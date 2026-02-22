@@ -1,0 +1,4 @@
+node_modules
+.env
+oneshop.db
+.DS_Store
