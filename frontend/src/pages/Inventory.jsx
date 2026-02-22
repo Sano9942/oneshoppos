@@ -12,7 +12,11 @@ export default function Inventory() {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
-  const [formData, setFormData] = useState({ barcode: '', name: '', price: '', cost_price: '', gst: '', stock: '' });
+  const [formData, setFormData] = useState({ barcode: '', name: '', price: '', cost_price: '', gst: '', stock: '', category_id: '', tax_id: '' });
+
+  // Dropdown Data
+  const [categories, setCategories] = useState([]);
+  const [taxes, setTaxes] = useState([]);
 
   // Fetch Products
   const fetchProducts = async () => {
@@ -25,8 +29,26 @@ export default function Inventory() {
     }
   };
 
+  const fetchDropdowns = async () => {
+    try {
+      const [catRes, taxRes] = await Promise.all([
+        fetch('http://localhost:5000/api/categories'),
+        fetch('http://localhost:5000/api/taxes')
+      ]);
+      const catData = await catRes.json();
+      const taxData = await taxRes.json();
+      setCategories(catData.categories || []);
+      setTaxes(taxData.taxes || []);
+    } catch (err) {
+      console.error("Failed to fetch dropdowns", err);
+    }
+  };
+
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     fetchProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchDropdowns();
   }, []);
 
   // Filter Products locally based on search
@@ -43,6 +65,7 @@ export default function Inventory() {
 
   // Reset to page 1 when searching
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     setCurrentPage(1);
   }, [searchTerm]);
 
@@ -55,11 +78,24 @@ export default function Inventory() {
         price: product.price, 
         cost_price: product.cost_price ?? '', 
         gst: product.gst ?? '', 
-        stock: product.stock 
+        stock: product.stock,
+        category_id: product.category_id || '',
+        tax_id: product.tax_id || ''
       });
     } else {
       setEditingProduct(null);
-      setFormData({ barcode: '', name: '', price: '', cost_price: '', gst: '', stock: '' });
+      // Auto-select default tax if available
+      const defaultTax = taxes.find(t => t.is_default);
+      setFormData({ 
+        barcode: '', 
+        name: '', 
+        price: '', 
+        cost_price: '', 
+        gst: '', 
+        stock: '',
+        category_id: '',
+        tax_id: defaultTax ? defaultTax.id : ''
+      });
     }
     setIsModalOpen(true);
   };
@@ -87,7 +123,9 @@ export default function Inventory() {
           price: parseFloat(formData.price),
           cost_price: formData.cost_price ? parseFloat(formData.cost_price) : 0,
           gst: formData.gst ? parseFloat(formData.gst) : '',
-          stock: parseInt(formData.stock)
+          stock: parseInt(formData.stock),
+          category_id: formData.category_id ? parseInt(formData.category_id) : null,
+          tax_id: formData.tax_id ? parseInt(formData.tax_id) : null
         })
       });
 
@@ -269,8 +307,30 @@ export default function Inventory() {
                         <input required type="number" step="0.01" min="0" value={formData.cost_price} onChange={e => setFormData({...formData, cost_price: e.target.value})} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="0.00" />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">GST (%) <span className="text-slate-400 font-normal">(Optional)</span></label>
-                        <input type="number" step="0.1" min="0" value={formData.gst} onChange={e => setFormData({...formData, gst: e.target.value})} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="e.g. 18" />
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                        <select 
+                          value={formData.category_id} 
+                          onChange={e => setFormData({...formData, category_id: e.target.value})}
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        >
+                          <option value="">No Category</option>
+                          {categories.map(cat => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Tax Profile</label>
+                        <select 
+                          value={formData.tax_id} 
+                          onChange={e => setFormData({...formData, tax_id: e.target.value})}
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        >
+                          <option value="">Legacy GST</option>
+                          {taxes.map(tax => (
+                            <option key={tax.id} value={tax.id}>{tax.name} ({tax.rate}%)</option>
+                          ))}
+                        </select>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Stock Level</label>

@@ -1,26 +1,54 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Trash2, Printer, ShoppingCart } from 'lucide-react';
+import { Search, Plus, Trash2, Printer, ShoppingCart, X, CreditCard, Banknote, CheckCircle2 } from 'lucide-react';
 
 export default function POS() {
   const [cart, setCart] = useState([]);
   const [barcodeInput, setBarcodeInput] = useState('');
   const [error, setError] = useState('');
   
-  // The magic ref that keeps our scanner input focused
-  const inputRef = useRef(null);
+  // Advanced Payments State
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+  const [payments, setPayments] = useState([]);
+  const [paymentAmountInput, setPaymentAmountInput] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
 
-  // Keep focus on the input field automatically
+  const inputRef = useRef(null);
+  const amountInputRef = useRef(null);
+
+  // Keep focus on the input field automatically (unless modal is open)
   useEffect(() => {
     const focusInput = () => {
-      if (inputRef.current && document.activeElement !== inputRef.current) {
+      if (!isCheckoutModalOpen && inputRef.current && document.activeElement !== inputRef.current) {
         inputRef.current.focus();
       }
     };
-    
-    // Check every few ms. Perfect for busy cashiers who click away.
     const interval = setInterval(focusInput, 500);
     return () => clearInterval(interval);
-  }, []);
+  }, [isCheckoutModalOpen]);
+
+  const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  
+  // Calculate specific totals including Tax
+  const taxTotal = cart.reduce((sum, item) => {
+    const itemTotal = item.price * item.quantity;
+    const taxObj = item.effectiveTaxRate || 0; // The API returns this now
+    // Reverse calculate the tax portion from the tax-inclusive price
+    const taxAmount = itemTotal - (itemTotal / (1 + (taxObj / 100)));
+    return sum + taxAmount;
+  }, 0);
+  const subtotal = total - taxTotal;
+
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+  const remainingBalance = Math.max(0, total - totalPaid);
+  const changeDue = Math.max(0, totalPaid - total);
+
+  // Automatically set the payment input to the remaining balance when modal opens or balance changes
+  useEffect(() => {
+    if (isCheckoutModalOpen && remainingBalance > 0) {
+      setPaymentAmountInput(remainingBalance.toFixed(2));
+      setTimeout(() => amountInputRef.current?.focus(), 100);
+    }
+  }, [isCheckoutModalOpen, remainingBalance]);
 
   const handleScan = async (e) => {
     e.preventDefault();
@@ -29,12 +57,10 @@ export default function POS() {
     setError('');
     
     try {
-      // 1. Fetch from Backend
       const res = await fetch(`http://localhost:5000/api/products/scan/${barcodeInput}`);
       const data = await res.json();
       
       if (!res.ok) {
-        // If 404, we'll show an error
         setError(data.error || 'Product not found');
         setBarcodeInput('');
         return;
@@ -42,11 +68,9 @@ export default function POS() {
 
       const product = data.product;
 
-      // 2. Add to Cart or Increment Quantity
       setCart((prevCart) => {
         const existingItem = prevCart.find(item => item.id === product.id);
         if (existingItem) {
-          // Check stock limit!
           if (existingItem.quantity >= product.stock) {
             setError(`Cannot add more. Only ${product.stock} in stock.`);
             return prevCart;
@@ -65,7 +89,7 @@ export default function POS() {
         }
       });
       
-      setBarcodeInput(''); // Clear input for next scan
+      setBarcodeInput(''); 
 
     } catch (err) {
       console.error(err);
@@ -76,16 +100,29 @@ export default function POS() {
   const removeFromCart = (id) => {
     setCart(cart.filter(item => item.id !== id));
   };
+  
+  const handleAddPayment = (e) => {
+      e.preventDefault();
+      const amount = parseFloat(paymentAmountInput);
+      if (isNaN(amount) || amount <= 0) return;
+      
+      setPayments([...payments, { method: paymentMethod, amount }]);
+      setPaymentAmountInput('');
+  };
+  
+  const handleRemovePayment = (index) => {
+      setPayments(payments.filter((_, i) => i !== index));
+  };
 
-  const handleCheckout = async () => {
-    if (cart.length === 0) return;
+  const handleCompleteSale = async () => {
+    if (cart.length === 0 || remainingBalance > 0) return;
 
     try {
       const res = await fetch('http://localhost:5000/api/sales', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          paymentMethod: 'Cash', // Default for now
+          payments: payments,
           cartItems: cart
         })
       });
@@ -93,8 +130,6 @@ export default function POS() {
       if (res.ok) {
         const data = await res.json();
         
-        // --- RECEIPT PRINTING LOGIC ---
-        // Create an invisible iframe to print thermal-receipt formatted text
         const printWindow = window.open('', '_blank', 'width=400,height=600');
         
         let receiptHTML = `
@@ -135,13 +170,34 @@ export default function POS() {
               </table>
               <div class="divider"></div>
               <table>
+                <tr>
+                   <td>Subtotal</td>
+                   <td class="right">$${subtotal.toFixed(2)}</td>
+                </tr>
+                <tr>
+                   <td>Tax</td>
+                   <td class="right">$${taxTotal.toFixed(2)}</td>
+                </tr>
                 <tr class="bold text-lg">
                   <td>TOTAL</td>
                   <td class="right">$${total.toFixed(2)}</td>
                 </tr>
+        `;
+        
+        // Print all payment tenders
+        payments.forEach(p => {
+             receiptHTML += `
                 <tr>
-                  <td>Payment Method</td>
-                  <td class="right">Cash</td>
+                  <td>Tendered ${p.method}</td>
+                  <td class="right">$${p.amount.toFixed(2)}</td>
+                </tr>
+            `;
+        });
+
+        receiptHTML += `
+                <tr class="bold">
+                  <td>CHANGE DUE</td>
+                  <td class="right">$${changeDue.toFixed(2)}</td>
                 </tr>
               </table>
               <div class="divider"></div>
@@ -153,24 +209,24 @@ export default function POS() {
         printWindow.document.write(receiptHTML);
         printWindow.document.close();
         
-        // Automatically open the print dialog the moment the window loads
         printWindow.onload = () => {
            printWindow.print();
-           // Optional: printWindow.close(); // Close the tab after printing
         };
 
-        // Clear cart after successful checkout
+        // Reset
         setCart([]); 
+        setPayments([]);
+        setIsCheckoutModalOpen(false);
       } else {
         const data = await res.json();
         setError(data.error || 'Checkout failed');
+        setIsCheckoutModalOpen(false);
       }
     } catch (err) {
       setError('Checkout failed. Is the server running?');
+      setIsCheckoutModalOpen(false);
     }
   };
-
-  const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
   return (
     <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-slate-50 relative">
@@ -190,6 +246,7 @@ export default function POS() {
                className="block w-full pl-10 pr-3 py-3 border border-slate-300 rounded-xl leading-5 bg-slate-50 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-lg transition-all"
                placeholder="Scan barcode or type here..."
                autoComplete="off"
+               disabled={isCheckoutModalOpen}
                autoFocus
              />
            </form>
@@ -259,11 +316,11 @@ export default function POS() {
              <div className="space-y-4 text-slate-600">
                <div className="flex justify-between text-lg">
                  <span>Subtotal</span>
-                 <span className="font-medium">${total.toFixed(2)}</span>
+                 <span className="font-medium">${subtotal.toFixed(2)}</span>
                </div>
                <div className="flex justify-between text-lg">
-                 <span>Tax (0%)</span>
-                 <span className="font-medium">$0.00</span>
+                 <span>Tax</span>
+                 <span className="font-medium">${taxTotal.toFixed(2)}</span>
                </div>
                <div className="h-px bg-slate-200 my-4"></div>
                <div className="flex justify-between text-2xl font-bold text-slate-900">
@@ -275,20 +332,152 @@ export default function POS() {
 
           <div className="p-6 bg-slate-50 border-t border-slate-200">
             <button 
-              onClick={handleCheckout}
+              onClick={() => {
+                  setPayments([]);
+                  setIsCheckoutModalOpen(true);
+              }}
               disabled={cart.length === 0}
               className={`w-full py-4 px-6 rounded-xl text-white font-bold text-lg flex items-center justify-center gap-2 transition-all ${
                 cart.length === 0 
                   ? 'bg-slate-300 cursor-not-allowed' 
-                  : 'bg-green-600 hover:bg-green-700 shadow-lg hover:shadow-green-600/30 hover:-translate-y-0.5'
+                  : 'bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-blue-600/30 hover:-translate-y-0.5'
               }`}
             >
-              <Printer size={24} />
-              Pay & Print Receipt
+              Checkout
             </button>
           </div>
         </div>
       </div>
+      
+      {/* Checkout Modal Overlay */}
+      {isCheckoutModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex justify-center items-center z-50">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                        <Banknote className="text-blue-600" /> Payment Processing
+                    </h2>
+                    <button onClick={() => setIsCheckoutModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-200 transition-colors">
+                        <X size={24} />
+                    </button>
+                </div>
+                
+                <div className="p-6 flex-1 overflow-y-auto flex gap-6">
+                    {/* Left: Tenders Input */}
+                    <div className="flex-1 space-y-6">
+                        <form onSubmit={handleAddPayment} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button 
+                                      type="button"
+                                      onClick={() => setPaymentMethod('Cash')}
+                                      className={`py-3 px-4 border rounded-xl flex items-center justify-center gap-2 font-medium transition-colors ${paymentMethod === 'Cash' ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-500/20' : 'border-slate-200 hover:bg-slate-50 text-slate-600'}`}
+                                    >
+                                        <Banknote size={20} /> Cash
+                                    </button>
+                                    <button 
+                                      type="button"
+                                      onClick={() => setPaymentMethod('Card')}
+                                      className={`py-3 px-4 border rounded-xl flex items-center justify-center gap-2 font-medium transition-colors ${paymentMethod === 'Card' ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-500/20' : 'border-slate-200 hover:bg-slate-50 text-slate-600'}`}
+                                    >
+                                        <CreditCard size={20} /> Card
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Amount</label>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">$</span>
+                                    <input 
+                                        ref={amountInputRef}
+                                        type="number"
+                                        step="0.01"
+                                        min="0.01"
+                                        value={paymentAmountInput}
+                                        onChange={(e) => setPaymentAmountInput(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-xl font-medium"
+                                        placeholder="0.00"
+                                    />
+                                    <button 
+                                        type="submit"
+                                        disabled={!paymentAmountInput || isNaN(parseFloat(paymentAmountInput)) || parseFloat(paymentAmountInput) <= 0}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-slate-800 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                        
+                        {/* List of Payments */}
+                        <div className="mt-6">
+                            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-3">Applied Tenders</h3>
+                            {payments.length === 0 ? (
+                                <p className="text-slate-400 text-sm italic py-4 text-center bg-slate-50 rounded-lg border border-dashed border-slate-200">No payments added yet.</p>
+                            ) : (
+                                <ul className="space-y-2">
+                                    {payments.map((p, idx) => (
+                                        <li key={idx} className="flex justify-between items-center py-2 px-4 bg-blue-50/50 border border-blue-100 rounded-lg">
+                                            <div className="flex items-center gap-2 text-blue-800 font-medium text-sm">
+                                                {p.method === 'Cash' ? <Banknote size={16} /> : <CreditCard size={16} />}
+                                                {p.method}
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className="font-bold text-slate-800">${p.amount.toFixed(2)}</span>
+                                                <button onClick={() => handleRemovePayment(idx)} className="text-red-400 hover:text-red-600 p-1 rounded-full hover:bg-red-50"><Trash2 size={14}/></button>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    </div>
+                    
+                    {/* Right: Totals Summary */}
+                    <div className="w-64 bg-slate-50 border border-slate-200 rounded-xl p-5 flex flex-col">
+                        <div className="space-y-4 flex-1">
+                            <div>
+                                <p className="text-slate-500 text-sm font-semibold mb-1">Total Due</p>
+                                <p className="text-2xl font-bold text-slate-800">${total.toFixed(2)}</p>
+                            </div>
+                            <div className="h-px w-full bg-slate-200"></div>
+                            <div>
+                                <p className="text-slate-500 text-sm font-semibold mb-1">Total Tendered</p>
+                                <p className="text-2xl font-bold text-blue-600">${totalPaid.toFixed(2)}</p>
+                            </div>
+                            <div className="h-px w-full bg-slate-200"></div>
+                            {remainingBalance > 0 ? (
+                                <div>
+                                    <p className="text-rose-500 text-sm font-bold mb-1 uppercase tracking-wide">Remaining Balance</p>
+                                    <p className="text-3xl font-black text-rose-600">${remainingBalance.toFixed(2)}</p>
+                                </div>
+                            ) : (
+                                <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl">
+                                    <p className="text-emerald-600 text-sm font-bold mb-1 uppercase tracking-wide">Change Due</p>
+                                    <p className="text-4xl font-black text-emerald-600">${changeDue.toFixed(2)}</p>
+                                </div>
+                            )}
+                        </div>
+                        
+                        <button 
+                            onClick={handleCompleteSale}
+                            disabled={remainingBalance > 0}
+                            className={`w-full py-4 mt-6 rounded-xl text-white font-bold text-lg flex items-center justify-center gap-2 transition-all ${
+                                remainingBalance > 0 
+                                  ? 'bg-slate-300 cursor-not-allowed' 
+                                  : 'bg-green-600 hover:bg-green-700 shadow-lg hover:shadow-green-600/30 hover:-translate-y-0.5'
+                            }`}
+                        >
+                            <CheckCircle2 size={24} />
+                            Complete Sale
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
     </div>
   );
 }
