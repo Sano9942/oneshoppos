@@ -12,11 +12,13 @@ export default function Inventory() {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
-  const [formData, setFormData] = useState({ barcode: '', name: '', price: '', cost_price: '', gst: '', stock: '', category_id: '', tax_id: '' });
+  const [formData, setFormData] = useState({ barcode: '', name: '', price: '', cost_price: '', gst: '', stock: '', category_id: '', tax_id: '', brand_id: '', outlet_id: '' });
 
   // Dropdown Data
   const [categories, setCategories] = useState([]);
   const [taxes, setTaxes] = useState([]);
+  const [brands, setBrands] = useState([]);
+  const [outlets, setOutlets] = useState([]);
 
   // Fetch Products
   const fetchProducts = async () => {
@@ -31,14 +33,20 @@ export default function Inventory() {
 
   const fetchDropdowns = async () => {
     try {
-      const [catRes, taxRes] = await Promise.all([
+      const [catRes, taxRes, brandRes, outletRes] = await Promise.all([
         fetch('http://localhost:5000/api/categories'),
-        fetch('http://localhost:5000/api/taxes')
+        fetch('http://localhost:5000/api/taxes'),
+        fetch('http://localhost:5000/api/brands'),
+        fetch('http://localhost:5000/api/outlets')
       ]);
       const catData = await catRes.json();
       const taxData = await taxRes.json();
+      const brandData = await brandRes.json();
+      const outletData = await outletRes.json();
       setCategories(catData.categories || []);
       setTaxes(taxData.taxes || []);
+      setBrands(brandData.brands || []);
+      setOutlets(outletData.outlets || []);
     } catch (err) {
       console.error("Failed to fetch dropdowns", err);
     }
@@ -78,14 +86,18 @@ export default function Inventory() {
         price: product.price, 
         cost_price: product.cost_price ?? '', 
         gst: product.gst ?? '', 
-        stock: product.stock,
+        stock: product.total_stock, // Use total_stock for viewing, though editing it here won't work perfectly in multi-outlet. We'll disable it below.
         category_id: product.category_id || '',
-        tax_id: product.tax_id || ''
+        tax_id: product.tax_id || '',
+        brand_id: product.brand_id || '',
+        outlet_id: ''
       });
     } else {
       setEditingProduct(null);
       // Auto-select default tax if available
       const defaultTax = taxes.find(t => t.is_default);
+      // Auto-select first outlet if available
+      const defaultOutlet = outlets.length > 0 ? outlets[0].id : '';
       setFormData({ 
         barcode: '', 
         name: '', 
@@ -94,7 +106,9 @@ export default function Inventory() {
         gst: '', 
         stock: '',
         category_id: '',
-        tax_id: defaultTax ? defaultTax.id : ''
+        tax_id: defaultTax ? defaultTax.id : '',
+        brand_id: '',
+        outlet_id: defaultOutlet
       });
     }
     setIsModalOpen(true);
@@ -114,19 +128,27 @@ export default function Inventory() {
     const method = editingProduct ? 'PUT' : 'POST';
 
     try {
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const payload = {
           barcode: formData.barcode,
           name: formData.name,
           price: parseFloat(formData.price),
           cost_price: formData.cost_price ? parseFloat(formData.cost_price) : 0,
           gst: formData.gst ? parseFloat(formData.gst) : '',
-          stock: parseInt(formData.stock),
           category_id: formData.category_id ? parseInt(formData.category_id) : null,
-          tax_id: formData.tax_id ? parseInt(formData.tax_id) : null
-        })
+          tax_id: formData.tax_id ? parseInt(formData.tax_id) : null,
+          brand_id: formData.brand_id ? parseInt(formData.brand_id) : null,
+      };
+
+      // Only send initial_stock and outlet_id on creation
+      if (!editingProduct) {
+          payload.initial_stock = formData.stock ? parseInt(formData.stock) : 0;
+          payload.outlet_id = formData.outlet_id ? parseInt(formData.outlet_id) : null;
+      }
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
 
       if (res.ok) {
@@ -205,9 +227,9 @@ export default function Inventory() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
                     <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      product.stock <= 5 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                      product.total_stock <= 5 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
                     }`}>
-                      {product.stock} in stock
+                      {product.total_stock} in stock
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -320,6 +342,19 @@ export default function Inventory() {
                         </select>
                       </div>
                       <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Brand</label>
+                        <select 
+                          value={formData.brand_id} 
+                          onChange={e => setFormData({...formData, brand_id: e.target.value})}
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        >
+                          <option value="">No Brand</option>
+                          {brands.map(brand => (
+                            <option key={brand.id} value={brand.id}>{brand.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Tax Profile</label>
                         <select 
                           value={formData.tax_id} 
@@ -332,9 +367,37 @@ export default function Inventory() {
                           ))}
                         </select>
                       </div>
+                      {!editingProduct && (
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Stock Location (Outlet)</label>
+                          <select 
+                            required
+                            value={formData.outlet_id} 
+                            onChange={e => setFormData({...formData, outlet_id: e.target.value})}
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                          >
+                            <option value="" disabled>Select Initial Outlet</option>
+                            {outlets.map(outlet => (
+                              <option key={outlet.id} value={outlet.id}>{outlet.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Stock Level</label>
-                        <input required type="number" min="0" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="100" />
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          {editingProduct ? 'Total Stock (Read Only)' : 'Initial Stock Level'}
+                        </label>
+                        <input 
+                          required={!editingProduct} 
+                          type={editingProduct ? "text" : "number"} 
+                          min="0" 
+                          value={formData.stock} 
+                          onChange={e => !editingProduct && setFormData({...formData, stock: e.target.value})} 
+                          className={`w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${editingProduct ? 'bg-slate-100 cursor-not-allowed' : ''}`} 
+                          placeholder="100" 
+                          readOnly={!!editingProduct}
+                        />
+                         {editingProduct && <p className="text-xs text-slate-500 mt-1">Use Stock Adjustments/Transfers to manipulate stock quantites.</p>}
                       </div>
                     </div>
                   </div>

@@ -59,6 +59,38 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 FOREIGN KEY(product_id) REFERENCES products(id)
             )`);
 
+      // Outlet Stock Table (Multi-Location Inventory)
+      db.run(`CREATE TABLE IF NOT EXISTS outlet_stock (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL REFERENCES products(id),
+            outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+            quantity INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(product_id, outlet_id)
+        )`);
+
+      // Outlets Table
+      db.run(`CREATE TABLE IF NOT EXISTS outlets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                address TEXT,
+                phone TEXT
+            )`);
+
+      // Employees Table
+      db.run(`CREATE TABLE IF NOT EXISTS employees (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'Cashier',
+                pin_code TEXT UNIQUE NOT NULL
+            )`);
+
+      // Brands Table
+      db.run(`CREATE TABLE IF NOT EXISTS brands (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                description TEXT
+            )`);
+
       // Sale Payments Table (Split Tenders)
       db.run(`CREATE TABLE IF NOT EXISTS sale_payments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

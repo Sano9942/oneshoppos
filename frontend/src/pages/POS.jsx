@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Trash2, Printer, ShoppingCart, X, CreditCard, Banknote, CheckCircle2 } from 'lucide-react';
+import { Search, Plus, Trash2, Printer, ShoppingCart, X, CreditCard, Banknote, CheckCircle2, Lock, User, LogOut } from 'lucide-react';
 
 export default function POS() {
   const [cart, setCart] = useState([]);
@@ -12,19 +12,24 @@ export default function POS() {
   const [paymentAmountInput, setPaymentAmountInput] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
 
+  // Employee Login State
+  const [currentEmployee, setCurrentEmployee] = useState(null);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
+
   const inputRef = useRef(null);
   const amountInputRef = useRef(null);
 
   // Keep focus on the input field automatically (unless modal is open)
   useEffect(() => {
     const focusInput = () => {
-      if (!isCheckoutModalOpen && inputRef.current && document.activeElement !== inputRef.current) {
+      if (currentEmployee && !isCheckoutModalOpen && inputRef.current && document.activeElement !== inputRef.current) {
         inputRef.current.focus();
       }
     };
     const interval = setInterval(focusInput, 500);
     return () => clearInterval(interval);
-  }, [isCheckoutModalOpen]);
+  }, [isCheckoutModalOpen, currentEmployee]);
 
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   
@@ -228,6 +233,72 @@ export default function POS() {
     }
   };
 
+  const handlePinLogin = async (e) => {
+    e.preventDefault();
+    if (!pinInput) return;
+    
+    try {
+      const res = await fetch('http://localhost:5000/api/employees/validate-pin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pin_code: pinInput }),
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        setPinError(data.error || 'Invalid PIN');
+        setPinInput('');
+        return;
+      }
+      
+      setCurrentEmployee(data.employee);
+      setPinError('');
+      setPinInput('');
+    } catch (err) {
+      setPinError('Failed to connect to server');
+    }
+  };
+
+  if (!currentEmployee) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-slate-900">
+        <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm flex flex-col items-center">
+            <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4">
+                <Lock size={32} />
+            </div>
+            <h1 className="text-2xl font-bold text-slate-800 mb-1">POS Terminal</h1>
+            <p className="text-slate-500 text-sm mb-6 text-center">Enter your PIN to unlock the register</p>
+            
+            <form onSubmit={handlePinLogin} className="w-full flex flex-col gap-4">
+                <div>
+                   <input
+                      type="password"
+                      autoFocus
+                      maxLength="10"
+                      value={pinInput}
+                      onChange={(e) => { setPinInput(e.target.value); setPinError(''); }}
+                      className="w-full text-center tracking-[0.5em] text-2xl py-3 px-4 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
+                      placeholder="****"
+                   />
+                </div>
+                {pinError && <p className="text-red-500 text-sm text-center font-medium">{pinError}</p>}
+                
+                <button 
+                  type="submit"
+                  disabled={!pinInput}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm mt-2"
+                >
+                  Unlock Register
+                </button>
+            </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-slate-50 relative">
       
@@ -251,6 +322,21 @@ export default function POS() {
              />
            </form>
            {error && <p className="text-red-500 text-sm mt-2 font-medium">{error}</p>}
+        </div>
+        
+        <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+               <User size={16} className="text-slate-500" />
+               <span className="text-sm font-bold text-slate-700">{currentEmployee.name}</span>
+               <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md ml-1 font-semibold border border-indigo-200">{currentEmployee.role}</span>
+            </div>
+            <button 
+               onClick={() => setCurrentEmployee(null)}
+               className="flex items-center gap-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 px-3 py-1.5 rounded-lg transition-colors text-sm font-semibold border border-transparent hover:border-rose-100"
+            >
+               <LogOut size={16} />
+               Lock Register
+            </button>
         </div>
       </div>
 

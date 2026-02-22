@@ -108,25 +108,248 @@ app.delete('/api/categories/:id', (req, res) => {
 });
 
 
+// --- ROUTES: OUTLETS ---
+
+// Get all outlets
+app.get('/api/outlets', (req, res) => {
+    db.all("SELECT * FROM outlets ORDER BY name ASC", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ outlets: rows });
+    });
+});
+
+// Add a new outlet
+app.post('/api/outlets', (req, res) => {
+    const { name, address, phone } = req.body;
+    db.run(
+        "INSERT INTO outlets (name, address, phone) VALUES (?, ?, ?)",
+        [name, address, phone],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ id: this.lastID, name, address, phone });
+        }
+    );
+});
+
+// Update an outlet
+app.put('/api/outlets/:id', (req, res) => {
+    const { id } = req.params;
+    const { name, address, phone } = req.body;
+    db.run(
+        "UPDATE outlets SET name = COALESCE(?, name), address = COALESCE(?, address), phone = COALESCE(?, phone) WHERE id = ?",
+        [name, address, phone, id],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            if (this.changes === 0) return res.status(404).json({ error: "Outlet not found" });
+            res.json({ message: "Outlet updated successfully" });
+        }
+    );
+});
+
+// Delete an outlet
+app.delete('/api/outlets/:id', (req, res) => {
+    const { id } = req.params;
+    db.run("DELETE FROM outlets WHERE id = ?", [id], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: "Outlet not found" });
+        res.json({ message: "Outlet deleted" });
+    });
+});
+
+
+// --- ROUTES: EMPLOYEES ---
+
+// Get all employees
+app.get('/api/employees', (req, res) => {
+    db.all("SELECT id, name, role FROM employees ORDER BY name ASC", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ employees: rows });
+    });
+});
+
+// Validate PIN (For POS Login)
+app.post('/api/employees/validate-pin', (req, res) => {
+    const { pin_code } = req.body;
+    db.get("SELECT id, name, role FROM employees WHERE pin_code = ?", [pin_code], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(401).json({ error: "Invalid PIN" });
+        res.json({ employee: row });
+    });
+});
+
+// Add a new employee
+app.post('/api/employees', (req, res) => {
+    const { name, role, pin_code } = req.body;
+    db.run(
+        "INSERT INTO employees (name, role, pin_code) VALUES (?, ?, ?)",
+        [name, role, pin_code],
+        function (err) {
+            if (err) {
+                if (err.message.includes('UNIQUE constraint failed')) {
+                    return res.status(400).json({ error: "PIN code must be unique" });
+                }
+                return res.status(500).json({ error: err.message });
+            }
+            res.json({ id: this.lastID, name, role });
+        }
+    );
+});
+
+// Update an employee
+app.put('/api/employees/:id', (req, res) => {
+    const { id } = req.params;
+    const { name, role, pin_code } = req.body;
+    
+    // Allow updating PIN only if it's provided, otherwise keep existing
+    let query = "UPDATE employees SET name = COALESCE(?, name), role = COALESCE(?, role)";
+    let params = [name, role];
+    
+    if (pin_code !== undefined && pin_code !== '') {
+        query += ", pin_code = ?";
+        params.push(pin_code);
+    }
+    
+    query += " WHERE id = ?";
+    params.push(id);
+
+    db.run(query, params, function (err) {
+            if (err) {
+                if (err.message.includes('UNIQUE constraint failed')) {
+                    return res.status(400).json({ error: "PIN code must be unique" });
+                }
+                return res.status(500).json({ error: err.message });
+            }
+            if (this.changes === 0) return res.status(404).json({ error: "Employee not found" });
+            res.json({ message: "Employee updated successfully" });
+        }
+    );
+});
+
+// Delete an employee
+app.delete('/api/employees/:id', (req, res) => {
+    const { id } = req.params;
+    db.run("DELETE FROM employees WHERE id = ?", [id], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: "Employee not found" });
+        res.json({ message: "Employee deleted" });
+    });
+});
+
+
+// --- ROUTES: BRANDS ---
+
+// Get all brands
+app.get('/api/brands', (req, res) => {
+    db.all("SELECT * FROM brands ORDER BY name ASC", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ brands: rows });
+    });
+});
+
+// Add a new brand
+app.post('/api/brands', (req, res) => {
+    const { name, description } = req.body;
+    db.run(
+        "INSERT INTO brands (name, description) VALUES (?, ?)",
+        [name, description],
+        function (err) {
+            if (err) {
+                if (err.message.includes('UNIQUE constraint failed')) {
+                    return res.status(400).json({ error: "Brand name must be unique" });
+                }
+                return res.status(500).json({ error: err.message });
+            }
+            res.json({ id: this.lastID, name, description });
+        }
+    );
+});
+
+// Update a brand
+app.put('/api/brands/:id', (req, res) => {
+    const { id } = req.params;
+    const { name, description } = req.body;
+    db.run(
+        "UPDATE brands SET name = COALESCE(?, name), description = COALESCE(?, description) WHERE id = ?",
+        [name, description, id],
+        function (err) {
+            if (err) {
+                if (err.message.includes('UNIQUE constraint failed')) {
+                    return res.status(400).json({ error: "Brand name must be unique" });
+                }
+                return res.status(500).json({ error: err.message });
+            }
+            if (this.changes === 0) return res.status(404).json({ error: "Brand not found" });
+            res.json({ message: "Brand updated successfully" });
+        }
+    );
+});
+
+// Delete a brand
+app.delete('/api/brands/:id', (req, res) => {
+    const { id } = req.params;
+    db.run("DELETE FROM brands WHERE id = ?", [id], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: "Brand not found" });
+        res.json({ message: "Brand deleted" });
+    });
+});
+
+
 // --- ROUTES: PRODUCTS (INVENTORY) ---
 
-// Get all products
+// Get all products (with aggregated stock)
 app.get('/api/products', (req, res) => {
-    db.all("SELECT * FROM products ORDER BY name ASC", [], (err, rows) => {
+    db.all(`
+        SELECT p.*, 
+               c.name as category_name, 
+               t.name as tax_name, t.rate as tax_rate,
+               s.name as supplier_name,
+               b.name as brand_name,
+               COALESCE(SUM(os.quantity), 0) as total_stock
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN taxes t ON p.tax_id = t.id
+        LEFT JOIN suppliers s ON p.supplier_id = s.id
+        LEFT JOIN brands b ON p.brand_id = b.id
+        LEFT JOIN outlet_stock os ON p.id = os.product_id
+        GROUP BY p.id
+        ORDER BY p.name ASC
+    `, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ products: rows });
+    });
+});
+
+// Get individual product stock across all outlets
+app.get('/api/products/:id/stock', (req, res) => {
+    const { id } = req.params;
+    db.all(`
+        SELECT os.outlet_id, o.name as outlet_name, os.quantity 
+        FROM outlet_stock os
+        JOIN outlets o ON os.outlet_id = o.id
+        WHERE os.product_id = ?
+    `, [id], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ stock: rows });
     });
 });
 
 // Scan/Find a product by barcode (Crucial for POS speed)
 app.get('/api/products/scan/:barcode', (req, res) => {
     const { barcode } = req.params;
-    db.get(`
-        SELECT p.*, t.rate as tax_rate, t.name as tax_name 
+    const outlet_id = req.query.outlet_id; // Pass outlet ID from POS to get local stock
+    
+    let query = `
+        SELECT p.*, t.rate as tax_rate, t.name as tax_name,
+               COALESCE(SUM(os.quantity), 0) as local_stock
         FROM products p
         LEFT JOIN taxes t ON p.tax_id = t.id
+        LEFT JOIN outlet_stock os ON p.id = os.product_id ${outlet_id ? `AND os.outlet_id = ${outlet_id}` : ''}
         WHERE p.barcode = ?
-    `, [barcode], (err, row) => {
+        GROUP BY p.id
+    `;
+
+    db.get(query, [barcode], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ error: "Product not found" });
 
@@ -145,33 +368,58 @@ app.get('/api/products/scan/:barcode', (req, res) => {
     });
 });
 
-// Add a new product
+// Add a new product (and optionally set initial stock for a specific outlet)
 app.post('/api/products', (req, res) => {
-    const { barcode, name, price, cost_price, gst, stock } = req.body;
-    db.run(
-        "INSERT INTO products (barcode, name, price, cost_price, gst, stock) VALUES (?, ?, ?, ?, ?, ?)",
-        [barcode, name, price, cost_price || 0, gst === '' ? null : gst, stock || 0],
-        function (err) {
-            if (err) {
-                if (err.message.includes('UNIQUE constraint failed')) {
-                    return res.status(400).json({ error: "Barcode already exists" });
+    const { barcode, name, price, cost_price, gst, category_id, tax_id, brand_id, outlet_id, initial_stock } = req.body;
+    
+    // We start a transaction because we need to insert into products, and then optionally into outlet_stock.
+    db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
+        db.run(
+            "INSERT INTO products (barcode, name, price, cost_price, gst, stock, category_id, tax_id, brand_id) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)",
+            [barcode, name, price, cost_price || 0, gst === '' ? null : gst, category_id || null, tax_id || null, brand_id || null],
+            function (err) {
+                if (err) {
+                    db.run('ROLLBACK');
+                    if (err.message.includes('UNIQUE constraint failed')) {
+                        return res.status(400).json({ error: "Barcode already exists" });
+                    }
+                    return res.status(500).json({ error: err.message });
                 }
-                return res.status(500).json({ error: err.message });
+                const newProductId = this.lastID;
+
+                // If outlet_id and initial_stock are provided, initialize stock for that outlet.
+                if (outlet_id && initial_stock) {
+                    db.run(
+                        "INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES (?, ?, ?)",
+                        [newProductId, outlet_id, initial_stock],
+                        function(stockErr) {
+                            if (stockErr) {
+                                db.run('ROLLBACK');
+                                return res.status(500).json({ error: "Failed to initialize outlet stock: " + stockErr.message });
+                            }
+                            db.run('COMMIT');
+                            res.json({ id: newProductId, barcode, name, price, cost_price, gst, category_id, tax_id, brand_id, initial_stock, outlet_id });
+                        }
+                    );
+                } else {
+                    db.run('COMMIT');
+                    res.json({ id: newProductId, barcode, name, price, cost_price, gst, category_id, tax_id, brand_id });
+                }
             }
-            res.json({ id: this.lastID, barcode, name, price, cost_price, gst, stock });
-        }
-    );
+        );
+    });
 });
 
-// Update a product (Stock/Price)
+// Update a product (Prices, Names, Categories... NOT Stock. Stock is handled via Adjustments/Transfers)
 app.put('/api/products/:id', (req, res) => {
     const { id } = req.params;
-    const { name, price, cost_price, gst, stock, barcode } = req.body;
+    const { name, price, cost_price, gst, barcode, category_id, tax_id, brand_id } = req.body;
     
     // Simple dynamic update
     db.run(
-        "UPDATE products SET name = COALESCE(?, name), price = COALESCE(?, price), cost_price = COALESCE(?, cost_price), gst = ?, stock = COALESCE(?, stock), barcode = COALESCE(?, barcode) WHERE id = ?",
-        [name, price, cost_price, gst === '' ? null : gst, stock, barcode, id],
+        "UPDATE products SET name = COALESCE(?, name), price = COALESCE(?, price), cost_price = COALESCE(?, cost_price), gst = ?, barcode = COALESCE(?, barcode), category_id = COALESCE(?, category_id), tax_id = COALESCE(?, tax_id), brand_id = COALESCE(?, brand_id) WHERE id = ?",
+        [name, price, cost_price, gst === '' ? null : gst, barcode, category_id || null, tax_id || null, brand_id || null, id],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
             if (this.changes === 0) return res.status(404).json({ error: "Product not found" });
@@ -329,6 +577,11 @@ app.post('/api/purchase-orders', (req, res) => {
 // Receive a purchase order (Updates Inventory Stock & Cost Price)
 app.post('/api/purchase-orders/:id/receive', (req, res) => {
     const { id } = req.params;
+    const { outlet_id } = req.body; // Outlet ID where the stock should go
+
+    if (!outlet_id) {
+        return res.status(400).json({ error: "Outlet ID is required to receive PO" });
+    }
 
     db.get("SELECT status FROM purchase_orders WHERE id = ?", [id], (err, po) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -344,12 +597,26 @@ app.post('/api/purchase-orders/:id/receive', (req, res) => {
                 // Update PO status
                 db.run("UPDATE purchase_orders SET status = 'Received' WHERE id = ?", [id]);
 
-                // Update Products stock and cost_price
-                const updateStmt = db.prepare("UPDATE products SET stock = stock + ?, cost_price = ? WHERE id = ?");
+                // Update Products cost_price
+                const updateCostStmt = db.prepare("UPDATE products SET cost_price = ? WHERE id = ?");
+                // Update or Insert into Outlet Stock
+                const updateStockStmt = db.prepare(`
+                    INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = quantity + ?
+                `);
+                
                 let hasError = false;
 
                 items.forEach(item => {
-                    updateStmt.run(item.quantity, item.cost_price, item.product_id, (err) => {
+                    updateCostStmt.run(item.cost_price, item.product_id, (err) => {
+                        if (err) {
+                            console.error("Cost Update Error", err);
+                            hasError = true;
+                        }
+                    });
+                    
+                    updateStockStmt.run(item.product_id, outlet_id, item.quantity, item.quantity, (err) => {
                         if (err) {
                             console.error("Stock Update Error", err);
                             hasError = true;
@@ -357,7 +624,8 @@ app.post('/api/purchase-orders/:id/receive', (req, res) => {
                     });
                 });
 
-                updateStmt.finalize();
+                updateCostStmt.finalize();
+                updateStockStmt.finalize();
 
                 if (hasError) {
                     db.run("ROLLBACK");
@@ -404,11 +672,14 @@ app.delete('/api/purchase-orders/:id', (req, res) => {
 
 // Process a Sale (Cart Checkout)
 app.post('/api/sales', (req, res) => {
-    const { cartItems, paymentMethod, payments } = req.body;
+    const { cartItems, paymentMethod, payments, outlet_id } = req.body;
     
     // Validation
     if (!cartItems || cartItems.length === 0) {
         return res.status(400).json({ error: "Cart is empty" });
+    }
+    if (!outlet_id) {
+        return res.status(400).json({ error: "Outlet ID is required for checkout" });
     }
 
     // 1. Calculate Expected Total
@@ -442,7 +713,11 @@ app.post('/api/sales', (req, res) => {
 
                 const saleId = this.lastID;
                 const itemsStmt = db.prepare("INSERT INTO sale_items (sale_id, product_id, quantity, price_at_sale, cost_price_at_sale) VALUES (?, ?, ?, ?, ?)");
-                const stockStmt = db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?");
+                const stockStmt = db.prepare(`
+                    UPDATE outlet_stock 
+                    SET quantity = quantity - ? 
+                    WHERE product_id = ? AND outlet_id = ?
+                `);
                 const paymentsStmt = db.prepare("INSERT INTO sale_payments (sale_id, payment_method, amount) VALUES (?, ?, ?)");
                 
                 let hasError = false;
@@ -453,7 +728,7 @@ app.post('/api/sales', (req, res) => {
                         if (err) hasError = true;
                     });
                     
-                    stockStmt.run(item.quantity, item.id, (err) => {
+                    stockStmt.run(item.quantity, item.id, outlet_id, (err) => {
                         if (err) hasError = true;
                     });
                 });

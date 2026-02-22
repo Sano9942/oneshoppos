@@ -7,6 +7,9 @@ import PurchaseOrders from './pages/PurchaseOrders';
 import AppLayout from './components/AppLayout';
 import Taxes from './pages/Taxes';
 import Categories from './pages/Categories';
+import Outlets from './pages/Outlets';
+import Employees from './pages/Employees';
+import Brands from './pages/Brands';
 
 // Temporary Placeholders for the new Views
 function PlaceholderView({ title }) {
@@ -38,6 +41,9 @@ function App() {
            {/* New Implementation Routes */}
            <Route path="/categories" element={<Categories />} />
            <Route path="/taxes" element={<Taxes />} />
+           <Route path="/outlets" element={<Outlets />} />
+           <Route path="/employees" element={<Employees />} />
+           <Route path="/brands" element={<Brands />} />
            <Route path="/reports" element={<PlaceholderView title="Advanced Reporting" />} />
         </Route>
 

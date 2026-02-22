@@ -8,10 +8,10 @@ import {
   Truck, 
   Receipt,
   Tags,
-  Users,
-  BoxSelect,
   Settings,
   Shield,
+  Store,
+  Users,
   History,
   RefreshCw,
   ChevronDown
@@ -144,6 +144,48 @@ export default function AppLayout() {
           >
             <Receipt size={18} />
             Reports
+          </NavLink>
+
+          <NavLink
+            to="/outlets"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive 
+                  ? 'bg-blue-600/10 text-blue-400' 
+                  : 'hover:bg-slate-800/50 hover:text-white'
+              }`
+            }
+          >
+            <Store size={18} />
+            Outlets
+          </NavLink>
+
+          <NavLink
+            to="/employees"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive 
+                  ? 'bg-blue-600/10 text-blue-400' 
+                  : 'hover:bg-slate-800/50 hover:text-white'
+              }`
+            }
+          >
+            <Users size={18} />
+            Employees
+          </NavLink>
+          
+          <NavLink
+            to="/brands"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive 
+                  ? 'bg-blue-600/10 text-blue-400' 
+                  : 'hover:bg-slate-800/50 hover:text-white'
+              }`
+            }
+          >
+            <Tags size={18} />
+            Brands
           </NavLink>
 
           <NavLink
