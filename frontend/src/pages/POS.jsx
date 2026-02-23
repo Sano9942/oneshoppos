@@ -14,6 +14,7 @@ import {
   LogOut,
   Store,
   Wallet,
+  Clock,
 } from "lucide-react";
 
 export default function POS() {
@@ -27,8 +28,13 @@ export default function POS() {
   const [paymentAmountInput, setPaymentAmountInput] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
 
+  // Discount State
+  const [discountInput, setDiscountInput] = useState("");
+  const [discountType, setDiscountType] = useState("fixed"); // "fixed" | "percent"
+
   // Employee Login State
   const [currentEmployee, setCurrentEmployee] = useState(null);
+  const [attendanceId, setAttendanceId] = useState(null);
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState("");
 
@@ -92,7 +98,7 @@ export default function POS() {
     return () => clearInterval(interval);
   }, [isCheckoutModalOpen, currentEmployee]);
 
-  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const grossTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   // Calculate specific totals including Tax
   const taxTotal = cart.reduce((sum, item) => {
@@ -102,7 +108,13 @@ export default function POS() {
     const taxAmount = itemTotal - itemTotal / (1 + taxObj / 100);
     return sum + taxAmount;
   }, 0);
-  const subtotal = total - taxTotal;
+  const subtotal = grossTotal - taxTotal;
+
+  const discountValue =
+    discountType === "percent"
+      ? (grossTotal * parseFloat(discountInput || 0)) / 100
+      : parseFloat(discountInput || 0);
+  const total = Math.max(0, grossTotal - discountValue);
 
   const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
   const remainingBalance = Math.max(0, total - totalPaid);
@@ -207,6 +219,8 @@ export default function POS() {
           outlet_id: selectedOutletId,
           employee_id: currentEmployee?.id || null,
           customer_id: selectedCustomerId ? parseInt(selectedCustomerId) : null,
+          discount_amount: parseFloat(discountInput || 0),
+          discount_type: discountType,
         }),
       });
 
@@ -301,6 +315,8 @@ export default function POS() {
         setPayments([]);
         setSelectedCustomerId("");
         setCustomerSearch("");
+        setDiscountInput("");
+        setDiscountType("fixed");
         setIsCheckoutModalOpen(false);
       } else {
         const data = await res.json();
@@ -340,9 +356,33 @@ export default function POS() {
       setCurrentEmployee(data.employee);
       setPinError("");
       setPinInput("");
+
+      // Auto clock-in
+      if (selectedOutletId) {
+        fetch("http://localhost:5000/api/attendance/checkin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ employee_id: data.employee.id, outlet_id: selectedOutletId }),
+        })
+          .then((r) => r.json())
+          .then((d) => { if (d.attendance) setAttendanceId(d.attendance.id); })
+          .catch(() => {});
+      }
     } catch {
       setPinError("Failed to connect to server");
     }
+  };
+
+  const handleLockRegister = async () => {
+    if (attendanceId) {
+      try {
+        await fetch(`http://localhost:5000/api/attendance/${attendanceId}/checkout`, {
+          method: "POST",
+        });
+      } catch {}
+    }
+    setCurrentEmployee(null);
+    setAttendanceId(null);
   };
 
   if (!currentEmployee) {
@@ -449,8 +489,14 @@ export default function POS() {
               {currentEmployee.role}
             </span>
           </div>
+          {attendanceId && (
+            <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold">
+              <Clock size={13} />
+              Clocked In
+            </div>
+          )}
           <button
-            onClick={() => setCurrentEmployee(null)}
+            onClick={handleLockRegister}
             className="flex items-center gap-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 px-3 py-1.5 rounded-lg transition-colors text-sm font-semibold border border-transparent hover:border-rose-100"
           >
             <LogOut size={16} />
@@ -563,6 +609,12 @@ export default function POS() {
                 <span>Tax</span>
                 <span className="font-medium">${taxTotal.toFixed(2)}</span>
               </div>
+              {discountValue > 0 && (
+                <div className="flex justify-between text-lg text-rose-600">
+                  <span>Discount</span>
+                  <span className="font-medium">-${discountValue.toFixed(2)}</span>
+                </div>
+              )}
               <div className="h-px bg-slate-200 my-4"></div>
               <div className="flex justify-between text-2xl font-bold text-slate-900">
                 <span>Total</span>
@@ -644,6 +696,45 @@ export default function POS() {
                         ))}
                     </select>
                   </div>
+                </div>
+
+                {/* Discount Row */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Discount <span className="text-slate-400 font-normal">(optional)</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="flex rounded-lg border border-slate-200 overflow-hidden text-sm font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setDiscountType("fixed")}
+                        className={`px-3 py-2 transition-colors ${discountType === "fixed" ? "bg-blue-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                      >
+                        $
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDiscountType("percent")}
+                        className={`px-3 py-2 transition-colors ${discountType === "percent" ? "bg-blue-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                      >
+                        %
+                      </button>
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={discountInput}
+                      onChange={(e) => setDiscountInput(e.target.value)}
+                      placeholder={discountType === "percent" ? "e.g. 10" : "e.g. 5.00"}
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    />
+                  </div>
+                  {discountValue > 0 && (
+                    <p className="text-xs text-rose-600 font-medium mt-1">
+                      −${discountValue.toFixed(2)} off · New total: ${total.toFixed(2)}
+                    </p>
+                  )}
                 </div>
 
                 <form onSubmit={handleAddPayment} className="space-y-4">

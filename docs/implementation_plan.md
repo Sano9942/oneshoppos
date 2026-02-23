@@ -1,108 +1,159 @@
-# Professional Software Engineering Process
+# OneShopPOS — Implementation Reference
 
-To ensure the highest quality for OneShopPOS, we will adopt a professional software house methodology. Every phase of the project will be executed and reviewed from the perspective of specialized engineering roles.
-
-## The Engineering Roles
-
-### 1. The Systems Architect / Lead Planner
-
-- **Responsibility:** Designs the overall structure of the application. Selects the technology stack, designs the database schema, and ensures the system can handle the required scale (e.g., 5,000 products).
-- **Review Duties:** Approves the initial plans, database designs, and API contracts before any code is written.
-
-### 2. The Backend Engineer (Data & Logic)
-
-- **Responsibility:** Builds the Node.js/Express server. Writes the SQL queries for the SQLite database. Ensures fast data retrieval and safe transactions to prevent overselling.
-- **Review Duties:** Reviews data integrity, checks for SQL injection vulnerabilities, and ensures APIs are returning correct HTTP status codes.
-
-### 3. The Frontend Engineer (UI/UX)
-
-- **Responsibility:** Builds the React interface. Ensures the POS is lightning fast, aesthetic, and intuitive for a cashier to use alongside a barcode scanner.
-- **Review Duties:** Reviews UI responsiveness, error handling on the client side (e.g., item not found), and overall user experience.
-
-### 4. The Quality Assurance (QA) Engineer
-
-- **Responsibility:** The final gatekeeper. Tests the application continuously. Simulates edge cases (e.g., scanning multiple items rapidly, printing offline).
-- **Review Duties:** Runs manual and automated tests. A task cannot be checked off the `task.md` list until the QA Engineer officially signs off.
+This document records the technical architecture, API contract, and database schema as actually built. It reflects the real system, not the original plan.
 
 ---
 
-## The Step-by-Step Review Protocol
+## Database Schema (SQLite — 19 Migrations)
 
-For every single task on our checklist, we will strictly follow this protocol:
+### Core Tables
 
-1. **Planning (Architect):** Define exactly what is being built in this specific step.
-2. **Execution (Backend/Frontend):** Write the code to fulfill the requirements.
-3. **Internal Review (Specialist):** The engineer reviews their own code for best practices and performance.
-4. **QA Testing (QA Engineer):** We will actively test the new feature (e.g., using test scripts or manual verification) to find bugs.
-5. **Sign-off:** Only if steps 1-4 pass without critical errors do we check the item off our `task.md` checklist and move to the next step. If an error is found, we loop back to step 2.
+**products**
+- id, barcode (UNIQUE + indexed), name, price, cost_price, stock (legacy), category_id FK, brand_id FK, tax_id FK, effective_tax_rate
+
+**sales**
+- id, total_amount, payment_method, timestamp, outlet_id FK, employee_id FK, customer_id FK, voided (0/1), void_reason, discount_amount, discount_type
+
+**sale_items**
+- id, sale_id FK, product_id FK, quantity, price_at_sale, cost_price_at_sale
+
+**sale_payments** (multi-tender)
+- id, sale_id FK, payment_method, amount
+
+### Stock Control
+
+**outlet_stock**
+- product_id FK, outlet_id FK, quantity — UNIQUE(product_id, outlet_id)
+
+**stock_adjustments**
+- id, product_id FK, outlet_id FK, adjustment_type, quantity_change, reason, adjusted_at
+
+**inventory_transfers**
+- id, from_outlet_id FK, to_outlet_id FK, product_id FK, quantity, transferred_at, notes
+
+### Setup / Infrastructure
+
+**outlets** — id, name, address, phone
+**employees** — id, name, role, pin_code
+**brands** — id, name
+**categories** — id, name, description
+**taxes** — id, name, rate, is_default
+
+### Customer & Suppliers
+
+**customers** — id, name, mobile, email, address, loyalty_points, created_at
+**suppliers** — id, name, contact_person, phone, email, address
+
+### Purchasing
+
+**purchase_orders** — id, supplier_id FK, status (Draft/Received), total_cost, created_at
+**purchase_order_items** — id, po_id FK, product_id FK, quantity, cost_price
+
+**goods_received_notes** — id, grn_number (UNIQUE), po_id FK, outlet_id FK, received_by FK employees, received_at, notes
+**grn_items** — id, grn_id FK, product_id FK, qty_ordered, qty_received, cost_price
+
+### Register Operations
+
+**cash_shifts** — id, outlet_id FK, employee_id FK, status (open/closed), opening_float, closing_cash, expected_cash, variance, opened_at, closed_at, notes
+
+### HR
+
+**employee_attendance** — id, employee_id FK, outlet_id FK, check_in DATETIME, check_out DATETIME, hours REAL, status (present/absent/late), comment
 
 ---
 
-## Technical Architecture Plan
+## API Endpoint Reference
 
-As the **Systems Architect**, here is the proposed architecture for Phase 1.
+### Products
+- GET /api/products — paginated list with search
+- GET /api/products/scan/:barcode?outlet_id= — POS barcode lookup
+- POST /api/products — create
+- PUT /api/products/:id — update
+- DELETE /api/products/:id — delete
 
-### 1. Database Schema (SQLite)
+### Sales
+- POST /api/sales — checkout: creates sale + sale_items + sale_payments + deducts outlet_stock. Accepts: cartItems, payments, outlet_id, employee_id, customer_id, discount_amount, discount_type
+- GET /api/sales — paginated history with date/search filters, returns discount_amount
+- GET /api/sales/:id — detail with items and payments
+- POST /api/sales/:id/void — void a sale
 
-We will use three clean, simplified tables (inspired by Frappe DocTypes) to handle all pos operations locally.
+### Attendance
+- GET /api/attendance?date_from&date_to&employee_id — list records
+- POST /api/attendance/checkin — clock in (employee_id, outlet_id)
+- POST /api/attendance/:id/checkout — clock out, auto-calculates hours
 
-#### Table: `products`
+### Outlets / Employees / Brands / Categories / Taxes / Suppliers / Customers
+- Standard GET (list) / POST (create) / PUT :id (update) / DELETE :id per resource
 
-- `id` (INTEGER, Primary Key)
-- `barcode` (TEXT, Unique, Indexed for fast scanning)
-- `name` (TEXT)
-- `price` (REAL)
-- `stock` (INTEGER) - Prevents overselling.
+### Cash Shifts
+- GET /api/shifts?outlet_id — list shifts
+- GET /api/shifts/active?outlet_id — get current open shift
+- POST /api/shifts/open — open a shift
+- POST /api/shifts/:id/close — close a shift with closing_cash
 
-#### Table: `sales` (The Receipts)
+### Purchase Orders
+- GET /api/purchase-orders — list
+- GET /api/purchase-orders/:id — detail with items
+- POST /api/purchase-orders — create with items
+- POST /api/purchase-orders/:id/receive — receive PO, creates GRN record, updates outlet_stock
+- DELETE /api/purchase-orders/:id — delete (Draft only)
 
-- `id` (INTEGER, Primary Key)
-- `total_amount` (REAL)
-- `payment_method` (TEXT) - e.g., 'Cash' or 'Card'
-- `timestamp` (DATETIME)
+### GRN
+- GET /api/grn?date_from&date_to — list all GRNs
+- GET /api/grn/:id — detail with items
 
-#### Table: `sale_items` (Line items on the receipt)
+### Reports
+- GET /api/reports/dashboard — KPIs for home screen
+- GET /api/reports/sales-summary — per-sale headers
+- GET /api/reports/sales-detail — line items per sale
+- GET /api/reports/sales-stock — sales vs stock comparison
+- GET /api/reports/inventory-dump — full inventory snapshot
+- GET /api/reports/category-wise — revenue by category
+- GET /api/reports/product-spec — product details
+- GET /api/reports/on-hand — current stock levels
+- GET /api/reports/item-wise — units sold + revenue + profit per product
+- GET /api/reports/product-performance — margin analysis
+- GET /api/reports/inventory-loss — write-off history
+- GET /api/reports/wastage — wastage totals
+- GET /api/reports/replenishment — low stock reorder suggestions
+- GET /api/reports/supplier-wise — spend per supplier
+- GET /api/reports/order-wise — per-order with discount column
+- GET /api/transfers — for product movement and STR reports
 
-- `id` (INTEGER, Primary Key)
-- `sale_id` (INTEGER, Foreign Key referencing `sales`)
-- `product_id` (INTEGER, Foreign Key referencing `products`)
-- `quantity` (INTEGER)
-- `price_at_sale` (REAL) - Locks in the price in case product price changes later.
+---
 
-### 2. API Endpoints (Backend to Frontend)
+## Frontend Page Map
 
-The frontend UI will communicate with the Node.js backend using these clean REST APIs:
+| Route | File | Description |
+|---|---|---|
+| / | Dashboard.jsx | KPI home screen |
+| /pos | POS.jsx | Register terminal (full screen) |
+| /inventory | Inventory.jsx | Product management |
+| /adjustments | StockAdjustments.jsx | Stock write-offs |
+| /transfers | Transfers.jsx | Inter-outlet transfers |
+| /sales-history | SalesHistory.jsx | Past sales + void |
+| /cash-management | CashManagement.jsx | Shift management |
+| /customers | Customers.jsx | CRM |
+| /attendance | Attendance.jsx | Clock-in/out log |
+| /suppliers | Suppliers.jsx | Supplier CRUD |
+| /purchase-orders | PurchaseOrders.jsx | PO create + GRN receive |
+| /reports | Reports.jsx | 20-tab reporting engine |
+| /outlets | Outlets.jsx | Outlet setup |
+| /employees | Employees.jsx | Employee setup |
+| /brands | Brands.jsx | Brand setup |
+| /categories | Categories.jsx | Category setup |
+| /taxes | Taxes.jsx | Tax rate setup |
 
-**Inventory (Products)**
+---
 
-- `GET /api/products` - Load the inventory table.
-- `GET /api/products/scan/:barcode` - Instant lookup when a barcode is scanned. Returns 404 if not found.
-- `POST /api/products` - Add a new item.
-- `PUT /api/products/:id` - Update stock/price.
-- `DELETE /api/products/:id` - Remove item.
+## Key Design Decisions
 
-**Point of Sale (Checkout)**
+1. **outlet_stock over products.stock** — Stock is tracked per outlet, not globally. The legacy `products.stock` column is unused; all stock reads/writes go to `outlet_stock`.
 
-- `POST /api/sales` - Submit a completed cart.
-  - _System Logic:_ This API will receive the cart, automatically subtract `quantity` from the `products` table stock, and insert records into `sales` and `sale_items`. Returns the exact receipt data.
+2. **discount stored on sales table** — Both `discount_amount` (actual $ value deducted) and `discount_type` are stored, not just the percentage, so historical reports always show the correct number regardless of future price changes.
 
-### 3. UI Wireframe & Layout Plan
+3. **GRN as audit trail** — Receiving a PO creates a GRN record instead of directly updating stock. This gives a complete history of when goods arrived, who received them, and how many per item.
 
-Inspired by Frappe/ERPNext's clean interface, the React frontend will follow a modern dual-pane layout:
+4. **Attendance auto-driven by POS** — Clock-in/out is automatic on PIN login/lock, so cashiers never have to remember to clock themselves in/out.
 
-#### A. Left Sidebar (Navigation)
-
-- **POS Terminal:** The main checkout screen.
-- **Inventory:** The screen to manage the 5,000 products.
-- **Sales History:** View past receipts.
-
-#### B. Main Workspace - POS Terminal (The most critical screen)
-
-- **Top Bar:** A large input field that is _always automatically focused_ so the user can just scan a barcode with the USB scanner without touching the mouse.
-- **Left 70%:** The current Cart. Displays items scanned, quantity, unit price, and a delete button per row.
-- **Right 30%:** The Checkout Panel. Shows Subtotal, Tax (if any), Total Amount. Contains a large, green "Pay & Print Receipt" button.
-
-#### C. Main Workspace - Inventory
-
-- A clean, searchable, tabular data grid showing the products.
-- Includes buttons to "Add Item" or edit existing items easily. Uses pagination so the browser doesn't crash when loading 5,000 items.
+5. **tax-inclusive pricing** — Prices are stored inclusive of tax. Tax is reverse-calculated from the price for display on receipts and reports.

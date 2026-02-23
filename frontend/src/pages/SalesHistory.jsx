@@ -248,6 +248,7 @@ export default function SalesHistory() {
                   <th className="p-4">Cashier</th>
                   <th className="p-4">Outlet</th>
                   <th className="p-4 text-center">Items</th>
+                  <th className="p-4 text-right">Discount</th>
                   <th className="p-4 text-right">Total</th>
                   <th className="p-4">Payment</th>
                   <th className="p-4">Status</th>
@@ -256,13 +257,13 @@ export default function SalesHistory() {
               <tbody className="divide-y divide-slate-100">
                 {isLoading ? (
                   <tr>
-                    <td colSpan="8" className="p-8 text-center text-slate-400">
+                    <td colSpan="9" className="p-8 text-center text-slate-400">
                       Loading sales...
                     </td>
                   </tr>
                 ) : sales.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="p-10 text-center">
+                    <td colSpan="9" className="p-10 text-center">
                       <ClipboardList
                         size={48}
                         className="mx-auto text-slate-300 mb-3"
@@ -299,6 +300,15 @@ export default function SalesHistory() {
                         <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full text-xs font-semibold">
                           {s.item_count}
                         </span>
+                      </td>
+                      <td className="p-4 text-right text-sm">
+                        {s.discount_amount > 0 ? (
+                          <span className="text-rose-600 font-semibold">
+                            -{formatCurrency(s.discount_amount)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
                       </td>
                       <td className="p-4 text-right font-bold text-slate-900">
                         {formatCurrency(s.total_amount)}

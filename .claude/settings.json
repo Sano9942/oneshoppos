@@ -10,7 +10,10 @@
       "Bash(curl:*)",
       "Bash(wmic process:*)",
       "Bash(cmd //c \"taskkill /PID 20884 /F\")",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(cmd //c \"taskkill /F /IM node.exe\")",
+      "Bash(cmd //c \"netstat -ano | findstr :5000 | findstr LISTENING\")",
+      "Bash(cmd //c \"netstat -ano | findstr :5173 | findstr LISTENING\")"
     ]
   }
 }

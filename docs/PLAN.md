@@ -1,31 +1,98 @@
-# OneShopPOS - Software Development Plan
+# OneShopPOS — Project Overview & Current Status
 
-## Project Overview
+**Status: Phase 5 Complete — Fully Production Ready**
 
-OneShopPOS is a custom Point of Sale (POS) software designed to handle daily business operations, sales tracking, and inventory management.
+OneShopPOS is a custom Point of Sale (POS) software for daily retail operations. It runs 100% offline on a Windows PC as a local web app, inspired by Xstak/ERPNext in design and feature depth.
 
-## 1. Core Features (Minimum Viable Product)
+---
 
-- [x] Product & Inventory Management (Handle ~5,000 items, track stock levels to prevent overselling)
-- [x] Sales & Checkout System (Ring up sales, calculate totals)
-- [x] Barcode Scanning Support (Fast checkout using standard USB barcode scanners)
-- [x] Receipt Printing (Generate and print physical receipts for customers)
-- [x] Single User Account (No need to separate Admin vs. Cashier roles for the MVP)
+## Technology Stack (Final)
 
-## 2. Technology Stack Options (Selected)
+- **Frontend:** React + Vite 7.x, Tailwind CSS v4, Lucide React icons
+- **Backend:** Node.js + Express 5.x
+- **Database:** SQLite — single file `backend/database.sqlite`, zero setup, 100% offline
+- **Environment:** dotenv
 
-We will build a **Web Application** that runs perfectly natively on your Windows desktop. We will use the **Frappe Framework** as an inspiration for the design and database structure (i.e., clean tables, simple "Doctype" like data handling), but we will build it using lightweight tools so you don't have to install slow Linux virtual machines or Docker on your Windows PC!
+---
 
-**Selected Tech Stack:**
+## Original MVP Goals vs. What Was Built
 
-- **Frontend (The User Interface):** HTML, CSS, JavaScript (using React via Vite for a super fast, app-like feel). We will make it look extremely modern and premium, just like Frappe/ERPNext.
-- **Backend (The Data Engine):** Node.js with Express.
-- **Database:** SQLite. This is perfect! It saves all 5,000 products into a single file right on your computer, meaning it's incredibly fast, requires zero setup, and works 100% offline.
+| Original Goal | Status |
+|---|---|
+| Product & Inventory Management (~5,000 items) | Done — with per-outlet stock tracking |
+| Sales & Checkout System | Done — multi-tender, discounts, taxes |
+| Barcode Scanning Support | Done |
+| Receipt Printing | Done — thermal-style browser print |
+| Single User Account | Expanded into full multi-employee PIN system |
 
-## 3. Next Steps
+The project far exceeded the original MVP scope and now rivals a commercial ERP.
 
-1. Decide on the Exact Features: What do you want the POS to do on day one?
-2. Choose the Tech Stack.
-3. Design the Database (Items, Users, Receipts).
-4. Build the user interface (UI).
-5. Code the business logic and connect the database.
+---
+
+## Complete Feature List (All Built & Working)
+
+### POS Terminal (Register)
+- Multi-employee PIN login with Lock Register
+- Auto clock-in on login, auto clock-out on lock (attendance)
+- Barcode scanner — auto-focused input, always ready
+- Cart with quantity management and line-item deletion
+- Multi-tender payments: Cash + Card split in one sale
+- Discount: Fixed ($) or Percentage (%) per sale with live preview
+- Tax: per-product, tax-inclusive calculation
+- Customer selector on checkout (search by name or mobile)
+- Thermal-style receipt printing
+- Active shift warning banner when no shift is open
+
+### Inventory
+- Full product CRUD (name, barcode, price, cost, category, brand, tax)
+- Paginated table — handles 5,000+ products without crashing
+- Per-outlet stock via outlet_stock table
+- Stock Adjustments — damage/loss write-offs with reason logging
+- Inventory Transfers — move stock from Outlet A to Outlet B
+
+### Purchasing & Receiving
+- Supplier CRUD
+- Purchase Orders with line items and cost prices
+- GRN (Goods Received Note) — partial receipts supported, per-item qty, auto-updates outlet stock and product cost
+
+### Setup
+- Outlets (multiple store locations)
+- Employees (name, role, PIN code)
+- Brands, Categories, Taxes — all fully configurable
+
+### Customer Management
+- Customer profiles (name, mobile, email, address, loyalty points)
+- Per-customer order history in the CRM page
+- Customer linkage on POS checkout
+
+### Cash Management
+- Shift open/close with opening float input
+- Cash sales auto-summed per shift period
+- Variance calculation (expected cash vs actual closing cash)
+- Full shift history log
+
+### Sales History
+- Paginated with date range and search filters
+- Receipt detail panel with all line items and payments
+- Void sale with reason logging
+
+### Employee Attendance
+- Auto clock-in tied to POS PIN login, auto clock-out on Lock Register
+- "Clocked In" badge shown in POS top bar while on shift
+- Attendance management page — filterable by date and employee, shows total hours
+
+### Reporting Engine — 20 tabs, 6 groups
+- **Sales:** Overview, Sales Summary, Sales Detail, Order Wise, Sales & Stock, Category Wise
+- **Customers:** Customer Details, Customer Wise
+- **Inventory:** Inventory Dump, On Hand, Item Wise, Product Performance, Product Spec, Replenishment
+- **Operations:** Inventory Loss, Wastage, Product Movement, STR Report
+- **Procurement:** Supplier Wise, Purchase Orders, GRN Report
+- **HR:** Attendance Report
+
+---
+
+## How to Start
+
+Double-click **START.bat** in the project root. It starts both servers and opens the browser automatically.
+- Backend: http://localhost:5000
+- Frontend: http://localhost:5173

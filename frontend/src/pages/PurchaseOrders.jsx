@@ -5,10 +5,19 @@ export default function PurchaseOrders() {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [products, setProducts] = useState([]);
-  
+  const [outlets, setOutlets] = useState([]);
+  const [employees, setEmployees] = useState([]);
+
   // Views: 'list', 'create', 'view'
   const [currentView, setCurrentView] = useState('list');
   const [selectedPO, setSelectedPO] = useState(null);
+
+  // GRN Modal State
+  const [isGrnModalOpen, setIsGrnModalOpen] = useState(false);
+  const [grnOutletId, setGrnOutletId] = useState('');
+  const [grnReceivedBy, setGrnReceivedBy] = useState('');
+  const [grnNotes, setGrnNotes] = useState('');
+  const [grnQtys, setGrnQtys] = useState({}); // { product_id: qty_received }
   
   // Create PO State
   const [poForm, setPoForm] = useState({ supplier_id: '' });
@@ -22,6 +31,8 @@ export default function PurchaseOrders() {
     fetchPurchaseOrders();
     fetchSuppliers();
     fetchProducts();
+    fetch('http://localhost:5000/api/outlets').then(r => r.json()).then(d => setOutlets(d.outlets || [])).catch(() => {});
+    fetch('http://localhost:5000/api/employees').then(r => r.json()).then(d => setEmployees(d.employees || [])).catch(() => {});
   }, []);
 
   const fetchPurchaseOrders = async () => {
@@ -124,16 +135,38 @@ export default function PurchaseOrders() {
     }
   };
 
-  const handleReceivePO = async (id) => {
-    if (!window.confirm("Are you sure? This will officially add the items to your Inventory stock.")) return;
-    
+  const openGrnModal = (po, items) => {
+    const initialQtys = {};
+    items.forEach(item => { initialQtys[item.product_id] = item.quantity; });
+    setGrnQtys(initialQtys);
+    setGrnOutletId(outlets[0]?.id?.toString() || '');
+    setGrnReceivedBy('');
+    setGrnNotes('');
+    setIsGrnModalOpen(true);
+  };
+
+  const handleSubmitGrn = async () => {
+    if (!grnOutletId) { alert("Please select an outlet."); return; }
+    const { purchaseOrder: po, items } = selectedPO;
+    const itemsPayload = items.map(item => ({
+      product_id: item.product_id,
+      qty_received: parseFloat(grnQtys[item.product_id] ?? item.quantity),
+    }));
     try {
-      const res = await fetch(`http://localhost:5000/api/purchase-orders/${id}/receive`, {
-        method: 'POST'
+      const res = await fetch(`http://localhost:5000/api/purchase-orders/${po.id}/receive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          outlet_id: parseInt(grnOutletId),
+          received_by: grnReceivedBy ? parseInt(grnReceivedBy) : null,
+          items: itemsPayload,
+          notes: grnNotes,
+        }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
-      
-      alert("Purchase Order Received & Inventory Updated!");
+      const data = await res.json();
+      alert(`GRN Created: ${data.grn_number}`);
+      setIsGrnModalOpen(false);
       setCurrentView('list');
       fetchPurchaseOrders();
     } catch (err) {
@@ -352,12 +385,12 @@ export default function PurchaseOrders() {
           </div>
 
           {po.status === 'Draft' && (
-            <button 
-              onClick={() => handleReceivePO(po.id)}
+            <button
+              onClick={() => openGrnModal(po, items)}
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md shadow-emerald-200 transition-all flex items-center gap-2"
             >
               <PackageCheck size={20} />
-              Receive Items to Inventory
+              Receive Items (Create GRN)
             </button>
           )}
         </div>
@@ -406,6 +439,85 @@ export default function PurchaseOrders() {
             </table>
           </div>
         </div>
+
+      {/* GRN Modal */}
+      {isGrnModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <PackageCheck size={20} className="text-emerald-600" />
+                Goods Received Note
+              </h2>
+              <button onClick={() => setIsGrnModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-200">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Receiving Outlet *</label>
+                  <select value={grnOutletId} onChange={e => setGrnOutletId(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="">Select outlet...</option>
+                    {outlets.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Received By</label>
+                  <select value={grnReceivedBy} onChange={e => setGrnReceivedBy(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="">Select employee...</option>
+                    {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Notes</label>
+                <textarea value={grnNotes} onChange={e => setGrnNotes(e.target.value)}
+                  rows={2} placeholder="Optional receiving notes..."
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none" />
+              </div>
+
+              <div>
+                <h3 className="text-xs font-semibold text-slate-500 uppercase mb-2">Qty Received per Item</h3>
+                <div className="space-y-2">
+                  {selectedPO.items.map(item => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 bg-slate-50 rounded-lg px-4 py-2.5 border border-slate-100">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{item.name}</p>
+                        <p className="text-xs text-slate-400 font-mono">{item.barcode} · Ordered: {item.quantity}</p>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        max={item.quantity}
+                        value={grnQtys[item.product_id] ?? item.quantity}
+                        onChange={e => setGrnQtys(prev => ({ ...prev, [item.product_id]: e.target.value }))}
+                        className="w-20 text-center border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+              <button onClick={() => setIsGrnModalOpen(false)}
+                className="px-5 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100">
+                Cancel
+              </button>
+              <button onClick={handleSubmitGrn}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold flex items-center gap-2 transition-colors">
+                <CheckCircle2 size={16} />
+                Confirm & Create GRN
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       </div>
     );

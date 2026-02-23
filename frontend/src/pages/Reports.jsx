@@ -3,7 +3,7 @@ import {
   BarChart3, TrendingUp, DollarSign, PackageX, ShoppingBag,
   AlertTriangle, TrendingDown, Users, ClipboardList, Search, X,
   Package, Truck, Archive, RotateCcw, Layers, Tag,
-  ArrowLeftRight, ShoppingCart, Star, Recycle, BarChart2, FileText,
+  ArrowLeftRight, ShoppingCart, Star, Recycle, BarChart2, FileText, Clock,
 } from "lucide-react";
 
 const API = "http://localhost:5000";
@@ -547,7 +547,7 @@ function OrderWiseTab() {
       <DateRangeFilter dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo}
         search={search} setSearch={setSearch} searchPlaceholder="Search order # or customer..." />
       <CardShell title="Order Wise Report" subtitle={`${rows.length} order${rows.length !== 1 ? "s" : ""} — Excl. Tax ${fmt(totalExcl)} · Incl. Tax ${fmt(totalIncl)}`}>
-        <TableShell cols={["Date", "Customer", "Order #", "Sale Excl. Tax", "Sale Incl. Tax", "Payment"]}
+        <TableShell cols={["Date", "Customer", "Order #", "Sale Excl. Tax", "Discount", "Sale Incl. Tax", "Payment"]}
           loading={loading} empty={rows.length === 0}>
           {rows.map((r) => (
             <tr key={r.id} className="hover:bg-slate-50 transition-colors">
@@ -555,6 +555,11 @@ function OrderWiseTab() {
               <td className="p-4 text-sm font-medium text-slate-800">{r.customer_name}</td>
               <td className="p-4 font-mono font-bold text-slate-800">#{r.id}</td>
               <td className="p-4 text-right text-sm text-slate-700">{fmt(r.sale_excl_tax)}</td>
+              <td className="p-4 text-right text-sm">
+                {r.discount_amount > 0
+                  ? <span className="text-rose-600 font-semibold">-{fmt(r.discount_amount)}</span>
+                  : <span className="text-slate-400">—</span>}
+              </td>
               <td className="p-4 text-right font-bold text-slate-900">{fmt(r.total_amount)}</td>
               <td className="p-4 text-sm text-slate-600">{r.payment_method}</td>
             </tr>
@@ -1057,6 +1062,126 @@ function PurchaseOrdersReportTab() {
   );
 }
 
+// ─── GRN Report Tab ───────────────────────────────────────────────────────────
+
+function GRNReportTab() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  const load = useCallback(() => {
+    setLoading(true);
+    const p = new URLSearchParams();
+    if (dateFrom) p.set("date_from", dateFrom);
+    if (dateTo) p.set("date_to", dateTo);
+    fetch(`${API}/api/grn?${p}`)
+      .then((r) => r.json())
+      .then((d) => setRows(d.grns || []))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
+  }, [dateFrom, dateTo]);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <DateRangeFilter dateFrom={dateFrom} setDateFrom={setDateFrom} dateTo={dateTo} setDateTo={setDateTo} onApply={load} />
+      <CardShell title="GRN Report" subtitle={`${rows.length} goods received note${rows.length !== 1 ? "s" : ""}`} icon={Archive}>
+        <TableShell cols={["GRN #", "Date", "PO #", "Supplier", "Outlet", "Received By", "Lines"]}
+          loading={loading} empty={rows.length === 0} emptyIcon={Archive}>
+          {rows.map((r) => (
+            <tr key={r.id} className="hover:bg-slate-50 transition-colors">
+              <td className="p-4 font-mono font-bold text-slate-800">{r.grn_number}</td>
+              <td className="p-4 text-sm text-slate-500 whitespace-nowrap">{fmtDate(r.received_at)}</td>
+              <td className="p-4 font-mono text-slate-700">{r.po_number || "—"}</td>
+              <td className="p-4 font-medium text-slate-800">{r.supplier_name || "—"}</td>
+              <td className="p-4 text-slate-600">{r.outlet_name || "—"}</td>
+              <td className="p-4 text-slate-600">{r.received_by_name || "—"}</td>
+              <td className="p-4 text-center">
+                <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold">{r.line_count}</span>
+              </td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
+  );
+}
+
+// ─── Attendance Tab ───────────────────────────────────────────────────────────
+
+function AttendanceTab() {
+  const today = new Date().toISOString().slice(0, 10);
+  const [records, setRecords] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [dateFrom, setDateFrom] = useState(today);
+  const [dateTo, setDateTo] = useState(today);
+  const [employeeId, setEmployeeId] = useState("");
+
+  useEffect(() => {
+    fetch(`${API}/api/employees`).then((r) => r.json()).then((d) => setEmployees(d.employees || [])).catch(() => {});
+  }, []);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    const p = new URLSearchParams();
+    if (dateFrom) p.set("date_from", dateFrom);
+    if (dateTo) p.set("date_to", dateTo);
+    if (employeeId) p.set("employee_id", employeeId);
+    fetch(`${API}/api/attendance?${p}`)
+      .then((r) => r.json())
+      .then((d) => setRecords(d.records || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [dateFrom, dateTo, employeeId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const totalHours = records.reduce((s, r) => s + (r.hours || 0), 0);
+
+  const fmtTime = (dt) => dt ? new Date(dt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "—";
+
+  return (
+    <CardShell title="Attendance Report" icon={Clock}>
+      <div className="flex flex-wrap gap-3 items-end mb-4">
+        <DateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} onApply={load} />
+        <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}
+          className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="">All Employees</option>
+          {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+        </select>
+        <span className="ml-auto text-sm font-semibold text-slate-600 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-lg">
+          Total: {totalHours.toFixed(2)}h
+        </span>
+      </div>
+      <TableShell
+        cols={["Date", "Employee", "Role", "Outlet", "Check In", "Check Out", "Hours", "Status"]}
+        loading={loading}
+        empty={records.length === 0}
+      >
+        {records.map((r) => (
+          <tr key={r.id} className="hover:bg-slate-50">
+            <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{fmtDate(r.check_in)}</td>
+            <td className="px-4 py-3 font-semibold text-slate-800 whitespace-nowrap">{r.employee_name}</td>
+            <td className="px-4 py-3 text-slate-500 capitalize whitespace-nowrap">{r.role}</td>
+            <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{r.outlet_name}</td>
+            <td className="px-4 py-3 font-mono text-slate-700 whitespace-nowrap">{fmtTime(r.check_in)}</td>
+            <td className="px-4 py-3 font-mono text-slate-700 whitespace-nowrap">{fmtTime(r.check_out)}</td>
+            <td className="px-4 py-3 font-semibold text-slate-800 whitespace-nowrap">{r.hours != null ? `${r.hours.toFixed(2)}h` : "—"}</td>
+            <td className="px-4 py-3">
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold capitalize ${
+                r.status === "present" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+              }`}>{r.status}</span>
+            </td>
+          </tr>
+        ))}
+      </TableShell>
+    </CardShell>
+  );
+}
+
 // ─── Main Reports Page ────────────────────────────────────────────────────────
 
 const GROUPS = [
@@ -1103,6 +1228,13 @@ const GROUPS = [
     tabs: [
       { id: "supplier-wise", label: "Supplier Wise", icon: Truck },
       { id: "purchase-orders-report", label: "Purchase Orders", icon: ShoppingCart },
+      { id: "grn-report", label: "GRN Report", icon: Archive },
+    ],
+  },
+  {
+    label: "HR",
+    tabs: [
+      { id: "attendance", label: "Attendance", icon: Clock },
     ],
   },
 ];
@@ -1129,6 +1261,8 @@ function TabContent({ activeTab }) {
     case "replenishment": return <ReplenishmentTab />;
     case "supplier-wise": return <SupplierWiseTab />;
     case "purchase-orders-report": return <PurchaseOrdersReportTab />;
+    case "grn-report": return <GRNReportTab />;
+    case "attendance": return <AttendanceTab />;
     default: return null;
   }
 }

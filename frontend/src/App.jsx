@@ -15,6 +15,7 @@ import Transfers from "./pages/Transfers";
 import SalesHistory from "./pages/SalesHistory";
 import CashManagement from "./pages/CashManagement";
 import Customers from "./pages/Customers";
+import Attendance from "./pages/Attendance";
 import Reports from "./pages/Reports";
 
 function App() {
@@ -41,6 +42,7 @@ function App() {
           <Route path="/taxes" element={<Taxes />} />
           <Route path="/outlets" element={<Outlets />} />
           <Route path="/employees" element={<Employees />} />
+          <Route path="/attendance" element={<Attendance />} />
           <Route path="/brands" element={<Brands />} />
           <Route path="/reports" element={<Reports />} />
         </Route>

@@ -697,91 +697,134 @@ app.post("/api/purchase-orders", (req, res) => {
 // Receive a purchase order (Updates Inventory Stock & Cost Price)
 app.post("/api/purchase-orders/:id/receive", (req, res) => {
   const { id } = req.params;
-  const { outlet_id } = req.body; // Outlet ID where the stock should go
+  const { outlet_id, received_by, items: receivedItems, notes } = req.body;
 
   if (!outlet_id) {
-    return res
-      .status(400)
-      .json({ error: "Outlet ID is required to receive PO" });
+    return res.status(400).json({ error: "Outlet ID is required to receive PO" });
   }
 
-  db.get("SELECT status FROM purchase_orders WHERE id = ?", [id], (err, po) => {
+  db.get("SELECT * FROM purchase_orders WHERE id = ?", [id], (err, po) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!po) return res.status(404).json({ error: "PO not found" });
     if (po.status === "Received")
       return res.status(400).json({ error: "PO already received" });
 
     db.all(
-      "SELECT product_id, quantity, cost_price FROM purchase_order_items WHERE po_id = ?",
+      "SELECT poi.*, p.name as product_name FROM purchase_order_items poi JOIN products p ON poi.product_id = p.id WHERE poi.po_id = ?",
       [id],
-      (err, items) => {
+      (err, poItems) => {
         if (err) return res.status(500).json({ error: err.message });
+
+        // Build a map of qty_received: use provided items or default to full quantity
+        const receivedMap = {};
+        if (receivedItems && Array.isArray(receivedItems)) {
+          receivedItems.forEach((ri) => { receivedMap[ri.product_id] = parseFloat(ri.qty_received) || 0; });
+        }
+
+        const grnNumber = `GRN-${Date.now()}`;
 
         db.serialize(() => {
           db.run("BEGIN TRANSACTION");
 
-          // Update PO status
+          // 1. Update PO status
+          db.run("UPDATE purchase_orders SET status = 'Received' WHERE id = ?", [id]);
+
+          // 2. Create GRN header
           db.run(
-            "UPDATE purchase_orders SET status = 'Received' WHERE id = ?",
-            [id],
+            "INSERT INTO goods_received_notes (grn_number, po_id, outlet_id, received_by, notes) VALUES (?, ?, ?, ?, ?)",
+            [grnNumber, id, outlet_id, received_by || null, notes || null],
+            function (err) {
+              if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
+
+              const grnId = this.lastID;
+              const grnItemStmt = db.prepare(
+                "INSERT INTO grn_items (grn_id, product_id, qty_ordered, qty_received, cost_price) VALUES (?, ?, ?, ?, ?)"
+              );
+              const updateCostStmt = db.prepare("UPDATE products SET cost_price = ? WHERE id = ?");
+              const updateStockStmt = db.prepare(`
+                INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+                VALUES (?, ?, ?)
+                ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = quantity + ?
+              `);
+
+              poItems.forEach((item) => {
+                const qtyReceived = receivedMap[item.product_id] ?? item.quantity;
+                grnItemStmt.run(grnId, item.product_id, item.quantity, qtyReceived, item.cost_price);
+                updateCostStmt.run(item.cost_price, item.product_id);
+                updateStockStmt.run(item.product_id, outlet_id, qtyReceived, qtyReceived);
+              });
+
+              grnItemStmt.finalize();
+              updateCostStmt.finalize();
+              updateStockStmt.finalize();
+
+              db.run("COMMIT", (err) => {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ message: "PO received. GRN created.", grn_number: grnNumber, grn_id: grnId });
+              });
+            }
           );
-
-          // Update Products cost_price
-          const updateCostStmt = db.prepare(
-            "UPDATE products SET cost_price = ? WHERE id = ?",
-          );
-          // Update or Insert into Outlet Stock
-          const updateStockStmt = db.prepare(`
-                    INSERT INTO outlet_stock (product_id, outlet_id, quantity)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = quantity + ?
-                `);
-
-          let hasError = false;
-
-          items.forEach((item) => {
-            updateCostStmt.run(item.cost_price, item.product_id, (err) => {
-              if (err) {
-                console.error("Cost Update Error", err);
-                hasError = true;
-              }
-            });
-
-            updateStockStmt.run(
-              item.product_id,
-              outlet_id,
-              item.quantity,
-              item.quantity,
-              (err) => {
-                if (err) {
-                  console.error("Stock Update Error", err);
-                  hasError = true;
-                }
-              },
-            );
-          });
-
-          updateCostStmt.finalize();
-          updateStockStmt.finalize();
-
-          if (hasError) {
-            db.run("ROLLBACK");
-            return res
-              .status(500)
-              .json({ error: "Failed to update inventory" });
-          }
-
-          db.run("COMMIT", (err) => {
-            if (err)
-              return res
-                .status(500)
-                .json({ error: "Failed to commit inventory changes" });
-            res.json({ message: "PO received and inventory updated" });
-          });
         });
-      },
+      }
     );
   });
+});
+
+// --- GRN (Goods Received Notes) ---
+
+app.get("/api/grn", (req, res) => {
+  const { date_from, date_to } = req.query;
+  const where = [];
+  const params = [];
+  if (date_from) { where.push("date(g.received_at,'localtime') >= ?"); params.push(date_from); }
+  if (date_to)   { where.push("date(g.received_at,'localtime') <= ?"); params.push(date_to); }
+  const sql = `
+    SELECT g.id, g.grn_number, g.received_at, g.notes,
+           ('PO-' || printf('%04d', po.id)) as po_number, s.name as supplier_name,
+           o.name as outlet_name,
+           e.name as received_by_name,
+           COUNT(gi.id) as line_count
+    FROM goods_received_notes g
+    LEFT JOIN purchase_orders po ON g.po_id = po.id
+    LEFT JOIN suppliers s ON po.supplier_id = s.id
+    LEFT JOIN outlets o ON g.outlet_id = o.id
+    LEFT JOIN employees e ON g.received_by = e.id
+    LEFT JOIN grn_items gi ON g.id = gi.grn_id
+    ${where.length ? "WHERE " + where.join(" AND ") : ""}
+    GROUP BY g.id
+    ORDER BY g.received_at DESC`;
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ grns: rows });
+  });
+});
+
+app.get("/api/grn/:id", (req, res) => {
+  const { id } = req.params;
+  db.get(
+    `SELECT g.*, ('PO-' || printf('%04d', po.id)) as po_number, s.name as supplier_name, o.name as outlet_name, e.name as received_by_name
+     FROM goods_received_notes g
+     LEFT JOIN purchase_orders po ON g.po_id = po.id
+     LEFT JOIN suppliers s ON po.supplier_id = s.id
+     LEFT JOIN outlets o ON g.outlet_id = o.id
+     LEFT JOIN employees e ON g.received_by = e.id
+     WHERE g.id = ?`,
+    [id],
+    (err, grn) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!grn) return res.status(404).json({ error: "GRN not found" });
+      db.all(
+        `SELECT gi.*, p.name as product_name, p.barcode
+         FROM grn_items gi JOIN products p ON gi.product_id = p.id
+         WHERE gi.grn_id = ?`,
+        [id],
+        (err, items) => {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json({ grn, items });
+        }
+      );
+    }
+  );
 });
 
 // Delete a purchase order
@@ -993,6 +1036,7 @@ app.get("/api/reports/order-wise", (req, res) => {
   const where = conditions.join(" AND ");
   db.all(
     `SELECT s.id, s.timestamp, s.total_amount, s.payment_method,
+            COALESCE(s.discount_amount, 0) as discount_amount,
             COALESCE(c.name, 'Walk-in Customer') as customer_name,
             o.name as outlet_name,
             COALESCE(SUM(si.price_at_sale * si.quantity), 0) as sale_excl_tax
@@ -1057,6 +1101,7 @@ app.get("/api/sales", (req, res) => {
 
     const listQuery = `
       SELECT s.id, s.timestamp, s.total_amount, s.payment_method, s.voided, s.void_reason,
+             COALESCE(s.discount_amount, 0) as discount_amount,
              o.name as outlet_name, e.name as employee_name,
              COUNT(si.id) as item_count
       FROM sales s
@@ -1193,6 +1238,8 @@ app.post("/api/sales", (req, res) => {
     outlet_id,
     employee_id,
     customer_id,
+    discount_amount = 0,
+    discount_type = "fixed",
   } = req.body;
 
   // Validation
@@ -1205,11 +1252,16 @@ app.post("/api/sales", (req, res) => {
       .json({ error: "Outlet ID is required for checkout" });
   }
 
-  // 1. Calculate Expected Total
-  const totalAmount = cartItems.reduce(
+  // 1. Calculate Expected Total (subtotal minus discount)
+  const subtotal = cartItems.reduce(
     (acc, item) => acc + item.price * item.quantity,
     0,
   );
+  const discountValue =
+    discount_type === "percent"
+      ? (subtotal * parseFloat(discount_amount || 0)) / 100
+      : parseFloat(discount_amount || 0);
+  const totalAmount = Math.max(0, subtotal - discountValue);
 
   // Determine the actual payments to record
   let finalPayments = payments;
@@ -1227,15 +1279,17 @@ app.post("/api/sales", (req, res) => {
   db.serialize(() => {
     db.run("BEGIN TRANSACTION");
 
-    // 2. Insert into Sales Table (outlet_id + employee_id + customer_id)
+    // 2. Insert into Sales Table (outlet_id + employee_id + customer_id + discount)
     db.run(
-      "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type) VALUES (?, ?, ?, ?, ?, ?, ?)",
       [
         totalAmount,
         mainPaymentMethod,
         outlet_id,
         employee_id || null,
         customer_id || null,
+        discountValue,
+        discount_type,
       ],
       function (err) {
         if (err) {
@@ -1756,6 +1810,64 @@ app.post("/api/shifts/:id/close", (req, res) => {
       );
     },
   );
+});
+
+// --- EMPLOYEE ATTENDANCE ---
+
+app.get("/api/attendance", (req, res) => {
+  const { date_from, date_to, employee_id } = req.query;
+  const where = [];
+  const params = [];
+  if (date_from) { where.push("date(ea.check_in,'localtime') >= ?"); params.push(date_from); }
+  if (date_to)   { where.push("date(ea.check_in,'localtime') <= ?"); params.push(date_to); }
+  if (employee_id) { where.push("ea.employee_id = ?"); params.push(employee_id); }
+  const sql = `
+    SELECT ea.*, e.name AS employee_name, e.role, o.name AS outlet_name
+    FROM employee_attendance ea
+    JOIN employees e ON ea.employee_id = e.id
+    JOIN outlets o ON ea.outlet_id = o.id
+    ${where.length ? "WHERE " + where.join(" AND ") : ""}
+    ORDER BY ea.check_in DESC`;
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ records: rows });
+  });
+});
+
+app.post("/api/attendance/checkin", (req, res) => {
+  const { employee_id, outlet_id } = req.body;
+  if (!employee_id || !outlet_id)
+    return res.status(400).json({ error: "employee_id and outlet_id are required" });
+  db.run(
+    "INSERT INTO employee_attendance (employee_id, outlet_id, status) VALUES (?, ?, 'present')",
+    [employee_id, outlet_id],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      db.get("SELECT * FROM employee_attendance WHERE id = ?", [this.lastID], (err2, row) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        res.json({ attendance: row });
+      });
+    }
+  );
+});
+
+app.post("/api/attendance/:id/checkout", (req, res) => {
+  const { id } = req.params;
+  db.get("SELECT * FROM employee_attendance WHERE id = ?", [id], (err, record) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!record) return res.status(404).json({ error: "Attendance record not found" });
+    if (record.check_out) return res.status(400).json({ error: "Already clocked out" });
+    const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+    const hours = parseFloat(((new Date() - new Date(record.check_in)) / 3600000).toFixed(2));
+    db.run(
+      "UPDATE employee_attendance SET check_out = ?, hours = ? WHERE id = ?",
+      [now, hours, id],
+      function (err2) {
+        if (err2) return res.status(500).json({ error: err2.message });
+        res.json({ message: "Clocked out successfully", hours, check_out: now });
+      }
+    );
+  });
 });
 
 // --- EXTENDED REPORTS ---

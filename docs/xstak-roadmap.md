@@ -1,69 +1,112 @@
-# Xstak Comprehensive Feature Gap & Roadmap
+# OneShopPOS vs. Xstak — Gap Analysis & Roadmap
 
-Based on a detailed analysis of the live Xstak ShopDesk dashboard, while OneShopPOS has a strong foundation, there is a significant feature gap to reach full parity. The Xstak system is a highly complex enterprise ERP.
-
-## Gap Analysis: Missing Features
-
-Here is the exact breakdown of the sub-menus and functions present in Xstak that are currently missing from OneShopPOS:
-
-### 1. Register
-
-- **Sales History:** A dedicated view for past transactions, allowing reprints and refunds.
-- **Cash Management:** Tracking cash drawer sessions (Opening float, Cash drops, Closing drawer).
-
-### 2. Products
-
-- **LookUp:** Advanced searching capabilities.
-- **Custom Fields/DropDowns:** Allowing dynamic product attributes beyond just name/price.
-- **Attribute Sets:** Grouping custom fields for specific product types (e.g., Clothing vs Electronics).
-
-### 3. Stock Control
-
-- **Inventory Transfer:** Moving stock between different physical store locations.
-- **Stock Adjustments:** Manually correcting stock levels due to shrinkage, damage, or counting errors.
-- **Returned Stock:** Handling RMAs (Return Merchandise Authorization) back to suppliers.
-
-### 4. Setup (Infrastructure)
-
-- **Outlets:** Managing multiple physical store locations. _(Crucial dependency for Inventory Transfers)_.
-- **Employees:** Staff profiles, logins, and permissions. _(Crucial dependency for Cash Management)_.
-- **Partners & Brands:** Classifying products further by manufacturer/brand.
-- **Barcode & Receipt Templates:** Customizable print layouts.
-
-### 5. Comprehensive Reporting Suite
-
-Xstak features a massive analytics engine with over 15 specific reports:
-
-- _Sales Summary, Sales Detail, Sales And Stock, Inventory Dump, Category Wise, Item Wise, Product Specification, Product Performance, Employee Attendance, Order Wise, Replenishment, On Hand Inventory, Customer Details, Supplier Wise, Inventory Loss, Product Movement._
+Original gap analysis was done against the live Xstak ShopDesk dashboard. This document tracks what was missing then, what has been built since, and what remains.
 
 ---
 
-## Proposed Phased Roadmap
+## Original Gap Analysis — Updated Status
 
-### Phase 1: Core Infrastructure (Setup)
+### 1. Register
 
-Before we can track stock moving between stores, or track which cashier made a sale, we need the infrastructure.
+| Feature | Was Missing | Status |
+|---|---|---|
+| Sales History — view past transactions, reprints | Yes | DONE — SalesHistory.jsx with void + reprint |
+| Cash Management — opening float, drawer tracking | Yes | DONE — cash_shifts table + CashManagement.jsx |
 
-1. **Outlets Management:** Database tables and UI for managing multiple locations.
-2. **Employee Management:** Database tables and UI for staff, including PIN/login infrastructure for the POS.
-3. **Brands Management:** Simple CRUD for adding Brands to products.
+### 2. Products
 
-### Phase 2: Advanced Products & Stock Control
+| Feature | Was Missing | Status |
+|---|---|---|
+| LookUp (advanced search) | Yes | DONE — barcode scan + search filters in Inventory |
+| Custom Fields / Attribute Sets | Yes | Not built — not prioritized |
 
-With Outlets in place, we can handle advanced inventory scenarios.
+### 3. Stock Control
 
-1. **Stock Adjustments:** Tool to write-off damaged or lost stock.
-2. **Returned Stock:** Logic to return stock to Suppliers.
-3. **Inventory Transfers:** Logic to move stock from Outlet A to Outlet B.
-4. **Product Attributes:** Adding custom fields to the Product creation flow.
+| Feature | Was Missing | Status |
+|---|---|---|
+| Inventory Transfers (Outlet A to B) | Yes | DONE — Transfers.jsx + inventory_transfers table |
+| Stock Adjustments (damage/loss) | Yes | DONE — StockAdjustments.jsx + stock_adjustments table |
+| Returned Stock (RMAs to suppliers) | Yes | Not built — not prioritized |
 
-### Phase 3: Advanced Register Operations
+### 4. Setup / Infrastructure
 
-With Employees in place, we can lock down the register.
+| Feature | Was Missing | Status |
+|---|---|---|
+| Outlets (multi-location) | Yes | DONE — outlets table + Outlets.jsx |
+| Employees (staff + PIN) | Yes | DONE — employees table + POS PIN login |
+| Brands | Yes | DONE — brands table + Brands.jsx |
+| Barcode & Receipt Templates | Yes | Partial — standard receipt format built, no template editor |
 
-1. **Cash Management:** Shift tracking, opening float, and closing drawer logic.
-2. **Sales History:** UI to view, refund, and reprint past transactions.
+### 5. Reporting Suite
 
-### Phase 4: The Reporting Engine
+| Report | Was Missing | Status |
+|---|---|---|
+| Sales Summary | Yes | DONE |
+| Sales Detail | Yes | DONE |
+| Sales & Stock | Yes | DONE |
+| Inventory Dump | Yes | DONE |
+| Category Wise | Yes | DONE |
+| Item Wise | Yes | DONE |
+| Product Specification | Yes | DONE |
+| Product Performance | Yes | DONE |
+| Employee Attendance | Yes | DONE |
+| Order Wise | Yes | DONE (with Discount column) |
+| Replenishment | Yes | DONE |
+| On Hand Inventory | Yes | DONE |
+| Customer Details | Yes | DONE |
+| Supplier Wise | Yes | DONE |
+| Inventory Loss | Yes | DONE |
+| Product Movement | Yes | DONE |
+| STR Report | Yes | DONE |
+| Purchase Orders Report | Bonus | DONE |
+| GRN Report | Bonus | DONE |
+| Attendance Report (HR) | Bonus | DONE |
 
-Once all the advanced operational data is flowing into the database from Phases 1-3, we will build out the massive grid of Xstak Reports (Category Wise, Inventory Dump, Shrinkage, etc.).
+---
+
+## Features Built Beyond Xstak Scope (Bonus)
+
+These were not in the original Xstak gap analysis but were added:
+
+- **Discount System** — Fixed $ or % discount applied at POS checkout, stored on sales, visible in reports
+- **GRN (Goods Received Notes)** — Full audit trail for stock receiving with partial-receipt support
+- **Employee Attendance Auto-Tracking** — POS PIN login/lock triggers clock-in/out automatically
+- **Multi-Tender Payments** — Split payment between Cash + Card in a single transaction
+- **Customer CRM** — Full customer profiles linked to sales and visible on checkout
+- **Dashboard KPI Screen** — Real-time revenue, profit, sales count, inventory value, shift status, top sellers, low stock
+
+---
+
+## Remaining Gaps (Not Yet Built)
+
+| Feature | Priority | Notes |
+|---|---|---|
+| Custom Product Fields / Attribute Sets | Low | Needed for clothing (size/color variants) |
+| Returned Stock / RMA to Supplier | Medium | Return goods to supplier and deduct from supplier balance |
+| Barcode Label Printing | Medium | Print shelf labels with barcode from the system |
+| Receipt Template Editor | Low | Custom header/footer on printed receipts |
+| Role-Based Access Control | Medium | Restrict what cashier vs. manager can see |
+| Loyalty Points Redemption at POS | Medium | Column exists in customers table, logic not wired to POS |
+| Cloud Sync / Multi-PC | Low | Currently single-machine SQLite only |
+| Refunds / Returns from Customer | High | Return merchandise from customer, restock, partial refund |
+
+---
+
+## Phased Roadmap (Next Sessions)
+
+### Phase 6 — Returns & Refunds
+- Customer return flow on POS
+- Restock returned items to outlet_stock
+- Refund payment recorded
+
+### Phase 7 — Access Control
+- Manager vs. Cashier permission levels
+- Lock discount/void behind manager PIN
+
+### Phase 8 — Product Variants
+- Size / Color attribute sets
+- Variant-level stock tracking
+
+### Phase 9 — Loyalty Points at POS
+- Earn points on purchase (already stored)
+- Redeem points as discount at checkout
