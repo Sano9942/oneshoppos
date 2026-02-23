@@ -25,7 +25,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
           rate REAL NOT NULL,
           is_default BOOLEAN DEFAULT 0
       )`);
-      
+
       // Products Table (Inventory)
       db.run(`CREATE TABLE IF NOT EXISTS products (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,7 +36,8 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 gst REAL DEFAULT 0.0,
                 stock INTEGER NOT NULL,
                 category_id INTEGER REFERENCES categories(id),
-                tax_id INTEGER REFERENCES taxes(id)
+                tax_id INTEGER REFERENCES taxes(id),
+                supplier_id INTEGER REFERENCES suppliers(id)
             )`);
 
       // Sales Table (Receipts)
@@ -75,6 +76,17 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 address TEXT,
                 phone TEXT
             )`);
+
+      // Stock Adjustments Table
+      db.run(`CREATE TABLE IF NOT EXISTS stock_adjustments (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               product_id INTEGER NOT NULL REFERENCES products(id),
+               outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+               employee_id INTEGER REFERENCES employees(id),
+               quantity_change INTEGER NOT NULL,
+               reason TEXT NOT NULL,
+               timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+           )`);
 
       // Employees Table
       db.run(`CREATE TABLE IF NOT EXISTS employees (

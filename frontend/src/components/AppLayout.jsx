@@ -1,11 +1,10 @@
-import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  MonitorPlay, 
-  ShoppingCart, 
-  Package, 
-  Truck, 
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import {
+  LayoutDashboard,
+  MonitorPlay,
+  ShoppingCart,
+  Package,
+  Truck,
   Receipt,
   Tags,
   Settings,
@@ -14,18 +13,19 @@ import {
   Users,
   History,
   RefreshCw,
-  ChevronDown
-} from 'lucide-react';
+  ChevronDown,
+  ArrowLeftRight,
+  ClipboardList,
+  Wallet,
+} from "lucide-react";
 
 export default function AppLayout() {
   const navigate = useNavigate();
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans overflow-hidden">
-      
       {/* Left Sidebar (Dark Theme like Xstak) */}
       <div className="w-64 bg-[#0B1120] text-slate-300 flex flex-col h-full border-r border-slate-800 shadow-2xl z-20 overflow-y-auto">
-        
         {/* Logo Area */}
         <div className="h-16 flex items-center px-6 border-b border-slate-800/50 mb-4 sticky top-0 bg-[#0B1120] z-10">
           <div className="font-black text-xl tracking-tight text-white flex items-center gap-2">
@@ -38,15 +38,14 @@ export default function AppLayout() {
 
         {/* Navigation Links */}
         <nav className="flex-1 px-3 space-y-1 pb-8">
-          
           <NavLink
             to="/"
             end
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive 
-                  ? 'bg-blue-600/10 text-blue-400' 
-                  : 'hover:bg-slate-800/50 hover:text-white'
+                isActive
+                  ? "bg-blue-600/10 text-blue-400"
+                  : "hover:bg-slate-800/50 hover:text-white"
               }`
             }
           >
@@ -58,9 +57,9 @@ export default function AppLayout() {
             to="/pos"
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive 
-                  ? 'bg-blue-600/10 text-blue-400' 
-                  : 'hover:bg-slate-800/50 hover:text-white'
+                isActive
+                  ? "bg-blue-600/10 text-blue-400"
+                  : "hover:bg-slate-800/50 hover:text-white"
               }`
             }
           >
@@ -69,16 +68,18 @@ export default function AppLayout() {
           </NavLink>
 
           <div className="pt-4 pb-1">
-            <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Store Management</p>
+            <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              Store Management
+            </p>
           </div>
 
           <NavLink
             to="/inventory"
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive 
-                  ? 'bg-blue-600/10 text-blue-400' 
-                  : 'hover:bg-slate-800/50 hover:text-white'
+                isActive
+                  ? "bg-blue-600/10 text-blue-400"
+                  : "hover:bg-slate-800/50 hover:text-white"
               }`
             }
           >
@@ -87,12 +88,40 @@ export default function AppLayout() {
           </NavLink>
 
           <NavLink
+            to="/adjustments"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive
+                  ? "bg-blue-600/10 text-blue-400"
+                  : "hover:bg-slate-800/50 hover:text-white"
+              }`
+            }
+          >
+            <History size={18} />
+            Stock Adjustments
+          </NavLink>
+
+          <NavLink
+            to="/transfers"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive
+                  ? "bg-blue-600/10 text-blue-400"
+                  : "hover:bg-slate-800/50 hover:text-white"
+              }`
+            }
+          >
+            <ArrowLeftRight size={18} />
+            Transfers
+          </NavLink>
+
+          <NavLink
             to="/categories"
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive 
-                  ? 'bg-blue-600/10 text-blue-400' 
-                  : 'hover:bg-slate-800/50 hover:text-white'
+                isActive
+                  ? "bg-blue-600/10 text-blue-400"
+                  : "hover:bg-slate-800/50 hover:text-white"
               }`
             }
           >
@@ -104,9 +133,9 @@ export default function AppLayout() {
             to="/purchase-orders"
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive 
-                  ? 'bg-blue-600/10 text-blue-400' 
-                  : 'hover:bg-slate-800/50 hover:text-white'
+                isActive
+                  ? "bg-blue-600/10 text-blue-400"
+                  : "hover:bg-slate-800/50 hover:text-white"
               }`
             }
           >
@@ -118,9 +147,9 @@ export default function AppLayout() {
             to="/suppliers"
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive 
-                  ? 'bg-blue-600/10 text-blue-400' 
-                  : 'hover:bg-slate-800/50 hover:text-white'
+                isActive
+                  ? "bg-blue-600/10 text-blue-400"
+                  : "hover:bg-slate-800/50 hover:text-white"
               }`
             }
           >
@@ -129,16 +158,18 @@ export default function AppLayout() {
           </NavLink>
 
           <div className="pt-4 pb-1">
-            <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Reports & Setup</p>
+            <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              Reports & Setup
+            </p>
           </div>
-          
+
           <NavLink
             to="/reports"
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive 
-                  ? 'bg-blue-600/10 text-blue-400' 
-                  : 'hover:bg-slate-800/50 hover:text-white'
+                isActive
+                  ? "bg-blue-600/10 text-blue-400"
+                  : "hover:bg-slate-800/50 hover:text-white"
               }`
             }
           >
@@ -147,12 +178,54 @@ export default function AppLayout() {
           </NavLink>
 
           <NavLink
+            to="/sales-history"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive
+                  ? "bg-blue-600/10 text-blue-400"
+                  : "hover:bg-slate-800/50 hover:text-white"
+              }`
+            }
+          >
+            <ClipboardList size={18} />
+            Sales History
+          </NavLink>
+
+          <NavLink
+            to="/cash-management"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive
+                  ? "bg-blue-600/10 text-blue-400"
+                  : "hover:bg-slate-800/50 hover:text-white"
+              }`
+            }
+          >
+            <Wallet size={18} />
+            Cash Management
+          </NavLink>
+
+          <NavLink
+            to="/customers"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive
+                  ? "bg-blue-600/10 text-blue-400"
+                  : "hover:bg-slate-800/50 hover:text-white"
+              }`
+            }
+          >
+            <Users size={18} />
+            Customers
+          </NavLink>
+
+          <NavLink
             to="/outlets"
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive 
-                  ? 'bg-blue-600/10 text-blue-400' 
-                  : 'hover:bg-slate-800/50 hover:text-white'
+                isActive
+                  ? "bg-blue-600/10 text-blue-400"
+                  : "hover:bg-slate-800/50 hover:text-white"
               }`
             }
           >
@@ -164,23 +237,23 @@ export default function AppLayout() {
             to="/employees"
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive 
-                  ? 'bg-blue-600/10 text-blue-400' 
-                  : 'hover:bg-slate-800/50 hover:text-white'
+                isActive
+                  ? "bg-blue-600/10 text-blue-400"
+                  : "hover:bg-slate-800/50 hover:text-white"
               }`
             }
           >
             <Users size={18} />
             Employees
           </NavLink>
-          
+
           <NavLink
             to="/brands"
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive 
-                  ? 'bg-blue-600/10 text-blue-400' 
-                  : 'hover:bg-slate-800/50 hover:text-white'
+                isActive
+                  ? "bg-blue-600/10 text-blue-400"
+                  : "hover:bg-slate-800/50 hover:text-white"
               }`
             }
           >
@@ -192,71 +265,65 @@ export default function AppLayout() {
             to="/taxes"
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive 
-                  ? 'bg-blue-600/10 text-blue-400' 
-                  : 'hover:bg-slate-800/50 hover:text-white'
+                isActive
+                  ? "bg-blue-600/10 text-blue-400"
+                  : "hover:bg-slate-800/50 hover:text-white"
               }`
             }
           >
             <Settings size={18} />
             Taxes
           </NavLink>
-
         </nav>
 
         {/* Bottom User Area */}
         <div className="p-4 border-t border-slate-800/50 bg-[#0B1120] sticky bottom-0">
-           <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-white font-bold text-sm">
-                A
-              </div>
-              <div>
-                 <p className="text-sm font-medium text-white">Admin User</p>
-                 <p className="text-xs text-slate-500">v1.2.0 • Online</p>
-              </div>
-           </div>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-white font-bold text-sm">
+              A
+            </div>
+            <div>
+              <p className="text-sm font-medium text-white">Admin User</p>
+              <p className="text-xs text-slate-500">v1.2.0 • Online</p>
+            </div>
+          </div>
         </div>
-
       </div>
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white">
-        
         {/* Top Header Bar */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-10 shadow-sm">
-          
           <div className="flex items-center gap-4">
-             <button 
-                onClick={() => navigate('/pos')}
-                className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium px-4 py-2 rounded-lg text-sm transition-colors border border-slate-200"
-              >
-                <MonitorPlay size={16} />
-                Point of Sale
-             </button>
+            <button
+              onClick={() => navigate("/pos")}
+              className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium px-4 py-2 rounded-lg text-sm transition-colors border border-slate-200"
+            >
+              <MonitorPlay size={16} />
+              Point of Sale
+            </button>
           </div>
 
           <div className="flex items-center gap-4">
-             
-             <button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm">
-                <RefreshCw size={16} className="text-indigo-200" />
-                Sync Data
-             </button>
+            <button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm">
+              <RefreshCw size={16} className="text-indigo-200" />
+              Sync Data
+            </button>
 
-             <div className="h-6 w-px bg-slate-200 mx-2"></div>
+            <div className="h-6 w-px bg-slate-200 mx-2"></div>
 
-             <button className="flex items-center gap-2 text-slate-700 hover:text-slate-900 font-medium text-sm transition-colors">
-                One Shop-The Toy Store
-                <ChevronDown size={16} className="text-slate-400" />
-             </button>
-
+            <button className="flex items-center gap-2 text-slate-700 hover:text-slate-900 font-medium text-sm transition-colors">
+              One Shop-The Toy Store
+              <ChevronDown size={16} className="text-slate-400" />
+            </button>
           </div>
         </header>
 
         {/* Page Content Viewport */}
         <main className="flex-1 overflow-auto bg-slate-50">
-           <div className="h-full p-6">
-              <Outlet />
-           </div>
+          <div className="h-full p-6">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(npm run build:*)",
+      "Bash(timeout 8 npm run dev:*)",
+      "Bash(netstat:*)",
+      "Bash(ss:*)",
+      "Bash(taskkill:*)",
+      "Bash(curl:*)",
+      "Bash(wmic process:*)",
+      "Bash(cmd //c \"taskkill /PID 20884 /F\")",
+      "Bash(findstr:*)"
+    ]
+  }
+}

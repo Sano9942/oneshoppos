@@ -21,11 +21,11 @@ We must build foundational relationships before we can execute advanced features
 
 ### 3. Brands Management
 
-- [ ] Update `migrate6.js` to build a `brands` table (`id`, `name`).
-- [ ] Modify the `products` table schema to include `brand_id`.
-- [ ] Build Backend CRUD API `/api/brands`.
-- [ ] Build Frontend UI Interface `Brands.jsx`.
-- [ ] Modify `Inventory.jsx` to select a Brand during product creation.
+- [x] Update `migrate6.js` to build a `brands` table (`id`, `name`).
+- [x] Modify the `products` table schema to include `brand_id`.
+- [x] Build Backend CRUD API `/api/brands`.
+- [x] Build Frontend UI Interface `Brands.jsx`.
+- [x] Modify `Inventory.jsx` to select a Brand during product creation.
 
 ## Phase 2: Advanced Products & Stock Control
 
