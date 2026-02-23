@@ -17,6 +17,7 @@ import CashManagement from "./pages/CashManagement";
 import Customers from "./pages/Customers";
 import Attendance from "./pages/Attendance";
 import Reports from "./pages/Reports";
+import Returns from "./pages/Returns";
 
 function App() {
   return (
@@ -45,6 +46,7 @@ function App() {
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/brands" element={<Brands />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/returns" element={<Returns />} />
         </Route>
       </Routes>
     </Router>

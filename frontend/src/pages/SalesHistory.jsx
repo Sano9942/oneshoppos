@@ -11,7 +11,9 @@ import {
   User,
   Package,
   CreditCard,
+  ArrowLeftRight,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const API = "http://localhost:5000";
 
@@ -42,6 +44,7 @@ function StatusBadge({ voided }) {
 }
 
 export default function SalesHistory() {
+  const navigate = useNavigate();
   const [sales, setSales] = useState([]);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
@@ -491,6 +494,22 @@ export default function SalesHistory() {
                     <Ban size={16} /> Void
                   </button>
                 )}
+                <button
+                  onClick={() => {
+                    navigate("/returns", {
+                      state: {
+                        sale_id: selectedSale.id,
+                        outlet_id: saleDetail.sale.outlet_id,
+                        employee_id: saleDetail.sale.employee_id,
+                        customer_id: saleDetail.sale.customer_id,
+                        items: saleDetail.items,
+                      },
+                    });
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 border border-blue-200 rounded-lg text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
+                >
+                  <ArrowLeftRight size={16} /> Return
+                </button>
               </div>
             )}
           </div>

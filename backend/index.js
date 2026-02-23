@@ -355,6 +355,46 @@ app.get("/api/products/:id/stock", (req, res) => {
   );
 });
 
+// Search products by name or barcode (for autocomplete and search)
+app.get("/api/products/search", (req, res) => {
+  const { query, outlet_id } = req.query;
+
+  if (!query) return res.json({ products: [] });
+
+  const searchQuery = `%${query}%`;
+
+  let sql = `
+        SELECT p.*, t.rate as tax_rate, t.name as tax_name,
+               COALESCE(SUM(os.quantity), 0) as local_stock
+        FROM products p
+        LEFT JOIN taxes t ON p.tax_id = t.id
+        LEFT JOIN outlet_stock os ON p.id = os.product_id ${outlet_id ? `AND os.outlet_id = ${outlet_id}` : ""}
+        WHERE p.name LIKE ? OR p.barcode LIKE ?
+        GROUP BY p.id
+        ORDER BY p.name ASC
+        LIMIT 50
+    `;
+
+  db.all(sql, [searchQuery, searchQuery], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    // Normalize Tax Output for the POS Terminal
+    const productsWithTax = rows.map((row) => {
+      const effectiveTaxRate =
+        row.tax_rate !== null ? row.tax_rate : row.gst !== null ? row.gst : 0;
+      const effectiveTaxName =
+        row.tax_name || (row.gst !== null ? "GST" : "No Tax");
+      return {
+        ...row,
+        effectiveTaxRate,
+        effectiveTaxName,
+      };
+    });
+
+    res.json({ products: productsWithTax });
+  });
+});
+
 // Scan/Find a product by barcode (Crucial for POS speed)
 app.get("/api/products/scan/:barcode", (req, res) => {
   const { barcode } = req.params;
@@ -700,7 +740,9 @@ app.post("/api/purchase-orders/:id/receive", (req, res) => {
   const { outlet_id, received_by, items: receivedItems, notes } = req.body;
 
   if (!outlet_id) {
-    return res.status(400).json({ error: "Outlet ID is required to receive PO" });
+    return res
+      .status(400)
+      .json({ error: "Outlet ID is required to receive PO" });
   }
 
   db.get("SELECT * FROM purchase_orders WHERE id = ?", [id], (err, po) => {
@@ -718,7 +760,9 @@ app.post("/api/purchase-orders/:id/receive", (req, res) => {
         // Build a map of qty_received: use provided items or default to full quantity
         const receivedMap = {};
         if (receivedItems && Array.isArray(receivedItems)) {
-          receivedItems.forEach((ri) => { receivedMap[ri.product_id] = parseFloat(ri.qty_received) || 0; });
+          receivedItems.forEach((ri) => {
+            receivedMap[ri.product_id] = parseFloat(ri.qty_received) || 0;
+          });
         }
 
         const grnNumber = `GRN-${Date.now()}`;
@@ -727,20 +771,28 @@ app.post("/api/purchase-orders/:id/receive", (req, res) => {
           db.run("BEGIN TRANSACTION");
 
           // 1. Update PO status
-          db.run("UPDATE purchase_orders SET status = 'Received' WHERE id = ?", [id]);
+          db.run(
+            "UPDATE purchase_orders SET status = 'Received' WHERE id = ?",
+            [id],
+          );
 
           // 2. Create GRN header
           db.run(
             "INSERT INTO goods_received_notes (grn_number, po_id, outlet_id, received_by, notes) VALUES (?, ?, ?, ?, ?)",
             [grnNumber, id, outlet_id, received_by || null, notes || null],
             function (err) {
-              if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
+              if (err) {
+                db.run("ROLLBACK");
+                return res.status(500).json({ error: err.message });
+              }
 
               const grnId = this.lastID;
               const grnItemStmt = db.prepare(
-                "INSERT INTO grn_items (grn_id, product_id, qty_ordered, qty_received, cost_price) VALUES (?, ?, ?, ?, ?)"
+                "INSERT INTO grn_items (grn_id, product_id, qty_ordered, qty_received, cost_price) VALUES (?, ?, ?, ?, ?)",
               );
-              const updateCostStmt = db.prepare("UPDATE products SET cost_price = ? WHERE id = ?");
+              const updateCostStmt = db.prepare(
+                "UPDATE products SET cost_price = ? WHERE id = ?",
+              );
               const updateStockStmt = db.prepare(`
                 INSERT INTO outlet_stock (product_id, outlet_id, quantity)
                 VALUES (?, ?, ?)
@@ -748,10 +800,22 @@ app.post("/api/purchase-orders/:id/receive", (req, res) => {
               `);
 
               poItems.forEach((item) => {
-                const qtyReceived = receivedMap[item.product_id] ?? item.quantity;
-                grnItemStmt.run(grnId, item.product_id, item.quantity, qtyReceived, item.cost_price);
+                const qtyReceived =
+                  receivedMap[item.product_id] ?? item.quantity;
+                grnItemStmt.run(
+                  grnId,
+                  item.product_id,
+                  item.quantity,
+                  qtyReceived,
+                  item.cost_price,
+                );
                 updateCostStmt.run(item.cost_price, item.product_id);
-                updateStockStmt.run(item.product_id, outlet_id, qtyReceived, qtyReceived);
+                updateStockStmt.run(
+                  item.product_id,
+                  outlet_id,
+                  qtyReceived,
+                  qtyReceived,
+                );
               });
 
               grnItemStmt.finalize();
@@ -760,12 +824,16 @@ app.post("/api/purchase-orders/:id/receive", (req, res) => {
 
               db.run("COMMIT", (err) => {
                 if (err) return res.status(500).json({ error: err.message });
-                res.json({ message: "PO received. GRN created.", grn_number: grnNumber, grn_id: grnId });
+                res.json({
+                  message: "PO received. GRN created.",
+                  grn_number: grnNumber,
+                  grn_id: grnId,
+                });
               });
-            }
+            },
           );
         });
-      }
+      },
     );
   });
 });
@@ -776,8 +844,14 @@ app.get("/api/grn", (req, res) => {
   const { date_from, date_to } = req.query;
   const where = [];
   const params = [];
-  if (date_from) { where.push("date(g.received_at,'localtime') >= ?"); params.push(date_from); }
-  if (date_to)   { where.push("date(g.received_at,'localtime') <= ?"); params.push(date_to); }
+  if (date_from) {
+    where.push("date(g.received_at,'localtime') >= ?");
+    params.push(date_from);
+  }
+  if (date_to) {
+    where.push("date(g.received_at,'localtime') <= ?");
+    params.push(date_to);
+  }
   const sql = `
     SELECT g.id, g.grn_number, g.received_at, g.notes,
            ('PO-' || printf('%04d', po.id)) as po_number, s.name as supplier_name,
@@ -821,9 +895,9 @@ app.get("/api/grn/:id", (req, res) => {
         (err, items) => {
           if (err) return res.status(500).json({ error: err.message });
           res.json({ grn, items });
-        }
+        },
       );
-    }
+    },
   );
 });
 
@@ -1261,7 +1335,7 @@ app.post("/api/sales", (req, res) => {
     discount_type === "percent"
       ? (subtotal * parseFloat(discount_amount || 0)) / 100
       : parseFloat(discount_amount || 0);
-  const totalAmount = Math.max(0, subtotal - discountValue);
+  const totalAmount = subtotal - discountValue;
 
   // Determine the actual payments to record
   let finalPayments = payments;
@@ -1781,29 +1855,54 @@ app.post("/api/shifts/:id/close", (req, res) => {
           if (err) return res.status(500).json({ error: err.message });
 
           const cashSales = row?.cash_sales || 0;
-          const expectedCash = parseFloat(shift.opening_float) + cashSales;
-          const variance = parseFloat(closing_cash) - expectedCash;
-          const closedAt = new Date()
-            .toISOString()
-            .replace("T", " ")
-            .slice(0, 19);
 
-          db.run(
-            `UPDATE cash_shifts
-           SET status = 'closed', closing_cash = ?, expected_cash = ?, variance = ?,
-               closed_at = ?, notes = ?
-           WHERE id = ?`,
-            [closing_cash, expectedCash, variance, closedAt, notes || null, id],
-            function (err) {
+          db.get(
+            `SELECT COALESCE(SUM(total_refund), 0) as cash_refunds
+             FROM returns
+             WHERE outlet_id = ?
+               AND refund_method = 'Cash'
+               AND timestamp >= ?`,
+            [shift.outlet_id, shift.opened_at],
+            (err, refundRow) => {
               if (err) return res.status(500).json({ error: err.message });
-              res.json({
-                message: "Shift closed successfully",
-                opening_float: shift.opening_float,
-                cash_sales: cashSales,
-                expected_cash: expectedCash,
-                closing_cash,
-                variance,
-              });
+
+              const cashRefunds = refundRow?.cash_refunds || 0;
+              const netCashSales = cashSales - cashRefunds;
+              const expectedCash =
+                parseFloat(shift.opening_float) + netCashSales;
+              const variance = parseFloat(closing_cash) - expectedCash;
+              const closedAt = new Date()
+                .toISOString()
+                .replace("T", " ")
+                .slice(0, 19);
+
+              db.run(
+                `UPDATE cash_shifts
+               SET status = 'closed', closing_cash = ?, expected_cash = ?, variance = ?,
+                   closed_at = ?, notes = ?
+               WHERE id = ?`,
+                [
+                  closing_cash,
+                  expectedCash,
+                  variance,
+                  closedAt,
+                  notes || null,
+                  id,
+                ],
+                function (err) {
+                  if (err) return res.status(500).json({ error: err.message });
+                  res.json({
+                    message: "Shift closed successfully",
+                    opening_float: shift.opening_float,
+                    cash_sales: cashSales,
+                    cash_refunds: cashRefunds,
+                    net_cash_sales: netCashSales,
+                    expected_cash: expectedCash,
+                    closing_cash,
+                    variance,
+                  });
+                },
+              );
             },
           );
         },
@@ -1818,9 +1917,18 @@ app.get("/api/attendance", (req, res) => {
   const { date_from, date_to, employee_id } = req.query;
   const where = [];
   const params = [];
-  if (date_from) { where.push("date(ea.check_in,'localtime') >= ?"); params.push(date_from); }
-  if (date_to)   { where.push("date(ea.check_in,'localtime') <= ?"); params.push(date_to); }
-  if (employee_id) { where.push("ea.employee_id = ?"); params.push(employee_id); }
+  if (date_from) {
+    where.push("date(ea.check_in,'localtime') >= ?");
+    params.push(date_from);
+  }
+  if (date_to) {
+    where.push("date(ea.check_in,'localtime') <= ?");
+    params.push(date_to);
+  }
+  if (employee_id) {
+    where.push("ea.employee_id = ?");
+    params.push(employee_id);
+  }
   const sql = `
     SELECT ea.*, e.name AS employee_name, e.role, o.name AS outlet_name
     FROM employee_attendance ea
@@ -1837,37 +1945,55 @@ app.get("/api/attendance", (req, res) => {
 app.post("/api/attendance/checkin", (req, res) => {
   const { employee_id, outlet_id } = req.body;
   if (!employee_id || !outlet_id)
-    return res.status(400).json({ error: "employee_id and outlet_id are required" });
+    return res
+      .status(400)
+      .json({ error: "employee_id and outlet_id are required" });
   db.run(
     "INSERT INTO employee_attendance (employee_id, outlet_id, status) VALUES (?, ?, 'present')",
     [employee_id, outlet_id],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
-      db.get("SELECT * FROM employee_attendance WHERE id = ?", [this.lastID], (err2, row) => {
-        if (err2) return res.status(500).json({ error: err2.message });
-        res.json({ attendance: row });
-      });
-    }
+      db.get(
+        "SELECT * FROM employee_attendance WHERE id = ?",
+        [this.lastID],
+        (err2, row) => {
+          if (err2) return res.status(500).json({ error: err2.message });
+          res.json({ attendance: row });
+        },
+      );
+    },
   );
 });
 
 app.post("/api/attendance/:id/checkout", (req, res) => {
   const { id } = req.params;
-  db.get("SELECT * FROM employee_attendance WHERE id = ?", [id], (err, record) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!record) return res.status(404).json({ error: "Attendance record not found" });
-    if (record.check_out) return res.status(400).json({ error: "Already clocked out" });
-    const now = new Date().toISOString().replace("T", " ").slice(0, 19);
-    const hours = parseFloat(((new Date() - new Date(record.check_in)) / 3600000).toFixed(2));
-    db.run(
-      "UPDATE employee_attendance SET check_out = ?, hours = ? WHERE id = ?",
-      [now, hours, id],
-      function (err2) {
-        if (err2) return res.status(500).json({ error: err2.message });
-        res.json({ message: "Clocked out successfully", hours, check_out: now });
-      }
-    );
-  });
+  db.get(
+    "SELECT * FROM employee_attendance WHERE id = ?",
+    [id],
+    (err, record) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!record)
+        return res.status(404).json({ error: "Attendance record not found" });
+      if (record.check_out)
+        return res.status(400).json({ error: "Already clocked out" });
+      const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+      const hours = parseFloat(
+        ((new Date() - new Date(record.check_in)) / 3600000).toFixed(2),
+      );
+      db.run(
+        "UPDATE employee_attendance SET check_out = ?, hours = ? WHERE id = ?",
+        [now, hours, id],
+        function (err2) {
+          if (err2) return res.status(500).json({ error: err2.message });
+          res.json({
+            message: "Clocked out successfully",
+            hours,
+            check_out: now,
+          });
+        },
+      );
+    },
+  );
 });
 
 // --- EXTENDED REPORTS ---
@@ -1877,9 +2003,18 @@ app.get("/api/reports/sales-summary", (req, res) => {
   const { date_from, date_to, search } = req.query;
   let where = ["s.voided = 0"];
   const params = [];
-  if (date_from) { where.push("date(s.timestamp,'localtime') >= ?"); params.push(date_from); }
-  if (date_to)   { where.push("date(s.timestamp,'localtime') <= ?"); params.push(date_to); }
-  if (search)    { where.push("(CAST(s.id AS TEXT) LIKE ? OR COALESCE(c.name,'') LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
+  if (date_from) {
+    where.push("date(s.timestamp,'localtime') >= ?");
+    params.push(date_from);
+  }
+  if (date_to) {
+    where.push("date(s.timestamp,'localtime') <= ?");
+    params.push(date_to);
+  }
+  if (search) {
+    where.push("(CAST(s.id AS TEXT) LIKE ? OR COALESCE(c.name,'') LIKE ?)");
+    params.push(`%${search}%`, `%${search}%`);
+  }
   const sql = `
     SELECT s.id, s.timestamp, s.total_amount,
            COALESCE(c.name,'Walk-in') AS customer_name,
@@ -1905,9 +2040,18 @@ app.get("/api/reports/sales-detail", (req, res) => {
   const { date_from, date_to, search } = req.query;
   let where = ["s.voided = 0"];
   const params = [];
-  if (date_from) { where.push("date(s.timestamp,'localtime') >= ?"); params.push(date_from); }
-  if (date_to)   { where.push("date(s.timestamp,'localtime') <= ?"); params.push(date_to); }
-  if (search)    { where.push("(p.name LIKE ? OR CAST(s.id AS TEXT) LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
+  if (date_from) {
+    where.push("date(s.timestamp,'localtime') >= ?");
+    params.push(date_from);
+  }
+  if (date_to) {
+    where.push("date(s.timestamp,'localtime') <= ?");
+    params.push(date_to);
+  }
+  if (search) {
+    where.push("(p.name LIKE ? OR CAST(s.id AS TEXT) LIKE ?)");
+    params.push(`%${search}%`, `%${search}%`);
+  }
   const sql = `
     SELECT s.id AS sale_id, s.timestamp, COALESCE(c.name,'Walk-in') AS customer_name,
            p.name AS product_name, p.barcode,
@@ -1949,7 +2093,10 @@ app.get("/api/reports/inventory-dump", (req, res) => {
   const { outlet_id } = req.query;
   let where = [];
   const params = [];
-  if (outlet_id) { where.push("os.outlet_id = ?"); params.push(outlet_id); }
+  if (outlet_id) {
+    where.push("os.outlet_id = ?");
+    params.push(outlet_id);
+  }
   const sql = `
     SELECT o.name AS outlet_name, p.name AS product_name, p.barcode,
            COALESCE(cat.name,'—') AS category, COALESCE(b.name,'—') AS brand,
@@ -1974,8 +2121,14 @@ app.get("/api/reports/category-wise", (req, res) => {
   const { date_from, date_to } = req.query;
   let where = ["s.voided = 0"];
   const params = [];
-  if (date_from) { where.push("date(s.timestamp,'localtime') >= ?"); params.push(date_from); }
-  if (date_to)   { where.push("date(s.timestamp,'localtime') <= ?"); params.push(date_to); }
+  if (date_from) {
+    where.push("date(s.timestamp,'localtime') >= ?");
+    params.push(date_from);
+  }
+  if (date_to) {
+    where.push("date(s.timestamp,'localtime') <= ?");
+    params.push(date_to);
+  }
   const sql = `
     SELECT COALESCE(cat.name,'Uncategorized') AS category,
            SUM(si.quantity) AS units_sold,
@@ -1992,7 +2145,10 @@ app.get("/api/reports/category-wise", (req, res) => {
   db.all(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     const total = rows.reduce((s, r) => s + r.revenue, 0);
-    const data = rows.map((r) => ({ ...r, pct: total > 0 ? ((r.revenue / total) * 100).toFixed(1) : "0.0" }));
+    const data = rows.map((r) => ({
+      ...r,
+      pct: total > 0 ? ((r.revenue / total) * 100).toFixed(1) : "0.0",
+    }));
     res.json({ data });
   });
 });
@@ -2002,7 +2158,10 @@ app.get("/api/reports/product-spec", (req, res) => {
   const { search } = req.query;
   let where = [];
   const params = [];
-  if (search) { where.push("(p.name LIKE ? OR p.barcode LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
+  if (search) {
+    where.push("(p.name LIKE ? OR p.barcode LIKE ?)");
+    params.push(`%${search}%`, `%${search}%`);
+  }
   const sql = `
     SELECT p.id, p.barcode, p.name, p.price, p.cost_price,
            COALESCE(cat.name,'—') AS category, COALESCE(b.name,'—') AS brand,
@@ -2026,7 +2185,10 @@ app.get("/api/reports/on-hand", (req, res) => {
   const { outlet_id } = req.query;
   let where = [];
   const params = [];
-  if (outlet_id) { where.push("os.outlet_id = ?"); params.push(outlet_id); }
+  if (outlet_id) {
+    where.push("os.outlet_id = ?");
+    params.push(outlet_id);
+  }
   const sql = `
     SELECT p.name AS product_name, p.barcode, o.name AS outlet_name,
            os.quantity, p.price, p.cost_price,
@@ -2048,8 +2210,14 @@ app.get("/api/reports/item-wise", (req, res) => {
   const { date_from, date_to } = req.query;
   let where = ["s.voided = 0"];
   const params = [];
-  if (date_from) { where.push("date(s.timestamp,'localtime') >= ?"); params.push(date_from); }
-  if (date_to)   { where.push("date(s.timestamp,'localtime') <= ?"); params.push(date_to); }
+  if (date_from) {
+    where.push("date(s.timestamp,'localtime') >= ?");
+    params.push(date_from);
+  }
+  if (date_to) {
+    where.push("date(s.timestamp,'localtime') <= ?");
+    params.push(date_to);
+  }
   const sql = `
     SELECT p.id, p.name AS product_name, p.barcode,
            SUM(si.quantity) AS units_sold,
@@ -2073,8 +2241,14 @@ app.get("/api/reports/product-performance", (req, res) => {
   const { date_from, date_to } = req.query;
   let where = ["s.voided = 0"];
   const params = [];
-  if (date_from) { where.push("date(s.timestamp,'localtime') >= ?"); params.push(date_from); }
-  if (date_to)   { where.push("date(s.timestamp,'localtime') <= ?"); params.push(date_to); }
+  if (date_from) {
+    where.push("date(s.timestamp,'localtime') >= ?");
+    params.push(date_from);
+  }
+  if (date_to) {
+    where.push("date(s.timestamp,'localtime') <= ?");
+    params.push(date_to);
+  }
   const sql = `
     SELECT p.id, p.name AS product_name, p.barcode,
            SUM(si.quantity) AS units_sold,
@@ -2102,8 +2276,14 @@ app.get("/api/reports/inventory-loss", (req, res) => {
   const { date_from, date_to } = req.query;
   let where = ["sa.quantity_change < 0"];
   const params = [];
-  if (date_from) { where.push("date(sa.timestamp,'localtime') >= ?"); params.push(date_from); }
-  if (date_to)   { where.push("date(sa.timestamp,'localtime') <= ?"); params.push(date_to); }
+  if (date_from) {
+    where.push("date(sa.timestamp,'localtime') >= ?");
+    params.push(date_from);
+  }
+  if (date_to) {
+    where.push("date(sa.timestamp,'localtime') <= ?");
+    params.push(date_to);
+  }
   const sql = `
     SELECT sa.timestamp, p.name AS product_name, p.barcode,
            o.name AS outlet_name, COALESCE(e.name,'—') AS employee_name,
@@ -2125,8 +2305,14 @@ app.get("/api/reports/wastage", (req, res) => {
   const { date_from, date_to } = req.query;
   let where = ["sa.reason IN ('Damaged','Expired')"];
   const params = [];
-  if (date_from) { where.push("date(sa.timestamp,'localtime') >= ?"); params.push(date_from); }
-  if (date_to)   { where.push("date(sa.timestamp,'localtime') <= ?"); params.push(date_to); }
+  if (date_from) {
+    where.push("date(sa.timestamp,'localtime') >= ?");
+    params.push(date_from);
+  }
+  if (date_to) {
+    where.push("date(sa.timestamp,'localtime') <= ?");
+    params.push(date_to);
+  }
   const sql = `
     SELECT sa.timestamp, p.name AS product_name, p.barcode,
            o.name AS outlet_name, COALESCE(e.name,'—') AS employee_name,
@@ -2175,6 +2361,178 @@ app.get("/api/reports/supplier-wise", (req, res) => {
   db.all(sql, [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ rows });
+  });
+});
+
+// --- ROUTES: RETURNS ---
+
+// Create a new return
+app.post("/api/returns", (req, res) => {
+  const {
+    original_sale_id,
+    outlet_id,
+    employee_id,
+    customer_id,
+    total_refund,
+    refund_method,
+    reason,
+    items,
+  } = req.body;
+
+  if (!items || items.length === 0) {
+    return res.status(400).json({ error: "Return must have items" });
+  }
+  if (!outlet_id) {
+    return res
+      .status(400)
+      .json({ error: "Outlet ID is required for restocking" });
+  }
+
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
+
+    db.run(
+      "INSERT INTO returns (original_sale_id, outlet_id, employee_id, customer_id, total_refund, refund_method, reason) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [
+        original_sale_id || null,
+        outlet_id,
+        employee_id || null,
+        customer_id || null,
+        total_refund,
+        refund_method,
+        reason || null,
+      ],
+      function (err) {
+        if (err) {
+          db.run("ROLLBACK");
+          return res
+            .status(500)
+            .json({ error: "Failed to create return: " + err.message });
+        }
+
+        const returnId = this.lastID;
+        const insertItemStmt = db.prepare(
+          "INSERT INTO return_items (return_id, product_id, quantity, refund_price) VALUES (?, ?, ?, ?)",
+        );
+        const updateStockStmt = db.prepare(`
+          INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+          VALUES (?, ?, ?)
+          ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = quantity + ?
+        `);
+
+        let hasError = false;
+
+        items.forEach((item) => {
+          insertItemStmt.run(
+            returnId,
+            item.product_id,
+            item.quantity,
+            item.refund_price,
+            (err) => {
+              if (err) hasError = true;
+            },
+          );
+          // Restock the returned items
+          updateStockStmt.run(
+            item.product_id,
+            outlet_id,
+            item.quantity,
+            item.quantity,
+            (err) => {
+              if (err) hasError = true;
+            },
+          );
+        });
+
+        insertItemStmt.finalize();
+        updateStockStmt.finalize();
+
+        if (hasError) {
+          db.run("ROLLBACK");
+          return res.status(500).json({
+            error: "Transaction failed while processing return items",
+          });
+        }
+
+        db.run("COMMIT", (err) => {
+          if (err)
+            return res
+              .status(500)
+              .json({ error: "Failed to commit return transaction" });
+          res.json({ message: "Return processed successfully", id: returnId });
+        });
+      },
+    );
+  });
+});
+
+// Get all returns (with details)
+app.get("/api/returns", (req, res) => {
+  const { date_from, date_to } = req.query;
+  const where = [];
+  const params = [];
+
+  if (date_from) {
+    where.push("date(r.timestamp, 'localtime') >= ?");
+    params.push(date_from);
+  }
+  if (date_to) {
+    where.push("date(r.timestamp, 'localtime') <= ?");
+    params.push(date_to);
+  }
+
+  const whereClause = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
+
+  const sql = `
+    SELECT r.*,
+           o.name as outlet_name,
+           e.name as employee_name,
+           c.name as customer_name,
+           COUNT(ri.id) as item_count
+    FROM returns r
+    LEFT JOIN outlets o ON r.outlet_id = o.id
+    LEFT JOIN employees e ON r.employee_id = e.id
+    LEFT JOIN customers c ON r.customer_id = c.id
+    LEFT JOIN return_items ri ON r.id = ri.return_id
+    ${whereClause}
+    GROUP BY r.id
+    ORDER BY r.timestamp DESC
+  `;
+
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ returns: rows });
+  });
+});
+
+// Get a single return with items
+app.get("/api/returns/:id", (req, res) => {
+  const { id } = req.params;
+
+  const sql = `
+    SELECT r.*, o.name as outlet_name, e.name as employee_name, c.name as customer_name
+    FROM returns r
+    LEFT JOIN outlets o ON r.outlet_id = o.id
+    LEFT JOIN employees e ON r.employee_id = e.id
+    LEFT JOIN customers c ON r.customer_id = c.id
+    WHERE r.id = ?
+  `;
+
+  db.get(sql, [id], (err, returnRow) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!returnRow) return res.status(404).json({ error: "Return not found" });
+
+    db.all(
+      `SELECT ri.*, p.name as product_name, p.barcode
+       FROM return_items ri
+       JOIN products p ON ri.product_id = p.id
+       WHERE ri.return_id = ?`,
+      [id],
+      (err, items) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ returnData: returnRow, items });
+      },
+    );
   });
 });
 

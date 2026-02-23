@@ -145,6 +145,17 @@ async function post(path, body) {
     return Array.isArray(d.lowStock);
   });
 
+  // ── RETURNS ──
+  console.log("\n📦 Returns");
+  await test("GET /api/returns returns list", async () => {
+    const d = await get("/api/returns");
+    return Array.isArray(d.returns);
+  });
+  await test("POST /api/returns rejects empty items", async () => {
+    const r = await post("/api/returns", { items: [], outlet_id: 1 });
+    return r.status === 400;
+  });
+
   // ── RESULT ──
   const total = passed + failed;
   console.log("\n" + "═".repeat(45));
