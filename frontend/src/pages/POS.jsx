@@ -107,7 +107,7 @@ export default function POS() {
       } else {
         setOverrideError("User lacks required permission");
       }
-    } catch (err) {
+    } catch {
       setOverrideError("Error verifying PIN");
     }
   };

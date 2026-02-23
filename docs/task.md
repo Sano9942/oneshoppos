@@ -1,5 +1,7 @@
 # OneShopPOS — Master Build Log
 
+**Last Updated: 2026-02-24**
+
 All completed and pending work tracked here. Updated after every build session.
 
 ---
@@ -162,6 +164,54 @@ All completed and pending work tracked here. Updated after every build session.
 
 ---
 
+## Phase 7: Review, RBAC & Code Quality Audit ✅ COMPLETE (2026-02-24)
+
+### 17. Supplier Returns (RMA)
+
+- [x] `supplier_returns` + `supplier_return_items` tables (inline in `index.js` startup)
+- [x] Backend APIs: `GET /api/supplier-returns`, `POST /api/supplier-returns`, `GET /api/supplier-returns/:id`
+- [x] Frontend UI `ReturnedStock.jsx` — file a return against a supplier, list all returns
+- [x] Sidebar nav link added under Purchasing
+
+### 18. Role-Based Access Control (RBAC)
+
+- [x] `roles` + `role_permissions` tables (inline in `index.js` startup)
+- [x] 3 default roles seeded: Admin (all_access), Manager, Cashier
+- [x] Backend API: `GET /api/roles`, `POST /api/roles`, `PUT /api/roles`, `DELETE /api/roles/:id`
+- [x] Backend API: `GET /api/roles/:id/permissions`, `PUT /api/roles/:id/permissions`
+- [x] `DELETE /api/roles/1` returns 400 — system roles protected
+- [x] POS Manager Override modal — cashiers can request manager override for restricted actions
+- [x] `AppLayout.jsx` filters sidebar nav items based on `requiredPerm` field
+- [x] `Administrator.jsx` frontend UI for role management + permission checkboxes
+
+### 19. Action History (Audit Log)
+
+- [x] `action_history` table (inline in `index.js` startup)
+- [x] Backend API: `GET /api/action-history`, `POST /api/action-history`
+- [x] Frontend UI `ActionHistory.jsx` — filterable audit log table
+- [x] Sidebar nav link added under HR
+
+### 20. Code Quality — ESLint Cleanup
+
+- [x] Ran `npx eslint src/` — found 4 errors + 5 warnings across 6 files
+- [x] Fixed `Attendance.jsx` — removed unused `Download` import, fixed effect pattern
+- [x] Fixed `Inventory.jsx` — removed 3 stale `eslint-disable` comments
+- [x] Fixed `PurchaseOrders.jsx` — removed unused `Save` import
+- [x] Fixed `POS.jsx` — `catch (err)` → `catch {}` (unused variable)
+- [x] Fixed `StockAdjustments.jsx` — moved `fetchData` before useEffect
+- [x] Fixed `Suppliers.jsx` — `catch (err)` → `catch {}`
+- [x] **Final: `npx eslint src/` — Exit code 0. Zero errors. Zero warnings.**
+
+### 21. Comprehensive E2E + RBAC Test
+
+- [x] Created `backend/e2e_test.js` — automated 14-check test suite
+- [x] **Result: 14/14 PASSED** — see `docs/TESTING.md` for full output
+- [x] Full sale cycle verified: create → decrement stock → void → restore stock
+- [x] RBAC roles and protections confirmed working
+- [x] All 8 major UI pages visually audited via browser
+
+---
+
 ## Taxes & Categories (Setup) ✅ COMPLETE
 
 - [x] `migrate7.js` — `taxes` table; Backend + `Taxes.jsx` UI
@@ -193,6 +243,9 @@ migrate17.js    → employee_attendance table
 migrate18.js    → discount_amount, discount_type on sales
 migrate19.js    → goods_received_notes + grn_items tables
 migrate20.js    → returns + return_items tables
++ inline in index.js startup:
+                → roles, role_permissions, supplier_returns,
+                   supplier_return_items, action_history, product_variants
 ```
 
 ---
@@ -203,3 +256,14 @@ Double-click **`START.bat`** in the root folder. It starts both servers and open
 
 - Backend: `http://localhost:5000`
 - Frontend: `http://localhost:5173`
+
+### To Brief an AI When Resuming
+
+Say: _"Read all files in the docs folder and resume from where we left off"_
+
+Key files to read:
+
+1. `docs/STATUS.md` — current state and recent work
+2. `docs/task.md` — this file, full phase/feature history
+3. `docs/TESTING.md` — all test outcomes
+4. `docs/ARCHITECTURE.md` — code map, schema, API reference

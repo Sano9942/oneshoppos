@@ -1,12 +1,23 @@
 import { useState, useEffect } from "react";
-import { Clock, User, Search, Download } from "lucide-react";
+import { Clock, User, Search } from "lucide-react";
 
 const API = "http://localhost:5000";
 const fmt = (n) => (n == null ? "—" : `${parseFloat(n).toFixed(2)}h`);
 const fmtTime = (dt) =>
-  dt ? new Date(dt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "—";
+  dt
+    ? new Date(dt).toLocaleTimeString(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
 const fmtDate = (dt) =>
-  dt ? new Date(dt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "—";
+  dt
+    ? new Date(dt).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    : "—";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -19,13 +30,6 @@ export default function Attendance() {
   const [dateTo, setDateTo] = useState(today);
   const [employeeId, setEmployeeId] = useState("");
   const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    fetch(`${API}/api/employees`)
-      .then((r) => r.json())
-      .then((d) => setEmployees(d.employees || []))
-      .catch(() => {});
-  }, []);
 
   const fetchRecords = () => {
     setLoading(true);
@@ -44,13 +48,21 @@ export default function Attendance() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchRecords(); }, []);
+  /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+  useEffect(() => {
+    fetch(`${API}/api/employees`)
+      .then((r) => r.json())
+      .then((d) => setEmployees(d.employees || []))
+      .catch(() => {});
+    fetchRecords();
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
   const filtered = search
     ? records.filter(
         (r) =>
           r.employee_name?.toLowerCase().includes(search.toLowerCase()) ||
-          r.outlet_name?.toLowerCase().includes(search.toLowerCase())
+          r.outlet_name?.toLowerCase().includes(search.toLowerCase()),
       )
     : records;
 
@@ -63,7 +75,9 @@ export default function Attendance() {
       late: "bg-amber-100 text-amber-800",
     };
     return (
-      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold capitalize ${map[status] || "bg-slate-100 text-slate-700"}`}>
+      <span
+        className={`px-2.5 py-0.5 rounded-full text-xs font-bold capitalize ${map[status] || "bg-slate-100 text-slate-700"}`}
+      >
         {status}
       </span>
     );
@@ -74,19 +88,26 @@ export default function Attendance() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-1">Attendance</h1>
-          <p className="text-slate-500 text-sm">Clock-in and clock-out records from the POS terminal</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-1">
+            Attendance
+          </h1>
+          <p className="text-slate-500 text-sm">
+            Clock-in and clock-out records from the POS terminal
+          </p>
         </div>
         <div className="flex gap-2 text-xs font-semibold text-slate-500 bg-slate-100 px-4 py-2 rounded-xl border border-slate-200">
           <Clock size={14} className="text-blue-500" />
-          Total Hours (filtered): <span className="text-slate-800 ml-1">{totalHours.toFixed(2)}h</span>
+          Total Hours (filtered):{" "}
+          <span className="text-slate-800 ml-1">{totalHours.toFixed(2)}h</span>
         </div>
       </div>
 
       {/* Filters */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-wrap gap-3 items-end">
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">From</label>
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            From
+          </label>
           <input
             type="date"
             value={dateFrom}
@@ -95,7 +116,9 @@ export default function Attendance() {
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">To</label>
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            To
+          </label>
           <input
             type="date"
             value={dateTo}
@@ -104,7 +127,9 @@ export default function Attendance() {
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Employee</label>
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            Employee
+          </label>
           <select
             value={employeeId}
             onChange={(e) => setEmployeeId(e.target.value)}
@@ -112,7 +137,9 @@ export default function Attendance() {
           >
             <option value="">All Employees</option>
             {employees.map((e) => (
-              <option key={e.id} value={e.id}>{e.name}</option>
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
             ))}
           </select>
         </div>
@@ -138,26 +165,48 @@ export default function Attendance() {
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
           <User size={15} className="text-blue-500" />
-          <h3 className="font-bold text-slate-800 text-sm">Attendance Records</h3>
-          <span className="ml-auto text-xs text-slate-400">{filtered.length} record{filtered.length !== 1 ? "s" : ""}</span>
+          <h3 className="font-bold text-slate-800 text-sm">
+            Attendance Records
+          </h3>
+          <span className="ml-auto text-xs text-slate-400">
+            {filtered.length} record{filtered.length !== 1 ? "s" : ""}
+          </span>
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center flex-1 text-slate-400 text-sm">Loading...</div>
+          <div className="flex items-center justify-center flex-1 text-slate-400 text-sm">
+            Loading...
+          </div>
         ) : error ? (
-          <div className="flex items-center justify-center flex-1 text-rose-600 text-sm">{error}</div>
+          <div className="flex items-center justify-center flex-1 text-rose-600 text-sm">
+            {error}
+          </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center flex-1 text-slate-400 py-16">
             <Clock size={40} className="mb-3 opacity-20" />
-            <p className="text-sm">No attendance records for the selected period</p>
+            <p className="text-sm">
+              No attendance records for the selected period
+            </p>
           </div>
         ) : (
           <div className="overflow-auto flex-1">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-100 sticky top-0">
                 <tr>
-                  {["Date", "Employee", "Role", "Outlet", "Check In", "Check Out", "Hours", "Status"].map((h) => (
-                    <th key={h} className="text-left px-5 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                  {[
+                    "Date",
+                    "Employee",
+                    "Role",
+                    "Outlet",
+                    "Check In",
+                    "Check Out",
+                    "Hours",
+                    "Status",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className="text-left px-5 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide whitespace-nowrap"
+                    >
                       {h}
                     </th>
                   ))}
@@ -166,21 +215,42 @@ export default function Attendance() {
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-50">
-                    <td className="px-5 py-3 text-slate-700 whitespace-nowrap">{fmtDate(r.check_in)}</td>
-                    <td className="px-5 py-3 font-semibold text-slate-800 whitespace-nowrap">{r.employee_name}</td>
-                    <td className="px-5 py-3 text-slate-500 whitespace-nowrap capitalize">{r.role}</td>
-                    <td className="px-5 py-3 text-slate-600 whitespace-nowrap">{r.outlet_name}</td>
-                    <td className="px-5 py-3 text-slate-700 font-mono whitespace-nowrap">{fmtTime(r.check_in)}</td>
-                    <td className="px-5 py-3 text-slate-700 font-mono whitespace-nowrap">{fmtTime(r.check_out)}</td>
-                    <td className="px-5 py-3 font-semibold text-slate-800 whitespace-nowrap">{fmt(r.hours)}</td>
+                    <td className="px-5 py-3 text-slate-700 whitespace-nowrap">
+                      {fmtDate(r.check_in)}
+                    </td>
+                    <td className="px-5 py-3 font-semibold text-slate-800 whitespace-nowrap">
+                      {r.employee_name}
+                    </td>
+                    <td className="px-5 py-3 text-slate-500 whitespace-nowrap capitalize">
+                      {r.role}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600 whitespace-nowrap">
+                      {r.outlet_name}
+                    </td>
+                    <td className="px-5 py-3 text-slate-700 font-mono whitespace-nowrap">
+                      {fmtTime(r.check_in)}
+                    </td>
+                    <td className="px-5 py-3 text-slate-700 font-mono whitespace-nowrap">
+                      {fmtTime(r.check_out)}
+                    </td>
+                    <td className="px-5 py-3 font-semibold text-slate-800 whitespace-nowrap">
+                      {fmt(r.hours)}
+                    </td>
                     <td className="px-5 py-3">{statusBadge(r.status)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot className="bg-slate-50 border-t border-slate-200">
                 <tr>
-                  <td colSpan={6} className="px-5 py-3 text-xs font-bold text-slate-500 uppercase">Total</td>
-                  <td className="px-5 py-3 font-bold text-slate-800">{totalHours.toFixed(2)}h</td>
+                  <td
+                    colSpan={6}
+                    className="px-5 py-3 text-xs font-bold text-slate-500 uppercase"
+                  >
+                    Total
+                  </td>
+                  <td className="px-5 py-3 font-bold text-slate-800">
+                    {totalHours.toFixed(2)}h
+                  </td>
                   <td />
                 </tr>
               </tfoot>

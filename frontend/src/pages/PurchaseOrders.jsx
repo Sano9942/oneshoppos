@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import {
   ShoppingBag,
   Plus,
-  Save,
   X,
   Search,
   CheckCircle2,
@@ -35,7 +34,7 @@ export default function PurchaseOrders() {
   const [productSearch, setProductSearch] = useState("");
 
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [_error, setError] = useState(null); // Error state tracked but shown via alert
 
   useEffect(() => {
     fetchPurchaseOrders();

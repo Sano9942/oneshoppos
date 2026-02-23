@@ -24,10 +24,6 @@ export default function StockAdjustments() {
     "Other",
   ];
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
   const fetchData = async () => {
     try {
       const [adjRes, prodRes, outRes] = await Promise.all([
@@ -53,6 +49,10 @@ export default function StockAdjustments() {
       console.error("Failed to load data", err);
     }
   };
+
+  useEffect(() => {
+    fetchData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e) => {
     e.preventDefault();

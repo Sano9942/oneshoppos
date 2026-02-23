@@ -71,12 +71,12 @@ export default function Inventory() {
     }
   };
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     fetchProducts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     fetchDropdowns();
-  }, []);
+  }, []); // Initial data load - external API calls, not cascading renders
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Filter Products locally based on search
   const filteredProducts = products.filter(
@@ -95,10 +95,11 @@ export default function Inventory() {
   );
 
   // Reset to page 1 when searching
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     setCurrentPage(1);
-  }, [searchTerm]);
+  }, [searchTerm]); // Derived state reset - intentional pattern
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const openModal = (product = null) => {
     if (product) {
