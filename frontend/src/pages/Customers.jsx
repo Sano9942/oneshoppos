@@ -11,6 +11,7 @@ import {
   MapPin,
   ShoppingBag,
   DollarSign,
+  Gift,
 } from "lucide-react";
 
 const API = "http://localhost:5000";
@@ -45,6 +46,10 @@ export default function Customers() {
 
   // Delete
   const [deleteError, setDeleteError] = useState("");
+
+  // Points
+  const [pointsAdjust, setPointsAdjust] = useState("");
+  const [isAdjustingPoints, setIsAdjustingPoints] = useState(false);
 
   const fetchCustomers = async (q = "") => {
     setIsLoading(true);
@@ -137,10 +142,46 @@ export default function Customers() {
     }
   };
 
+  const handleAdjustPoints = async (e) => {
+    e.preventDefault();
+    if (!selectedCustomer || pointsAdjust === "") return;
+    setIsAdjustingPoints(true);
+    try {
+      const res = await fetch(
+        `${API}/api/customers/${selectedCustomer.id}/points`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ points: pointsAdjust }),
+        },
+      );
+      if (res.ok) {
+        const updatedPoints = parseInt(pointsAdjust);
+        setSelectedCustomer({
+          ...selectedCustomer,
+          loyalty_points: updatedPoints,
+        });
+        setCustomers(
+          customers.map((c) =>
+            c.id === selectedCustomer.id
+              ? { ...c, loyalty_points: updatedPoints }
+              : c,
+          ),
+        );
+        setPointsAdjust("");
+      }
+    } catch (err) {
+      console.error("Failed to adjust points", err);
+    } finally {
+      setIsAdjustingPoints(false);
+    }
+  };
+
   const openDetail = async (c) => {
     setSelectedCustomer(c);
     setSalesLoading(true);
     setCustomerSales([]);
+    setPointsAdjust(c.loyalty_points || 0);
     try {
       const res = await fetch(`${API}/api/customers/${c.id}/sales`);
       const data = await res.json();
@@ -209,6 +250,7 @@ export default function Customers() {
                   <th className="p-4">Customer</th>
                   <th className="p-4">Mobile</th>
                   <th className="p-4">Email</th>
+                  <th className="p-4 text-center">Points</th>
                   <th className="p-4 text-center">Orders</th>
                   <th className="p-4 text-right">Total Spent</th>
                   <th className="p-4">Joined</th>
@@ -246,7 +288,7 @@ export default function Customers() {
                     >
                       <td className="p-4">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                          <div className="w-8 h-8 rounded-full bg-linear-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
                             {c.name.charAt(0).toUpperCase()}
                           </div>
                           <span className="font-semibold text-slate-800">
@@ -263,6 +305,11 @@ export default function Customers() {
                         {c.email || (
                           <span className="italic text-slate-400">—</span>
                         )}
+                      </td>
+                      <td className="p-4 text-center">
+                        <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full text-xs font-bold flex items-center justify-center gap-1 mx-auto w-fit">
+                          <Gift size={12} /> {c.loyalty_points || 0}
+                        </span>
                       </td>
                       <td className="p-4 text-center">
                         <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full text-xs font-semibold">
@@ -317,7 +364,7 @@ export default function Customers() {
             <div className="flex-1 overflow-auto p-4 space-y-4">
               {/* Avatar + name */}
               <div className="text-center py-4">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-2xl font-bold mx-auto mb-3">
+                <div className="w-16 h-16 rounded-full bg-linear-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-2xl font-bold mx-auto mb-3">
                   {selectedCustomer.name.charAt(0).toUpperCase()}
                 </div>
                 <h3 className="font-bold text-slate-900 text-lg">
@@ -329,7 +376,7 @@ export default function Customers() {
               </div>
 
               {/* Stats */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 mb-2">
                 <div className="bg-blue-50 rounded-xl p-3 text-center">
                   <ShoppingBag
                     size={16}
@@ -350,6 +397,35 @@ export default function Customers() {
                   </p>
                   <p className="text-xs text-green-600">Total Spent</p>
                 </div>
+              </div>
+
+              {/* Loyalty Points Edit */}
+              <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
+                <div className="flex items-center gap-2 mb-3">
+                  <Gift size={16} className="text-purple-600" />
+                  <h4 className="font-bold text-purple-900 text-sm">
+                    Loyalty Points
+                  </h4>
+                </div>
+                <form onSubmit={handleAdjustPoints} className="flex gap-2">
+                  <input
+                    type="number"
+                    className="w-full px-3 py-1.5 border border-purple-200 rounded-lg text-sm bg-white focus:outline-none focus:border-purple-500 font-bold text-purple-900"
+                    value={pointsAdjust}
+                    onChange={(e) => setPointsAdjust(e.target.value)}
+                  />
+                  <button
+                    type="submit"
+                    disabled={
+                      isAdjustingPoints ||
+                      pointsAdjust === "" ||
+                      parseInt(pointsAdjust) === selectedCustomer.loyalty_points
+                    }
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold transition-colors disabled:opacity-50 whitespace-nowrap"
+                  >
+                    Set
+                  </button>
+                </form>
               </div>
 
               {/* Contact details */}

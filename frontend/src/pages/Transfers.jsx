@@ -117,7 +117,7 @@ export default function Transfers() {
   );
 
   return (
-    <div className="max-w-7xl mx-auto flex flex-col h-full space-y-6">
+    <div className="w-full flex flex-col h-full space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>

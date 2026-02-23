@@ -5,6 +5,7 @@ import {
   Trash2,
   Printer,
   ShoppingCart,
+  ShoppingBag,
   X,
   CreditCard,
   Banknote,
@@ -38,9 +39,92 @@ export default function POS() {
   const [discountType, setDiscountType] = useState("fixed");
 
   const [currentEmployee, setCurrentEmployee] = useState(null);
+  const [employeePerms, setEmployeePerms] = useState([]);
   const [attendanceId, setAttendanceId] = useState(null);
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState("");
+
+  const [overrideState, setOverrideState] = useState({
+    show: false,
+    actionFunc: null,
+    requiredPerm: "",
+  });
+  const [overridePin, setOverridePin] = useState("");
+  const [overrideError, setOverrideError] = useState("");
+
+  const hasPerm = (perm) =>
+    employeePerms.includes("all_access") || employeePerms.includes(perm);
+
+  const executeWithPermission = (perm, actionFunc) => {
+    if (hasPerm(perm)) {
+      actionFunc();
+    } else {
+      setOverridePin("");
+      setOverrideError("");
+      setOverrideState({ show: true, actionFunc, requiredPerm: perm });
+    }
+  };
+
+  useEffect(() => {
+    if (currentEmployee && currentEmployee.role_id) {
+      fetch(
+        `http://localhost:5000/api/roles/${currentEmployee.role_id}/permissions`,
+      )
+        .then((r) => r.json())
+        .then((d) => setEmployeePerms(d.permissions || []))
+        .catch((e) => console.error(e));
+    }
+  }, [currentEmployee]);
+
+  const handleOverrideSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(
+        "http://localhost:5000/api/employees/validate-pin",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pin_code: overridePin }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        setOverrideError("Invalid Manager PIN");
+        return;
+      }
+      const permRes = await fetch(
+        `http://localhost:5000/api/roles/${data.employee.role_id || 3}/permissions`,
+      );
+      const permData = await permRes.json();
+      const pList = permData.permissions || [];
+      if (
+        pList.includes("all_access") ||
+        pList.includes(overrideState.requiredPerm)
+      ) {
+        const func = overrideState.actionFunc;
+        setOverrideState({ show: false, actionFunc: null, requiredPerm: "" });
+        if (func) func();
+      } else {
+        setOverrideError("User lacks required permission");
+      }
+    } catch (err) {
+      setOverrideError("Error verifying PIN");
+    }
+  };
+
+  const [isTaxInclusive, setIsTaxInclusive] = useState(false);
+  const [orderNote, setOrderNote] = useState("");
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [showParkedModal, setShowParkedModal] = useState(false);
+  const [parkedSales, setParkedSales] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("parkedSales")) || [];
+    } catch {
+      return [];
+    }
+  });
+  const [customerSearchFocused, setCustomerSearchFocused] = useState(false);
 
   const [outlets, setOutlets] = useState([]);
   const [selectedOutletId, setSelectedOutletId] = useState(null);
@@ -48,6 +132,10 @@ export default function POS() {
   const [customers, setCustomers] = useState([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
+  const [pointsRedeemed, setPointsRedeemed] = useState(0);
+
+  const [variantSelectProduct, setVariantSelectProduct] = useState(null);
+  const [productVariants, setProductVariants] = useState([]);
 
   const inputRef = useRef(null);
   const amountInputRef = useRef(null);
@@ -88,24 +176,92 @@ export default function POS() {
     0,
   );
 
-  const taxTotal = cart.reduce((sum, item) => {
-    const itemTotal = item.price * item.quantity;
-    const taxObj = item.effectiveTaxRate || 0;
-    const taxAmount = itemTotal - itemTotal / (1 + taxObj / 100);
-    return sum + taxAmount;
-  }, 0);
-  const subtotal = grossTotal - taxTotal;
-
   const discountValue =
     discountType === "percent"
       ? (grossTotal * parseFloat(discountInput || 0)) / 100
       : parseFloat(discountInput || 0);
-  const total = grossTotal - discountValue;
+
+  const discountRatio = grossTotal > 0 ? discountValue / grossTotal : 0;
+
+  const taxTotal = cart.reduce((sum, item) => {
+    const itemTotal = item.price * item.quantity;
+    const discountedItemTotal = itemTotal * (1 - discountRatio);
+    const rate = item.effectiveTaxRate || 0;
+    return (
+      sum +
+      (isTaxInclusive
+        ? discountedItemTotal - discountedItemTotal / (1 + rate / 100)
+        : discountedItemTotal * (rate / 100))
+    );
+  }, 0);
+
+  const subtotal = isTaxInclusive
+    ? grossTotal -
+      cart.reduce(
+        (s, i) =>
+          s +
+          i.price * i.quantity -
+          (i.price * i.quantity) / (1 + (i.effectiveTaxRate || 0) / 100),
+        0,
+      )
+    : grossTotal;
+
+  const total = isTaxInclusive
+    ? grossTotal - discountValue - pointsRedeemed
+    : grossTotal - discountValue + taxTotal - pointsRedeemed;
+
+  const pointsEarned = total > 0 ? Math.floor(total / 100) : 0;
 
   const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
   const remainingBalance = total > 0 ? Math.max(0, total - totalPaid) : 0;
   const changeDue =
     total >= 0 ? Math.max(0, totalPaid - total) : Math.abs(total);
+
+  const saveParkedSales = (sales) => {
+    setParkedSales(sales);
+    localStorage.setItem("parkedSales", JSON.stringify(sales));
+  };
+
+  const handleParkSale = () => {
+    if (cart.length === 0) return;
+    const newSale = {
+      id: Date.now(),
+      date: new Date().toLocaleString(),
+      cart,
+      customerId: selectedCustomerId,
+      discountInput,
+      discountType,
+      pointsRedeemed,
+      isTaxInclusive,
+      orderNote,
+      total,
+    };
+    saveParkedSales([newSale, ...parkedSales]);
+
+    // Clear current POS
+    setCart([]);
+    setSelectedCustomerId("");
+    setPointsRedeemed(0);
+    setCustomerSearch("");
+    setDiscountInput("");
+    setDiscountType("fixed");
+    setOrderNote("");
+    setIsTaxInclusive(false);
+  };
+
+  const handleRestoreParkedSale = (sale) => {
+    setCart(sale.cart || []);
+    setSelectedCustomerId(sale.customerId || "");
+    setDiscountInput(sale.discountInput || "");
+    setDiscountType(sale.discountType || "fixed");
+    setPointsRedeemed(sale.pointsRedeemed || 0);
+    setIsTaxInclusive(sale.isTaxInclusive || false);
+    setOrderNote(sale.orderNote || "");
+
+    // Remove from parked
+    saveParkedSales(parkedSales.filter((s) => s.id !== sale.id));
+    setShowParkedModal(false);
+  };
 
   useEffect(() => {
     let focusTimeout;
@@ -158,6 +314,25 @@ export default function POS() {
 
   const addItemToCart = (product) => {
     setError("");
+
+    // Intercept if it's a base product with variants
+    if (product.has_variants === 1 && !product.is_variant) {
+      fetch(`http://localhost:5000/api/products/${product.id}/variants`)
+        .then((r) => r.json())
+        .then((d) => {
+          setProductVariants(d.variants || []);
+          setVariantSelectProduct(product);
+        })
+        .catch((err) => {
+          console.error("Failed to load variants", err);
+          setError("Failed to load product variants.");
+        });
+      setBarcodeInput("");
+      setSearchResults([]);
+      setShowDropdown(false);
+      return;
+    }
+
     const availableStock = product.local_stock ?? product.stock ?? 0;
 
     setCart((prevCart) => {
@@ -187,6 +362,23 @@ export default function POS() {
     setSearchResults([]);
     setShowDropdown(false);
     inputRef.current?.focus();
+  };
+
+  const confirmVariantSelection = (variant) => {
+    const cartProduct = {
+      ...variantSelectProduct,
+      original_product_id: variantSelectProduct.id,
+      id: `v${variant.id}`, // Make it unique in cart
+      variant_id: variant.id,
+      name: `${variantSelectProduct.name} - ${variant.options.map((o) => o.option_value).join(" ")}`,
+      price: variant.price || variantSelectProduct.price,
+      stock: variant.stock,
+      local_stock: variant.stock, // We use global stock for variants right now
+      is_variant: true,
+    };
+    setVariantSelectProduct(null);
+    setProductVariants([]);
+    addItemToCart(cartProduct);
   };
 
   const handleScanSubmit = async (e) => {
@@ -268,6 +460,8 @@ export default function POS() {
           customer_id: selectedCustomerId ? parseInt(selectedCustomerId) : null,
           discount_amount: parseFloat(discountInput || 0),
           discount_type: discountType,
+          points_earned: pointsEarned,
+          points_redeemed: pointsRedeemed,
         }),
       });
 
@@ -321,6 +515,16 @@ export default function POS() {
                    <td>Tax</td>
                    <td class="right">$${taxTotal.toFixed(2)}</td>
                 </tr>
+                ${
+                  pointsRedeemed > 0
+                    ? `
+                <tr>
+                   <td>Pts Redeemed</td>
+                   <td class="right">-$${pointsRedeemed.toFixed(2)}</td>
+                </tr>
+                `
+                    : ""
+                }
                 <tr class="bold text-lg">
                   <td>TOTAL</td>
                   <td class="right">$${total.toFixed(2)}</td>
@@ -343,6 +547,15 @@ export default function POS() {
                 </tr>
               </table>
               <div class="divider"></div>
+              ${
+                pointsEarned > 0
+                  ? `
+              <p class="center" style="font-weight: bold; font-size: 16px;">
+                 +${pointsEarned} Loyalty Pts Earned!
+              </p>
+              `
+                  : ""
+              }
               <p class="center" style="font-size:12px">Powered by OneShopPOS System<br/>(Custom Build)</p>
             </body>
           </html>
@@ -356,6 +569,7 @@ export default function POS() {
         setPayments([]);
         setSelectedCustomerId("");
         setCustomerSearch("");
+        setPointsRedeemed(0);
         setDiscountInput("");
         setDiscountType("fixed");
         setIsCheckoutModalOpen(false);
@@ -533,14 +747,25 @@ export default function POS() {
               Sell
             </h2>
             <div className="flex gap-2">
-              <button className="flex items-center gap-2 text-[#8066FF] border border-indigo-100 bg-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-indigo-50 transition-colors shadow-sm">
+              <button
+                onClick={() =>
+                  executeWithPermission("pos_park", handleParkSale)
+                }
+                disabled={cart.length === 0}
+                className="flex items-center gap-2 text-[#8066FF] border border-indigo-100 bg-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-indigo-50 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <Tag size={14} /> Park Sale
               </button>
-              <button className="flex items-center gap-2 text-[#8066FF] border border-indigo-100 bg-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-indigo-50 transition-colors shadow-sm">
-                <Clock size={14} /> Previously Parked Sales
-              </button>
-              <button className="flex items-center gap-2 bg-[#8066FF] text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-[#7055E6] transition-colors shadow-sm">
-                More Actions <MoreHorizontal size={14} />
+              <button
+                onClick={() => setShowParkedModal(true)}
+                className="flex items-center gap-2 text-[#8066FF] border border-indigo-100 bg-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-indigo-50 transition-colors shadow-sm"
+              >
+                <Clock size={14} /> Parked Sales
+                {parkedSales.length > 0 && (
+                  <span className="bg-[#8066FF] text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-1">
+                    {parkedSales.length}
+                  </span>
+                )}
               </button>
             </div>
           </div>
@@ -552,14 +777,23 @@ export default function POS() {
               </span>
               <Calendar size={16} className="text-slate-400" />
             </div>
-            <div className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-sm">
-              <div className="w-10 h-5 bg-slate-200 rounded-full relative">
-                <div className="w-4 h-4 bg-white rounded-full absolute left-0.5 top-0.5 shadow-sm"></div>
+            <button
+              onClick={() => setIsTaxInclusive(!isTaxInclusive)}
+              className={`border rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-sm transition-colors cursor-pointer ${isTaxInclusive ? "bg-[#8066FF]/10 border-[#8066FF]" : "bg-white border-slate-200"}`}
+            >
+              <div
+                className={`w-10 h-5 rounded-full relative transition-colors ${isTaxInclusive ? "bg-[#8066FF]" : "bg-slate-200"}`}
+              >
+                <div
+                  className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${isTaxInclusive ? "left-5" : "left-0.5"}`}
+                ></div>
               </div>
-              <span className="text-sm font-bold text-slate-600">
-                Tax Exclusive
+              <span
+                className={`text-sm font-bold ${isTaxInclusive ? "text-[#8066FF]" : "text-slate-600"}`}
+              >
+                Tax Inclusive
               </span>
-            </div>
+            </button>
           </div>
 
           <div className="mb-4 relative">
@@ -686,7 +920,11 @@ export default function POS() {
                         </td>
                         <td className="py-3 text-right">
                           <button
-                            onClick={() => removeFromCart(item.id)}
+                            onClick={() =>
+                              executeWithPermission("pos_void", () =>
+                                removeFromCart(item.id),
+                              )
+                            }
                             className="text-red-400 hover:text-red-500 bg-red-50 hover:bg-red-100 p-1.5 rounded-lg transition-colors"
                           >
                             <Trash2 size={14} />
@@ -711,67 +949,135 @@ export default function POS() {
               type="text"
               placeholder="Search & Select Customer"
               value={customerSearch}
-              onChange={(e) => setCustomerSearch(e.target.value)}
-              className="w-full bg-white text-slate-900 rounded-xl pl-10 pr-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#8066FF] placeholder-slate-400 shadow-inner"
+              onChange={(e) => {
+                setCustomerSearch(e.target.value);
+                setCustomerSearchFocused(true);
+              }}
+              onFocus={() => setCustomerSearchFocused(true)}
+              onBlur={() =>
+                setTimeout(() => setCustomerSearchFocused(false), 200)
+              }
+              className="w-full bg-white text-slate-900 rounded-xl pl-10 pr-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#8066FF] placeholder-slate-400 shadow-inner leading-5"
             />
+            {customerSearchFocused && customerSearch.trim() !== "" && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto z-40">
+                {customers
+                  .filter((c) => {
+                    const q = customerSearch.toLowerCase();
+                    return (
+                      c.name.toLowerCase().includes(q) ||
+                      (c.mobile || "").includes(q)
+                    );
+                  })
+                  .map((c) => (
+                    <div
+                      key={c.id}
+                      onClick={() => {
+                        setSelectedCustomerId(c.id);
+                        setCustomerSearch("");
+                        setCustomerSearchFocused(false);
+                      }}
+                      className="px-4 py-2.5 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0 text-slate-900"
+                    >
+                      <div className="font-bold text-sm text-slate-800">
+                        {c.name}
+                      </div>
+                      {c.mobile && (
+                        <div className="text-xs text-slate-500">{c.mobile}</div>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
 
-          <div className="flex-1 border border-[#1A1A1A] rounded-xl flex items-center justify-center p-4 bg-[#111] mb-6 shadow-inner">
-            {/* Customer selected space or empty placeholder */}
+          <div className="flex-1 border border-[#1A1A1A] rounded-xl flex items-center justify-center p-4 bg-[#111] mb-6 shadow-inner relative z-0">
             {selectedCustomerId ? (
               <div className="text-center w-full">
                 <div className="w-12 h-12 bg-[#8066FF]/20 text-[#8066FF] rounded-full mx-auto mb-2 flex items-center justify-center">
                   <User size={20} />
                 </div>
-                <p className="font-bold text-sm">
+                <p className="font-bold text-sm text-white">
                   {customers.find((c) => c.id == selectedCustomerId)?.name}
                 </p>
-                <button
-                  onClick={() => setSelectedCustomerId("")}
-                  className="text-xs text-red-400 mt-2 hover:underline"
-                >
-                  Remove
-                </button>
+                <div className="text-xs text-[#8066FF] font-bold mt-1">
+                  {customers.find((c) => c.id == selectedCustomerId)
+                    ?.loyalty_points || 0}{" "}
+                  Points
+                </div>
+                {customers.find((c) => c.id == selectedCustomerId)
+                  ?.loyalty_points > 0 &&
+                  pointsRedeemed === 0 && (
+                    <button
+                      onClick={() => {
+                        const maxPoints =
+                          customers.find((c) => c.id == selectedCustomerId)
+                            ?.loyalty_points || 0;
+                        const subtotalRedeemable = isTaxInclusive
+                          ? grossTotal - discountValue
+                          : grossTotal - discountValue + taxTotal;
+                        const toRedeem = Math.min(
+                          maxPoints,
+                          Math.floor(subtotalRedeemable),
+                        );
+                        setPointsRedeemed(toRedeem);
+                      }}
+                      className="mt-2 text-[10px] bg-[#8066FF] text-white px-2 py-1 rounded-md uppercase font-bold tracking-wider hover:bg-[#7055E6] transition-colors"
+                    >
+                      Redeem Points
+                    </button>
+                  )}
+                {pointsRedeemed > 0 && (
+                  <button
+                    onClick={() => setPointsRedeemed(0)}
+                    className="mt-2 text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-1 rounded-md uppercase font-bold tracking-wider hover:bg-red-500/30 transition-colors"
+                  >
+                    Cancel Redemption (-PKR {pointsRedeemed})
+                  </button>
+                )}
+                <div className="mt-3">
+                  <button
+                    onClick={() => {
+                      setSelectedCustomerId("");
+                      setPointsRedeemed(0);
+                    }}
+                    className="text-xs text-red-400 hover:text-red-300 hover:underline"
+                  >
+                    Remove Customer
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="space-y-3 w-full">
-                <select
-                  value={selectedCustomerId}
-                  onChange={(e) => setSelectedCustomerId(e.target.value)}
-                  className="w-full bg-white/5 text-white rounded-lg px-3 py-2 text-sm focus:outline-none border border-[#333] mb-2 appearance-none font-medium"
-                >
-                  <option value="" className="text-slate-800">
-                    Walk-in Customer
-                  </option>
-                  {customers
-                    .filter((c) => {
-                      if (!customerSearch) return true;
-                      const q = customerSearch.toLowerCase();
-                      return (
-                        c.name.toLowerCase().includes(q) ||
-                        (c.mobile || "").includes(q)
-                      );
-                    })
-                    .map((c) => (
-                      <option
-                        key={c.id}
-                        value={c.id}
-                        className="text-slate-800"
-                      >
-                        {c.name} {c.mobile ? `· ${c.mobile}` : ""}
-                      </option>
-                    ))}
-                </select>
+              <div className="flex flex-col items-center opacity-40">
+                <User size={32} className="mb-2" />
+                <span className="font-bold text-sm">Walk-in Customer</span>
               </div>
             )}
           </div>
 
-          <div className="flex gap-3 mb-6">
-            <button className="flex-1 flex items-center justify-center gap-2 border border-[#333] hover:bg-[#222] hover:border-[#444] rounded-xl py-3 text-[13px] font-bold transition-all shadow-sm">
-              <Tag size={14} className="text-[#8066FF]" /> Add Discount
+          <div className="flex gap-3 mb-6 relative z-0">
+            <button
+              onClick={() =>
+                executeWithPermission("pos_discount", () =>
+                  setShowDiscountModal(true),
+                )
+              }
+              className="flex-1 flex items-center justify-center gap-2 border border-[#333] hover:bg-[#222] hover:border-[#444] rounded-xl py-3 text-[13px] font-bold transition-all shadow-sm focus:outline-none"
+            >
+              <Tag size={14} className="text-[#8066FF]" />
+              {discountInput
+                ? `Discount (${discountType === "percent" ? discountInput + "%" : "PKR " + discountInput})`
+                : "Add Discount"}
             </button>
-            <button className="flex-1 flex items-center justify-center gap-2 border border-[#333] hover:bg-[#222] hover:border-[#444] rounded-xl py-3 text-[13px] font-bold transition-all shadow-sm">
-              <FileText size={14} className="text-[#8066FF]" /> Add Note
+            <button
+              onClick={() => setShowNoteModal(true)}
+              className="flex-1 flex items-center justify-center gap-2 border border-[#333] hover:bg-[#222] hover:border-[#444] rounded-xl py-3 text-[13px] font-bold transition-all shadow-sm focus:outline-none"
+            >
+              <FileText
+                size={14}
+                className={orderNote ? "text-emerald-400" : "text-[#8066FF]"}
+              />
+              {orderNote ? "Edit Note" : "Add Note"}
             </button>
           </div>
 
@@ -796,6 +1102,20 @@ export default function POS() {
                 PKRs {discountValue.toFixed(2)}
               </span>
             </div>
+            {pointsRedeemed > 0 && (
+              <div className="flex justify-between items-center text-sm pt-2 text-[#8066FF]">
+                <span className="font-bold">Points Redeemed</span>
+                <span className="font-bold">
+                  - PKRs {pointsRedeemed.toFixed(2)}
+                </span>
+              </div>
+            )}
+            {pointsEarned > 0 && (
+              <div className="flex justify-between items-center text-[11px] pt-3 text-emerald-400/80">
+                <span>Earning Points</span>
+                <span>+{pointsEarned} pts</span>
+              </div>
+            )}
           </div>
 
           <button
@@ -816,7 +1136,7 @@ export default function POS() {
           </button>
 
           <button
-            onClick={() => setCart([])}
+            onClick={() => executeWithPermission("pos_void", () => setCart([]))}
             className="w-full text-center text-slate-500 mt-5 text-[13px] font-semibold hover:text-white transition-colors"
           >
             Clear Order
@@ -825,9 +1145,9 @@ export default function POS() {
       </div>
 
       {isCheckoutModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center z-50">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col border border-slate-100/20">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl flex flex-col border border-slate-100/20 max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0 rounded-t-3xl">
               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                 <Banknote className="text-[#8066FF]" /> Complete Payment
               </h2>
@@ -839,7 +1159,7 @@ export default function POS() {
               </button>
             </div>
 
-            <div className="p-6">
+            <div className="p-6 overflow-y-auto min-h-0">
               <div className="text-center mb-6 bg-slate-50 border border-slate-100 rounded-2xl py-6">
                 <p className="text-sm font-semibold text-slate-500 uppercase tracking-widest mb-2">
                   Total Due
@@ -950,6 +1270,289 @@ export default function POS() {
                   ? "Add Remaining Tender"
                   : "Complete Checkout"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showDiscountModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h2 className="text-lg font-bold text-slate-800">Add Discount</h2>
+              <button
+                onClick={() => setShowDiscountModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <div className="flex grid-cols-2 gap-2 p-1 bg-slate-100 rounded-lg">
+                <button
+                  onClick={() => setDiscountType("percent")}
+                  className={`flex-1 py-1.5 rounded-md text-sm font-bold transition-colors ${discountType === "percent" ? "bg-white shadow-sm text-slate-800" : "text-slate-500 hover:bg-slate-200"}`}
+                >
+                  Percentage (%)
+                </button>
+                <button
+                  onClick={() => setDiscountType("fixed")}
+                  className={`flex-1 py-1.5 rounded-md text-sm font-bold transition-colors ${discountType === "fixed" ? "bg-white shadow-sm text-slate-800" : "text-slate-500 hover:bg-slate-200"}`}
+                >
+                  Fixed Amount
+                </button>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">
+                  Value
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={discountInput}
+                  onChange={(e) => setDiscountInput(e.target.value)}
+                  className="w-full border-2 border-slate-200 rounded-lg px-4 py-2 focus:border-[#8066FF] outline-none font-bold text-slate-800"
+                  placeholder={discountType === "percent" ? "10" : "5.00"}
+                />
+              </div>
+              <button
+                onClick={() => setShowDiscountModal(false)}
+                className="w-full bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold py-2.5 rounded-lg transition-colors mt-2"
+              >
+                Apply Discount
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNoteModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h2 className="text-lg font-bold text-slate-800">Order Note</h2>
+              <button
+                onClick={() => setShowNoteModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-5">
+              <textarea
+                value={orderNote}
+                onChange={(e) => setOrderNote(e.target.value)}
+                className="w-full border-2 border-slate-200 rounded-lg px-4 py-3 focus:border-[#8066FF] outline-none min-h-30 resize-none text-slate-800"
+                placeholder="Add comments or instructions for this order..."
+              ></textarea>
+              <button
+                onClick={() => setShowNoteModal(false)}
+                className="w-full bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold py-2.5 rounded-lg transition-colors mt-4"
+              >
+                Save Note
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showParkedModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <Clock className="text-[#8066FF]" /> Parked Sales
+              </h2>
+              <button
+                onClick={() => setShowParkedModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-200"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto">
+              {parkedSales.length === 0 ? (
+                <div className="text-center py-10 text-slate-400 flex flex-col items-center">
+                  <ShoppingCart size={40} className="mb-3 opacity-20" />
+                  <p className="font-medium text-lg text-slate-500">
+                    No parked sales
+                  </p>
+                  <p className="text-sm">
+                    You can park a sale to serve another customer.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {parkedSales.map((sale) => (
+                    <div
+                      key={sale.id}
+                      className="border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4 hover:border-[#8066FF] transition-colors bg-white"
+                    >
+                      <div>
+                        <div className="font-bold text-slate-800 text-lg mb-0.5">
+                          PKR {sale.total.toFixed(2)}
+                        </div>
+                        <div className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1.5">
+                          {sale.date}
+                        </div>
+                        <div className="text-sm text-slate-600 flex items-center gap-2">
+                          <ShoppingBag size={14} className="text-[#8066FF]" />
+                          {sale.cart.reduce((s, i) => s + i.quantity, 0)} items
+                          {sale.customerId
+                            ? ` • Customer #${sale.customerId}`
+                            : " • Walk-in"}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() =>
+                            executeWithPermission("pos_void", () =>
+                              saveParkedSales(
+                                parkedSales.filter((s) => s.id !== sale.id),
+                              ),
+                            )
+                          }
+                          className="px-3 py-2 text-red-500 bg-red-50 hover:bg-red-100 rounded-lg text-sm font-bold transition-colors"
+                        >
+                          Delete
+                        </button>
+                        <button
+                          onClick={() => handleRestoreParkedSale(sale)}
+                          className="px-5 py-2 bg-[#8066FF] hover:bg-[#7055E6] text-white rounded-lg text-sm font-bold shadow-sm transition-colors"
+                        >
+                          Restore
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {overrideState.show && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center z-100 p-4">
+          <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm flex flex-col items-center">
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
+              <Lock size={32} />
+            </div>
+            <h2 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
+              Manager Override
+            </h2>
+            <p className="text-slate-500 text-sm mb-6 text-center">
+              Enter a PIN with '{overrideState.requiredPerm}' permission.
+            </p>
+
+            <form
+              onSubmit={handleOverrideSubmit}
+              className="w-full flex flex-col gap-4"
+            >
+              <div>
+                <input
+                  type="password"
+                  autoFocus
+                  maxLength="10"
+                  value={overridePin}
+                  onChange={(e) => {
+                    setOverridePin(e.target.value);
+                    setOverrideError("");
+                  }}
+                  className="w-full text-center tracking-[0.5em] text-2xl py-3 px-4 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                  placeholder="****"
+                />
+              </div>
+              {overrideError && (
+                <p className="text-red-500 text-sm font-medium text-center">
+                  {overrideError}
+                </p>
+              )}
+
+              <div className="flex gap-3 mt-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOverrideState({
+                      show: false,
+                      actionFunc: null,
+                      requiredPerm: "",
+                    })
+                  }
+                  className="flex-1 py-3 text-slate-600 bg-slate-100 hover:bg-slate-200 font-bold rounded-xl transition-colors shadow-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!overridePin}
+                  className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors shadow-sm disabled:opacity-50"
+                >
+                  Approve
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {variantSelectProduct && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center z-100 p-4">
+          <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[80vh]">
+            <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-4 shrink-0">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                Select Variant
+              </h2>
+              <button
+                onClick={() => {
+                  setVariantSelectProduct(null);
+                  setProductVariants([]);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-200"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <p className="text-slate-500 text-sm mb-4 shrink-0">
+              Choose an option for{" "}
+              <span className="font-bold text-slate-700">
+                {variantSelectProduct.name}
+              </span>
+              :
+            </p>
+            <div className="overflow-y-auto flex-1 flex flex-col gap-2">
+              {productVariants.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  No variants available.
+                </div>
+              ) : (
+                productVariants.map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => confirmVariantSelection(v)}
+                    disabled={v.stock <= 0}
+                    className={`flex justify-between items-center p-4 border rounded-xl text-left transition-colors ${v.stock > 0 ? "border-slate-200 hover:border-[#8066FF] hover:bg-indigo-50 cursor-pointer" : "border-slate-100 bg-slate-50 opacity-60 cursor-not-allowed"}`}
+                  >
+                    <div>
+                      <div className="font-bold text-slate-800">
+                        {v.options.map((o) => o.option_value).join(" / ")}
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        {v.sku}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-[#8066FF]">
+                        PKR {v.price}
+                      </div>
+                      <div
+                        className={`text-[10px] font-bold uppercase ${v.stock > 0 ? "text-emerald-500" : "text-red-500"}`}
+                      >
+                        {v.stock} in stock
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
             </div>
           </div>
         </div>

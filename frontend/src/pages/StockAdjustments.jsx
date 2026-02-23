@@ -89,7 +89,7 @@ export default function StockAdjustments() {
   );
 
   return (
-    <div className="max-w-7xl mx-auto flex flex-col h-full space-y-6">
+    <div className="w-full flex flex-col h-full space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-1">
