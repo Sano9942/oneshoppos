@@ -1,6 +1,6 @@
 # Xstak Feature Implementation Plan
 
-**Last Updated: 2026-02-24 (Phase 2 ✅ Phase 3 ✅ Phase 4 ✅ Phase 5 ✅ Phase 6 ✅)**
+**Last Updated: 2026-02-24 (Phase 2 ✅ Phase 3 ✅ Phase 4 ✅ Phase 5 ✅ Phase 6 ✅ Phase 7 ✅)**
 
 ---
 
@@ -153,21 +153,23 @@ barcode,name,price,cost_price,gst,stock,min_qty,max_qty,unit
 
 ---
 
-### 🔲 Phase 7 — Receipt Template Designer _(~3 hrs)_
+### ✅ Phase 7 — Receipt Template Designer _(COMPLETE — 2026-02-24)_
 
-**DB:**
+**DB (`migrate28.js`):**
+- `receipt_templates` table: `id, name, header_text, footer_text, show_barcode, show_logo, is_active, created_at`
+- Seeded default template (header: "OneShopPOS", footer: "Thank you for your purchase!", is_active: 1)
 
-- `receipt_templates` table: `id, name, header_text, footer_text, show_barcode, show_logo, is_active`
-
-**Backend:**
-
-- CRUD at `/api/receipt-templates`
-- `GET /api/receipt-templates/active` — used by POS print
+**Backend (`index.js`):**
+- `GET /api/receipt-templates` — list all templates
+- `GET /api/receipt-templates/active` — returns the single active template (used by POS)
+- `POST /api/receipt-templates` — create; auto-deactivates others if `is_active: true`
+- `PUT /api/receipt-templates/:id` — update; auto-deactivates others if `is_active: true`
+- `DELETE /api/receipt-templates/:id`
 
 **Frontend:**
-
-- New settings page `ReceiptTemplates.jsx` with live preview panel
-- POS print function reads active template instead of hardcoded HTML
+- `ReceiptTemplates.jsx` — card grid of templates with live preview panel in slide-in modal; Star button to set active, color-coded active badge
+- `App.jsx` — route `/receipt-templates` wired to `ReceiptTemplates` (was `PlaceholderPage`)
+- `POS.jsx` — print logic now fetches `/api/receipt-templates/active` before printing; uses `tmpl.header_text`, `tmpl.footer_text`, `tmpl.show_barcode`; gracefully falls back to defaults on fetch failure
 
 ---
 
@@ -181,7 +183,7 @@ barcode,name,price,cost_price,gst,stock,min_qty,max_qty,unit
 | 4   | Dashboard top salespeople + chart                           | Small  | Medium | ✅ Done |
 | 5   | Export CSV (all pages)                                      | Small  | Medium | ✅ Done |
 | 6   | Bulk CSV product import                                     | Medium | High   | ✅ Done |
-| 7   | Receipt Template designer                                   | Large  | Low    | 🔲      |
+| 7   | Receipt Template designer                                   | Large  | Low    | ✅ Done |
 
 ---
 

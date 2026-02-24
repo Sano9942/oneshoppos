@@ -468,6 +468,17 @@ export default function POS() {
 
       if (res.ok) {
         const data = await res.json();
+
+        // Fetch active receipt template (fall back to defaults if none configured)
+        let tmpl = { header_text: "OneShopPOS", footer_text: "Thank you for your purchase!", show_barcode: false };
+        try {
+          const tmplRes = await fetch("http://localhost:5000/api/receipt-templates/active");
+          if (tmplRes.ok) {
+            const tmplData = await tmplRes.json();
+            if (tmplData.template) tmpl = tmplData.template;
+          }
+        } catch { /* use defaults */ }
+
         const printWindow = window.open("", "_blank", "width=400,height=600");
 
         let receiptHTML = `
@@ -487,8 +498,7 @@ export default function POS() {
             </head>
             <body>
               <div class="center">
-                <h2 style="margin:0;">OneShopPOS</h2>
-                <p style="margin: 5px 0;">Thank you for your purchase!</p>
+                <h2 style="margin:0;">${tmpl.header_text || "OneShopPOS"}</h2>
                 <p style="margin: 5px 0;">Receipt #${data.saleId}</p>
               </div>
               <div class="divider"></div>
@@ -557,7 +567,8 @@ export default function POS() {
               `
                   : ""
               }
-              <p class="center" style="font-size:12px">Powered by OneShopPOS System<br/>(Custom Build)</p>
+              ${tmpl.show_barcode ? `<div class="center" style="margin:8px 0;"><div style="font-size:32px;letter-spacing:2px;">▌▌▌▌▌▌▌▌▌▌▌▌</div><div style="font-size:11px;">${data.saleId}</div></div><div class="divider"></div>` : ""}
+              <p class="center" style="font-size:12px;white-space:pre-line;">${tmpl.footer_text || ""}</p>
             </body>
           </html>
         `;

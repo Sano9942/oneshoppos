@@ -23,6 +23,7 @@ import ActionHistory from "./pages/ActionHistory";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import Administrator from "./pages/Administrator";
 import AttributeSets from "./pages/AttributeSets";
+import ReceiptTemplates from "./pages/ReceiptTemplates";
 
 function App() {
   return (
@@ -128,7 +129,7 @@ function App() {
             element={<ReportTabStandalone tabId="product-performance" />}
           />
           <Route path="/barcode-templates" element={<PlaceholderPage />} />
-          <Route path="/receipt-templates" element={<PlaceholderPage />} />
+          <Route path="/receipt-templates" element={<ReceiptTemplates />} />
           <Route path="/partners" element={<PlaceholderPage />} />
           <Route path="/shopcast" element={<PlaceholderPage />} />
           <Route path="/administrator" element={<Administrator />} />
