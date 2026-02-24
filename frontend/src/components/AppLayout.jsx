@@ -60,6 +60,7 @@ export default function AppLayout() {
       path.startsWith("/barcode") ||
       path.startsWith("/receipt") ||
       path.startsWith("/backup-restore") ||
+      path.startsWith("/integrations") ||
       path.startsWith("/partners") ||
       path.startsWith("/brands") ||
       path.startsWith("/shopcast")
@@ -143,6 +144,7 @@ export default function AppLayout() {
     else if (path.startsWith("/barcode-templates")) moduleName = "Setup > Barcode Templates";
     else if (path.startsWith("/receipt-templates")) moduleName = "Setup > Receipt Templates";
     else if (path.startsWith("/backup-restore")) moduleName = "Setup > Backup & Restore";
+    else if (path.startsWith("/integrations/shopify")) moduleName = "Setup > Shopify Integration";
     else if (path.startsWith("/partners")) moduleName = "Setup > Partners";
     else if (path.startsWith("/brands")) moduleName = "Setup > Brands";
     else if (path.startsWith("/shopcast")) moduleName = "Setup > Shopcast";
@@ -160,7 +162,7 @@ export default function AppLayout() {
         { name: "Cash Management", path: "/cash-management" },
       ],
     },
-    { name: "Orders", path: "/orders", icon: <ShoppingCart size={18} /> },
+    { name: "Orders", path: "/orders", icon: <ShoppingCart size={18} />, requiredPerm: "manage_orders" },
     { name: "Categories", path: "/categories", icon: <Tags size={18} />, requiredPerm: "manage_inventory" },
     { name: "Suppliers", path: "/suppliers", icon: <Truck size={18} />, requiredPerm: "manage_orders" },
     { name: "Supplier Payables", path: "/supplier-payables", icon: <CreditCard size={18} />, requiredPerm: "manage_orders", requiredFlag: "supplier_payables" },
@@ -222,6 +224,7 @@ export default function AppLayout() {
         { name: "Barcode Templates", path: "/barcode-templates", requiredPerm: "manage_inventory" },
         { name: "Receipt Templates", path: "/receipt-templates" },
         { name: "Backup & Restore", path: "/backup-restore", requiredPerm: "manage_employees", requiredFlag: "backup_restore" },
+        { name: "Shopify Integration", path: "/integrations/shopify", requiredPerm: "manage_inventory" },
         { name: "Partners", path: "/partners" },
         { name: "Brands", path: "/brands", requiredPerm: "manage_inventory" },
         { name: "Shopcast", path: "/shopcast" },

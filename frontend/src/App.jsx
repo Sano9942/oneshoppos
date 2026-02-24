@@ -20,6 +20,7 @@ import Expenses from "./pages/Expenses";
 import Inventory from "./pages/Inventory";
 import Login from "./pages/Login";
 import Outlets from "./pages/Outlets";
+import Orders from "./pages/Orders";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import POS from "./pages/POS";
 import Promotions from "./pages/Promotions";
@@ -33,6 +34,7 @@ import ActionHistory from "./pages/ActionHistory";
 import StockAdjustments from "./pages/StockAdjustments";
 import SupplierPayables from "./pages/SupplierPayables";
 import Suppliers from "./pages/Suppliers";
+import ShopifyIntegration from "./pages/ShopifyIntegration";
 import Taxes from "./pages/Taxes";
 import Transfers from "./pages/Transfers";
 
@@ -70,7 +72,14 @@ function App() {
           <Route path="/cash-management" element={<CashManagement />} />
           <Route path="/customers" element={<Customers />} />
           <Route path="/attribute-sets" element={<AttributeSets />} />
-          <Route path="/orders" element={<PlaceholderPage />} />
+          <Route
+            path="/orders"
+            element={
+              <RequirePerm perm="manage_orders">
+                <Orders />
+              </RequirePerm>
+            }
+          />
           <Route path="/lookup" element={<PlaceholderPage />} />
           <Route path="/custom-fields" element={<PlaceholderPage />} />
           <Route path="/partners" element={<PlaceholderPage />} />
@@ -229,6 +238,14 @@ function App() {
             element={
               <RequirePerm perm="manage_employees">
                 <BackupRestore />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/integrations/shopify"
+            element={
+              <RequirePerm perm="manage_inventory">
+                <ShopifyIntegration />
               </RequirePerm>
             }
           />

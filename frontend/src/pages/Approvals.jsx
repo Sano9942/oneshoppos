@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { CheckCircle, XCircle, Clock, RefreshCw } from "lucide-react";
+import { useAuth } from "../auth/AuthProvider";
 
 const API = "http://localhost:5000/api";
 
@@ -12,9 +13,32 @@ const STATUS_LABELS = {
 const TYPE_LABELS = {
   po_approval: "Purchase Order",
   str_approval: "Stock Transfer",
+  reconciliation_fix: "Inventory Reconciliation",
 };
 
+function getApprovalEndpoint(approval) {
+  if (approval.reference_type === "purchase_order") {
+    return `${API}/purchase-orders/${approval.reference_id}/approve`;
+  }
+  if (approval.reference_type === "reconciliation") {
+    return `${API}/reconciliation/inventory/${approval.reference_id}/approve-fix`;
+  }
+  return `${API}/transfers/${approval.reference_id}/approve`;
+}
+
+function formatApprovalNotes(approval) {
+  if (approval.request_type !== "reconciliation_fix") return approval.notes || "-";
+  try {
+    const parsed = JSON.parse(approval.notes || "{}");
+    const mode = parsed.mode === "push_to_shopify" ? "Push local to Shopify" : "Pull Shopify to local";
+    return `${mode}${parsed.diff !== undefined ? ` | diff=${parsed.diff}` : ""}`;
+  } catch {
+    return approval.notes || "-";
+  }
+}
+
 export default function Approvals() {
+  const { authHeaders } = useAuth();
   const [approvals, setApprovals] = useState([]);
   const [filterStatus, setFilterStatus] = useState("pending_approval");
   const [loading, setLoading] = useState(false);
@@ -23,10 +47,20 @@ export default function Approvals() {
   const [actionReason, setActionReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const apiFetch = useCallback(
+    (url, options = {}) => {
+      const headers = new Headers(options.headers || {});
+      const merged = authHeaders();
+      Object.entries(merged).forEach(([key, value]) => headers.set(key, value));
+      return fetch(url, { ...options, headers });
+    },
+    [authHeaders],
+  );
+
   const fetchApprovals = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/approvals?status=${filterStatus}`);
+      const res = await apiFetch(`${API}/approvals?status=${filterStatus}`);
       const data = await res.json();
       setApprovals(data.approvals || []);
     } catch {
@@ -34,7 +68,7 @@ export default function Approvals() {
     } finally {
       setLoading(false);
     }
-  }, [filterStatus]);
+  }, [filterStatus, apiFetch]);
 
   useEffect(() => {
     fetchApprovals();
@@ -44,14 +78,11 @@ export default function Approvals() {
     if (!actionModal) return;
     const { approval, action } = actionModal;
 
-    const endpoint =
-      approval.reference_type === "purchase_order"
-        ? `${API}/purchase-orders/${approval.reference_id}/approve`
-        : `${API}/transfers/${approval.reference_id}/approve`;
+    const endpoint = getApprovalEndpoint(approval);
 
     setSubmitting(true);
     try {
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, action_by: actionBy, reason: actionReason }),
@@ -78,7 +109,7 @@ export default function Approvals() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Approval Workflow</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Review and approve Purchase Orders and Stock Transfers
+            Review and approve purchase orders, stock transfers, and reconciliation fixes
           </p>
         </div>
         <button
@@ -140,7 +171,7 @@ export default function Approvals() {
                     <td className="px-4 py-3 text-gray-600">#{ap.reference_id}</td>
                     <td className="px-4 py-3 text-gray-600">{ap.requested_by || "—"}</td>
                     <td className="px-4 py-3 text-gray-500 max-w-xs truncate">
-                      {ap.notes || "—"}
+                      {formatApprovalNotes(ap)}
                     </td>
                     <td className="px-4 py-3 text-gray-500">
                       {new Date(ap.created_at).toLocaleString()}

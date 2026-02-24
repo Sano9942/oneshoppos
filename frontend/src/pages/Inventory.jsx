@@ -56,7 +56,13 @@ export default function Inventory() {
     name: "",
     price: "",
     cost_price: "",
+    compare_at_price: "",
     gst: "",
+    description_html: "",
+    product_type: "",
+    vendor: "",
+    tags: "",
+    status: "active",
     stock: "",
     category_id: "",
     tax_id: "",
@@ -113,12 +119,10 @@ export default function Inventory() {
     }
   };
 
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     fetchProducts();
     fetchDropdowns();
   }, []); // Initial data load - external API calls, not cascading renders
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Filter Products locally based on search
   const filteredProducts = products.filter(
@@ -137,11 +141,9 @@ export default function Inventory() {
   );
 
   // Reset to page 1 when searching
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm]); // Derived state reset - intentional pattern
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const openModal = (product = null) => {
     if (product) {
@@ -151,7 +153,13 @@ export default function Inventory() {
         name: product.name,
         price: product.price,
         cost_price: product.cost_price ?? "",
+        compare_at_price: product.compare_at_price ?? "",
         gst: product.gst ?? "",
+        description_html: product.description_html || "",
+        product_type: product.product_type || "",
+        vendor: product.vendor || "",
+        tags: product.tags || "",
+        status: product.status || "active",
         stock: product.total_stock,
         category_id: product.category_id || "",
         tax_id: product.tax_id || "",
@@ -173,7 +181,13 @@ export default function Inventory() {
         name: "",
         price: "",
         cost_price: "",
+        compare_at_price: "",
         gst: "",
+        description_html: "",
+        product_type: "",
+        vendor: "",
+        tags: "",
+        status: "active",
         stock: "",
         category_id: "",
         tax_id: defaultTax ? defaultTax.id : "",
@@ -232,7 +246,10 @@ export default function Inventory() {
         .join("-")
         .toUpperCase()}`,
       price: formData.price,
+      compare_at_price: formData.compare_at_price || formData.price,
       cost_price: formData.cost_price,
+      weight: 0,
+      weight_unit: "kg",
       initial_stock: 0,
       options: comb,
     }));
@@ -269,7 +286,13 @@ export default function Inventory() {
         name: formData.name,
         price: parseFloat(formData.price),
         cost_price: formData.cost_price ? parseFloat(formData.cost_price) : 0,
+        compare_at_price: formData.compare_at_price ? parseFloat(formData.compare_at_price) : 0,
         gst: formData.gst ? parseFloat(formData.gst) : "",
+        description_html: formData.description_html || null,
+        product_type: formData.product_type || null,
+        vendor: formData.vendor || null,
+        tags: formData.tags || null,
+        status: formData.status || "active",
         category_id: formData.category_id
           ? parseInt(formData.category_id)
           : null,
@@ -360,6 +383,12 @@ export default function Inventory() {
                   name: p.name,
                   price: p.price,
                   cost_price: p.cost_price,
+                  compare_at_price: p.compare_at_price,
+                  description_html: p.description_html,
+                  product_type: p.product_type,
+                  vendor: p.vendor,
+                  tags: p.tags,
+                  status: p.status,
                   gst: p.gst,
                   stock: p.total_stock ?? p.stock,
                   min_qty: p.min_qty,
@@ -482,8 +511,16 @@ export default function Inventory() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-mono">
                     {product.barcode}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
-                    {product.name}
+                  <td className="px-6 py-4 text-sm font-medium text-slate-900">
+                    <div className="flex items-center gap-2">
+                      <span>{product.name}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] uppercase ${String(product.status || "active") === "active" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                        {product.status || "active"}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      {product.vendor || "-"} {product.product_type ? `| ${product.product_type}` : ""}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 text-right">
                     ${product.price ? product.price.toFixed(2) : "0.00"}
@@ -687,6 +724,100 @@ export default function Inventory() {
                           }
                           className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           placeholder="0.00"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Compare-at Price ($)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={formData.compare_at_price}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              compare_at_price: e.target.value,
+                            })
+                          }
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Status
+                        </label>
+                        <select
+                          value={formData.status}
+                          onChange={(e) =>
+                            setFormData({ ...formData, status: e.target.value })
+                          }
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        >
+                          <option value="active">active</option>
+                          <option value="draft">draft</option>
+                          <option value="archived">archived</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Product Type
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.product_type}
+                          onChange={(e) =>
+                            setFormData({ ...formData, product_type: e.target.value })
+                          }
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="e.g. Beverage"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Vendor
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.vendor}
+                          onChange={(e) =>
+                            setFormData({ ...formData, vendor: e.target.value })
+                          }
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="e.g. Coca-Cola"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Tags (comma-separated)
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.tags}
+                          onChange={(e) =>
+                            setFormData({ ...formData, tags: e.target.value })
+                          }
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="summer, featured, online"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Description (HTML/plain)
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={formData.description_html}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              description_html: e.target.value,
+                            })
+                          }
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Product description for online channels"
                         />
                       </div>
                       <div>
@@ -942,6 +1073,12 @@ export default function Inventory() {
                                 <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 w-24">
                                   Cost
                                 </th>
+                                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 w-24">
+                                  Compare-at
+                                </th>
+                                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 w-24">
+                                  Weight
+                                </th>
                                 <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500 w-20">
                                   Stock
                                 </th>
@@ -999,6 +1136,54 @@ export default function Inventory() {
                                       className="w-full border border-slate-300 rounded px-2 py-1 focus:ring-blue-500 focus:border-blue-500"
                                       required
                                     />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={v.compare_at_price}
+                                      onChange={(e) =>
+                                        updateVariantField(
+                                          idx,
+                                          "compare_at_price",
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="w-full border border-slate-300 rounded px-2 py-1 focus:ring-blue-500 focus:border-blue-500"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex gap-1">
+                                      <input
+                                        type="number"
+                                        step="0.001"
+                                        value={v.weight}
+                                        onChange={(e) =>
+                                          updateVariantField(
+                                            idx,
+                                            "weight",
+                                            e.target.value,
+                                          )
+                                        }
+                                        className="w-full border border-slate-300 rounded px-2 py-1 focus:ring-blue-500 focus:border-blue-500"
+                                      />
+                                      <select
+                                        value={v.weight_unit || "kg"}
+                                        onChange={(e) =>
+                                          updateVariantField(
+                                            idx,
+                                            "weight_unit",
+                                            e.target.value,
+                                          )
+                                        }
+                                        className="border border-slate-300 rounded px-2 py-1 focus:ring-blue-500 focus:border-blue-500"
+                                      >
+                                        <option value="kg">kg</option>
+                                        <option value="g">g</option>
+                                        <option value="lb">lb</option>
+                                        <option value="oz">oz</option>
+                                      </select>
+                                    </div>
                                   </td>
                                   <td className="px-3 py-2">
                                     <input

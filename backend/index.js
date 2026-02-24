@@ -3,16 +3,95 @@ const cors = require("cors");
 const db = require("./db");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const multer = require("multer");
 const sqlite3 = require("sqlite3").verbose();
+const {
+  verifyConnection,
+  fetchShopifyLocations,
+  adjustShopifyInventory,
+  fetchShopifyVariantCatalog,
+  fetchInventoryLevel,
+} = require("./shopify/client");
+const {
+  retryDelayMinutesWithJitter,
+  evaluateWebhookTimestampWindow,
+  isRetryableInventoryEventStatus,
+  canApproveReconciliationRequest,
+  buildWebhookIdempotencyKey,
+  verifyWebhookSignature,
+} = require("./shopify/utils");
 require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const SHOPIFY_SECRET_ENC_PREFIX = "enc:v1";
+const SHOPIFY_MAX_RETRY_ATTEMPTS = Math.max(1, parseInt(process.env.SHOPIFY_MAX_RETRY_ATTEMPTS || "5", 10));
+
+function getShopifySecretKeyBuffer() {
+  const raw = String(process.env.SHOPIFY_SECRET_KEY || "").trim();
+  if (!raw) return null;
+  if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, "hex");
+  try {
+    const b64 = Buffer.from(raw, "base64");
+    if (b64.length === 32) return b64;
+  } catch {
+    // ignore parse issues
+  }
+  return crypto.createHash("sha256").update(raw, "utf8").digest();
+}
+
+function encryptShopifySecret(plainText) {
+  const value = String(plainText || "");
+  if (!value) return "";
+  const key = getShopifySecretKeyBuffer();
+  if (!key) return value;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${SHOPIFY_SECRET_ENC_PREFIX}:${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
+}
+
+function decryptShopifySecret(storedText) {
+  const stored = String(storedText || "");
+  if (!stored) return "";
+  if (!stored.startsWith(`${SHOPIFY_SECRET_ENC_PREFIX}:`)) return stored;
+  const key = getShopifySecretKeyBuffer();
+  if (!key) {
+    throw new Error("SHOPIFY_SECRET_KEY is required to decrypt Shopify secrets");
+  }
+  const parts = stored.split(":");
+  if (parts.length !== 5) throw new Error("Invalid encrypted Shopify secret format");
+  const iv = Buffer.from(parts[2], "base64");
+  const tag = Buffer.from(parts[3], "base64");
+  const encrypted = Buffer.from(parts[4], "base64");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(tag);
+  const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+  return decrypted.toString("utf8");
+}
+
+function logShopifyEvent(level, event, details = {}) {
+  const payload = {
+    ts: new Date().toISOString(),
+    area: "shopify_connector",
+    event,
+    ...details,
+  };
+  const logger = level === "error" ? console.error : level === "warn" ? console.warn : console.log;
+  logger(JSON.stringify(payload));
+}
 
 // Middleware
 app.use(cors());
-app.use(express.json()); // Parse JSON bodies
+app.use(express.json({
+  verify: (req, res, buf) => {
+    if (req.originalUrl && req.originalUrl.includes("/api/integrations/shopify/webhooks/")) {
+      req.rawBody = buf.toString("utf8");
+    }
+  },
+})); // Parse JSON bodies
 
 // --- PERMISSION MIDDLEWARE SCAFFOLD ---
 // Reads optional x-employee-id header, attaches permissions to req.
@@ -133,7 +212,7 @@ const PERMISSION_RULES = [
   { methods: ["POST"], path: /^\/api\/returns$/, anyPerms: ["manage_orders"] },
 
   // Approval workflow
-  { methods: ["GET"], path: /^\/api\/approvals$/, anyPerms: ["manage_orders"] },
+  { methods: ["GET"], path: /^\/api\/approvals$/, anyPerms: ["manage_orders", "manage_employees"] },
   { methods: ["POST"], path: /^\/api\/purchase-orders\/\d+\/submit$/, anyPerms: ["manage_orders"] },
   { methods: ["POST"], path: /^\/api\/purchase-orders\/\d+\/approve$/, anyPerms: ["manage_orders"] },
   { methods: ["POST"], path: /^\/api\/transfers\/\d+\/submit$/, anyPerms: ["manage_orders"] },
@@ -993,12 +1072,18 @@ app.post("/api/products", (req, res) => {
     min_qty,
     max_qty,
     unit,
+    description_html,
+    compare_at_price,
+    product_type,
+    vendor,
+    tags,
+    status,
   } = req.body;
 
   db.serialize(() => {
     db.run("BEGIN TRANSACTION");
     db.run(
-      "INSERT INTO products (barcode, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO products (barcode, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit, description_html, compare_at_price, product_type, vendor, tags, status) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         barcode,
         name,
@@ -1013,6 +1098,12 @@ app.post("/api/products", (req, res) => {
         min_qty || 0,
         max_qty || 0,
         unit || "pcs",
+        description_html || null,
+        compare_at_price || 0,
+        product_type || null,
+        vendor || null,
+        tags || null,
+        status || "active",
       ],
       function (err) {
         if (err) {
@@ -1039,12 +1130,17 @@ app.post("/api/products", (req, res) => {
             if (hasError) return;
 
             db.run(
-              "INSERT INTO product_variants (product_id, sku, price, cost_price, stock) VALUES (?, ?, ?, ?, 0)",
+              `INSERT INTO product_variants
+                 (product_id, sku, price, cost_price, compare_at_price, weight, weight_unit, stock)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
               [
                 newProductId,
                 variant.sku,
                 variant.price || price,
                 variant.cost_price || cost_price,
+                variant.compare_at_price || variant.price || price || 0,
+                variant.weight || 0,
+                variant.weight_unit || "kg",
               ],
               function (vErr) {
                 if (vErr) {
@@ -1125,7 +1221,7 @@ app.post("/api/products", (req, res) => {
 
 // Bulk import products from CSV rows (upsert by barcode)
 app.post("/api/products/bulk-import", (req, res) => {
-  const { rows } = req.body; // [{ barcode, name, price, cost_price, gst, stock, min_qty, max_qty, unit }]
+  const { rows } = req.body; // [{ barcode, name, price, cost_price, compare_at_price, description_html, product_type, vendor, tags, status, gst, stock, min_qty, max_qty, unit }]
   if (!Array.isArray(rows) || rows.length === 0) {
     return res.status(400).json({ error: "No rows provided" });
   }
@@ -1137,7 +1233,23 @@ app.post("/api/products/bulk-import", (req, res) => {
       return res.json({ results });
     }
     const row = rows[index];
-    const { barcode, name, price, cost_price, gst, stock, min_qty, max_qty, unit } = row;
+    const {
+      barcode,
+      name,
+      price,
+      cost_price,
+      compare_at_price,
+      description_html,
+      product_type,
+      vendor,
+      tags,
+      status,
+      gst,
+      stock,
+      min_qty,
+      max_qty,
+      unit,
+    } = row;
 
     if (!barcode || !name || !price) {
       results.push({ barcode: barcode || "?", status: "error", message: "barcode, name, and price are required" });
@@ -1154,12 +1266,18 @@ app.post("/api/products/bulk-import", (req, res) => {
         }
 
         db.run(
-          `INSERT INTO products (barcode, name, price, cost_price, gst, stock, min_qty, max_qty, unit)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO products (barcode, name, price, cost_price, compare_at_price, description_html, product_type, vendor, tags, status, gst, stock, min_qty, max_qty, unit)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(barcode) DO UPDATE SET
              name = excluded.name,
              price = excluded.price,
              cost_price = excluded.cost_price,
+             compare_at_price = excluded.compare_at_price,
+             description_html = excluded.description_html,
+             product_type = excluded.product_type,
+             vendor = excluded.vendor,
+             tags = excluded.tags,
+             status = excluded.status,
              gst = excluded.gst,
              stock = excluded.stock,
              min_qty = excluded.min_qty,
@@ -1170,6 +1288,12 @@ app.post("/api/products/bulk-import", (req, res) => {
             name,
             parseFloat(price) || 0,
             parseFloat(cost_price) || 0,
+            parseFloat(compare_at_price) || 0,
+            description_html || null,
+            product_type || null,
+            vendor || null,
+            tags || null,
+            status || "active",
             gst !== "" && gst != null ? parseFloat(gst) : null,
             parseInt(stock) || 0,
             parseInt(min_qty) || 0,
@@ -1211,11 +1335,17 @@ app.put("/api/products/:id", (req, res) => {
     min_qty,
     max_qty,
     unit,
+    description_html,
+    compare_at_price,
+    product_type,
+    vendor,
+    tags,
+    status,
   } = req.body;
 
   // Simple dynamic update
   db.run(
-    "UPDATE products SET name = COALESCE(?, name), price = COALESCE(?, price), cost_price = COALESCE(?, cost_price), gst = ?, barcode = COALESCE(?, barcode), category_id = COALESCE(?, category_id), tax_id = COALESCE(?, tax_id), brand_id = COALESCE(?, brand_id), min_qty = COALESCE(?, min_qty), max_qty = COALESCE(?, max_qty), unit = COALESCE(?, unit) WHERE id = ?",
+    "UPDATE products SET name = COALESCE(?, name), price = COALESCE(?, price), cost_price = COALESCE(?, cost_price), gst = ?, barcode = COALESCE(?, barcode), category_id = COALESCE(?, category_id), tax_id = COALESCE(?, tax_id), brand_id = COALESCE(?, brand_id), min_qty = COALESCE(?, min_qty), max_qty = COALESCE(?, max_qty), unit = COALESCE(?, unit), description_html = COALESCE(?, description_html), compare_at_price = COALESCE(?, compare_at_price), product_type = COALESCE(?, product_type), vendor = COALESCE(?, vendor), tags = COALESCE(?, tags), status = COALESCE(?, status) WHERE id = ?",
     [
       name,
       price,
@@ -1228,6 +1358,12 @@ app.put("/api/products/:id", (req, res) => {
       min_qty !== undefined ? min_qty : null,
       max_qty !== undefined ? max_qty : null,
       unit || null,
+      description_html || null,
+      compare_at_price !== undefined ? compare_at_price : null,
+      product_type || null,
+      vendor || null,
+      tags || null,
+      status || null,
       id,
     ],
     function (err) {
@@ -1507,6 +1643,15 @@ app.post("/api/purchase-orders/:id/receive", requirePerm("manage_orders"), (req,
 
               db.run("COMMIT", (err) => {
                 if (err) return res.status(500).json({ error: err.message });
+                const syncChanges = poItems.map((item) => ({
+                  product_id: item.product_id,
+                  outlet_id,
+                  delta: Number(receivedMap[item.product_id] ?? item.quantity ?? 0),
+                  reason: "po_receive",
+                  reference_type: "purchase_order",
+                  reference_id: po.id,
+                }));
+                enqueueInventorySyncEvents(syncChanges, {}, () => {});
                 // Auto-create supplier invoice for this GRN
                 if (po.supplier_id && po.total_cost > 0) {
                   const invNumber = `INV-${grnNumber}`;
@@ -2323,6 +2468,16 @@ app.put("/api/sales/:id/void", requireAnyPerm(["void_sales", "pos_void"]), (req,
             return res
               .status(500)
               .json({ error: "Failed to commit void transaction" });
+          const syncChanges = items.map((item) => ({
+            product_id: item.product_id,
+            variant_id: item.variant_id || null,
+            outlet_id: sale.outlet_id,
+            delta: Number(item.quantity || 0),
+            reason: "void",
+            reference_type: "sale_void",
+            reference_id: id,
+          }));
+          enqueueInventorySyncEvents(syncChanges, {}, () => {});
           res.json({
             message: "Sale voided successfully. Stock has been restored.",
           });
@@ -2501,6 +2656,16 @@ app.post("/api/sales", (req, res) => {
         db.run("COMMIT", (err) => {
           if (err)
             return res.status(500).json({ error: "Failed to commit sale" });
+          const syncChanges = cartItems.map((item) => ({
+            product_id: item.original_product_id || item.product_id || item.id,
+            variant_id: item.variant_id || null,
+            outlet_id,
+            delta: -1 * Number(item.quantity || 0),
+            reason: "sale",
+            reference_type: "sale",
+            reference_id: saleId,
+          }));
+          enqueueInventorySyncEvents(syncChanges, {}, () => {});
           assignInvoiceNumberToSale(saleId, 1, (invErr, invoiceNumber) => {
             if (invErr) {
               return res.status(500).json({
@@ -2649,6 +2814,28 @@ app.post("/api/transfers", requirePerm("manage_inventory"), (req, res) => {
             return res
               .status(500)
               .json({ error: "Failed to commit transfer transaction" });
+          enqueueInventorySyncEvents(
+            [
+              {
+                product_id,
+                outlet_id: from_outlet_id,
+                delta: -1 * Number(quantity || 0),
+                reason: "transfer_out",
+                reference_type: "transfer",
+                reference_id: null,
+              },
+              {
+                product_id,
+                outlet_id: to_outlet_id,
+                delta: Number(quantity || 0),
+                reason: "transfer_in",
+                reference_type: "transfer",
+                reference_id: null,
+              },
+            ],
+            {},
+            () => {},
+          );
           res.json({ message: "Transfer completed successfully" });
         });
       });
@@ -2696,6 +2883,7 @@ app.post("/api/adjustments", requirePerm("manage_inventory"), (req, res) => {
           db.run("ROLLBACK");
           return res.status(500).json({ error: "Failed to record adjustment" });
         }
+        const adjustmentId = this.lastID;
 
         // Upsert outlet_stock
         db.run(
@@ -2715,6 +2903,20 @@ app.post("/api/adjustments", requirePerm("manage_inventory"), (req, res) => {
                 return res
                   .status(500)
                   .json({ error: "Failed to commit adjustment transaction" });
+              enqueueInventorySyncEvents(
+                [
+                  {
+                    product_id,
+                    outlet_id,
+                    delta: Number(quantity_change || 0),
+                    reason: "adjustment",
+                    reference_type: "adjustment",
+                    reference_id: adjustmentId || null,
+                  },
+                ],
+                {},
+                () => {},
+              );
               res.json({ message: "Stock adjusted successfully" });
             });
           },
@@ -3639,6 +3841,15 @@ app.post("/api/returns", (req, res) => {
             return res
               .status(500)
               .json({ error: "Failed to commit return transaction" });
+          const syncChanges = items.map((item) => ({
+            product_id: item.product_id,
+            outlet_id,
+            delta: Number(item.quantity || 0),
+            reason: "return",
+            reference_type: "return",
+            reference_id: returnId,
+          }));
+          enqueueInventorySyncEvents(syncChanges, {}, () => {});
           res.json({ message: "Return processed successfully", id: returnId });
         });
       },
@@ -4188,6 +4399,16 @@ app.post("/api/supplier-returns", (req, res) => {
 
         db.run("COMMIT", (err) => {
           if (err) return res.status(500).json({ error: err.message });
+          const syncChanges = items.map((item) => ({
+            product_id: item.product_id || item.id,
+            variant_id: item.variant_id || null,
+            outlet_id,
+            delta: -1 * Number(item.quantity || 0),
+            reason: "supplier_return",
+            reference_type: "supplier_return",
+            reference_id: returnId,
+          }));
+          enqueueInventorySyncEvents(syncChanges, {}, () => {});
           res.json({ message: "Supplier return processed", id: returnId });
         });
       },
@@ -4285,6 +4506,2524 @@ app.delete("/api/parked-sales/:id", (req, res) => {
     if (this.changes === 0) return res.status(404).json({ error: "Parked sale not found" });
     res.json({ message: "Parked sale removed" });
   });
+});
+
+// --- ROUTES: ORDERS (Website order staging before live Shopify integration) ---
+
+app.get("/api/orders", requirePerm("manage_orders"), (req, res) => {
+  const {
+    source,
+    order_status,
+    payment_status,
+    fulfillment_status,
+    date_from,
+    date_to,
+    search,
+  } = req.query;
+
+  const where = ["1=1"];
+  const params = [];
+
+  if (source) {
+    where.push("wo.source = ?");
+    params.push(source);
+  }
+  if (order_status) {
+    where.push("wo.order_status = ?");
+    params.push(order_status);
+  }
+  if (payment_status) {
+    where.push("wo.payment_status = ?");
+    params.push(payment_status);
+  }
+  if (fulfillment_status) {
+    where.push("wo.fulfillment_status = ?");
+    params.push(fulfillment_status);
+  }
+  if (date_from) {
+    where.push("date(wo.ordered_at,'localtime') >= ?");
+    params.push(date_from);
+  }
+  if (date_to) {
+    where.push("date(wo.ordered_at,'localtime') <= ?");
+    params.push(date_to);
+  }
+  if (search) {
+    where.push(
+      "(wo.external_order_number LIKE ? OR wo.external_order_id LIKE ? OR COALESCE(c.name,'') LIKE ?)",
+    );
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+  }
+
+  db.all(
+    `SELECT wo.*,
+            c.name as customer_name,
+            o.name as outlet_name,
+            COUNT(woi.id) as item_count
+     FROM web_orders wo
+     LEFT JOIN customers c ON wo.customer_id = c.id
+     LEFT JOIN outlets o ON wo.outlet_id = o.id
+     LEFT JOIN web_order_items woi ON woi.web_order_id = wo.id
+     WHERE ${where.join(" AND ")}
+     GROUP BY wo.id
+     ORDER BY COALESCE(wo.ordered_at, wo.created_at) DESC`,
+    params,
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ orders: rows || [] });
+    },
+  );
+});
+
+app.get("/api/orders/:id", requirePerm("manage_orders"), (req, res) => {
+  const { id } = req.params;
+  db.get(
+    `SELECT wo.*, c.name as customer_name, o.name as outlet_name
+     FROM web_orders wo
+     LEFT JOIN customers c ON wo.customer_id = c.id
+     LEFT JOIN outlets o ON wo.outlet_id = o.id
+     WHERE wo.id = ?`,
+    [id],
+    (err, order) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!order) return res.status(404).json({ error: "Order not found" });
+
+      db.all(
+        "SELECT * FROM web_order_items WHERE web_order_id = ? ORDER BY id ASC",
+        [id],
+        (itemErr, items) => {
+          if (itemErr) return res.status(500).json({ error: itemErr.message });
+          db.all(
+            "SELECT * FROM web_order_transactions WHERE web_order_id = ? ORDER BY processed_at DESC, id DESC",
+            [id],
+            (txnErr, transactions) => {
+              if (txnErr) return res.status(500).json({ error: txnErr.message });
+              db.all(
+                "SELECT * FROM web_order_fulfillments WHERE web_order_id = ? ORDER BY fulfilled_at DESC, id DESC",
+                [id],
+                (fulErr, fulfillments) => {
+                  if (fulErr) return res.status(500).json({ error: fulErr.message });
+                  res.json({
+                    order,
+                    items: items || [],
+                    transactions: transactions || [],
+                    fulfillments: fulfillments || [],
+                  });
+                },
+              );
+            },
+          );
+        },
+      );
+    },
+  );
+});
+
+app.post("/api/orders", requirePerm("manage_orders"), (req, res) => {
+  const {
+    source = "shopify",
+    external_order_id,
+    external_order_number,
+    customer_id,
+    outlet_id,
+    currency = "PKR",
+    subtotal = 0,
+    discount_total = 0,
+    tax_total = 0,
+    shipping_total = 0,
+    grand_total = 0,
+    payment_status = "pending",
+    fulfillment_status = "unfulfilled",
+    order_status = "open",
+    ordered_at,
+    raw_payload = null,
+    items = [],
+  } = req.body || {};
+
+  if (!external_order_id) {
+    return res.status(400).json({ error: "external_order_id is required" });
+  }
+
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
+    db.run(
+      `INSERT INTO web_orders (
+          source, external_order_id, external_order_number, customer_id, outlet_id, currency,
+          subtotal, discount_total, tax_total, shipping_total, grand_total,
+          payment_status, fulfillment_status, order_status, ordered_at, raw_payload
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        source,
+        String(external_order_id),
+        external_order_number || null,
+        customer_id || null,
+        outlet_id || null,
+        currency,
+        parseFloat(subtotal || 0),
+        parseFloat(discount_total || 0),
+        parseFloat(tax_total || 0),
+        parseFloat(shipping_total || 0),
+        parseFloat(grand_total || 0),
+        payment_status,
+        fulfillment_status,
+        order_status,
+        ordered_at || new Date().toISOString(),
+        raw_payload ? JSON.stringify(raw_payload) : null,
+      ],
+      function (err) {
+        if (err) {
+          db.run("ROLLBACK");
+          if (String(err.message || "").includes("UNIQUE constraint failed")) {
+            return res.status(409).json({ error: "Order already exists for this source" });
+          }
+          return res.status(500).json({ error: err.message });
+        }
+        const webOrderId = this.lastID;
+
+        if (!items || items.length === 0) {
+          return db.run("COMMIT", (commitErr) => {
+            if (commitErr) return res.status(500).json({ error: commitErr.message });
+            applyWebOrderStockPolicy(webOrderId, (policyErr, policy) => {
+              return res.json({
+                id: webOrderId,
+                message: "Order created",
+                stock_policy: policyErr ? { error: policyErr.message } : (policy || null),
+              });
+            });
+          });
+        }
+
+        const stmt = db.prepare(
+          `INSERT INTO web_order_items (
+            web_order_id, product_id, variant_id, sku, barcode, title, qty,
+            unit_price, discount, tax, line_total
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        );
+        for (const item of items) {
+          const qty = parseInt(item.qty || item.quantity || 0);
+          const unitPrice = parseFloat(item.unit_price || item.price || 0);
+          const discount = parseFloat(item.discount || 0);
+          const tax = parseFloat(item.tax || 0);
+          const lineTotal = item.line_total !== undefined
+            ? parseFloat(item.line_total || 0)
+            : qty * unitPrice - discount + tax;
+          stmt.run([
+            webOrderId,
+            item.product_id || null,
+            item.variant_id || null,
+            item.sku || null,
+            item.barcode || null,
+            item.title || item.name || null,
+            qty,
+            unitPrice,
+            discount,
+            tax,
+            lineTotal,
+          ]);
+        }
+        stmt.finalize((finErr) => {
+          if (finErr) {
+            db.run("ROLLBACK");
+            return res.status(500).json({ error: finErr.message });
+          }
+          db.run("COMMIT", (commitErr) => {
+            if (commitErr) return res.status(500).json({ error: commitErr.message });
+            applyWebOrderStockPolicy(webOrderId, (policyErr, policy) => {
+              return res.json({
+                id: webOrderId,
+                message: "Order created",
+                stock_policy: policyErr ? { error: policyErr.message } : (policy || null),
+              });
+            });
+          });
+        });
+      },
+    );
+  });
+});
+
+app.put("/api/orders/:id/status", requirePerm("manage_orders"), (req, res) => {
+  const { id } = req.params;
+  const { order_status, payment_status, fulfillment_status } = req.body || {};
+  db.run(
+    `UPDATE web_orders
+     SET order_status = COALESCE(?, order_status),
+         payment_status = COALESCE(?, payment_status),
+         fulfillment_status = COALESCE(?, fulfillment_status),
+         updated_at = datetime('now','localtime')
+     WHERE id = ?`,
+    [order_status || null, payment_status || null, fulfillment_status || null, id],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      if (this.changes === 0) return res.status(404).json({ error: "Order not found" });
+      applyWebOrderStockPolicy(id, (policyErr, policy) => {
+        res.json({
+          message: "Order status updated",
+          stock_policy: policyErr ? { error: policyErr.message } : (policy || null),
+        });
+      });
+    },
+  );
+});
+
+app.post("/api/orders/:id/transactions", requirePerm("manage_orders"), (req, res) => {
+  const { id } = req.params;
+  const {
+    external_txn_id,
+    gateway,
+    kind,
+    status,
+    amount = 0,
+    processed_at,
+    raw_payload,
+  } = req.body || {};
+  db.run(
+    `INSERT INTO web_order_transactions (
+      web_order_id, external_txn_id, gateway, kind, status, amount, processed_at, raw_payload
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      external_txn_id || null,
+      gateway || null,
+      kind || null,
+      status || null,
+      parseFloat(amount || 0),
+      processed_at || new Date().toISOString(),
+      raw_payload ? JSON.stringify(raw_payload) : null,
+    ],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id: this.lastID, message: "Transaction recorded" });
+    },
+  );
+});
+
+app.post("/api/orders/:id/fulfillments", requirePerm("manage_orders"), (req, res) => {
+  const { id } = req.params;
+  const {
+    external_fulfillment_id,
+    status,
+    carrier,
+    tracking_number,
+    tracking_url,
+    fulfilled_at,
+    raw_payload,
+  } = req.body || {};
+  db.run(
+    `INSERT INTO web_order_fulfillments (
+      web_order_id, external_fulfillment_id, status, carrier, tracking_number, tracking_url, fulfilled_at, raw_payload
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      external_fulfillment_id || null,
+      status || null,
+      carrier || null,
+      tracking_number || null,
+      tracking_url || null,
+      fulfilled_at || new Date().toISOString(),
+      raw_payload ? JSON.stringify(raw_payload) : null,
+    ],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id: this.lastID, message: "Fulfillment recorded" });
+    },
+  );
+});
+
+function maskSecret(secret) {
+  let value = String(secret || "");
+  try {
+    value = decryptShopifySecret(value);
+  } catch {
+    // keep masked fallback for unreadable encrypted data
+  }
+  if (!value) return "";
+  if (value.length <= 8) return "********";
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
+function logActionHistory(req, actionType, description, cb = () => {}) {
+  const employeeId = req.headers["x-employee-id"];
+  if (!employeeId) return cb();
+  db.get("SELECT name FROM employees WHERE id = ?", [employeeId], (err, row) => {
+    const userName = err ? "System" : (row?.name || "System");
+    db.run(
+      "INSERT INTO action_history (user_name, action_type, description) VALUES (?, ?, ?)",
+      [userName, actionType, description],
+      () => cb(),
+    );
+  });
+}
+
+function getActiveShopifyConnection(cb) {
+  db.get(
+    `SELECT *
+     FROM shopify_connections
+     WHERE is_active = 1
+     ORDER BY id DESC
+     LIMIT 1`,
+    [],
+    (err, row) => {
+      if (err || !row) return cb(err, row);
+      try {
+        const hydrated = {
+          ...row,
+          access_token: decryptShopifySecret(row.access_token),
+          webhook_secret: decryptShopifySecret(row.webhook_secret),
+        };
+        return cb(null, hydrated);
+      } catch (e) {
+        return cb(e);
+      }
+    },
+  );
+}
+
+function upsertWebOrderFromShopifyPayload(payload, cb) {
+  const source = "shopify";
+  const externalOrderId = String(payload?.id || payload?.order_id || "");
+  if (!externalOrderId) {
+    return cb(new Error("Missing Shopify order id"));
+  }
+  const externalOrderNumber = payload?.name || payload?.order_number || null;
+  const currency = payload?.currency || "PKR";
+  const subtotal = parseFloat(payload?.subtotal_price || 0);
+  const discountTotal = parseFloat(payload?.total_discounts || 0);
+  const taxTotal = parseFloat(payload?.total_tax || 0);
+  const shippingTotal = parseFloat(payload?.total_shipping_price_set?.shop_money?.amount || 0);
+  const grandTotal = parseFloat(payload?.total_price || 0);
+  const paymentStatus = payload?.financial_status || "pending";
+  const fulfillmentStatus = payload?.fulfillment_status || "unfulfilled";
+  const orderedAt = payload?.created_at || new Date().toISOString();
+  const rawPayload = JSON.stringify(payload || {});
+  const lineItems = Array.isArray(payload?.line_items) ? payload.line_items : [];
+
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
+    db.run(
+      `INSERT INTO web_orders (
+        source, external_order_id, external_order_number, currency,
+        subtotal, discount_total, tax_total, shipping_total, grand_total,
+        payment_status, fulfillment_status, order_status, ordered_at, raw_payload
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)
+      ON CONFLICT(source, external_order_id) DO UPDATE SET
+        external_order_number = excluded.external_order_number,
+        currency = excluded.currency,
+        subtotal = excluded.subtotal,
+        discount_total = excluded.discount_total,
+        tax_total = excluded.tax_total,
+        shipping_total = excluded.shipping_total,
+        grand_total = excluded.grand_total,
+        payment_status = excluded.payment_status,
+        fulfillment_status = excluded.fulfillment_status,
+        ordered_at = excluded.ordered_at,
+        raw_payload = excluded.raw_payload,
+        updated_at = datetime('now','localtime')`,
+      [
+        source,
+        externalOrderId,
+        externalOrderNumber,
+        currency,
+        subtotal,
+        discountTotal,
+        taxTotal,
+        shippingTotal,
+        grandTotal,
+        paymentStatus,
+        fulfillmentStatus,
+        orderedAt,
+        rawPayload,
+      ],
+      (err) => {
+        if (err) {
+          db.run("ROLLBACK");
+          return cb(err);
+        }
+        db.get(
+          "SELECT id FROM web_orders WHERE source = ? AND external_order_id = ?",
+          [source, externalOrderId],
+          (getErr, row) => {
+            if (getErr || !row) {
+              db.run("ROLLBACK");
+              return cb(getErr || new Error("Failed to resolve web order"));
+            }
+            const webOrderId = row.id;
+            db.run("DELETE FROM web_order_items WHERE web_order_id = ?", [webOrderId], (delErr) => {
+              if (delErr) {
+                db.run("ROLLBACK");
+                return cb(delErr);
+              }
+              if (lineItems.length === 0) {
+                return db.run("COMMIT", (commitErr) => {
+                  if (commitErr) return cb(commitErr);
+                  return applyWebOrderStockPolicy(webOrderId, (policyErr, policy) => {
+                    return cb(null, {
+                      web_order_id: webOrderId,
+                      item_count: 0,
+                      stock_policy: policyErr ? { error: policyErr.message } : (policy || null),
+                    });
+                  });
+                });
+              }
+              const stmt = db.prepare(
+                `INSERT INTO web_order_items (
+                  web_order_id, sku, barcode, title, qty, unit_price, discount, tax, line_total
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              );
+              for (const item of lineItems) {
+                const qty = parseInt(item.quantity || 0, 10);
+                const unitPrice = parseFloat(item.price || 0);
+                const discount = parseFloat(item.total_discount || 0);
+                const tax = parseFloat(item.total_tax || 0);
+                const lineTotal = (qty * unitPrice) - discount + tax;
+                stmt.run([
+                  webOrderId,
+                  item.sku || null,
+                  item.barcode || null,
+                  item.title || null,
+                  qty,
+                  unitPrice,
+                  discount,
+                  tax,
+                  lineTotal,
+                ]);
+              }
+              stmt.finalize((finErr) => {
+                if (finErr) {
+                  db.run("ROLLBACK");
+                  return cb(finErr);
+                }
+                db.run("COMMIT", (commitErr) => {
+                  if (commitErr) return cb(commitErr);
+                  return applyWebOrderStockPolicy(webOrderId, (policyErr, policy) => {
+                    return cb(null, {
+                      web_order_id: webOrderId,
+                      item_count: lineItems.length,
+                      stock_policy: policyErr ? { error: policyErr.message } : (policy || null),
+                    });
+                  });
+                });
+              });
+            });
+          },
+        );
+      },
+    );
+  });
+}
+
+function shouldApplyWebOrderStock(order) {
+  const payment = String(order?.payment_status || "").toLowerCase();
+  const orderStatus = String(order?.order_status || "").toLowerCase();
+  const paidStates = ["paid", "partially_paid", "authorized"];
+  const blockedStates = ["cancelled", "canceled"];
+  return paidStates.includes(payment) && !blockedStates.includes(orderStatus);
+}
+
+function shouldReverseWebOrderStock(order) {
+  const payment = String(order?.payment_status || "").toLowerCase();
+  const orderStatus = String(order?.order_status || "").toLowerCase();
+  const reversalPayments = ["refunded", "partially_refunded", "voided", "failed"];
+  const reversalStatuses = ["cancelled", "canceled"];
+  return reversalPayments.includes(payment) || reversalStatuses.includes(orderStatus);
+}
+
+function resolveWebOrderOutletId(order, cb) {
+  if (order?.outlet_id) return cb(null, Number(order.outlet_id));
+  getActiveShopifyConnection((connErr, conn) => {
+    if (connErr) return cb(connErr);
+    if (!conn?.default_location_id) {
+      return cb(new Error("Order has no outlet_id and no default Shopify location is configured"));
+    }
+    db.get(
+      "SELECT outlet_id FROM shopify_location_map WHERE shopify_location_id = ? LIMIT 1",
+      [String(conn.default_location_id)],
+      (mapErr, row) => {
+        if (mapErr) return cb(mapErr);
+        if (!row?.outlet_id) {
+          return cb(new Error("No outlet mapping found for default Shopify location"));
+        }
+        return cb(null, Number(row.outlet_id));
+      },
+    );
+  });
+}
+
+function resolveWebOrderItemMapping(item, cb) {
+  const directProduct = item?.product_id ? Number(item.product_id) : null;
+  const directVariant = item?.variant_id ? Number(item.variant_id) : null;
+  if (directProduct) {
+    return cb(null, { product_id: directProduct, variant_id: directVariant });
+  }
+
+  const sku = String(item?.sku || "").trim();
+  const barcode = String(item?.barcode || "").trim();
+
+  const done = (result) => cb(null, result);
+
+  const byVariantSku = () => {
+    if (!sku) return byVariantBarcode();
+    db.get(
+      "SELECT id as variant_id, product_id FROM product_variants WHERE sku = ? LIMIT 1",
+      [sku],
+      (err, row) => {
+        if (err) return cb(err);
+        if (row?.product_id) return done({ product_id: Number(row.product_id), variant_id: Number(row.variant_id) });
+        return byVariantBarcode();
+      },
+    );
+  };
+
+  const byVariantBarcode = () => {
+    if (!barcode) return byProductBarcode();
+    db.get(
+      "SELECT id as variant_id, product_id FROM product_variants WHERE barcode = ? LIMIT 1",
+      [barcode],
+      (err, row) => {
+        if (err) return cb(err);
+        if (row?.product_id) return done({ product_id: Number(row.product_id), variant_id: Number(row.variant_id) });
+        return byProductBarcode();
+      },
+    );
+  };
+
+  const byProductBarcode = () => {
+    if (!barcode) return done(null);
+    db.get(
+      "SELECT id as product_id FROM products WHERE barcode = ? LIMIT 1",
+      [barcode],
+      (err, row) => {
+        if (err) return cb(err);
+        if (row?.product_id) return done({ product_id: Number(row.product_id), variant_id: null });
+        return done(null);
+      },
+    );
+  };
+
+  byVariantSku();
+}
+
+function applyWebOrderStockPolicy(webOrderId, cb = () => {}) {
+  db.get("SELECT * FROM web_orders WHERE id = ?", [webOrderId], (orderErr, order) => {
+    if (orderErr) return cb(orderErr);
+    if (!order) return cb(new Error("Web order not found"));
+
+    const applied = Number(order.stock_applied || 0) === 1;
+    const shouldApply = shouldApplyWebOrderStock(order);
+    const shouldReverse = shouldReverseWebOrderStock(order);
+
+    if (shouldApply && applied) return cb(null, { action: "noop_already_applied" });
+    if (shouldReverse && !applied) return cb(null, { action: "noop_already_reversed" });
+    if (!shouldApply && !shouldReverse) return cb(null, { action: "noop_state_not_actionable" });
+
+    const direction = shouldApply ? -1 : 1;
+    const nextAppliedState = shouldApply ? 1 : 0;
+    const actionLabel = shouldApply ? "apply" : "reverse";
+
+    resolveWebOrderOutletId(order, (outletErr, resolvedOutletId) => {
+      if (outletErr) {
+        db.run(
+          "UPDATE web_orders SET stock_policy_note = ? WHERE id = ?",
+          [String(outletErr.message || "Failed resolving outlet"), webOrderId],
+          () => cb(outletErr),
+        );
+        return;
+      }
+
+      db.all(
+        "SELECT * FROM web_order_items WHERE web_order_id = ? ORDER BY id ASC",
+        [webOrderId],
+        (itemsErr, items) => {
+          if (itemsErr) return cb(itemsErr);
+          if (!items || items.length === 0) return cb(null, { action: "noop_no_items" });
+
+          const resolved = [];
+          const unresolved = [];
+          let idx = 0;
+
+          const resolveNext = () => {
+            if (idx >= items.length) {
+              if (unresolved.length > 0) {
+                const note = `Unmapped items (${unresolved.length}) - stock policy not applied`;
+                return db.run(
+                  "UPDATE web_orders SET stock_policy_note = ? WHERE id = ?",
+                  [note, webOrderId],
+                  () => cb(new Error(note)),
+                );
+              }
+
+              db.serialize(() => {
+                db.run("BEGIN TRANSACTION");
+                const stockStmt = db.prepare(
+                  `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = quantity + ?`,
+                );
+                for (const r of resolved) {
+                  const delta = direction * Number(r.qty || 0);
+                  stockStmt.run([r.product_id, resolvedOutletId, delta, delta]);
+                }
+                stockStmt.finalize((finErr) => {
+                  if (finErr) {
+                    db.run("ROLLBACK");
+                    return cb(finErr);
+                  }
+                  db.run(
+                    `UPDATE web_orders
+                     SET stock_applied = ?,
+                         stock_applied_at = datetime('now','localtime'),
+                         stock_policy_note = ?,
+                         outlet_id = COALESCE(outlet_id, ?),
+                         updated_at = datetime('now','localtime')
+                     WHERE id = ?`,
+                    [nextAppliedState, `Stock policy ${actionLabel}d`, resolvedOutletId, webOrderId],
+                    (updErr) => {
+                      if (updErr) {
+                        db.run("ROLLBACK");
+                        return cb(updErr);
+                      }
+                      db.run("COMMIT", (commitErr) => {
+                        if (commitErr) return cb(commitErr);
+                        return cb(null, {
+                          action: actionLabel,
+                          outlet_id: resolvedOutletId,
+                          item_count: resolved.length,
+                        });
+                      });
+                    },
+                  );
+                });
+              });
+              return;
+            }
+
+            const current = items[idx];
+            idx += 1;
+            resolveWebOrderItemMapping(current, (mapErr, mapped) => {
+              if (mapErr) return cb(mapErr);
+              if (!mapped?.product_id) {
+                unresolved.push(current.id);
+                return resolveNext();
+              }
+              db.run(
+                "UPDATE web_order_items SET product_id = COALESCE(product_id, ?), variant_id = COALESCE(variant_id, ?) WHERE id = ?",
+                [mapped.product_id, mapped.variant_id || null, current.id],
+                () => {
+                  resolved.push({
+                    item_id: current.id,
+                    product_id: mapped.product_id,
+                    variant_id: mapped.variant_id || null,
+                    qty: Number(current.qty || 0),
+                  });
+                  resolveNext();
+                },
+              );
+            });
+          };
+
+          resolveNext();
+        },
+      );
+    });
+  });
+}
+
+function enqueueInventorySyncEvents(changes, context = {}, cb = () => {}) {
+  const normalized = (changes || [])
+    .map((c) => ({
+      product_id: c.product_id ? Number(c.product_id) : null,
+      variant_id: c.variant_id ? Number(c.variant_id) : null,
+      outlet_id: c.outlet_id ? Number(c.outlet_id) : null,
+      delta: Number(c.delta || 0),
+      reason: c.reason || context.reason || "correction",
+      reference_type: c.reference_type || context.reference_type || null,
+      reference_id: c.reference_id || context.reference_id || null,
+    }))
+    .filter((c) => c.product_id && c.outlet_id && c.delta !== 0);
+
+  if (normalized.length === 0) return cb(null, { queued: 0, skipped: 0 });
+
+  getActiveShopifyConnection((connErr, conn) => {
+    if (connErr) return cb(connErr);
+    if (!conn) return cb(null, { queued: 0, skipped: normalized.length, reason: "no_connection" });
+
+    let idx = 0;
+    let queued = 0;
+    let skipped = 0;
+
+    const step = () => {
+      if (idx >= normalized.length) return cb(null, { queued, skipped });
+      const item = normalized[idx];
+      idx += 1;
+
+      db.get(
+        `SELECT shopify_location_id
+         FROM shopify_location_map
+         WHERE outlet_id = ?`,
+        [item.outlet_id],
+        (locErr, loc) => {
+          if (locErr) return cb(locErr);
+          db.get(
+            `SELECT shopify_inventory_item_id, product_id, variant_id
+             FROM shopify_product_map
+             WHERE is_active = 1
+               AND (
+                 (variant_id IS NOT NULL AND variant_id = ?)
+                 OR (variant_id IS NULL AND product_id = ?)
+               )
+             ORDER BY CASE WHEN variant_id IS NOT NULL THEN 0 ELSE 1 END, id DESC
+             LIMIT 1`,
+            [item.variant_id || -1, item.product_id],
+            (mapErr, map) => {
+              if (mapErr) return cb(mapErr);
+
+              const idempotencyKey = [
+                "outbound_inventory",
+                item.reason || "correction",
+                item.reference_type || "none",
+                item.reference_id || "none",
+                item.product_id,
+                item.variant_id || 0,
+                item.outlet_id,
+              ].join("_");
+
+              if (!loc?.shopify_location_id || !map?.shopify_inventory_item_id) {
+                db.run(
+                  `INSERT OR IGNORE INTO external_sync_events (
+                    direction, entity_type, idempotency_key, status, error_message, payload, created_at, processed_at, attempt_count
+                  ) VALUES ('outbound', 'inventory', ?, 'failed_mapping', ?, ?, datetime('now','localtime'), datetime('now','localtime'), 0)`,
+                  [
+                    idempotencyKey,
+                    "Missing Shopify product/location mapping",
+                    JSON.stringify({
+                      product_id: item.product_id,
+                      variant_id: item.variant_id,
+                      outlet_id: item.outlet_id,
+                      delta: item.delta,
+                    }),
+                  ],
+                  () => {
+                    skipped += 1;
+                    step();
+                  },
+                );
+                return;
+              }
+
+              const payload = JSON.stringify({
+                product_id: item.product_id,
+                variant_id: item.variant_id,
+                outlet_id: item.outlet_id,
+                delta: item.delta,
+                reason: item.reason,
+                reference_type: item.reference_type,
+                reference_id: item.reference_id,
+                shopify_inventory_item_id: map.shopify_inventory_item_id,
+                shopify_location_id: loc.shopify_location_id,
+              });
+
+              db.run(
+                `INSERT OR IGNORE INTO external_sync_events (
+                  direction, entity_type, idempotency_key, status, payload, created_at, attempt_count, next_retry_at
+                ) VALUES ('outbound', 'inventory', ?, 'pending', ?, datetime('now','localtime'), 0, datetime('now','localtime'))`,
+                [idempotencyKey, payload],
+                function () {
+                  if (this?.changes > 0) queued += 1;
+                  else skipped += 1;
+                  step();
+                },
+              );
+            },
+          );
+        },
+      );
+    };
+
+    step();
+  });
+}
+
+function processPendingShopifyInventoryEvents(limit = 25, cb = () => {}) {
+  getActiveShopifyConnection((connErr, conn) => {
+    if (connErr) return cb(connErr);
+    if (!conn) return cb(null, { processed: 0, failed: 0, skipped: 0, reason: "no_connection" });
+
+    db.all(
+      `SELECT id, payload, attempt_count
+       FROM external_sync_events
+       WHERE direction = 'outbound'
+         AND entity_type = 'inventory'
+         AND status IN ('pending', 'retry')
+         AND (next_retry_at IS NULL OR datetime(next_retry_at) <= datetime('now','localtime'))
+       ORDER BY id ASC
+       LIMIT ?`,
+      [limit],
+      async (listErr, rows) => {
+        if (listErr) return cb(listErr);
+        let processed = 0;
+        let failed = 0;
+        let skipped = 0;
+
+        for (const row of rows || []) {
+          let parsed;
+          try {
+            parsed = JSON.parse(row.payload || "{}");
+          } catch {
+            parsed = {};
+          }
+          const delta = Number(parsed.delta || 0);
+          const inventoryItemId = parsed.shopify_inventory_item_id || null;
+          const locationId = parsed.shopify_location_id || null;
+          if (!inventoryItemId || !locationId || delta === 0) {
+            skipped += 1;
+            logShopifyEvent("warn", "outbound_payload_invalid", {
+              event_id: row.id,
+              inventory_item_id: inventoryItemId,
+              location_id: locationId,
+              delta,
+            });
+            await new Promise((resolve) => {
+              db.run(
+                `UPDATE external_sync_events
+                 SET status = 'dead_letter',
+                     error_message = ?,
+                     last_attempt_at = datetime('now','localtime'),
+                     processed_at = datetime('now','localtime')
+                 WHERE id = ?`,
+                ["Invalid payload for Shopify inventory sync", row.id],
+                () => resolve(),
+              );
+            });
+            continue;
+          }
+
+          try {
+            const result = await adjustShopifyInventory(
+              conn,
+              [{ inventory_item_id: inventoryItemId, location_id: locationId, delta }],
+              parsed.reason || "correction",
+            );
+            if ((result.userErrors || []).length > 0) {
+              failed += 1;
+              const msg = result.userErrors.map((e) => e.message).join("; ");
+              logShopifyEvent("warn", "outbound_user_error", {
+                event_id: row.id,
+                attempt: Number(row.attempt_count || 0) + 1,
+                error: msg || "Shopify user error",
+              });
+              const nextAttempt = Number(row.attempt_count || 0) + 1;
+              const terminal = nextAttempt >= SHOPIFY_MAX_RETRY_ATTEMPTS;
+              const delayMins = retryDelayMinutesWithJitter(nextAttempt);
+              await new Promise((resolve) => {
+                db.run(
+                  `UPDATE external_sync_events
+                   SET status = ?,
+                       error_message = ?,
+                       attempt_count = ?,
+                       last_attempt_at = datetime('now','localtime'),
+                       next_retry_at = CASE
+                         WHEN ? = 1 THEN NULL
+                         ELSE datetime('now','localtime', '+' || ? || ' minutes')
+                       END,
+                       processed_at = CASE WHEN ? = 1 THEN datetime('now','localtime') ELSE NULL END
+                   WHERE id = ?`,
+                  [
+                    terminal ? "dead_letter" : "retry",
+                    msg || "Shopify user error",
+                    nextAttempt,
+                    terminal ? 1 : 0,
+                    delayMins,
+                    terminal ? 1 : 0,
+                    row.id,
+                  ],
+                  () => resolve(),
+                );
+              });
+            } else {
+              processed += 1;
+              await new Promise((resolve) => {
+                db.run(
+                  `UPDATE external_sync_events
+                   SET status = 'processed',
+                       error_message = NULL,
+                       attempt_count = COALESCE(attempt_count, 0) + 1,
+                       last_attempt_at = datetime('now','localtime'),
+                       next_retry_at = NULL,
+                       processed_at = datetime('now','localtime')
+                   WHERE id = ?`,
+                  [row.id],
+                  () => resolve(),
+                );
+              });
+            }
+          } catch (err) {
+            failed += 1;
+            logShopifyEvent("error", "outbound_sync_exception", {
+              event_id: row.id,
+              attempt: Number(row.attempt_count || 0) + 1,
+              error: String(err?.message || "Shopify sync failed"),
+            });
+            const nextAttempt = Number(row.attempt_count || 0) + 1;
+            const terminal = nextAttempt >= SHOPIFY_MAX_RETRY_ATTEMPTS;
+            const delayMins = retryDelayMinutesWithJitter(nextAttempt);
+            await new Promise((resolve) => {
+              db.run(
+                `UPDATE external_sync_events
+                 SET status = ?,
+                     error_message = ?,
+                     attempt_count = ?,
+                     last_attempt_at = datetime('now','localtime'),
+                     next_retry_at = CASE
+                       WHEN ? = 1 THEN NULL
+                       ELSE datetime('now','localtime', '+' || ? || ' minutes')
+                     END,
+                     processed_at = CASE WHEN ? = 1 THEN datetime('now','localtime') ELSE NULL END
+                 WHERE id = ?`,
+                [
+                  terminal ? "dead_letter" : "retry",
+                  String(err?.message || "Shopify sync failed"),
+                  nextAttempt,
+                  terminal ? 1 : 0,
+                  delayMins,
+                  terminal ? 1 : 0,
+                  row.id,
+                ],
+                () => resolve(),
+              );
+            });
+          }
+        }
+
+        db.run(
+          `UPDATE shopify_connections
+           SET last_sync_at = datetime('now','localtime'),
+               last_error = ?,
+               updated_at = datetime('now','localtime')
+           WHERE id = ?`,
+          [failed > 0 ? `${failed} event(s) failed` : null, conn.id],
+          () => cb(null, { processed, failed, skipped }),
+        );
+      },
+    );
+  });
+}
+
+// --- ROUTES: SHOPIFY CONNECTOR ---
+
+app.get("/api/integrations/shopify/config", requirePerm("manage_inventory"), (req, res) => {
+  getActiveShopifyConnection((err, conn) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!conn) {
+      return res.json({
+        connected: false,
+        config: null,
+      });
+    }
+    return res.json({
+      connected: true,
+      config: {
+        id: conn.id,
+        shop_domain: conn.shop_domain,
+        api_version: conn.api_version,
+        webhook_secret_masked: maskSecret(conn.webhook_secret),
+        default_location_id: conn.default_location_id,
+        is_active: Number(conn.is_active || 0) === 1,
+        last_sync_at: conn.last_sync_at,
+        last_error: conn.last_error,
+      },
+    });
+  });
+});
+
+app.put("/api/integrations/shopify/config", requirePerm("manage_inventory"), (req, res) => {
+  const {
+    shop_domain,
+    access_token,
+    api_version = "2025-10",
+    webhook_secret = null,
+    default_location_id = null,
+    is_active = true,
+  } = req.body || {};
+  if (!shop_domain) {
+    return res.status(400).json({ error: "shop_domain is required" });
+  }
+  const normalizedDomain = String(shop_domain).trim().toLowerCase();
+  db.get(
+    "SELECT access_token FROM shopify_connections WHERE shop_domain = ?",
+    [normalizedDomain],
+    (selErr, existing) => {
+      if (selErr) return res.status(500).json({ error: selErr.message });
+      const tokenInput = String(access_token || "").trim();
+      const effectiveToken = tokenInput
+        ? encryptShopifySecret(tokenInput)
+        : (existing?.access_token || null);
+      if (!effectiveToken) {
+        return res.status(400).json({ error: "access_token is required for first-time connection" });
+      }
+
+      db.serialize(() => {
+        db.run("UPDATE shopify_connections SET is_active = 0");
+        db.run(
+          `INSERT INTO shopify_connections (
+            shop_domain, access_token, api_version, webhook_secret, default_location_id, is_active, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, datetime('now','localtime'))
+          ON CONFLICT(shop_domain) DO UPDATE SET
+            access_token = excluded.access_token,
+            api_version = excluded.api_version,
+            webhook_secret = COALESCE(excluded.webhook_secret, shopify_connections.webhook_secret),
+            default_location_id = excluded.default_location_id,
+            is_active = excluded.is_active,
+            updated_at = datetime('now','localtime')`,
+          [
+            normalizedDomain,
+            effectiveToken,
+            String(api_version).trim(),
+            webhook_secret ? encryptShopifySecret(String(webhook_secret)) : null,
+            default_location_id ? String(default_location_id) : null,
+            is_active ? 1 : 0,
+          ],
+          function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: "Shopify connection saved", id: this.lastID || null });
+          },
+        );
+      });
+    },
+  );
+});
+
+app.post("/api/integrations/shopify/disconnect", requirePerm("manage_inventory"), (req, res) => {
+  db.run(
+    "UPDATE shopify_connections SET is_active = 0, updated_at = datetime('now','localtime') WHERE is_active = 1",
+    [],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: "Shopify disconnected", updated: this.changes || 0 });
+    },
+  );
+});
+
+app.get("/api/integrations/shopify/status", requireAnyPerm(["manage_inventory", "manage_orders"]), (req, res) => {
+  getActiveShopifyConnection((connErr, conn) => {
+    if (connErr) return res.status(500).json({ error: connErr.message });
+    db.get(
+      `SELECT COUNT(*) as total,
+              SUM(CASE WHEN status = 'processed' THEN 1 ELSE 0 END) as processed,
+              SUM(CASE WHEN status IN ('failed', 'dead_letter', 'failed_mapping') THEN 1 ELSE 0 END) as failed,
+              SUM(CASE WHEN status IN ('pending', 'retry') THEN 1 ELSE 0 END) as pending
+       FROM external_sync_events`,
+      [],
+      (evtErr, stats) => {
+        if (evtErr) return res.status(500).json({ error: evtErr.message });
+        db.get(
+          `SELECT started_at, finished_at, status, processed_count, failed_count, direction, run_type
+           FROM shopify_sync_runs
+           ORDER BY id DESC
+           LIMIT 1`,
+          [],
+          (runErr, lastRun) => {
+            if (runErr) return res.status(500).json({ error: runErr.message });
+            db.get(
+              `SELECT
+                 SUM(CASE WHEN status = 'dead_letter' THEN 1 ELSE 0 END) as dead_letter,
+                 SUM(CASE
+                       WHEN status = 'retry'
+                        AND (next_retry_at IS NULL OR datetime(next_retry_at) <= datetime('now','localtime'))
+                       THEN 1 ELSE 0 END) as retry_due,
+                 SUM(CASE WHEN status IN ('pending','retry') THEN 1 ELSE 0 END) as backlog,
+                 MIN(CASE WHEN status IN ('pending','retry') THEN created_at END) as oldest_backlog_at
+               FROM external_sync_events
+               WHERE direction = 'outbound'
+                 AND entity_type = 'inventory'`,
+              [],
+              (opsErr, ops) => {
+                if (opsErr) return res.status(500).json({ error: opsErr.message });
+                let oldestBacklogMinutes = null;
+                if (ops?.oldest_backlog_at) {
+                  const oldestMs = Date.parse(String(ops.oldest_backlog_at).replace(" ", "T"));
+                  if (!Number.isNaN(oldestMs)) {
+                    oldestBacklogMinutes = Math.max(0, Math.round((Date.now() - oldestMs) / 60000));
+                  }
+                }
+                res.json({
+                  connected: Boolean(conn),
+                  shop_domain: conn?.shop_domain || null,
+                  last_sync_at: conn?.last_sync_at || null,
+                  last_error: conn?.last_error || null,
+                  event_stats: {
+                    total: stats?.total || 0,
+                    processed: stats?.processed || 0,
+                    failed: stats?.failed || 0,
+                    pending: stats?.pending || 0,
+                  },
+                  queue_health: {
+                    dead_letter: Number(ops?.dead_letter || 0),
+                    retry_due: Number(ops?.retry_due || 0),
+                    backlog: Number(ops?.backlog || 0),
+                    oldest_backlog_minutes: oldestBacklogMinutes,
+                  },
+                  last_run: lastRun || null,
+                });
+              },
+            );
+          },
+        );
+      },
+    );
+  });
+});
+
+app.post("/api/integrations/shopify/verify", requirePerm("manage_inventory"), async (req, res) => {
+  getActiveShopifyConnection(async (err, conn) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!conn) return res.status(400).json({ error: "No active Shopify connection" });
+    try {
+      const shop = await verifyConnection(conn);
+      res.json({ ok: true, shop });
+    } catch (e) {
+      res.status(400).json({ ok: false, error: e.message || "Verification failed" });
+    }
+  });
+});
+
+app.post("/api/integrations/shopify/live-validation", requirePerm("manage_inventory"), async (req, res) => {
+  getActiveShopifyConnection(async (err, conn) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!conn) return res.status(400).json({ error: "No active Shopify connection" });
+
+    try {
+      const shop = await verifyConnection(conn);
+      const locations = await fetchShopifyLocations(conn);
+
+      db.all(
+        `SELECT spm.product_id, spm.variant_id, spm.shopify_inventory_item_id, slm.shopify_location_id
+         FROM shopify_product_map spm
+         JOIN shopify_location_map slm
+         WHERE spm.is_active = 1
+           AND spm.shopify_inventory_item_id IS NOT NULL
+         LIMIT 5`,
+        [],
+        async (mapErr, mappedRows) => {
+          if (mapErr) return res.status(500).json({ error: mapErr.message });
+          const sampleChecks = [];
+          for (const row of mappedRows || []) {
+            try {
+              const inv = await fetchInventoryLevel(conn, row.shopify_inventory_item_id, row.shopify_location_id);
+              sampleChecks.push({
+                product_id: row.product_id,
+                variant_id: row.variant_id || null,
+                inventory_item_id: row.shopify_inventory_item_id,
+                location_id: row.shopify_location_id,
+                ok: true,
+                available: Number(inv?.available || 0),
+              });
+            } catch (e) {
+              sampleChecks.push({
+                product_id: row.product_id,
+                variant_id: row.variant_id || null,
+                inventory_item_id: row.shopify_inventory_item_id,
+                location_id: row.shopify_location_id,
+                ok: false,
+                error: String(e?.message || "Failed fetching inventory level"),
+              });
+            }
+          }
+          const failedSamples = sampleChecks.filter((s) => !s.ok).length;
+          return res.json({
+            ok: failedSamples === 0,
+            checked_at: new Date().toISOString(),
+            checks: {
+              shop_connection: {
+                ok: true,
+                myshopify_domain: shop?.myshopifyDomain || null,
+                shop_name: shop?.name || null,
+              },
+              locations: {
+                ok: Array.isArray(locations),
+                count: Array.isArray(locations) ? locations.length : 0,
+              },
+              mapped_inventory_sample: {
+                ok: failedSamples === 0,
+                total: sampleChecks.length,
+                failed: failedSamples,
+                rows: sampleChecks,
+              },
+            },
+          });
+        },
+      );
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: e.message || "Live validation failed" });
+    }
+  });
+});
+
+app.get("/api/integrations/shopify/webhooks/setup", requirePerm("manage_inventory"), (req, res) => {
+  getActiveShopifyConnection((err, conn) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!conn) return res.status(400).json({ error: "No active Shopify connection" });
+
+    const configuredBase = String(process.env.APP_PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+    const detectedBase = `${req.protocol}://${req.get("host")}`;
+    const baseUrl = configuredBase || detectedBase;
+    const endpoint = `${baseUrl}/api/integrations/shopify/webhooks/orders-create`;
+    res.json({
+      ok: true,
+      base_url: baseUrl,
+      callback_url: endpoint,
+      shop_domain: conn.shop_domain || null,
+      secret_configured: Boolean(conn.webhook_secret),
+      required_topics: [
+        "orders/create",
+        "orders/updated",
+        "orders/cancelled",
+        "refunds/create",
+      ],
+      notes: [
+        "Set webhook format to JSON.",
+        "Use the same webhook secret configured in OneShopPOS.",
+        "Use HTTPS callback URL reachable by Shopify.",
+      ],
+    });
+  });
+});
+
+app.get("/api/integrations/shopify/uat-checklist", requireAnyPerm(["manage_inventory", "manage_orders"]), (req, res) => {
+  getActiveShopifyConnection((connErr, conn) => {
+    if (connErr) return res.status(500).json({ error: connErr.message });
+    db.serialize(() => {
+      db.get("SELECT COUNT(*) as count FROM shopify_location_map", [], (locErr, locRow) => {
+        if (locErr) return res.status(500).json({ error: locErr.message });
+        db.get("SELECT COUNT(*) as count FROM shopify_product_map WHERE is_active = 1", [], (mapErr, mapRow) => {
+          if (mapErr) return res.status(500).json({ error: mapErr.message });
+          db.get(
+            `SELECT
+               SUM(CASE WHEN direction='outbound' AND status='processed' THEN 1 ELSE 0 END) as outbound_processed,
+               SUM(CASE WHEN direction='inbound' AND status='processed' THEN 1 ELSE 0 END) as inbound_processed,
+               SUM(CASE WHEN status='dead_letter' THEN 1 ELSE 0 END) as dead_letter
+             FROM external_sync_events`,
+            [],
+            (evtErr, ev) => {
+              if (evtErr) return res.status(500).json({ error: evtErr.message });
+              const checklist = [
+                { id: "connection", label: "Active Shopify connection", pass: Boolean(conn) },
+                { id: "location_mapping", label: "At least one location mapping", pass: Number(locRow?.count || 0) > 0 },
+                { id: "product_mapping", label: "At least one active product mapping", pass: Number(mapRow?.count || 0) > 0 },
+                { id: "outbound_processed", label: "At least one outbound event processed", pass: Number(ev?.outbound_processed || 0) > 0 },
+                { id: "inbound_processed", label: "At least one inbound event processed", pass: Number(ev?.inbound_processed || 0) > 0 },
+                { id: "dead_letter_zero", label: "No dead-letter events", pass: Number(ev?.dead_letter || 0) === 0 },
+              ];
+              return res.json({
+                checked_at: new Date().toISOString(),
+                checklist,
+                stats: {
+                  location_mappings: Number(locRow?.count || 0),
+                  product_mappings: Number(mapRow?.count || 0),
+                  outbound_processed: Number(ev?.outbound_processed || 0),
+                  inbound_processed: Number(ev?.inbound_processed || 0),
+                  dead_letter: Number(ev?.dead_letter || 0),
+                },
+              });
+            },
+          );
+        });
+      });
+    });
+  });
+});
+
+app.get("/api/integrations/shopify/locations/live", requirePerm("manage_inventory"), async (req, res) => {
+  getActiveShopifyConnection(async (err, conn) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!conn) return res.status(400).json({ error: "No active Shopify connection" });
+    try {
+      const locations = await fetchShopifyLocations(conn);
+      res.json({ locations });
+    } catch (e) {
+      res.status(400).json({ error: e.message || "Failed to load Shopify locations" });
+    }
+  });
+});
+
+app.get("/api/integrations/shopify/events", requireAnyPerm(["manage_inventory", "manage_orders"]), (req, res) => {
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit || "50", 10)));
+  const { status, entity_type, direction, search } = req.query;
+  const where = ["1=1"];
+  const params = [];
+  if (status) {
+    where.push("status = ?");
+    params.push(String(status));
+  }
+  if (entity_type) {
+    where.push("entity_type = ?");
+    params.push(String(entity_type));
+  }
+  if (direction) {
+    where.push("direction = ?");
+    params.push(String(direction));
+  }
+  if (search) {
+    where.push("(idempotency_key LIKE ? OR COALESCE(error_message,'') LIKE ?)");
+    params.push(`%${search}%`, `%${search}%`);
+  }
+  params.push(limit);
+  db.all(
+    `SELECT id, direction, entity_type, idempotency_key, status, error_message, attempt_count, next_retry_at, created_at, processed_at
+     FROM external_sync_events
+     WHERE ${where.join(" AND ")}
+     ORDER BY id DESC
+     LIMIT ?`,
+    params,
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ events: rows || [] });
+    },
+  );
+});
+
+app.post("/api/integrations/shopify/sync/retry-event/:id", requirePerm("manage_inventory"), (req, res) => {
+  const { id } = req.params;
+  db.get(
+    `SELECT id, direction, entity_type, status
+     FROM external_sync_events
+     WHERE id = ?`,
+    [id],
+    (selErr, eventRow) => {
+      if (selErr) return res.status(500).json({ error: selErr.message });
+      if (!eventRow) return res.status(404).json({ error: "Event not found" });
+      if (eventRow.direction !== "outbound" || eventRow.entity_type !== "inventory") {
+        return res.status(400).json({ error: "Only outbound inventory events can be retried" });
+      }
+      if (!isRetryableInventoryEventStatus(eventRow.status)) {
+        return res.status(400).json({ error: "Event status is not retryable" });
+      }
+
+      db.run(
+        `UPDATE external_sync_events
+         SET status = 'pending',
+             error_message = NULL,
+             next_retry_at = datetime('now','localtime'),
+             processed_at = NULL
+         WHERE id = ?`,
+        [id],
+        function (updErr) {
+          if (updErr) return res.status(500).json({ error: updErr.message });
+          logShopifyEvent("info", "retry_single_queued", { event_id: Number(id), previous_status: eventRow.status });
+          res.json({ message: "Event queued for retry", id: Number(id) });
+        },
+      );
+    },
+  );
+});
+
+app.post("/api/integrations/shopify/sync/process-pending", requirePerm("manage_inventory"), (req, res) => {
+  const limit = Math.min(100, Math.max(1, parseInt(req.body?.limit || "25", 10)));
+  db.run(
+    `INSERT INTO shopify_sync_runs (direction, run_type, status, notes)
+     VALUES ('outbound', 'process_pending_inventory', 'running', ?)`,
+    [`Manual queue processing requested (limit ${limit})`],
+    function (runErr) {
+      if (runErr) return res.status(500).json({ error: runErr.message });
+      const runId = this.lastID;
+      processPendingShopifyInventoryEvents(limit, (err, result) => {
+        const out = result || { processed: 0, failed: 0, skipped: 0 };
+        db.run(
+          `UPDATE shopify_sync_runs
+           SET finished_at = datetime('now','localtime'),
+               status = ?,
+               processed_count = ?,
+               failed_count = ?
+           WHERE id = ?`,
+          [out.failed > 0 ? "completed_with_errors" : "completed", out.processed || 0, out.failed || 0, runId],
+        );
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ run_id: runId, ...out });
+      });
+    },
+  );
+});
+
+app.post("/api/integrations/shopify/sync/retry-failed", requirePerm("manage_inventory"), (req, res) => {
+  const limit = Math.min(500, Math.max(1, parseInt(req.body?.limit || "100", 10)));
+  db.run(
+    `UPDATE external_sync_events
+     SET status = 'pending',
+         error_message = NULL,
+         next_retry_at = datetime('now','localtime'),
+         processed_at = NULL
+     WHERE id IN (
+       SELECT id FROM external_sync_events
+       WHERE direction = 'outbound'
+         AND entity_type = 'inventory'
+         AND status IN ('failed', 'dead_letter', 'retry', 'failed_mapping')
+       ORDER BY id ASC
+       LIMIT ?
+     )`,
+    [limit],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      logShopifyEvent("info", "retry_bulk_queued", { queued: this.changes || 0, limit });
+      res.json({ message: "Failed events queued for retry", queued: this.changes || 0 });
+    },
+  );
+});
+
+app.post("/api/integrations/shopify/sync/push-inventory", requirePerm("manage_inventory"), (req, res) => {
+  const { rows = [], process_now = true } = req.body || {};
+  getActiveShopifyConnection((connErr, conn) => {
+    if (connErr) return res.status(500).json({ error: connErr.message });
+    if (!conn) return res.status(400).json({ error: "No active Shopify connection" });
+
+    db.serialize(() => {
+      db.run(
+        `INSERT INTO shopify_sync_runs (direction, run_type, status, notes)
+         VALUES ('outbound', 'manual_push_inventory', 'running', ?)`,
+        [rows.length > 0 ? "Manual rows pushed" : "Dry-run push generated from local inventory"],
+        function (runErr) {
+          if (runErr) return res.status(500).json({ error: runErr.message });
+          const runId = this.lastID;
+          const toPush = Array.isArray(rows) ? rows : [];
+          enqueueInventorySyncEvents(
+            toPush,
+            { reason: "manual_sync", reference_type: "manual", reference_id: runId },
+            (enqueueErr, enqueueResult) => {
+              if (enqueueErr) {
+                db.run(
+                  `UPDATE shopify_sync_runs
+                   SET finished_at = datetime('now','localtime'),
+                       status = 'failed',
+                       failed_count = 1,
+                       notes = ?
+                   WHERE id = ?`,
+                  [enqueueErr.message, runId],
+                );
+                return res.status(500).json({ error: enqueueErr.message });
+              }
+
+              const queuedCount = enqueueResult?.queued || 0;
+              const finalizeRun = (processResult) => {
+                const processedCount = processResult?.processed || 0;
+                const failedCount = processResult?.failed || 0;
+                db.run(
+                  `UPDATE shopify_sync_runs
+                   SET finished_at = datetime('now','localtime'),
+                       status = ?,
+                       processed_count = ?,
+                       failed_count = ?
+                   WHERE id = ?`,
+                  [failedCount > 0 ? "completed_with_errors" : "completed", processedCount, failedCount, runId],
+                );
+                db.run(
+                  `UPDATE shopify_connections
+                   SET last_sync_at = datetime('now','localtime'),
+                       last_error = ?,
+                       updated_at = datetime('now','localtime')
+                   WHERE id = ?`,
+                  [failedCount > 0 ? `${failedCount} event(s) failed` : null, conn.id],
+                );
+                return res.json({
+                  message: "Inventory sync run completed",
+                  run_id: runId,
+                  queued: queuedCount,
+                  processed: processedCount,
+                  failed: failedCount,
+                  skipped: processResult?.skipped || 0,
+                });
+              };
+
+              if (!process_now || queuedCount === 0) {
+                return finalizeRun({ processed: 0, failed: 0, skipped: enqueueResult?.skipped || 0 });
+              }
+              processPendingShopifyInventoryEvents(50, (procErr, procResult) => {
+                if (procErr) return res.status(500).json({ error: procErr.message });
+                return finalizeRun(procResult || {});
+              });
+            },
+          );
+        },
+      );
+    });
+  });
+});
+
+app.post("/api/integrations/shopify/sync/pull-orders", requirePerm("manage_orders"), (req, res) => {
+  const { orders = [] } = req.body || {};
+  getActiveShopifyConnection((connErr, conn) => {
+    if (connErr) return res.status(500).json({ error: connErr.message });
+    if (!conn) return res.status(400).json({ error: "No active Shopify connection" });
+
+    const demoOrders = Array.isArray(orders) && orders.length > 0
+      ? orders
+      : [{
+        id: `demo-${Date.now()}`,
+        name: `#WEB-${Date.now().toString().slice(-6)}`,
+        currency: "PKR",
+        subtotal_price: 0,
+        total_discounts: 0,
+        total_tax: 0,
+        total_price: 0,
+        financial_status: "pending",
+        fulfillment_status: "unfulfilled",
+        line_items: [],
+      }];
+
+    db.run(
+      `INSERT INTO shopify_sync_runs (direction, run_type, status, notes)
+       VALUES ('inbound', 'manual_pull_orders', 'running', ?)`,
+      [`Pull requested: ${demoOrders.length} order(s)`],
+      function (runErr) {
+        if (runErr) return res.status(500).json({ error: runErr.message });
+        const runId = this.lastID;
+        let idx = 0;
+        let processed = 0;
+        let failed = 0;
+
+        const next = () => {
+          if (idx >= demoOrders.length) {
+            db.run(
+              `UPDATE shopify_sync_runs
+               SET finished_at = datetime('now','localtime'),
+                   status = ?,
+                   processed_count = ?,
+                   failed_count = ?
+               WHERE id = ?`,
+              [failed > 0 ? "completed_with_errors" : "completed", processed, failed, runId],
+            );
+            db.run(
+              `UPDATE shopify_connections
+               SET last_sync_at = datetime('now','localtime'),
+                   last_error = ?,
+                   updated_at = datetime('now','localtime')
+               WHERE id = ?`,
+              [failed > 0 ? "Some orders failed in pull run" : null, conn.id],
+            );
+            return res.json({
+              message: "Order pull run completed",
+              run_id: runId,
+              processed,
+              failed,
+            });
+          }
+
+          const orderPayload = demoOrders[idx];
+          idx += 1;
+          upsertWebOrderFromShopifyPayload(orderPayload, (orderErr, result) => {
+            const idemKey = `inbound_order_${String(orderPayload?.id || "")}_${String(orderPayload?.updated_at || Date.now())}`;
+            db.run(
+              `INSERT OR IGNORE INTO external_sync_events (
+                 direction, entity_type, idempotency_key, status, error_message, payload, created_at, processed_at
+               ) VALUES ('inbound', 'order', ?, ?, ?, ?, datetime('now','localtime'), datetime('now','localtime'))`,
+              [
+                idemKey,
+                orderErr ? "failed" : "processed",
+                orderErr ? String(orderErr.message || "Unknown error") : null,
+                JSON.stringify({
+                  run_id: runId,
+                  order_id: orderPayload?.id || null,
+                  web_order_id: result?.web_order_id || null,
+                }),
+              ],
+              () => {
+                if (orderErr) failed += 1;
+                else processed += 1;
+                next();
+              },
+            );
+          });
+        };
+        next();
+      },
+    );
+  });
+});
+
+app.post("/api/integrations/shopify/webhooks/orders-create", (req, res) => {
+  const payload = req.body || {};
+  const rawBody = req.rawBody || JSON.stringify(payload || {});
+  const webhookId = req.headers["x-shopify-webhook-id"] || "";
+  const hmacHeader = req.headers["x-shopify-hmac-sha256"] || "";
+  const shopHeader = req.headers["x-shopify-shop-domain"] || "";
+  const triggeredAtHeader = req.headers["x-shopify-triggered-at"] || "";
+  const orderId = String(payload?.id || payload?.order_id || "");
+  const idempotencyKey = buildWebhookIdempotencyKey({ webhookId, payload });
+
+  getActiveShopifyConnection((connErr, conn) => {
+    if (connErr) return res.status(500).json({ error: connErr.message });
+    if (!conn) return res.status(400).json({ error: "No active Shopify connection" });
+
+    if (shopHeader && conn.shop_domain && String(shopHeader).toLowerCase() !== String(conn.shop_domain).toLowerCase()) {
+      return res.status(403).json({ error: "Shop domain mismatch" });
+    }
+
+    const signatureCheck = verifyWebhookSignature({
+      rawBody,
+      providedHmac: hmacHeader,
+      webhookSecret: conn.webhook_secret,
+    });
+    if (!signatureCheck.ok) {
+      return res.status(401).json({
+        error: signatureCheck.reason === "missing_signature" ? "Missing webhook signature" : "Invalid webhook signature",
+      });
+    }
+
+    const replayWindow = evaluateWebhookTimestampWindow(triggeredAtHeader, Date.now());
+    if (!replayWindow.ok) {
+      logShopifyEvent("warn", "webhook_replay_window_reject", {
+        reason: replayWindow.reason,
+        age_ms: replayWindow.ageMs || null,
+        webhook_id: webhookId || null,
+        shop: shopHeader || null,
+      });
+      return res.status(401).json({ error: "Webhook timestamp outside allowed replay window" });
+    }
+
+    db.get(
+      "SELECT id FROM external_sync_events WHERE idempotency_key = ?",
+      [idempotencyKey],
+      (dupErr, dup) => {
+        if (dupErr) return res.status(500).json({ error: dupErr.message });
+        if (dup) {
+          logShopifyEvent("info", "webhook_duplicate_ignored", {
+            webhook_id: webhookId || null,
+            idempotency_key: idempotencyKey,
+          });
+          return res.json({ success: true, duplicate: true });
+        }
+
+        upsertWebOrderFromShopifyPayload(payload, (orderErr, result) => {
+          db.run(
+            `INSERT INTO external_sync_events (
+              direction, entity_type, idempotency_key, status, error_message, payload, created_at, processed_at
+            ) VALUES ('inbound', 'order', ?, ?, ?, ?, datetime('now','localtime'), datetime('now','localtime'))`,
+            [
+              idempotencyKey,
+              orderErr ? "failed" : "processed",
+              orderErr ? String(orderErr.message || "Unknown error") : null,
+              JSON.stringify({
+                webhook_id: webhookId || null,
+                order_id: orderId || null,
+                web_order_id: result?.web_order_id || null,
+              }),
+            ],
+            (evtErr) => {
+              if (evtErr) return res.status(500).json({ error: evtErr.message });
+              db.run(
+                `UPDATE shopify_connections
+                 SET last_sync_at = datetime('now','localtime'),
+                     last_error = ?,
+                     updated_at = datetime('now','localtime')
+                 WHERE id = ?`,
+                [orderErr ? String(orderErr.message || "Webhook order processing failed") : null, conn.id],
+              );
+              if (orderErr) return res.status(500).json({ error: orderErr.message });
+              return res.json({ success: true, web_order_id: result?.web_order_id || null });
+            },
+          );
+        });
+      },
+    );
+  });
+});
+
+// --- ROUTES: INTERNAL SHOPIFY MAPPINGS ---
+
+app.get("/api/integrations/mappings/products", requirePerm("manage_inventory"), (req, res) => {
+  db.all(
+    `SELECT spm.*, p.name as product_name, pv.sku as variant_sku
+     FROM shopify_product_map spm
+     LEFT JOIN products p ON p.id = spm.product_id
+     LEFT JOIN product_variants pv ON pv.id = spm.variant_id
+     ORDER BY spm.id DESC`,
+    [],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ mappings: rows || [] });
+    },
+  );
+});
+
+app.put("/api/integrations/mappings/products/:id", requirePerm("manage_inventory"), (req, res) => {
+  const { id } = req.params;
+  const {
+    product_id,
+    variant_id,
+    shopify_product_id,
+    shopify_variant_id,
+    shopify_inventory_item_id,
+    is_active,
+  } = req.body || {};
+  db.run(
+    `INSERT INTO shopify_product_map (
+      id, product_id, variant_id, shopify_product_id, shopify_variant_id, shopify_inventory_item_id, is_active, last_verified_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
+    ON CONFLICT(id) DO UPDATE SET
+      product_id = excluded.product_id,
+      variant_id = excluded.variant_id,
+      shopify_product_id = excluded.shopify_product_id,
+      shopify_variant_id = excluded.shopify_variant_id,
+      shopify_inventory_item_id = excluded.shopify_inventory_item_id,
+      is_active = excluded.is_active,
+      last_verified_at = datetime('now','localtime')`,
+    [
+      parseInt(id),
+      product_id || null,
+      variant_id || null,
+      shopify_product_id || null,
+      shopify_variant_id || null,
+      shopify_inventory_item_id || null,
+      is_active !== undefined ? (is_active ? 1 : 0) : 1,
+    ],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: "Product mapping saved" });
+    },
+  );
+});
+
+app.post("/api/integrations/mappings/products/auto", requirePerm("manage_inventory"), (req, res) => {
+  // Placeholder for later Shopify-aware auto-map.
+  // For pre-integration phase, return local products/variants candidates.
+  db.all(
+    `SELECT p.id as product_id, p.name, p.barcode, pv.id as variant_id, pv.sku
+     FROM products p
+     LEFT JOIN product_variants pv ON pv.product_id = p.id
+     ORDER BY p.name ASC`,
+    [],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ candidates: rows || [], message: "Auto-map candidates generated" });
+    },
+  );
+});
+
+app.post("/api/integrations/mappings/products/auto-live", requirePerm("manage_inventory"), (req, res) => {
+  const limit = Math.min(1000, Math.max(1, parseInt(req.body?.limit || "500", 10)));
+  getActiveShopifyConnection(async (connErr, conn) => {
+    if (connErr) return res.status(500).json({ error: connErr.message });
+    if (!conn) return res.status(400).json({ error: "No active Shopify connection" });
+
+    try {
+      const remoteVariants = await fetchShopifyVariantCatalog(conn, limit);
+      db.all(
+        `SELECT p.id as product_id,
+                p.name as product_name,
+                p.barcode as product_barcode,
+                pv.id as variant_id,
+                pv.sku as variant_sku,
+                pv.barcode as variant_barcode
+         FROM products p
+         LEFT JOIN product_variants pv ON pv.product_id = p.id`,
+        [],
+        (localErr, localRows) => {
+          if (localErr) return res.status(500).json({ error: localErr.message });
+
+          const byBarcode = new Map();
+          const bySku = new Map();
+          for (const rv of remoteVariants) {
+            const b = String(rv.barcode || "").trim().toLowerCase();
+            const s = String(rv.sku || "").trim().toLowerCase();
+            if (b && !byBarcode.has(b)) byBarcode.set(b, rv);
+            if (s && !bySku.has(s)) bySku.set(s, rv);
+          }
+
+          const suggestions = [];
+          for (const lr of localRows || []) {
+            const localBarcode = String(lr.variant_barcode || lr.product_barcode || "").trim().toLowerCase();
+            const localSku = String(lr.variant_sku || "").trim().toLowerCase();
+
+            let match = null;
+            let confidence = "";
+            if (localBarcode && byBarcode.has(localBarcode)) {
+              match = byBarcode.get(localBarcode);
+              confidence = "exact_barcode";
+            } else if (localSku && bySku.has(localSku)) {
+              match = bySku.get(localSku);
+              confidence = "exact_sku";
+            }
+            if (!match) continue;
+
+            suggestions.push({
+              product_id: lr.product_id,
+              product_name: lr.product_name,
+              variant_id: lr.variant_id || null,
+              local_sku: lr.variant_sku || null,
+              local_barcode: lr.variant_barcode || lr.product_barcode || null,
+              shopify_product_id: match.product_id || null,
+              shopify_variant_id: match.variant_id || null,
+              shopify_inventory_item_id: match.inventory_item_id || null,
+              shopify_title: match.display_name || match.product_title || null,
+              confidence,
+            });
+          }
+
+          return res.json({
+            message: "Live mapping suggestions generated",
+            remote_count: remoteVariants.length,
+            suggestion_count: suggestions.length,
+            suggestions,
+          });
+        },
+      );
+    } catch (e) {
+      return res.status(400).json({ error: e.message || "Failed to generate live mappings" });
+    }
+  });
+});
+
+app.post("/api/integrations/mappings/products/apply-suggestions", requirePerm("manage_inventory"), (req, res) => {
+  const suggestions = Array.isArray(req.body?.suggestions) ? req.body.suggestions : [];
+  if (suggestions.length === 0) {
+    return res.status(400).json({ error: "suggestions array is required" });
+  }
+
+  let idx = 0;
+  let applied = 0;
+  let skipped = 0;
+  const conflicts = [];
+
+  const next = () => {
+    if (idx >= suggestions.length) {
+      return res.json({
+        message: "Suggestions processed",
+        total: suggestions.length,
+        applied,
+        skipped,
+        conflicts,
+      });
+    }
+
+    const s = suggestions[idx];
+    idx += 1;
+    const productId = s.product_id ? Number(s.product_id) : null;
+    const variantId = s.variant_id ? Number(s.variant_id) : null;
+    const shopifyProductId = s.shopify_product_id || null;
+    const shopifyVariantId = s.shopify_variant_id || null;
+    const shopifyInventoryItemId = s.shopify_inventory_item_id || null;
+
+    if (!productId || !shopifyVariantId) {
+      skipped += 1;
+      return next();
+    }
+
+    db.get(
+      `SELECT id, product_id, variant_id
+       FROM shopify_product_map
+       WHERE shopify_variant_id = ?
+         AND (
+           product_id != ?
+           OR COALESCE(variant_id, -1) != COALESCE(?, -1)
+         )
+       LIMIT 1`,
+      [shopifyVariantId, productId, variantId],
+      (confErr, conflict) => {
+        if (confErr) {
+          skipped += 1;
+          conflicts.push({
+            product_id: productId,
+            variant_id: variantId,
+            shopify_variant_id: shopifyVariantId,
+            reason: confErr.message,
+          });
+          return next();
+        }
+        if (conflict) {
+          skipped += 1;
+          conflicts.push({
+            product_id: productId,
+            variant_id: variantId,
+            shopify_variant_id: shopifyVariantId,
+            reason: `Already mapped to local product ${conflict.product_id}/${conflict.variant_id || "no-variant"}`,
+          });
+          return next();
+        }
+
+        db.run(
+          `INSERT INTO shopify_product_map (
+             product_id, variant_id, shopify_product_id, shopify_variant_id, shopify_inventory_item_id, is_active, last_verified_at
+           ) VALUES (?, ?, ?, ?, ?, 1, datetime('now','localtime'))
+           ON CONFLICT(product_id, variant_id) DO UPDATE SET
+             shopify_product_id = excluded.shopify_product_id,
+             shopify_variant_id = excluded.shopify_variant_id,
+             shopify_inventory_item_id = excluded.shopify_inventory_item_id,
+             is_active = 1,
+             last_verified_at = datetime('now','localtime')`,
+          [productId, variantId, shopifyProductId, shopifyVariantId, shopifyInventoryItemId],
+          (upErr) => {
+            if (upErr) {
+              skipped += 1;
+              conflicts.push({
+                product_id: productId,
+                variant_id: variantId,
+                shopify_variant_id: shopifyVariantId,
+                reason: upErr.message,
+              });
+            } else {
+              applied += 1;
+            }
+            return next();
+          },
+        );
+      },
+    );
+  };
+
+  next();
+});
+
+app.get("/api/integrations/mappings/locations", requirePerm("manage_inventory"), (req, res) => {
+  db.all(
+    `SELECT slm.*, o.name as outlet_name
+     FROM shopify_location_map slm
+     LEFT JOIN outlets o ON o.id = slm.outlet_id
+     ORDER BY o.name ASC`,
+    [],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ mappings: rows || [] });
+    },
+  );
+});
+
+app.put("/api/integrations/mappings/locations/:outletId", requirePerm("manage_inventory"), (req, res) => {
+  const { outletId } = req.params;
+  const { shopify_location_id, shopify_location_name } = req.body || {};
+  if (!shopify_location_id) {
+    return res.status(400).json({ error: "shopify_location_id is required" });
+  }
+  db.run(
+    `INSERT INTO shopify_location_map (outlet_id, shopify_location_id, shopify_location_name)
+     VALUES (?, ?, ?)
+     ON CONFLICT(outlet_id, shopify_location_id) DO UPDATE SET
+       shopify_location_name = excluded.shopify_location_name`,
+    [outletId, String(shopify_location_id), shopify_location_name || null],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: "Location mapping saved" });
+    },
+  );
+});
+
+app.get("/api/integrations/mappings/customers", requirePerm("manage_orders"), (req, res) => {
+  db.all(
+    `SELECT scm.*, c.name as customer_name, c.mobile, c.email
+     FROM shopify_customer_map scm
+     LEFT JOIN customers c ON c.id = scm.customer_id
+     ORDER BY scm.id DESC`,
+    [],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ mappings: rows || [] });
+    },
+  );
+});
+
+app.put("/api/integrations/mappings/customers/:customerId", requirePerm("manage_orders"), (req, res) => {
+  const { customerId } = req.params;
+  const { shopify_customer_id } = req.body || {};
+  if (!shopify_customer_id) {
+    return res.status(400).json({ error: "shopify_customer_id is required" });
+  }
+  db.run(
+    `INSERT INTO shopify_customer_map (customer_id, shopify_customer_id, last_synced_at)
+     VALUES (?, ?, datetime('now','localtime'))
+     ON CONFLICT(shopify_customer_id) DO UPDATE SET
+      customer_id = excluded.customer_id,
+      last_synced_at = datetime('now','localtime')`,
+    [customerId, String(shopify_customer_id)],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: "Customer mapping saved" });
+    },
+  );
+});
+
+// --- ROUTES: RECONCILIATION (internal) ---
+
+app.get("/api/reconciliation/inventory", requireAnyPerm(["view_reports", "manage_inventory"]), (req, res) => {
+  const { status, resolution_status } = req.query;
+  const where = ["1=1"];
+  const params = [];
+  if (status) {
+    where.push("ir.status = ?");
+    params.push(status);
+  }
+  if (resolution_status) {
+    where.push("ir.resolution_status = ?");
+    params.push(resolution_status);
+  }
+  db.all(
+    `SELECT ir.*,
+            p.name as product_name,
+            pv.sku as variant_sku,
+            o.name as outlet_name
+     FROM inventory_reconciliation ir
+     LEFT JOIN products p ON p.id = ir.product_id
+     LEFT JOIN product_variants pv ON pv.id = ir.variant_id
+     LEFT JOIN outlets o ON o.id = ir.outlet_id
+     WHERE ${where.join(" AND ")}
+     ORDER BY ir.checked_at DESC, ABS(ir.diff) DESC`,
+    params,
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ rows: rows || [] });
+    },
+  );
+});
+
+app.post("/api/reconciliation/inventory/run", requirePerm("manage_inventory"), (req, res) => {
+  getActiveShopifyConnection(async (connErr, conn) => {
+    if (connErr) return res.status(500).json({ error: connErr.message });
+    if (!conn) return res.status(400).json({ error: "No active Shopify connection" });
+
+    db.all(
+      `SELECT spm.product_id,
+              spm.variant_id,
+              spm.shopify_inventory_item_id,
+              slm.outlet_id,
+              slm.shopify_location_id,
+              COALESCE(SUM(os.quantity), 0) as local_qty
+       FROM shopify_product_map spm
+       JOIN shopify_location_map slm
+       LEFT JOIN outlet_stock os
+         ON os.product_id = spm.product_id
+        AND os.outlet_id = slm.outlet_id
+       WHERE spm.is_active = 1
+         AND spm.shopify_inventory_item_id IS NOT NULL
+       GROUP BY spm.product_id, spm.variant_id, spm.shopify_inventory_item_id, slm.outlet_id, slm.shopify_location_id`,
+      [],
+      async (mapErr, mappedRows) => {
+        if (mapErr) return res.status(500).json({ error: mapErr.message });
+        if (!mappedRows || mappedRows.length === 0) {
+          return res.status(400).json({ error: "No mapped inventory items/locations found for reconciliation" });
+        }
+
+        const rowsToInsert = [];
+        let matched = 0;
+        let mismatch = 0;
+        let errors = 0;
+
+        for (const row of mappedRows) {
+          const localQty = Number(row.local_qty || 0);
+          try {
+            const remote = await fetchInventoryLevel(conn, row.shopify_inventory_item_id, row.shopify_location_id);
+            const externalQty = Number(remote.available || 0);
+            const diff = Number((localQty - externalQty).toFixed(4));
+            const status = diff === 0 ? "matched" : "mismatch";
+            if (status === "matched") matched += 1;
+            else mismatch += 1;
+            rowsToInsert.push({
+              product_id: row.product_id,
+              variant_id: row.variant_id || null,
+              outlet_id: row.outlet_id,
+              external_location_id: row.shopify_location_id,
+              local_qty: localQty,
+              external_qty: externalQty,
+              diff,
+              status,
+              resolution_status: "open",
+              resolution_note: null,
+            });
+          } catch (e) {
+            errors += 1;
+            rowsToInsert.push({
+              product_id: row.product_id,
+              variant_id: row.variant_id || null,
+              outlet_id: row.outlet_id,
+              external_location_id: row.shopify_location_id,
+              local_qty: localQty,
+              external_qty: 0,
+              diff: localQty,
+              status: "error",
+              resolution_status: "open",
+              resolution_note: String(e.message || "Failed fetching Shopify quantity"),
+            });
+          }
+        }
+
+        db.serialize(() => {
+          db.run("DELETE FROM inventory_reconciliation");
+          const stmt = db.prepare(
+            `INSERT INTO inventory_reconciliation (
+               product_id, variant_id, outlet_id, external_location_id,
+               local_qty, external_qty, diff, status, checked_at,
+               resolution_status, resolution_note
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'), ?, ?)`,
+          );
+          for (const r of rowsToInsert) {
+            stmt.run([
+              r.product_id,
+              r.variant_id,
+              r.outlet_id,
+              r.external_location_id,
+              r.local_qty,
+              r.external_qty,
+              r.diff,
+              r.status,
+              r.resolution_status,
+              r.resolution_note,
+            ]);
+          }
+          stmt.finalize((finErr) => {
+            if (finErr) return res.status(500).json({ error: finErr.message });
+            return res.json({
+              message: "Live reconciliation completed",
+              row_count: rowsToInsert.length,
+              matched,
+              mismatch,
+              errors,
+            });
+          });
+        });
+      },
+    );
+  });
+});
+
+app.post("/api/reconciliation/inventory/:id/resolve", requirePerm("manage_inventory"), (req, res) => {
+  const { id } = req.params;
+  const { resolution_status = "resolved", resolution_note = null } = req.body || {};
+  const allowed = ["open", "resolved", "ignored"];
+  if (!allowed.includes(String(resolution_status))) {
+    return res.status(400).json({ error: `resolution_status must be one of: ${allowed.join(", ")}` });
+  }
+  const resolvedBy = req.headers["x-employee-id"] ? Number(req.headers["x-employee-id"]) : null;
+  db.run(
+    `UPDATE inventory_reconciliation
+     SET resolution_status = ?,
+         resolution_note = ?,
+         resolved_by = ?,
+         resolved_at = CASE WHEN ? = 'open' THEN NULL ELSE datetime('now','localtime') END
+     WHERE id = ?`,
+    [resolution_status, resolution_note, resolvedBy, resolution_status, id],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      if (this.changes === 0) return res.status(404).json({ error: "Reconciliation row not found" });
+      logActionHistory(
+        req,
+        "reconciliation_resolve",
+        `Reconciliation row #${id} marked as ${resolution_status}`,
+      );
+      res.json({ message: "Reconciliation row updated" });
+    },
+  );
+});
+
+function executeReconciliationFix(req, row, mode, cb) {
+  const fixMode = String(mode || "");
+  if (!["push_to_shopify", "pull_to_local"].includes(fixMode)) {
+    return cb(new Error("mode must be 'push_to_shopify' or 'pull_to_local'"));
+  }
+  const rowId = row?.id;
+  if (!rowId) return cb(new Error("Reconciliation row not found"));
+
+  const localQty = Number(row.local_qty || 0);
+  const externalQty = Number(row.external_qty || 0);
+  const diff = Number((localQty - externalQty).toFixed(4));
+
+  if (fixMode === "push_to_shopify") {
+    if (!row.external_location_id) {
+      return cb(new Error("Missing external location id on reconciliation row"));
+    }
+    return db.get(
+      `SELECT shopify_inventory_item_id
+       FROM shopify_product_map
+       WHERE product_id = ?
+         AND ((variant_id IS NOT NULL AND variant_id = ?) OR (variant_id IS NULL AND ? IS NULL))
+         AND is_active = 1
+       ORDER BY CASE WHEN variant_id IS NOT NULL THEN 0 ELSE 1 END, id DESC
+       LIMIT 1`,
+      [row.product_id, row.variant_id || null, row.variant_id || null],
+      (mapErr, map) => {
+        if (mapErr) return cb(mapErr);
+        if (!map?.shopify_inventory_item_id) {
+          return cb(new Error("No active Shopify inventory mapping found for this row"));
+        }
+        return getActiveShopifyConnection(async (connErr, conn) => {
+          if (connErr) return cb(connErr);
+          if (!conn) return cb(new Error("No active Shopify connection"));
+          try {
+            const result = await adjustShopifyInventory(
+              conn,
+              [
+                {
+                  inventory_item_id: map.shopify_inventory_item_id,
+                  location_id: row.external_location_id,
+                  delta: diff,
+                },
+              ],
+              "correction",
+            );
+            if ((result.userErrors || []).length > 0) {
+              return cb(new Error(result.userErrors.map((e) => e.message).join("; ") || "Shopify user error"));
+            }
+            db.run(
+              `UPDATE inventory_reconciliation
+               SET external_qty = local_qty,
+                   diff = 0,
+                   status = 'matched',
+                   resolution_status = 'resolved',
+                   resolution_note = ?,
+                   resolved_by = ?,
+                   resolved_at = datetime('now','localtime')
+               WHERE id = ?`,
+              [
+                "Corrective action: pushed local qty to Shopify",
+                req.headers["x-employee-id"] ? Number(req.headers["x-employee-id"]) : null,
+                rowId,
+              ],
+              (updErr) => {
+                if (updErr) return cb(updErr);
+                return cb(null, { message: "Corrective push applied to Shopify", delta: diff });
+              },
+            );
+          } catch (e) {
+            return cb(new Error(e.message || "Failed applying Shopify correction"));
+          }
+        });
+      },
+    );
+  }
+
+  const deltaLocal = Number((externalQty - localQty).toFixed(4));
+  return db.run(
+    `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+     VALUES (?, ?, ?)
+     ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = quantity + ?`,
+    [row.product_id, row.outlet_id, deltaLocal, deltaLocal],
+    (stockErr) => {
+      if (stockErr) return cb(stockErr);
+      return db.run(
+        `UPDATE inventory_reconciliation
+         SET local_qty = external_qty,
+             diff = 0,
+             status = 'matched',
+             resolution_status = 'resolved',
+             resolution_note = ?,
+             resolved_by = ?,
+             resolved_at = datetime('now','localtime')
+         WHERE id = ?`,
+        [
+          "Corrective action: pulled Shopify qty to local stock",
+          req.headers["x-employee-id"] ? Number(req.headers["x-employee-id"]) : null,
+          rowId,
+        ],
+        (updErr) => {
+          if (updErr) return cb(updErr);
+          return cb(null, { message: "Corrective pull applied to local stock", delta: deltaLocal });
+        },
+      );
+    },
+  );
+}
+
+app.post("/api/reconciliation/inventory/:id/request-fix", requirePerm("manage_inventory"), requireFeature("approvals"), (req, res) => {
+  const { id } = req.params;
+  const { mode, requested_by, note } = req.body || {};
+  const requesterEmployeeId = req.headers["x-employee-id"] ? Number(req.headers["x-employee-id"]) : null;
+  const fixMode = String(mode || "");
+  if (!["push_to_shopify", "pull_to_local"].includes(fixMode)) {
+    return res.status(400).json({ error: "mode must be 'push_to_shopify' or 'pull_to_local'" });
+  }
+
+  db.get(
+    "SELECT * FROM inventory_reconciliation WHERE id = ?",
+    [id],
+    (rowErr, row) => {
+      if (rowErr) return res.status(500).json({ error: rowErr.message });
+      if (!row) return res.status(404).json({ error: "Reconciliation row not found" });
+
+      db.get(
+        `SELECT id
+         FROM approval_requests
+         WHERE reference_type = 'reconciliation'
+           AND reference_id = ?
+           AND status = 'pending_approval'`,
+        [id],
+        (pendingErr, pendingReq) => {
+          if (pendingErr) return res.status(500).json({ error: pendingErr.message });
+          if (pendingReq) {
+            return res.status(409).json({ error: "A reconciliation approval is already pending for this row" });
+          }
+
+          const notes = JSON.stringify({
+            mode: fixMode,
+            note: note || null,
+            diff: row.diff,
+            local_qty: row.local_qty,
+            external_qty: row.external_qty,
+            product_id: row.product_id,
+            variant_id: row.variant_id || null,
+            outlet_id: row.outlet_id,
+            requester_employee_id: requesterEmployeeId || null,
+            requested_at: new Date().toISOString(),
+          });
+
+          db.run(
+            `INSERT INTO approval_requests (request_type, reference_id, reference_type, requested_by, notes, status)
+             VALUES ('reconciliation_fix', ?, 'reconciliation', ?, ?, 'pending_approval')`,
+            [id, requested_by || (requesterEmployeeId ? String(requesterEmployeeId) : null), notes],
+            function (insErr) {
+              if (insErr) return res.status(500).json({ error: insErr.message });
+              logActionHistory(
+                req,
+                "reconciliation_fix_request",
+                `Reconciliation fix requested for row #${id} mode=${fixMode}`,
+              );
+              return res.json({
+                message: "Reconciliation fix approval request submitted",
+                approval_request_id: this.lastID,
+              });
+            },
+          );
+        },
+      );
+    },
+  );
+});
+
+app.post("/api/reconciliation/inventory/:id/approve-fix", requireAnyPerm(["manage_orders", "manage_employees"]), requireFeature("approvals"), (req, res) => {
+  const { id } = req.params;
+  const { action, action_by, reason } = req.body || {};
+  const approverEmployeeId = req.headers["x-employee-id"] ? Number(req.headers["x-employee-id"]) : null;
+  if (!["approved", "rejected"].includes(String(action))) {
+    return res.status(400).json({ error: "action must be 'approved' or 'rejected'" });
+  }
+
+  db.get("SELECT * FROM inventory_reconciliation WHERE id = ?", [id], (rowErr, row) => {
+    if (rowErr) return res.status(500).json({ error: rowErr.message });
+    if (!row) return res.status(404).json({ error: "Reconciliation row not found" });
+
+    db.get(
+      `SELECT *
+       FROM approval_requests
+       WHERE reference_type = 'reconciliation'
+         AND reference_id = ?
+         AND status = 'pending_approval'
+       ORDER BY id DESC
+       LIMIT 1`,
+      [id],
+      (reqErr, approvalReq) => {
+        if (reqErr) return res.status(500).json({ error: reqErr.message });
+        if (!approvalReq) return res.status(404).json({ error: "No pending approval request found for this row" });
+
+        let parsedNotes = {};
+        try {
+          parsedNotes = JSON.parse(approvalReq.notes || "{}");
+        } catch {
+          parsedNotes = {};
+        }
+        const mode = String(parsedNotes.mode || "");
+        if (!["push_to_shopify", "pull_to_local"].includes(mode)) {
+          return res.status(400).json({ error: "Pending request is missing a valid mode" });
+        }
+        const requesterFromNotes = Number(parsedNotes.requester_employee_id || 0) || null;
+        const requesterFromColumn = Number(approvalReq.requested_by || 0) || null;
+        const requesterEmployeeId = requesterFromNotes || requesterFromColumn;
+        if (!canApproveReconciliationRequest({ requesterEmployeeId, approverEmployeeId })) {
+          return res.status(403).json({ error: "Requester cannot approve or reject their own reconciliation fix request" });
+        }
+
+        const finalizeApproval = (finalStatus, extraMessage = null) => {
+          const actionReasonPayload = JSON.stringify({
+            note: reason || null,
+            mode,
+            row_id: Number(id),
+            requester_employee_id: requesterEmployeeId || null,
+            approver_employee_id: approverEmployeeId || null,
+            local_qty_before: Number(row.local_qty || 0),
+            external_qty_before: Number(row.external_qty || 0),
+            diff_before: Number(row.diff || 0),
+            decision_at: new Date().toISOString(),
+          });
+          db.serialize(() => {
+            db.run(
+              "UPDATE approval_requests SET status = ? WHERE id = ?",
+              [finalStatus, approvalReq.id],
+            );
+            db.run(
+              "INSERT INTO approval_actions (approval_request_id, action, action_by, reason) VALUES (?, ?, ?, ?)",
+              [approvalReq.id, finalStatus, action_by || (approverEmployeeId ? String(approverEmployeeId) : null), actionReasonPayload],
+            );
+          });
+          return res.json({
+            message:
+              finalStatus === "approved"
+                ? (extraMessage || "Reconciliation fix approved and applied")
+                : "Reconciliation fix rejected",
+          });
+        };
+
+        if (action === "rejected") {
+          logActionHistory(
+            req,
+            "reconciliation_fix_reject",
+            `Reconciliation fix request rejected for row #${id}`,
+          );
+          return finalizeApproval("rejected");
+        }
+
+        executeReconciliationFix(req, row, mode, (fixErr, fixResult) => {
+          if (fixErr) return res.status(500).json({ error: fixErr.message });
+          logActionHistory(
+            req,
+            "reconciliation_fix_approve",
+            `Reconciliation fix approved for row #${id} mode=${mode}`,
+          );
+          return finalizeApproval("approved", fixResult?.message || null);
+        });
+      },
+    );
+  });
+});
+
+app.get("/api/reconciliation/inventory/:id/audit", requireAnyPerm(["manage_inventory", "manage_employees", "view_reports"]), (req, res) => {
+  const { id } = req.params;
+  db.get(
+    `SELECT ir.*,
+            p.name as product_name,
+            o.name as outlet_name
+     FROM inventory_reconciliation ir
+     LEFT JOIN products p ON p.id = ir.product_id
+     LEFT JOIN outlets o ON o.id = ir.outlet_id
+     WHERE ir.id = ?`,
+    [id],
+    (rowErr, row) => {
+      if (rowErr) return res.status(500).json({ error: rowErr.message });
+      if (!row) return res.status(404).json({ error: "Reconciliation row not found" });
+
+      db.all(
+        `SELECT *
+         FROM approval_requests
+         WHERE reference_type = 'reconciliation'
+           AND reference_id = ?
+         ORDER BY id DESC`,
+        [id],
+        (reqErr, requests) => {
+          if (reqErr) return res.status(500).json({ error: reqErr.message });
+          const requestIds = (requests || []).map((r) => r.id);
+          if (requestIds.length === 0) {
+            return res.json({ row, approval_requests: [], approval_actions: [] });
+          }
+          const placeholders = requestIds.map(() => "?").join(",");
+          db.all(
+            `SELECT *
+             FROM approval_actions
+             WHERE approval_request_id IN (${placeholders})
+             ORDER BY id DESC`,
+            requestIds,
+            (actErr, actions) => {
+              if (actErr) return res.status(500).json({ error: actErr.message });
+              return res.json({
+                row,
+                approval_requests: requests || [],
+                approval_actions: actions || [],
+              });
+            },
+          );
+        },
+      );
+    },
+  );
 });
 
 // --- APPROVAL WORKFLOW TABLES (Phase 1) ---
@@ -4990,5 +7729,12 @@ app.get("/api/sales/:id/invoice/export", requireFeature("e_invoicing_export"), (
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
+
+const SHOPIFY_WORKER_DISABLED = String(process.env.SHOPIFY_SYNC_WORKER_DISABLED || "0") === "1";
+if (!SHOPIFY_WORKER_DISABLED) {
+  setInterval(() => {
+    processPendingShopifyInventoryEvents(20, () => {});
+  }, 30000);
+}
 
 

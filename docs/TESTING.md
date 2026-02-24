@@ -245,3 +245,104 @@ npm run test:e2e-full
 
 - A backend query mismatch (`customers.phone` vs `customers.mobile`) that caused export `500` was fixed before the final run.
 - Full suite completed with no retained test data.
+
+---
+
+## Shopify Connector Test Matrix (Current)
+
+### What Was Executed
+
+1. Backend syntax/static checks
+- `node --check backend/index.js` (multiple iterations after Shopify connector updates)
+- `node --check backend/shopify/client.js`
+- `node --check backend/migrate41.js`
+- `node --check backend/migrate42.js`
+- `node --check backend/migrate43.js`
+- `node --check backend/migrate44.js`
+- `node --check backend/migrate45.js`
+
+2. Frontend lint checks
+- `npx eslint src/pages/ShopifyIntegration.jsx`
+- `npx eslint src/App.jsx src/components/AppLayout.jsx src/pages/Orders.jsx`
+
+3. Migration execution checks (applied successfully)
+- `node migrate41.js`
+- `node migrate42.js`
+- `node migrate43.js`
+- `node migrate44.js`
+- `node migrate45.js`
+
+4. Functional smoke checks (local)
+- Shopify integration route and page render
+- Connection save/disconnect flow (without requiring live token)
+- Manual sync actions reachable from UI
+- Retry failed queue endpoint wired and callable
+- Single-event retry endpoint wired and callable
+- Sync event filters (status/entity/direction/search) wired in UI
+- Reconciliation run/read/resolve endpoints wired and callable
+- Reconciliation corrective actions wired with approval flow in UI/backend:
+  - request push local -> Shopify
+  - request pull Shopify -> local
+  - approve/reject from approvals workflow
+- Mapping review workflow wired in UI:
+  - include/exclude suggestions before apply
+  - backend conflict report handling
+- Live validation + readiness flows wired:
+  - `/api/integrations/shopify/live-validation`
+  - `/api/integrations/shopify/webhooks/setup`
+  - `/api/integrations/shopify/uat-checklist`
+- Queue health metrics surfaced:
+  - `dead_letter`, `retry_due`, `backlog`, `oldest_backlog_minutes`
+- Reconciliation audit endpoint wired:
+  - `/api/reconciliation/inventory/:id/audit`
+- Shopify utility unit tests added:
+  - `node backend/shopify_utils_test.js`
+- Mocked Shopify integration tests added:
+  - `node backend/shopify_mock_integration_test.js`
+
+### What Was Not Executed Yet
+
+1. Live Shopify store E2E (real credentials)
+- Verify connection against real `*.myshopify.com` domain with valid token
+- Real inventory mutation (`inventoryAdjustQuantities`) validation in Shopify Admin
+- Real location and variant catalog reads with production-like data
+
+2. Live webhook delivery tests
+- Real `orders/create` webhook delivery from Shopify Admin
+- Signature validation with actual Shopify header/payload stream
+- Replay window behavior with captured real webhook timestamps
+
+3. Connector automated tests
+- Unit tests for:
+  - encryption/decryption helpers
+  - webhook signature/replay checks
+  - retry/backoff transitions (`pending` -> `retry` -> `dead_letter`)
+  - inbound web-order stock policy transitions
+- Integration tests for reconciliation fetch + mismatch persistence
+- Note: mocked integration coverage now exists for Shopify client + webhook payload validation;
+  real API integration and live-store flows remain pending.
+
+4. Full post-connector regression
+- Full browser/UAT pass across POS + Shopify integration features in one runbook
+
+### Pending UAT Evidence Checklist (To Collect)
+
+- [ ] Screenshot/video: successful Shopify connection verification
+- [ ] Screenshot/video: live locations loaded from Shopify
+- [ ] Screenshot/video: live mapping suggestions generated and applied
+- [ ] Evidence: outbound event created after POS sale and marked `processed`
+- [ ] Evidence: outbound event retry path (`retry` then `processed` or `dead_letter`)
+- [ ] Evidence: single-event retry action works from UI and updates event state correctly
+- [ ] Evidence: inbound webhook creates/updates `web_orders` and respects idempotency
+- [ ] Evidence: stock policy applies once on paid/open, reverses on cancelled/refunded
+- [ ] Evidence: reconciliation run shows matched/mismatch rows from live Shopify quantities
+- [ ] Evidence: reconciliation row resolve/ignore updates persisted
+- [ ] Evidence: reconciliation fix request appears in approvals and approve/reject updates request status
+- [ ] Evidence: same employee cannot approve/reject their own reconciliation fix request (403 expected)
+- [ ] Evidence: approved reconciliation corrective action updates target system and row status
+- [ ] Evidence: mapping conflict review prevents incorrect bulk apply and logs conflicts
+- [ ] Evidence: live-validation endpoint returns pass/fail checks against real Shopify store
+- [ ] Evidence: webhook setup callback URL/topics copied into Shopify admin and subscription test succeeds
+- [ ] Evidence: UAT checklist reflects runtime stats after successful sync activity
+- [ ] Evidence: reconciliation audit endpoint shows structured approve/reject metadata
+- [ ] Final signed UAT report with environment details (shop domain, API version, date/time)
