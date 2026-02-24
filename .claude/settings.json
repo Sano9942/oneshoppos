@@ -20,7 +20,8 @@
       "Bash(npx vite build:*)",
       "Bash(ls:*)",
       "Bash(npm install:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Read(//d/newprojects/oneshoppos/**)"
     ]
   }
 }

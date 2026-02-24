@@ -24,6 +24,11 @@ import PlaceholderPage from "./pages/PlaceholderPage";
 import Administrator from "./pages/Administrator";
 import AttributeSets from "./pages/AttributeSets";
 import ReceiptTemplates from "./pages/ReceiptTemplates";
+import Approvals from "./pages/Approvals";
+import SupplierPayables from "./pages/SupplierPayables";
+import Promotions from "./pages/Promotions";
+import BarcodeTemplates from "./pages/BarcodeTemplates";
+import Expenses from "./pages/Expenses";
 
 function App() {
   return (
@@ -43,6 +48,9 @@ function App() {
           <Route path="/customers" element={<Customers />} />
           <Route path="/suppliers" element={<Suppliers />} />
           <Route path="/purchase-orders" element={<PurchaseOrders />} />
+          <Route path="/supplier-payables" element={<SupplierPayables />} />
+          <Route path="/promotions" element={<Promotions />} />
+          <Route path="/expenses" element={<Expenses />} />
 
           {/* New Implementation Routes */}
           <Route path="/categories" element={<Categories />} />
@@ -128,12 +136,12 @@ function App() {
             path="/reports/product-performance"
             element={<ReportTabStandalone tabId="product-performance" />}
           />
-          <Route path="/barcode-templates" element={<PlaceholderPage />} />
+          <Route path="/barcode-templates" element={<BarcodeTemplates />} />
           <Route path="/receipt-templates" element={<ReceiptTemplates />} />
           <Route path="/partners" element={<PlaceholderPage />} />
           <Route path="/shopcast" element={<PlaceholderPage />} />
           <Route path="/administrator" element={<Administrator />} />
-          <Route path="/action-history" element={<PlaceholderPage />} />
+          <Route path="/approvals" element={<Approvals />} />
 
           {/* Keep old legacy routes around safely just in case */}
           <Route path="/reports" element={<Reports />} />

@@ -13,6 +13,7 @@ import {
   DollarSign,
   Gift,
   Download,
+  Wallet,
 } from "lucide-react";
 
 const exportCSV = (data, filename) => {
@@ -74,6 +75,12 @@ export default function Customers() {
   // Points
   const [pointsAdjust, setPointsAdjust] = useState("");
   const [isAdjustingPoints, setIsAdjustingPoints] = useState(false);
+
+  // Wallet
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [walletTopup, setWalletTopup] = useState("");
+  const [walletNote, setWalletNote] = useState("");
+  const [isTopingUp, setIsTopingUp] = useState(false);
 
   const fetchCustomers = async (q = "") => {
     setIsLoading(true);
@@ -208,14 +215,46 @@ export default function Customers() {
     setSalesLoading(true);
     setCustomerSales([]);
     setPointsAdjust(c.loyalty_points || 0);
+    setWalletTopup("");
+    setWalletNote("");
     try {
-      const res = await fetch(`${API}/api/customers/${c.id}/sales`);
-      const data = await res.json();
-      setCustomerSales(data.sales || []);
+      const [salesRes, walletRes] = await Promise.all([
+        fetch(`${API}/api/customers/${c.id}/sales`),
+        fetch(`${API}/api/customers/${c.id}/wallet`),
+      ]);
+      const salesData = await salesRes.json();
+      const walletData = await walletRes.json();
+      setCustomerSales(salesData.sales || []);
+      setWalletBalance(walletData.balance || 0);
     } catch {
-      console.error("Failed to load sales");
+      console.error("Failed to load customer detail");
     } finally {
       setSalesLoading(false);
+    }
+  };
+
+  const handleWalletTopup = async (e) => {
+    e.preventDefault();
+    if (!selectedCustomer || !walletTopup || parseFloat(walletTopup) <= 0) return;
+    setIsTopingUp(true);
+    try {
+      const res = await fetch(`${API}/api/customers/${selectedCustomer.id}/wallet/topup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: parseFloat(walletTopup), note: walletNote }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setWalletBalance(data.balance);
+        setWalletTopup("");
+        setWalletNote("");
+      } else {
+        alert(data.error || "Top-up failed");
+      }
+    } catch {
+      alert("Connection failed");
+    } finally {
+      setIsTopingUp(false);
     }
   };
 
@@ -300,6 +339,7 @@ export default function Customers() {
                   <th className="p-4">Mobile</th>
                   <th className="p-4">Email</th>
                   <th className="p-4 text-center">Points</th>
+                  <th className="p-4 text-right">Wallet</th>
                   <th className="p-4 text-center">Orders</th>
                   <th className="p-4 text-right">Total Spent</th>
                   <th className="p-4">Joined</th>
@@ -309,13 +349,13 @@ export default function Customers() {
               <tbody className="divide-y divide-slate-100">
                 {isLoading ? (
                   <tr>
-                    <td colSpan="7" className="p-8 text-center text-slate-400">
+                    <td colSpan="9" className="p-8 text-center text-slate-400">
                       Loading customers...
                     </td>
                   </tr>
                 ) : customers.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="p-10 text-center">
+                    <td colSpan="9" className="p-10 text-center">
                       <Users
                         size={48}
                         className="mx-auto text-slate-300 mb-3"
@@ -359,6 +399,9 @@ export default function Customers() {
                         <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full text-xs font-bold flex items-center justify-center gap-1 mx-auto w-fit">
                           <Gift size={12} /> {c.loyalty_points || 0}
                         </span>
+                      </td>
+                      <td className="p-4 text-right text-sm font-semibold text-emerald-700">
+                        {(c.balance || 0) > 0 ? `PKRs ${(c.balance).toFixed(2)}` : <span className="text-slate-400">—</span>}
                       </td>
                       <td className="p-4 text-center">
                         <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full text-xs font-semibold">
@@ -474,6 +517,44 @@ export default function Customers() {
                   >
                     Set
                   </button>
+                </form>
+              </div>
+
+              {/* Wallet */}
+              <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Wallet size={16} className="text-emerald-600" />
+                    <h4 className="font-bold text-emerald-900 text-sm">Store Wallet</h4>
+                  </div>
+                  <span className="text-lg font-black text-emerald-700">PKRs {walletBalance.toFixed(2)}</span>
+                </div>
+                <form onSubmit={handleWalletTopup} className="space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      placeholder="Amount"
+                      className="w-full px-3 py-1.5 border border-emerald-200 rounded-lg text-sm bg-white focus:outline-none focus:border-emerald-500"
+                      value={walletTopup}
+                      onChange={(e) => setWalletTopup(e.target.value)}
+                    />
+                    <button
+                      type="submit"
+                      disabled={isTopingUp || !walletTopup || parseFloat(walletTopup) <= 0}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold transition-colors disabled:opacity-50 whitespace-nowrap"
+                    >
+                      Top Up
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Note (optional)"
+                    className="w-full px-3 py-1.5 border border-emerald-200 rounded-lg text-sm bg-white focus:outline-none focus:border-emerald-500"
+                    value={walletNote}
+                    onChange={(e) => setWalletNote(e.target.value)}
+                  />
                 </form>
               </div>
 

@@ -10,6 +10,49 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json()); // Parse JSON bodies
 
+// --- PERMISSION MIDDLEWARE SCAFFOLD ---
+// Reads optional x-employee-id header, attaches permissions to req.
+// Routes can call requirePerm(perm) to enforce access. No behavior change
+// on routes that don't use it — existing flows are untouched.
+
+function loadEmployeePerms(req, res, next) {
+  const employeeId = req.headers["x-employee-id"];
+  if (!employeeId) {
+    req.employeePerms = [];
+    return next();
+  }
+  db.get(
+    "SELECT role_id FROM employees WHERE id = ?",
+    [employeeId],
+    (err, emp) => {
+      if (err || !emp) {
+        req.employeePerms = [];
+        return next();
+      }
+      db.all(
+        "SELECT permission FROM role_permissions WHERE role_id = ?",
+        [emp.role_id],
+        (err2, rows) => {
+          req.employeePerms = err2 ? [] : rows.map((r) => r.permission);
+          next();
+        }
+      );
+    }
+  );
+}
+
+function requirePerm(permission) {
+  return (req, res, next) => {
+    const perms = req.employeePerms || [];
+    if (perms.includes("all_access") || perms.includes(permission)) {
+      return next();
+    }
+    return res.status(403).json({ error: "Forbidden: insufficient permissions" });
+  };
+}
+
+app.use(loadEmployeePerms);
+
 // --- ROUTES: TAXES ---
 
 // Get all taxes
@@ -21,7 +64,7 @@ app.get("/api/taxes", (req, res) => {
 });
 
 // Add a new tax
-app.post("/api/taxes", (req, res) => {
+app.post("/api/taxes", requirePerm("manage_inventory"), (req, res) => {
   const { name, rate, is_default } = req.body;
   db.run(
     "INSERT INTO taxes (name, rate, is_default) VALUES (?, ?, ?)",
@@ -34,7 +77,7 @@ app.post("/api/taxes", (req, res) => {
 });
 
 // Update a tax
-app.put("/api/taxes/:id", (req, res) => {
+app.put("/api/taxes/:id", requirePerm("manage_inventory"), (req, res) => {
   const { id } = req.params;
   const { name, rate, is_default } = req.body;
   db.run(
@@ -50,7 +93,7 @@ app.put("/api/taxes/:id", (req, res) => {
 });
 
 // Delete a tax
-app.delete("/api/taxes/:id", (req, res) => {
+app.delete("/api/taxes/:id", requirePerm("manage_inventory"), (req, res) => {
   const { id } = req.params;
   db.run("DELETE FROM taxes WHERE id = ?", [id], function (err) {
     if (err) return res.status(500).json({ error: err.message });
@@ -189,7 +232,7 @@ app.post("/api/employees/validate-pin", (req, res) => {
 });
 
 // Add a new employee
-app.post("/api/employees", (req, res) => {
+app.post("/api/employees", requirePerm("manage_employees"), (req, res) => {
   const { name, role_id, pin_code } = req.body;
   db.run(
     "INSERT INTO employees (name, role_id, pin_code) VALUES (?, ?, ?)",
@@ -207,7 +250,7 @@ app.post("/api/employees", (req, res) => {
 });
 
 // Update an employee
-app.put("/api/employees/:id", (req, res) => {
+app.put("/api/employees/:id", requirePerm("manage_employees"), (req, res) => {
   const { id } = req.params;
   const { name, role_id, pin_code } = req.body;
 
@@ -238,7 +281,7 @@ app.put("/api/employees/:id", (req, res) => {
 });
 
 // Delete an employee
-app.delete("/api/employees/:id", (req, res) => {
+app.delete("/api/employees/:id", requirePerm("manage_employees"), (req, res) => {
   const { id } = req.params;
   db.run("DELETE FROM employees WHERE id = ?", [id], function (err) {
     if (err) return res.status(500).json({ error: err.message });
@@ -259,7 +302,7 @@ app.get("/api/roles", (req, res) => {
 });
 
 // Add a new role
-app.post("/api/roles", (req, res) => {
+app.post("/api/roles", requirePerm("manage_employees"), (req, res) => {
   const { name, description } = req.body;
   if (!name) return res.status(400).json({ error: "Role name is required" });
 
@@ -279,7 +322,7 @@ app.post("/api/roles", (req, res) => {
 });
 
 // Update a role
-app.put("/api/roles/:id", (req, res) => {
+app.put("/api/roles/:id", requirePerm("manage_employees"), (req, res) => {
   const { id } = req.params;
   const { name, description } = req.body;
 
@@ -301,7 +344,7 @@ app.put("/api/roles/:id", (req, res) => {
 });
 
 // Delete a role
-app.delete("/api/roles/:id", (req, res) => {
+app.delete("/api/roles/:id", requirePerm("manage_employees"), (req, res) => {
   const { id } = req.params;
 
   // Prevent deleting default roles (id 1, 2, 3)
@@ -353,7 +396,7 @@ app.get("/api/roles/:id/permissions", (req, res) => {
 });
 
 // Update permissions for a specific role
-app.put("/api/roles/:id/permissions", (req, res) => {
+app.put("/api/roles/:id/permissions", requirePerm("manage_employees"), (req, res) => {
   const { id } = req.params;
   const { permissions } = req.body; // expected to be an array of permission strings
 
@@ -1004,7 +1047,7 @@ app.get("/api/purchase-orders/:id", (req, res) => {
 });
 
 // Create a new purchase order
-app.post("/api/purchase-orders", (req, res) => {
+app.post("/api/purchase-orders", requirePerm("manage_orders"), (req, res) => {
   const { supplier_id, total_cost, items, due_date } = req.body;
 
   if (!items || items.length === 0) {
@@ -1061,7 +1104,7 @@ app.post("/api/purchase-orders", (req, res) => {
 });
 
 // Receive a purchase order (Updates Inventory Stock & Cost Price)
-app.post("/api/purchase-orders/:id/receive", (req, res) => {
+app.post("/api/purchase-orders/:id/receive", requirePerm("manage_orders"), (req, res) => {
   const { id } = req.params;
   const { outlet_id, received_by, items: receivedItems, notes } = req.body;
 
@@ -1150,6 +1193,15 @@ app.post("/api/purchase-orders/:id/receive", (req, res) => {
 
               db.run("COMMIT", (err) => {
                 if (err) return res.status(500).json({ error: err.message });
+                // Auto-create supplier invoice for this GRN
+                if (po.supplier_id && po.total_cost > 0) {
+                  const invNumber = `INV-${grnNumber}`;
+                  db.run(
+                    "INSERT INTO supplier_invoices (supplier_id, po_id, grn_id, invoice_number, amount, due_date) VALUES (?, ?, ?, ?, ?, ?)",
+                    [po.supplier_id, po.id, grnId, invNumber, po.total_cost, po.due_date || null],
+                    () => {} // best-effort, don't fail the response
+                  );
+                }
                 res.json({
                   message: "PO received. GRN created.",
                   grn_number: grnNumber,
@@ -1228,7 +1280,7 @@ app.get("/api/grn/:id", (req, res) => {
 });
 
 // Delete a purchase order
-app.delete("/api/purchase-orders/:id", (req, res) => {
+app.delete("/api/purchase-orders/:id", requirePerm("manage_orders"), (req, res) => {
   const { id } = req.params;
 
   db.get("SELECT status FROM purchase_orders WHERE id = ?", [id], (err, po) => {
@@ -1261,6 +1313,252 @@ app.delete("/api/purchase-orders/:id", (req, res) => {
       });
     });
   });
+});
+
+// --- SUPPLIER PAYABLES ---
+
+// GET all supplier invoices (with supplier name, payment totals)
+app.get("/api/supplier-invoices", (req, res) => {
+  const { supplier_id, status } = req.query;
+  let query = `
+    SELECT si.*,
+           s.name as supplier_name,
+           COALESCE(SUM(sp.amount), 0) as amount_paid,
+           si.amount - COALESCE(SUM(sp.amount), 0) as amount_due
+    FROM supplier_invoices si
+    JOIN suppliers s ON si.supplier_id = s.id
+    LEFT JOIN supplier_payments sp ON sp.supplier_invoice_id = si.id
+  `;
+  const params = [];
+  const wheres = [];
+  if (supplier_id) { wheres.push("si.supplier_id = ?"); params.push(supplier_id); }
+  if (status) { wheres.push("si.status = ?"); params.push(status); }
+  if (wheres.length) query += " WHERE " + wheres.join(" AND ");
+  query += " GROUP BY si.id ORDER BY si.created_at DESC";
+  db.all(query, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ invoices: rows });
+  });
+});
+
+// GET single supplier invoice with its payments
+app.get("/api/supplier-invoices/:id", (req, res) => {
+  const { id } = req.params;
+  db.get(
+    `SELECT si.*, s.name as supplier_name FROM supplier_invoices si
+     JOIN suppliers s ON si.supplier_id = s.id WHERE si.id = ?`,
+    [id],
+    (err, inv) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!inv) return res.status(404).json({ error: "Invoice not found" });
+      db.all(
+        "SELECT * FROM supplier_payments WHERE supplier_invoice_id = ? ORDER BY paid_at DESC",
+        [id],
+        (err2, payments) => {
+          if (err2) return res.status(500).json({ error: err2.message });
+          res.json({ invoice: inv, payments: payments || [] });
+        }
+      );
+    }
+  );
+});
+
+// POST record a payment against a supplier invoice
+app.post("/api/supplier-invoices/:id/pay", (req, res) => {
+  const { id } = req.params;
+  const { amount, payment_method = "Cash", reference, paid_by, notes } = req.body;
+  if (!amount || isNaN(amount) || parseFloat(amount) <= 0)
+    return res.status(400).json({ error: "Valid amount is required" });
+
+  db.get(
+    `SELECT si.*, COALESCE(SUM(sp.amount), 0) as amount_paid
+     FROM supplier_invoices si
+     LEFT JOIN supplier_payments sp ON sp.supplier_invoice_id = si.id
+     WHERE si.id = ?`,
+    [id],
+    (err, inv) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!inv) return res.status(404).json({ error: "Invoice not found" });
+      if (inv.status === "paid") return res.status(400).json({ error: "Invoice already fully paid" });
+
+      const amt = parseFloat(amount);
+      const remaining = inv.amount - inv.amount_paid;
+      if (amt > remaining + 0.001)
+        return res.status(400).json({ error: `Payment exceeds outstanding amount (PKRs ${remaining.toFixed(2)})` });
+
+      db.serialize(() => {
+        db.run("BEGIN TRANSACTION");
+        db.run(
+          "INSERT INTO supplier_payments (supplier_invoice_id, supplier_id, amount, payment_method, reference, paid_by, notes) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          [id, inv.supplier_id, amt, payment_method, reference || null, paid_by || null, notes || null],
+          function (err) {
+            if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
+            // Update invoice status
+            const newPaid = inv.amount_paid + amt;
+            const newStatus = newPaid >= inv.amount - 0.001 ? "paid" : "partial";
+            db.run(
+              "UPDATE supplier_invoices SET status = ? WHERE id = ?",
+              [newStatus, id],
+              (err2) => {
+                if (err2) { db.run("ROLLBACK"); return res.status(500).json({ error: err2.message }); }
+                db.run("COMMIT", () => {
+                  res.json({ message: "Payment recorded", status: newStatus });
+                });
+              }
+            );
+          }
+        );
+      });
+    }
+  );
+});
+
+// GET supplier aging summary — one row per supplier with total owed
+app.get("/api/supplier-aging", (req, res) => {
+  db.all(
+    `SELECT s.id, s.name as supplier_name, s.phone,
+            COUNT(DISTINCT si.id) as invoice_count,
+            COALESCE(SUM(si.amount), 0) as total_invoiced,
+            COALESCE(SUM(sp.amount), 0) as total_paid,
+            COALESCE(SUM(si.amount), 0) - COALESCE(SUM(sp.amount), 0) as total_due
+     FROM suppliers s
+     LEFT JOIN supplier_invoices si ON si.supplier_id = s.id
+     LEFT JOIN supplier_payments sp ON sp.supplier_invoice_id = si.id
+     GROUP BY s.id
+     HAVING total_invoiced > 0
+     ORDER BY total_due DESC`,
+    [],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ aging: rows });
+    }
+  );
+});
+
+// --- PROMOTIONS ENGINE ---
+
+// GET all promotions
+app.get("/api/promotions", (req, res) => {
+  db.all("SELECT * FROM promotions ORDER BY created_at DESC", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ promotions: rows });
+  });
+});
+
+// POST create promotion
+app.post("/api/promotions", requirePerm("manage_inventory"), (req, res) => {
+  const { name, type, value, min_order_amount = 0, buy_qty = 0, get_qty = 0,
+          applies_to = "all", product_id, category_id, starts_at, ends_at } = req.body;
+  if (!name || !type || value === undefined)
+    return res.status(400).json({ error: "name, type, value are required" });
+  db.run(
+    `INSERT INTO promotions (name, type, value, min_order_amount, buy_qty, get_qty, applies_to, product_id, category_id, starts_at, ends_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [name, type, value, min_order_amount, buy_qty, get_qty, applies_to,
+     product_id || null, category_id || null, starts_at || null, ends_at || null],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: "Promotion created", id: this.lastID });
+    }
+  );
+});
+
+// PUT update promotion
+app.put("/api/promotions/:id", requirePerm("manage_inventory"), (req, res) => {
+  const { id } = req.params;
+  const { name, type, value, min_order_amount = 0, buy_qty = 0, get_qty = 0,
+          applies_to = "all", product_id, category_id, active, starts_at, ends_at } = req.body;
+  db.run(
+    `UPDATE promotions SET name=?, type=?, value=?, min_order_amount=?, buy_qty=?, get_qty=?,
+     applies_to=?, product_id=?, category_id=?, active=?, starts_at=?, ends_at=? WHERE id=?`,
+    [name, type, value, min_order_amount, buy_qty, get_qty, applies_to,
+     product_id || null, category_id || null, active !== undefined ? active : 1,
+     starts_at || null, ends_at || null, id],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      if (this.changes === 0) return res.status(404).json({ error: "Promotion not found" });
+      res.json({ message: "Promotion updated" });
+    }
+  );
+});
+
+// DELETE promotion
+app.delete("/api/promotions/:id", requirePerm("manage_inventory"), (req, res) => {
+  db.run("DELETE FROM promotions WHERE id = ?", [req.params.id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    if (this.changes === 0) return res.status(404).json({ error: "Promotion not found" });
+    res.json({ message: "Promotion deleted" });
+  });
+});
+
+// POST /api/promotions/quote — evaluate active promotions against a cart
+// Body: { items: [{product_id, category_id, quantity, price}], order_total }
+app.post("/api/promotions/quote", (req, res) => {
+  const { items = [], order_total = 0 } = req.body;
+  const now = new Date().toISOString().slice(0, 10);
+
+  db.all(
+    `SELECT * FROM promotions WHERE active = 1
+     AND (starts_at IS NULL OR starts_at <= ?)
+     AND (ends_at IS NULL OR ends_at >= ?)
+     ORDER BY id ASC`,
+    [now, now],
+    (err, promos) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      const applied = [];
+      let totalDiscount = 0;
+
+      for (const promo of promos) {
+        const itemMatches = (item) => {
+          if (promo.applies_to === "all") return true;
+          if (promo.applies_to === "product" && promo.product_id)
+            return item.product_id === promo.product_id;
+          if (promo.applies_to === "category" && promo.category_id)
+            return item.category_id === promo.category_id;
+          return false;
+        };
+
+        const matchedItems = items.filter(itemMatches);
+        const matchedTotal = matchedItems.reduce((s, i) => s + i.price * i.quantity, 0);
+        let discount = 0;
+
+        if (promo.type === "percent") {
+          discount = matchedTotal * (promo.value / 100);
+        } else if (promo.type === "fixed") {
+          discount = Math.min(promo.value, matchedTotal);
+        } else if (promo.type === "threshold_percent") {
+          if (order_total >= promo.min_order_amount)
+            discount = matchedTotal * (promo.value / 100);
+        } else if (promo.type === "threshold_fixed") {
+          if (order_total >= promo.min_order_amount)
+            discount = Math.min(promo.value, matchedTotal);
+        } else if (promo.type === "bxgy") {
+          if (promo.buy_qty > 0 && promo.get_qty > 0) {
+            matchedItems.forEach((item) => {
+              const sets = Math.floor(item.quantity / (promo.buy_qty + promo.get_qty));
+              discount += sets * promo.get_qty * item.price;
+            });
+          }
+        }
+
+        if (discount > 0) {
+          totalDiscount += discount;
+          applied.push({
+            promotion_id: promo.id,
+            name: promo.name,
+            type: promo.type,
+            discount: parseFloat(discount.toFixed(2)),
+          });
+        }
+      }
+
+      res.json({
+        applied_promotions: applied,
+        total_promotion_discount: parseFloat(totalDiscount.toFixed(2)),
+      });
+    }
+  );
 });
 
 // --- FOR CHECKOUT (POINT OF SALE) ---
@@ -1388,6 +1686,58 @@ app.put("/api/customers/:id/points", (req, res) => {
       res.json({ message: "Customer points updated" });
     },
   );
+});
+
+// GET customer wallet balance + ledger
+app.get("/api/customers/:id/wallet", (req, res) => {
+  const { id } = req.params;
+  db.get("SELECT balance FROM customers WHERE id = ?", [id], (err, customer) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
+    db.all(
+      "SELECT * FROM customer_wallet_ledger WHERE customer_id = ? ORDER BY created_at DESC LIMIT 50",
+      [id],
+      (err2, ledger) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        res.json({ balance: customer.balance || 0, ledger: ledger || [] });
+      }
+    );
+  });
+});
+
+// POST top-up customer wallet (credit)
+app.post("/api/customers/:id/wallet/topup", (req, res) => {
+  const { id } = req.params;
+  const { amount, note } = req.body;
+  if (!amount || isNaN(amount) || parseFloat(amount) <= 0)
+    return res.status(400).json({ error: "Valid amount is required" });
+
+  const amt = parseFloat(amount);
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
+    db.run(
+      "UPDATE customers SET balance = COALESCE(balance, 0) + ? WHERE id = ?",
+      [amt, id],
+      function (err) {
+        if (err || this.changes === 0) {
+          db.run("ROLLBACK");
+          return res.status(err ? 500 : 404).json({ error: err ? err.message : "Customer not found" });
+        }
+        db.run(
+          "INSERT INTO customer_wallet_ledger (customer_id, type, amount, reference_type, note) VALUES (?, 'credit', ?, 'topup', ?)",
+          [id, amt, note || "Manual top-up"],
+          (err2) => {
+            if (err2) { db.run("ROLLBACK"); return res.status(500).json({ error: err2.message }); }
+            db.run("COMMIT", () => {
+              db.get("SELECT balance FROM customers WHERE id = ?", [id], (e, row) => {
+                res.json({ message: "Wallet topped up", balance: row?.balance || 0 });
+              });
+            });
+          }
+        );
+      }
+    );
+  });
 });
 
 // DELETE customer (only if no linked sales)
@@ -1602,7 +1952,7 @@ app.get("/api/sales/:id", (req, res) => {
 });
 
 // VOID a sale — marks as voided and restores stock to outlet
-app.put("/api/sales/:id/void", (req, res) => {
+app.put("/api/sales/:id/void", requirePerm("void_sales"), (req, res) => {
   const { id } = req.params;
   const { void_reason } = req.body;
 
@@ -1812,6 +2162,22 @@ app.post("/api/sales", (req, res) => {
           );
         }
 
+        // Debit wallet for any Wallet payments
+        const walletPayments = finalPayments.filter((p) => p.method === "Wallet");
+        if (customer_id && walletPayments.length > 0) {
+          const walletTotal = walletPayments.reduce((s, p) => s + p.amount, 0);
+          db.run(
+            "UPDATE customers SET balance = COALESCE(balance, 0) - ? WHERE id = ?",
+            [walletTotal, customer_id],
+            (err) => { if (err) hasError = true; }
+          );
+          db.run(
+            "INSERT INTO customer_wallet_ledger (customer_id, type, amount, reference_type, reference_id, note) VALUES (?, 'debit', ?, 'sale', ?, ?)",
+            [customer_id, walletTotal, saleId, `Debit for Sale #${saleId}`],
+            (err) => { if (err) hasError = true; }
+          );
+        }
+
         // 5. Commit or Rollback
         if (hasError) {
           db.run("ROLLBACK");
@@ -1857,7 +2223,7 @@ app.get("/api/transfers", (req, res) => {
 });
 
 // Create a new inventory transfer (atomically moves stock between outlets)
-app.post("/api/transfers", (req, res) => {
+app.post("/api/transfers", requirePerm("manage_inventory"), (req, res) => {
   const {
     product_id,
     from_outlet_id,
@@ -1983,7 +2349,7 @@ app.get("/api/adjustments", (req, res) => {
   });
 });
 
-app.post("/api/adjustments", (req, res) => {
+app.post("/api/adjustments", requirePerm("manage_inventory"), (req, res) => {
   const { product_id, outlet_id, employee_id, quantity_change, reason } =
     req.body;
 
@@ -2128,12 +2494,21 @@ app.get("/api/reports/dashboard", async (req, res) => {
       ORDER BY day ASC
     `);
 
+    // 7. Today's expenses total (deducted from net profit)
+    const expenseRows = await getQuery(
+      `SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE expense_date = date('now','localtime')`
+    );
+    const todayExpenses = expenseRows[0]?.total || 0;
+    const netProfitToday = todayProfit - todayExpenses;
+
     res.json({
       zReport,
       totalRevenueToday,
       taxInclusive,
       taxExclusive,
-      todayProfit,
+      todayProfit: netProfitToday,
+      todayGrossProfit: todayProfit,
+      todayExpenses,
       saleCount,
       topSelling,
       lowStock,
@@ -3452,6 +3827,499 @@ app.post("/api/supplier-returns", (req, res) => {
         });
       },
     );
+  });
+});
+
+// --- ROUTES: PARKED SALES (Phase 3) ---
+
+// List all parked sales (with item count)
+app.get("/api/parked-sales", (req, res) => {
+  const { outlet_id } = req.query;
+  let sql = `
+    SELECT ps.*, e.name as employee_name, c.name as customer_name,
+           COUNT(psi.id) as item_count
+    FROM parked_sales ps
+    LEFT JOIN employees e ON ps.employee_id = e.id
+    LEFT JOIN customers c ON ps.customer_id = c.id
+    LEFT JOIN parked_sale_items psi ON psi.parked_sale_id = ps.id
+  `;
+  const params = [];
+  if (outlet_id) {
+    sql += " WHERE ps.outlet_id = ?";
+    params.push(outlet_id);
+  }
+  sql += " GROUP BY ps.id ORDER BY ps.parked_at DESC";
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ parkedSales: rows });
+  });
+});
+
+// Get a single parked sale with all items
+app.get("/api/parked-sales/:id", (req, res) => {
+  const { id } = req.params;
+  db.get(
+    `SELECT ps.*, e.name as employee_name, c.name as customer_name
+     FROM parked_sales ps
+     LEFT JOIN employees e ON ps.employee_id = e.id
+     LEFT JOIN customers c ON ps.customer_id = c.id
+     WHERE ps.id = ?`,
+    [id],
+    (err, sale) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!sale) return res.status(404).json({ error: "Parked sale not found" });
+      db.all(
+        "SELECT * FROM parked_sale_items WHERE parked_sale_id = ?",
+        [id],
+        (err, items) => {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json({ parkedSale: sale, items });
+        }
+      );
+    }
+  );
+});
+
+// Park a sale (create)
+app.post("/api/parked-sales", (req, res) => {
+  const { employee_id, outlet_id, customer_id, label, notes, items } = req.body;
+  if (!items || items.length === 0) {
+    return res.status(400).json({ error: "Cannot park an empty cart" });
+  }
+
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
+    db.run(
+      "INSERT INTO parked_sales (employee_id, outlet_id, customer_id, label, notes) VALUES (?, ?, ?, ?, ?)",
+      [employee_id || null, outlet_id || null, customer_id || null, label || null, notes || null],
+      function (err) {
+        if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
+        const parkedId = this.lastID;
+        const stmt = db.prepare(
+          "INSERT INTO parked_sale_items (parked_sale_id, product_id, variant_id, product_name, quantity, price, effective_tax_rate) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        );
+        items.forEach((item) => {
+          stmt.run(parkedId, item.product_id || null, item.variant_id || null,
+            item.product_name || item.name || "", item.quantity, item.price, item.effective_tax_rate || 0);
+        });
+        stmt.finalize();
+        db.run("COMMIT", (err) => {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json({ message: "Sale parked successfully", id: parkedId });
+        });
+      }
+    );
+  });
+});
+
+// Delete (unpark/restore) a parked sale
+app.delete("/api/parked-sales/:id", (req, res) => {
+  const { id } = req.params;
+  db.run("DELETE FROM parked_sales WHERE id = ?", [id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    if (this.changes === 0) return res.status(404).json({ error: "Parked sale not found" });
+    res.json({ message: "Parked sale removed" });
+  });
+});
+
+// --- APPROVAL WORKFLOW TABLES (Phase 1) ---
+// Ensure approval tables exist on startup (idempotent)
+db.serialize(() => {
+  db.run(`CREATE TABLE IF NOT EXISTS approval_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_type TEXT NOT NULL,
+    reference_id INTEGER NOT NULL,
+    reference_type TEXT NOT NULL,
+    requested_by TEXT,
+    status TEXT DEFAULT 'pending_approval',
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS approval_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    approval_request_id INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    action_by TEXT,
+    reason TEXT,
+    actioned_at TEXT DEFAULT (datetime('now','localtime'))
+  )`);
+});
+
+// --- ROUTES: APPROVAL WORKFLOW ---
+
+// List pending approvals (with context info)
+app.get("/api/approvals", (req, res) => {
+  const { status = "pending_approval" } = req.query;
+  db.all(
+    `SELECT * FROM approval_requests WHERE status = ? ORDER BY created_at DESC`,
+    [status],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ approvals: rows });
+    }
+  );
+});
+
+// Submit a PO for approval
+app.post("/api/purchase-orders/:id/submit", (req, res) => {
+  const { id } = req.params;
+  const { requested_by, notes } = req.body;
+
+  db.get("SELECT * FROM purchase_orders WHERE id = ?", [id], (err, po) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!po) return res.status(404).json({ error: "PO not found" });
+    if (po.status !== "Draft")
+      return res.status(400).json({ error: "Only Draft POs can be submitted for approval" });
+
+    db.serialize(() => {
+      db.run("BEGIN TRANSACTION");
+      db.run(
+        "UPDATE purchase_orders SET status = 'pending_approval' WHERE id = ?",
+        [id],
+        (err) => {
+          if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
+        }
+      );
+      db.run(
+        "INSERT INTO approval_requests (request_type, reference_id, reference_type, requested_by, notes) VALUES ('po_approval', ?, 'purchase_order', ?, ?)",
+        [id, requested_by || null, notes || null],
+        function (err) {
+          if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
+          db.run("COMMIT", (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: "PO submitted for approval", approval_request_id: this.lastID });
+          });
+        }
+      );
+    });
+  });
+});
+
+// Approve or reject a PO
+app.post("/api/purchase-orders/:id/approve", (req, res) => {
+  const { id } = req.params;
+  const { action, action_by, reason } = req.body; // action: 'approved' | 'rejected'
+
+  if (!["approved", "rejected"].includes(action)) {
+    return res.status(400).json({ error: "action must be 'approved' or 'rejected'" });
+  }
+
+  db.get("SELECT * FROM purchase_orders WHERE id = ?", [id], (err, po) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!po) return res.status(404).json({ error: "PO not found" });
+    if (po.status !== "pending_approval")
+      return res.status(400).json({ error: "Only POs pending approval can be approved/rejected" });
+
+    db.get(
+      "SELECT id FROM approval_requests WHERE reference_type = 'purchase_order' AND reference_id = ? AND status = 'pending_approval'",
+      [id],
+      (err, req_row) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        db.serialize(() => {
+          db.run("BEGIN TRANSACTION");
+          db.run(
+            "UPDATE purchase_orders SET status = ? WHERE id = ?",
+            [action === "approved" ? "Approved" : "Draft", id]
+          );
+          if (req_row) {
+            db.run(
+              "UPDATE approval_requests SET status = ? WHERE id = ?",
+              [action, req_row.id]
+            );
+            db.run(
+              "INSERT INTO approval_actions (approval_request_id, action, action_by, reason) VALUES (?, ?, ?, ?)",
+              [req_row.id, action, action_by || null, reason || null]
+            );
+          }
+          db.run(
+            "INSERT INTO action_history (user_name, action_type, description) VALUES (?, 'po_approval', ?)",
+            [action_by || "System", `PO #${id} ${action} by ${action_by || "manager"}. ${reason || ""}`]
+          );
+          db.run("COMMIT", (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: `PO ${action} successfully` });
+          });
+        });
+      }
+    );
+  });
+});
+
+// Submit a transfer for approval
+app.post("/api/transfers/:id/submit", (req, res) => {
+  const { id } = req.params;
+  const { requested_by, notes } = req.body;
+
+  db.get("SELECT * FROM inventory_transfers WHERE id = ?", [id], (err, tr) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!tr) return res.status(404).json({ error: "Transfer not found" });
+    if (tr.status !== "draft")
+      return res.status(400).json({ error: "Only draft transfers can be submitted for approval" });
+
+    db.serialize(() => {
+      db.run("BEGIN TRANSACTION");
+      db.run(
+        "UPDATE inventory_transfers SET status = 'pending_approval' WHERE id = ?",
+        [id],
+        (err) => {
+          if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
+        }
+      );
+      db.run(
+        "INSERT INTO approval_requests (request_type, reference_id, reference_type, requested_by, notes) VALUES ('str_approval', ?, 'transfer', ?, ?)",
+        [id, requested_by || null, notes || null],
+        function (err) {
+          if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
+          db.run("COMMIT", (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: "Transfer submitted for approval", approval_request_id: this.lastID });
+          });
+        }
+      );
+    });
+  });
+});
+
+// Approve or reject a transfer
+app.post("/api/transfers/:id/approve", (req, res) => {
+  const { id } = req.params;
+  const { action, action_by, reason } = req.body;
+
+  if (!["approved", "rejected"].includes(action)) {
+    return res.status(400).json({ error: "action must be 'approved' or 'rejected'" });
+  }
+
+  db.get("SELECT * FROM inventory_transfers WHERE id = ?", [id], (err, tr) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!tr) return res.status(404).json({ error: "Transfer not found" });
+    if (tr.status !== "pending_approval")
+      return res.status(400).json({ error: "Only transfers pending approval can be approved/rejected" });
+
+    db.get(
+      "SELECT id FROM approval_requests WHERE reference_type = 'transfer' AND reference_id = ? AND status = 'pending_approval'",
+      [id],
+      (err, req_row) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        db.serialize(() => {
+          db.run("BEGIN TRANSACTION");
+          db.run(
+            "UPDATE inventory_transfers SET status = ? WHERE id = ?",
+            [action === "approved" ? "approved" : "draft", id]
+          );
+          if (req_row) {
+            db.run("UPDATE approval_requests SET status = ? WHERE id = ?", [action, req_row.id]);
+            db.run(
+              "INSERT INTO approval_actions (approval_request_id, action, action_by, reason) VALUES (?, ?, ?, ?)",
+              [req_row.id, action, action_by || null, reason || null]
+            );
+          }
+          db.run(
+            "INSERT INTO action_history (user_name, action_type, description) VALUES (?, 'str_approval', ?)",
+            [action_by || "System", `Transfer #${id} ${action} by ${action_by || "manager"}. ${reason || ""}`]
+          );
+          db.run("COMMIT", (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: `Transfer ${action} successfully` });
+          });
+        });
+      }
+    );
+  });
+});
+
+// --- BARCODE TEMPLATES ---
+
+app.get("/api/barcode-templates", (req, res) => {
+  db.all("SELECT * FROM barcode_templates ORDER BY is_default DESC, name ASC", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ templates: rows });
+  });
+});
+
+app.post("/api/barcode-templates", requirePerm("manage_inventory"), (req, res) => {
+  const { name, width_mm = 50, height_mm = 30, show_name = 1, show_price = 1, show_barcode = 1, show_sku = 0, show_brand = 0, font_size = 10, is_default = 0 } = req.body;
+  if (!name) return res.status(400).json({ error: "Name required" });
+  db.serialize(() => {
+    if (is_default) db.run("UPDATE barcode_templates SET is_default = 0");
+    db.run(
+      "INSERT INTO barcode_templates (name, width_mm, height_mm, show_name, show_price, show_barcode, show_sku, show_brand, font_size, is_default) VALUES (?,?,?,?,?,?,?,?,?,?)",
+      [name, width_mm, height_mm, show_name ? 1 : 0, show_price ? 1 : 0, show_barcode ? 1 : 0, show_sku ? 1 : 0, show_brand ? 1 : 0, font_size, is_default ? 1 : 0],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ id: this.lastID });
+      }
+    );
+  });
+});
+
+app.put("/api/barcode-templates/:id", requirePerm("manage_inventory"), (req, res) => {
+  const { id } = req.params;
+  const { name, width_mm, height_mm, show_name, show_price, show_barcode, show_sku, show_brand, font_size, is_default } = req.body;
+  if (!name) return res.status(400).json({ error: "Name required" });
+  db.serialize(() => {
+    if (is_default) db.run("UPDATE barcode_templates SET is_default = 0");
+    db.run(
+      "UPDATE barcode_templates SET name=?, width_mm=?, height_mm=?, show_name=?, show_price=?, show_barcode=?, show_sku=?, show_brand=?, font_size=?, is_default=? WHERE id=?",
+      [name, width_mm, height_mm, show_name ? 1 : 0, show_price ? 1 : 0, show_barcode ? 1 : 0, show_sku ? 1 : 0, show_brand ? 1 : 0, font_size, is_default ? 1 : 0, id],
+      (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ updated: true });
+      }
+    );
+  });
+});
+
+app.delete("/api/barcode-templates/:id", requirePerm("manage_inventory"), (req, res) => {
+  db.run("DELETE FROM barcode_templates WHERE id = ?", [req.params.id], (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ deleted: true });
+  });
+});
+
+// POST /api/barcode-print-jobs — log a batch print event
+app.post("/api/barcode-print-jobs", (req, res) => {
+  const { template_id, items = [] } = req.body;
+  if (!items.length) return res.status(400).json({ error: "No items" });
+  const stmt = db.prepare(
+    "INSERT INTO barcode_print_jobs (template_id, product_id, product_name, barcode, price, copies) VALUES (?,?,?,?,?,?)"
+  );
+  for (const item of items) {
+    stmt.run([template_id || null, item.product_id || null, item.name || "", item.barcode || "", item.price || 0, item.copies || 1]);
+  }
+  stmt.finalize((err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ logged: items.length });
+  });
+});
+
+// --- EXPENSES ---
+
+// Expense categories CRUD
+app.get("/api/expense-categories", (req, res) => {
+  db.all("SELECT * FROM expense_categories ORDER BY name ASC", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ categories: rows });
+  });
+});
+
+app.post("/api/expense-categories", requirePerm("manage_inventory"), (req, res) => {
+  const { name, description } = req.body;
+  if (!name) return res.status(400).json({ error: "Name required" });
+  db.run("INSERT INTO expense_categories (name, description) VALUES (?,?)", [name, description || null], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ id: this.lastID });
+  });
+});
+
+app.put("/api/expense-categories/:id", requirePerm("manage_inventory"), (req, res) => {
+  const { name, description } = req.body;
+  if (!name) return res.status(400).json({ error: "Name required" });
+  db.run("UPDATE expense_categories SET name=?, description=? WHERE id=?", [name, description || null, req.params.id], (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ updated: true });
+  });
+});
+
+app.delete("/api/expense-categories/:id", requirePerm("manage_inventory"), (req, res) => {
+  db.run("DELETE FROM expense_categories WHERE id=?", [req.params.id], (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ deleted: true });
+  });
+});
+
+// Expenses CRUD
+app.get("/api/expenses", (req, res) => {
+  const { outlet_id, category_id, from, to } = req.query;
+  let where = "WHERE 1=1";
+  const params = [];
+  if (outlet_id) { where += " AND e.outlet_id=?"; params.push(outlet_id); }
+  if (category_id) { where += " AND e.category_id=?"; params.push(category_id); }
+  if (from) { where += " AND e.expense_date >= ?"; params.push(from); }
+  if (to) { where += " AND e.expense_date <= ?"; params.push(to); }
+
+  db.all(`
+    SELECT e.*, ec.name as category_name, o.name as outlet_name,
+           emp.name as employee_name
+    FROM expenses e
+    LEFT JOIN expense_categories ec ON e.category_id = ec.id
+    LEFT JOIN outlets o ON e.outlet_id = o.id
+    LEFT JOIN employees emp ON e.employee_id = emp.id
+    ${where}
+    ORDER BY e.expense_date DESC, e.created_at DESC
+  `, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ expenses: rows });
+  });
+});
+
+app.post("/api/expenses", (req, res) => {
+  const { category_id, outlet_id, shift_id, employee_id, amount, description, reference, expense_date } = req.body;
+  if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0)
+    return res.status(400).json({ error: "Valid amount required" });
+  db.run(
+    `INSERT INTO expenses (category_id, outlet_id, shift_id, employee_id, amount, description, reference, expense_date)
+     VALUES (?,?,?,?,?,?,?,?)`,
+    [
+      category_id || null, outlet_id || null, shift_id || null, employee_id || null,
+      parseFloat(amount), description || null, reference || null,
+      expense_date || new Date().toISOString().slice(0, 10),
+    ],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id: this.lastID });
+    }
+  );
+});
+
+app.put("/api/expenses/:id", (req, res) => {
+  const { category_id, outlet_id, shift_id, employee_id, amount, description, reference, expense_date } = req.body;
+  if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0)
+    return res.status(400).json({ error: "Valid amount required" });
+  db.run(
+    `UPDATE expenses SET category_id=?, outlet_id=?, shift_id=?, employee_id=?, amount=?,
+     description=?, reference=?, expense_date=? WHERE id=?`,
+    [
+      category_id || null, outlet_id || null, shift_id || null, employee_id || null,
+      parseFloat(amount), description || null, reference || null,
+      expense_date || new Date().toISOString().slice(0, 10), req.params.id,
+    ],
+    (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ updated: true });
+    }
+  );
+});
+
+app.delete("/api/expenses/:id", requirePerm("manage_inventory"), (req, res) => {
+  db.run("DELETE FROM expenses WHERE id=?", [req.params.id], (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ deleted: true });
+  });
+});
+
+// Summary: expenses by category for a date range (used by reports/dashboard)
+app.get("/api/expenses/summary", (req, res) => {
+  const { from, to, outlet_id } = req.query;
+  let where = "WHERE 1=1";
+  const params = [];
+  if (from) { where += " AND e.expense_date >= ?"; params.push(from); }
+  if (to) { where += " AND e.expense_date <= ?"; params.push(to); }
+  if (outlet_id) { where += " AND e.outlet_id = ?"; params.push(outlet_id); }
+
+  db.all(`
+    SELECT ec.name as category, SUM(e.amount) as total, COUNT(e.id) as count
+    FROM expenses e
+    LEFT JOIN expense_categories ec ON e.category_id = ec.id
+    ${where}
+    GROUP BY e.category_id
+    ORDER BY total DESC
+  `, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    const grandTotal = rows.reduce((s, r) => s + r.total, 0);
+    res.json({ summary: rows, grand_total: grandTotal });
   });
 });
 

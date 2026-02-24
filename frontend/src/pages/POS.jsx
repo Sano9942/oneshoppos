@@ -117,13 +117,7 @@ export default function POS() {
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showParkedModal, setShowParkedModal] = useState(false);
-  const [parkedSales, setParkedSales] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("parkedSales")) || [];
-    } catch {
-      return [];
-    }
-  });
+  const [parkedSales, setParkedSales] = useState([]);
   const [customerSearchFocused, setCustomerSearchFocused] = useState(false);
 
   const [outlets, setOutlets] = useState([]);
@@ -133,13 +127,19 @@ export default function POS() {
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [pointsRedeemed, setPointsRedeemed] = useState(0);
+  const [customerWalletBalance, setCustomerWalletBalance] = useState(0);
 
   const [variantSelectProduct, setVariantSelectProduct] = useState(null);
   const [productVariants, setProductVariants] = useState([]);
 
+  // Promotions
+  const [appliedPromotions, setAppliedPromotions] = useState([]);
+  const [promoDiscount, setPromoDiscount] = useState(0);
+
   const inputRef = useRef(null);
   const amountInputRef = useRef(null);
   const searchTimeoutRef = useRef(null);
+  const promoTimeoutRef = useRef(null);
 
   useEffect(() => {
     fetch("http://localhost:5000/api/outlets")
@@ -158,6 +158,46 @@ export default function POS() {
       .then((d) => setCustomers(d.customers || []))
       .catch((err) => console.error("Failed to load customers", err)); // Fixed empty catch block
   }, []);
+
+  useEffect(() => {
+    if (selectedOutletId) fetchParkedSales();
+  }, [selectedOutletId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!selectedCustomerId) { setCustomerWalletBalance(0); return; }
+    fetch(`http://localhost:5000/api/customers/${selectedCustomerId}/wallet`)
+      .then((r) => r.json())
+      .then((d) => setCustomerWalletBalance(d.balance || 0))
+      .catch(() => setCustomerWalletBalance(0));
+  }, [selectedCustomerId]);
+
+  // Evaluate promotions whenever cart changes (debounced 400ms)
+  useEffect(() => {
+    if (promoTimeoutRef.current) clearTimeout(promoTimeoutRef.current);
+    if (cart.length === 0) { setAppliedPromotions([]); setPromoDiscount(0); return; }
+    promoTimeoutRef.current = setTimeout(async () => {
+      try {
+        const orderTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+        const res = await fetch("http://localhost:5000/api/promotions/quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: cart.map((i) => ({
+              product_id: i.original_product_id || i.id,
+              category_id: i.category_id || null,
+              quantity: i.quantity,
+              price: i.price,
+            })),
+            order_total: orderTotal,
+          }),
+        });
+        const data = await res.json();
+        setAppliedPromotions(data.applied_promotions || []);
+        setPromoDiscount(data.total_promotion_discount || 0);
+      } catch { /* fail silently — promotions are non-blocking */ }
+    }, 400);
+    return () => clearTimeout(promoTimeoutRef.current);
+  }, [cart]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!selectedOutletId) return;
@@ -207,8 +247,8 @@ export default function POS() {
     : grossTotal;
 
   const total = isTaxInclusive
-    ? grossTotal - discountValue - pointsRedeemed
-    : grossTotal - discountValue + taxTotal - pointsRedeemed;
+    ? grossTotal - discountValue - promoDiscount - pointsRedeemed
+    : grossTotal - discountValue - promoDiscount + taxTotal - pointsRedeemed;
 
   const pointsEarned = total > 0 ? Math.floor(total / 100) : 0;
 
@@ -217,50 +257,74 @@ export default function POS() {
   const changeDue =
     total >= 0 ? Math.max(0, totalPaid - total) : Math.abs(total);
 
-  const saveParkedSales = (sales) => {
-    setParkedSales(sales);
-    localStorage.setItem("parkedSales", JSON.stringify(sales));
+  const fetchParkedSales = async () => {
+    try {
+      const params = selectedOutletId ? `?outlet_id=${selectedOutletId}` : "";
+      const res = await fetch(`http://localhost:5000/api/parked-sales${params}`);
+      const data = await res.json();
+      setParkedSales(data.parkedSales || []);
+    } catch {}
   };
 
-  const handleParkSale = () => {
+  const handleParkSale = async () => {
     if (cart.length === 0) return;
-    const newSale = {
-      id: Date.now(),
-      date: new Date().toLocaleString(),
-      cart,
-      customerId: selectedCustomerId,
-      discountInput,
-      discountType,
-      pointsRedeemed,
-      isTaxInclusive,
-      orderNote,
-      total,
-    };
-    saveParkedSales([newSale, ...parkedSales]);
-
-    // Clear current POS
-    setCart([]);
-    setSelectedCustomerId("");
-    setPointsRedeemed(0);
-    setCustomerSearch("");
-    setDiscountInput("");
-    setDiscountType("fixed");
-    setOrderNote("");
-    setIsTaxInclusive(false);
+    try {
+      const res = await fetch("http://localhost:5000/api/parked-sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employee_id: loggedInEmployee?.id || null,
+          outlet_id: selectedOutletId || null,
+          customer_id: selectedCustomerId || null,
+          notes: orderNote || null,
+          items: cart.map((item) => ({
+            product_id: item.id,
+            variant_id: item.variant_id || null,
+            product_name: item.name,
+            quantity: item.quantity,
+            price: item.price,
+            effective_tax_rate: item.effective_tax_rate || 0,
+          })),
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      // Clear current POS
+      setCart([]);
+      setSelectedCustomerId("");
+      setPointsRedeemed(0);
+      setCustomerSearch("");
+      setDiscountInput("");
+      setDiscountType("fixed");
+      setOrderNote("");
+      setIsTaxInclusive(false);
+      fetchParkedSales();
+    } catch (err) {
+      alert("Failed to park sale: " + err.message);
+    }
   };
 
-  const handleRestoreParkedSale = (sale) => {
-    setCart(sale.cart || []);
-    setSelectedCustomerId(sale.customerId || "");
-    setDiscountInput(sale.discountInput || "");
-    setDiscountType(sale.discountType || "fixed");
-    setPointsRedeemed(sale.pointsRedeemed || 0);
-    setIsTaxInclusive(sale.isTaxInclusive || false);
-    setOrderNote(sale.orderNote || "");
-
-    // Remove from parked
-    saveParkedSales(parkedSales.filter((s) => s.id !== sale.id));
-    setShowParkedModal(false);
+  const handleRestoreParkedSale = async (sale) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/parked-sales/${sale.id}`);
+      const data = await res.json();
+      const restoredItems = (data.items || []).map((item) => ({
+        id: item.product_id,
+        variant_id: item.variant_id || null,
+        name: item.product_name,
+        quantity: item.quantity,
+        price: item.price,
+        effective_tax_rate: item.effective_tax_rate || 0,
+      }));
+      setCart(restoredItems);
+      if (data.parkedSale.customer_id) setSelectedCustomerId(String(data.parkedSale.customer_id));
+      setOrderNote(data.parkedSale.notes || "");
+      // Delete from DB after restore
+      await fetch(`http://localhost:5000/api/parked-sales/${sale.id}`, { method: "DELETE" });
+      fetchParkedSales();
+      setShowParkedModal(false);
+    } catch (err) {
+      alert("Failed to restore parked sale: " + err.message);
+    }
   };
 
   useEffect(() => {
@@ -277,6 +341,7 @@ export default function POS() {
 
   const handleCheckoutModalOpen = () => {
     setPayments([]);
+    setPaymentMethod("Cash");
     if (remainingBalance > 0) {
       setPaymentAmountInput(remainingBalance.toFixed(2));
     }
@@ -460,6 +525,8 @@ export default function POS() {
           customer_id: selectedCustomerId ? parseInt(selectedCustomerId) : null,
           discount_amount: parseFloat(discountInput || 0),
           discount_type: discountType,
+          promo_discount: promoDiscount,
+          applied_promotions: appliedPromotions,
           points_earned: pointsEarned,
           points_redeemed: pointsRedeemed,
           notes: orderNote || null,
@@ -584,6 +651,9 @@ export default function POS() {
         setPointsRedeemed(0);
         setDiscountInput("");
         setDiscountType("fixed");
+        setCustomerWalletBalance(0);
+        setAppliedPromotions([]);
+        setPromoDiscount(0);
         setIsCheckoutModalOpen(false);
       } else {
         const data = await res.json();
@@ -769,7 +839,7 @@ export default function POS() {
                 <Tag size={14} /> Park Sale
               </button>
               <button
-                onClick={() => setShowParkedModal(true)}
+                onClick={() => { setShowParkedModal(true); fetchParkedSales(); }}
                 className="flex items-center gap-2 text-[#8066FF] border border-indigo-100 bg-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-indigo-50 transition-colors shadow-sm"
               >
                 <Clock size={14} /> Parked Sales
@@ -1114,6 +1184,16 @@ export default function POS() {
                 PKRs {discountValue.toFixed(2)}
               </span>
             </div>
+            {promoDiscount > 0 && (
+              <div className="text-sm pt-2">
+                {appliedPromotions.map((ap) => (
+                  <div key={ap.promotion_id} className="flex justify-between items-center text-emerald-400">
+                    <span className="font-medium truncate max-w-[160px]">🏷 {ap.name}</span>
+                    <span className="font-bold">- PKRs {ap.discount.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             {pointsRedeemed > 0 && (
               <div className="flex justify-between items-center text-sm pt-2 text-[#8066FF]">
                 <span className="font-bold">Points Redeemed</span>
@@ -1186,7 +1266,7 @@ export default function POS() {
                   <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wide">
                     Payment Method
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <button
                       type="button"
                       onClick={() => setPaymentMethod("Cash")}
@@ -1201,7 +1281,24 @@ export default function POS() {
                     >
                       <CreditCard size={18} /> Card
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod("Wallet");
+                        const walletAmt = Math.min(remainingBalance, customerWalletBalance);
+                        if (walletAmt > 0) setPaymentAmountInput(walletAmt.toFixed(2));
+                      }}
+                      disabled={!selectedCustomerId || customerWalletBalance <= 0}
+                      className={`py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-bold transition-all border-2 ${paymentMethod === "Wallet" ? "border-[#8066FF] bg-[#8066FF]/5 text-[#8066FF]" : "border-slate-100 bg-white hover:border-slate-300 text-slate-600"} disabled:opacity-40 disabled:cursor-not-allowed`}
+                    >
+                      <Wallet size={18} /> Wallet
+                    </button>
                   </div>
+                  {selectedCustomerId && (
+                    <p className="text-xs text-slate-500 mt-2">
+                      Customer wallet balance: <span className={`font-bold ${customerWalletBalance > 0 ? "text-emerald-600" : "text-slate-400"}`}>PKRs {customerWalletBalance.toFixed(2)}</span>
+                    </p>
+                  )}
                 </div>
                 <div className="pt-2">
                   <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wide">
@@ -1247,6 +1344,8 @@ export default function POS() {
                         <div className="text-slate-800 font-bold text-sm flex items-center gap-2">
                           {p.method === "Cash" ? (
                             <Banknote className="text-[#8066FF]" size={16} />
+                          ) : p.method === "Wallet" ? (
+                            <Wallet className="text-[#8066FF]" size={16} />
                           ) : (
                             <CreditCard className="text-[#8066FF]" size={16} />
                           )}{" "}
@@ -1402,27 +1501,30 @@ export default function POS() {
                     >
                       <div>
                         <div className="font-bold text-slate-800 text-lg mb-0.5">
-                          PKR {sale.total.toFixed(2)}
+                          Parked Sale #{sale.id}
                         </div>
                         <div className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1.5">
-                          {sale.date}
+                          {new Date(sale.parked_at).toLocaleString()}
                         </div>
                         <div className="text-sm text-slate-600 flex items-center gap-2">
                           <ShoppingBag size={14} className="text-[#8066FF]" />
-                          {sale.cart.reduce((s, i) => s + i.quantity, 0)} items
-                          {sale.customerId
-                            ? ` • Customer #${sale.customerId}`
+                          {sale.item_count} item(s)
+                          {sale.customer_name
+                            ? ` • ${sale.customer_name}`
                             : " • Walk-in"}
+                          {sale.employee_name ? ` • ${sale.employee_name}` : ""}
                         </div>
+                        {sale.notes && (
+                          <div className="text-xs text-slate-400 mt-1">{sale.notes}</div>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() =>
-                            executeWithPermission("pos_void", () =>
-                              saveParkedSales(
-                                parkedSales.filter((s) => s.id !== sale.id),
-                              ),
-                            )
+                            executeWithPermission("pos_void", async () => {
+                              await fetch(`http://localhost:5000/api/parked-sales/${sale.id}`, { method: "DELETE" });
+                              fetchParkedSales();
+                            })
                           }
                           className="px-3 py-2 text-red-500 bg-red-50 hover:bg-red-100 rounded-lg text-sm font-bold transition-colors"
                         >

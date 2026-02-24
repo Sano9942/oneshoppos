@@ -92,7 +92,7 @@ export default function Dashboard() {
     </div>
   );
 
-  const { totalRevenueToday, todayProfit, saleCount, inventoryValue, topSelling, lowStock, zReport, salesTrend = [] } = data;
+  const { totalRevenueToday, todayProfit, todayExpenses = 0, saleCount, inventoryValue, topSelling, lowStock, zReport, salesTrend = [] } = data;
 
   const zReportText = zReport.length > 0
     ? zReport.map((z) => `${z.payment_method}: ${fmt(z.total)}`).join(" · ")
@@ -141,7 +141,7 @@ export default function Dashboard() {
         <KPICard
           title="Net Profit Today"
           value={fmt(todayProfit)}
-          sub="Gross sales minus cost of goods"
+          sub={todayExpenses > 0 ? `After ${fmt(todayExpenses)} expenses` : "Gross sales minus cost of goods"}
           icon={TrendingUp}
           iconBg="bg-emerald-100" iconColor="text-emerald-600"
           valueColor="text-emerald-600"

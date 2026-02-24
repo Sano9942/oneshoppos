@@ -18,7 +18,7 @@ oneshoppos/
 │   └── index.html
 ├── backend/
 │   ├── index.js                 ← ALL API endpoints (single file, ~1700 lines)
-│   ├── database.sqlite          ← SQLite database (do NOT delete)
+│   ├── oneshop.db               ← SQLite database (do NOT delete)
 │   ├── migrate*.js              ← Migration scripts (run once at setup)
 │   ├── e2e_test.js              ← E2E + RBAC test script (node e2e_test.js)
 │   └── api_test.js              ← Earlier edge-case API test script

@@ -9,6 +9,7 @@ import {
   PackageCheck,
   ListPlus,
   Download,
+  Send,
 } from "lucide-react";
 
 const exportCSV = (data, filename) => {
@@ -52,6 +53,7 @@ export default function PurchaseOrders() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [_error, setError] = useState(null); // Error state tracked but shown via alert
+  const [submittingApproval, setSubmittingApproval] = useState(false);
 
   useEffect(() => {
     fetchPurchaseOrders();
@@ -192,6 +194,25 @@ export default function PurchaseOrders() {
     }
   };
 
+  const handleSubmitForApproval = async (poId) => {
+    setSubmittingApproval(true);
+    try {
+      const res = await fetch(`http://localhost:5000/api/purchase-orders/${poId}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requested_by: "Manager" }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      alert("PO submitted for approval successfully.");
+      handleViewPO(poId);
+      fetchPurchaseOrders();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSubmittingApproval(false);
+    }
+  };
+
   const openGrnModal = (po, items) => {
     const initialQtys = {};
     items.forEach((item) => {
@@ -325,7 +346,7 @@ export default function PurchaseOrders() {
                   </td>
                   <td className="py-4 px-6">
                     <span
-                      className={`px-3 py-1 text-xs font-bold rounded-full ${po.status === "Received" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}
+                      className={`px-3 py-1 text-xs font-bold rounded-full ${po.status === "Received" ? "bg-green-100 text-green-700" : po.status === "Approved" ? "bg-blue-100 text-blue-700" : po.status === "pending_approval" ? "bg-yellow-100 text-yellow-700" : "bg-amber-100 text-amber-700"}`}
                     >
                       {po.status}
                     </span>
@@ -581,6 +602,16 @@ export default function PurchaseOrders() {
 
           {po.status === "Draft" && (
             <button
+              onClick={() => handleSubmitForApproval(po.id)}
+              disabled={submittingApproval}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md shadow-blue-200 transition-all flex items-center gap-2 disabled:opacity-50"
+            >
+              <Send size={20} />
+              {submittingApproval ? "Submitting..." : "Submit for Approval"}
+            </button>
+          )}
+          {po.status === "Approved" && (
+            <button
               onClick={() => openGrnModal(po, items)}
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md shadow-emerald-200 transition-all flex items-center gap-2"
             >
@@ -608,7 +639,7 @@ export default function PurchaseOrders() {
                 Status
               </div>
               <span
-                className={`px-4 py-1.5 text-sm font-bold rounded-full inline-block mb-3 ${po.status === "Received" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}
+                className={`px-4 py-1.5 text-sm font-bold rounded-full inline-block mb-3 ${po.status === "Received" ? "bg-green-100 text-green-700" : po.status === "Approved" ? "bg-blue-100 text-blue-700" : po.status === "pending_approval" ? "bg-yellow-100 text-yellow-700" : "bg-amber-100 text-amber-700"}`}
               >
                 {po.status}
               </span>

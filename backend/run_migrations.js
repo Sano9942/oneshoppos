@@ -21,6 +21,21 @@ const migrations = [
   "migrate18.js",
   "migrate19.js",
   "migrate20.js",
+  "migrate21.js",
+  "migrate22.js",
+  "migrate23.js",
+  "migrate24.js",
+  "migrate25.js",
+  "migrate26.js",
+  "migrate27.js",
+  "migrate28.js",
+  "migrate29.js",
+  "migrate30.js",
+  "migrate31.js",
+  "migrate32.js",
+  "migrate33.js",
+  "migrate34.js",
+  "migrate35.js",
 ];
 
 for (const m of migrations) {

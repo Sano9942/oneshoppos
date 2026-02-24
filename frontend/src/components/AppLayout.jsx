@@ -22,6 +22,10 @@ import {
   Wallet,
   Clock,
   CircleDot,
+  CheckSquare,
+  CreditCard,
+  Percent,
+  Banknote,
 } from "lucide-react";
 
 export default function AppLayout() {
@@ -135,6 +139,10 @@ export default function AppLayout() {
       moduleName = "Products > Custom Fields/DropDowns";
     else if (path.startsWith("/attribute-sets"))
       moduleName = "Products > Attribute Sets";
+    else if (path.startsWith("/supplier-payables"))
+      moduleName = "Suppliers > Payables";
+    else if (path.startsWith("/promotions"))
+      moduleName = "Promotions";
     // Stock Control
     else if (path.startsWith("/purchase-orders"))
       moduleName = "Stock Control > Purchase Orders";
@@ -155,6 +163,7 @@ export default function AppLayout() {
     } else if (path.startsWith("/attendance"))
       moduleName = "Reports > Employee Attendance";
     // Setup
+    else if (path.startsWith("/expenses")) moduleName = "Expenses";
     else if (path.startsWith("/outlets")) moduleName = "Setup > Outlets";
     else if (path.startsWith("/employees")) moduleName = "Setup > Employees";
     else if (path.startsWith("/barcode-templates"))
@@ -182,6 +191,9 @@ export default function AppLayout() {
     { name: "Orders", path: "/orders", icon: <ShoppingCart size={18} /> },
     { name: "Categories", path: "/categories", icon: <Tags size={18} /> },
     { name: "Suppliers", path: "/suppliers", icon: <Truck size={18} /> },
+    { name: "Supplier Payables", path: "/supplier-payables", icon: <CreditCard size={18} />, requiredPerm: "manage_orders" },
+    { name: "Promotions", path: "/promotions", icon: <Percent size={18} />, requiredPerm: "manage_inventory" },
+    { name: "Expenses", path: "/expenses", icon: <Banknote size={18} /> },
     { name: "Taxes", path: "/taxes", icon: <Settings size={18} /> },
     {
       name: "Products",
@@ -260,6 +272,12 @@ export default function AppLayout() {
       path: "/action-history",
       icon: <ClipboardList size={18} />,
       requiredPerm: "manage_employees",
+    },
+    {
+      name: "Approvals",
+      path: "/approvals",
+      icon: <CheckSquare size={18} />,
+      requiredPerm: "manage_orders",
     },
   ];
 

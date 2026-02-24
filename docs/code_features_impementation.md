@@ -60,7 +60,7 @@ This document captures:
 
 ## Phased Feature Implementation Roadmap
 
-## Phase 0 - Hardening Baseline
+## Phase 0 - Hardening Baseline ✅ COMPLETE
 Goal: reduce regression risk before major development.
 
 Scope:
@@ -81,9 +81,15 @@ Exit criteria:
 - Tests green
 - Docs aligned
 
+Completed: 2026-02-24
+- Fixed `database.sqlite` → `oneshop.db` in ARCHITECTURE.md and PLAN.md
+- `run_migrations.js` updated to include migrate21–migrate30
+- Duplicate `/action-history` route removed from App.jsx
+- `loadEmployeePerms` + `requirePerm()` middleware added to backend/index.js
+
 ---
 
-## Phase 1 - Approval Workflow (PO + STR)
+## Phase 1 - Approval Workflow (PO + STR) ✅ COMPLETE
 Goal: controlled operational approvals for purchasing/transfers.
 
 Scope:
@@ -99,9 +105,16 @@ Exit criteria:
 - No receive/execute from unapproved state
 - Approval trace visible and auditable
 
+Completed: 2026-02-24
+- migrate29.js: approval_requests + approval_actions tables, status column on inventory_transfers
+- Backend: GET /api/approvals, POST .../submit + .../approve for POs and Transfers
+- Frontend: Approvals.jsx page with status filter tabs + approve/reject modal
+- PurchaseOrders.jsx: Submit for Approval button (Draft state), status badge updates
+- AppLayout.jsx: Approvals nav item added
+
 ---
 
-## Phase 2 - Backend RBAC Enforcement
+## Phase 2 - Backend RBAC Enforcement ✅ COMPLETE
 Goal: enforce permissions server-side.
 
 Scope:
@@ -114,9 +127,14 @@ Exit criteria:
 - Unauthorized API calls return `403`
 - UI and API permissions consistent
 
+Completed: 2026-02-24
+- requirePerm() applied to: taxes (manage_inventory), employees/roles (manage_employees),
+  void sales (void_sales), purchase orders (manage_orders), adjustments/transfers (manage_inventory)
+- Unauthorized calls return 403 JSON with error message
+
 ---
 
-## Phase 3 - DB-Backed Parked Sales
+## Phase 3 - DB-Backed Parked Sales ✅ COMPLETE
 Goal: durable parked sales across sessions/devices/outlets.
 
 Scope:
@@ -129,9 +147,14 @@ Exit criteria:
 - Parked sales persist across restart/device
 - Restored cart matches original
 
+Completed: 2026-02-24
+- migrate30.js: parked_sales + parked_sale_items (ON DELETE CASCADE) tables
+- Backend: GET/POST /api/parked-sales, GET/DELETE /api/parked-sales/:id
+- POS.jsx: all localStorage parking replaced with API calls; fetchParkedSales() on mount + outlet change
+
 ---
 
-## Phase 4 - Customer Wallet / Store Credit
+## Phase 4 - Customer Wallet / Store Credit ✅ COMPLETE
 Goal: full wallet payment and ledgered balance control.
 
 Scope:
@@ -144,9 +167,16 @@ Exit criteria:
 - Every wallet change has ledger entry
 - POS can partially/fully pay from wallet safely
 
+Completed: 2026-02-24
+- migrate31.js: customer_wallet_ledger table (credit/debit, reference_type/id, note)
+- Backend: GET /api/customers/:id/wallet (balance + ledger), POST .../wallet/topup
+- Sales route: wallet payments auto-debit balance + create ledger entry atomically
+- POS.jsx: Wallet button in checkout (disabled if no customer/zero balance), shows balance, caps amount
+- Customers.jsx: wallet balance column in table, top-up form in detail panel
+
 ---
 
-## Phase 5 - Supplier Payables + Payments
+## Phase 5 - Supplier Payables + Payments ✅ COMPLETE
 Goal: manage supplier liabilities and settlements.
 
 Scope:
@@ -158,9 +188,17 @@ Scope:
 Exit criteria:
 - Outstanding payable is system-computed and traceable
 
+Completed: 2026-02-24
+- migrate32.js: supplier_invoices + supplier_payments tables
+- GRN receive route: auto-creates INV-GRN-{n} invoice on successful receive
+- Backend: GET /api/supplier-invoices, GET ./:id, POST ./:id/pay, GET /api/supplier-aging
+- Frontend: SupplierPayables.jsx with Aging Summary (expandable) + Invoices list tabs
+- Payment modal: Cash/Bank Transfer/Cheque, reference, paid_by, notes
+- AppLayout: "Supplier Payables" nav item under Suppliers (manage_orders permission)
+
 ---
 
-## Phase 6 - Promotions Engine
+## Phase 6 - Promotions Engine ✅ COMPLETE
 Goal: central pricing rules for discounts/promotions.
 
 Scope:
@@ -175,9 +213,17 @@ Scope:
 Exit criteria:
 - Promotion result deterministic and tested
 
+Completed: 2026-02-24
+- migrate33.js: promotions table (type, value, min_order_amount, buy_qty, get_qty, applies_to, date range, active)
+- Backend CRUD: GET/POST/PUT/DELETE /api/promotions (manage_inventory permission)
+- Backend: POST /api/promotions/quote — evaluates active promos, returns applied_promotions + total_promotion_discount
+- POS.jsx: debounced quote call on cart change; promoDiscount baked into total; applied promo names shown inline
+- Promotions.jsx: CRUD page with type-aware form fields, date range, applies_to scope (all/product/category)
+- AppLayout: Promotions nav item (manage_inventory permission)
+
 ---
 
-## Phase 7 - Barcode Label Designer + Batch Print
+## Phase 7 - Barcode Label Designer + Batch Print ✅ COMPLETE
 Goal: configurable barcode/shelf label generation.
 
 Scope:
@@ -188,9 +234,17 @@ Scope:
 Exit criteria:
 - User-defined label templates with batch output
 
+Completed: 2026-02-24
+- migrate34.js: barcode_templates (size, fields, default flag) + barcode_print_jobs tables; default 50×30mm template seeded
+- Backend CRUD: GET/POST/PUT/DELETE /api/barcode-templates (manage_inventory permission)
+- Backend: POST /api/barcode-print-jobs — logs batch print events
+- BarcodeTemplates.jsx: template CRUD table + Print Labels modal with product search queue + per-item copy count
+- Print engine: pure DOM API Code128B SVG barcode renderer (no external libs), opens print window with mm-exact label layout
+- App.jsx: /barcode-templates route now points to BarcodeTemplates (was PlaceholderPage)
+
 ---
 
-## Phase 8 - Expenses Module
+## Phase 8 - Expenses Module ✅ COMPLETE
 Goal: include operating expenses in profitability.
 
 Scope:
@@ -200,6 +254,17 @@ Scope:
 
 Exit criteria:
 - Profit reports reflect expense deductions
+
+Completed: 2026-02-24
+- migrate35.js: expense_categories + expenses tables; 7 common categories seeded (Rent, Utilities, Salaries…)
+- Backend CRUD: GET/POST/PUT/DELETE /api/expense-categories (manage_inventory), /api/expenses
+- Backend: GET /api/expenses/summary — groups by category with grand total
+- Dashboard API: today's expenses deducted from Net Profit; todayExpenses exposed for sub-label
+- Dashboard.jsx: Net Profit KPI sub-label shows "After PKRs X expenses" when expenses exist
+- Expenses.jsx: two-tab page (Expense List + Summary by Category), date/category/outlet filters
+- Category management modal: add/delete categories inline
+- App.jsx: /expenses route added
+- AppLayout.jsx: "Expenses" nav item (Banknote icon) added
 
 ---
 

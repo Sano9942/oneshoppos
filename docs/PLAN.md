@@ -12,7 +12,7 @@ OneShopPOS is a custom Point of Sale (POS) software for daily retail operations.
 
 - **Frontend:** React + Vite 7.x, Tailwind CSS v4, Lucide React icons
 - **Backend:** Node.js + Express 5.x
-- **Database:** SQLite — single file `backend/database.sqlite`, zero setup, 100% offline
+- **Database:** SQLite — single file `backend/oneshop.db`, zero setup, 100% offline
 - **Environment:** dotenv
 
 ---
