@@ -2,9 +2,19 @@
 
 **Last Updated: 2026-02-24**
 
-**Status: Phase 6 (Review & Polish) Complete — Production Ready + Fully Audited**
+**Status: Phase 12 Complete — Performance, Rollout, and Governance Delivered**
 
 OneShopPOS is a custom Point of Sale (POS) software for daily retail operations. It runs 100% offline on a Windows PC as a local web app, inspired by Xstak/ERPNext in design and feature depth.
+
+---
+
+## Latest Delivery Snapshot (Phase 12)
+
+- Feature flags introduced for high-risk modules (backup/restore, invoice export, approvals, supplier payables)
+- Health endpoint added: `GET /api/health`
+- Preflight checks added: `npm run preflight`
+- Hotspot DB indexes added via `migrate40.js`
+- Full E2E regression now at **69 passed, 0 failed**
 
 ---
 

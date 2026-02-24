@@ -55,6 +55,53 @@ function requirePerm(permission) {
   };
 }
 
+const DEFAULT_FEATURE_FLAGS = {
+  backup_restore: true,
+  e_invoicing_export: true,
+  supplier_payables: true,
+  approvals: true,
+};
+
+function getFeatureFlagsMap(cb) {
+  db.all("SELECT key, enabled FROM feature_flags", [], (err, rows) => {
+    if (err) {
+      // Keep legacy behavior if flags table isn't present yet.
+      if (String(err.message || "").includes("no such table")) {
+        return cb(null, { ...DEFAULT_FEATURE_FLAGS });
+      }
+      return cb(err);
+    }
+
+    const merged = { ...DEFAULT_FEATURE_FLAGS };
+    for (const row of rows || []) {
+      merged[row.key] = Number(row.enabled || 0) === 1;
+    }
+    cb(null, merged);
+  });
+}
+
+function isFeatureEnabled(flagKey, cb) {
+  getFeatureFlagsMap((err, flags) => {
+    if (err) return cb(err);
+    cb(null, Boolean(flags?.[flagKey]));
+  });
+}
+
+function requireFeature(flagKey) {
+  return (req, res, next) => {
+    isFeatureEnabled(flagKey, (err, enabled) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!enabled) {
+        return res.status(503).json({
+          error: `Feature disabled: ${flagKey}`,
+          flag: flagKey,
+        });
+      }
+      next();
+    });
+  };
+}
+
 app.use(loadEmployeePerms);
 
 let isRestoreInProgress = false;
@@ -65,6 +112,74 @@ app.use((req, res, next) => {
     });
   }
   next();
+});
+
+// --- ROUTES: FEATURE FLAGS / HEALTH ---
+
+app.get("/api/feature-flags", requirePerm("manage_employees"), (req, res) => {
+  db.all(
+    "SELECT key, enabled, description, updated_by, updated_at FROM feature_flags ORDER BY key ASC",
+    [],
+    (err, rows) => {
+      if (err) {
+        if (String(err.message || "").includes("no such table")) {
+          const fallback = Object.keys(DEFAULT_FEATURE_FLAGS).map((k) => ({
+            key: k,
+            enabled: DEFAULT_FEATURE_FLAGS[k] ? 1 : 0,
+            description: null,
+            updated_by: null,
+            updated_at: null,
+          }));
+          return res.json({ flags: fallback });
+        }
+        return res.status(500).json({ error: err.message });
+      }
+      return res.json({ flags: rows || [] });
+    }
+  );
+});
+
+app.put("/api/feature-flags/:key", requirePerm("manage_employees"), (req, res) => {
+  const { key } = req.params;
+  const { enabled, description, updated_by } = req.body || {};
+  const enabledInt = enabled ? 1 : 0;
+  db.run(
+    `INSERT INTO feature_flags (key, enabled, description, updated_by, updated_at)
+     VALUES (?, ?, ?, ?, datetime('now','localtime'))
+     ON CONFLICT(key) DO UPDATE SET
+       enabled = excluded.enabled,
+       description = COALESCE(excluded.description, feature_flags.description),
+       updated_by = excluded.updated_by,
+       updated_at = datetime('now','localtime')`,
+    [key, enabledInt, description || null, updated_by || null],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: "Feature flag updated", key, enabled: enabledInt });
+    }
+  );
+});
+
+app.get("/api/health", (req, res) => {
+  const requiredTables = ["sales", "sale_items", "sale_payments", "backup_log", "invoice_sequences", "feature_flags"];
+  db.all(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name IN (${requiredTables
+      .map(() => "?")
+      .join(",")})`,
+    requiredTables,
+    (err, rows) => {
+      if (err) return res.status(500).json({ status: "error", error: err.message });
+      const found = new Set((rows || []).map((r) => r.name));
+      const missingTables = requiredTables.filter((t) => !found.has(t));
+      const ok = missingTables.length === 0;
+      res.status(ok ? 200 : 503).json({
+        status: ok ? "ok" : "degraded",
+        database: "reachable",
+        restore_lock: isRestoreInProgress,
+        missing_tables: missingTables,
+        checked_at: new Date().toISOString(),
+      });
+    }
+  );
 });
 
 // --- ROUTES: TAXES ---
@@ -1332,7 +1447,7 @@ app.delete("/api/purchase-orders/:id", requirePerm("manage_orders"), (req, res) 
 // --- SUPPLIER PAYABLES ---
 
 // GET all supplier invoices (with supplier name, payment totals)
-app.get("/api/supplier-invoices", (req, res) => {
+app.get("/api/supplier-invoices", requireFeature("supplier_payables"), (req, res) => {
   const { supplier_id, status } = req.query;
   let query = `
     SELECT si.*,
@@ -1356,7 +1471,7 @@ app.get("/api/supplier-invoices", (req, res) => {
 });
 
 // GET single supplier invoice with its payments
-app.get("/api/supplier-invoices/:id", (req, res) => {
+app.get("/api/supplier-invoices/:id", requireFeature("supplier_payables"), (req, res) => {
   const { id } = req.params;
   db.get(
     `SELECT si.*, s.name as supplier_name FROM supplier_invoices si
@@ -1378,7 +1493,7 @@ app.get("/api/supplier-invoices/:id", (req, res) => {
 });
 
 // POST record a payment against a supplier invoice
-app.post("/api/supplier-invoices/:id/pay", (req, res) => {
+app.post("/api/supplier-invoices/:id/pay", requireFeature("supplier_payables"), (req, res) => {
   const { id } = req.params;
   const { amount, payment_method = "Cash", reference, paid_by, notes } = req.body;
   if (!amount || isNaN(amount) || parseFloat(amount) <= 0)
@@ -1428,7 +1543,7 @@ app.post("/api/supplier-invoices/:id/pay", (req, res) => {
 });
 
 // GET supplier aging summary — one row per supplier with total owed
-app.get("/api/supplier-aging", (req, res) => {
+app.get("/api/supplier-aging", requireFeature("supplier_payables"), (req, res) => {
   db.all(
     `SELECT s.id, s.name as supplier_name, s.phone,
             COUNT(DISTINCT si.id) as invoice_count,
@@ -4014,7 +4129,7 @@ db.serialize(() => {
 // --- ROUTES: APPROVAL WORKFLOW ---
 
 // List pending approvals (with context info)
-app.get("/api/approvals", (req, res) => {
+app.get("/api/approvals", requireFeature("approvals"), (req, res) => {
   const { status = "pending_approval" } = req.query;
   db.all(
     `SELECT * FROM approval_requests WHERE status = ? ORDER BY created_at DESC`,
@@ -4027,7 +4142,7 @@ app.get("/api/approvals", (req, res) => {
 });
 
 // Submit a PO for approval
-app.post("/api/purchase-orders/:id/submit", (req, res) => {
+app.post("/api/purchase-orders/:id/submit", requireFeature("approvals"), (req, res) => {
   const { id } = req.params;
   const { requested_by, notes } = req.body;
 
@@ -4062,7 +4177,7 @@ app.post("/api/purchase-orders/:id/submit", (req, res) => {
 });
 
 // Approve or reject a PO
-app.post("/api/purchase-orders/:id/approve", (req, res) => {
+app.post("/api/purchase-orders/:id/approve", requireFeature("approvals"), (req, res) => {
   const { id } = req.params;
   const { action, action_by, reason } = req.body; // action: 'approved' | 'rejected'
 
@@ -4113,7 +4228,7 @@ app.post("/api/purchase-orders/:id/approve", (req, res) => {
 });
 
 // Submit a transfer for approval
-app.post("/api/transfers/:id/submit", (req, res) => {
+app.post("/api/transfers/:id/submit", requireFeature("approvals"), (req, res) => {
   const { id } = req.params;
   const { requested_by, notes } = req.body;
 
@@ -4148,7 +4263,7 @@ app.post("/api/transfers/:id/submit", (req, res) => {
 });
 
 // Approve or reject a transfer
-app.post("/api/transfers/:id/approve", (req, res) => {
+app.post("/api/transfers/:id/approve", requireFeature("approvals"), (req, res) => {
   const { id } = req.params;
   const { action, action_by, reason } = req.body;
 
@@ -4401,7 +4516,7 @@ const restoreStorage = multer.diskStorage({
 const restoreUpload = multer({ storage: restoreStorage, limits: { fileSize: 500 * 1024 * 1024 } });
 
 // GET /api/backup/download — stream the SQLite file
-app.get("/api/backup/download", requirePerm("manage_employees"), (req, res) => {
+app.get("/api/backup/download", requirePerm("manage_employees"), requireFeature("backup_restore"), (req, res) => {
   const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const filename = `oneshop_backup_${ts}.db`;
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
@@ -4419,7 +4534,7 @@ app.get("/api/backup/download", requirePerm("manage_employees"), (req, res) => {
 });
 
 // POST /api/backup/restore — upload a .db file and replace the live DB
-app.post("/api/backup/restore", requirePerm("manage_employees"), restoreUpload.single("backup_file"), (req, res) => {
+app.post("/api/backup/restore", requirePerm("manage_employees"), requireFeature("backup_restore"), restoreUpload.single("backup_file"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   if (isRestoreInProgress) {
     return res.status(409).json({ error: "Restore already in progress" });
@@ -4505,7 +4620,7 @@ app.post("/api/backup/restore", requirePerm("manage_employees"), restoreUpload.s
 });
 
 // GET /api/backup/log — backup/restore history
-app.get("/api/backup/log", requirePerm("manage_employees"), (req, res) => {
+app.get("/api/backup/log", requirePerm("manage_employees"), requireFeature("backup_restore"), (req, res) => {
   db.all("SELECT * FROM backup_log ORDER BY created_at DESC LIMIT 100", [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ log: rows });
@@ -4569,7 +4684,7 @@ function getInvoiceData(saleId, cb) {
   db.get(
     `SELECT s.*, o.name as outlet_name, o.address as outlet_address,
             e.name as employee_name,
-            c.name as customer_name, c.phone as customer_phone, c.email as customer_email
+            c.name as customer_name, c.mobile as customer_phone, c.email as customer_email
      FROM sales s
      LEFT JOIN outlets o ON s.outlet_id = o.id
      LEFT JOIN employees e ON s.employee_id = e.id
@@ -4610,7 +4725,7 @@ app.get("/api/sales/:id/invoice", (req, res) => {
 });
 
 // GET /api/sales/:id/invoice/export - normalized JSON export contract (v1.0)
-app.get("/api/sales/:id/invoice/export", (req, res) => {
+app.get("/api/sales/:id/invoice/export", requireFeature("e_invoicing_export"), (req, res) => {
   const { id } = req.params;
   getInvoiceData(id, (err, payload) => {
     if (err) return res.status(500).json({ error: err.message });

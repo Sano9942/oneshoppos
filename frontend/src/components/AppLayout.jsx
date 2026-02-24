@@ -72,13 +72,21 @@ export default function AppLayout() {
     getExpandedMenuForPath(location.pathname),
   );
   const [employeePerms, setEmployeePerms] = useState([]);
+  const [featureFlags, setFeatureFlags] = useState({
+    backup_restore: true,
+    e_invoicing_export: true,
+    supplier_payables: true,
+    approvals: true,
+  });
 
   useEffect(() => {
     try {
       const empStr = localStorage.getItem("currentEmployee");
+      let headers = {};
       if (empStr) {
         const emp = JSON.parse(empStr);
         if (emp && emp.id) {
+          headers = { "x-employee-id": String(emp.id) };
           fetch(
             `http://localhost:5000/api/roles/${emp.role_id || 3}/permissions`,
           )
@@ -87,6 +95,20 @@ export default function AppLayout() {
             .catch((err) => console.error("Failed to load perms", err));
         }
       }
+      fetch("http://localhost:5000/api/feature-flags", { headers })
+        .then((r) => r.json())
+        .then((d) => {
+          setFeatureFlags((prev) => {
+            const nextFlags = { ...prev };
+            (d.flags || []).forEach((f) => {
+              nextFlags[f.key] = Number(f.enabled || 0) === 1;
+            });
+            return nextFlags;
+          });
+        })
+        .catch(() => {
+          // Keep defaults when endpoint unavailable
+        });
     } catch {
       // Ignore localStorage absent or parse errors
     }
@@ -194,7 +216,7 @@ export default function AppLayout() {
     { name: "Orders", path: "/orders", icon: <ShoppingCart size={18} /> },
     { name: "Categories", path: "/categories", icon: <Tags size={18} /> },
     { name: "Suppliers", path: "/suppliers", icon: <Truck size={18} /> },
-    { name: "Supplier Payables", path: "/supplier-payables", icon: <CreditCard size={18} />, requiredPerm: "manage_orders" },
+    { name: "Supplier Payables", path: "/supplier-payables", icon: <CreditCard size={18} />, requiredPerm: "manage_orders", requiredFlag: "supplier_payables" },
     { name: "Promotions", path: "/promotions", icon: <Percent size={18} />, requiredPerm: "manage_inventory" },
     { name: "Expenses", path: "/expenses", icon: <Banknote size={18} /> },
     { name: "Taxes", path: "/taxes", icon: <Settings size={18} /> },
@@ -259,7 +281,7 @@ export default function AppLayout() {
         { name: "Employees", path: "/employees" },
         { name: "Barcode Templates", path: "/barcode-templates" },
         { name: "Receipt Templates", path: "/receipt-templates" },
-        { name: "Backup & Restore", path: "/backup-restore" },
+        { name: "Backup & Restore", path: "/backup-restore", requiredFlag: "backup_restore" },
         { name: "Partners", path: "/partners" },
         { name: "Brands", path: "/brands" },
         { name: "Shopcast", path: "/shopcast" },
@@ -282,6 +304,7 @@ export default function AppLayout() {
       path: "/approvals",
       icon: <CheckSquare size={18} />,
       requiredPerm: "manage_orders",
+      requiredFlag: "approvals",
     },
   ];
 
@@ -292,19 +315,25 @@ export default function AppLayout() {
   const filteredNavItems = navItems
     .filter((item) => {
       if (item.requiredPerm && !hasPerm(item.requiredPerm)) return false;
+      if (item.requiredFlag && !featureFlags[item.requiredFlag]) return false;
       return true;
     })
     .map((item) => {
       if (item.subItems) {
+        const filteredSubs = item.subItems.filter((sub) => {
+          if (sub.requiredPerm && !hasPerm(sub.requiredPerm)) return false;
+          if (sub.requiredFlag && !featureFlags[sub.requiredFlag]) return false;
+          return true;
+        });
+        if (filteredSubs.length === 0) return null;
         return {
           ...item,
-          subItems: item.subItems.filter(
-            (sub) => !sub.requiredPerm || hasPerm(sub.requiredPerm),
-          ),
+          subItems: filteredSubs,
         };
       }
       return item;
-    });
+    })
+    .filter(Boolean);
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans overflow-hidden">

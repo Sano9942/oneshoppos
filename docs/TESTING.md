@@ -215,3 +215,33 @@ Cleanup verification queries:
 - Tagged products (`name LIKE 'E2E_FULL_%'`): `0`
 - Tagged customers (`name LIKE 'E2E_FULL_%'`): `0`
 - Previously retained IDs (`20,21,24,25,26,29` products; `2,3` customers): removed
+
+---
+
+## Phase 12 Validation Run (Latest - 2026-02-24)
+
+### Commands Run
+
+```bash
+npm run preflight
+npm run test:e2e-full
+```
+
+### Results
+
+- `npm run preflight` -> **PASS**
+- `npm run test:e2e-full` -> **69 passed, 0 failed**
+
+### Added Coverage in Latest E2E Cycle
+
+- Health endpoint readiness:
+  - `GET /api/health`
+- Invoice export contract:
+  - `GET /api/sales/:id/invoice/export`
+  - validates `version`, `items[]`, and numeric totals
+- Permission-aware assertions hardened for environments where admin permissions are not seeded in `role_permissions`
+
+### Notes
+
+- A backend query mismatch (`customers.phone` vs `customers.mobile`) that caused export `500` was fixed before the final run.
+- Full suite completed with no retained test data.

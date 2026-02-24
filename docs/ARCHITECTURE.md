@@ -14,13 +14,16 @@ oneshoppos/
 │   │   ├── pages/               ← One file per module (POS.jsx, Inventory.jsx, etc.)
 │   │   ├── components/
 │   │   │   └── AppLayout.jsx    ← Sidebar nav, layout wrapper, permission guard
-│   │   └── main.jsx             ← React app entry, router, all routes defined here
+│   │   └── main.jsx             ← React app bootstrap
+│   │   └── App.jsx              ← React router and all page routes
 │   └── index.html
 ├── backend/
-│   ├── index.js                 ← ALL API endpoints (single file, ~1700 lines)
+│   ├── index.js                 ← ALL API endpoints (single file, ~4700 lines)
 │   ├── oneshop.db               ← SQLite database (do NOT delete)
 │   ├── migrate*.js              ← Migration scripts (run once at setup)
 │   ├── e2e_test.js              ← E2E + RBAC test script (node e2e_test.js)
+│   ├── e2e_full_test.js         ← Full regression suite
+│   ├── preflight.js             ← Schema/integrity preflight checks
 │   └── api_test.js              ← Earlier edge-case API test script
 └── docs/
     ├── STATUS.md                ← START HERE when resuming
@@ -68,6 +71,8 @@ DELETE /api/<resource>/:id     — delete
 | `/api/attendance`                            | Clock-in/out records         |
 | `/api/action-history`                        | Audit log                    |
 | `/api/brands` `/api/categories` `/api/taxes` | Setup tables                 |
+| `/api/feature-flags`                         | Feature flag governance      |
+| `/api/health`                                | Runtime health checks        |
 | `/api/dashboard`                             | Aggregated KPIs              |
 | `/api/reports/*`                             | 20+ reporting endpoints      |
 

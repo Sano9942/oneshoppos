@@ -304,7 +304,7 @@ Completed: 2026-02-24
 
 ---
 
-## Phase 11 - Backup/Restore + E-Invoicing
+## Phase 11 - Backup/Restore + E-Invoicing ✅ COMPLETE
 Goal: recoverability and compliance readiness.
 
 Scope:
@@ -316,9 +316,20 @@ Exit criteria:
 - Restore drill passes
 - Invoicing export generated consistently
 
+Completed: 2026-02-24
+- migrate37.js: `backup_log`, `invoice_sequences`, `sales.invoice_number`, index on `sales.invoice_number`
+- migrate38.js: unique partial index `uq_sales_invoice_number` for non-null invoice numbers
+- Backend: `/api/backup/download`, `/api/backup/restore`, `/api/backup/log` with validation + restore safety flow
+- Backend: restore flow hardened with `PRAGMA quick_check`, maintenance lock gate, pre-restore snapshot, staged swap, restart-on-success
+- Backend: deterministic invoice finalization in `POST /api/sales` with retry and explicit error path if finalization fails
+- Backend: `/api/sales/:id/invoice/export` JSON export contract (`version: "1.0"`) added
+- Frontend: `BackupRestore.jsx` page wired with auth header (`x-employee-id`) for backup endpoints
+- Frontend: `InvoiceView.jsx` includes `Export JSON` action
+- Frontend: `AppLayout.jsx` setup menu/breadcrumb/auto-expand updated for `Backup & Restore`
+
 ---
 
-## Phase 12 - Performance, Rollout, and Governance
+## Phase 12 - Performance, Rollout, and Governance ✅ COMPLETE
 Goal: safe production rollout at scale.
 
 Scope:
@@ -330,6 +341,17 @@ Scope:
 Exit criteria:
 - Old flows stable with flags off
 - New flows stable with flags on
+
+Completed: 2026-02-24
+- migrate39.js: `feature_flags` table + seeded flags (`backup_restore`, `e_invoicing_export`, `supplier_payables`, `approvals`)
+- migrate40.js: query hotspot indexes added for sales, sale_items, sale_payments, approvals
+- Backend: feature flag services added (`getFeatureFlagsMap`, `isFeatureEnabled`, `requireFeature`)
+- Backend APIs: `GET /api/feature-flags`, `PUT /api/feature-flags/:key`, `GET /api/health`
+- Backend route gating enabled for approvals, supplier payables, backup/restore, and invoice export
+- Backend: `preflight.js` added + `npm run preflight` script for migration/schema/integrity checks
+- Frontend: `AppLayout.jsx` now loads feature flags and hides flagged navigation items
+- E2E (`e2e_full_test.js`) expanded for health and invoice export contract checks
+- Latest full run: `npm run test:e2e-full` -> **69 passed, 0 failed**
 
 ---
 

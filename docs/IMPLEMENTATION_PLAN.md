@@ -1,6 +1,6 @@
 # Xstak Feature Implementation Plan
 
-**Last Updated: 2026-02-24 (Phase 2 ✅ Phase 3 ✅ Phase 4 ✅ Phase 5 ✅ Phase 6 ✅ Phase 7 ✅)**
+**Last Updated: 2026-02-24 (Phase 1-12 ✅ Complete)**
 
 ---
 
@@ -18,9 +18,9 @@
 | **Customer CNIC/Occupation/Balance**    | ✅ Done    | Added in Phase 1 — columns in DB, backend, and customer form                                        |
 | **Order Notes**                         | ✅ Done    | Added in Phase 1 — `notes` column in `sales`, POS sends it on checkout                              |
 | **Tax toggle in POS**                   | ✅ Built   | `isTaxInclusive` state already in `POS.jsx` — toggling via toolbar button                           |
-| **Dashboard charts / Top Sales People** | ❌ Missing | Not built                                                                                           |
-| **Export CSV**                          | ❌ Missing | Not on any page                                                                                     |
-| **Bulk CSV Import**                     | ❌ Missing | Not built                                                                                           |
+| **Dashboard charts / Top Sales People** | ✅ Complete | Dashboard trend chart and top-salespeople report delivered                                          |
+| **Export CSV**                          | ✅ Complete | Implemented on inventory, customers, and purchase orders pages                                      |
+| **Bulk CSV Import**                     | ✅ Complete | Backend upsert API + Inventory CSV upload workflow delivered                                        |
 
 ---
 
@@ -173,22 +173,101 @@ barcode,name,price,cost_price,gst,stock,min_qty,max_qty,unit
 
 ---
 
-## Phase Status Summary
+### ✅ Phase 8 — Supplier Payables & Aging _(COMPLETE — 2026-02-24)_
 
-| #   | Phase                                                       | Effort | Value  | Status  |
-| --- | ----------------------------------------------------------- | ------ | ------ | ------- |
-| 1   | Quick DB columns (min/max qty, unit, due date, CNIC, notes) | Small  | High   | ✅ Done |
-| 2   | Product Variants backend (attribute-sets API)               | Medium | High   | ✅ Done |
-| 3   | Loyalty points wired to customer balance                    | Small  | High   | ✅ Done |
-| 4   | Dashboard top salespeople + chart                           | Small  | Medium | ✅ Done |
-| 5   | Export CSV (all pages)                                      | Small  | Medium | ✅ Done |
-| 6   | Bulk CSV product import                                     | Medium | High   | ✅ Done |
-| 7   | Receipt Template designer                                   | Large  | Low    | ✅ Done |
+**Backend:**
+- Supplier invoice/payments flow and aging endpoints completed:
+  - `GET /api/supplier-invoices`
+  - `GET /api/supplier-invoices/:id`
+  - `POST /api/supplier-invoices/:id/pay`
+  - `GET /api/supplier-aging`
+
+**Frontend:**
+- `SupplierPayables.jsx` route wired and usable from navigation.
 
 ---
 
-## Verification After Each Phase
+### ✅ Phase 9 — Variant Stock by Outlet _(COMPLETE — 2026-02-24)_
 
-1. Run `node e2e_test.js` — confirm 14/14 still pass
-2. Spot-check changed UI in the browser
-3. Run `npx eslint src/` — confirm 0 errors
+**Backend/DB:**
+- Outlet-level variant stock path implemented and integrated with stock operations.
+
+**Frontend:**
+- Variant-aware product and POS behavior integrated.
+
+---
+
+### ✅ Phase 10 — Shift Reconciliation Enhancements _(COMPLETE — 2026-02-24)_
+
+**DB (`migrate36.js`):**
+- `shift_denominations` table
+- `cash_shifts` columns: `variance_reason`, `variance_approved_by`
+
+**Backend + Frontend:**
+- Denomination capture, reason coding, and shift audit views implemented.
+
+---
+
+### ✅ Phase 11 — Backup/Restore + E-Invoicing _(COMPLETE — 2026-02-24)_
+
+**DB:**
+- `migrate37.js`: `backup_log`, `invoice_sequences`, `sales.invoice_number`
+- `migrate38.js`: unique index `uq_sales_invoice_number`
+
+**Backend:**
+- `/api/backup/download`, `/api/backup/restore`, `/api/backup/log`
+- Safe restore with validation (`PRAGMA quick_check`), lock, snapshot/staged swap, restart trigger
+- Invoice export API: `GET /api/sales/:id/invoice/export`
+
+**Frontend:**
+- `BackupRestore.jsx` and invoice export action in `InvoiceView.jsx`
+
+---
+
+### ✅ Phase 12 — Performance, Rollout, Governance _(COMPLETE — 2026-02-24)_
+
+**DB:**
+- `migrate39.js`: feature flags
+- `migrate40.js`: hotspot indexes
+
+**Backend:**
+- Feature flag middleware + APIs:
+  - `GET /api/feature-flags`
+  - `PUT /api/feature-flags/:key`
+- Health endpoint: `GET /api/health`
+- Preflight script: `npm run preflight`
+- Route-level feature gating for high-risk modules
+
+**Frontend:**
+- `AppLayout.jsx` loads flags and hides flagged nav items.
+
+**Testing:**
+- `e2e_full_test.js` expanded (health + invoice export validations)
+- Latest run: **69 passed, 0 failed**
+
+---
+
+## Phase Status Summary
+
+| #   | Phase                                  | Status |
+| --- | -------------------------------------- | ------ |
+| 1   | Quick DB columns                        | ✅ Done |
+| 2   | Product variants backend                | ✅ Done |
+| 3   | Loyalty points integration              | ✅ Done |
+| 4   | Dashboard trend + top salespeople       | ✅ Done |
+| 5   | CSV export                              | ✅ Done |
+| 6   | Bulk CSV import                         | ✅ Done |
+| 7   | Receipt templates                       | ✅ Done |
+| 8   | Supplier payables & aging               | ✅ Done |
+| 9   | Variant stock by outlet                 | ✅ Done |
+| 10  | Shift reconciliation enhancements       | ✅ Done |
+| 11  | Backup/restore + e-invoicing            | ✅ Done |
+| 12  | Performance, rollout, governance        | ✅ Done |
+
+---
+
+## Verification Baseline
+
+1. `npm run preflight` (backend) -> pass
+2. `npm run test:e2e-full` (backend) -> **69 passed, 0 failed**
+3. `npx eslint src/components/AppLayout.jsx` (frontend) -> pass
