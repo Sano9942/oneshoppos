@@ -16,10 +16,12 @@ const API = "http://localhost:5000/api";
 const AVAILABLE_PERMISSIONS = [
   { id: "all_access", label: "All Access", category: "System" },
   { id: "manage_inventory", label: "Manage Inventory", category: "Inventory" },
+  { id: "manage_orders", label: "Manage Orders", category: "Orders" },
   { id: "view_reports", label: "View Reports", category: "Reporting" },
   { id: "manage_employees", label: "Manage Employees", category: "System" },
   { id: "pos_discount", label: "Apply Custom Discounts", category: "POS" },
-  { id: "pos_void", label: "Void Sales", category: "POS" },
+  { id: "void_sales", label: "Void Sales", category: "POS" },
+  { id: "pos_void", label: "Manager Override Void", category: "POS" },
   { id: "pos_park", label: "Park & Restore Sales", category: "POS" },
 ];
 

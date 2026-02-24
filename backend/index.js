@@ -55,6 +55,94 @@ function requirePerm(permission) {
   };
 }
 
+function requireAnyPerm(permissions) {
+  return (req, res, next) => {
+    const perms = req.employeePerms || [];
+    const allowed =
+      perms.includes("all_access") ||
+      permissions.some((p) => perms.includes(p));
+    if (allowed) return next();
+    return res.status(403).json({ error: "Forbidden: insufficient permissions" });
+  };
+}
+
+const DEFAULT_ROLE_PERMISSIONS = {
+  Administrator: ["all_access"],
+  Manager: [
+    "manage_inventory",
+    "manage_orders",
+    "view_reports",
+    "manage_employees",
+    "pos_discount",
+    "void_sales",
+    "pos_park",
+    "pos_void",
+  ],
+  Cashier: ["view_reports", "pos_discount", "pos_park"],
+};
+
+function ensureDefaultRolePermissions() {
+  db.all("SELECT id, name FROM roles", [], (err, roles) => {
+    if (err || !roles || roles.length === 0) return;
+    const roleIdByName = {};
+    roles.forEach((r) => {
+      roleIdByName[r.name] = r.id;
+    });
+
+    db.serialize(() => {
+      Object.entries(DEFAULT_ROLE_PERMISSIONS).forEach(([roleName, perms]) => {
+        const roleId = roleIdByName[roleName];
+        if (!roleId) return;
+        perms.forEach((perm) => {
+          db.run(
+            "INSERT OR IGNORE INTO role_permissions (role_id, permission) VALUES (?, ?)",
+            [roleId, perm],
+          );
+        });
+      });
+    });
+  });
+}
+
+const PERMISSION_RULES = [
+  // Reporting and analytics
+  {
+    methods: ["GET"],
+    path: /^\/api\/reports(\/|$)/,
+    anyPerms: ["view_reports", "manage_employees"],
+  },
+  { methods: ["GET"], path: /^\/api\/attendance(\/|$)/, anyPerms: ["view_reports", "manage_employees"] },
+
+  // Setup/config mutation
+  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/categories(\/\d+)?$/, anyPerms: ["manage_inventory"] },
+  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/brands(\/\d+)?$/, anyPerms: ["manage_inventory"] },
+  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/products(\/\d+)?$/, anyPerms: ["manage_inventory"] },
+  { methods: ["POST"], path: /^\/api\/products\/bulk-import$/, anyPerms: ["manage_inventory"] },
+  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/attribute-sets(\/\d+)?$/, anyPerms: ["manage_inventory"] },
+  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/barcode-templates(\/\d+)?$/, anyPerms: ["manage_inventory"] },
+  { methods: ["POST"], path: /^\/api\/barcode-print-jobs$/, anyPerms: ["manage_inventory"] },
+  { methods: ["POST", "PUT"], path: /^\/api\/expenses(\/\d+)?$/, anyPerms: ["manage_inventory"] },
+  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/expense-categories(\/\d+)?$/, anyPerms: ["manage_inventory"] },
+  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/outlets(\/\d+)?$/, anyPerms: ["manage_employees"] },
+  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/receipt-templates(\/\d+)?$/, anyPerms: ["manage_employees"] },
+
+  // Orders/procurement mutation
+  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/suppliers(\/\d+)?$/, anyPerms: ["manage_orders"] },
+  { methods: ["POST"], path: /^\/api\/supplier-returns$/, anyPerms: ["manage_orders"] },
+  { methods: ["POST"], path: /^\/api\/supplier-invoices\/\d+\/pay$/, anyPerms: ["manage_orders"] },
+  { methods: ["POST"], path: /^\/api\/returns$/, anyPerms: ["manage_orders"] },
+
+  // Approval workflow
+  { methods: ["GET"], path: /^\/api\/approvals$/, anyPerms: ["manage_orders"] },
+  { methods: ["POST"], path: /^\/api\/purchase-orders\/\d+\/submit$/, anyPerms: ["manage_orders"] },
+  { methods: ["POST"], path: /^\/api\/purchase-orders\/\d+\/approve$/, anyPerms: ["manage_orders"] },
+  { methods: ["POST"], path: /^\/api\/transfers\/\d+\/submit$/, anyPerms: ["manage_orders"] },
+  { methods: ["POST"], path: /^\/api\/transfers\/\d+\/approve$/, anyPerms: ["manage_orders"] },
+
+  // POS-specific restricted flows
+  { methods: ["POST", "DELETE"], path: /^\/api\/parked-sales(\/\d+)?$/, anyPerms: ["pos_park"] },
+];
+
 const DEFAULT_FEATURE_FLAGS = {
   backup_restore: true,
   e_invoicing_export: true,
@@ -103,6 +191,25 @@ function requireFeature(flagKey) {
 }
 
 app.use(loadEmployeePerms);
+ensureDefaultRolePermissions();
+
+app.use((req, res, next) => {
+  if (!req.path.startsWith("/api/")) return next();
+  const rule = PERMISSION_RULES.find(
+    (r) => r.methods.includes(req.method) && r.path.test(req.path),
+  );
+  if (!rule) return next();
+
+  const perms = req.employeePerms || [];
+  const allowed =
+    perms.includes("all_access") ||
+    (rule.anyPerms || []).some((p) => perms.includes(p));
+
+  if (!allowed) {
+    return res.status(403).json({ error: "Forbidden: insufficient permissions" });
+  }
+  return next();
+});
 
 let isRestoreInProgress = false;
 app.use((req, res, next) => {
@@ -2159,7 +2266,7 @@ app.get("/api/sales/:id", (req, res) => {
 });
 
 // VOID a sale — marks as voided and restores stock to outlet
-app.put("/api/sales/:id/void", requirePerm("void_sales"), (req, res) => {
+app.put("/api/sales/:id/void", requireAnyPerm(["void_sales", "pos_void"]), (req, res) => {
   const { id } = req.params;
   const { void_reason } = req.body;
 

@@ -55,16 +55,24 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const fetchJson = async (url) => {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Request failed: ${url}`);
+    return data;
+  };
+
   useEffect(() => {
     Promise.all([
-      fetch(`${API}/api/reports/dashboard`).then((r) => r.json()),
-      fetch(`${API}/api/outlets`).then((r) => r.json()).then(async (d) => {
+      fetchJson(`${API}/api/reports/dashboard`),
+      fetchJson(`${API}/api/outlets`).then(async (d) => {
         const outlets = d.outlets || [];
         if (outlets.length === 0) return null;
-        return fetch(`${API}/api/shifts/active?outlet_id=${outlets[0].id}`)
-          .then((r) => r.json()).then((s) => s.shift || null).catch(() => null);
+        return fetchJson(`${API}/api/shifts/active?outlet_id=${outlets[0].id}`)
+          .then((s) => s.shift || null)
+          .catch(() => null);
       }),
-      fetch(`${API}/api/reports/top-salespeople`).then((r) => r.json()),
+      fetchJson(`${API}/api/reports/top-salespeople`),
     ])
       .then(([dashData, activeShift, spData]) => {
         setData(dashData);

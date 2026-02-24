@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   Plus,
@@ -13,6 +14,7 @@ import {
   Lock,
   User,
   LogOut,
+  ArrowLeft,
   Store,
   Wallet,
   Clock,
@@ -25,6 +27,7 @@ import {
 import { useAuth } from "../auth/AuthProvider";
 
 export default function POS() {
+  const navigate = useNavigate();
   const { employee, hasPerm } = useAuth();
   const [cart, setCart] = useState([]);
   const [barcodeInput, setBarcodeInput] = useState("");
@@ -737,6 +740,10 @@ export default function POS() {
     sessionStorage.removeItem("posAttendanceId");
   };
 
+  const handleBackToDashboard = () => {
+    navigate("/dashboard");
+  };
+
   if (isRegisterLocked) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-slate-900">
@@ -822,10 +829,20 @@ export default function POS() {
             </div>
           </div>
           <button
-            onClick={handleLockRegister}
-            className="text-slate-400 hover:text-red-500 transition-colors ml-2"
+            onClick={handleBackToDashboard}
+            className="flex items-center gap-1 text-slate-500 hover:text-slate-700 transition-colors ml-2 text-xs font-semibold"
+            title="Back to Dashboard"
           >
-            <LogOut size={18} />
+            <ArrowLeft size={16} />
+            Dashboard
+          </button>
+          <button
+            onClick={handleLockRegister}
+            className="flex items-center gap-1 text-slate-500 hover:text-red-600 transition-colors text-xs font-semibold"
+            title="Lock Register"
+          >
+            <LogOut size={16} />
+            Lock
           </button>
         </div>
       </div>

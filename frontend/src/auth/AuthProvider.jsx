@@ -106,6 +106,31 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  useEffect(() => {
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (input, init = {}) => {
+      const rawUrl = typeof input === "string" ? input : input?.url || "";
+      const isApiCall =
+        rawUrl.includes("http://localhost:5000/api/") ||
+        rawUrl.startsWith("/api/");
+
+      if (!isApiCall || !employee?.id) {
+        return nativeFetch(input, init);
+      }
+
+      const headers = new Headers(init.headers || {});
+      if (!headers.has("x-employee-id")) {
+        headers.set("x-employee-id", String(employee.id));
+      }
+
+      return nativeFetch(input, { ...init, headers });
+    };
+
+    return () => {
+      window.fetch = nativeFetch;
+    };
+  }, [employee?.id]);
+
   const value = useMemo(
     () => ({
       session,
