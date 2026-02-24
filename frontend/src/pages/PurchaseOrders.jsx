@@ -8,7 +8,24 @@ import {
   ChevronRight,
   PackageCheck,
   ListPlus,
+  Download,
 } from "lucide-react";
+
+const exportCSV = (data, filename) => {
+  if (!data.length) return;
+  const headers = Object.keys(data[0]).join(",");
+  const rows = data.map((r) =>
+    Object.values(r)
+      .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
+      .join(","),
+  );
+  const blob = new Blob([[headers, ...rows].join("\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
 
 export default function PurchaseOrders() {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
@@ -29,7 +46,7 @@ export default function PurchaseOrders() {
   const [grnQtys, setGrnQtys] = useState({}); // { product_id: qty_received }
 
   // Create PO State
-  const [poForm, setPoForm] = useState({ supplier_id: "" });
+  const [poForm, setPoForm] = useState({ supplier_id: "", due_date: "" });
   const [poCart, setPoCart] = useState([]);
   const [productSearch, setProductSearch] = useState("");
 
@@ -143,12 +160,13 @@ export default function PurchaseOrders() {
           supplier_id: poForm.supplier_id,
           total_cost,
           items: poCart,
+          due_date: poForm.due_date || null,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
 
       // Reset form and go back to list
-      setPoForm({ supplier_id: "" });
+      setPoForm({ supplier_id: "", due_date: "" });
       setPoCart([]);
       setCurrentView("list");
       fetchPurchaseOrders();
@@ -239,13 +257,33 @@ export default function PurchaseOrders() {
               Track incoming stock from suppliers.
             </p>
           </div>
-          <button
-            onClick={() => setCurrentView("create")}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-medium shadow-md shadow-emerald-200 transition-all flex items-center gap-2 transform hover:-translate-y-0.5"
-          >
-            <Plus size={20} />
-            Create Purchase Order
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() =>
+                exportCSV(
+                  purchaseOrders.map((po) => ({
+                    id: po.id,
+                    supplier: po.supplier_name,
+                    total_cost: po.total_cost,
+                    status: po.status,
+                    due_date: po.due_date,
+                    created_at: po.created_at,
+                  })),
+                  "purchase-orders.csv",
+                )
+              }
+              className="border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all"
+            >
+              <Download size={18} /> Export CSV
+            </button>
+            <button
+              onClick={() => setCurrentView("create")}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-medium shadow-md shadow-emerald-200 transition-all flex items-center gap-2 transform hover:-translate-y-0.5"
+            >
+              <Plus size={20} />
+              Create Purchase Order
+            </button>
+          </div>
         </div>
 
         <div className="bg-white shadow-sm flex-1 overflow-auto rounded-2xl mb-8 border border-slate-100">
@@ -403,7 +441,9 @@ export default function PurchaseOrders() {
               <select
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500/50 outline-none"
                 value={poForm.supplier_id}
-                onChange={(e) => setPoForm({ supplier_id: e.target.value })}
+                onChange={(e) =>
+                  setPoForm({ ...poForm, supplier_id: e.target.value })
+                }
               >
                 <option value="">-- Choose Supplier --</option>
                 {suppliers.map((s) => (
@@ -412,6 +452,20 @@ export default function PurchaseOrders() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="p-4 border-b border-slate-100">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Due Date (Optional)
+              </label>
+              <input
+                type="date"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500/50 outline-none text-slate-700"
+                value={poForm.due_date}
+                onChange={(e) =>
+                  setPoForm({ ...poForm, due_date: e.target.value })
+                }
+              />
             </div>
 
             <div className="flex-1 overflow-auto p-4 flex flex-col gap-3 bg-slate-50/50">

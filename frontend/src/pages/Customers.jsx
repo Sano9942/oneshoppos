@@ -12,7 +12,24 @@ import {
   ShoppingBag,
   DollarSign,
   Gift,
+  Download,
 } from "lucide-react";
+
+const exportCSV = (data, filename) => {
+  if (!data.length) return;
+  const headers = Object.keys(data[0]).join(",");
+  const rows = data.map((r) =>
+    Object.values(r)
+      .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
+      .join(","),
+  );
+  const blob = new Blob([[headers, ...rows].join("\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
 
 const API = "http://localhost:5000";
 const fmt = (n) => "$" + (n || 0).toFixed(2);
@@ -25,7 +42,14 @@ const fmtDate = (d) =>
       })
     : "—";
 
-const EMPTY = { name: "", mobile: "", email: "", address: "" };
+const EMPTY = {
+  name: "",
+  mobile: "",
+  email: "",
+  address: "",
+  cnic: "",
+  occupation: "",
+};
 
 export default function Customers() {
   const [customers, setCustomers] = useState([]);
@@ -88,6 +112,8 @@ export default function Customers() {
       mobile: c.mobile || "",
       email: c.email || "",
       address: c.address || "",
+      cnic: c.cnic || "",
+      occupation: c.occupation || "",
     });
     setFormError("");
     setIsModalOpen(true);
@@ -206,12 +232,35 @@ export default function Customers() {
             registered
           </p>
         </div>
-        <button
-          onClick={openAdd}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors flex items-center gap-2 shadow-sm"
-        >
-          <Plus size={20} /> Add Customer
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() =>
+              exportCSV(
+                customers.map((c) => ({
+                  name: c.name,
+                  mobile: c.mobile,
+                  email: c.email,
+                  address: c.address,
+                  cnic: c.cnic,
+                  occupation: c.occupation,
+                  loyalty_points: c.loyalty_points,
+                  total_spent: c.total_spent,
+                  order_count: c.order_count,
+                })),
+                "customers.csv",
+              )
+            }
+            className="border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all"
+          >
+            <Download size={18} /> Export CSV
+          </button>
+          <button
+            onClick={openAdd}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors flex items-center gap-2 shadow-sm"
+          >
+            <Plus size={20} /> Add Customer
+          </button>
+        </div>
       </div>
 
       {deleteError && (
@@ -567,6 +616,35 @@ export default function Customers() {
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    CNIC
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 42301-1234567-1"
+                    value={form.cnic}
+                    onChange={(e) => setForm({ ...form, cnic: e.target.value })}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    Occupation
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Teacher"
+                    value={form.occupation}
+                    onChange={(e) =>
+                      setForm({ ...form, occupation: e.target.value })
+                    }
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"

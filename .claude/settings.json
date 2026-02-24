@@ -13,7 +13,13 @@
       "Bash(findstr:*)",
       "Bash(cmd //c \"taskkill /F /IM node.exe\")",
       "Bash(cmd //c \"netstat -ano | findstr :5000 | findstr LISTENING\")",
-      "Bash(cmd //c \"netstat -ano | findstr :5173 | findstr LISTENING\")"
+      "Bash(cmd //c \"netstat -ano | findstr :5173 | findstr LISTENING\")",
+      "Bash(tasklist:*)",
+      "Bash(cmd.exe /c \"taskkill /F /PID 17480\")",
+      "Bash(cmd.exe //c \"taskkill /F /PID 17480\")",
+      "Bash(npx vite build:*)",
+      "Bash(ls:*)",
+      "Bash(npm install:*)"
     ]
   }
 }

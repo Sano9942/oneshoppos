@@ -462,6 +462,7 @@ export default function POS() {
           discount_type: discountType,
           points_earned: pointsEarned,
           points_redeemed: pointsRedeemed,
+          notes: orderNote || null,
         }),
       });
 

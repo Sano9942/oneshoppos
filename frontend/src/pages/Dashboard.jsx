@@ -3,8 +3,11 @@ import { useNavigate } from "react-router-dom";
 import {
   DollarSign, TrendingUp, ShoppingBag, Package,
   MonitorPlay, BarChart3, AlertTriangle, TrendingDown,
-  Clock, CheckCircle, XCircle, ArrowRight,
+  Clock, CheckCircle, XCircle, ArrowRight, Users,
 } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+} from "recharts";
 
 const API = "http://localhost:5000";
 const fmt = (n) => "$" + (n || 0).toFixed(2);
@@ -26,10 +29,29 @@ function KPICard({ title, value, sub, icon: Icon, iconBg, iconColor, valueColor 
   );
 }
 
+// Format day label: "2026-02-24" → "Feb 24"
+function fmtDay(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// Custom tooltip for the trend chart
+function TrendTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl shadow-lg px-4 py-3 text-sm">
+      <p className="font-semibold text-slate-700 mb-1">{fmtDay(label)}</p>
+      <p className="text-[#8066FF] font-bold">{fmt(payload[0]?.value)}</p>
+      <p className="text-slate-500 text-xs">{payload[1]?.value || 0} sales</p>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [shift, setShift] = useState(null);
+  const [salespeople, setSalespeople] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -42,10 +64,12 @@ export default function Dashboard() {
         return fetch(`${API}/api/shifts/active?outlet_id=${outlets[0].id}`)
           .then((r) => r.json()).then((s) => s.shift || null).catch(() => null);
       }),
+      fetch(`${API}/api/reports/top-salespeople`).then((r) => r.json()),
     ])
-      .then(([dashData, activeShift]) => {
+      .then(([dashData, activeShift, spData]) => {
         setData(dashData);
         setShift(activeShift);
+        setSalespeople(spData.salespeople || []);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -68,11 +92,20 @@ export default function Dashboard() {
     </div>
   );
 
-  const { totalRevenueToday, todayProfit, saleCount, inventoryValue, topSelling, lowStock, zReport } = data;
+  const { totalRevenueToday, todayProfit, saleCount, inventoryValue, topSelling, lowStock, zReport, salesTrend = [] } = data;
 
   const zReportText = zReport.length > 0
     ? zReport.map((z) => `${z.payment_method}: ${fmt(z.total)}`).join(" · ")
     : "No sales recorded today";
+
+  // Fill in missing days in the trend so the chart always shows 7 bars
+  const trendMap = Object.fromEntries(salesTrend.map((r) => [r.day, r]));
+  const trendData = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    const key = d.toISOString().split("T")[0];
+    return { day: key, revenue: trendMap[key]?.revenue || 0, sale_count: trendMap[key]?.sale_count || 0 };
+  });
 
   return (
     <div className="flex flex-col gap-6 h-full">
@@ -133,9 +166,7 @@ export default function Dashboard() {
 
       {/* Shift Status Banner */}
       <div className={`rounded-2xl border px-6 py-4 flex items-center gap-4 ${
-        shift
-          ? "bg-emerald-50 border-emerald-200"
-          : "bg-amber-50 border-amber-200"
+        shift ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"
       }`}>
         <div className={`p-2 rounded-xl ${shift ? "bg-emerald-100" : "bg-amber-100"}`}>
           {shift ? <CheckCircle className="text-emerald-600 w-5 h-5" /> : <XCircle className="text-amber-600 w-5 h-5" />}
@@ -165,9 +196,100 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Bottom Two-Column */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
-        {/* Top Selling */}
+      {/* Sales Trend Chart — last 7 days */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="text-[#8066FF] w-4 h-4" />
+            <h3 className="font-bold text-slate-800 text-sm">Sales Trend</h3>
+          </div>
+          <span className="text-xs text-slate-400">Last 7 days</span>
+        </div>
+        {trendData.every((d) => d.revenue === 0) ? (
+          <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+            <BarChart3 size={32} className="mb-2 opacity-30" />
+            <p className="text-sm">No sales in the last 7 days</p>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={trendData} margin={{ top: 0, right: 0, left: -10, bottom: 0 }} barSize={28}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis
+                dataKey="day"
+                tickFormatter={fmtDay}
+                tick={{ fontSize: 11, fill: "#94a3b8" }}
+                axisLine={false} tickLine={false}
+              />
+              <YAxis
+                tickFormatter={(v) => "$" + (v >= 1000 ? (v / 1000).toFixed(1) + "k" : v)}
+                tick={{ fontSize: 11, fill: "#94a3b8" }}
+                axisLine={false} tickLine={false}
+              />
+              <Tooltip content={<TrendTooltip />} cursor={{ fill: "#f8fafc" }} />
+              <Bar dataKey="revenue" fill="#8066FF" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="sale_count" fill="#e0d9ff" radius={[4, 4, 0, 0]} hide />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Bottom Three-Column */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
+
+        {/* Top Sales People */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+          <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Users className="text-[#8066FF] w-4 h-4" />
+              <h3 className="font-bold text-slate-800 text-sm">Top Sales People</h3>
+            </div>
+            <span className="text-xs text-slate-400">All time</span>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {salespeople.length > 0 ? (
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 text-slate-400 uppercase tracking-wider">
+                    <th className="px-4 py-2.5 text-left font-semibold">Name</th>
+                    <th className="px-4 py-2.5 text-right font-semibold">Revenue</th>
+                    <th className="px-4 py-2.5 text-right font-semibold">Txns</th>
+                    <th className="px-4 py-2.5 text-right font-semibold">Avg</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {salespeople.map((sp, i) => (
+                    <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center shrink-0">
+                            {i + 1}
+                          </span>
+                          <span className="font-medium text-slate-700 truncate">{sp.employee_name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-slate-800">{fmt(sp.revenue)}</td>
+                      <td className="px-4 py-3 text-right text-slate-500">{sp.transactions}</td>
+                      <td className="px-4 py-3 text-right text-slate-500">{fmt(sp.avg_basket)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full py-12 text-slate-400">
+                <Users size={32} className="mb-2 opacity-30" />
+                <p className="text-sm">No sales data yet</p>
+              </div>
+            )}
+          </div>
+          <div className="px-6 py-3 border-t border-slate-100 bg-slate-50/30">
+            <button onClick={() => navigate("/reports")}
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+              View sales reports <ArrowRight size={12} />
+            </button>
+          </div>
+        </div>
+
+        {/* Top Selling Products */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
           <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -248,6 +370,7 @@ export default function Dashboard() {
             </button>
           </div>
         </div>
+
       </div>
     </div>
   );

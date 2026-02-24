@@ -194,7 +194,7 @@ export default function AppLayout() {
           path: "/custom-fields",
           disabled: true,
         },
-        { name: "Attribute Sets", path: "/attribute-sets", disabled: true },
+        { name: "Attribute Sets", path: "/attribute-sets" },
       ],
     },
     { name: "Customers", path: "/customers", icon: <Users size={18} /> },

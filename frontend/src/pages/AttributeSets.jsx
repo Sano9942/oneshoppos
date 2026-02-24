@@ -16,8 +16,8 @@ export default function AttributeSets() {
   const [error, setError] = useState("");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingSet, setEditingSet] = useState(null);
 
-  // Using a simplified builder for creation:
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -45,12 +45,27 @@ export default function AttributeSets() {
     }
   };
 
-  const openModal = () => {
-    setFormData({
-      name: "",
-      description: "",
-      attributes: [{ name: "", options: [] }],
-    });
+  const handleOpenModal = (set = null) => {
+    if (set) {
+      setEditingSet(set);
+      setFormData({
+        name: set.name,
+        description: set.description || "",
+        attributes: set.attributes?.length > 0
+          ? set.attributes.map((a) => ({
+              name: a.name,
+              options: a.options.map((o) => o.value),
+            }))
+          : [{ name: "", options: [] }],
+      });
+    } else {
+      setEditingSet(null);
+      setFormData({
+        name: "",
+        description: "",
+        attributes: [{ name: "", options: [] }],
+      });
+    }
     setCurrentOptionInput({});
     setIsModalOpen(true);
   };
@@ -104,8 +119,13 @@ export default function AttributeSets() {
       .map((a) => ({ name: a.name.trim(), options: a.options }));
 
     try {
-      const res = await fetch("http://localhost:5000/api/attribute-sets", {
-        method: "POST",
+      const url = editingSet
+        ? `http://localhost:5000/api/attribute-sets/${editingSet.id}`
+        : "http://localhost:5000/api/attribute-sets";
+      const method = editingSet ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...formData, attributes: cleanAttrs }),
       });
@@ -114,6 +134,7 @@ export default function AttributeSets() {
 
       await fetchSets();
       setIsModalOpen(false);
+      setEditingSet(null);
     } catch (err) {
       alert("Error saving: " + err.message);
     }
@@ -155,7 +176,7 @@ export default function AttributeSets() {
           </p>
         </div>
         <button
-          onClick={openModal}
+          onClick={() => handleOpenModal()}
           className="bg-[#8066FF] hover:bg-[#7055E6] text-white px-5 py-2.5 rounded-lg font-bold shadow-md shadow-indigo-200 transition-all flex items-center gap-2"
         >
           <Plus size={18} /> New Attribute Set
@@ -246,6 +267,13 @@ export default function AttributeSets() {
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
+                          onClick={() => handleOpenModal(set)}
+                          className="p-1.5 text-slate-400 hover:text-[#8066FF] hover:bg-indigo-50 rounded transition-colors"
+                          title="Edit Set"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button
                           onClick={() => handleDelete(set.id, set.name)}
                           className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                           title="Delete Set"
@@ -266,15 +294,18 @@ export default function AttributeSets() {
         <div className="fixed inset-0 z-50 flex justify-end">
           <div
             className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm"
-            onClick={() => setIsModalOpen(false)}
+            onClick={() => { setIsModalOpen(false); setEditingSet(null); }}
           ></div>
           <div className="relative w-full max-w-lg bg-white h-full shadow-2xl flex flex-col border-l border-slate-200 animate-slide-in-right">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                <Plus size={20} className="text-[#8066FF]" /> New Attribute Set
+                {editingSet
+                  ? <><Edit2 size={20} className="text-[#8066FF]" /> Edit Attribute Set</>
+                  : <><Plus size={20} className="text-[#8066FF]" /> New Attribute Set</>
+                }
               </h2>
               <button
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => { setIsModalOpen(false); setEditingSet(null); }}
                 className="text-slate-400 hover:text-slate-600 p-1 bg-slate-200/50 rounded-full"
               >
                 <X size={18} />
@@ -398,7 +429,7 @@ export default function AttributeSets() {
               <div className="p-6 border-t border-slate-100 bg-slate-50 shrink-0 flex gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => { setIsModalOpen(false); setEditingSet(null); }}
                   className="flex-1 py-2.5 text-slate-600 bg-white border border-slate-200 font-bold rounded-xl hover:bg-slate-50 transition-colors text-sm"
                 >
                   Cancel
@@ -407,7 +438,7 @@ export default function AttributeSets() {
                   type="submit"
                   className="flex-1 py-2.5 bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold rounded-xl transition-colors shadow-md text-sm"
                 >
-                  Save Attribute Set
+                  {editingSet ? "Update Attribute Set" : "Save Attribute Set"}
                 </button>
               </div>
             </form>

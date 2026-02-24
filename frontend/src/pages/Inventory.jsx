@@ -1,9 +1,48 @@
 import { useState, useEffect } from "react";
-import { Package, Plus, Save, X, Search } from "lucide-react";
+import { Package, Plus, Save, X, Search, Download, Upload } from "lucide-react";
+
+const exportCSV = (data, filename) => {
+  if (!data.length) return;
+  const headers = Object.keys(data[0]).join(",");
+  const rows = data.map((r) =>
+    Object.values(r)
+      .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
+      .join(","),
+  );
+  const blob = new Blob([[headers, ...rows].join("\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+// Parse a CSV string into an array of objects using the first row as headers
+const parseCSV = (text) => {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+  return lines.slice(1).map((line) => {
+    const vals = [];
+    let cur = "";
+    let inQuote = false;
+    for (const ch of line) {
+      if (ch === '"') { inQuote = !inQuote; }
+      else if (ch === "," && !inQuote) { vals.push(cur); cur = ""; }
+      else { cur += ch; }
+    }
+    vals.push(cur);
+    return Object.fromEntries(headers.map((h, i) => [h, (vals[i] ?? "").trim()]));
+  });
+};
 
 export default function Inventory() {
   const [products, setProducts] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Bulk Import State
+  const [importResults, setImportResults] = useState(null); // null | { results: [] }
+  const [isImporting, setIsImporting] = useState(false);
 
   // Pagination State for Performance (5,000 items)
   const [currentPage, setCurrentPage] = useState(1);
@@ -26,6 +65,9 @@ export default function Inventory() {
     attribute_set_id: "",
     has_variants: false,
     variants: [],
+    min_qty: "",
+    max_qty: "",
+    unit: "pcs",
   });
 
   // Dropdown Data
@@ -118,6 +160,9 @@ export default function Inventory() {
         attribute_set_id: product.attribute_set_id || "",
         has_variants: product.has_variants === 1,
         variants: [],
+        min_qty: product.min_qty ?? "",
+        max_qty: product.max_qty ?? "",
+        unit: product.unit || "pcs",
       });
     } else {
       setEditingProduct(null);
@@ -137,6 +182,9 @@ export default function Inventory() {
         attribute_set_id: "",
         has_variants: false,
         variants: [],
+        min_qty: "",
+        max_qty: "",
+        unit: "pcs",
       });
     }
     setIsModalOpen(true);
@@ -232,6 +280,9 @@ export default function Inventory() {
           : null,
         has_variants: formData.has_variants,
         variants: formData.variants,
+        min_qty: formData.min_qty !== "" ? parseInt(formData.min_qty) : 0,
+        max_qty: formData.max_qty !== "" ? parseInt(formData.max_qty) : 0,
+        unit: formData.unit || "pcs",
       };
 
       // Only send initial_stock and outlet_id on creation
@@ -261,6 +312,35 @@ export default function Inventory() {
     }
   };
 
+  const handleImport = (e) => {
+    const file = e.target.files[0];
+    e.target.value = ""; // reset so same file can be re-selected
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const rows = parseCSV(ev.target.result);
+      if (!rows.length) return alert("CSV appears empty or has no data rows.");
+      setIsImporting(true);
+      setImportResults(null);
+      try {
+        const res = await fetch("http://localhost:5000/api/products/bulk-import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        setImportResults(data.results);
+        fetchProducts();
+      } catch (err) {
+        alert("Import failed: " + err.message);
+      } finally {
+        setIsImporting(false);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="flex-1 overflow-auto bg-slate-50 p-8 w-full h-full">
       {/* Header */}
@@ -271,13 +351,81 @@ export default function Inventory() {
             Manage your 5,000+ products here.
           </p>
         </div>
-        <button
-          onClick={() => openModal()}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-lg shadow-blue-600/20 transition-all hover:-translate-y-0.5"
-        >
-          <Plus size={20} /> Add New Item
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() =>
+              exportCSV(
+                products.map((p) => ({
+                  barcode: p.barcode,
+                  name: p.name,
+                  price: p.price,
+                  cost_price: p.cost_price,
+                  gst: p.gst,
+                  stock: p.total_stock ?? p.stock,
+                  min_qty: p.min_qty,
+                  max_qty: p.max_qty,
+                  unit: p.unit,
+                })),
+                "inventory.csv",
+              )
+            }
+            className="border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all"
+          >
+            <Download size={18} /> Export CSV
+          </button>
+          <label className="border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all cursor-pointer">
+            <Upload size={18} />
+            {isImporting ? "Importing…" : "Bulk Upload"}
+            <input
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleImport}
+              disabled={isImporting}
+            />
+          </label>
+          <button
+            onClick={() => openModal()}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-lg shadow-blue-600/20 transition-all hover:-translate-y-0.5"
+          >
+            <Plus size={20} /> Add New Item
+          </button>
+        </div>
       </div>
+
+      {/* Bulk Import Results */}
+      {importResults && (
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
+          <div className="flex justify-between items-center px-5 py-3 bg-slate-50 border-b border-slate-200">
+            <span className="font-bold text-slate-700 text-sm">
+              Import Results — {importResults.filter((r) => r.status !== "error").length} succeeded,{" "}
+              {importResults.filter((r) => r.status === "error").length} failed
+            </span>
+            <button onClick={() => setImportResults(null)} className="text-slate-400 hover:text-slate-600">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="max-h-52 overflow-y-auto divide-y divide-slate-100">
+            {importResults.map((r, i) => (
+              <div key={i} className="flex items-center gap-3 px-5 py-2 text-sm">
+                <span
+                  className={`px-2 py-0.5 rounded text-xs font-bold ${
+                    r.status === "error"
+                      ? "bg-red-100 text-red-600"
+                      : r.status === "inserted"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-blue-100 text-blue-700"
+                  }`}
+                >
+                  {r.status}
+                </span>
+                <span className="font-mono text-slate-500">{r.barcode}</span>
+                <span className="text-slate-700">{r.name || r.message}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Toolbar / Search */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex gap-4 items-center">
@@ -314,6 +462,12 @@ export default function Inventory() {
                   Price
                 </th>
                 <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Unit
+                </th>
+                <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Min QTY
+                </th>
+                <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   Stock Level
                 </th>
                 <th className="px-6 py-4"></th>
@@ -333,6 +487,12 @@ export default function Inventory() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 text-right">
                     ${product.price ? product.price.toFixed(2) : "0.00"}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 text-right">
+                    {product.unit || "pcs"}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 text-right">
+                    {product.min_qty || 0}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
                     <span
@@ -358,7 +518,7 @@ export default function Inventory() {
               {filteredProducts.length === 0 && (
                 <tr>
                   <td
-                    colSpan="5"
+                    colSpan="7"
                     className="px-6 py-12 text-center text-slate-500"
                   >
                     <Package className="mx-auto h-12 w-12 text-slate-300 mb-3" />
@@ -689,6 +849,63 @@ export default function Inventory() {
                           )}
                         </div>
                       )}
+                      {/* Unit of Measure + Reorder Levels */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Unit of Measure
+                        </label>
+                        <select
+                          value={formData.unit}
+                          onChange={(e) =>
+                            setFormData({ ...formData, unit: e.target.value })
+                          }
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        >
+                          <option value="pcs">pcs (Pieces)</option>
+                          <option value="kg">kg (Kilogram)</option>
+                          <option value="g">g (Gram)</option>
+                          <option value="litre">litre</option>
+                          <option value="ml">ml (Millilitre)</option>
+                          <option value="box">box</option>
+                          <option value="dozen">dozen</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Min QTY (Reorder Point)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.min_qty}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              min_qty: e.target.value,
+                            })
+                          }
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Max QTY (Max Stock Level)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.max_qty}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              max_qty: e.target.value,
+                            })
+                          }
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="0"
+                        />
+                      </div>
                     </div>
 
                     {formData.has_variants && formData.variants.length > 0 && (

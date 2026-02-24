@@ -633,12 +633,15 @@ app.post("/api/products", (req, res) => {
     has_variants,
     attribute_set_id,
     variants, // Array of variant objects if has_variants is true
+    min_qty,
+    max_qty,
+    unit,
   } = req.body;
 
   db.serialize(() => {
     db.run("BEGIN TRANSACTION");
     db.run(
-      "INSERT INTO products (barcode, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)",
+      "INSERT INTO products (barcode, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         barcode,
         name,
@@ -650,6 +653,9 @@ app.post("/api/products", (req, res) => {
         brand_id || null,
         has_variants ? 1 : 0,
         attribute_set_id || null,
+        min_qty || 0,
+        max_qty || 0,
+        unit || "pcs",
       ],
       function (err) {
         if (err) {
@@ -760,6 +766,65 @@ app.post("/api/products", (req, res) => {
   });
 });
 
+// Bulk import products from CSV rows (upsert by barcode)
+app.post("/api/products/bulk-import", (req, res) => {
+  const { rows } = req.body; // [{ barcode, name, price, cost_price, gst, stock, min_qty, max_qty, unit }]
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return res.status(400).json({ error: "No rows provided" });
+  }
+
+  const results = [];
+
+  const processNext = (index) => {
+    if (index >= rows.length) {
+      return res.json({ results });
+    }
+    const row = rows[index];
+    const { barcode, name, price, cost_price, gst, stock, min_qty, max_qty, unit } = row;
+
+    if (!barcode || !name || !price) {
+      results.push({ barcode: barcode || "?", status: "error", message: "barcode, name, and price are required" });
+      return processNext(index + 1);
+    }
+
+    db.run(
+      `INSERT INTO products (barcode, name, price, cost_price, gst, stock, min_qty, max_qty, unit)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(barcode) DO UPDATE SET
+         name = excluded.name,
+         price = excluded.price,
+         cost_price = excluded.cost_price,
+         gst = excluded.gst,
+         stock = excluded.stock,
+         min_qty = excluded.min_qty,
+         max_qty = excluded.max_qty,
+         unit = excluded.unit`,
+      [
+        barcode,
+        name,
+        parseFloat(price) || 0,
+        parseFloat(cost_price) || 0,
+        gst !== "" && gst != null ? parseFloat(gst) : null,
+        parseInt(stock) || 0,
+        parseInt(min_qty) || 0,
+        parseInt(max_qty) || 0,
+        unit || "pcs",
+      ],
+      function (err) {
+        if (err) {
+          results.push({ barcode, status: "error", message: err.message });
+        } else {
+          const action = this.changes === 1 && this.lastID > 0 ? "inserted" : "updated";
+          results.push({ barcode, name, status: action });
+        }
+        processNext(index + 1);
+      },
+    );
+  };
+
+  processNext(0);
+});
+
 // Update a product (Prices, Names, Categories... NOT Stock. Stock is handled via Adjustments/Transfers)
 app.put("/api/products/:id", (req, res) => {
   const { id } = req.params;
@@ -772,11 +837,14 @@ app.put("/api/products/:id", (req, res) => {
     category_id,
     tax_id,
     brand_id,
+    min_qty,
+    max_qty,
+    unit,
   } = req.body;
 
   // Simple dynamic update
   db.run(
-    "UPDATE products SET name = COALESCE(?, name), price = COALESCE(?, price), cost_price = COALESCE(?, cost_price), gst = ?, barcode = COALESCE(?, barcode), category_id = COALESCE(?, category_id), tax_id = COALESCE(?, tax_id), brand_id = COALESCE(?, brand_id) WHERE id = ?",
+    "UPDATE products SET name = COALESCE(?, name), price = COALESCE(?, price), cost_price = COALESCE(?, cost_price), gst = ?, barcode = COALESCE(?, barcode), category_id = COALESCE(?, category_id), tax_id = COALESCE(?, tax_id), brand_id = COALESCE(?, brand_id), min_qty = COALESCE(?, min_qty), max_qty = COALESCE(?, max_qty), unit = COALESCE(?, unit) WHERE id = ?",
     [
       name,
       price,
@@ -786,6 +854,9 @@ app.put("/api/products/:id", (req, res) => {
       category_id || null,
       tax_id || null,
       brand_id || null,
+      min_qty !== undefined ? min_qty : null,
+      max_qty !== undefined ? max_qty : null,
+      unit || null,
       id,
     ],
     function (err) {
@@ -920,7 +991,7 @@ app.get("/api/purchase-orders/:id", (req, res) => {
 
 // Create a new purchase order
 app.post("/api/purchase-orders", (req, res) => {
-  const { supplier_id, total_cost, items } = req.body;
+  const { supplier_id, total_cost, items, due_date } = req.body;
 
   if (!items || items.length === 0) {
     return res.status(400).json({ error: "Purchase order must have items" });
@@ -930,8 +1001,8 @@ app.post("/api/purchase-orders", (req, res) => {
     db.run("BEGIN TRANSACTION");
 
     db.run(
-      "INSERT INTO purchase_orders (supplier_id, total_cost, status) VALUES (?, ?, 'Draft')",
-      [supplier_id, total_cost],
+      "INSERT INTO purchase_orders (supplier_id, total_cost, status, due_date) VALUES (?, ?, 'Draft', ?)",
+      [supplier_id, total_cost, due_date || null],
       function (err) {
         if (err) {
           db.run("ROLLBACK");
@@ -1227,12 +1298,20 @@ app.get("/api/customers/:id/sales", (req, res) => {
 
 // POST create customer
 app.post("/api/customers", (req, res) => {
-  const { name, mobile, email, address } = req.body;
+  const { name, mobile, email, address, cnic, occupation, balance } = req.body;
   if (!name)
     return res.status(400).json({ error: "Customer name is required" });
   db.run(
-    "INSERT INTO customers (name, mobile, email, address) VALUES (?, ?, ?, ?)",
-    [name, mobile || null, email || null, address || null],
+    "INSERT INTO customers (name, mobile, email, address, cnic, occupation, balance) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [
+      name,
+      mobile || null,
+      email || null,
+      address || null,
+      cnic || null,
+      occupation || null,
+      balance || 0,
+    ],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({
@@ -1241,6 +1320,9 @@ app.post("/api/customers", (req, res) => {
         mobile,
         email,
         address,
+        cnic,
+        occupation,
+        balance: balance || 0,
         order_count: 0,
         total_spent: 0,
       });
@@ -1251,12 +1333,21 @@ app.post("/api/customers", (req, res) => {
 // PUT update customer
 app.put("/api/customers/:id", (req, res) => {
   const { id } = req.params;
-  const { name, mobile, email, address } = req.body;
+  const { name, mobile, email, address, cnic, occupation, balance } = req.body;
   if (!name)
     return res.status(400).json({ error: "Customer name is required" });
   db.run(
-    "UPDATE customers SET name = ?, mobile = ?, email = ?, address = ? WHERE id = ?",
-    [name, mobile || null, email || null, address || null, id],
+    "UPDATE customers SET name = ?, mobile = ?, email = ?, address = ?, cnic = ?, occupation = ?, balance = COALESCE(?, balance) WHERE id = ?",
+    [
+      name,
+      mobile || null,
+      email || null,
+      address || null,
+      cnic || null,
+      occupation || null,
+      balance !== undefined ? balance : null,
+      id,
+    ],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
       if (this.changes === 0)
@@ -1576,6 +1667,7 @@ app.post("/api/sales", (req, res) => {
     discount_type = "fixed",
     points_earned = 0,
     points_redeemed = 0,
+    notes = null,
   } = req.body;
 
   // Validation
@@ -1597,7 +1689,7 @@ app.post("/api/sales", (req, res) => {
     discount_type === "percent"
       ? (subtotal * parseFloat(discount_amount || 0)) / 100
       : parseFloat(discount_amount || 0);
-  const totalAmount = subtotal - discountValue;
+  const totalAmount = subtotal - discountValue - parseFloat(points_redeemed || 0);
 
   // Determine the actual payments to record
   let finalPayments = payments;
@@ -1617,7 +1709,7 @@ app.post("/api/sales", (req, res) => {
 
     // 2. Insert into Sales Table (outlet_id + employee_id + customer_id + discount + points)
     db.run(
-      "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         totalAmount,
         mainPaymentMethod,
@@ -1628,6 +1720,7 @@ app.post("/api/sales", (req, res) => {
         discount_type,
         points_earned,
         points_redeemed,
+        notes || null,
       ],
       function (err) {
         if (err) {
@@ -2009,6 +2102,18 @@ app.get("/api/reports/dashboard", async (req, res) => {
             WHERE os.quantity > 0
         `);
 
+    // 6. Last 7 days sales trend (for chart)
+    const salesTrend = await getQuery(`
+      SELECT date(timestamp,'localtime') as day,
+             ROUND(SUM(total_amount),2) as revenue,
+             COUNT(id) as sale_count
+      FROM sales
+      WHERE voided = 0
+        AND date(timestamp,'localtime') >= date('now','-6 days','localtime')
+      GROUP BY day
+      ORDER BY day ASC
+    `);
+
     res.json({
       zReport,
       totalRevenueToday,
@@ -2018,6 +2123,7 @@ app.get("/api/reports/dashboard", async (req, res) => {
       saleCount,
       topSelling,
       lowStock,
+      salesTrend,
       inventoryValue: inventoryValueRow[0] || {
         retail_value: 0,
         cost_value: 0,
@@ -2027,6 +2133,38 @@ app.get("/api/reports/dashboard", async (req, res) => {
     console.error("Report Error:", err);
     res.status(500).json({ error: "Failed to generate reports" });
   }
+});
+
+// Top Salespeople report
+app.get("/api/reports/top-salespeople", (req, res) => {
+  const { date_from, date_to } = req.query;
+  const where = ["s.voided = 0", "s.employee_id IS NOT NULL"];
+  const params = [];
+  if (date_from) {
+    where.push("date(s.timestamp,'localtime') >= ?");
+    params.push(date_from);
+  }
+  if (date_to) {
+    where.push("date(s.timestamp,'localtime') <= ?");
+    params.push(date_to);
+  }
+  const sql = `
+    SELECT e.name AS employee_name,
+           COUNT(DISTINCT s.id) AS transactions,
+           ROUND(SUM(s.total_amount), 2) AS revenue,
+           SUM(si.quantity) AS items_sold,
+           ROUND(SUM(s.total_amount) / COUNT(DISTINCT s.id), 2) AS avg_basket
+    FROM sales s
+    JOIN employees e ON s.employee_id = e.id
+    LEFT JOIN sale_items si ON s.id = si.sale_id
+    WHERE ${where.join(" AND ")}
+    GROUP BY s.employee_id
+    ORDER BY revenue DESC
+  `;
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ salespeople: rows });
+  });
 });
 
 // --- CASH MANAGEMENT ---
@@ -2938,6 +3076,108 @@ app.post("/api/attribute-sets", (req, res) => {
               });
             },
           );
+        });
+      },
+    );
+  });
+});
+
+// Update attribute set (full replace of attributes + options)
+app.put("/api/attribute-sets/:id", (req, res) => {
+  const { id } = req.params;
+  const { name, description, attributes } = req.body;
+
+  if (!name) return res.status(400).json({ error: "Name is required" });
+
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
+
+    db.run(
+      "UPDATE attribute_sets SET name = ?, description = ? WHERE id = ?",
+      [name, description || null, id],
+      function (err) {
+        if (err) {
+          db.run("ROLLBACK");
+          if (err.message.includes("UNIQUE constraint failed")) {
+            return res.status(400).json({ error: "Attribute set name must be unique" });
+          }
+          return res.status(500).json({ error: err.message });
+        }
+        if (this.changes === 0) {
+          db.run("ROLLBACK");
+          return res.status(404).json({ error: "Attribute set not found" });
+        }
+
+        // Delete old attributes (CASCADE removes attribute_options too)
+        db.run("DELETE FROM attributes WHERE attribute_set_id = ?", [id], (err2) => {
+          if (err2) {
+            db.run("ROLLBACK");
+            return res.status(500).json({ error: err2.message });
+          }
+
+          if (!attributes || attributes.length === 0) {
+            db.run("COMMIT");
+            return res.json({ message: "Attribute set updated", id });
+          }
+
+          let pendingAttributes = attributes.length;
+          let hasError = false;
+
+          attributes.forEach((attr) => {
+            if (hasError) return;
+
+            db.run(
+              "INSERT INTO attributes (name, attribute_set_id) VALUES (?, ?)",
+              [attr.name, id],
+              function (err3) {
+                if (err3) {
+                  hasError = true;
+                  db.run("ROLLBACK");
+                  return res.status(500).json({ error: err3.message });
+                }
+
+                const attrId = this.lastID;
+                const options = attr.options || [];
+
+                if (options.length === 0) {
+                  pendingAttributes--;
+                  if (pendingAttributes === 0 && !hasError) {
+                    db.run("COMMIT");
+                    res.json({ message: "Attribute set updated", id });
+                  }
+                  return;
+                }
+
+                let pendingOptions = options.length;
+                options.forEach((opt) => {
+                  if (hasError) return;
+                  const optValue = typeof opt === "string" ? opt : opt.value;
+                  db.run(
+                    "INSERT INTO attribute_options (attribute_id, value) VALUES (?, ?)",
+                    [attrId, optValue],
+                    function (err4) {
+                      if (err4) {
+                        hasError = true;
+                        db.run("ROLLBACK");
+                        return res.status(500).json({ error: err4.message });
+                      }
+                      pendingOptions--;
+                      if (pendingOptions === 0) {
+                        pendingAttributes--;
+                        if (pendingAttributes === 0 && !hasError) {
+                          db.run("COMMIT");
+                          res.json({
+                            message: "Attribute set updated",
+                            id,
+                          });
+                        }
+                      }
+                    },
+                  );
+                });
+              },
+            );
+          });
         });
       },
     );
