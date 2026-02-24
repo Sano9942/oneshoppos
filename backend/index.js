@@ -2641,7 +2641,7 @@ app.post("/api/shifts/open", (req, res) => {
 // POST close a shift — auto-calculates expected cash from cash sales during shift period
 app.post("/api/shifts/:id/close", (req, res) => {
   const { id } = req.params;
-  const { closing_cash, notes } = req.body;
+  const { closing_cash, notes, variance_reason, variance_approved_by, denominations } = req.body;
 
   if (closing_cash === undefined) {
     return res.status(400).json({ error: "closing_cash is required" });
@@ -2694,7 +2694,7 @@ app.post("/api/shifts/:id/close", (req, res) => {
               db.run(
                 `UPDATE cash_shifts
                SET status = 'closed', closing_cash = ?, expected_cash = ?, variance = ?,
-                   closed_at = ?, notes = ?
+                   closed_at = ?, notes = ?, variance_reason = ?, variance_approved_by = ?
                WHERE id = ?`,
                 [
                   closing_cash,
@@ -2702,10 +2702,23 @@ app.post("/api/shifts/:id/close", (req, res) => {
                   variance,
                   closedAt,
                   notes || null,
+                  variance_reason || null,
+                  variance_approved_by || null,
                   id,
                 ],
                 function (err) {
                   if (err) return res.status(500).json({ error: err.message });
+                  // Store denomination breakdown if provided
+                  if (denominations && denominations.length > 0) {
+                    const stmt = db.prepare(
+                      "INSERT INTO shift_denominations (shift_id, denomination, count) VALUES (?,?,?)"
+                    );
+                    denominations.forEach((d) => {
+                      if (d.count > 0)
+                        stmt.run([id, d.denomination, d.count]);
+                    });
+                    stmt.finalize();
+                  }
                   res.json({
                     message: "Shift closed successfully",
                     opening_float: shift.opening_float,
@@ -2715,6 +2728,7 @@ app.post("/api/shifts/:id/close", (req, res) => {
                     expected_cash: expectedCash,
                     closing_cash,
                     variance,
+                    variance_reason: variance_reason || null,
                   });
                 },
               );
@@ -2724,6 +2738,33 @@ app.post("/api/shifts/:id/close", (req, res) => {
       );
     },
   );
+});
+
+// GET denomination breakdown for a shift
+app.get("/api/shifts/:id/denominations", (req, res) => {
+  db.all(
+    "SELECT denomination, count, subtotal FROM shift_denominations WHERE shift_id = ? ORDER BY denomination DESC",
+    [req.params.id],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ denominations: rows });
+    }
+  );
+});
+
+// GET variance reason codes (static list)
+app.get("/api/variance-reasons", (req, res) => {
+  res.json({
+    reasons: [
+      "Counting error",
+      "Till refund not recorded",
+      "Change given incorrectly",
+      "Currency denomination mix-up",
+      "Tip/gratuity retained",
+      "Manager override",
+      "Other",
+    ],
+  });
 });
 
 // --- EMPLOYEE ATTENDANCE ---

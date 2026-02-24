@@ -282,7 +282,7 @@ Exit criteria:
 
 ---
 
-## Phase 10 - Shift Reconciliation Enhancements
+## Phase 10 - Shift Reconciliation Enhancements ✅ COMPLETE
 Goal: stronger cash accountability.
 
 Scope:
@@ -292,6 +292,15 @@ Scope:
 
 Exit criteria:
 - Full close-shift accountability trail with reasons
+
+Completed: 2026-02-24
+- migrate36.js: shift_denominations table (denomination, count, computed subtotal); added variance_reason + variance_approved_by columns to cash_shifts
+- Backend: close-shift route accepts denominations[], variance_reason, variance_approved_by; stores denomination rows post-close
+- Backend: GET /api/shifts/:id/denominations — retrieve breakdown for audit; GET /api/variance-reasons — static reason code list
+- CashManagement.jsx: close-shift modal replaced with denomination count grid (PKR 5000→1 denominations); auto-totals closing cash from counts
+- Variance reason dropdown pre-shown in close modal; optional "Approved By" field appears when reason is selected
+- Shift history table: new Reason column; clicking Actual amount opens denomination breakdown panel
+- Shift history: +1 column (Reason) with variance_reason displayed
 
 ---
 

@@ -36,6 +36,7 @@ const migrations = [
   "migrate33.js",
   "migrate34.js",
   "migrate35.js",
+  "migrate36.js",
 ];
 
 for (const m of migrations) {
