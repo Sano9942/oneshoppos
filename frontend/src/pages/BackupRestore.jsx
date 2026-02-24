@@ -1,22 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Download, Upload, History, AlertTriangle, CheckCircle, RefreshCw, Database } from "lucide-react";
+import { useAuth } from "../auth/AuthProvider";
 
 const API = "http://localhost:5000";
-
-function getCurrentEmployee() {
-  try {
-    const raw = localStorage.getItem("currentEmployee");
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function getAuthHeaders(extra = {}) {
-  const emp = getCurrentEmployee();
-  if (emp?.id) return { ...extra, "x-employee-id": String(emp.id) };
-  return { ...extra };
-}
 
 function fmt(dt) {
   if (!dt) return "—";
@@ -31,6 +17,7 @@ function fmtBytes(b) {
 }
 
 export default function BackupRestore() {
+  const { employee, authHeaders } = useAuth();
   const [log, setLog] = useState([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState(null); // { type: 'success'|'error', text }
@@ -44,24 +31,23 @@ export default function BackupRestore() {
 
   const fetchLog = useCallback(async (silent = false) => {
     try {
-      const r = await fetch(`${API}/api/backup/log`, { headers: getAuthHeaders() });
+      const r = await fetch(`${API}/api/backup/log`, { headers: authHeaders() });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Failed to load backup log");
       setLog(d.log || []);
     } catch (e) {
       if (!silent) showMsg("error", e.message || "Failed to load backup log");
     }
-  }, [showMsg]);
+  }, [showMsg, authHeaders]);
 
   useEffect(() => { fetchLog(true); }, [fetchLog]);
 
   const handleDownload = async () => {
     setLoading(true);
     try {
-      const emp = getCurrentEmployee();
-      const performedBy = emp?.name || (emp?.id ? `Employee #${emp.id}` : "Unknown");
+      const performedBy = employee?.name || (employee?.id ? `Employee #${employee.id}` : "Unknown");
       const res = await fetch(`${API}/api/backup/download?performed_by=${encodeURIComponent(performedBy)}`, {
-        headers: getAuthHeaders(),
+        headers: authHeaders(),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -100,15 +86,14 @@ export default function BackupRestore() {
 
     setRestoring(true);
     try {
-      const emp = getCurrentEmployee();
-      const performedBy = emp?.name || (emp?.id ? `Employee #${emp.id}` : "Unknown");
+      const performedBy = employee?.name || (employee?.id ? `Employee #${employee.id}` : "Unknown");
       const form = new FormData();
       form.append("backup_file", file);
       form.append("performed_by", performedBy);
       const res = await fetch(`${API}/api/backup/restore`, {
         method: "POST",
         body: form,
-        headers: getAuthHeaders(),
+        headers: authHeaders(),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Restore failed");

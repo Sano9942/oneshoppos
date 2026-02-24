@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Search,
   Plus,
@@ -22,8 +22,10 @@ import {
   Tag,
   FileText,
 } from "lucide-react";
+import { useAuth } from "../auth/AuthProvider";
 
 export default function POS() {
+  const { employee, hasPerm } = useAuth();
   const [cart, setCart] = useState([]);
   const [barcodeInput, setBarcodeInput] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -38,11 +40,10 @@ export default function POS() {
   const [discountInput, setDiscountInput] = useState("");
   const [discountType, setDiscountType] = useState("fixed");
 
-  const [currentEmployee, setCurrentEmployee] = useState(null);
-  const [employeePerms, setEmployeePerms] = useState([]);
   const [attendanceId, setAttendanceId] = useState(null);
-  const [pinInput, setPinInput] = useState("");
-  const [pinError, setPinError] = useState("");
+  const [isRegisterLocked, setIsRegisterLocked] = useState(false);
+  const [unlockPin, setUnlockPin] = useState("");
+  const [unlockError, setUnlockError] = useState("");
 
   const [overrideState, setOverrideState] = useState({
     show: false,
@@ -51,9 +52,6 @@ export default function POS() {
   });
   const [overridePin, setOverridePin] = useState("");
   const [overrideError, setOverrideError] = useState("");
-
-  const hasPerm = (perm) =>
-    employeePerms.includes("all_access") || employeePerms.includes(perm);
 
   const executeWithPermission = (perm, actionFunc) => {
     if (hasPerm(perm)) {
@@ -64,17 +62,6 @@ export default function POS() {
       setOverrideState({ show: true, actionFunc, requiredPerm: perm });
     }
   };
-
-  useEffect(() => {
-    if (currentEmployee && currentEmployee.role_id) {
-      fetch(
-        `http://localhost:5000/api/roles/${currentEmployee.role_id}/permissions`,
-      )
-        .then((r) => r.json())
-        .then((d) => setEmployeePerms(d.permissions || []))
-        .catch((e) => console.error(e));
-    }
-  }, [currentEmployee]);
 
   const handleOverrideSubmit = async (e) => {
     e.preventDefault();
@@ -142,6 +129,13 @@ export default function POS() {
   const promoTimeoutRef = useRef(null);
 
   useEffect(() => {
+    const raw = sessionStorage.getItem("posAttendanceId");
+    if (!raw) return;
+    const parsed = parseInt(raw, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) setAttendanceId(parsed);
+  }, []);
+
+  useEffect(() => {
     fetch("http://localhost:5000/api/outlets")
       .then((r) => r.json())
       .then((data) => {
@@ -158,6 +152,26 @@ export default function POS() {
       .then((d) => setCustomers(d.customers || []))
       .catch((err) => console.error("Failed to load customers", err)); // Fixed empty catch block
   }, []);
+
+  useEffect(() => {
+    if (!employee?.id || !selectedOutletId || attendanceId || isRegisterLocked) return;
+    fetch("http://localhost:5000/api/attendance/checkin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        employee_id: employee.id,
+        outlet_id: selectedOutletId,
+      }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.attendance?.id) {
+          setAttendanceId(d.attendance.id);
+          sessionStorage.setItem("posAttendanceId", String(d.attendance.id));
+        }
+      })
+      .catch((err) => console.error("Failed to check in attendance", err));
+  }, [employee, selectedOutletId, attendanceId, isRegisterLocked]);
 
   useEffect(() => {
     if (selectedOutletId) fetchParkedSales();
@@ -197,7 +211,7 @@ export default function POS() {
       } catch { /* fail silently — promotions are non-blocking */ }
     }, 400);
     return () => clearTimeout(promoTimeoutRef.current);
-  }, [cart]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cart]);
 
   useEffect(() => {
     if (!selectedOutletId) return;
@@ -263,7 +277,9 @@ export default function POS() {
       const res = await fetch(`http://localhost:5000/api/parked-sales${params}`);
       const data = await res.json();
       setParkedSales(data.parkedSales || []);
-    } catch {}
+    } catch (err) {
+      console.error("Failed to fetch parked sales", err);
+    }
   };
 
   const handleParkSale = async () => {
@@ -273,7 +289,7 @@ export default function POS() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          employee_id: loggedInEmployee?.id || null,
+          employee_id: employee?.id || null,
           outlet_id: selectedOutletId || null,
           customer_id: selectedCustomerId || null,
           notes: orderNote || null,
@@ -521,7 +537,7 @@ export default function POS() {
           payments: payments,
           cartItems: cart,
           outlet_id: selectedOutletId,
-          employee_id: currentEmployee?.id || null,
+          employee_id: employee?.id || null,
           customer_id: selectedCustomerId ? parseInt(selectedCustomerId) : null,
           discount_amount: parseFloat(discountInput || 0),
           discount_type: discountType,
@@ -667,9 +683,9 @@ export default function POS() {
     }
   };
 
-  const handlePinLogin = async (e) => {
+  const handleUnlockRegister = async (e) => {
     e.preventDefault();
-    if (!pinInput) return;
+    if (!unlockPin) return;
 
     try {
       const res = await fetch(
@@ -677,39 +693,28 @@ export default function POS() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pin_code: pinInput }),
+          body: JSON.stringify({ pin_code: unlockPin }),
         },
       );
 
       const data = await res.json();
 
       if (!res.ok) {
-        setPinError(data.error || "Invalid PIN");
-        setPinInput("");
+        setUnlockError(data.error || "Invalid PIN");
+        setUnlockPin("");
+        return;
+      }
+      if (!employee?.id || data.employee.id !== employee.id) {
+        setUnlockError("PIN does not match logged-in user");
+        setUnlockPin("");
         return;
       }
 
-      setCurrentEmployee(data.employee);
-      setPinError("");
-      setPinInput("");
-
-      if (selectedOutletId) {
-        fetch("http://localhost:5000/api/attendance/checkin", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            employee_id: data.employee.id,
-            outlet_id: selectedOutletId,
-          }),
-        })
-          .then((r) => r.json())
-          .then((d) => {
-            if (d.attendance) setAttendanceId(d.attendance.id);
-          })
-          .catch((err) => console.error("Failed to check in attendance", err)); // Fixed empty catch block
-      }
+      setUnlockError("");
+      setUnlockPin("");
+      setIsRegisterLocked(false);
     } catch (err) {
-      setPinError("Failed to connect to server");
+      setUnlockError("Failed to connect to server");
       console.error("PIN login failed", err);
     }
   };
@@ -725,11 +730,14 @@ export default function POS() {
         console.error("Failed to checkout", e);
       }
     }
-    setCurrentEmployee(null);
+    setIsRegisterLocked(true);
+    setUnlockPin("");
+    setUnlockError("");
     setAttendanceId(null);
+    sessionStorage.removeItem("posAttendanceId");
   };
 
-  if (!currentEmployee) {
+  if (isRegisterLocked) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-slate-900">
         <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm flex flex-col items-center">
@@ -744,7 +752,7 @@ export default function POS() {
           </p>
 
           <form
-            onSubmit={handlePinLogin}
+            onSubmit={handleUnlockRegister}
             className="w-full flex flex-col gap-4"
           >
             <div>
@@ -752,24 +760,24 @@ export default function POS() {
                 type="password"
                 autoFocus
                 maxLength="10"
-                value={pinInput}
+                value={unlockPin}
                 onChange={(e) => {
-                  setPinInput(e.target.value);
-                  setPinError("");
+                  setUnlockPin(e.target.value);
+                  setUnlockError("");
                 }}
                 className="w-full text-center tracking-[0.5em] text-2xl py-3 px-4 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono"
                 placeholder="****"
               />
             </div>
-            {pinError && (
+            {unlockError && (
               <p className="text-red-500 text-sm text-center font-medium">
-                {pinError}
+                {unlockError}
               </p>
             )}
 
             <button
               type="submit"
-              disabled={!pinInput}
+              disabled={!unlockPin}
               className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm mt-2"
             >
               Unlock Register
@@ -792,7 +800,7 @@ export default function POS() {
 
         <div className="flex items-center gap-4">
           <span className="text-sm font-semibold text-slate-600 hidden sm:block">
-            One Shop-The Toy Store
+            {employee?.name || "POS User"}
           </span>
           {outlets.length > 0 && (
             <select
@@ -1188,7 +1196,7 @@ export default function POS() {
               <div className="text-sm pt-2">
                 {appliedPromotions.map((ap) => (
                   <div key={ap.promotion_id} className="flex justify-between items-center text-emerald-400">
-                    <span className="font-medium truncate max-w-[160px]">🏷 {ap.name}</span>
+                    <span className="font-medium truncate max-w-40">🏷 {ap.name}</span>
                     <span className="font-bold">- PKRs {ap.discount.toFixed(2)}</span>
                   </div>
                 ))}

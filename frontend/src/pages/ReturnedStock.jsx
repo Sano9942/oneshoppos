@@ -14,6 +14,7 @@ import {
   ArrowLeft,
   RefreshCcw,
 } from "lucide-react";
+import { useAuth } from "../auth/AuthProvider";
 
 const API = "http://localhost:5000";
 
@@ -29,7 +30,8 @@ const fmtDate = (d) =>
       })
     : "—";
 
-export default function ReturnedStock({ currentEmployee }) {
+export default function ReturnedStock() {
+  const { employee } = useAuth();
   const [returns, setReturns] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -169,7 +171,7 @@ export default function ReturnedStock({ currentEmployee }) {
       const payload = {
         supplier_id: parseInt(selectedSupplierId),
         outlet_id: parseInt(selectedOutletId),
-        employee_id: currentEmployee?.id || null,
+        employee_id: employee?.id || null,
         reason: returnReason,
         reference_number: referenceNumber,
         items: returnItems.map((i) => ({

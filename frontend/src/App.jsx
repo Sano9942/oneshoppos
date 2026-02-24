@@ -1,73 +1,239 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import Inventory from "./pages/Inventory";
-import POS from "./pages/POS";
-import Dashboard from "./pages/Dashboard";
-import Suppliers from "./pages/Suppliers";
-import PurchaseOrders from "./pages/PurchaseOrders";
+import { BrowserRouter as Router, Navigate, Route, Routes } from "react-router-dom";
+import { useAuth } from "./auth/AuthProvider";
+import RequireAuth from "./components/RequireAuth";
+import RequirePerm from "./components/RequirePerm";
 import AppLayout from "./components/AppLayout";
-import Taxes from "./pages/Taxes";
-import Categories from "./pages/Categories";
-import Outlets from "./pages/Outlets";
-import Employees from "./pages/Employees";
-import Brands from "./pages/Brands";
-import StockAdjustments from "./pages/StockAdjustments";
-import Transfers from "./pages/Transfers";
-import SalesHistory from "./pages/SalesHistory";
-import CashManagement from "./pages/CashManagement";
-import Customers from "./pages/Customers";
-import Attendance from "./pages/Attendance";
-import Reports, { ReportTabStandalone } from "./pages/Reports";
-import Returns from "./pages/Returns";
-import ReturnedStock from "./pages/ReturnedStock";
-import ActionHistory from "./pages/ActionHistory";
-import PlaceholderPage from "./pages/PlaceholderPage";
+import AccessDenied from "./pages/AccessDenied";
 import Administrator from "./pages/Administrator";
-import AttributeSets from "./pages/AttributeSets";
-import ReceiptTemplates from "./pages/ReceiptTemplates";
 import Approvals from "./pages/Approvals";
-import SupplierPayables from "./pages/SupplierPayables";
-import Promotions from "./pages/Promotions";
-import BarcodeTemplates from "./pages/BarcodeTemplates";
-import Expenses from "./pages/Expenses";
+import Attendance from "./pages/Attendance";
+import AttributeSets from "./pages/AttributeSets";
 import BackupRestore from "./pages/BackupRestore";
+import BarcodeTemplates from "./pages/BarcodeTemplates";
+import Brands from "./pages/Brands";
+import CashManagement from "./pages/CashManagement";
+import Categories from "./pages/Categories";
+import Customers from "./pages/Customers";
+import Dashboard from "./pages/Dashboard";
+import Employees from "./pages/Employees";
+import Expenses from "./pages/Expenses";
+import Inventory from "./pages/Inventory";
+import Login from "./pages/Login";
+import Outlets from "./pages/Outlets";
+import PlaceholderPage from "./pages/PlaceholderPage";
+import POS from "./pages/POS";
+import Promotions from "./pages/Promotions";
+import PurchaseOrders from "./pages/PurchaseOrders";
+import ReceiptTemplates from "./pages/ReceiptTemplates";
+import Reports, { ReportTabStandalone } from "./pages/Reports";
+import ReturnedStock from "./pages/ReturnedStock";
+import Returns from "./pages/Returns";
+import SalesHistory from "./pages/SalesHistory";
+import ActionHistory from "./pages/ActionHistory";
+import StockAdjustments from "./pages/StockAdjustments";
+import SupplierPayables from "./pages/SupplierPayables";
+import Suppliers from "./pages/Suppliers";
+import Taxes from "./pages/Taxes";
+import Transfers from "./pages/Transfers";
+
+function HomeRedirect() {
+  const { isAuthenticated, isBootstrapping } = useAuth();
+  if (isBootstrapping) return null;
+  return <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />;
+}
 
 function App() {
   return (
     <Router>
       <Routes>
-        {/* POS operates outside the main Dashboard layout for maximum screen real-estate */}
-        <Route path="/pos" element={<POS />} />
+        <Route path="/" element={<HomeRedirect />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/access-denied" element={<AccessDenied />} />
+        <Route
+          path="/pos"
+          element={
+            <RequireAuth>
+              <POS />
+            </RequireAuth>
+          }
+        />
 
-        {/* The Xstak Dashboard Layout wraps all other routes */}
-        <Route element={<AppLayout />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/inventory" element={<Inventory />} />
-          <Route path="/adjustments" element={<StockAdjustments />} />
-          <Route path="/transfers" element={<Transfers />} />
+        <Route
+          element={
+            <RequireAuth>
+              <AppLayout />
+            </RequireAuth>
+          }
+        >
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/sales-history" element={<SalesHistory />} />
           <Route path="/cash-management" element={<CashManagement />} />
           <Route path="/customers" element={<Customers />} />
-          <Route path="/suppliers" element={<Suppliers />} />
-          <Route path="/purchase-orders" element={<PurchaseOrders />} />
-          <Route path="/supplier-payables" element={<SupplierPayables />} />
-          <Route path="/promotions" element={<Promotions />} />
-          <Route path="/expenses" element={<Expenses />} />
-
-          {/* New Implementation Routes */}
-          <Route path="/categories" element={<Categories />} />
-          <Route path="/taxes" element={<Taxes />} />
-          <Route path="/outlets" element={<Outlets />} />
-          <Route path="/employees" element={<Employees />} />
-          <Route path="/attendance" element={<Attendance />} />
-          <Route path="/brands" element={<Brands />} />
-
-          {/* New XStak Placeholder Routes */}
+          <Route path="/attribute-sets" element={<AttributeSets />} />
           <Route path="/orders" element={<PlaceholderPage />} />
           <Route path="/lookup" element={<PlaceholderPage />} />
           <Route path="/custom-fields" element={<PlaceholderPage />} />
-          <Route path="/attribute-sets" element={<AttributeSets />} />
-          <Route path="/returned-stock" element={<ReturnedStock />} />
-          <Route path="/action-history" element={<ActionHistory />} />
+          <Route path="/partners" element={<PlaceholderPage />} />
+          <Route path="/shopcast" element={<PlaceholderPage />} />
+          <Route path="/reports" element={<Reports />} />
+          <Route path="/returns" element={<Returns />} />
+
+          <Route
+            path="/inventory"
+            element={
+              <RequirePerm perm="manage_inventory">
+                <Inventory />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/adjustments"
+            element={
+              <RequirePerm perm="manage_inventory">
+                <StockAdjustments />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/transfers"
+            element={
+              <RequirePerm perm="manage_inventory">
+                <Transfers />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/promotions"
+            element={
+              <RequirePerm perm="manage_inventory">
+                <Promotions />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/expenses"
+            element={
+              <RequirePerm perm="manage_inventory">
+                <Expenses />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/categories"
+            element={
+              <RequirePerm perm="manage_inventory">
+                <Categories />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/taxes"
+            element={
+              <RequirePerm perm="manage_inventory">
+                <Taxes />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/brands"
+            element={
+              <RequirePerm perm="manage_inventory">
+                <Brands />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/barcode-templates"
+            element={
+              <RequirePerm perm="manage_inventory">
+                <BarcodeTemplates />
+              </RequirePerm>
+            }
+          />
+
+          <Route
+            path="/suppliers"
+            element={
+              <RequirePerm perm="manage_orders">
+                <Suppliers />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/purchase-orders"
+            element={
+              <RequirePerm perm="manage_orders">
+                <PurchaseOrders />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/supplier-payables"
+            element={
+              <RequirePerm perm="manage_orders">
+                <SupplierPayables />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/approvals"
+            element={
+              <RequirePerm perm="manage_orders">
+                <Approvals />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/returned-stock"
+            element={
+              <RequirePerm perm="manage_orders">
+                <ReturnedStock />
+              </RequirePerm>
+            }
+          />
+
+          <Route
+            path="/employees"
+            element={
+              <RequirePerm perm="manage_employees">
+                <Employees />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/outlets"
+            element={
+              <RequirePerm perm="manage_employees">
+                <Outlets />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/administrator"
+            element={
+              <RequirePerm perm="manage_employees">
+                <Administrator />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/action-history"
+            element={
+              <RequirePerm perm="manage_employees">
+                <ActionHistory />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/backup-restore"
+            element={
+              <RequirePerm perm="manage_employees">
+                <BackupRestore />
+              </RequirePerm>
+            }
+          />
+
+          <Route path="/attendance" element={<Attendance />} />
           <Route
             path="/reports/sales-summary"
             element={<ReportTabStandalone tabId="sales-summary" />}
@@ -137,18 +303,10 @@ function App() {
             path="/reports/product-performance"
             element={<ReportTabStandalone tabId="product-performance" />}
           />
-          <Route path="/barcode-templates" element={<BarcodeTemplates />} />
           <Route path="/receipt-templates" element={<ReceiptTemplates />} />
-          <Route path="/backup-restore" element={<BackupRestore />} />
-          <Route path="/partners" element={<PlaceholderPage />} />
-          <Route path="/shopcast" element={<PlaceholderPage />} />
-          <Route path="/administrator" element={<Administrator />} />
-          <Route path="/approvals" element={<Approvals />} />
-
-          {/* Keep old legacy routes around safely just in case */}
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/returns" element={<Returns />} />
         </Route>
+
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );
