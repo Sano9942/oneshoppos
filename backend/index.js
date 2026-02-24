@@ -787,37 +787,51 @@ app.post("/api/products/bulk-import", (req, res) => {
       return processNext(index + 1);
     }
 
-    db.run(
-      `INSERT INTO products (barcode, name, price, cost_price, gst, stock, min_qty, max_qty, unit)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(barcode) DO UPDATE SET
-         name = excluded.name,
-         price = excluded.price,
-         cost_price = excluded.cost_price,
-         gst = excluded.gst,
-         stock = excluded.stock,
-         min_qty = excluded.min_qty,
-         max_qty = excluded.max_qty,
-         unit = excluded.unit`,
-      [
-        barcode,
-        name,
-        parseFloat(price) || 0,
-        parseFloat(cost_price) || 0,
-        gst !== "" && gst != null ? parseFloat(gst) : null,
-        parseInt(stock) || 0,
-        parseInt(min_qty) || 0,
-        parseInt(max_qty) || 0,
-        unit || "pcs",
-      ],
-      function (err) {
-        if (err) {
-          results.push({ barcode, status: "error", message: err.message });
-        } else {
-          const action = this.changes === 1 && this.lastID > 0 ? "inserted" : "updated";
-          results.push({ barcode, name, status: action });
+    db.get(
+      "SELECT id FROM products WHERE barcode = ?",
+      [barcode],
+      (findErr, existing) => {
+        if (findErr) {
+          results.push({ barcode, status: "error", message: findErr.message });
+          return processNext(index + 1);
         }
-        processNext(index + 1);
+
+        db.run(
+          `INSERT INTO products (barcode, name, price, cost_price, gst, stock, min_qty, max_qty, unit)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(barcode) DO UPDATE SET
+             name = excluded.name,
+             price = excluded.price,
+             cost_price = excluded.cost_price,
+             gst = excluded.gst,
+             stock = excluded.stock,
+             min_qty = excluded.min_qty,
+             max_qty = excluded.max_qty,
+             unit = excluded.unit`,
+          [
+            barcode,
+            name,
+            parseFloat(price) || 0,
+            parseFloat(cost_price) || 0,
+            gst !== "" && gst != null ? parseFloat(gst) : null,
+            parseInt(stock) || 0,
+            parseInt(min_qty) || 0,
+            parseInt(max_qty) || 0,
+            unit || "pcs",
+          ],
+          function (err) {
+            if (err) {
+              results.push({ barcode, status: "error", message: err.message });
+            } else {
+              results.push({
+                barcode,
+                name,
+                status: existing ? "updated" : "inserted",
+              });
+            }
+            processNext(index + 1);
+          },
+        );
       },
     );
   };

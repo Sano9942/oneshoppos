@@ -118,3 +118,100 @@ The following real-world workflow was tested and confirmed working end-to-end:
 - [ ] No unit tests for helper functions
 - [ ] `api_test.js` (earlier script) found `/api/stock-adjustments` returns 404 on invalid qty type instead of 400 — not yet fixed
 - [ ] Returns processing via POS qty `-` button not formally tested via script
+
+---
+
+## Full Coverage Audit (Forced Restart + New Features) - 2026-02-24
+
+### Environment Reset (Executed First)
+
+1. Checked listeners on `:5000` and `:5173`
+2. Detected backend listener on `:5000` (`node index.js`, PID 12840)
+3. Stopped only confirmed app listener process on `:5000`
+4. Restarted app using `START.bat` from project root
+5. Readiness gates:
+   - `GET http://localhost:5000/api/outlets` -> `200` (PASS)
+   - `http://localhost:5173` responded (PASS)
+
+### Automated Commands Run
+
+```bash
+npm run lint
+node e2e_test.js
+node e2e_full_test.js
+npm run test:e2e-full
+```
+
+### Automated Results Summary
+
+- `node e2e_test.js` -> **14 passed, 0 failed**
+- `node e2e_full_test.js` -> **61 passed, 1 failed**
+- `npm run test:e2e-full` -> **61 passed, 1 failed**
+- `npm run lint` -> **0 errors, 2 warnings**
+
+### New Feature Coverage Added in `e2e_full_test.js`
+
+| Feature / Endpoint                                         | Status |
+| ---------------------------------------------------------- | ------ |
+| Product extended fields (`min_qty`, `max_qty`, `unit`)    | PASS   |
+| Bulk import endpoint (`POST /api/products/bulk-import`)   | PARTIAL (1 assertion fail) |
+| Attribute Sets full lifecycle (`POST/PUT/GET/DELETE`)     | PASS   |
+| Loyalty totals + points math (`POST /api/sales`)          | PASS   |
+| Dashboard trend + top salespeople reports                 | PASS   |
+| Receipt templates lifecycle + active switch               | PASS   |
+| Baseline RBAC + sale/void stock restore regression        | PASS   |
+
+### Failing Check (Action Required)
+
+- **`Bulk import has updated row` failed**
+  - API response did not include a row labeled `"updated"` in `results`.
+  - Functional verification confirmed the existing row was updated in DB.
+  - Likely defect is status labeling in bulk-import response.
+
+### Retained Test Data (Could Not Fully Auto-Clean)
+
+From `e2e_full_test.js` cleanup output:
+
+- Products: IDs `20, 21, 24, 25, 26, 29` failed delete with status `500`
+- Customers: IDs `2, 3` failed delete with status `400`
+
+Reason: linked sales/sale_items and non-cascade cleanup behavior in current schema/API path.
+
+### Manual UI Checklist (Exhaustive) - Pending Browser Execution
+
+Manual browser interactions still required:
+
+- POS: PIN login, tax toggle, park/restore sale, note, checkout, receipt print
+- Dashboard: KPI cards, sales trend chart, top salespeople widget
+- Inventory: min/max/unit fields, export CSV, bulk upload result panel
+- Attribute Sets: create/edit/delete flow
+- Receipt Templates: create/edit/set active/delete
+- Customers: CNIC/occupation/balance persistence
+- Purchase Orders: due date create/listing
+- Reports: critical tabs render with data
+- RBAC: restricted nav behavior in cashier session
+
+### Rerun After Fixes (2026-02-24)
+
+Applied fixes:
+
+- Bulk import response labeling fixed in `POST /api/products/bulk-import` (insert vs update detection)
+- `e2e_full_test.js` hardened with direct DB hard-cleanup by run tag
+- One-time cleanup executed for prior `E2E_FULL_%` leftovers
+
+Verification:
+
+```bash
+npm run test:e2e-full
+```
+
+Result:
+
+- **62 passed, 0 failed**
+- **Retained test data: none**
+
+Cleanup verification queries:
+
+- Tagged products (`name LIKE 'E2E_FULL_%'`): `0`
+- Tagged customers (`name LIKE 'E2E_FULL_%'`): `0`
+- Previously retained IDs (`20,21,24,25,26,29` products; `2,3` customers): removed
