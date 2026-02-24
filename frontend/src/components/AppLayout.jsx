@@ -53,6 +53,7 @@ export default function AppLayout() {
       path.startsWith("/employees") ||
       path.startsWith("/barcode") ||
       path.startsWith("/receipt") ||
+      path.startsWith("/backup-restore") ||
       path.startsWith("/partners") ||
       path.startsWith("/brands") ||
       path.startsWith("/shopcast")
@@ -170,6 +171,8 @@ export default function AppLayout() {
       moduleName = "Setup > Barcode Templates";
     else if (path.startsWith("/receipt-templates"))
       moduleName = "Setup > Receipt Templates";
+    else if (path.startsWith("/backup-restore"))
+      moduleName = "Setup > Backup & Restore";
     else if (path.startsWith("/partners")) moduleName = "Setup > Partners";
     else if (path.startsWith("/brands")) moduleName = "Setup > Brands";
     else if (path.startsWith("/shopcast")) moduleName = "Setup > Shopcast";
@@ -256,6 +259,7 @@ export default function AppLayout() {
         { name: "Employees", path: "/employees" },
         { name: "Barcode Templates", path: "/barcode-templates" },
         { name: "Receipt Templates", path: "/receipt-templates" },
+        { name: "Backup & Restore", path: "/backup-restore" },
         { name: "Partners", path: "/partners" },
         { name: "Brands", path: "/brands" },
         { name: "Shopcast", path: "/shopcast" },

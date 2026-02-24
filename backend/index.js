@@ -1,6 +1,10 @@
 const express = require("express");
 const cors = require("cors");
 const db = require("./db");
+const fs = require("fs");
+const path = require("path");
+const multer = require("multer");
+const sqlite3 = require("sqlite3").verbose();
 require("dotenv").config();
 
 const app = express();
@@ -52,6 +56,16 @@ function requirePerm(permission) {
 }
 
 app.use(loadEmployeePerms);
+
+let isRestoreInProgress = false;
+app.use((req, res, next) => {
+  if (isRestoreInProgress && req.method !== "GET" && req.method !== "OPTIONS") {
+    return res.status(503).json({
+      error: "Service temporarily unavailable: database restore in progress",
+    });
+  }
+  next();
+});
 
 // --- ROUTES: TAXES ---
 
@@ -2187,11 +2201,21 @@ app.post("/api/sales", (req, res) => {
         db.run("COMMIT", (err) => {
           if (err)
             return res.status(500).json({ error: "Failed to commit sale" });
-          res.json({
-            message: "Sale completed successfully",
-            saleId,
-            totalAmount,
-            payments: finalPayments,
+          assignInvoiceNumberToSale(saleId, 1, (invErr, invoiceNumber) => {
+            if (invErr) {
+              return res.status(500).json({
+                error: "Sale committed but invoice finalization failed",
+                saleId,
+                details: invErr.message,
+              });
+            }
+            res.json({
+              message: "Sale completed successfully",
+              saleId,
+              totalAmount,
+              invoiceNumber: invoiceNumber || null,
+              payments: finalPayments,
+            });
           });
         });
       },
@@ -4364,7 +4388,307 @@ app.get("/api/expenses/summary", (req, res) => {
   });
 });
 
+// ─── BACKUP / RESTORE ────────────────────────────────────────────────────────
+
+const DB_PATH = path.resolve(__dirname, "oneshop.db");
+const uploadDir = path.resolve(__dirname, "uploads");
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+const restoreStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => cb(null, `restore_${Date.now()}.db`),
+});
+const restoreUpload = multer({ storage: restoreStorage, limits: { fileSize: 500 * 1024 * 1024 } });
+
+// GET /api/backup/download — stream the SQLite file
+app.get("/api/backup/download", requirePerm("manage_employees"), (req, res) => {
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const filename = `oneshop_backup_${ts}.db`;
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("Content-Type", "application/octet-stream");
+  const stream = fs.createReadStream(DB_PATH);
+  stream.on("error", (err) => res.status(500).json({ error: err.message }));
+  stream.pipe(res);
+  // Log the backup event after streaming begins
+  const { performed_by } = req.query;
+  const size = fs.existsSync(DB_PATH) ? fs.statSync(DB_PATH).size : 0;
+  db.run(
+    "INSERT INTO backup_log (action, filename, size_bytes, performed_by) VALUES ('backup', ?, ?, ?)",
+    [filename, size, performed_by || null]
+  );
+});
+
+// POST /api/backup/restore — upload a .db file and replace the live DB
+app.post("/api/backup/restore", requirePerm("manage_employees"), restoreUpload.single("backup_file"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  if (isRestoreInProgress) {
+    return res.status(409).json({ error: "Restore already in progress" });
+  }
+  isRestoreInProgress = true;
+
+  const uploadedPath = req.file.path;
+  const { performed_by, note } = req.body;
+
+  const cleanupAndFail = (status, message) => {
+    try {
+      if (fs.existsSync(uploadedPath)) fs.unlinkSync(uploadedPath);
+    } catch (_) {
+      // ignore cleanup errors
+    }
+    isRestoreInProgress = false;
+    return res.status(status).json({ error: message });
+  };
+
+  try {
+    const header = Buffer.alloc(16);
+    const fd = fs.openSync(uploadedPath, "r");
+    fs.readSync(fd, header, 0, 16, 0);
+    fs.closeSync(fd);
+    if (header.toString("ascii", 0, 6) !== "SQLite") {
+      return cleanupAndFail(400, "Uploaded file is not a valid SQLite database");
+    }
+  } catch (err) {
+    return cleanupAndFail(400, "Failed to read uploaded file: " + err.message);
+  }
+
+  const verifyDb = new sqlite3.Database(uploadedPath, sqlite3.OPEN_READONLY, (openErr) => {
+    if (openErr) {
+      return cleanupAndFail(400, "Failed to open uploaded database: " + openErr.message);
+    }
+
+    verifyDb.get("PRAGMA quick_check", [], (qcErr, qcRow) => {
+      verifyDb.close(() => {});
+      if (qcErr) return cleanupAndFail(400, "Failed SQLite integrity check: " + qcErr.message);
+      const qc = qcRow ? Object.values(qcRow)[0] : null;
+      if (String(qc).toLowerCase() !== "ok") {
+        return cleanupAndFail(400, "Uploaded database failed integrity check");
+      }
+
+      const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const snapshotPath = path.join(uploadDir, `oneshop_pre_restore_${ts}.db`);
+      const stagedPath = path.join(uploadDir, `oneshop_restore_staged_${Date.now()}.db`);
+
+      db.run("BEGIN IMMEDIATE", (lockErr) => {
+        if (lockErr) return cleanupAndFail(503, "Could not acquire database lock for restore");
+
+        try {
+          fs.copyFileSync(DB_PATH, snapshotPath);
+          fs.copyFileSync(uploadedPath, stagedPath);
+          fs.copyFileSync(stagedPath, DB_PATH);
+          fs.unlinkSync(uploadedPath);
+          fs.unlinkSync(stagedPath);
+        } catch (swapErr) {
+          db.run("ROLLBACK");
+          return cleanupAndFail(500, "Failed to replace database: " + swapErr.message);
+        }
+
+        db.run("ROLLBACK");
+        db.run(
+          "INSERT INTO backup_log (action, filename, size_bytes, performed_by, note) VALUES ('restore', ?, ?, ?, ?)",
+          [req.file.originalname, req.file.size, performed_by || null, note || null],
+          () => {
+            // best-effort logging
+          }
+        );
+
+        res.json({
+          success: true,
+          message:
+            "Database restored successfully. Backend will restart now. If not supervised, restart it manually.",
+        });
+        res.on("finish", () => {
+          setTimeout(() => process.exit(0), 300);
+        });
+      });
+    });
+  });
+});
+
+// GET /api/backup/log — backup/restore history
+app.get("/api/backup/log", requirePerm("manage_employees"), (req, res) => {
+  db.all("SELECT * FROM backup_log ORDER BY created_at DESC LIMIT 100", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ log: rows });
+  });
+});
+
+// ─── E-INVOICING ─────────────────────────────────────────────────────────────
+
+// Helper: generate next invoice number atomically (INV-YYYY-00001)
+function generateInvoiceNumber(cb) {
+  const year = new Date().getFullYear();
+  db.serialize(() => {
+    db.run(
+      "INSERT INTO invoice_sequences (year, last_seq) VALUES (?, 1) ON CONFLICT(year) DO UPDATE SET last_seq = last_seq + 1",
+      [year],
+      function (err) {
+        if (err) return cb(err);
+        db.get("SELECT last_seq FROM invoice_sequences WHERE year = ?", [year], (err2, row) => {
+          if (err2) return cb(err2);
+          const seq = String(row.last_seq).padStart(5, "0");
+          cb(null, `INV-${year}-${seq}`);
+        });
+      }
+    );
+  });
+}
+
+function assignInvoiceNumberToSale(saleId, retriesLeft, cb) {
+  generateInvoiceNumber((invErr, invoiceNumber) => {
+    if (invErr || !invoiceNumber) {
+      if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1, cb);
+      return cb(invErr || new Error("Failed to generate invoice number"));
+    }
+
+    db.run(
+      "UPDATE sales SET invoice_number = ? WHERE id = ? AND invoice_number IS NULL",
+      [invoiceNumber, saleId],
+      function (updateErr) {
+        if (updateErr) {
+          if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1, cb);
+          return cb(updateErr);
+        }
+
+        if (this.changes > 0) return cb(null, invoiceNumber);
+
+        db.get("SELECT invoice_number FROM sales WHERE id = ?", [saleId], (rowErr, row) => {
+          if (rowErr) {
+            if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1, cb);
+            return cb(rowErr);
+          }
+          if (row && row.invoice_number) return cb(null, row.invoice_number);
+          if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1, cb);
+          return cb(new Error("Invoice number update affected zero rows"));
+        });
+      }
+    );
+  });
+}
+
+function getInvoiceData(saleId, cb) {
+  db.get(
+    `SELECT s.*, o.name as outlet_name, o.address as outlet_address,
+            e.name as employee_name,
+            c.name as customer_name, c.phone as customer_phone, c.email as customer_email
+     FROM sales s
+     LEFT JOIN outlets o ON s.outlet_id = o.id
+     LEFT JOIN employees e ON s.employee_id = e.id
+     LEFT JOIN customers c ON s.customer_id = c.id
+     WHERE s.id = ?`,
+    [saleId],
+    (err, sale) => {
+      if (err) return cb(err);
+      if (!sale) return cb(null, null);
+      db.all(
+        `SELECT si.*, p.name as product_name, p.barcode,
+                t.name as tax_name, t.rate as tax_rate
+         FROM sale_items si
+         JOIN products p ON si.product_id = p.id
+         LEFT JOIN taxes t ON p.tax_id = t.id
+         WHERE si.sale_id = ?`,
+        [saleId],
+        (err2, items) => {
+          if (err2) return cb(err2);
+          db.all("SELECT * FROM sale_payments WHERE sale_id = ?", [saleId], (err3, payments) => {
+            if (err3) return cb(err3);
+            cb(null, { sale, items: items || [], payments: payments || [] });
+          });
+        }
+      );
+    }
+  );
+}
+
+// GET /api/sales/:id/invoice — formal invoice data for a sale
+app.get("/api/sales/:id/invoice", (req, res) => {
+  const { id } = req.params;
+  getInvoiceData(id, (err, payload) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!payload) return res.status(404).json({ error: "Sale not found" });
+    return res.json(payload);
+  });
+});
+
+// GET /api/sales/:id/invoice/export - normalized JSON export contract (v1.0)
+app.get("/api/sales/:id/invoice/export", (req, res) => {
+  const { id } = req.params;
+  getInvoiceData(id, (err, payload) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!payload) return res.status(404).json({ error: "Sale not found" });
+
+    const { sale, items, payments } = payload;
+    const normalizedItems = items.map((item) => {
+      const unitPrice = Number(item.price_at_sale || 0);
+      const quantity = Number(item.quantity || 0);
+      const taxRate = Number(item.tax_rate || 0);
+      const lineSubtotal = Number((unitPrice * quantity).toFixed(2));
+      const lineTax = Number(((lineSubtotal * taxRate) / 100).toFixed(2));
+      return {
+        product_id: item.product_id,
+        product_name: item.product_name || null,
+        barcode: item.barcode || null,
+        quantity,
+        unit_price: unitPrice,
+        tax_name: item.tax_name || null,
+        tax_rate: taxRate,
+        line_subtotal: lineSubtotal,
+        line_tax: lineTax,
+        line_total: Number((lineSubtotal + lineTax).toFixed(2)),
+      };
+    });
+
+    const subtotal = Number(
+      normalizedItems.reduce((sum, row) => sum + row.line_subtotal, 0).toFixed(2)
+    );
+    const taxTotal = Number(
+      normalizedItems.reduce((sum, row) => sum + row.line_tax, 0).toFixed(2)
+    );
+    const discountAmount = Number(sale.discount_amount || 0);
+    const pointsRedeemed = Number(sale.points_redeemed || 0);
+    const totalAmount = Number(sale.total_amount || 0);
+
+    return res.json({
+      version: "1.0",
+      exported_at: new Date().toISOString(),
+      invoice: {
+        invoice_number: sale.invoice_number || `SALE-${sale.id}`,
+        sale_id: sale.id,
+        timestamp: sale.timestamp,
+        status: sale.status || (sale.voided ? "voided" : "paid"),
+        currency: "PKR",
+        totals: {
+          subtotal,
+          tax_total: taxTotal,
+          discount_amount: discountAmount,
+          points_redeemed: pointsRedeemed,
+          total_amount: totalAmount,
+        },
+      },
+      seller: {
+        outlet_id: sale.outlet_id || null,
+        outlet_name: sale.outlet_name || null,
+        outlet_address: sale.outlet_address || null,
+      },
+      buyer: sale.customer_id
+        ? {
+            customer_id: sale.customer_id,
+            name: sale.customer_name || null,
+            phone: sale.customer_phone || null,
+            email: sale.customer_email || null,
+          }
+        : null,
+      items: normalizedItems,
+      payments: (payments || []).map((p) => ({
+        payment_method: p.payment_method || null,
+        amount: Number(p.amount || 0),
+      })),
+    });
+  });
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
+
+

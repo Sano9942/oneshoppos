@@ -12,8 +12,10 @@ import {
   Package,
   CreditCard,
   ArrowLeftRight,
+  FileText,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import InvoiceView from "./InvoiceView";
 
 const API = "http://localhost:5000";
 
@@ -60,6 +62,9 @@ export default function SalesHistory() {
   const [selectedSale, setSelectedSale] = useState(null);
   const [saleDetail, setSaleDetail] = useState(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
+
+  // Invoice view
+  const [invoiceSaleId, setInvoiceSaleId] = useState(null);
 
   // Void Modal
   const [isVoidModalOpen, setIsVoidModalOpen] = useState(false);
@@ -176,6 +181,11 @@ export default function SalesHistory() {
       setIsVoiding(false);
     }
   };
+
+  // Invoice view overlay
+  if (invoiceSaleId) {
+    return <InvoiceView saleId={invoiceSaleId} onBack={() => setInvoiceSaleId(null)} />;
+  }
 
   return (
     <div className="flex flex-col h-full gap-6">
@@ -475,12 +485,18 @@ export default function SalesHistory() {
 
             {/* Actions */}
             {saleDetail && (
-              <div className="p-4 border-t border-slate-200 flex gap-2">
+              <div className="p-4 border-t border-slate-200 flex gap-2 flex-wrap">
                 <button
                   onClick={handleReprint}
                   className="flex-1 flex items-center justify-center gap-2 px-3 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   <Printer size={16} /> Reprint
+                </button>
+                <button
+                  onClick={() => setInvoiceSaleId(selectedSale.id)}
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 border border-violet-200 rounded-lg text-sm font-medium text-violet-600 hover:bg-violet-50 transition-colors"
+                >
+                  <FileText size={16} /> Invoice
                 </button>
                 {!saleDetail.sale.voided && (
                   <button

@@ -29,6 +29,7 @@ import SupplierPayables from "./pages/SupplierPayables";
 import Promotions from "./pages/Promotions";
 import BarcodeTemplates from "./pages/BarcodeTemplates";
 import Expenses from "./pages/Expenses";
+import BackupRestore from "./pages/BackupRestore";
 
 function App() {
   return (
@@ -138,6 +139,7 @@ function App() {
           />
           <Route path="/barcode-templates" element={<BarcodeTemplates />} />
           <Route path="/receipt-templates" element={<ReceiptTemplates />} />
+          <Route path="/backup-restore" element={<BackupRestore />} />
           <Route path="/partners" element={<PlaceholderPage />} />
           <Route path="/shopcast" element={<PlaceholderPage />} />
           <Route path="/administrator" element={<Administrator />} />
