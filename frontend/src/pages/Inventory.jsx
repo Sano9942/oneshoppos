@@ -1,3 +1,4 @@
+import { API_BASE as API } from '../config';
 import { useState, useEffect } from "react";
 import { Package, Plus, Save, X, Search, Download, Upload, ImagePlus, Trash2 } from "lucide-react";
 
@@ -89,7 +90,7 @@ export default function Inventory() {
   // Fetch Products
   const fetchProducts = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/products");
+      const res = await fetch(`${API}/api/products`);
       const data = await res.json();
       setProducts(data.products || []);
     } catch (err) {
@@ -101,11 +102,11 @@ export default function Inventory() {
     try {
       const [catRes, taxRes, brandRes, outletRes, attrSetsRes] =
         await Promise.all([
-          fetch("http://localhost:5000/api/categories"),
-          fetch("http://localhost:5000/api/taxes"),
-          fetch("http://localhost:5000/api/brands"),
-          fetch("http://localhost:5000/api/outlets"),
-          fetch("http://localhost:5000/api/attribute-sets"),
+          fetch(`${API}/api/categories`),
+          fetch(`${API}/api/taxes`),
+          fetch(`${API}/api/brands`),
+          fetch(`${API}/api/outlets`),
+          fetch(`${API}/api/attribute-sets`),
         ]);
       const catData = await catRes.json();
       const taxData = await taxRes.json();
@@ -176,7 +177,7 @@ export default function Inventory() {
         unit: product.unit || "pcs",
         media: [],
       });
-      fetch(`http://localhost:5000/api/products/${product.id}/media`)
+      fetch(`${API}/api/products/${product.id}/media`)
         .then((r) => r.json())
         .then((d) => {
           setFormData((prev) => ({ ...prev, media: d.media || [] }));
@@ -307,7 +308,7 @@ export default function Inventory() {
     body.append("image", file);
     setUploadingImage(true);
     try {
-      const res = await fetch("http://localhost:5000/api/uploads/product-image", {
+      const res = await fetch(`${API}/api/uploads/product-image`, {
         method: "POST",
         body,
       });
@@ -334,8 +335,8 @@ export default function Inventory() {
   const handleSave = async (e) => {
     e.preventDefault();
     const url = editingProduct
-      ? `http://localhost:5000/api/products/${editingProduct.id}`
-      : "http://localhost:5000/api/products";
+      ? `${API}/api/products/${editingProduct.id}`
+      : `${API}/api/products`;
 
     const method = editingProduct ? "PUT" : "POST";
 
@@ -410,7 +411,7 @@ export default function Inventory() {
       setIsImporting(true);
       setImportResults(null);
       try {
-        const res = await fetch("http://localhost:5000/api/products/bulk-import", {
+        const res = await fetch(`${API}/api/products/bulk-import`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ rows }),
@@ -924,7 +925,7 @@ export default function Inventory() {
                               {(formData.media || []).map((m, idx) => (
                                 <div key={`${m.url}-${idx}`} className="relative group border border-slate-200 rounded-lg overflow-hidden bg-white">
                                   <img
-                                    src={m.url.startsWith("http") ? m.url : `http://localhost:5000${m.url}`}
+                                    src={m.url.startsWith("http") ? m.url : `${API}${m.url}`}
                                     alt={m.alt_text || `Product image ${idx + 1}`}
                                     className="w-full h-28 object-cover"
                                   />

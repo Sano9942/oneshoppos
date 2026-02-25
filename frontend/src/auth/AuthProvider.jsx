@@ -9,7 +9,7 @@ import {
 } from "react";
 import { clearSession, readSession, writeSession } from "./authStore";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from '../config';
 const AuthContext = createContext(null);
 const EMPTY_PERMISSIONS = [];
 
@@ -111,7 +111,7 @@ export function AuthProvider({ children }) {
     window.fetch = (input, init = {}) => {
       const rawUrl = typeof input === "string" ? input : input?.url || "";
       const isApiCall =
-        rawUrl.includes("http://localhost:5000/api/") ||
+        rawUrl.includes(`${API}/api/`) ||
         rawUrl.startsWith("/api/");
 
       if (!isApiCall || !employee?.id) {

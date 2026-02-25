@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Tag, Plus, Edit2, Trash2, X, RefreshCw, Printer, Check } from "lucide-react";
 
-const API = "http://localhost:5000/api";
+import { API } from '../config';
 
 // ── Minimal Code128B encoder ─────────────────────────────────────────────────
 const CODE128_TABLE = (() => {

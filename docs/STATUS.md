@@ -1,63 +1,66 @@
-# OneShopPOS - Project Status
+﻿# OneShopPOS - Project Status
 
-**Last Updated:** 2026-02-24  
-**Current Phase:** Phase 12 complete  
-**System State:** Operational with rollout controls enabled
-
----
-
-## Current Status
-
-- Backend API running on `http://localhost:5000`
-- Frontend app running on `http://localhost:5173`
-- Migrations through `migrate40.js` applied
-- Preflight and health endpoints implemented
-- Feature flag governance implemented for high-risk modules
+Last Updated: 2026-02-25  
+Current Phase: Tier 4 implementation completed  
+System State: Operational
 
 ---
 
-## Phase Completion Snapshot
+## Current Snapshot
 
-| Phase | Status |
-| --- | --- |
-| Phase 1-7 | ✅ Complete |
-| Phase 8 | ✅ Complete |
-| Phase 9 | ✅ Complete |
-| Phase 10 | ✅ Complete |
-| Phase 11 | ✅ Complete |
-| Phase 12 | ✅ Complete |
+- Backend API: `http://localhost:5000`
+- Frontend app: `http://localhost:5173`
+- Latest migration in runner: `migrate46.js`
+- Feature flags include Tier 4 keys:
+  - `notifications`
+  - `accounting_core`
+  - `crm_quotations`
+  - `advanced_hr`
+  - `multi_company`
+
+---
+
+## Delivered Through Tier 4
+
+- Tier 1: Completed
+- Tier 2: Not started (placeholder routes still present)
+- Tier 3: Mostly completed (`3.1` email receipts still pending)
+- Tier 4: Completed and smoke-tested end-to-end
+
+---
+
+## Tier 4 Deliverables (Completed)
+
+- Notifications module
+  - API: `/api/notifications*`
+  - UI: bell dropdown in app header
+- Company profile module
+  - API: `/api/company-profile*`
+  - UI: `/company-settings`
+- Accounting module
+  - API: `/api/accounting*`
+  - UI: `/accounting`
+- Advanced HR module
+  - API: `/api/hr/leave*`, `/api/hr/payroll*`
+  - UI: `/hr/leave`, `/hr/payroll`
+- CRM and Quotations module
+  - API: `/api/crm*`, `/api/quotations*`
+  - UI: `/crm`, `/quotations`
 
 ---
 
 ## Latest Verification
 
-- `npm run preflight` (backend): **PASS**
-- `npm run test:e2e-full` (backend): **69 passed, 0 failed**
-- `npx eslint src/components/AppLayout.jsx` (frontend): **PASS**
-
----
-
-## Notable Phase 12 Additions
-
-- Feature flags table and API management:
-  - `GET /api/feature-flags`
-  - `PUT /api/feature-flags/:key`
-- Health endpoint:
-  - `GET /api/health`
-- Route gating via feature flags for:
-  - approvals
-  - supplier payables
-  - backup/restore
-  - invoice export
-- Query hotspot indexes (`migrate40.js`)
-- Preflight script:
-  - `npm run preflight`
+- `npm run preflight`: PASS
+- `npm run test:e2e-full`: 69 passed, 0 failed
+- `npm run test:tier4-smoke`: 53 passed, 0 failed
 
 ---
 
 ## Resume Checklist
 
 1. Start services (`START.bat` or backend/frontend separately)
-2. Run `npm run preflight` in `backend/`
-3. Run `npm run test:e2e-full` in `backend/`
-4. Check `docs/code_features_impementation.md` and `docs/IMPLEMENTATION_PLAN.md`
+2. Run `node backend/run_migrations.js`
+3. Run `npm run preflight` in `backend/`
+4. Run `npm run test:e2e-full` in `backend/`
+5. Run `npm run test:tier4-smoke` in `backend/`

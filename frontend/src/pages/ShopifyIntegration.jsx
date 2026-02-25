@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
 
-const API = "http://localhost:5000/api";
+import { API } from '../config';
 
 function statusClass(value) {
   const v = String(value || "").toLowerCase();

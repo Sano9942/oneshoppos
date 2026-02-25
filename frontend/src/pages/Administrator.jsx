@@ -11,7 +11,7 @@ import {
   Save,
 } from "lucide-react";
 
-const API = "http://localhost:5000/api";
+import { API } from '../config';
 
 const AVAILABLE_PERMISSIONS = [
   { id: "all_access", label: "All Access", category: "System" },

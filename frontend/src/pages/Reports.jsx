@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   BarChart3,
   TrendingUp,
@@ -24,9 +24,17 @@ import {
   BarChart2,
   FileText,
   Clock,
+  Download,
+  Building2,
+  GitBranch,
 } from "lucide-react";
+import {
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid,
+} from "recharts";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from '../config';
+
 const fmt = (n) => "$" + (n || 0).toFixed(2);
 const fmtDate = (d) =>
   d
@@ -46,6 +54,42 @@ const fmtDateTime = (d) =>
         minute: "2-digit",
       })
     : "—";
+
+// ─── CSV Export Utilities ─────────────────────────────────────────────────────
+
+const exportCSV = (filename, cols, rows) => {
+  const headers = cols.map((c) => (typeof c === "string" ? c : c.header));
+  const keys = cols.map((c) => (typeof c === "string" ? c : c.key));
+  const lines = [
+    headers.map((h) => `"${String(h).replace(/"/g, '""')}"`).join(","),
+    ...rows.map((r) =>
+      keys
+        .map((k) => {
+          const v = r[k] ?? "";
+          return `"${String(v).replace(/"/g, '""')}"`;
+        })
+        .join(","),
+    ),
+  ];
+  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+function ExportButton({ onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors"
+    >
+      <Download size={12} /> Export CSV
+    </button>
+  );
+}
 
 // ─── Shared UI Helpers ────────────────────────────────────────────────────────
 
@@ -154,14 +198,17 @@ function DateRangeFilter({
   );
 }
 
-function CardShell({ title, subtitle, children }) {
+function CardShell({ title, subtitle, action, children }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-      <div className="p-4 border-b border-slate-200 bg-slate-50 shrink-0">
-        <h2 className="font-bold text-slate-700">{title}</h2>
-        {subtitle && (
-          <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>
-        )}
+      <div className="p-4 border-b border-slate-200 bg-slate-50 shrink-0 flex items-start justify-between gap-2">
+        <div className="flex-1">
+          <h2 className="font-bold text-slate-700">{title}</h2>
+          {subtitle && (
+            <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>
+          )}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
       </div>
       {children}
     </div>
@@ -384,7 +431,27 @@ function SalesSummaryTab() {
   useEffect(() => {
     load();
   }, [load]);
+
   const total = rows.reduce((s, r) => s + r.total_amount, 0);
+  const avgBasket = rows.length ? total / rows.length : 0;
+
+  const trendData = useMemo(() => {
+    const map = {};
+    rows.forEach((r) => {
+      const day = (r.timestamp || "").slice(0, 10);
+      if (!day) return;
+      map[day] = (map[day] || 0) + r.total_amount;
+    });
+    return Object.entries(map)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, revenue]) => ({
+        date: new Date(date + "T00:00:00").toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        }),
+        revenue: +revenue.toFixed(2),
+      }));
+  }, [rows]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -397,9 +464,117 @@ function SalesSummaryTab() {
         setSearch={setSearch}
         searchPlaceholder="Search order # or customer..."
       />
+
+      {/* KPI Strip */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+            <DollarSign size={18} className="text-blue-600" />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Total Revenue</p>
+            <p className="text-xl font-bold text-slate-900">{fmt(total)}</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+            <ShoppingBag size={18} className="text-emerald-600" />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Avg Basket</p>
+            <p className="text-xl font-bold text-slate-900">{fmt(avgBasket)}</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
+            <ClipboardList size={18} className="text-violet-600" />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Orders</p>
+            <p className="text-xl font-bold text-slate-900">{rows.length}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Revenue Trend Chart */}
+      {trendData.length > 1 && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+          <p className="text-sm font-semibold text-slate-700 mb-3">
+            Revenue Trend
+          </p>
+          <ResponsiveContainer width="100%" height={160}>
+            <AreaChart
+              data={trendData}
+              margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
+            >
+              <defs>
+                <linearGradient
+                  id="revenueGrad"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10, fill: "#94a3b8" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: "#94a3b8" }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => `$${v}`}
+              />
+              <Tooltip
+                formatter={(v) => [fmt(v), "Revenue"]}
+                contentStyle={{
+                  fontSize: 12,
+                  borderRadius: 8,
+                  border: "1px solid #e2e8f0",
+                }}
+              />
+              <Area
+                type="monotone"
+                dataKey="revenue"
+                stroke="#3b82f6"
+                strokeWidth={2}
+                fill="url(#revenueGrad)"
+                dot={false}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       <CardShell
         title="Sales Summary"
         subtitle={`${rows.length} sale${rows.length !== 1 ? "s" : ""} · Total: ${fmt(total)}`}
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "sales-summary.csv",
+                [
+                  { header: "Date", key: "timestamp" },
+                  { header: "Order #", key: "id" },
+                  { header: "Customer", key: "customer_name" },
+                  { header: "Outlet", key: "outlet_name" },
+                  { header: "Employee", key: "employee_name" },
+                  { header: "Payment", key: "payment_methods" },
+                  { header: "Total", key: "total_amount" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
         <TableShell
           cols={[
@@ -487,6 +662,27 @@ function SalesDetailTab() {
       <CardShell
         title="Sales Detail"
         subtitle={`${rows.length} line item${rows.length !== 1 ? "s" : ""} · Revenue: ${fmt(totalRevenue)}`}
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "sales-detail.csv",
+                [
+                  { header: "Order #", key: "sale_id" },
+                  { header: "Date", key: "timestamp" },
+                  { header: "Customer", key: "customer_name" },
+                  { header: "Product", key: "product_name" },
+                  { header: "Barcode", key: "barcode" },
+                  { header: "Qty", key: "quantity" },
+                  { header: "Price", key: "price_at_sale" },
+                  { header: "Cost", key: "cost_price_at_sale" },
+                  { header: "Line Total", key: "line_total" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
         <TableShell
           cols={[
@@ -654,6 +850,28 @@ function InventoryDumpTab() {
       <CardShell
         title="Inventory Dump"
         subtitle={`${rows.length} records · Retail Value: ${fmt(totalRetail)} · Cost Value: ${fmt(totalCost)}`}
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "inventory-dump.csv",
+                [
+                  { header: "Outlet", key: "outlet_name" },
+                  { header: "Product", key: "product_name" },
+                  { header: "Barcode", key: "barcode" },
+                  { header: "Category", key: "category" },
+                  { header: "Brand", key: "brand" },
+                  { header: "Price", key: "price" },
+                  { header: "Cost", key: "cost_price" },
+                  { header: "Qty", key: "quantity" },
+                  { header: "Retail Value", key: "retail_value" },
+                  { header: "Cost Value", key: "cost_value" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
         <TableShell
           cols={[
@@ -745,6 +963,24 @@ function CategoryWiseTab() {
       <CardShell
         title="Category Wise Sales"
         subtitle="Revenue and profit breakdown by product category"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "category-wise.csv",
+                [
+                  { header: "Category", key: "category" },
+                  { header: "Units Sold", key: "units_sold" },
+                  { header: "Revenue", key: "revenue" },
+                  { header: "COGS", key: "cost" },
+                  { header: "Gross Profit", key: "profit" },
+                  { header: "% of Revenue", key: "pct" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
         <TableShell
           cols={[
@@ -991,6 +1227,25 @@ function OrderWiseTab() {
       <CardShell
         title="Order Wise Report"
         subtitle={`${rows.length} order${rows.length !== 1 ? "s" : ""} — Excl. Tax ${fmt(totalExcl)} · Incl. Tax ${fmt(totalIncl)}`}
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "order-wise.csv",
+                [
+                  { header: "Date", key: "timestamp" },
+                  { header: "Customer", key: "customer_name" },
+                  { header: "Order #", key: "id" },
+                  { header: "Sale Excl. Tax", key: "sale_excl_tax" },
+                  { header: "Discount", key: "discount_amount" },
+                  { header: "Sale Incl. Tax", key: "total_amount" },
+                  { header: "Payment", key: "payment_method" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
         <TableShell
           cols={[
@@ -1081,6 +1336,24 @@ function ItemWiseTab() {
       <CardShell
         title="Item Wise Report"
         subtitle={`${rows.length} product${rows.length !== 1 ? "s" : ""} · Revenue: ${fmt(totalRevenue)} · Profit: ${fmt(totalProfit)}`}
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "item-wise.csv",
+                [
+                  { header: "Product", key: "product_name" },
+                  { header: "Barcode", key: "barcode" },
+                  { header: "Units Sold", key: "units_sold" },
+                  { header: "Revenue", key: "revenue" },
+                  { header: "COGS", key: "total_cost" },
+                  { header: "Gross Profit", key: "gross_profit" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
         <TableShell
           cols={[
@@ -1372,6 +1645,26 @@ function OnHandTab() {
       <CardShell
         title="On Hand Inventory"
         subtitle={`${rows.length} records · Retail Value: ${fmt(totalRetail)}`}
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "on-hand-inventory.csv",
+                [
+                  { header: "Product", key: "product_name" },
+                  { header: "Barcode", key: "barcode" },
+                  { header: "Outlet", key: "outlet_name" },
+                  { header: "Qty on Hand", key: "quantity" },
+                  { header: "Price", key: "price" },
+                  { header: "Cost", key: "cost_price" },
+                  { header: "Retail Value", key: "retail_value" },
+                  { header: "Cost Value", key: "cost_value" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
         <TableShell
           cols={[
@@ -1745,6 +2038,8 @@ function ReplenishmentTab() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [threshold, setThreshold] = useState(10);
+  const [drafting, setDrafting] = useState(false);
+  const [draftResult, setDraftResult] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1761,16 +2056,53 @@ function ReplenishmentTab() {
     }
   }, [threshold]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
+
+  // Group items by supplier → one Draft PO per supplier
+  const handleCreateDraftPOs = async () => {
+    const withSupplier = rows.filter((r) => r.supplier_id);
+    if (!withSupplier.length) {
+      setDraftResult({ error: "No items have a supplier assigned. Edit products to add suppliers." });
+      return;
+    }
+    const bySupplier = {};
+    withSupplier.forEach((r) => {
+      if (!bySupplier[r.supplier_id]) bySupplier[r.supplier_id] = { supplier_name: r.supplier_name, items: [] };
+      const reorderQty = Math.max(1, (r.min_qty || 10) - r.quantity);
+      bySupplier[r.supplier_id].items.push({ product_id: r.product_id, quantity: reorderQty, cost_price: r.cost_price || 0 });
+    });
+
+    setDrafting(true);
+    setDraftResult(null);
+    const created = [];
+    const failed = [];
+    for (const [supplierId, { supplier_name, items }] of Object.entries(bySupplier)) {
+      const totalCost = items.reduce((s, i) => s + i.quantity * i.cost_price, 0);
+      try {
+        const res = await fetch(`${API}/api/purchase-orders`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ supplier_id: parseInt(supplierId), total_cost: totalCost, items }),
+        });
+        if (res.ok) created.push(supplier_name);
+        else failed.push(supplier_name);
+      } catch {
+        failed.push(supplier_name);
+      }
+    }
+    setDrafting(false);
+    setDraftResult({ created, failed });
+  };
+
+  const suppliersWithItems = useMemo(() => {
+    const ids = new Set(rows.filter((r) => r.supplier_id).map((r) => r.supplier_id));
+    return ids.size;
+  }, [rows]);
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex items-center gap-3">
-        <label className="text-sm font-medium text-slate-600">
-          Threshold (units)
-        </label>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex flex-wrap items-center gap-3">
+        <label className="text-sm font-medium text-slate-600">Threshold (units)</label>
         <input
           type="number"
           min={0}
@@ -1779,45 +2111,67 @@ function ReplenishmentTab() {
           onChange={(e) => setThreshold(parseInt(e.target.value) || 0)}
           className="w-24 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
         />
-        <span className="text-xs text-slate-500">
-          Show products at or below this quantity
-        </span>
+        <span className="text-xs text-slate-500">Show products at or below this quantity</span>
+        {rows.length > 0 && (
+          <button
+            onClick={handleCreateDraftPOs}
+            disabled={drafting}
+            className="ml-auto flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <ShoppingCart size={13} />
+            {drafting ? "Creating…" : `Create Draft POs (${suppliersWithItems} supplier${suppliersWithItems !== 1 ? "s" : ""})`}
+          </button>
+        )}
       </div>
+
+      {draftResult && (
+        <div className={`rounded-xl border px-4 py-3 text-sm flex items-start gap-2 ${draftResult.error ? "bg-rose-50 border-rose-200 text-rose-700" : "bg-emerald-50 border-emerald-200 text-emerald-800"}`}>
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <div>
+            {draftResult.error ? draftResult.error : (
+              <>
+                {draftResult.created.length > 0 && <p><strong>Draft POs created</strong> for: {draftResult.created.join(", ")}</p>}
+                {draftResult.failed.length > 0 && <p className="text-rose-600 mt-1">Failed: {draftResult.failed.join(", ")} — check permissions</p>}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <CardShell
         title="Replenishment Report"
         subtitle={`${rows.length} product${rows.length !== 1 ? "s" : ""} need restocking (≤ ${threshold} units)`}
       >
         <TableShell
-          cols={["Product", "Barcode", "Outlet", "Qty on Hand", "Status"]}
+          cols={["Product", "Barcode", "Supplier", "Outlet", "Qty on Hand", "Reorder Qty", "Status"]}
           loading={loading}
           empty={rows.length === 0}
           emptyIcon={RotateCcw}
         >
-          {rows.map((r, i) => (
-            <tr key={i} className="hover:bg-slate-50 transition-colors">
-              <td className="p-4 font-medium text-slate-800">
-                {r.product_name}
-              </td>
-              <td className="p-4 text-xs font-mono text-slate-500">
-                {r.barcode}
-              </td>
-              <td className="p-4 text-sm text-slate-600">{r.outlet_name}</td>
-              <td className="p-4 text-center">
-                <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-bold ${r.quantity === 0 ? "bg-rose-100 text-rose-800" : "bg-orange-100 text-orange-800"}`}
-                >
-                  {r.quantity}
-                </span>
-              </td>
-              <td className="p-4">
-                <span
-                  className={`px-2.5 py-1 rounded-full text-xs font-semibold ${r.quantity === 0 ? "bg-rose-100 text-rose-700" : "bg-orange-100 text-orange-700"}`}
-                >
-                  {r.quantity === 0 ? "Out of Stock" : "Low Stock"}
-                </span>
-              </td>
-            </tr>
-          ))}
+          {rows.map((r, i) => {
+            const reorderQty = Math.max(1, (r.min_qty || 10) - r.quantity);
+            return (
+              <tr key={i} className="hover:bg-slate-50 transition-colors">
+                <td className="p-4 font-medium text-slate-800">{r.product_name}</td>
+                <td className="p-4 text-xs font-mono text-slate-500">{r.barcode}</td>
+                <td className="p-4 text-sm text-slate-600">{r.supplier_name}</td>
+                <td className="p-4 text-sm text-slate-600">{r.outlet_name}</td>
+                <td className="p-4 text-center">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${r.quantity === 0 ? "bg-rose-100 text-rose-800" : "bg-orange-100 text-orange-800"}`}>
+                    {r.quantity}
+                  </span>
+                </td>
+                <td className="p-4 text-center">
+                  <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold">{reorderQty}</span>
+                </td>
+                <td className="p-4">
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${r.quantity === 0 ? "bg-rose-100 text-rose-700" : "bg-orange-100 text-orange-700"}`}>
+                    {r.quantity === 0 ? "Out of Stock" : "Low Stock"}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
         </TableShell>
       </CardShell>
     </div>
@@ -2160,6 +2514,268 @@ function AttendanceTab() {
   );
 }
 
+// ─── Tab: Outlet Comparison ───────────────────────────────────────────────────
+
+function OutletComparisonTab() {
+  const [outlets, setOutlets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams();
+      if (dateFrom) p.set("date_from", dateFrom);
+      if (dateTo) p.set("date_to", dateTo);
+      const res = await fetch(`${API}/api/reports/outlet-comparison?${p}`);
+      const d = await res.json();
+      setOutlets(d.outlets || []);
+    } catch {
+      setOutlets([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [dateFrom, dateTo]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const totalRevenue = outlets.reduce((s, o) => s + o.revenue, 0);
+  const chartData = outlets.map((o) => ({ name: o.name, revenue: +o.revenue.toFixed(2), orders: o.order_count }));
+
+  return (
+    <div className="flex flex-col gap-3">
+      <DateRangeFilter
+        dateFrom={dateFrom} setDateFrom={setDateFrom}
+        dateTo={dateTo} setDateTo={setDateTo}
+      />
+
+      {/* Bar chart */}
+      {!loading && chartData.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+          <p className="text-sm font-semibold text-slate-700 mb-3">Revenue by Outlet</p>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
+              <Tooltip
+                formatter={(v, name) => [name === "revenue" ? fmt(v) : v, name === "revenue" ? "Revenue" : "Orders"]}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
+              />
+              <Bar dataKey="revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <CardShell
+        title="Outlet Comparison"
+        subtitle={`${outlets.length} outlet${outlets.length !== 1 ? "s" : ""} · Total Revenue: ${fmt(totalRevenue)}`}
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV("outlet-comparison.csv", [
+                { header: "Outlet", key: "name" },
+                { header: "Orders", key: "order_count" },
+                { header: "Revenue", key: "revenue" },
+                { header: "Avg Basket", key: "avg_basket" },
+                { header: "Unique Customers", key: "unique_customers" },
+              ], outlets)
+            }
+          />
+        }
+      >
+        <TableShell
+          cols={["Outlet", "Orders", "Revenue", "Avg Basket", "Unique Customers", "% of Total"]}
+          loading={loading}
+          empty={outlets.length === 0}
+          emptyIcon={Building2}
+        >
+          {outlets.map((o) => (
+            <tr key={o.id} className="hover:bg-slate-50 transition-colors">
+              <td className="p-4 font-semibold text-slate-800">{o.name}</td>
+              <td className="p-4 text-center">
+                <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold">{o.order_count}</span>
+              </td>
+              <td className="p-4 text-right font-bold text-slate-900">{fmt(o.revenue)}</td>
+              <td className="p-4 text-right text-sm text-slate-600">{fmt(o.avg_basket)}</td>
+              <td className="p-4 text-center text-sm text-slate-600">{o.unique_customers}</td>
+              <td className="p-4 text-center">
+                <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-xs font-semibold">
+                  {totalRevenue > 0 ? ((o.revenue / totalRevenue) * 100).toFixed(1) : "0.0"}%
+                </span>
+              </td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
+  );
+}
+
+// ─── Tab: Customer RFM Segmentation ───────────────────────────────────────────
+
+const RFM_SEGMENTS = {
+  Champions:          { color: "bg-emerald-100 text-emerald-800", desc: "Buy recently, often, and spend the most" },
+  "Loyal":            { color: "bg-blue-100 text-blue-800",       desc: "Regular buyers with solid spend" },
+  "Potential Loyalist":{ color: "bg-sky-100 text-sky-800",        desc: "Recent buyers, starting to buy more" },
+  "New Customer":     { color: "bg-teal-100 text-teal-800",       desc: "Bought recently for the first time" },
+  "Need Attention":   { color: "bg-yellow-100 text-yellow-800",   desc: "Were good, but activity slowing" },
+  "At Risk":          { color: "bg-orange-100 text-orange-800",   desc: "Used to buy often — haven't returned" },
+  "Can't Lose Them":  { color: "bg-rose-100 text-rose-800",       desc: "High-value, now dormant — act fast" },
+  "About to Sleep":   { color: "bg-slate-100 text-slate-700",     desc: "Low engagement, fading" },
+  "Lost":             { color: "bg-gray-100 text-gray-600",       desc: "Inactive, minimal engagement" },
+};
+
+function getSegment(r, f) {
+  if (r >= 4 && f >= 4) return "Champions";
+  if (r >= 3 && f >= 4) return "Loyal";
+  if (r >= 4 && f >= 2) return "Potential Loyalist";
+  if (r === 5 && f === 1) return "New Customer";
+  if (r >= 3 && f >= 3) return "Need Attention";
+  if (r >= 2 && f >= 3) return "At Risk";
+  if (r === 1 && f >= 4) return "Can't Lose Them";
+  if (r >= 2)            return "About to Sleep";
+  return "Lost";
+}
+
+function scoreRFMCustomers(customers) {
+  if (!customers.length) return [];
+  const n = customers.length;
+  const byRecency = [...customers].sort((a, b) => a.recency_days - b.recency_days);
+  const byFreq    = [...customers].sort((a, b) => b.order_count - a.order_count);
+  const rRank = new Map(byRecency.map((c, i) => [c.id, Math.max(1, 5 - Math.floor((i / n) * 5))]));
+  const fRank = new Map(byFreq.map((c, i) => [c.id, Math.max(1, 5 - Math.floor((i / n) * 5))]));
+  return customers.map((c) => {
+    const r = rRank.get(c.id) || 1;
+    const f = fRank.get(c.id) || 1;
+    return { ...c, r_score: r, f_score: f, segment: getSegment(r, f) };
+  });
+}
+
+function CustomerRFMTab() {
+  const [raw, setRaw] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filterSeg, setFilterSeg] = useState("");
+
+  useEffect(() => {
+    fetch(`${API}/api/reports/customer-rfm`)
+      .then((r) => r.json())
+      .then((d) => setRaw(d.customers || []))
+      .catch(() => setRaw([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const scored = useMemo(() => scoreRFMCustomers(raw), [raw]);
+  const filtered = filterSeg ? scored.filter((c) => c.segment === filterSeg) : scored;
+
+  const segmentCounts = useMemo(() => {
+    const map = {};
+    scored.forEach((c) => { map[c.segment] = (map[c.segment] || 0) + 1; });
+    return map;
+  }, [scored]);
+
+  const ScoreBox = ({ value }) => (
+    <span className={`inline-flex items-center justify-center w-6 h-6 rounded text-xs font-bold
+      ${value >= 4 ? "bg-emerald-100 text-emerald-800" : value === 3 ? "bg-yellow-100 text-yellow-800" : "bg-rose-100 text-rose-800"}`}>
+      {value}
+    </span>
+  );
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Segment distribution */}
+      {!loading && (
+        <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+          {Object.entries(RFM_SEGMENTS).map(([seg, { color }]) => (
+            <button
+              key={seg}
+              onClick={() => setFilterSeg(filterSeg === seg ? "" : seg)}
+              className={`text-left p-3 rounded-xl border transition-all ${
+                filterSeg === seg
+                  ? "border-blue-400 ring-2 ring-blue-200 bg-white"
+                  : "border-slate-200 bg-white hover:border-slate-300"
+              }`}
+            >
+              <p className="text-xl font-bold text-slate-900">{segmentCounts[seg] || 0}</p>
+              <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${color}`}>{seg}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <CardShell
+        title="Customer RFM Analysis"
+        subtitle={`${filtered.length} customer${filtered.length !== 1 ? "s" : ""}${filterSeg ? ` · Filtered: ${filterSeg}` : ""} · Recency / Frequency scoring (1=low, 5=high)`}
+        action={
+          <div className="flex items-center gap-2">
+            {filterSeg && (
+              <button onClick={() => setFilterSeg("")} className="text-xs text-slate-500 hover:text-red-600 flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                <X size={11} /> Clear
+              </button>
+            )}
+            <ExportButton
+              onClick={() =>
+                exportCSV("customer-rfm.csv", [
+                  { header: "Customer", key: "name" },
+                  { header: "Mobile", key: "mobile" },
+                  { header: "Email", key: "email" },
+                  { header: "Orders", key: "order_count" },
+                  { header: "Total Spent", key: "total_spent" },
+                  { header: "Recency (days)", key: "recency_days" },
+                  { header: "R Score", key: "r_score" },
+                  { header: "F Score", key: "f_score" },
+                  { header: "Segment", key: "segment" },
+                ], filtered)
+              }
+            />
+          </div>
+        }
+      >
+        <TableShell
+          cols={["Customer", "Last Purchase", "Orders", "Total Spent", "R", "F", "Segment"]}
+          loading={loading}
+          empty={filtered.length === 0}
+          emptyIcon={Users}
+        >
+          {filtered.map((c) => {
+            const seg = RFM_SEGMENTS[c.segment] || { color: "bg-slate-100 text-slate-700" };
+            return (
+              <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                <td className="p-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-full bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                      {c.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-800 text-sm">{c.name}</p>
+                      {c.mobile && <p className="text-xs text-slate-400">{c.mobile}</p>}
+                    </div>
+                  </div>
+                </td>
+                <td className="p-4 text-sm text-slate-500 whitespace-nowrap">
+                  {fmtDate(c.last_order_at)}
+                  <span className="block text-xs text-slate-400">{c.recency_days}d ago</span>
+                </td>
+                <td className="p-4 text-center">
+                  <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold">{c.order_count}</span>
+                </td>
+                <td className="p-4 text-right font-bold text-slate-900">{fmt(c.total_spent)}</td>
+                <td className="p-4 text-center"><ScoreBox value={c.r_score} /></td>
+                <td className="p-4 text-center"><ScoreBox value={c.f_score} /></td>
+                <td className="p-4">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${seg.color}`}>{c.segment}</span>
+                </td>
+              </tr>
+            );
+          })}
+        </TableShell>
+      </CardShell>
+    </div>
+  );
+}
+
 // ─── Main Reports Page ────────────────────────────────────────────────────────
 
 const GROUPS = [
@@ -2179,6 +2795,7 @@ const GROUPS = [
     tabs: [
       { id: "customer-details", label: "Customer Details", icon: Users },
       { id: "customer-wise", label: "Customer Wise", icon: TrendingUp },
+      { id: "customer-rfm", label: "RFM Analysis", icon: GitBranch },
     ],
   },
   {
@@ -2195,6 +2812,7 @@ const GROUPS = [
   {
     label: "Operations",
     tabs: [
+      { id: "outlet-comparison", label: "Outlet Comparison", icon: Building2 },
       { id: "inventory-loss", label: "Inventory Loss", icon: TrendingDown },
       { id: "wastage", label: "Wastage", icon: Recycle },
       {
@@ -2241,6 +2859,10 @@ function TabContent({ activeTab }) {
       return <CustomerDetailsTab />;
     case "customer-wise":
       return <CustomerWiseTab />;
+    case "customer-rfm":
+      return <CustomerRFMTab />;
+    case "outlet-comparison":
+      return <OutletComparisonTab />;
     case "order-wise":
       return <OrderWiseTab />;
     case "item-wise":

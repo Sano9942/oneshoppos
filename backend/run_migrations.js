@@ -46,12 +46,13 @@ const migrations = [
   "migrate43.js",
   "migrate44.js",
   "migrate45.js",
+  "migrate46.js",
 ];
 
 for (const m of migrations) {
   console.log(`Running ${m}...`);
   try {
-    execSync(`node ${m}`, { stdio: "inherit" });
+    execSync(`node ${m}`, { stdio: "inherit", cwd: __dirname });
   } catch (e) {
     console.error(`Failed on ${m}`);
   }

@@ -1,3 +1,4 @@
+import { API_BASE as API } from '../config';
 import { useState, useEffect } from "react";
 import {
   ShoppingBag,
@@ -59,11 +60,11 @@ export default function PurchaseOrders() {
     fetchPurchaseOrders();
     fetchSuppliers();
     fetchProducts();
-    fetch("http://localhost:5000/api/outlets")
+    fetch(`${API}/api/outlets`)
       .then((r) => r.json())
       .then((d) => setOutlets(d.outlets || []))
       .catch(() => {});
-    fetch("http://localhost:5000/api/employees")
+    fetch(`${API}/api/employees`)
       .then((r) => r.json())
       .then((d) => setEmployees(d.employees || []))
       .catch(() => {});
@@ -72,7 +73,7 @@ export default function PurchaseOrders() {
   const fetchPurchaseOrders = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/purchase-orders");
+      const res = await fetch(`${API}/api/purchase-orders`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setPurchaseOrders(data.purchaseOrders);
@@ -85,7 +86,7 @@ export default function PurchaseOrders() {
 
   const fetchSuppliers = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/suppliers");
+      const res = await fetch(`${API}/api/suppliers`);
       const data = await res.json();
       setSuppliers(data.suppliers);
     } catch (err) {
@@ -95,7 +96,7 @@ export default function PurchaseOrders() {
 
   const fetchProducts = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/products");
+      const res = await fetch(`${API}/api/products`);
       const data = await res.json();
       setProducts(data.products);
     } catch (err) {
@@ -155,7 +156,7 @@ export default function PurchaseOrders() {
 
     setIsLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/purchase-orders", {
+      const res = await fetch(`${API}/api/purchase-orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -183,7 +184,7 @@ export default function PurchaseOrders() {
   const handleViewPO = async (id) => {
     try {
       const res = await fetch(
-        `http://localhost:5000/api/purchase-orders/${id}`,
+        `${API}/api/purchase-orders/${id}`,
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -197,7 +198,7 @@ export default function PurchaseOrders() {
   const handleSubmitForApproval = async (poId) => {
     setSubmittingApproval(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/purchase-orders/${poId}/submit`, {
+      const res = await fetch(`${API}/api/purchase-orders/${poId}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requested_by: "Manager" }),
@@ -237,7 +238,7 @@ export default function PurchaseOrders() {
     }));
     try {
       const res = await fetch(
-        `http://localhost:5000/api/purchase-orders/${po.id}/receive`,
+        `${API}/api/purchase-orders/${po.id}/receive`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

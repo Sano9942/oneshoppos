@@ -32,7 +32,8 @@ const exportCSV = (data, filename) => {
   URL.revokeObjectURL(a.href);
 };
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from '../config';
+
 const fmt = (n) => "$" + (n || 0).toFixed(2);
 const fmtDate = (d) =>
   d

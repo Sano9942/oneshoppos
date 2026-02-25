@@ -1,3 +1,4 @@
+import { API_BASE as API } from '../config';
 import { useState, useEffect } from "react";
 import {
   Tags,
@@ -34,7 +35,7 @@ export default function AttributeSets() {
   const fetchSets = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch("http://localhost:5000/api/attribute-sets");
+      const res = await fetch(`${API}/api/attribute-sets`);
       const data = await res.json();
       setSets(data.attributeSets || []);
     } catch (err) {
@@ -120,8 +121,8 @@ export default function AttributeSets() {
 
     try {
       const url = editingSet
-        ? `http://localhost:5000/api/attribute-sets/${editingSet.id}`
-        : "http://localhost:5000/api/attribute-sets";
+        ? `${API}/api/attribute-sets/${editingSet.id}`
+        : `${API}/api/attribute-sets`;
       const method = editingSet ? "PUT" : "POST";
 
       const res = await fetch(url, {
@@ -149,7 +150,7 @@ export default function AttributeSets() {
       return;
     try {
       const res = await fetch(
-        `http://localhost:5000/api/attribute-sets/${id}`,
+        `${API}/api/attribute-sets/${id}`,
         { method: "DELETE" },
       );
       if (!res.ok) throw new Error("Failed to delete");

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Tag, Plus, Edit2, Trash2, X, ToggleLeft, ToggleRight, RefreshCw } from "lucide-react";
 
-const API = "http://localhost:5000/api";
+import { API } from '../config';
 
 const TYPE_LABELS = {
   percent: "% Off (all matched items)",

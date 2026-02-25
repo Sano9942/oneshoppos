@@ -1,3 +1,4 @@
+import { API_BASE as API } from '../config';
 import { useState, useEffect } from "react";
 import { Plus, Edit2, Trash2, Search, User, Shield, Lock } from "lucide-react";
 
@@ -21,11 +22,11 @@ export default function Employees() {
   const fetchEmployees = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch("http://localhost:5000/api/employees");
+      const res = await fetch(`${API}/api/employees`);
       const data = await res.json();
       setEmployees(data.employees || []);
 
-      const rolesRes = await fetch("http://localhost:5000/api/roles");
+      const rolesRes = await fetch(`${API}/api/roles`);
       const rolesData = await rolesRes.json();
       setRoles(rolesData.roles || []);
     } catch (error) {
@@ -74,8 +75,8 @@ export default function Employees() {
 
     try {
       const url = editingEmployee
-        ? `http://localhost:5000/api/employees/${editingEmployee.id}`
-        : "http://localhost:5000/api/employees";
+        ? `${API}/api/employees/${editingEmployee.id}`
+        : `${API}/api/employees`;
 
       const method = editingEmployee ? "PUT" : "POST";
 
@@ -104,7 +105,7 @@ export default function Employees() {
     if (!window.confirm(`Are you sure you want to delete ${name}?`)) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/employees/${id}`, {
+      const res = await fetch(`${API}/api/employees/${id}`, {
         method: "DELETE",
       });
 

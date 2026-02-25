@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { FileText, Plus, Edit2, Trash2, X, CheckCircle2, Star } from "lucide-react";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from '../config';
+
 
 const EMPTY = {
   name: "",

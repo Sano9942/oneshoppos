@@ -1,3 +1,4 @@
+import { API_BASE as API } from '../config';
 import { useState, useEffect } from "react";
 import { Plus, Trash2, Edit2, ShieldCheck, ShieldAlert } from "lucide-react";
 
@@ -21,7 +22,7 @@ export default function Taxes() {
 
   const fetchTaxes = async () => {
     try {
-      const response = await fetch("http://localhost:5000/api/taxes");
+      const response = await fetch(`${API}/api/taxes`);
       if (!response.ok) throw new Error("Failed to fetch taxes");
       const data = await response.json();
       setTaxes(data.taxes);
@@ -35,8 +36,8 @@ export default function Taxes() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const url = formData.id
-      ? `http://localhost:5000/api/taxes/${formData.id}`
-      : "http://localhost:5000/api/taxes";
+      ? `${API}/api/taxes/${formData.id}`
+      : `${API}/api/taxes`;
 
     const method = formData.id ? "PUT" : "POST";
 
@@ -65,7 +66,7 @@ export default function Taxes() {
     if (!window.confirm("Are you sure you want to delete this tax rule?"))
       return;
     try {
-      const response = await fetch(`http://localhost:5000/api/taxes/${id}`, {
+      const response = await fetch(`${API}/api/taxes/${id}`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed to delete tax");

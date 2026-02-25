@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Clock, User, Search } from "lucide-react";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from '../config';
+
 const fmt = (n) => (n == null ? "—" : `${parseFloat(n).toFixed(2)}h`);
 const fmtTime = (dt) =>
   dt

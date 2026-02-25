@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Receipt, Plus, Edit2, Trash2, X, RefreshCw, Tag, Filter } from "lucide-react";
 
-const API = "http://localhost:5000/api";
+import { API } from '../config';
 
 const EMPTY = {
   category_id: "", outlet_id: "", employee_id: "",

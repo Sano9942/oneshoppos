@@ -4,13 +4,14 @@ import {
   DollarSign, TrendingUp, ShoppingBag, Package,
   MonitorPlay, BarChart3, AlertTriangle, TrendingDown,
   Clock, CheckCircle, XCircle, ArrowRight, Users,
-  Filter,
+  Filter, Activity, CreditCard,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from '../config';
+
 const fmt = (n) => "$" + (n || 0).toFixed(2);
 
 function KPICard({ title, value, sub, icon: Icon, iconBg, iconColor, valueColor = "text-slate-900" }) {
@@ -48,11 +49,45 @@ function TrendTooltip({ active, payload, label }) {
   );
 }
 
+const PAYMENT_COLORS = {
+  cash: "bg-emerald-100 text-emerald-700",
+  card: "bg-blue-100 text-blue-700",
+  wallet: "bg-violet-100 text-violet-700",
+};
+
+function RecentSaleRow({ sale }) {
+  const time = new Date(sale.timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const method = (sale.payment_method || "cash").toLowerCase();
+  const colorClass = PAYMENT_COLORS[method] || "bg-slate-100 text-slate-600";
+  return (
+    <div className="flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+          <CreditCard size={14} className="text-slate-500" />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-slate-700">
+            {sale.customer_name || "Walk-in"}
+          </p>
+          <p className="text-xs text-slate-400">{time}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${colorClass}`}>
+          {method}
+        </span>
+        <span className="text-sm font-bold text-slate-800">{fmt(sale.total_amount)}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [shift, setShift] = useState(null);
   const [salespeople, setSalespeople] = useState([]);
+  const [recentSales, setRecentSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -83,11 +118,13 @@ export default function Dashboard() {
           .catch(() => null);
       }),
       fetchJson(`${API}/api/reports/top-salespeople`),
+      fetchJson(`${API}/api/sales?limit=8`).catch(() => ({ sales: [] })),
     ])
-      .then(([dashData, activeShift, spData]) => {
+      .then(([dashData, activeShift, spData, salesData]) => {
         setData(dashData);
         setShift(activeShift);
         setSalespeople(spData.salespeople || []);
+        setRecentSales(salesData.sales || []);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -328,8 +365,8 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Bottom Three-Column */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
+      {/* Bottom Four-Column */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 min-h-0">
 
         {/* Top Sales People */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
@@ -432,7 +469,11 @@ export default function Dashboard() {
               <TrendingDown className="text-rose-500 w-4 h-4" />
               <h3 className="font-bold text-slate-800 text-sm">Low Stock Alerts</h3>
             </div>
-            <span className="text-xs text-slate-400">≤ 10 units</span>
+            {lowStock.length > 0 && (
+              <span className="bg-rose-100 text-rose-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                {lowStock.length} items
+              </span>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto">
             {lowStock.length > 0 ? (
@@ -462,6 +503,33 @@ export default function Dashboard() {
             <button onClick={() => navigate("/inventory")}
               className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
               Manage inventory <ArrowRight size={12} />
+            </button>
+          </div>
+        </div>
+
+        {/* Recent Sales Activity */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Activity className="text-violet-500 w-4 h-4" />
+              <h3 className="font-bold text-slate-800 text-sm">Recent Sales</h3>
+            </div>
+            <span className="text-xs text-slate-400">Latest 8</span>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {recentSales.length > 0 ? (
+              recentSales.map((sale) => <RecentSaleRow key={sale.id} sale={sale} />)
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full py-12 text-slate-400">
+                <Activity size={32} className="mb-2 opacity-30" />
+                <p className="text-sm">No sales today yet</p>
+              </div>
+            )}
+          </div>
+          <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/30">
+            <button onClick={() => navigate("/sales-history")}
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+              View all sales <ArrowRight size={12} />
             </button>
           </div>
         </div>

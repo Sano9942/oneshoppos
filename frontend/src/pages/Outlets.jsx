@@ -1,3 +1,4 @@
+import { API_BASE as API } from '../config';
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Search, MapPin, Phone } from 'lucide-react';
 
@@ -20,7 +21,7 @@ export default function Outlets() {
   const fetchOutlets = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch('http://localhost:5000/api/outlets');
+      const res = await fetch(`${API}/api/outlets`);
       const data = await res.json();
       setOutlets(data.outlets || []);
     } catch (error) {
@@ -64,8 +65,8 @@ export default function Outlets() {
 
     try {
       const url = editingOutlet 
-        ? `http://localhost:5000/api/outlets/${editingOutlet.id}`
-        : 'http://localhost:5000/api/outlets';
+        ? `${API}/api/outlets/${editingOutlet.id}`
+        : `${API}/api/outlets`;
         
       const method = editingOutlet ? 'PUT' : 'POST';
 
@@ -95,7 +96,7 @@ export default function Outlets() {
     if (!window.confirm(`Are you sure you want to delete ${name}?`)) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/outlets/${id}`, {
+      const res = await fetch(`${API}/api/outlets/${id}`, {
         method: 'DELETE',
       });
 

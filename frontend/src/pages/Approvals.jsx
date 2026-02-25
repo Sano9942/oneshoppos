@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { CheckCircle, XCircle, Clock, RefreshCw } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
 
-const API = "http://localhost:5000/api";
+import { API } from '../config';
 
 const STATUS_LABELS = {
   pending_approval: { label: "Pending", color: "bg-yellow-100 text-yellow-800" },

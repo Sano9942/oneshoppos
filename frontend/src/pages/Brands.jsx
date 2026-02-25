@@ -1,3 +1,4 @@
+import { API_BASE as API } from '../config';
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Search, Tag } from 'lucide-react';
 
@@ -19,7 +20,7 @@ export default function Brands() {
   const fetchBrands = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch('http://localhost:5000/api/brands');
+      const res = await fetch(`${API}/api/brands`);
       const data = await res.json();
       setBrands(data.brands || []);
     } catch (error) {
@@ -62,8 +63,8 @@ export default function Brands() {
 
     try {
       const url = editingBrand 
-        ? `http://localhost:5000/api/brands/${editingBrand.id}`
-        : 'http://localhost:5000/api/brands';
+        ? `${API}/api/brands/${editingBrand.id}`
+        : `${API}/api/brands`;
         
       const method = editingBrand ? 'PUT' : 'POST';
 
@@ -93,7 +94,7 @@ export default function Brands() {
     if (!window.confirm(`Are you sure you want to delete ${name}?`)) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/brands/${id}`, {
+      const res = await fetch(`${API}/api/brands/${id}`, {
         method: 'DELETE',
       });
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Eye, Filter, RefreshCw, Save, Search, Download, CheckSquare, Edit3 } from "lucide-react";
 
-const API = "http://localhost:5000/api";
+import { API } from '../config';
 
 function statusPill(value) {
   const v = String(value || "").toLowerCase();

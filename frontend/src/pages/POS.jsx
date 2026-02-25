@@ -1,3 +1,4 @@
+import { API_BASE as API } from '../config';
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -70,7 +71,7 @@ export default function POS() {
     e.preventDefault();
     try {
       const res = await fetch(
-        "http://localhost:5000/api/employees/validate-pin",
+        `${API}/api/employees/validate-pin`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -83,7 +84,7 @@ export default function POS() {
         return;
       }
       const permRes = await fetch(
-        `http://localhost:5000/api/roles/${data.employee.role_id || 3}/permissions`,
+        `${API}/api/roles/${data.employee.role_id || 3}/permissions`,
       );
       const permData = await permRes.json();
       const pList = permData.permissions || [];
@@ -130,6 +131,24 @@ export default function POS() {
   const amountInputRef = useRef(null);
   const searchTimeoutRef = useRef(null);
   const promoTimeoutRef = useRef(null);
+  const errorTimerRef = useRef(null);
+
+  // Auto-dismiss errors after 3 seconds
+  useEffect(() => {
+    if (!error) return;
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    errorTimerRef.current = setTimeout(() => setError(""), 3000);
+    return () => clearTimeout(errorTimerRef.current);
+  }, [error]);
+
+  // F2 focuses the product search bar
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "F2") { e.preventDefault(); inputRef.current?.focus(); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("posAttendanceId");
@@ -139,7 +158,7 @@ export default function POS() {
   }, []);
 
   useEffect(() => {
-    fetch("http://localhost:5000/api/outlets")
+    fetch(`${API}/api/outlets`)
       .then((r) => r.json())
       .then((data) => {
         const list = data.outlets || [];
@@ -150,7 +169,7 @@ export default function POS() {
   }, []);
 
   useEffect(() => {
-    fetch("http://localhost:5000/api/customers")
+    fetch(`${API}/api/customers`)
       .then((r) => r.json())
       .then((d) => setCustomers(d.customers || []))
       .catch((err) => console.error("Failed to load customers", err)); // Fixed empty catch block
@@ -158,7 +177,7 @@ export default function POS() {
 
   useEffect(() => {
     if (!employee?.id || !selectedOutletId || attendanceId || isRegisterLocked) return;
-    fetch("http://localhost:5000/api/attendance/checkin", {
+    fetch(`${API}/api/attendance/checkin`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -182,7 +201,7 @@ export default function POS() {
 
   useEffect(() => {
     if (!selectedCustomerId) { setCustomerWalletBalance(0); return; }
-    fetch(`http://localhost:5000/api/customers/${selectedCustomerId}/wallet`)
+    fetch(`${API}/api/customers/${selectedCustomerId}/wallet`)
       .then((r) => r.json())
       .then((d) => setCustomerWalletBalance(d.balance || 0))
       .catch(() => setCustomerWalletBalance(0));
@@ -195,7 +214,7 @@ export default function POS() {
     promoTimeoutRef.current = setTimeout(async () => {
       try {
         const orderTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-        const res = await fetch("http://localhost:5000/api/promotions/quote", {
+        const res = await fetch(`${API}/api/promotions/quote`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -219,7 +238,7 @@ export default function POS() {
   useEffect(() => {
     if (!selectedOutletId) return;
     fetch(
-      `http://localhost:5000/api/shifts/active?outlet_id=${selectedOutletId}`,
+      `${API}/api/shifts/active?outlet_id=${selectedOutletId}`,
     )
       .then((r) => r.json())
       .then(() => {})
@@ -277,7 +296,7 @@ export default function POS() {
   const fetchParkedSales = async () => {
     try {
       const params = selectedOutletId ? `?outlet_id=${selectedOutletId}` : "";
-      const res = await fetch(`http://localhost:5000/api/parked-sales${params}`);
+      const res = await fetch(`${API}/api/parked-sales${params}`);
       const data = await res.json();
       setParkedSales(data.parkedSales || []);
     } catch (err) {
@@ -288,7 +307,7 @@ export default function POS() {
   const handleParkSale = async () => {
     if (cart.length === 0) return;
     try {
-      const res = await fetch("http://localhost:5000/api/parked-sales", {
+      const res = await fetch(`${API}/api/parked-sales`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -324,7 +343,7 @@ export default function POS() {
 
   const handleRestoreParkedSale = async (sale) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/parked-sales/${sale.id}`);
+      const res = await fetch(`${API}/api/parked-sales/${sale.id}`);
       const data = await res.json();
       const restoredItems = (data.items || []).map((item) => ({
         id: item.product_id,
@@ -338,7 +357,7 @@ export default function POS() {
       if (data.parkedSale.customer_id) setSelectedCustomerId(String(data.parkedSale.customer_id));
       setOrderNote(data.parkedSale.notes || "");
       // Delete from DB after restore
-      await fetch(`http://localhost:5000/api/parked-sales/${sale.id}`, { method: "DELETE" });
+      await fetch(`${API}/api/parked-sales/${sale.id}`, { method: "DELETE" });
       fetchParkedSales();
       setShowParkedModal(false);
     } catch (err) {
@@ -385,7 +404,7 @@ export default function POS() {
           ? `&outlet_id=${selectedOutletId}`
           : "";
         const res = await fetch(
-          `http://localhost:5000/api/products/search?query=${query}${outletParam}`,
+          `${API}/api/products/search?query=${query}${outletParam}`,
         );
         const data = await res.json();
         setSearchResults(data.products || []);
@@ -401,7 +420,7 @@ export default function POS() {
 
     // Intercept if it's a base product with variants
     if (product.has_variants === 1 && !product.is_variant) {
-      fetch(`http://localhost:5000/api/products/${product.id}/variants`)
+      fetch(`${API}/api/products/${product.id}/variants`)
         .then((r) => r.json())
         .then((d) => {
           setProductVariants(d.variants || []);
@@ -479,7 +498,7 @@ export default function POS() {
         ? `?outlet_id=${selectedOutletId}`
         : "";
       const res = await fetch(
-        `http://localhost:5000/api/products/scan/${barcodeInput}${outletParam}`,
+        `${API}/api/products/scan/${barcodeInput}${outletParam}`,
       );
       const data = await res.json();
 
@@ -533,7 +552,7 @@ export default function POS() {
     }
 
     try {
-      const res = await fetch("http://localhost:5000/api/sales", {
+      const res = await fetch(`${API}/api/sales`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -558,7 +577,7 @@ export default function POS() {
         // Fetch active receipt template (fall back to defaults if none configured)
         let tmpl = { header_text: "OneShopPOS", footer_text: "Thank you for your purchase!", show_barcode: false };
         try {
-          const tmplRes = await fetch("http://localhost:5000/api/receipt-templates/active");
+          const tmplRes = await fetch(`${API}/api/receipt-templates/active`);
           if (tmplRes.ok) {
             const tmplData = await tmplRes.json();
             if (tmplData.template) tmpl = tmplData.template;
@@ -692,7 +711,7 @@ export default function POS() {
 
     try {
       const res = await fetch(
-        "http://localhost:5000/api/employees/validate-pin",
+        `${API}/api/employees/validate-pin`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -726,7 +745,7 @@ export default function POS() {
     if (attendanceId) {
       try {
         await fetch(
-          `http://localhost:5000/api/attendance/${attendanceId}/checkout`,
+          `${API}/api/attendance/${attendanceId}/checkout`,
           { method: "POST" },
         );
       } catch (e) {
@@ -904,8 +923,9 @@ export default function POS() {
           </div>
 
           <div className="mb-4 relative">
-            <h3 className="text-sm font-bold text-slate-800 mb-2">
+            <h3 className="text-sm font-bold text-slate-800 mb-2 flex items-center justify-between">
               Search Product
+              <span className="text-[10px] text-slate-400 font-normal bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">F2</span>
             </h3>
             <form
               onSubmit={handleScanSubmit}
@@ -959,8 +979,13 @@ export default function POS() {
             )}
           </div>
 
-          <h3 className="text-sm font-bold text-slate-800 mb-2">
+          <h3 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
             Products List
+            {cart.length > 0 && (
+              <span className="bg-[#8066FF] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                {cart.length} item{cart.length > 1 ? "s" : ""}
+              </span>
+            )}
           </h3>
 
           <div className="bg-white flex-1 rounded-xl shadow-sm border border-slate-100 overflow-hidden flex flex-col relative">
@@ -996,9 +1021,12 @@ export default function POS() {
                         className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors"
                       >
                         <td className="py-3">
-                          <div className="font-bold text-slate-800 text-sm">
-                            {item.name}
-                          </div>
+                          <div className="font-bold text-slate-800 text-sm">{item.name}</div>
+                          {item.availableStock > 0 && item.quantity >= Math.ceil(item.availableStock * 0.8) && (
+                            <div className={`text-[10px] font-bold mt-0.5 ${item.quantity >= item.availableStock ? "text-rose-500" : "text-amber-500"}`}>
+                              {item.quantity >= item.availableStock ? "⚠ Max stock reached" : `⚠ ${item.availableStock - item.quantity} left in stock`}
+                            </div>
+                          )}
                         </td>
                         <td className="py-3 text-center">
                           <div className="inline-flex items-center gap-1">
@@ -1194,9 +1222,11 @@ export default function POS() {
               <span className="text-white">PKRs {subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span>Discount %</span>
+              <span>Discount {discountType === "percent" ? "%" : "Amount"}</span>
               <span className="flex items-center gap-1.5 text-white">
-                0.0 <FileText size={12} className="opacity-40" />
+                {discountType === "percent"
+                  ? `${parseFloat(discountInput || 0).toFixed(1)}%`
+                  : `PKRs ${discountValue.toFixed(2)}`}
               </span>
             </div>
             <div className="flex justify-between items-center">
@@ -1351,6 +1381,21 @@ export default function POS() {
                     >
                       Add
                     </button>
+                  </div>
+                  {/* Quick-amount shortcuts */}
+                  <div className="flex gap-2 mt-3 flex-wrap">
+                    <button type="button"
+                      onClick={() => setPaymentAmountInput(remainingBalance.toFixed(2))}
+                      className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition-colors">
+                      Exact
+                    </button>
+                    {[50, 100, 500, 1000].map((amt) => (
+                      <button key={amt} type="button"
+                        onClick={() => setPaymentAmountInput((Math.ceil(remainingBalance / amt) * amt).toFixed(2))}
+                        className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-bold transition-colors">
+                        +{amt}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </form>
@@ -1547,7 +1592,7 @@ export default function POS() {
                         <button
                           onClick={() =>
                             executeWithPermission("pos_void", async () => {
-                              await fetch(`http://localhost:5000/api/parked-sales/${sale.id}`, { method: "DELETE" });
+                              await fetch(`${API}/api/parked-sales/${sale.id}`, { method: "DELETE" });
                               fetchParkedSales();
                             })
                           }

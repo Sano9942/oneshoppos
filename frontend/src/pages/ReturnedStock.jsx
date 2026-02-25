@@ -16,7 +16,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from '../config';
+
 
 const fmt = (n) => "$" + (n || 0).toFixed(2);
 const fmtDate = (d) =>

@@ -1,3 +1,4 @@
+import { API_BASE as API } from '../config';
 import { useState, useEffect } from "react";
 import {
   Plus,
@@ -34,9 +35,9 @@ export default function Transfers() {
     setIsLoading(true);
     try {
       const [trRes, prodRes, outRes] = await Promise.all([
-        fetch("http://localhost:5000/api/transfers"),
-        fetch("http://localhost:5000/api/products"),
-        fetch("http://localhost:5000/api/outlets"),
+        fetch(`${API}/api/transfers`),
+        fetch(`${API}/api/products`),
+        fetch(`${API}/api/outlets`),
       ]);
       const [trData, prodData, outData] = await Promise.all([
         trRes.json(),
@@ -80,7 +81,7 @@ export default function Transfers() {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch("http://localhost:5000/api/transfers", {
+      const res = await fetch(`${API}/api/transfers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

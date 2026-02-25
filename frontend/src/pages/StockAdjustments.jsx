@@ -1,3 +1,4 @@
+import { API_BASE as API } from '../config';
 import { useState, useEffect } from "react";
 import { Plus, Search, Building2, History, X } from "lucide-react";
 
@@ -27,9 +28,9 @@ export default function StockAdjustments() {
   const fetchData = async () => {
     try {
       const [adjRes, prodRes, outRes] = await Promise.all([
-        fetch("http://localhost:5000/api/adjustments"),
-        fetch("http://localhost:5000/api/products"),
-        fetch("http://localhost:5000/api/outlets"),
+        fetch(`${API}/api/adjustments`),
+        fetch(`${API}/api/products`),
+        fetch(`${API}/api/outlets`),
       ]);
       const [adjData, prodData, outData] = await Promise.all([
         adjRes.json(),
@@ -57,7 +58,7 @@ export default function StockAdjustments() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch("http://localhost:5000/api/adjustments", {
+      const res = await fetch(`${API}/api/adjustments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

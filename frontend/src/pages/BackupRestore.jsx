@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Download, Upload, History, AlertTriangle, CheckCircle, RefreshCw, Database } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from '../config';
 
 function fmt(dt) {
   if (!dt) return "—";

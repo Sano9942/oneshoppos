@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { History, Search, RefreshCcw } from "lucide-react";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from '../config';
+
 
 const fmtDate = (d) =>
   d

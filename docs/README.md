@@ -1,33 +1,33 @@
 ﻿# OneShopPOS Documentation Index
 
-This folder is organized into **active** docs (authoritative for current work) and **archived** docs (historical context).
+This folder contains current project documentation.
 
-## Active (Authoritative)
+## Core Docs
 
-- `STATUS.md` - Current system snapshot and delivery phase.
-- `ARCHITECTURE.md` - System architecture, runtime flow, and design constraints.
-- `API_REFERENCE.md` - Complete backend endpoint list and frontend route map.
-- `TESTING.md` - Test history and latest validation runs.
-- `SHOPIFY_ALIGNMENT_PLAN.md` - Shopify alignment status and remaining work.
-- `SHOPIFY_SYNC_PLAN.md` - Shopify sync implementation details.
-- `SHOPIFY_LIVE_RUNBOOK.md` - Steps for live validation/go-live once keys are available.
-- `odoo.md` - Odoo comparison and strategic gap analysis.
+- `STATUS.md` - Current delivery/status snapshot
+- `project-full-overview.md` - High-level full project context
+- `IMPROVEMENT_PLAN.md` - Tiered roadmap with completion states
+- `tier 4 plan .md` - Tier 4 implementation and verification record
 
-## Archived (Historical)
+## Technical Docs
 
-These were useful during build-out but are no longer primary references:
+- `ARCHITECTURE.md` - Runtime architecture and module map
+- `API_REFERENCE.md` - API/route summary and Tier 4 endpoint inventory
+- `TESTING.md` - Latest test baselines and commands
 
-- `archive/PLAN.md`
-- `archive/task.md`
-- `archive/code_features_impementation.md`
-- `archive/IMPLEMENTATION_PLAN.md`
-- `archive/XSTAK_GAPS.md`
+## Domain Docs
 
-## Usage Guidance
+- `SHOPIFY_ALIGNMENT_PLAN.md`
+- `SHOPIFY_SYNC_PLAN.md`
+- `SHOPIFY_LIVE_RUNBOOK.md`
+- `odoo.md`
 
-1. Start with `STATUS.md` for current state.
-2. Use `ARCHITECTURE.md` for implementation context.
-3. Use `API_REFERENCE.md` for exact endpoint/route inventory.
-4. Check `TESTING.md` before and after major changes.
-5. For Shopify work, follow the three Shopify docs in this folder.
-6. Use `archive/` only when historical decisions are needed.
+## Suggested Reading Order
+
+1. `STATUS.md`
+2. `project-full-overview.md`
+3. `IMPROVEMENT_PLAN.md`
+4. `tier 4 plan .md`
+5. `ARCHITECTURE.md`
+6. `API_REFERENCE.md`
+7. `TESTING.md`

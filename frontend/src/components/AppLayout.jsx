@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Banknote,
+  BookOpen,
   CheckSquare,
   ChevronDown,
   ChevronLeft,
@@ -23,10 +24,13 @@ import {
   Users,
   History,
   User,
+  UserPlus,
+  FileText,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
+import NotificationBell from "./NotificationBell";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from '../config';
 
 export default function AppLayout() {
   const location = useLocation();
@@ -38,6 +42,16 @@ export default function AppLayout() {
     e_invoicing_export: true,
     supplier_payables: true,
     approvals: true,
+    notifications: true,
+    accounting_core: true,
+    crm_quotations: true,
+    advanced_hr: true,
+    multi_company: true,
+  });
+  const [lowStockCount, setLowStockCount] = useState(0);
+  const [companyProfile, setCompanyProfile] = useState({
+    company_name: "OneShopPOS",
+    logo_url: "",
   });
 
   const getExpandedMenuForPath = (path) => {
@@ -57,6 +71,7 @@ export default function AppLayout() {
     if (
       path.startsWith("/outlets") ||
       path.startsWith("/employees") ||
+      path.startsWith("/company-settings") ||
       path.startsWith("/barcode") ||
       path.startsWith("/receipt") ||
       path.startsWith("/backup-restore") ||
@@ -70,6 +85,9 @@ export default function AppLayout() {
       path.startsWith("/sales-history") ||
       path.startsWith("/cash-management")
     ) return "Register";
+    if (path.startsWith("/accounting")) return "Accounting";
+    if (path.startsWith("/crm") || path.startsWith("/quotations")) return "Sales CRM";
+    if (path.startsWith("/hr/")) return "HR";
     return "";
   };
 
@@ -79,20 +97,27 @@ export default function AppLayout() {
   const [prevPath, setPrevPath] = useState(location.pathname);
 
   useEffect(() => {
-    fetch(`${API}/api/feature-flags`, { headers: authHeaders() })
-      .then((r) => r.json())
-      .then((d) => {
-        setFeatureFlags((prev) => {
-          const next = { ...prev };
-          (d.flags || []).forEach((f) => {
-            next[f.key] = Number(f.enabled || 0) === 1;
-          });
-          return next;
+    const headers = authHeaders();
+    Promise.all([
+      fetch(`${API}/api/feature-flags`, { headers }).then((r) => r.json()),
+      fetch(`${API}/api/reports/dashboard`, { headers }).then((r) => r.json()).catch(() => null),
+      fetch(`${API}/api/company-profile`, { headers }).then((r) => r.json()).catch(() => null),
+    ]).then(([flagData, dashData, companyData]) => {
+      setFeatureFlags((prev) => {
+        const next = { ...prev };
+        (flagData.flags || []).forEach((f) => {
+          next[f.key] = Number(f.enabled || 0) === 1;
         });
-      })
-      .catch(() => {
-        // Keep defaults when endpoint unavailable.
+        return next;
       });
+      if (dashData?.lowStock) setLowStockCount(dashData.lowStock.length);
+      if (companyData?.profile) {
+        setCompanyProfile({
+          company_name: companyData.profile.company_name || "OneShopPOS",
+          logo_url: companyData.profile.logo_url || "",
+        });
+      }
+    }).catch(() => {});
   }, [authHeaders]);
 
   if (location.pathname !== prevPath) {
@@ -118,6 +143,8 @@ export default function AppLayout() {
     else if (path.startsWith("/suppliers")) moduleName = "Suppliers";
     else if (path.startsWith("/taxes")) moduleName = "Taxes";
     else if (path.startsWith("/customers")) moduleName = "Customers";
+    else if (path.startsWith("/crm")) moduleName = "Sales CRM > CRM";
+    else if (path.startsWith("/quotations")) moduleName = "Sales CRM > Quotations";
     else if (path.startsWith("/administrator")) moduleName = "Administrator";
     else if (path.startsWith("/action-history")) moduleName = "Action History";
     else if (path.startsWith("/inventory")) moduleName = "Products > Product Listing";
@@ -141,6 +168,7 @@ export default function AppLayout() {
     else if (path.startsWith("/expenses")) moduleName = "Expenses";
     else if (path.startsWith("/outlets")) moduleName = "Setup > Outlets";
     else if (path.startsWith("/employees")) moduleName = "Setup > Employees";
+    else if (path.startsWith("/company-settings")) moduleName = "Setup > Company Profile";
     else if (path.startsWith("/barcode-templates")) moduleName = "Setup > Barcode Templates";
     else if (path.startsWith("/receipt-templates")) moduleName = "Setup > Receipt Templates";
     else if (path.startsWith("/backup-restore")) moduleName = "Setup > Backup & Restore";
@@ -148,6 +176,9 @@ export default function AppLayout() {
     else if (path.startsWith("/partners")) moduleName = "Setup > Partners";
     else if (path.startsWith("/brands")) moduleName = "Setup > Brands";
     else if (path.startsWith("/shopcast")) moduleName = "Setup > Shopcast";
+    else if (path.startsWith("/accounting")) moduleName = "Accounting";
+    else if (path.startsWith("/hr/leave")) moduleName = "HR > Leave";
+    else if (path.startsWith("/hr/payroll")) moduleName = "HR > Payroll";
     return `Shopdesk > ${moduleName}`;
   };
 
@@ -168,6 +199,7 @@ export default function AppLayout() {
     { name: "Supplier Payables", path: "/supplier-payables", icon: <CreditCard size={18} />, requiredPerm: "manage_orders", requiredFlag: "supplier_payables" },
     { name: "Promotions", path: "/promotions", icon: <Percent size={18} />, requiredPerm: "manage_inventory" },
     { name: "Expenses", path: "/expenses", icon: <Banknote size={18} />, requiredPerm: "manage_inventory" },
+    { name: "Accounting", path: "/accounting", icon: <BookOpen size={18} />, requiredPerm: "view_reports", requiredFlag: "accounting_core" },
     { name: "Taxes", path: "/taxes", icon: <Settings size={18} />, requiredPerm: "manage_inventory" },
     {
       name: "Products",
@@ -180,6 +212,14 @@ export default function AppLayout() {
       ],
     },
     { name: "Customers", path: "/customers", icon: <Users size={18} /> },
+    {
+      name: "Sales CRM",
+      icon: <UserPlus size={18} />,
+      subItems: [
+        { name: "CRM", path: "/crm", requiredPerm: "manage_orders", requiredFlag: "crm_quotations" },
+        { name: "Quotations", path: "/quotations", requiredPerm: "manage_orders", requiredFlag: "crm_quotations" },
+      ],
+    },
     {
       name: "Stock Control",
       icon: <History size={18} />,
@@ -221,6 +261,7 @@ export default function AppLayout() {
       subItems: [
         { name: "Outlets", path: "/outlets", requiredPerm: "manage_employees" },
         { name: "Employees", path: "/employees", requiredPerm: "manage_employees" },
+        { name: "Company Profile", path: "/company-settings", requiredPerm: "manage_employees", requiredFlag: "multi_company" },
         { name: "Barcode Templates", path: "/barcode-templates", requiredPerm: "manage_inventory" },
         { name: "Receipt Templates", path: "/receipt-templates" },
         { name: "Backup & Restore", path: "/backup-restore", requiredPerm: "manage_employees", requiredFlag: "backup_restore" },
@@ -228,6 +269,14 @@ export default function AppLayout() {
         { name: "Partners", path: "/partners" },
         { name: "Brands", path: "/brands", requiredPerm: "manage_inventory" },
         { name: "Shopcast", path: "/shopcast" },
+      ],
+    },
+    {
+      name: "HR",
+      icon: <FileText size={18} />,
+      subItems: [
+        { name: "Leave", path: "/hr/leave", requiredPerm: "manage_employees", requiredFlag: "advanced_hr" },
+        { name: "Payroll", path: "/hr/payroll", requiredPerm: "manage_employees", requiredFlag: "advanced_hr" },
       ],
     },
     { name: "Administrator", path: "/administrator", icon: <Shield size={18} />, requiredPerm: "manage_employees" },
@@ -265,13 +314,20 @@ export default function AppLayout() {
 
         <div className={`h-16 flex items-center ${isSidebarCollapsed ? "justify-center px-0" : "px-6"} mb-4 sticky top-0 bg-[#050507] z-10 overflow-hidden shrink-0`}>
           <div className="font-black text-xl tracking-tight text-white flex items-center gap-2 whitespace-nowrap">
-            <div className="w-8 h-8 bg-[#7B61FF] rounded-lg flex justify-center items-center text-white shrink-0">
-              <span className="font-bold text-lg">X</span>
-            </div>
+            {companyProfile.logo_url ? (
+              <img
+                src={`${API}${companyProfile.logo_url}`}
+                alt="Company logo"
+                className="w-8 h-8 rounded-lg object-cover bg-white shrink-0"
+              />
+            ) : (
+              <div className="w-8 h-8 bg-[#7B61FF] rounded-lg flex justify-center items-center text-white shrink-0">
+                <span className="font-bold text-lg">{String(companyProfile.company_name || "O").charAt(0).toUpperCase()}</span>
+              </div>
+            )}
             {!isSidebarCollapsed && (
               <span>
-                XStak
-                <span className="text-[#7B61FF] text-sm ml-1 align-top font-medium">POS</span>
+                {companyProfile.company_name || "OneShopPOS"}
               </span>
             )}
           </div>
@@ -296,6 +352,11 @@ export default function AppLayout() {
                       <div className="flex items-center gap-3">
                         {item.icon}
                         {!isSidebarCollapsed && <span>{item.name}</span>}
+                        {!isSidebarCollapsed && item.name === "Products" && lowStockCount > 0 && (
+                          <span className="ml-auto mr-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-bold px-1">
+                            {lowStockCount > 99 ? "99+" : lowStockCount}
+                          </span>
+                        )}
                       </div>
                       {!isSidebarCollapsed && (
                         <ChevronRight size={16} className={`transition-transform duration-200 ${expandedMenu === item.name ? "rotate-90" : ""}`} />
@@ -369,6 +430,7 @@ export default function AppLayout() {
               <RefreshCw size={14} />
               Sync Data
             </button>
+            {featureFlags.notifications && <NotificationBell />}
 
             <div className="flex items-center gap-2 text-slate-700 font-semibold text-sm">
               {employee?.name || "Employee"}

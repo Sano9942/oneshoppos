@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Receipt, DollarSign, RefreshCw, X, ChevronDown, ChevronUp } from "lucide-react";
 
-const API = "http://localhost:5000/api";
+import { API } from '../config';
 const fmt = (n) => `PKRs ${(n || 0).toFixed(2)}`;
 
 const STATUS_COLORS = {

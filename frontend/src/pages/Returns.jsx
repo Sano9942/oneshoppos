@@ -16,7 +16,8 @@ import {
 } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from '../config';
+
 
 function formatCurrency(n) {
   return "$" + (n || 0).toFixed(2);

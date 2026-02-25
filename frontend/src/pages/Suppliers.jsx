@@ -1,3 +1,4 @@
+import { API_BASE as API } from '../config';
 import { useState, useEffect } from "react";
 import { Truck, Plus, Save, X, Search, Trash2, Edit } from "lucide-react";
 
@@ -28,7 +29,7 @@ export default function Suppliers() {
   const fetchSuppliers = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/suppliers");
+      const res = await fetch(`${API}/api/suppliers`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setSuppliers(data.suppliers);
@@ -74,8 +75,8 @@ export default function Suppliers() {
     setIsLoading(true);
 
     const url = editingSupplier
-      ? `http://localhost:5000/api/suppliers/${editingSupplier.id}`
-      : "http://localhost:5000/api/suppliers";
+      ? `${API}/api/suppliers/${editingSupplier.id}`
+      : `${API}/api/suppliers`;
 
     const method = editingSupplier ? "PUT" : "POST";
 
@@ -105,7 +106,7 @@ export default function Suppliers() {
       return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/suppliers/${id}`, {
+      const res = await fetch(`${API}/api/suppliers/${id}`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Failed to delete");

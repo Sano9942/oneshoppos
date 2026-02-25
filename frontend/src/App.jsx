@@ -31,12 +31,17 @@ import ReturnedStock from "./pages/ReturnedStock";
 import Returns from "./pages/Returns";
 import SalesHistory from "./pages/SalesHistory";
 import ActionHistory from "./pages/ActionHistory";
+import Accounting from "./pages/Accounting";
 import StockAdjustments from "./pages/StockAdjustments";
 import SupplierPayables from "./pages/SupplierPayables";
 import Suppliers from "./pages/Suppliers";
 import ShopifyIntegration from "./pages/ShopifyIntegration";
 import Taxes from "./pages/Taxes";
 import Transfers from "./pages/Transfers";
+import CRM from "./pages/CRM";
+import Quotations from "./pages/Quotations";
+import HRManagement from "./pages/HRManagement";
+import CompanySettings from "./pages/CompanySettings";
 
 function HomeRedirect() {
   const { isAuthenticated, isBootstrapping } = useAuth();
@@ -71,6 +76,22 @@ function App() {
           <Route path="/sales-history" element={<SalesHistory />} />
           <Route path="/cash-management" element={<CashManagement />} />
           <Route path="/customers" element={<Customers />} />
+          <Route
+            path="/crm"
+            element={
+              <RequirePerm perm="manage_orders">
+                <CRM />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/quotations"
+            element={
+              <RequirePerm perm="manage_orders">
+                <Quotations />
+              </RequirePerm>
+            }
+          />
           <Route path="/attribute-sets" element={<AttributeSets />} />
           <Route
             path="/orders"
@@ -124,6 +145,14 @@ function App() {
             element={
               <RequirePerm perm="manage_inventory">
                 <Expenses />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/accounting"
+            element={
+              <RequirePerm perm="view_reports">
+                <Accounting />
               </RequirePerm>
             }
           />
@@ -251,6 +280,30 @@ function App() {
           />
 
           <Route path="/attendance" element={<Attendance />} />
+          <Route
+            path="/hr/leave"
+            element={
+              <RequirePerm perm="manage_employees">
+                <HRManagement />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/hr/payroll"
+            element={
+              <RequirePerm perm="manage_employees">
+                <HRManagement />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/company-settings"
+            element={
+              <RequirePerm perm="manage_employees">
+                <CompanySettings />
+              </RequirePerm>
+            }
+          />
           <Route
             path="/reports/sales-summary"
             element={<ReportTabStandalone tabId="sales-summary" />}

@@ -1,3 +1,4 @@
+import { API_BASE as API } from '../config';
 import { useState, useEffect } from "react";
 import { Plus, Trash2, Edit2, ShieldAlert, Tags } from "lucide-react";
 
@@ -20,7 +21,7 @@ export default function Categories() {
 
   const fetchCategories = async () => {
     try {
-      const response = await fetch("http://localhost:5000/api/categories");
+      const response = await fetch(`${API}/api/categories`);
       if (!response.ok) throw new Error("Failed to fetch categories");
       const data = await response.json();
       setCategories(data.categories);
@@ -34,8 +35,8 @@ export default function Categories() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const url = formData.id
-      ? `http://localhost:5000/api/categories/${formData.id}`
-      : "http://localhost:5000/api/categories";
+      ? `${API}/api/categories/${formData.id}`
+      : `${API}/api/categories`;
 
     const method = formData.id ? "PUT" : "POST";
 
@@ -68,7 +69,7 @@ export default function Categories() {
       return;
     try {
       const response = await fetch(
-        `http://localhost:5000/api/categories/${id}`,
+        `${API}/api/categories/${id}`,
         { method: "DELETE" },
       );
       if (!response.ok) throw new Error("Failed to delete category");

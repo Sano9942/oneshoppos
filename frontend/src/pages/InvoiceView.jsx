@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Printer, ArrowLeft, RefreshCw, FileText, Download } from "lucide-react";
 
-const API = "http://localhost:5000";
+import { API_BASE as API } from '../config';
+
 const fmt = (n) => `PKR ${Number(n || 0).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtDate = (dt) => dt ? new Date(dt).toLocaleString() : "—";
 
