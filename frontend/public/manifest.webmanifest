@@ -1,0 +1,17 @@
+{
+  "name": "OneShopPOS",
+  "short_name": "OneShopPOS",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f172a",
+  "description": "Local-first retail POS with inventory and operations modules.",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

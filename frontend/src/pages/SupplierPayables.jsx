@@ -14,7 +14,7 @@ export default function SupplierPayables() {
   const [tab, setTab] = useState("aging"); // 'aging' | 'invoices'
   const [aging, setAging] = useState([]);
   const [invoices, setInvoices] = useState([]);
-  const [filterSupplier, setFilterSupplier] = useState("");
+  const filterSupplier = "";
   const [filterStatus, setFilterStatus] = useState("unpaid");
   const [loading, setLoading] = useState(false);
 

@@ -56,6 +56,9 @@ export function AuthProvider({ children }) {
     } catch {
       // frontend-only clear is enough
     }
+    if (navigator.serviceWorker?.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: "AUTH_LOGOUT" });
+    }
     clearSession();
     setSession(null);
   };
@@ -110,9 +113,28 @@ export function AuthProvider({ children }) {
     const nativeFetch = window.fetch.bind(window);
     window.fetch = (input, init = {}) => {
       const rawUrl = typeof input === "string" ? input : input?.url || "";
+      const method =
+        String(init.method || (typeof input !== "string" && input?.method) || "GET").toUpperCase();
       const isApiCall =
         rawUrl.includes(`${API}/api/`) ||
         rawUrl.startsWith("/api/");
+
+      if (isApiCall && !navigator.onLine && !["GET", "HEAD", "OPTIONS"].includes(method)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: "Offline mode: write actions require an internet or local network connection.",
+            }),
+            {
+              status: 503,
+              headers: {
+                "Content-Type": "application/json",
+                "X-Offline-Mode": "1",
+              },
+            },
+          ),
+        );
+      }
 
       if (!isApiCall || !employee?.id) {
         return nativeFetch(input, init);

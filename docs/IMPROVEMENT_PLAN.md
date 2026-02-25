@@ -64,15 +64,144 @@ Validation:
 
 ---
 
-## Tier 5 - Technical Debt and Infrastructure (Pending)
+## Tier 5 - Technical Debt and Infrastructure (In Progress, 3 Phases)
 
-| # | Item | Status | Notes |
-|---|---|---|---|
-| 5.1 | Split `backend/index.js` | Pending | Move to route modules |
-| 5.2 | API rate limiting | Pending | Add abuse protection middleware |
-| 5.3 | PWA/offline mode | Pending | Service worker and offline strategy |
-| 5.4 | Real-time updates | Pending | WebSocket or SSE |
-| 5.5 | Remove legacy files | Pending | Clean stale artifacts and snapshots |
+### Tier 5-A (Stabilization, low risk)
+
+| # | Item | Status | Owner | Definition of Done | Risk | Rollback |
+|---|---|---|---|---|---|---|
+| 5.5 | Legacy cleanup and reference deconfliction | Done | Backend + Docs | Legacy artifacts are archived from runtime paths, docs/scripts reference only `backend/oneshop.db`, startup/tests run clean | Path/reference misses after move | Restore archived files to previous location and revert docs/script references |
+| 5.2 | Baseline API rate limiting | Done | Backend | `express-rate-limit` integrated with global + strict route policies, standardized 429 contract, diagnostics headers present | False positives on POS burst flows | Disable limiter middleware via config switch and restore previous middleware chain |
+| 5.3 | PWA foundations (read-first) | Done | Frontend | Manifest + service worker registration + read-first caching for static/selected GET responses with offline UX for writes | Stale data, cache poisoning, auth-sensitive caching mistakes | Unregister SW, bump cache version, ship no-op SW |
+
+### Tier 5-B (Structural maintainability)
+
+| # | Item | Status | Owner | Definition of Done | Risk | Rollback |
+|---|---|---|---|---|---|---|
+| 5.1 | Backend route modularization (`index.js` split) | Planned | Backend | Route modules extracted by domain, shared middleware/util layers introduced, no route path changes, all core suites pass | Regression in transaction-heavy flows during extraction | Revert extraction PRs by domain, keep parity checkpoints and route inventory diffs |
+
+### Tier 5-C (Realtime and hardening)
+
+| # | Item | Status | Owner | Definition of Done | Risk | Rollback |
+|---|---|---|---|---|---|---|
+| 5.4 | SSE realtime channels | Planned | Backend + Frontend | `GET /api/events/stream` live, targeted event types wired, reconnect + polling fallback implemented | Connection churn/load on long-lived streams | Disable SSE endpoint and keep interval polling only |
+| 5.2-T | Rate limit tuning + observability pass | Planned | Backend + Ops | Threshold tuning validated against real usage and logs/metrics show 429 hotspots and retry behavior | Under/over-throttling after rollout | Revert policy values to baseline defaults |
+
+### Tier 5 Technical Spec
+
+#### 5.1 Split `backend/index.js` (Route Modules)
+
+- Target structure:
+  - `backend/routes/*.js` for domain routes
+  - `backend/middleware/*.js` for auth/perm/feature/shared guards
+  - `backend/services/*.js` for reusable business helpers
+- Keep one Express app and one sqlite connection from `db.js`.
+- Migration strategy:
+  1. Extract read-only/no-op modules first.
+  2. Extract write-heavy modules with transaction parity checks.
+  3. Keep route behavior, path contracts, and response shapes unchanged.
+- Done criteria:
+  - No endpoint path changes.
+  - `npm run preflight`, `npm run test:e2e-full`, and `npm run test:tier4-smoke` all pass.
+
+#### 5.2 API Rate Limiting
+
+- Add `express-rate-limit`.
+- Initial policy:
+  - Global default limiter.
+  - Stricter limiter for auth/login and public webhook endpoints.
+  - Explicit exemptions or higher thresholds for local POS burst paths.
+- Standard 429 JSON contract:
+  - `{ "error": "Too many requests", "retry_after_seconds": <n> }`
+- Add diagnostics headers for observability and tuning.
+
+#### 5.3 PWA / Offline (Read-First)
+
+- Add:
+  - `manifest.webmanifest`
+  - service worker registration in frontend entry
+  - service worker caching for static assets and selected GET responses
+- Scope constraints:
+  - No offline write queue in Tier 5.
+  - Explicit UX message for write attempts while offline.
+- Cache policy:
+  - static assets: cache-first
+  - critical GET endpoints: stale-while-revalidate
+  - auth-sensitive data: short TTL and explicit invalidation on logout
+
+#### 5.4 Realtime Updates (SSE)
+
+- Add SSE endpoint:
+  - `GET /api/events/stream`
+- Initial event types:
+  - `notification:new`
+  - `dashboard:kpi_refresh`
+  - `shopify:queue_status`
+- Frontend behavior:
+  - `EventSource` subscription in top-level app context or targeted module contexts
+  - fallback to existing polling on disconnect
+- Keep write operations HTTP-based; no socket command channel in Tier 5.
+
+#### 5.5 Remove Legacy Files (Archive Policy)
+
+- Move non-runtime artifacts from `backend/` to an archive/tools location.
+- Candidate files:
+  - `backend/archive/legacy/database.sqlite`
+  - `backend/archive/legacy/schema_dump.txt`
+  - `backend/archive/legacy/readable_schema.txt`
+- Update docs/scripts so runtime DB reference is only `backend/oneshop.db`.
+- Add a short legacy artifacts policy note to docs.
+
+Implementation status:
+- Completed on 2026-02-25.
+- Files moved to `backend/archive/legacy/`.
+
+### Tier 5 Verification Matrix
+
+| Item | Command Checks | Functional Checks | Regression Checks | Rollback Check |
+|---|---|---|---|---|
+| 5.1 | endpoint inventory diff + suite commands | route parity smoke on migrated domains | `preflight` + full e2e + Tier 4 smoke | domain-by-domain revert preserves old behavior |
+| 5.2 | limiter unit/integration checks, 429 contract checks | auth brute-force simulation returns deterministic 429/retry | POS high-frequency flows unaffected | middleware feature switch disables limiter |
+| 5.3 | build/preview with SW active, manifest validation | installability + offline reload of app shell + cached reads | no auth/session corruption from cache | SW unregister and cache-bust restore baseline |
+| 5.4 | SSE connect/reconnect and heartbeat checks | event delivery for initial event types + polling fallback | no impact on existing HTTP write flows | disable SSE endpoint and rely on polling |
+| 5.5 | startup + migration + test scripts from clean clone | no runtime lookups against archived files | docs/scripts paths remain valid | restore archived files + previous refs |
+
+### Public APIs / Interfaces / Types Affected
+
+- Planned new endpoint:
+  - `GET /api/events/stream`
+- Planned standardized rate-limit contract:
+  - `{ "error": "Too many requests", "retry_after_seconds": <n> }`
+- Planned frontend interfaces:
+  - PWA manifest
+  - service worker registration lifecycle
+- No breaking changes to Tier 1-4 endpoint paths.
+
+### Test Cases and Scenarios (Tier 5)
+
+1. Rate-limit auth brute-force simulation:
+   - exceed threshold, validate deterministic 429 with retry metadata
+2. POS burst safety:
+   - rapid sale-related calls do not trigger false positives
+3. PWA offline read path:
+   - load once online, then offline refresh for app shell and selected cached views
+4. PWA offline write behavior:
+   - write attempts offline show explicit non-destructive UX error
+5. Route modularization parity:
+   - endpoint inventory parity + full regression suites
+6. SSE lifecycle:
+   - connect, receive events, drop network, reconnect, continue receiving
+7. Legacy cleanup safety:
+   - clean clone startup + migration + tests with no path regressions
+
+### Assumptions and Defaults (Locked)
+
+- Tier 5 is planned in 3 phases.
+- Backend refactor uses route modules, not a full service/repository rewrite.
+- Realtime transport is SSE-first with polling fallback.
+- PWA scope is read-first offline, without offline transaction queueing.
+- Legacy cleanup uses archive + reference removal, not hard delete.
+- Tier 3.1 remains outside Tier 5 and is tracked separately.
 
 ---
 
@@ -80,4 +209,6 @@ Validation:
 
 1. Complete `3.1` email receipt workflow
 2. Start Tier 2 route implementations (`/lookup` first)
-3. Begin Tier 5.1 backend route split to reduce regression risk
+3. Execute Tier 5-A first (`5.5` -> `5.2` -> `5.3`)
+4. Execute Tier 5-B (`5.1` route modularization)
+5. Execute Tier 5-C (`5.4` SSE + rate-limit tuning)

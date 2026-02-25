@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const multer = require("multer");
+const rateLimit = require("express-rate-limit");
 const sqlite3 = require("sqlite3").verbose();
 const {
   verifyConnection,
@@ -31,6 +32,10 @@ const DB_PATH = path.resolve(__dirname, "oneshop.db");
 const UPLOADS_DIR = path.resolve(__dirname, "uploads");
 const PRODUCT_UPLOADS_DIR = path.resolve(UPLOADS_DIR, "products");
 const COMPANY_UPLOADS_DIR = path.resolve(UPLOADS_DIR, "company");
+const RATE_LIMIT_WINDOW_MS = Math.max(1000, Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000));
+const RATE_LIMIT_GLOBAL_MAX = Math.max(1, Number(process.env.RATE_LIMIT_GLOBAL_MAX || 600));
+const RATE_LIMIT_AUTH_MAX = Math.max(1, Number(process.env.RATE_LIMIT_AUTH_MAX || 20));
+const RATE_LIMIT_WEBHOOK_MAX = Math.max(1, Number(process.env.RATE_LIMIT_WEBHOOK_MAX || 120));
 
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 if (!fs.existsSync(PRODUCT_UPLOADS_DIR)) fs.mkdirSync(PRODUCT_UPLOADS_DIR, { recursive: true });
@@ -91,6 +96,54 @@ function logShopifyEvent(level, event, details = {}) {
   logger(JSON.stringify(payload));
 }
 
+function retryAfterSeconds(req, fallbackWindowMs) {
+  const resetAt = req.rateLimit?.resetTime ? new Date(req.rateLimit.resetTime).getTime() : Date.now() + fallbackWindowMs;
+  return Math.max(1, Math.ceil((resetAt - Date.now()) / 1000));
+}
+
+function limitExceededHandler(req, res, _next, options) {
+  const retryAfter = retryAfterSeconds(req, RATE_LIMIT_WINDOW_MS);
+  res.set("Retry-After", String(retryAfter));
+  return res.status(options.statusCode || 429).json({
+    error: "Too many requests",
+    retry_after_seconds: retryAfter,
+  });
+}
+
+function isPosBurstPath(pathname) {
+  return (
+    pathname.startsWith("/api/sales") ||
+    pathname.startsWith("/api/products/search") ||
+    pathname.startsWith("/api/products/scan/") ||
+    pathname.startsWith("/api/orders")
+  );
+}
+
+const globalLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMIT_GLOBAL_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitExceededHandler,
+  skip: (req) => isPosBurstPath(req.path || ""),
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: RATE_LIMIT_AUTH_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitExceededHandler,
+});
+
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: RATE_LIMIT_WEBHOOK_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitExceededHandler,
+});
+
 // Middleware
 app.use(cors());
 app.use(express.json({
@@ -101,6 +154,7 @@ app.use(express.json({
   },
 })); // Parse JSON bodies
 app.use("/uploads", express.static(UPLOADS_DIR));
+app.use(globalLimiter);
 
 // --- PERMISSION MIDDLEWARE SCAFFOLD ---
 // Reads optional x-employee-id header, attaches permissions to req.
@@ -1798,7 +1852,7 @@ app.delete("/api/outlets/:id", (req, res) => {
 
 // --- ROUTES: AUTH ---
 
-app.post("/api/auth/login", (req, res) => {
+app.post("/api/auth/login", authLimiter, (req, res) => {
   const { username, pin } = req.body || {};
   if (!username || !pin) {
     return res.status(400).json({ error: "username and pin are required" });
@@ -7781,7 +7835,7 @@ app.post("/api/integrations/shopify/sync/pull-orders", requirePerm("manage_order
   });
 });
 
-app.post("/api/integrations/shopify/webhooks/orders-create", (req, res) => {
+app.post("/api/integrations/shopify/webhooks/orders-create", webhookLimiter, (req, res) => {
   const payload = req.body || {};
   const rawBody = req.rawBody || JSON.stringify(payload || {});
   const webhookId = req.headers["x-shopify-webhook-id"] || "";

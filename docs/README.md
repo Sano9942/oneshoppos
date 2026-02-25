@@ -21,6 +21,7 @@ This folder contains current project documentation.
 - `SHOPIFY_SYNC_PLAN.md`
 - `SHOPIFY_LIVE_RUNBOOK.md`
 - `odoo.md`
+- `LEGACY_ARTIFACTS_POLICY.md`
 
 ## Suggested Reading Order
 
