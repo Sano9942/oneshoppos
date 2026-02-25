@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_BASE as API } from "../config";
 import { useAuth } from "../auth/AuthProvider";
 
@@ -21,7 +21,7 @@ export default function Quotations() {
   const [items, setItems] = useState([{ product_id: "", quantity: 1, unit_price: 0, tax_rate: 0 }]);
   const [form, setForm] = useState({ customer_id: "", outlet_id: "", employee_id: "", valid_until: "", discount_type: "fixed", discount_amount: 0, notes: "" });
 
-  const loadBasics = async () => {
+  const loadBasics = useCallback(async () => {
     try {
       const [qRes, cRes, pRes, oRes, eRes] = await Promise.all([
         fetch(`${API}/api/quotations${statusFilter ? `?status=${statusFilter}` : ""}`, { headers: authHeaders() }).then((r) => r.json()),
@@ -38,11 +38,11 @@ export default function Quotations() {
     } catch {
       // ignore
     }
-  };
+  }, [authHeaders, statusFilter]);
 
   useEffect(() => {
     loadBasics();
-  }, [statusFilter]);
+  }, [loadBasics]);
 
   const subtotal = useMemo(
     () => items.reduce((s, it) => s + Number(it.quantity || 0) * Number(it.unit_price || 0), 0),

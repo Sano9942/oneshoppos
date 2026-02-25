@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { API_BASE as API } from "../config";
 import { useAuth } from "../auth/AuthProvider";
 
@@ -14,7 +14,7 @@ export default function CRM() {
   const [activities, setActivities] = useState([]);
   const [activityText, setActivityText] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const [leadRes, empRes] = await Promise.all([
         fetch(`${API}/api/crm/leads`, { headers: authHeaders() }).then((r) => r.json()),
@@ -25,9 +25,9 @@ export default function CRM() {
     } catch {
       // ignore
     }
-  };
+  }, [authHeaders]);
 
-  const loadActivities = async (leadId) => {
+  const loadActivities = useCallback(async (leadId) => {
     try {
       const res = await fetch(`${API}/api/crm/leads/${leadId}/activities`, { headers: authHeaders() });
       const data = await res.json();
@@ -35,11 +35,11 @@ export default function CRM() {
     } catch {
       setActivities([]);
     }
-  };
+  }, [authHeaders]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const createLead = async (e) => {
     e.preventDefault();

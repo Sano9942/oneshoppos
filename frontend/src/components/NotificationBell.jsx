@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -40,7 +40,7 @@ export default function NotificationBell() {
   const [unread, setUnread] = useState(0);
   const [rows, setRows] = useState([]);
 
-  const loadCount = async () => {
+  const loadCount = useCallback(async () => {
     try {
       const res = await fetch(`${API}/api/notifications/count`, { headers: authHeaders() });
       const data = await res.json();
@@ -48,9 +48,9 @@ export default function NotificationBell() {
     } catch {
       // ignore
     }
-  };
+  }, [authHeaders]);
 
-  const loadRows = async () => {
+  const loadRows = useCallback(async () => {
     try {
       const res = await fetch(`${API}/api/notifications`, { headers: authHeaders() });
       const data = await res.json();
@@ -58,17 +58,17 @@ export default function NotificationBell() {
     } catch {
       // ignore
     }
-  };
+  }, [authHeaders]);
 
   useEffect(() => {
     loadCount();
     const id = setInterval(loadCount, 60000);
     return () => clearInterval(id);
-  }, []);
+  }, [loadCount]);
 
   useEffect(() => {
     if (open) loadRows();
-  }, [open]);
+  }, [open, loadRows]);
 
   const markAllRead = async () => {
     try {

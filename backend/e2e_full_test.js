@@ -5,12 +5,14 @@ const path = require("path");
 const API = "http://localhost:5000";
 const TEST_RUN = "E2E_FULL_" + new Date().toISOString().replace(/[:.]/g, "-");
 const DB_PATH = path.resolve(__dirname, "oneshop.db");
+let DEFAULT_HEADERS = {};
 
 function makeRequest(path, method = "GET", data = null, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
+    const mergedHeaders = { ...DEFAULT_HEADERS, ...extraHeaders };
     const options = {
       method,
-      headers: { "Content-Type": "application/json", ...extraHeaders },
+      headers: { "Content-Type": "application/json", ...mergedHeaders },
     };
     const req = http.request(API + path, options, (res) => {
       let body = "";
@@ -138,6 +140,7 @@ async function runAll() {
       null;
     const employeeId = adminEmployee?.id || 1;
     const adminHeaders = { "x-employee-id": String(employeeId) };
+    DEFAULT_HEADERS = { ...adminHeaders };
     check("Employees endpoint available", employees.status === 200, `status=${employees.status}`);
 
     // Baseline RBAC + sales flow regression

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { API_BASE as API } from "../config";
 import { useAuth } from "../auth/AuthProvider";
 
@@ -27,7 +27,7 @@ export default function CompanySettings() {
   const [msg, setMsg] = useState("");
   const [logoFile, setLogoFile] = useState(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const res = await fetch(`${API}/api/company-profile`, { headers: authHeaders() });
       const data = await res.json();
@@ -35,11 +35,11 @@ export default function CompanySettings() {
     } catch {
       // ignore
     }
-  };
+  }, [authHeaders]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const save = async (e) => {
     e.preventDefault();

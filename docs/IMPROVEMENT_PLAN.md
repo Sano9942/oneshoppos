@@ -78,7 +78,7 @@ Validation:
 
 | # | Item | Status | Owner | Definition of Done | Risk | Rollback |
 |---|---|---|---|---|---|---|
-| 5.1 | Backend route modularization (`index.js` split) | Planned | Backend | Route modules extracted by domain, shared middleware/util layers introduced, no route path changes, all core suites pass | Regression in transaction-heavy flows during extraction | Revert extraction PRs by domain, keep parity checkpoints and route inventory diffs |
+| 5.1 | Backend route modularization (`index.js` split) | Done | Backend | Route modules extracted by domain, shared middleware/util layers introduced, no route path changes, all core suites pass | Regression in transaction-heavy flows during extraction | Revert extraction PRs by domain, keep parity checkpoints and route inventory diffs |
 
 ### Tier 5-C (Realtime and hardening)
 
@@ -103,6 +103,10 @@ Validation:
 - Done criteria:
   - No endpoint path changes.
   - `npm run preflight`, `npm run test:e2e-full`, and `npm run test:tier4-smoke` all pass.
+
+Implementation progress:
+- 2026-02-25 milestone complete: Tier 4 domain routes extracted to `backend/routes/tier4.js` and mounted via `app.use(...)` with parity validated by Tier 4 smoke (`53/53`).
+- 2026-02-25 completion milestone: remaining route registration flow extracted into `backend/routes/registerAllRoutes.js`, with `index.js` reduced to app/bootstrap/worker wiring.
 
 #### 5.2 API Rate Limiting
 

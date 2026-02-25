@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_BASE as API } from "../config";
 import { useAuth } from "../auth/AuthProvider";
 
@@ -18,7 +18,7 @@ export default function Accounting() {
   const [cashflow, setCashflow] = useState(null);
   const [ap, setAp] = useState({ supplier_ap: [], customer_ar: [] });
 
-  const loadOutlets = async () => {
+  const loadOutlets = useCallback(async () => {
     try {
       const res = await fetch(`${API}/api/outlets`, { headers: authHeaders() });
       const data = await res.json();
@@ -26,9 +26,9 @@ export default function Accounting() {
     } catch {
       // ignore
     }
-  };
+  }, [authHeaders]);
 
-  const loadAll = async () => {
+  const loadAll = useCallback(async () => {
     const q = new URLSearchParams({ from, to });
     if (outletId) q.set("outlet_id", outletId);
     try {
@@ -43,15 +43,15 @@ export default function Accounting() {
     } catch {
       // ignore
     }
-  };
+  }, [authHeaders, from, to, outletId]);
 
   useEffect(() => {
     loadOutlets();
-  }, []);
+  }, [loadOutlets]);
 
   useEffect(() => {
     loadAll();
-  }, [from, to, outletId]);
+  }, [loadAll]);
 
   const kpis = useMemo(() => {
     if (!pnl) return null;

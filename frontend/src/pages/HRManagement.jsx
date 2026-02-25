@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { API_BASE as API } from "../config";
 import { useAuth } from "../auth/AuthProvider";
 
@@ -14,7 +14,7 @@ export default function HRManagement() {
   const [leaveForm, setLeaveForm] = useState({ employee_id: "", type: "annual", start_date: "", end_date: "", days: 1, reason: "" });
   const [periodForm, setPeriodForm] = useState({ period_name: "", start_date: "", end_date: "" });
 
-  const loadAll = async () => {
+  const loadAll = useCallback(async () => {
     try {
       const [empRes, leaveRes, periodRes] = await Promise.all([
         fetch(`${API}/api/employees`, { headers: authHeaders() }).then((r) => r.json()),
@@ -27,9 +27,9 @@ export default function HRManagement() {
     } catch {
       // ignore
     }
-  };
+  }, [authHeaders]);
 
-  const loadLines = async (periodId) => {
+  const loadLines = useCallback(async (periodId) => {
     if (!periodId) return setLines([]);
     try {
       const res = await fetch(`${API}/api/hr/payroll/periods/${periodId}/lines`, { headers: authHeaders() });
@@ -38,15 +38,15 @@ export default function HRManagement() {
     } catch {
       setLines([]);
     }
-  };
+  }, [authHeaders]);
 
   useEffect(() => {
     loadAll();
-  }, []);
+  }, [loadAll]);
 
   useEffect(() => {
     loadLines(selectedPeriod);
-  }, [selectedPeriod]);
+  }, [selectedPeriod, loadLines]);
 
   const submitLeave = async (e) => {
     e.preventDefault();
