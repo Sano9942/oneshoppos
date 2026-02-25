@@ -254,8 +254,8 @@ export default function AppLayout() {
     .filter(Boolean);
 
   return (
-    <div className="flex h-screen bg-slate-100 font-sans overflow-hidden">
-      <div className={`${isSidebarCollapsed ? "w-20" : "w-64"} bg-[#0B1120] text-slate-300 flex flex-col h-full shadow-2xl z-20 transition-all duration-300 relative`}>
+    <div className="flex h-screen bg-[#ececef] font-sans overflow-hidden">
+      <div className={`${isSidebarCollapsed ? "w-20" : "w-64"} bg-[#050507] text-slate-300 flex flex-col h-full shadow-2xl z-20 transition-all duration-300 relative`}>
         <button
           onClick={() => setIsSidebarCollapsed((v) => !v)}
           className="absolute -right-3 top-6 bg-white border border-slate-200 text-slate-700 p-1 rounded-full shadow-md hover:bg-slate-50 z-30 flex items-center justify-center h-6 w-6"
@@ -263,7 +263,7 @@ export default function AppLayout() {
           {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>
 
-        <div className={`h-16 flex items-center ${isSidebarCollapsed ? "justify-center px-0" : "px-6"} mb-4 sticky top-0 bg-[#0B1120] z-10 overflow-hidden shrink-0`}>
+        <div className={`h-16 flex items-center ${isSidebarCollapsed ? "justify-center px-0" : "px-6"} mb-4 sticky top-0 bg-[#050507] z-10 overflow-hidden shrink-0`}>
           <div className="font-black text-xl tracking-tight text-white flex items-center gap-2 whitespace-nowrap">
             <div className="w-8 h-8 bg-[#7B61FF] rounded-lg flex justify-center items-center text-white shrink-0">
               <span className="font-bold text-lg">X</span>
@@ -352,7 +352,7 @@ export default function AppLayout() {
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50">
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-10 shadow-sm shrink-0">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-10 shrink-0">
           <div className="flex flex-col justify-center">
             <div className="flex items-center gap-3 text-sm">
               <button className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold px-3 py-1.5 rounded-md transition-colors border border-slate-200 shadow-sm">

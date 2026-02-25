@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Package, Plus, Save, X, Search, Download, Upload } from "lucide-react";
+import { Package, Plus, Save, X, Search, Download, Upload, ImagePlus, Trash2 } from "lucide-react";
 
 const exportCSV = (data, filename) => {
   if (!data.length) return;
@@ -74,7 +74,10 @@ export default function Inventory() {
     min_qty: "",
     max_qty: "",
     unit: "pcs",
+    media: [],
   });
+  const [manualImageUrl, setManualImageUrl] = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // Dropdown Data
   const [categories, setCategories] = useState([]);
@@ -171,7 +174,16 @@ export default function Inventory() {
         min_qty: product.min_qty ?? "",
         max_qty: product.max_qty ?? "",
         unit: product.unit || "pcs",
+        media: [],
       });
+      fetch(`http://localhost:5000/api/products/${product.id}/media`)
+        .then((r) => r.json())
+        .then((d) => {
+          setFormData((prev) => ({ ...prev, media: d.media || [] }));
+        })
+        .catch((err) => {
+          console.error("Failed to load product media", err);
+        });
     } else {
       setEditingProduct(null);
       const defaultTax = taxes.find((t) => t.is_default);
@@ -199,8 +211,10 @@ export default function Inventory() {
         min_qty: "",
         max_qty: "",
         unit: "pcs",
+        media: [],
       });
     }
+    setManualImageUrl("");
     setIsModalOpen(true);
   };
 
@@ -267,6 +281,51 @@ export default function Inventory() {
     setFormData({ ...formData, variants: newVariants });
   };
 
+  const addManualImageUrl = () => {
+    const url = manualImageUrl.trim();
+    if (!url) return;
+    setFormData((prev) => ({
+      ...prev,
+      media: [...(prev.media || []), { url, alt_text: "", position: (prev.media || []).length }],
+    }));
+    setManualImageUrl("");
+  };
+
+  const removeMediaItem = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      media: (prev.media || []).filter((_, i) => i !== index).map((m, i) => ({ ...m, position: i })),
+    }));
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    const body = new FormData();
+    body.append("image", file);
+    setUploadingImage(true);
+    try {
+      const res = await fetch("http://localhost:5000/api/uploads/product-image", {
+        method: "POST",
+        body,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Image upload failed");
+      }
+      setFormData((prev) => ({
+        ...prev,
+        media: [...(prev.media || []), { url: data.url, alt_text: "", position: (prev.media || []).length }],
+      }));
+    } catch (err) {
+      alert(`Image upload failed: ${err.message}`);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingProduct(null);
@@ -303,6 +362,11 @@ export default function Inventory() {
           : null,
         has_variants: formData.has_variants,
         variants: formData.variants,
+        media: (formData.media || []).map((m, i) => ({
+          url: m.url,
+          alt_text: m.alt_text || null,
+          position: i,
+        })),
         min_qty: formData.min_qty !== "" ? parseInt(formData.min_qty) : 0,
         max_qty: formData.max_qty !== "" ? parseInt(formData.max_qty) : 0,
         unit: formData.unit || "pcs",
@@ -819,6 +883,68 @@ export default function Inventory() {
                           className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           placeholder="Product description for online channels"
                         />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Product Images
+                        </label>
+                        <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 space-y-3">
+                          <div className="flex flex-wrap gap-2">
+                            <label className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm cursor-pointer hover:bg-slate-100">
+                              <ImagePlus size={16} />
+                              {uploadingImage ? "Uploading..." : "Upload Image"}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={handleImageUpload}
+                                disabled={uploadingImage}
+                              />
+                            </label>
+                            <div className="flex-1 min-w-[220px] flex gap-2">
+                              <input
+                                type="url"
+                                value={manualImageUrl}
+                                onChange={(e) => setManualImageUrl(e.target.value)}
+                                className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                placeholder="Or paste external image URL"
+                              />
+                              <button
+                                type="button"
+                                onClick={addManualImageUrl}
+                                className="px-3 py-2 bg-slate-800 text-white rounded-lg text-sm hover:bg-slate-700"
+                              >
+                                Add URL
+                              </button>
+                            </div>
+                          </div>
+
+                          {(formData.media || []).length > 0 ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                              {(formData.media || []).map((m, idx) => (
+                                <div key={`${m.url}-${idx}`} className="relative group border border-slate-200 rounded-lg overflow-hidden bg-white">
+                                  <img
+                                    src={m.url.startsWith("http") ? m.url : `http://localhost:5000${m.url}`}
+                                    alt={m.alt_text || `Product image ${idx + 1}`}
+                                    className="w-full h-28 object-cover"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => removeMediaItem(idx)}
+                                    className="absolute top-1 right-1 bg-red-600/90 hover:bg-red-700 text-white rounded p-1"
+                                    title="Remove image"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-500">
+                              No images selected.
+                            </p>
+                          )}
+                        </div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">

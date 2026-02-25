@@ -8,16 +8,16 @@ Source of truth:
 
 ## Backend API Summary
 
-- Total registered endpoints: 187
+- Total registered endpoints: 193
 - Group counts by first path segment under `/api/*`:
   - integrations: 25
   - reports: 18
-  - products: 9
+  - products: 12
   - customers: 8
+  - orders: 8
   - purchase-orders: 7
   - roles: 6
   - sales: 6
-  - orders: 6
   - reconciliation: 6
   - employees: 5
   - promotions: 5
@@ -47,6 +47,7 @@ Source of truth:
   - health: 1
   - supplier-aging: 1
   - variance-reasons: 1
+  - uploads: 1
   - approvals: 1
   - barcode-print-jobs: 1
 
@@ -180,9 +181,15 @@ GET /api/parked-sales/:id
 POST /api/parked-sales
 DELETE /api/parked-sales/:id
 GET /api/orders
+GET /api/products/:id/media
+POST /api/products/:id/media
+DELETE /api/products/:id/media/:mediaId
+POST /api/uploads/product-image
 GET /api/orders/:id
 POST /api/orders
 PUT /api/orders/:id/status
+POST /api/orders/mark-complete
+POST /api/orders/bulk-update
 POST /api/orders/:id/transactions
 POST /api/orders/:id/fulfillments
 GET /api/integrations/shopify/config

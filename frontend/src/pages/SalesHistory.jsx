@@ -13,6 +13,9 @@ import {
   CreditCard,
   ArrowLeftRight,
   FileText,
+  Download,
+  Plus,
+  Filter,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import InvoiceView from "./InvoiceView";
@@ -52,6 +55,9 @@ export default function SalesHistory() {
   const [pages, setPages] = useState(1);
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("all");
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [filterScope, setFilterScope] = useState("invoice");
 
   // Filters
   const [search, setSearch] = useState("");
@@ -73,6 +79,39 @@ export default function SalesHistory() {
   const [voidError, setVoidError] = useState("");
 
   const LIMIT = 50;
+
+  const exportCsv = () => {
+    if (!sales.length) return;
+    const headers = [
+      "receipt_id",
+      "timestamp",
+      "cashier",
+      "outlet",
+      "item_count",
+      "discount_amount",
+      "total_amount",
+      "payment_method",
+      "status",
+    ];
+    const rows = sales.map((s) => [
+      s.id,
+      s.timestamp,
+      s.employee_name || "",
+      s.outlet_name || "",
+      s.item_count || 0,
+      s.discount_amount || 0,
+      s.total_amount || 0,
+      s.payment_method || "",
+      s.voided ? "voided" : "active",
+    ]);
+    const csv = [headers.join(","), ...rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `sales_history_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   const fetchSales = useCallback(
     async (p = 1) => {
@@ -182,6 +221,15 @@ export default function SalesHistory() {
     }
   };
 
+  const visibleSales = sales.filter((s) => {
+    if (activeTab === "all") return true;
+    if (activeTab === "dead_sales") return Number(s.voided || 0) === 1;
+    if (activeTab === "completed") return Number(s.voided || 0) === 0;
+    if (activeTab === "continue_sales") return Number(s.voided || 0) === 0;
+    if (activeTab === "returns") return String(s.status || "").toLowerCase() === "returned";
+    return true;
+  });
+
   // Invoice view overlay
   if (invoiceSaleId) {
     return <InvoiceView saleId={invoiceSaleId} onBack={() => setInvoiceSaleId(null)} />;
@@ -199,10 +247,30 @@ export default function SalesHistory() {
             {total.toLocaleString()} transaction{total !== 1 ? "s" : ""} found
           </p>
         </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportCsv}
+            className="inline-flex items-center gap-2 bg-[#7B61FF]/10 hover:bg-[#7B61FF]/20 text-[#6a50e5] px-4 py-2 rounded-lg text-sm font-semibold"
+          >
+            <Download size={14} /> Export CSV
+          </button>
+          <button
+            onClick={() => navigate("/pos")}
+            className="inline-flex items-center gap-2 bg-[#7B61FF] hover:bg-[#6a50e5] text-white px-4 py-2 rounded-lg text-sm font-semibold"
+          >
+            <Plus size={14} /> New Sale
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-wrap gap-3 items-center">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-wrap gap-3 items-center relative">
+        <button
+          onClick={() => setIsFilterOpen((v) => !v)}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 text-sm font-semibold"
+        >
+          <Filter size={14} /> Filter
+        </button>
         <div className="relative flex-1 min-w-48">
           <Search
             className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -246,6 +314,84 @@ export default function SalesHistory() {
             <X size={14} /> Clear
           </button>
         )}
+        {isFilterOpen && (
+          <div className="absolute left-4 top-16 z-20 w-[420px] bg-white border border-slate-200 rounded-xl shadow-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-bold text-slate-700">Filter</p>
+              <button
+                onClick={() => {
+                  setFilterScope("invoice");
+                  setDateFrom("");
+                  setDateTo("");
+                  setIsFilterOpen(false);
+                }}
+                className="text-xs text-[#7B61FF] font-semibold"
+              >
+                Reset All
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="space-y-2">
+                <p className="font-semibold text-slate-600">Select</p>
+                {[
+                  ["invoice", "Invoice"],
+                  ["customer_store", "Customer Store Level"],
+                  ["customer_brand", "Customer Brand Level"],
+                ].map(([value, label]) => (
+                  <label key={value} className="flex items-center gap-2 text-slate-600">
+                    <input
+                      type="radio"
+                      name="scope"
+                      value={value}
+                      checked={filterScope === value}
+                      onChange={(e) => setFilterScope(e.target.value)}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <div className="space-y-2">
+                <p className="font-semibold text-slate-600">Data Range</p>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                />
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg"
+                />
+              </div>
+            </div>
+            <button
+              onClick={() => setIsFilterOpen(false)}
+              className="mt-4 px-4 py-2 bg-[#7B61FF] hover:bg-[#6a50e5] text-white text-sm rounded-lg font-semibold"
+            >
+              Apply
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-6 text-sm border-b border-slate-200 pb-2 -mt-1">
+        {[
+          ["continue_sales", "Continue Sales"],
+          ["returns", "Returns"],
+          ["completed", "Completed"],
+          ["dead_sales", "Dead Sales"],
+          ["all", "All Sales"],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id)}
+            className={`pb-2 font-semibold ${activeTab === id ? "text-[#7B61FF] border-b-2 border-[#7B61FF]" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* Main content */}
@@ -274,7 +420,7 @@ export default function SalesHistory() {
                       Loading sales...
                     </td>
                   </tr>
-                ) : sales.length === 0 ? (
+                ) : visibleSales.length === 0 ? (
                   <tr>
                     <td colSpan="9" className="p-10 text-center">
                       <ClipboardList
@@ -287,7 +433,7 @@ export default function SalesHistory() {
                     </td>
                   </tr>
                 ) : (
-                  sales.map((s) => (
+                  visibleSales.map((s) => (
                     <tr
                       key={s.id}
                       onClick={() => openDetail(s)}

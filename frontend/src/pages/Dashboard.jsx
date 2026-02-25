@@ -4,6 +4,7 @@ import {
   DollarSign, TrendingUp, ShoppingBag, Package,
   MonitorPlay, BarChart3, AlertTriangle, TrendingDown,
   Clock, CheckCircle, XCircle, ArrowRight, Users,
+  Filter,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -54,6 +55,15 @@ export default function Dashboard() {
   const [salespeople, setSalespeople] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterState, setFilterState] = useState({
+    dateFrom: "",
+    dateTo: "",
+    salesChannel: "",
+    store: "",
+    product: "",
+    mop: "",
+  });
 
   const fetchJson = async (url) => {
     const res = await fetch(url);
@@ -135,6 +145,83 @@ export default function Dashboard() {
             <MonitorPlay size={15} /> Open Register
           </button>
         </div>
+      </div>
+
+      <div className="relative">
+        <button
+          onClick={() => setShowFilters((v) => !v)}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 text-sm font-semibold"
+        >
+          <Filter size={14} /> Filter
+        </button>
+        {showFilters && (
+          <div className="absolute z-20 mt-3 w-full max-w-5xl bg-white border border-slate-200 rounded-2xl shadow-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-bold text-slate-700">Filter</p>
+              <button
+                className="text-xs text-[#7B61FF] font-semibold"
+                onClick={() => {
+                  setFilterState({
+                    dateFrom: "",
+                    dateTo: "",
+                    salesChannel: "",
+                    store: "",
+                    product: "",
+                    mop: "",
+                  });
+                }}
+              >
+                Reset All
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <input
+                type="datetime-local"
+                value={filterState.dateFrom}
+                onChange={(e) => setFilterState((p) => ({ ...p, dateFrom: e.target.value }))}
+                className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                placeholder="Date From"
+              />
+              <input
+                type="datetime-local"
+                value={filterState.dateTo}
+                onChange={(e) => setFilterState((p) => ({ ...p, dateTo: e.target.value }))}
+                className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                placeholder="Date To"
+              />
+              <input
+                value={filterState.salesChannel}
+                onChange={(e) => setFilterState((p) => ({ ...p, salesChannel: e.target.value }))}
+                className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                placeholder="Sales Channel"
+              />
+              <input
+                value={filterState.store}
+                onChange={(e) => setFilterState((p) => ({ ...p, store: e.target.value }))}
+                className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                placeholder="Search by Store"
+              />
+              <input
+                value={filterState.product}
+                onChange={(e) => setFilterState((p) => ({ ...p, product: e.target.value }))}
+                className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                placeholder="Search by Product Name"
+              />
+              <input
+                value={filterState.mop}
+                onChange={(e) => setFilterState((p) => ({ ...p, mop: e.target.value }))}
+                className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                placeholder="Mop"
+              />
+            </div>
+            <button
+              onClick={() => setShowFilters(false)}
+              className="mt-4 px-4 py-2 bg-[#7B61FF] hover:bg-[#6a50e5] text-white text-sm rounded-lg font-semibold"
+            >
+              Apply
+            </button>
+          </div>
+        )}
       </div>
 
       {/* KPI Row */}

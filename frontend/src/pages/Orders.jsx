@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Eye, Filter, RefreshCw, Save, Search } from "lucide-react";
+import { Eye, Filter, RefreshCw, Save, Search, Download, CheckSquare, Edit3 } from "lucide-react";
 
 const API = "http://localhost:5000/api";
 
@@ -26,6 +26,15 @@ export default function Orders() {
     payment_status: "",
     fulfillment_status: "",
   });
+  const [typeTab, setTypeTab] = useState("all");
+  const [statusTab, setStatusTab] = useState("all");
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [bulkForm, setBulkForm] = useState({
+    order_status: "",
+    payment_status: "",
+    fulfillment_status: "",
+  });
 
   const loadOrders = async () => {
     setLoading(true);
@@ -40,6 +49,7 @@ export default function Orders() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load orders");
       setRows(data.orders || []);
+      setSelectedIds([]);
     } catch (e) {
       setError(e.message || "Failed to load orders");
     } finally {
@@ -71,6 +81,124 @@ export default function Orders() {
     const paid = rows.filter((r) => r.payment_status === "paid").length;
     return { total, open, paid };
   }, [rows]);
+
+  const visibleRows = useMemo(() => {
+    let out = [...rows];
+    if (typeTab === "pickup") {
+      out = out.filter((r) => Number(r.shipping_total || 0) === 0);
+    } else if (typeTab === "delivery") {
+      out = out.filter((r) => Number(r.shipping_total || 0) > 0);
+    } else if (typeTab === "express") {
+      out = out.filter((r) => String(r.shipping_method || "").toLowerCase().includes("express"));
+    } else if (typeTab === "future") {
+      out = out.filter((r) => {
+        if (!r.delivery_date) return false;
+        return new Date(r.delivery_date) > new Date();
+      });
+    }
+
+    if (statusTab !== "all") {
+      out = out.filter((r) => {
+        const st = String(r.order_status || "").toLowerCase();
+        if (statusTab === "pending") return st === "open" || st === "pending" || st === "on_hold";
+        if (statusTab === "returned") return st === "returned" || String(r.fulfillment_status || "").toLowerCase() === "restocked";
+        return st === statusTab;
+      });
+    }
+    return out;
+  }, [rows, typeTab, statusTab]);
+
+  const exportCsv = () => {
+    if (!visibleRows.length) return;
+    const headers = ["order", "customer", "email", "order_status", "payment_status", "fulfillment_status", "shipping_total", "grand_total"];
+    const csvRows = visibleRows.map((r) => [
+      r.external_order_number || r.external_order_id || r.id,
+      r.customer_name || "",
+      r.customer_email || "",
+      r.order_status || "",
+      r.payment_status || "",
+      r.fulfillment_status || "",
+      r.shipping_total || 0,
+      r.grand_total || 0,
+    ]);
+    const content = [headers.join(","), ...csvRows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([content], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `orders_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const toggleRow = (id, checked) => {
+    setSelectedIds((prev) =>
+      checked ? Array.from(new Set([...prev, id])) : prev.filter((x) => x !== id),
+    );
+  };
+
+  const toggleAllVisible = (checked) => {
+    if (!checked) return setSelectedIds([]);
+    setSelectedIds(visibleRows.map((r) => r.id));
+  };
+
+  const handleMarkOrdersComplete = async () => {
+    const ids = selectedIds.length ? selectedIds : visibleRows.map((r) => r.id);
+    if (!ids.length) return;
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`${API}/orders/mark-complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to mark orders complete");
+      await loadOrders();
+      if (selected?.id && ids.includes(selected.id)) {
+        await loadDetail(selected.id);
+      }
+    } catch (e) {
+      setError(e.message || "Failed to mark orders complete");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleBulkUpdate = async (e) => {
+    e.preventDefault();
+    const ids = selectedIds.length ? selectedIds : visibleRows.map((r) => r.id);
+    if (!ids.length) {
+      setError("Select at least one order or keep visible rows to update.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`${API}/orders/bulk-update`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids,
+          order_status: bulkForm.order_status || null,
+          payment_status: bulkForm.payment_status || null,
+          fulfillment_status: bulkForm.fulfillment_status || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Bulk update failed");
+      setIsBulkModalOpen(false);
+      setBulkForm({ order_status: "", payment_status: "", fulfillment_status: "" });
+      await loadOrders();
+      if (selected?.id && ids.includes(selected.id)) {
+        await loadDetail(selected.id);
+      }
+    } catch (e) {
+      setError(e.message || "Bulk update failed");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const saveStatuses = async () => {
     if (!selected) return;
@@ -104,13 +232,49 @@ export default function Orders() {
           <h2 className="text-2xl font-bold text-slate-800">Orders</h2>
           <p className="text-sm text-slate-500">Website order staging and lifecycle management.</p>
         </div>
-        <button
-          onClick={loadOrders}
-          className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-semibold"
-        >
-          <RefreshCw size={14} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleMarkOrdersComplete}
+            disabled={saving || (!selectedIds.length && !visibleRows.length)}
+            className="inline-flex items-center gap-2 bg-[#7B61FF]/20 text-[#6a50e5] px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+          >
+            <CheckSquare size={14} /> Mark Orders Complete
+          </button>
+          <button
+            onClick={() => setIsBulkModalOpen(true)}
+            className="inline-flex items-center gap-2 bg-[#7B61FF] hover:bg-[#6a50e5] text-white px-4 py-2 rounded-lg text-sm font-semibold"
+          >
+            <Edit3 size={14} /> Bulk Update
+          </button>
+          <button onClick={exportCsv} className="inline-flex items-center gap-2 bg-[#7B61FF] hover:bg-[#6a50e5] text-white px-4 py-2 rounded-lg text-sm font-semibold">
+            <Download size={14} /> Export CSV
+          </button>
+          <button
+            onClick={loadOrders}
+            className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-semibold"
+          >
+            <RefreshCw size={14} />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-6 text-sm border-b border-slate-200 pb-2">
+        {[
+          ["all", "All Order Types"],
+          ["pickup", "Pickup Orders"],
+          ["delivery", "Delivery Orders"],
+          ["express", "Express Shipping"],
+          ["future", "Future Delivery"],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTypeTab(id)}
+            className={`pb-2 font-semibold ${typeTab === id ? "text-[#7B61FF] border-b-2 border-[#7B61FF]" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <div className="grid grid-cols-3 gap-4">
@@ -184,6 +348,23 @@ export default function Orders() {
         </button>
       </div>
 
+      <div className="flex items-center gap-6 text-sm -mt-2">
+        {[
+          ["all", "All Status"],
+          ["closed", "Completed"],
+          ["pending", "Pending"],
+          ["returned", "Returned"],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setStatusTab(id)}
+            className={`pb-2 font-semibold ${statusTab === id ? "text-[#7B61FF] border-b-2 border-[#7B61FF]" : "text-slate-500 hover:text-slate-700"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {error && (
         <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-lg text-sm">
           {error}
@@ -195,6 +376,13 @@ export default function Orders() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
+                <th className="text-center p-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={visibleRows.length > 0 && selectedIds.length === visibleRows.length}
+                    onChange={(e) => toggleAllVisible(e.target.checked)}
+                  />
+                </th>
                 <th className="text-left p-3">Order</th>
                 <th className="text-left p-3">Customer</th>
                 <th className="text-left p-3">Payment</th>
@@ -206,15 +394,22 @@ export default function Orders() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="p-6 text-center text-slate-400">Loading orders...</td>
+                  <td colSpan={7} className="p-6 text-center text-slate-400">Loading orders...</td>
                 </tr>
-              ) : rows.length === 0 ? (
+              ) : visibleRows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-6 text-center text-slate-400">No orders found.</td>
+                  <td colSpan={7} className="p-6 text-center text-slate-400">No orders found.</td>
                 </tr>
               ) : (
-                rows.map((r) => (
+                visibleRows.map((r) => (
                   <tr key={r.id} className="border-t border-slate-100">
+                    <td className="p-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(r.id)}
+                        onChange={(e) => toggleRow(r.id, e.target.checked)}
+                      />
+                    </td>
                     <td className="p-3">
                       <div className="font-semibold text-slate-800">#{r.external_order_number || r.external_order_id}</div>
                       <div className="text-xs text-slate-500">{r.source}</div>
@@ -348,6 +543,75 @@ export default function Orders() {
           )}
         </div>
       </div>
+
+      {isBulkModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="p-5 border-b border-slate-200">
+              <h3 className="text-lg font-bold text-slate-800">Bulk Update Orders</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Applying to {selectedIds.length ? `${selectedIds.length} selected` : `${visibleRows.length} visible`} orders.
+              </p>
+            </div>
+            <form onSubmit={handleBulkUpdate} className="p-5 space-y-3">
+              <select
+                value={bulkForm.order_status}
+                onChange={(e) => setBulkForm((p) => ({ ...p, order_status: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+              >
+                <option value="">Order Status (no change)</option>
+                <option value="open">open</option>
+                <option value="closed">closed</option>
+                <option value="cancelled">cancelled</option>
+                <option value="on_hold">on_hold</option>
+                <option value="returned">returned</option>
+              </select>
+              <select
+                value={bulkForm.payment_status}
+                onChange={(e) => setBulkForm((p) => ({ ...p, payment_status: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+              >
+                <option value="">Payment Status (no change)</option>
+                <option value="pending">pending</option>
+                <option value="authorized">authorized</option>
+                <option value="paid">paid</option>
+                <option value="partially_refunded">partially_refunded</option>
+                <option value="refunded">refunded</option>
+                <option value="voided">voided</option>
+                <option value="failed">failed</option>
+              </select>
+              <select
+                value={bulkForm.fulfillment_status}
+                onChange={(e) => setBulkForm((p) => ({ ...p, fulfillment_status: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+              >
+                <option value="">Fulfillment Status (no change)</option>
+                <option value="unfulfilled">unfulfilled</option>
+                <option value="partial">partial</option>
+                <option value="fulfilled">fulfilled</option>
+                <option value="restocked">restocked</option>
+                <option value="cancelled">cancelled</option>
+              </select>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkModalOpen(false)}
+                  className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 px-4 py-2 bg-[#7B61FF] hover:bg-[#6a50e5] text-white rounded-lg text-sm font-semibold disabled:opacity-60"
+                >
+                  {saving ? "Updating..." : "Apply Updates"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

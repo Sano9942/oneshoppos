@@ -11,6 +11,8 @@ import {
   AlertTriangle,
   X,
   Calculator,
+  Download,
+  Filter,
 } from "lucide-react";
 
 const API = "http://localhost:5000";
@@ -55,6 +57,7 @@ export default function CashManagement() {
   const [selectedOutlet, setSelectedOutlet] = useState("");
   const [activeShift, setActiveShift] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [historyFilter, setHistoryFilter] = useState("all");
 
   // Open shift modal
   const [isOpenModalOpen, setIsOpenModalOpen] = useState(false);
@@ -194,6 +197,38 @@ export default function CashManagement() {
   const filteredShifts = selectedOutlet
     ? shifts.filter((s) => String(s.outlet_id) === selectedOutlet)
     : shifts;
+  const visibleShifts = filteredShifts.filter((s) => {
+    if (historyFilter === "all") return true;
+    return String(s.status || "").toLowerCase() === historyFilter;
+  });
+
+  const totalSaleCash = filteredShifts.reduce((sum, s) => sum + Number(s.total_cash_sales || 0), 0);
+  const totalCashIn = filteredShifts.reduce((sum, s) => sum + Number(s.opening_float || 0), 0);
+  const totalCashOut = filteredShifts.reduce((sum, s) => sum + Math.max(0, -Number(s.variance || 0)), 0);
+  const totalCashInHand = filteredShifts.reduce((sum, s) => sum + Number(s.closing_cash || 0), 0);
+
+  const exportCsv = () => {
+    if (!visibleShifts.length) return;
+    const headers = ["opened_at", "closed_at", "outlet", "cashier", "opening_float", "expected_cash", "closing_cash", "variance", "status"];
+    const rows = visibleShifts.map((s) => [
+      s.opened_at || "",
+      s.closed_at || "",
+      s.outlet_name || "",
+      s.employee_name || "",
+      s.opening_float || 0,
+      s.expected_cash || 0,
+      s.closing_cash || 0,
+      s.variance || 0,
+      s.status || "",
+    ]);
+    const csv = [headers.join(","), ...rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `cash_management_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   // For close result: compute variance after result is set
   const resultVariance = closeResult ? parseFloat(closeResult.variance) : 0;
@@ -207,6 +242,22 @@ export default function CashManagement() {
           <p className="text-slate-500">Manage cash drawer shifts, opening floats, and end-of-day reconciliation.</p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={exportCsv}
+            className="inline-flex items-center gap-2 bg-[#7B61FF]/10 hover:bg-[#7B61FF]/20 text-[#6a50e5] px-4 py-2 rounded-lg text-sm font-semibold"
+          >
+            <Download size={14} /> Export CSV
+          </button>
+          <button
+            onClick={() => {
+              setOpenForm({ opening_float: "", employee_id: "" });
+              setOpenError("");
+              setIsOpenModalOpen(true);
+            }}
+            className="inline-flex items-center gap-2 bg-[#7B61FF] hover:bg-[#6a50e5] text-white px-4 py-2 rounded-lg text-sm font-semibold"
+          >
+            <Plus size={14} /> Add Cash
+          </button>
           <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
             <Building2 size={16} className="text-slate-400" />
             <select value={selectedOutlet} onChange={(e) => setSelectedOutlet(e.target.value)}
@@ -217,6 +268,30 @@ export default function CashManagement() {
             <ChevronDown size={14} className="text-slate-400" />
           </div>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+        {[
+          ["Total Sale Cash", totalSaleCash],
+          ["Total Customer Balance", 0],
+          ["Cash In", totalCashIn],
+          ["Cash Out", totalCashOut],
+          ["Cash In Hand", totalCashInHand],
+        ].map(([label, value]) => (
+          <div key={label} className="bg-white border border-slate-200 rounded-xl p-4">
+            <p className="text-xs text-slate-500">{label}</p>
+            <p className="text-2xl font-bold text-slate-800 mt-1">{fmt(Number(value || 0))}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 text-sm font-semibold"
+          onClick={() => setHistoryFilter((prev) => (prev === "all" ? "open" : prev === "open" ? "closed" : "all"))}
+        >
+          <Filter size={14} /> Filter ({historyFilter})
+        </button>
       </div>
 
       {/* Active Shift Card */}
@@ -294,13 +369,13 @@ export default function CashManagement() {
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr><td colSpan="10" className="p-8 text-center text-slate-400">Loading shifts...</td></tr>
-              ) : filteredShifts.length === 0 ? (
+              ) : visibleShifts.length === 0 ? (
                 <tr><td colSpan="10" className="p-10 text-center">
                   <Clock size={48} className="mx-auto text-slate-300 mb-3" />
                   <p className="font-medium text-slate-600">No shifts yet</p>
                   <p className="text-sm text-slate-400 mt-1">Open a shift to start tracking cash.</p>
                 </td></tr>
-              ) : filteredShifts.map((s) => (
+              ) : visibleShifts.map((s) => (
                 <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
                   <td className="p-4 text-sm text-slate-600 whitespace-nowrap">{fmtDate(s.opened_at)}</td>
                   <td className="p-4 text-sm text-slate-600 whitespace-nowrap">{fmtDate(s.closed_at)}</td>

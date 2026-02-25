@@ -27,6 +27,12 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const SHOPIFY_SECRET_ENC_PREFIX = "enc:v1";
 const SHOPIFY_MAX_RETRY_ATTEMPTS = Math.max(1, parseInt(process.env.SHOPIFY_MAX_RETRY_ATTEMPTS || "5", 10));
+const DB_PATH = path.resolve(__dirname, "oneshop.db");
+const UPLOADS_DIR = path.resolve(__dirname, "uploads");
+const PRODUCT_UPLOADS_DIR = path.resolve(UPLOADS_DIR, "products");
+
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+if (!fs.existsSync(PRODUCT_UPLOADS_DIR)) fs.mkdirSync(PRODUCT_UPLOADS_DIR, { recursive: true });
 
 function getShopifySecretKeyBuffer() {
   const raw = String(process.env.SHOPIFY_SECRET_KEY || "").trim();
@@ -92,6 +98,7 @@ app.use(express.json({
     }
   },
 })); // Parse JSON bodies
+app.use("/uploads", express.static(UPLOADS_DIR));
 
 // --- PERMISSION MIDDLEWARE SCAFFOLD ---
 // Reads optional x-employee-id header, attaches permissions to req.
@@ -898,6 +905,85 @@ app.delete("/api/brands/:id", (req, res) => {
 
 // --- ROUTES: PRODUCTS (INVENTORY) ---
 
+function normalizeProductMediaInput(media, image_urls) {
+  const normalized = [];
+
+  if (Array.isArray(media)) {
+    media.forEach((item) => {
+      if (!item) return;
+      if (typeof item === "string") {
+        const url = item.trim();
+        if (url) normalized.push({ url, alt_text: null });
+        return;
+      }
+      const url = String(item.url || "").trim();
+      if (!url) return;
+      normalized.push({
+        url,
+        alt_text: item.alt_text != null ? String(item.alt_text) : null,
+      });
+    });
+  }
+
+  if (Array.isArray(image_urls)) {
+    image_urls.forEach((urlRaw) => {
+      const url = String(urlRaw || "").trim();
+      if (url) normalized.push({ url, alt_text: null });
+    });
+  }
+
+  const seen = new Set();
+  const deduped = [];
+  normalized.forEach((m, idx) => {
+    const key = m.url.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    deduped.push({
+      url: m.url,
+      alt_text: m.alt_text,
+      position: idx,
+    });
+  });
+
+  return deduped;
+}
+
+function replaceProductMedia(productId, mediaItems, cb) {
+  const media = Array.isArray(mediaItems) ? mediaItems : [];
+  db.serialize(() => {
+    db.run(
+      "DELETE FROM product_media WHERE product_id = ? AND variant_id IS NULL",
+      [productId],
+      (delErr) => {
+        if (delErr) {
+          if (String(delErr.message || "").includes("no such table")) return cb(null);
+          return cb(delErr);
+        }
+        if (media.length === 0) return cb(null);
+
+        let pending = media.length;
+        let failed = false;
+        media.forEach((item, idx) => {
+          if (failed) return;
+          db.run(
+            "INSERT INTO product_media (product_id, variant_id, url, alt_text, position) VALUES (?, NULL, ?, ?, ?)",
+            [productId, item.url, item.alt_text || null, item.position != null ? item.position : idx],
+            (insErr) => {
+              if (failed) return;
+              if (insErr) {
+                failed = true;
+                return cb(insErr);
+              }
+              pending -= 1;
+              if (pending === 0) cb(null);
+            },
+          );
+        });
+      },
+    );
+  });
+}
+
 // Get all products (with aggregated stock)
 app.get("/api/products", (req, res) => {
   db.all(
@@ -1078,7 +1164,10 @@ app.post("/api/products", (req, res) => {
     vendor,
     tags,
     status,
+    media,
+    image_urls,
   } = req.body;
+  const productMediaItems = normalizeProductMediaInput(media, image_urls);
 
   db.serialize(() => {
     db.run("BEGIN TRANSACTION");
@@ -1117,8 +1206,14 @@ app.post("/api/products", (req, res) => {
 
         // Helper function to successfully terminate the request
         const finishCreation = () => {
-          db.run("COMMIT");
-          res.json({ id: newProductId, barcode, name, has_variants });
+          replaceProductMedia(newProductId, productMediaItems, (mediaErr) => {
+            if (mediaErr) {
+              db.run("ROLLBACK");
+              return res.status(500).json({ error: mediaErr.message });
+            }
+            db.run("COMMIT");
+            res.json({ id: newProductId, barcode, name, has_variants });
+          });
         };
 
         // 1. If it has variants, process them
@@ -1221,7 +1316,7 @@ app.post("/api/products", (req, res) => {
 
 // Bulk import products from CSV rows (upsert by barcode)
 app.post("/api/products/bulk-import", (req, res) => {
-  const { rows } = req.body; // [{ barcode, name, price, cost_price, compare_at_price, description_html, product_type, vendor, tags, status, gst, stock, min_qty, max_qty, unit }]
+  const { rows } = req.body; // [{ barcode, name, price, ..., image_url, image_urls }]
   if (!Array.isArray(rows) || rows.length === 0) {
     return res.status(400).json({ error: "No rows provided" });
   }
@@ -1249,7 +1344,20 @@ app.post("/api/products/bulk-import", (req, res) => {
       min_qty,
       max_qty,
       unit,
+      image_url,
+      image_urls,
     } = row;
+    const productMediaItems = normalizeProductMediaInput(
+      null,
+      image_urls
+        ? String(image_urls)
+            .split("|")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : image_url
+          ? [String(image_url).trim()]
+          : [],
+    );
 
     if (!barcode || !name || !price) {
       results.push({ barcode: barcode || "?", status: "error", message: "barcode, name, and price are required" });
@@ -1303,14 +1411,22 @@ app.post("/api/products/bulk-import", (req, res) => {
           function (err) {
             if (err) {
               results.push({ barcode, status: "error", message: err.message });
-            } else {
-              results.push({
-                barcode,
-                name,
-                status: existing ? "updated" : "inserted",
-              });
+              return processNext(index + 1);
             }
-            processNext(index + 1);
+
+            const productId = existing ? existing.id : this.lastID;
+            replaceProductMedia(productId, productMediaItems, (mediaErr) => {
+              if (mediaErr) {
+                results.push({ barcode, status: "error", message: mediaErr.message });
+              } else {
+                results.push({
+                  barcode,
+                  name,
+                  status: existing ? "updated" : "inserted",
+                });
+              }
+              processNext(index + 1);
+            });
           },
         );
       },
@@ -1341,7 +1457,13 @@ app.put("/api/products/:id", (req, res) => {
     vendor,
     tags,
     status,
+    media,
+    image_urls,
   } = req.body;
+  const shouldReplaceMedia =
+    Object.prototype.hasOwnProperty.call(req.body || {}, "media") ||
+    Object.prototype.hasOwnProperty.call(req.body || {}, "image_urls");
+  const productMediaItems = normalizeProductMediaInput(media, image_urls);
 
   // Simple dynamic update
   db.run(
@@ -1370,7 +1492,13 @@ app.put("/api/products/:id", (req, res) => {
       if (err) return res.status(500).json({ error: err.message });
       if (this.changes === 0)
         return res.status(404).json({ error: "Product not found" });
-      res.json({ message: "Product updated successfully" });
+      if (!shouldReplaceMedia) {
+        return res.json({ message: "Product updated successfully" });
+      }
+      replaceProductMedia(id, productMediaItems, (mediaErr) => {
+        if (mediaErr) return res.status(500).json({ error: mediaErr.message });
+        res.json({ message: "Product updated successfully" });
+      });
     },
   );
 });
@@ -4575,6 +4703,100 @@ app.get("/api/orders", requirePerm("manage_orders"), (req, res) => {
   );
 });
 
+// Product-level media list (variant_id NULL records)
+app.get("/api/products/:id/media", (req, res) => {
+  const { id } = req.params;
+  db.all(
+    `SELECT id, product_id, variant_id, url, alt_text, position, created_at
+     FROM product_media
+     WHERE product_id = ? AND variant_id IS NULL
+     ORDER BY position ASC, id ASC`,
+    [id],
+    (err, rows) => {
+      if (err) {
+        if (String(err.message || "").includes("no such table")) {
+          return res.json({ media: [] });
+        }
+        return res.status(500).json({ error: err.message });
+      }
+      res.json({ media: rows || [] });
+    },
+  );
+});
+
+app.post("/api/products/:id/media", requirePerm("manage_inventory"), (req, res) => {
+  const { id } = req.params;
+  const { url, alt_text = null, position = 0 } = req.body || {};
+  if (!url || !String(url).trim()) {
+    return res.status(400).json({ error: "url is required" });
+  }
+  db.run(
+    "INSERT INTO product_media (product_id, variant_id, url, alt_text, position) VALUES (?, NULL, ?, ?, ?)",
+    [id, String(url).trim(), alt_text, Number(position) || 0],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id: this.lastID, product_id: Number(id), url, alt_text, position: Number(position) || 0 });
+    },
+  );
+});
+
+app.delete("/api/products/:id/media/:mediaId", requirePerm("manage_inventory"), (req, res) => {
+  const { id, mediaId } = req.params;
+  db.get(
+    "SELECT id, url FROM product_media WHERE id = ? AND product_id = ? AND variant_id IS NULL",
+    [mediaId, id],
+    (findErr, row) => {
+      if (findErr) return res.status(500).json({ error: findErr.message });
+      if (!row) return res.status(404).json({ error: "Media not found" });
+      db.run("DELETE FROM product_media WHERE id = ?", [mediaId], (delErr) => {
+        if (delErr) return res.status(500).json({ error: delErr.message });
+        const url = String(row.url || "");
+        if (url.startsWith("/uploads/products/")) {
+          const filename = path.basename(url);
+          const filePath = path.join(PRODUCT_UPLOADS_DIR, filename);
+          if (fs.existsSync(filePath)) {
+            try { fs.unlinkSync(filePath); } catch (_) { /* ignore file cleanup errors */ }
+          }
+        }
+        res.json({ deleted: true });
+      });
+    },
+  );
+});
+
+// Upload a product image file and return a served URL
+const productImageStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, PRODUCT_UPLOADS_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    const safeExt = [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(ext) ? ext : ".jpg";
+    cb(null, `product_${Date.now()}_${Math.round(Math.random() * 1e6)}${safeExt}`);
+  },
+});
+
+const productImageUpload = multer({
+  storage: productImageStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    if (!file || !file.mimetype) return cb(new Error("Invalid file"));
+    if (!file.mimetype.startsWith("image/")) {
+      return cb(new Error("Only image uploads are allowed"));
+    }
+    cb(null, true);
+  },
+});
+
+app.post("/api/uploads/product-image", requirePerm("manage_inventory"), productImageUpload.single("image"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No image uploaded" });
+  const relativeUrl = `/uploads/products/${req.file.filename}`;
+  res.json({
+    url: relativeUrl,
+    filename: req.file.filename,
+    original_name: req.file.originalname,
+    size: req.file.size,
+  });
+});
+
 app.get("/api/orders/:id", requirePerm("manage_orders"), (req, res) => {
   const { id } = req.params;
   db.get(
@@ -4764,6 +4986,86 @@ app.put("/api/orders/:id/status", requirePerm("manage_orders"), (req, res) => {
       });
     },
   );
+});
+
+app.post("/api/orders/mark-complete", requirePerm("manage_orders"), (req, res) => {
+  const { ids = [], set_paid = false } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "ids array is required" });
+  }
+
+  const normalizedIds = ids
+    .map((id) => parseInt(id, 10))
+    .filter((id) => Number.isInteger(id) && id > 0);
+  if (normalizedIds.length === 0) {
+    return res.status(400).json({ error: "No valid ids provided" });
+  }
+
+  const placeholders = normalizedIds.map(() => "?").join(",");
+  const sql = set_paid
+    ? `UPDATE web_orders
+       SET order_status = 'closed',
+           fulfillment_status = 'fulfilled',
+           payment_status = 'paid',
+           updated_at = datetime('now','localtime')
+       WHERE id IN (${placeholders})`
+    : `UPDATE web_orders
+       SET order_status = 'closed',
+           fulfillment_status = 'fulfilled',
+           updated_at = datetime('now','localtime')
+       WHERE id IN (${placeholders})`;
+
+  db.run(sql, normalizedIds, function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: "Orders marked complete", updated: this.changes || 0 });
+  });
+});
+
+app.post("/api/orders/bulk-update", requirePerm("manage_orders"), (req, res) => {
+  const {
+    ids = [],
+    order_status = null,
+    payment_status = null,
+    fulfillment_status = null,
+  } = req.body || {};
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "ids array is required" });
+  }
+
+  const normalizedIds = ids
+    .map((id) => parseInt(id, 10))
+    .filter((id) => Number.isInteger(id) && id > 0);
+  if (normalizedIds.length === 0) {
+    return res.status(400).json({ error: "No valid ids provided" });
+  }
+
+  const updates = [];
+  const params = [];
+  if (order_status != null && String(order_status).trim() !== "") {
+    updates.push("order_status = ?");
+    params.push(String(order_status).trim());
+  }
+  if (payment_status != null && String(payment_status).trim() !== "") {
+    updates.push("payment_status = ?");
+    params.push(String(payment_status).trim());
+  }
+  if (fulfillment_status != null && String(fulfillment_status).trim() !== "") {
+    updates.push("fulfillment_status = ?");
+    params.push(String(fulfillment_status).trim());
+  }
+  if (updates.length === 0) {
+    return res.status(400).json({ error: "At least one status field is required" });
+  }
+
+  updates.push("updated_at = datetime('now','localtime')");
+  const placeholders = normalizedIds.map(() => "?").join(",");
+  const sql = `UPDATE web_orders SET ${updates.join(", ")} WHERE id IN (${placeholders})`;
+
+  db.run(sql, [...params, ...normalizedIds], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: "Orders updated", updated: this.changes || 0 });
+  });
 });
 
 app.post("/api/orders/:id/transactions", requirePerm("manage_orders"), (req, res) => {
@@ -7429,12 +7731,10 @@ app.get("/api/expenses/summary", (req, res) => {
 
 // ─── BACKUP / RESTORE ────────────────────────────────────────────────────────
 
-const DB_PATH = path.resolve(__dirname, "oneshop.db");
-const uploadDir = path.resolve(__dirname, "uploads");
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+const backupUploadDir = UPLOADS_DIR;
 
 const restoreStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
+  destination: (req, file, cb) => cb(null, backupUploadDir),
   filename: (req, file, cb) => cb(null, `restore_${Date.now()}.db`),
 });
 const restoreUpload = multer({ storage: restoreStorage, limits: { fileSize: 500 * 1024 * 1024 } });
@@ -7504,8 +7804,8 @@ app.post("/api/backup/restore", requirePerm("manage_employees"), requireFeature(
       }
 
       const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-      const snapshotPath = path.join(uploadDir, `oneshop_pre_restore_${ts}.db`);
-      const stagedPath = path.join(uploadDir, `oneshop_restore_staged_${Date.now()}.db`);
+      const snapshotPath = path.join(backupUploadDir, `oneshop_pre_restore_${ts}.db`);
+      const stagedPath = path.join(backupUploadDir, `oneshop_restore_staged_${Date.now()}.db`);
 
       db.run("BEGIN IMMEDIATE", (lockErr) => {
         if (lockErr) return cleanupAndFail(503, "Could not acquire database lock for restore");
