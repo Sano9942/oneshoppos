@@ -1,192 +1,278 @@
-# OneShopPOS — Architecture & Code Map
+﻿# OneShopPOS Architecture and Code Map
 
-> A technical reference to orient yourself quickly in the codebase.
+Last audited: 2026-02-25
 
----
+This document is the architectural overview of the current codebase.
+For complete endpoint and route lists, use `docs/API_REFERENCE.md`.
 
-## Project Structure
+## 1. System Overview
 
-```
+OneShopPOS is a local-first retail POS system with:
+- Frontend: React 19 + Vite 7 + Tailwind 4 + React Router 7
+- Backend: Node.js + Express 5 + sqlite3
+- Database: SQLite file at `backend/oneshop.db`
+- Integration layer: Shopify connector (GraphQL + webhook + sync queue + reconciliation)
+
+Architecture style:
+- Backend is monolithic: `backend/index.js` (~7,137 lines).
+- Frontend is page-oriented and route-composed in `frontend/src/App.jsx`.
+- Data model evolved incrementally via `migrate.js` to `migrate45.js`.
+
+## 2. Repository Layout (Current)
+
+```text
 oneshoppos/
-├── START.bat                    ← Double-click to start both servers
-├── frontend/
-│   ├── src/
-│   │   ├── pages/               ← One file per module (POS.jsx, Inventory.jsx, etc.)
-│   │   ├── components/
-│   │   │   └── AppLayout.jsx    ← Sidebar nav, layout wrapper, permission guard
-│   │   └── main.jsx             ← React app bootstrap
-│   │   └── App.jsx              ← React router and all page routes
-│   └── index.html
-├── backend/
-│   ├── index.js                 ← ALL API endpoints (single file, ~4700 lines)
-│   ├── oneshop.db               ← SQLite database (do NOT delete)
-│   ├── migrate*.js              ← Migration scripts (run once at setup)
-│   ├── e2e_test.js              ← E2E + RBAC test script (node e2e_test.js)
-│   ├── e2e_full_test.js         ← Full regression suite
-│   ├── preflight.js             ← Schema/integrity preflight checks
-│   └── api_test.js              ← Earlier edge-case API test script
-└── docs/
-    ├── STATUS.md                ← START HERE when resuming
-    ├── task.md                  ← Phase-by-phase build log + migration sequence
-    ├── TESTING.md               ← All test results
-    ├── ARCHITECTURE.md          ← This file
-    └── PLAN.md                  ← Original project overview + feature list
+|-- START.bat
+|-- start-pos.bat
+|-- health_check.js
+|-- User_Manual.md
+|-- backend/
+|   |-- index.js
+|   |-- db.js
+|   |-- oneshop.db
+|   |-- run_migrations.js
+|   |-- migrate.js ... migrate45.js
+|   |-- preflight.js
+|   |-- e2e_test.js
+|   |-- e2e_full_test.js
+|   |-- shopify_utils_test.js
+|   |-- shopify_mock_integration_test.js
+|   |-- shopify/
+|   |   |-- client.js
+|   |   `-- utils.js
+|   |-- uploads/
+|   `-- .env.shopify.example
+|-- frontend/
+|   |-- src/
+|   |   |-- App.jsx
+|   |   |-- main.jsx
+|   |   |-- auth/
+|   |   |   |-- AuthProvider.jsx
+|   |   |   `-- authStore.js
+|   |   |-- components/
+|   |   |   |-- AppLayout.jsx
+|   |   |   |-- RequireAuth.jsx
+|   |   |   `-- RequirePerm.jsx
+|   |   `-- pages/*.jsx
+|   |-- index.html
+|   |-- vite.config.js
+|   `-- eslint.config.js
+`-- docs/
+    |-- README.md
+    |-- STATUS.md
+    |-- TESTING.md
+    |-- ARCHITECTURE.md
+    |-- API_REFERENCE.md
+    |-- SHOPIFY_ALIGNMENT_PLAN.md
+    |-- SHOPIFY_SYNC_PLAN.md
+    |-- SHOPIFY_LIVE_RUNBOOK.md
+    |-- odoo.md
+    `-- archive/
 ```
 
----
+Important:
+- `backend/database.sqlite` exists as a zero-byte legacy file and is not used by runtime code.
+- Runtime DB path in code is `backend/oneshop.db`.
 
-## Backend Architecture
+## 3. Runtime and Startup Flow
 
-**Single file:** `backend/index.js`
+### 3.1 Local startup scripts
 
-All API endpoints follow REST conventions:
+- `START.bat`
+  - Starts backend with `node index.js`
+  - Starts frontend with `npm run dev`
+  - Opens `http://localhost:5173`
 
-```
-GET    /api/<resource>         — list all
-GET    /api/<resource>/:id     — get one
-POST   /api/<resource>         — create
-PUT    /api/<resource>/:id     — update (uses COALESCE for partial updates)
-DELETE /api/<resource>/:id     — delete
-```
+- `start-pos.bat`
+  - Verifies Node is installed
+  - Starts backend (`npm start`) and frontend (`npm run dev`)
+  - On keypress, kills all `node.exe` processes
 
-### Key API Groups
+### 3.2 Backend startup (`backend/index.js`)
 
-| Prefix                                       | Module                       |
-| -------------------------------------------- | ---------------------------- |
-| `/api/outlets`                               | Store locations              |
-| `/api/employees`                             | Staff + PIN validation       |
-| `/api/roles` + `/api/roles/:id/permissions`  | RBAC roles                   |
-| `/api/products`                              | Product catalog              |
-| `/api/products/scan/:barcode`                | Barcode scan (outlet-aware)  |
-| `/api/adjustments`                           | Stock write-offs             |
-| `/api/transfers`                             | Inter-outlet stock moves     |
-| `/api/sales`                                 | Checkout, history, void      |
-| `/api/shifts`                                | Cash shift open/close/active |
-| `/api/customers`                             | CRM                          |
-| `/api/purchase-orders` + `/receive`          | PO + GRN creation            |
-| `/api/grn`                                   | GRN list/detail              |
-| `/api/suppliers`                             | Supplier CRUD                |
-| `/api/supplier-returns`                      | RMA to suppliers             |
-| `/api/returns`                               | Customer returns             |
-| `/api/attendance`                            | Clock-in/out records         |
-| `/api/action-history`                        | Audit log                    |
-| `/api/brands` `/api/categories` `/api/taxes` | Setup tables                 |
-| `/api/feature-flags`                         | Feature flag governance      |
-| `/api/health`                                | Runtime health checks        |
-| `/api/dashboard`                             | Aggregated KPIs              |
-| `/api/reports/*`                             | 20+ reporting endpoints      |
+Execution order:
+1. Load dependencies and Shopify helpers.
+2. Configure `cors()` and `express.json()` (captures `rawBody` for Shopify webhook routes).
+3. Install permission context middleware (`loadEmployeePerms`).
+4. Seed default role permissions if missing (`ensureDefaultRolePermissions`).
+5. Install route-level permission rules (`PERMISSION_RULES`).
+6. Install restore lock middleware (`isRestoreInProgress`).
+7. Register API routes.
+8. Start HTTP server on `PORT` (default 5000).
+9. Start Shopify background worker unless `SHOPIFY_SYNC_WORKER_DISABLED=1`.
 
-### Database Design Principles
+## 4. Backend Architecture
 
-- **SQLite** — single file, no server required
-- Multi-outlet stock via the `outlet_stock` junction table (not a column on products)
-- Transactions used for: sale processing, GRN receiving, sale void, permission updates
-- No cascading deletes defined — if you delete a product, orphaned `outlet_stock` rows remain
-- `action_history` table is append-only (no FK constraints), used as a simple audit trail
+### 4.1 Data access and transaction style
 
----
+- Uses sqlite3 callback API via shared `db` object from `backend/db.js`.
+- Uses explicit transactions (`BEGIN/COMMIT/ROLLBACK`) in critical financial/inventory flows:
+  - sales posting and sale void
+  - GRN receiving
+  - inventory transfers
+  - approvals
+  - wallet operations
+  - backup/restore actions
 
-## Frontend Architecture
+### 4.2 Auth, RBAC, and feature flags
 
-**Framework:** React 18 + Vite 7 + Tailwind CSS v4 + Lucide React icons
+- Auth model: employee name + PIN (`/api/auth/login`).
+- Session storage: frontend `localStorage`.
+- Request identity: `x-employee-id` header (injected by auth provider for API calls).
+- Authorization:
+  - global method/path rules in `PERMISSION_RULES`
+  - endpoint-level `requirePerm` / `requireAnyPerm`
+- Feature flags in `feature_flags` table with `requireFeature` middleware:
+  - `backup_restore`
+  - `e_invoicing_export`
+  - `supplier_payables`
+  - `approvals`
 
-### Routing
+### 4.3 API surface location
 
-All routes defined in `frontend/src/main.jsx`. Protected routes use `AppLayout` as the parent which:
+- Full, exact backend endpoint list is documented in `docs/API_REFERENCE.md`.
+- Source of truth remains `backend/index.js`.
 
-1. Fetches the current user's role permissions from `/api/roles/:id/permissions`
-2. Filters sidebar nav items based on `requiredPerm` field
-3. Renders the `<Outlet />` for the matched route
+## 5. Shopify Integration Architecture
 
-### State Management
+Implementation files:
+- `backend/shopify/client.js`: Shopify GraphQL transport and operations
+- `backend/shopify/utils.js`: retry policy, signature verification, idempotency helpers
+- Shopify routes in `backend/index.js` under `/api/integrations/*`
 
-- **No global state library** — each page manages its own state with `useState` / `useEffect`
-- POS.jsx is the largest/most complex component (~1560 lines) — manages cart, payments, discounts, customer, employee, override modal, clock-in/out
-- Data fetching pattern: `useEffect(() => { fetchXxx(); }, [])` on mount — functions defined before the effect
+Capabilities currently implemented:
+- Connection/config management
+- Optional secret encryption with `SHOPIFY_SECRET_KEY`
+- Live verify/location discovery
+- Product/location/customer mapping
+- Push inventory / pull orders
+- Webhook ingestion (`orders-create`) with idempotency handling
+- Outbound queue (`external_sync_events`) with retry metadata
+- Inventory reconciliation and approval-assisted corrective actions
+- Background worker polling every 30 seconds
 
-### Key Design Patterns
+## 6. Frontend Architecture
 
-- **CRUD pages** follow: list view → modal opens for create/edit → POST or PUT → refresh list
-- **POS** has a separate full-screen layout (no sidebar) with its own PIN login overlay
-- **Reports** uses a tab-based lazy-fetch pattern — data only fetched when tab is selected
-- **Permission guard** in `AppLayout.jsx` filters sidebar items; individual pages do not re-check
+### 6.1 App shell and auth model
 
----
+- Entry: `frontend/src/main.jsx`
+- Router: `frontend/src/App.jsx`
+- Auth context: `frontend/src/auth/AuthProvider.jsx`
+- Route guards:
+  - `RequireAuth` for authentication
+  - `RequirePerm` for permission-based access
+- Sidebar and feature-flag-aware nav: `frontend/src/components/AppLayout.jsx`
 
-## Database Schema Summary
+Session behavior:
+- Persists `authSession` in `localStorage`
+- Also writes `currentEmployee` for backward compatibility
+- Adds `x-employee-id` to API requests through a fetch wrapper
 
-```sql
--- Setup / configuration
-outlets          (id, name, address, phone)
-employees        (id, name, role_id FK→roles, pin_code UNIQUE, outlet_id FK→outlets)
-roles            (id, name, is_system_role)
-role_permissions (role_id FK→roles, permission TEXT)
-brands           (id, name UNIQUE)
-categories       (id, name, description)
-taxes            (id, name, rate)
+### 6.2 Complexity hotspots (by page size)
 
--- Products & Stock
-products         (id, name, barcode UNIQUE, price, cost_price, brand_id FK, category_id FK, tax_id FK)
-product_variants (id, product_id FK, name, price, stock)
-outlet_stock     (product_id FK, outlet_id FK, quantity) ← per-outlet stock
+- `Reports.jsx` (~2,213 lines)
+- `POS.jsx` (~1,601 lines)
+- `ShopifyIntegration.jsx` (~1,216 lines)
+- `Inventory.jsx` (~1,196 lines)
 
--- Sales
-sales            (id, total, discount_amount, discount_type, outlet_id FK, employee_id FK,
-                  customer_id FK, payment_method, status, void_reason, created_at)
-sale_items       (id, sale_id FK, product_id FK, variant_id FK, quantity, price, effective_tax_rate)
-sale_payments    (id, sale_id FK, method, amount)
+### 6.3 Frontend route location
 
--- Returns
-returns          (id, sale_id FK, employee_id FK, outlet_id FK, total_refund, payment_method, reason, created_at)
-return_items     (id, return_id FK, product_id FK, variant_id FK, quantity, price)
-supplier_returns (id, supplier_id FK, employee_id FK, outlet_id FK, return_date, status, reason, total_value, reference_number)
-supplier_return_items (id, supplier_return_id FK, product_id FK, variant_id FK, quantity, unit_price, reason)
+- Full frontend route map is documented in `docs/API_REFERENCE.md`.
+- Source of truth remains `frontend/src/App.jsx`.
 
--- Purchasing
-suppliers            (id, name, contact_person, phone, email, address)
-purchase_orders      (id, supplier_id FK, total_cost, status, created_at)
-purchase_order_items (id, po_id FK, product_id FK, quantity, cost_price)
-goods_received_notes (id, grn_number UNIQUE, po_id FK, outlet_id FK, received_by FK→employees, notes, received_at)
-grn_items            (id, grn_id FK, product_id FK, qty_ordered, qty_received, cost_price)
+## 7. Database Architecture (Live `oneshop.db`)
 
--- Operations
-stock_adjustments    (id, product_id FK, outlet_id FK, employee_id FK, quantity_change, reason, timestamp)
-inventory_transfers  (id, from_outlet_id FK, to_outlet_id FK, product_id FK, employee_id FK, quantity, notes, transferred_at)
-cash_shifts          (id, outlet_id FK, opened_by FK→employees, closed_by FK→employees,
-                      opening_float, total_cash_sales, total_card_sales, total_returns,
-                      expected_cash, actual_closing_cash, variance, status, opened_at, closed_at)
+### 7.1 Core master data
 
--- HR & Audit
-employee_attendance  (id, employee_id FK, outlet_id FK, check_in, check_out, hours, status)
-customers            (id, name, mobile UNIQUE, email, address, loyalty_points)
-action_history       (id, user_name, action_type, description, timestamp)
-```
+- `products`, `product_variants`, `product_media`
+- `categories`, `brands`, `taxes`
+- `outlets`, `outlet_stock`
+- `employees`, `roles`, `role_permissions`
+- `customers`, `customer_wallet_ledger`
+- `suppliers`
 
----
+### 7.2 Sales and POS
 
-## Migration Sequence (Run Once, Already Applied)
+- `sales`, `sale_items`, `sale_payments`
+- `returns`, `return_items`
+- `parked_sales`, `parked_sale_items`
+- `receipt_templates`
+- `promotions`
+- `invoice_sequences`
 
-```
-migrate.js      → products, sales, sale_items (initial schema)
-migrate2.js     → add cost_price to products
-migrate3.js     → add barcode index
-migrate4.js     → categories
-migrate5.js     → taxes, add tax_id to products
-migrate6.js     → outlets, employees, brands; add brand_id to products
-migrate7.js     → effective_tax_rate support
-migrate8.js     → sale_payments table (multi-tender)
-migrate9.js     → employee_id, outlet_id, customer_id on sales
-migrate10.js    → outlet_stock table
-migrate11.js    → stock_adjustments table
-migrate12.js    → inventory_transfers table
-migrate13.js    → cash_shifts table
-migrate14.js    → suppliers table
-migrate15.js    → purchase_orders + purchase_order_items
-migrate16.js    → customers table
-migrate17.js    → employee_attendance table
-migrate18.js    → discount_amount, discount_type on sales
-migrate19.js    → goods_received_notes + grn_items tables
-migrate20.js    → returns + return_items tables
-+ inline        → roles, role_permissions, supplier_returns, supplier_return_items,
-                   action_history, product_variants (added inline in index.js startup)
-```
+### 7.3 Inventory and procurement
+
+- `stock_adjustments`
+- `inventory_transfers`
+- `purchase_orders`, `purchase_order_items`
+- `goods_received_notes`, `grn_items`
+- `supplier_returns`, `supplier_return_items`
+- `supplier_invoices`, `supplier_payments`
+
+### 7.4 Operations and governance
+
+- `cash_shifts`, `shift_denominations`
+- `employee_attendance`
+- `action_history`
+- `feature_flags`
+- `backup_log`
+- `approval_requests`, `approval_actions`
+
+### 7.5 Shopify sync and staging
+
+- `shopify_connections`, `shopify_sync_runs`
+- `shopify_product_map`, `shopify_location_map`, `shopify_customer_map`, `shopify_order_map`
+- `web_orders`, `web_order_items`, `web_order_transactions`, `web_order_fulfillments`
+- `external_sync_events`
+- `inventory_reconciliation`
+
+Schema notes:
+- Multi-outlet stock source of truth is `outlet_stock`.
+- Legacy columns remain for backward compatibility.
+- `db.js` bootstraps baseline tables; migrations provide full current shape.
+- FK cascade behavior is mixed (some tables cascade, many do not).
+
+## 8. Migration Strategy
+
+- Runner: `backend/run_migrations.js`
+- Order: `migrate.js` through `migrate45.js`
+
+Progressive evolution:
+- Core POS and inventory base
+- Multi-outlet stock and operations
+- RBAC, approvals, parked sales, wallet, supplier payables
+- Promotions, barcode templates, expenses, invoice numbering, feature flags
+- Shopify alignment, mapping, sync queue, and reconciliation fields
+
+## 9. Testing and Operational Scripts
+
+Backend scripts (`backend/package.json`):
+- `npm start`
+- `npm run preflight`
+- `npm run test:e2e-full`
+- `npm run test:shopify-utils`
+- `npm run test:shopify-mock`
+
+Important supporting scripts:
+- `backend/e2e_test.js`
+- `backend/e2e_full_test.js`
+- `backend/preflight.js`
+- `backend/health_check.js`
+- root `health_check.js`
+
+## 10. Current Constraints and Technical Debt
+
+- Backend monolith (`index.js`) remains large, raising regression risk.
+- Frontend API base URL is hardcoded in many files.
+- Auth model is header-based and localStorage-backed (not hardened for internet-facing deployments).
+- `backend/database.sqlite` legacy file can cause confusion.
+- Some schema snapshot files are stale (`schema_dump.txt`, `readable_schema.txt`).
+- `frontend/README.md` is still template content.
+
+## 11. Practical Navigation Guide
+
+1. Read `backend/index.js` for API behavior.
+2. Read `frontend/src/App.jsx` and `components/AppLayout.jsx` for route and permission visibility.
+3. Verify schema changes in migrations and in live `oneshop.db`.
+4. Run `npm run preflight` and `npm run test:e2e-full` before release.
+5. For API and route inventory, use `docs/API_REFERENCE.md`.
