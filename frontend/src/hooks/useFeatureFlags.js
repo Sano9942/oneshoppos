@@ -11,6 +11,7 @@ const DEFAULT_FLAGS = {
   crm_quotations: true,
   advanced_hr: true,
   multi_company: true,
+  ui_redesign_pos: true,
 };
 
 export default function useFeatureFlags(authHeaders) {

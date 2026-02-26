@@ -4927,11 +4927,12 @@ module.exports = function registerAllRoutes(app, deps) {
   app.get("/api/parked-sales", (req, res) => {
     const { outlet_id } = req.query;
     let sql = `
-    SELECT ps.*, e.name as employee_name, c.name as customer_name,
+    SELECT ps.*, e.name as employee_name, c.name as customer_name, o.name as outlet_name,
            COUNT(psi.id) as item_count
     FROM parked_sales ps
     LEFT JOIN employees e ON ps.employee_id = e.id
     LEFT JOIN customers c ON ps.customer_id = c.id
+    LEFT JOIN outlets o ON ps.outlet_id = o.id
     LEFT JOIN parked_sale_items psi ON psi.parked_sale_id = ps.id
   `;
     const params = [];
@@ -4950,10 +4951,11 @@ module.exports = function registerAllRoutes(app, deps) {
   app.get("/api/parked-sales/:id", (req, res) => {
     const { id } = req.params;
     db.get(
-      `SELECT ps.*, e.name as employee_name, c.name as customer_name
+      `SELECT ps.*, e.name as employee_name, c.name as customer_name, o.name as outlet_name
      FROM parked_sales ps
      LEFT JOIN employees e ON ps.employee_id = e.id
      LEFT JOIN customers c ON ps.customer_id = c.id
+     LEFT JOIN outlets o ON ps.outlet_id = o.id
      WHERE ps.id = ?`,
       [id],
       (err, sale) => {
