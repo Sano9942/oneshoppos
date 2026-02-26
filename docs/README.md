@@ -13,6 +13,8 @@ This folder contains current project documentation.
 - `ARCHITECTURE.md` - Runtime architecture and module map
 - `API_REFERENCE.md` - API/route summary and Tier 4 endpoint inventory
 - `TESTING.md` - Latest test baselines and commands
+- `REDESIGN_BASELINE.md` - Redesign rollout baseline contract
+- `REDESIGN_MODULE_DONE_CHECKLIST.md` - Per-module redesign completion gate
 
 ## Domain Docs
 

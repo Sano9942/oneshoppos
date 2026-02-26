@@ -2,7 +2,7 @@ import { BrowserRouter as Router, Navigate, Route, Routes } from "react-router-d
 import { useAuth } from "./auth/AuthProvider";
 import RequireAuth from "./components/RequireAuth";
 import RequirePerm from "./components/RequirePerm";
-import AppLayout from "./components/AppLayout";
+import AppLayoutSwitch from "./components/AppLayoutSwitch";
 import AccessDenied from "./pages/AccessDenied";
 import Administrator from "./pages/Administrator";
 import Approvals from "./pages/Approvals";
@@ -11,25 +11,19 @@ import AttributeSets from "./pages/AttributeSets";
 import BackupRestore from "./pages/BackupRestore";
 import BarcodeTemplates from "./pages/BarcodeTemplates";
 import Brands from "./pages/Brands";
-import CashManagement from "./pages/CashManagement";
 import Categories from "./pages/Categories";
-import Customers from "./pages/Customers";
 import Dashboard from "./pages/Dashboard";
 import Employees from "./pages/Employees";
 import Expenses from "./pages/Expenses";
-import Inventory from "./pages/Inventory";
+import InventoryRoute from "./pages/InventoryRoute";
 import Login from "./pages/Login";
 import Outlets from "./pages/Outlets";
-import Orders from "./pages/Orders";
 import PlaceholderPage from "./pages/PlaceholderPage";
-import POS from "./pages/POS";
 import Promotions from "./pages/Promotions";
 import PurchaseOrders from "./pages/PurchaseOrders";
 import ReceiptTemplates from "./pages/ReceiptTemplates";
 import Reports, { ReportTabStandalone } from "./pages/Reports";
 import ReturnedStock from "./pages/ReturnedStock";
-import Returns from "./pages/Returns";
-import SalesHistory from "./pages/SalesHistory";
 import ActionHistory from "./pages/ActionHistory";
 import Accounting from "./pages/Accounting";
 import StockAdjustments from "./pages/StockAdjustments";
@@ -42,6 +36,12 @@ import CRM from "./pages/CRM";
 import Quotations from "./pages/Quotations";
 import HRManagement from "./pages/HRManagement";
 import CompanySettings from "./pages/CompanySettings";
+import POSRoute from "./pages/POSRoute";
+import OrdersRoute from "./pages/OrdersRoute";
+import CustomersRoute from "./pages/CustomersRoute";
+import SalesHistoryRoute from "./pages/SalesHistoryRoute";
+import CashManagementRoute from "./pages/CashManagementRoute";
+import ReturnsRoute from "./pages/ReturnsRoute";
 
 function HomeRedirect() {
   const { isAuthenticated, isBootstrapping } = useAuth();
@@ -59,23 +59,23 @@ function App() {
         <Route
           path="/pos"
           element={
-            <RequireAuth>
-              <POS />
+              <RequireAuth>
+              <POSRoute />
             </RequireAuth>
           }
         />
 
         <Route
           element={
-            <RequireAuth>
-              <AppLayout />
+              <RequireAuth>
+              <AppLayoutSwitch />
             </RequireAuth>
           }
         >
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/sales-history" element={<SalesHistory />} />
-          <Route path="/cash-management" element={<CashManagement />} />
-          <Route path="/customers" element={<Customers />} />
+          <Route path="/sales-history" element={<SalesHistoryRoute />} />
+          <Route path="/cash-management" element={<CashManagementRoute />} />
+          <Route path="/customers" element={<CustomersRoute />} />
           <Route
             path="/crm"
             element={
@@ -96,8 +96,8 @@ function App() {
           <Route
             path="/orders"
             element={
-              <RequirePerm perm="manage_orders">
-                <Orders />
+                <RequirePerm perm="manage_orders">
+                <OrdersRoute />
               </RequirePerm>
             }
           />
@@ -106,13 +106,13 @@ function App() {
           <Route path="/partners" element={<PlaceholderPage />} />
           <Route path="/shopcast" element={<PlaceholderPage />} />
           <Route path="/reports" element={<Reports />} />
-          <Route path="/returns" element={<Returns />} />
+          <Route path="/returns" element={<ReturnsRoute />} />
 
           <Route
             path="/inventory"
             element={
-              <RequirePerm perm="manage_inventory">
-                <Inventory />
+                <RequirePerm perm="manage_inventory">
+                <InventoryRoute />
               </RequirePerm>
             }
           />

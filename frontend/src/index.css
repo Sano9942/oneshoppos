@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./ui/tokens.css";
 
 html,
 body,

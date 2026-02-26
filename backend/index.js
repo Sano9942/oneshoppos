@@ -425,6 +425,16 @@ const DEFAULT_FEATURE_FLAGS = {
   crm_quotations: true,
   advanced_hr: true,
   multi_company: true,
+  ui_redesign_enabled: true,
+  ui_redesign_inventory: true,
+  ui_redesign_orders: false,
+  ui_redesign_pos: false,
+  ui_redesign_reports: false,
+  ui_redesign_admin: false,
+  ui_redesign_customers: false,
+  ui_redesign_sales_history: false,
+  ui_redesign_cash_management: false,
+  ui_redesign_returns: false,
 };
 
 function getFeatureFlagsMap(cb) {
