@@ -167,7 +167,7 @@ export default function AttributeSetsRedesign() {
   };
 
   const removeSet = async (row) => {
-    if (!window.confirm(`Delete attribute set \"${row.name}\"?`)) return;
+    if (!window.confirm(`Delete attribute set "${row.name}"?`)) return;
     setError("");
     try {
       const res = await fetch(`${API}/api/attribute-sets/${row.id}`, {

@@ -89,7 +89,7 @@ export default function BrandsRedesign() {
   };
 
   const remove = async (row) => {
-    if (!window.confirm(`Delete brand \"${row.name}\"?`)) return;
+    if (!window.confirm(`Delete brand "${row.name}"?`)) return;
     setError("");
     try {
       const res = await fetch(`${API}/api/brands/${row.id}`, { method: "DELETE" });

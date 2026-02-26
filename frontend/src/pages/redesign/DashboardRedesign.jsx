@@ -69,7 +69,6 @@ export default function DashboardRedesign() {
 
   useEffect(() => {
     let mounted = true;
-    setLoading(true);
     Promise.all([
       fetch(`${API}/api/reports/dashboard`, { headers: authHeaders() }).then((r) => r.json()),
       fetch(`${API}/api/sales?limit=10`, { headers: authHeaders() })

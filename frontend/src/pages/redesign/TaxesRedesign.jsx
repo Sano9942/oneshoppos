@@ -91,7 +91,7 @@ export default function TaxesRedesign() {
   };
 
   const remove = async (row) => {
-    if (!window.confirm(`Delete tax \"${row.name}\"?`)) return;
+    if (!window.confirm(`Delete tax "${row.name}"?`)) return;
     setError("");
     try {
       const res = await fetch(`${API}/api/taxes/${row.id}`, { method: "DELETE" });

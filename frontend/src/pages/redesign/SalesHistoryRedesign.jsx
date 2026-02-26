@@ -163,7 +163,7 @@ export default function SalesHistoryRedesign() {
     const lines = detail.items
       .map(
         (i) =>
-          `<tr><td>${i.quantity}x ${i.product_name}</td><td style=\"text-align:right\">${money(
+          `<tr><td>${i.quantity}x ${i.product_name}</td><td style="text-align:right">${money(
             i.price_at_sale * i.quantity,
           )}</td></tr>`,
       )
@@ -171,7 +171,7 @@ export default function SalesHistoryRedesign() {
     const pays = (detail.payments || [])
       .map(
         (p) =>
-          `<tr><td>${p.payment_method}</td><td style=\"text-align:right\">${money(
+          `<tr><td>${p.payment_method}</td><td style="text-align:right">${money(
             p.amount,
           )}</td></tr>`,
       )

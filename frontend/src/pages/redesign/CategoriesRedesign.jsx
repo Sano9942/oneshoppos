@@ -89,7 +89,7 @@ export default function CategoriesRedesign() {
   };
 
   const remove = async (row) => {
-    if (!window.confirm(`Delete category \"${row.name}\"?`)) return;
+    if (!window.confirm(`Delete category "${row.name}"?`)) return;
     setError("");
     try {
       const res = await fetch(`${API}/api/categories/${row.id}`, { method: "DELETE" });
