@@ -12,6 +12,11 @@ const DEFAULT_FLAGS = {
   advanced_hr: true,
   multi_company: true,
   ui_redesign_pos: true,
+  reports_enhanced_filters: false,
+  reports_profit_layer: false,
+  reports_inventory_health_plus: false,
+  reports_exceptions: false,
+  reports_scheduled_exports: false,
 };
 
 export default function useFeatureFlags(authHeaders) {

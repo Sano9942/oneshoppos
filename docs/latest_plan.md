@@ -1,5 +1,10 @@
 # OneShopPOS Complete Shopify-Style Redesign Plan (All Non-Placeholder Modules)
 
+Status Note (2026-02-27):
+- This file remains the redesign execution plan.
+- Reports Power-Up implementation status now lives in `docs/reportsupdateplan.md`.
+- Current runtime/system status is tracked in `docs/STATUS.md`.
+
 ## Summary
 
 Redesign the full app UX/UI and interaction model to Shopify-style patterns while preserving existing business logic and permissions, excluding only:

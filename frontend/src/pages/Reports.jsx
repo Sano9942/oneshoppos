@@ -35,7 +35,7 @@ import {
 
 import { API_BASE as API } from '../config';
 
-const fmt = (n) => "$" + (n || 0).toFixed(2);
+const fmt = (n) => "PKRs " + Number(n || 0).toFixed(2);
 const fmtDate = (d) =>
   d
     ? new Date(d).toLocaleDateString(undefined, {
@@ -43,7 +43,7 @@ const fmtDate = (d) =>
         month: "short",
         day: "numeric",
       })
-    : "—";
+    : "ï¿½";
 const fmtDateTime = (d) =>
   d
     ? new Date(d).toLocaleString(undefined, {
@@ -53,7 +53,7 @@ const fmtDateTime = (d) =>
         hour: "2-digit",
         minute: "2-digit",
       })
-    : "—";
+    : "ï¿½";
 
 // --- CSV Export Utilities -----------------------------------------------------
 
@@ -530,7 +530,7 @@ function SalesSummaryTab() {
                 tick={{ fontSize: 10, fill: "#94a3b8" }}
                 axisLine={false}
                 tickLine={false}
-                tickFormatter={(v) => `$${v}`}
+                tickFormatter={(v) => `PKRs ${v}`}
               />
               <Tooltip
                 formatter={(v) => [fmt(v), "Revenue"]}
@@ -555,7 +555,7 @@ function SalesSummaryTab() {
 
       <CardShell
         title="Sales Summary"
-        subtitle={`${rows.length} sale${rows.length !== 1 ? "s" : ""} · Total: ${fmt(total)}`}
+        subtitle={`${rows.length} sale${rows.length !== 1 ? "s" : ""} ï¿½ Total: ${fmt(total)}`}
         action={
           <ExportButton
             onClick={() =>
@@ -661,7 +661,7 @@ function SalesDetailTab() {
       />
       <CardShell
         title="Sales Detail"
-        subtitle={`${rows.length} line item${rows.length !== 1 ? "s" : ""} · Revenue: ${fmt(totalRevenue)}`}
+        subtitle={`${rows.length} line item${rows.length !== 1 ? "s" : ""} ï¿½ Revenue: ${fmt(totalRevenue)}`}
         action={
           <ExportButton
             onClick={() =>
@@ -849,7 +849,7 @@ function InventoryDumpTab() {
       </div>
       <CardShell
         title="Inventory Dump"
-        subtitle={`${rows.length} records · Retail Value: ${fmt(totalRetail)} · Cost Value: ${fmt(totalCost)}`}
+        subtitle={`${rows.length} records ï¿½ Retail Value: ${fmt(totalRetail)} ï¿½ Cost Value: ${fmt(totalCost)}`}
         action={
           <ExportButton
             onClick={() =>
@@ -1115,10 +1115,10 @@ function CustomerDetailsTab() {
               </span>
             </td>
             <td className="p-4 text-sm text-slate-600">
-              {c.mobile || <span className="italic text-slate-400">—</span>}
+              {c.mobile || <span className="italic text-slate-400">ï¿½</span>}
             </td>
             <td className="p-4 text-sm text-slate-600">
-              {c.email || <span className="italic text-slate-400">—</span>}
+              {c.email || <span className="italic text-slate-400">ï¿½</span>}
             </td>
           </tr>
         ))}
@@ -1226,7 +1226,7 @@ function OrderWiseTab() {
       />
       <CardShell
         title="Order Wise Report"
-        subtitle={`${rows.length} order${rows.length !== 1 ? "s" : ""} — Excl. Tax ${fmt(totalExcl)} · Incl. Tax ${fmt(totalIncl)}`}
+        subtitle={`${rows.length} order${rows.length !== 1 ? "s" : ""} ï¿½ Excl. Tax ${fmt(totalExcl)} ï¿½ Incl. Tax ${fmt(totalIncl)}`}
         action={
           <ExportButton
             onClick={() =>
@@ -1280,7 +1280,7 @@ function OrderWiseTab() {
                     -{fmt(r.discount_amount)}
                   </span>
                 ) : (
-                  <span className="text-slate-400">—</span>
+                  <span className="text-slate-400">ï¿½</span>
                 )}
               </td>
               <td className="p-4 text-right font-bold text-slate-900">
@@ -1335,7 +1335,7 @@ function ItemWiseTab() {
       />
       <CardShell
         title="Item Wise Report"
-        subtitle={`${rows.length} product${rows.length !== 1 ? "s" : ""} · Revenue: ${fmt(totalRevenue)} · Profit: ${fmt(totalProfit)}`}
+        subtitle={`${rows.length} product${rows.length !== 1 ? "s" : ""} ï¿½ Revenue: ${fmt(totalRevenue)} ï¿½ Profit: ${fmt(totalProfit)}`}
         action={
           <ExportButton
             onClick={() =>
@@ -1644,7 +1644,7 @@ function OnHandTab() {
       </div>
       <CardShell
         title="On Hand Inventory"
-        subtitle={`${rows.length} records · Retail Value: ${fmt(totalRetail)}`}
+        subtitle={`${rows.length} records ï¿½ Retail Value: ${fmt(totalRetail)}`}
         action={
           <ExportButton
             onClick={() =>
@@ -1756,7 +1756,7 @@ function InventoryLossTab() {
       />
       <CardShell
         title="Inventory Loss"
-        subtitle={`${rows.length} adjustment${rows.length !== 1 ? "s" : ""} · Total units lost: ${totalLoss}`}
+        subtitle={`${rows.length} adjustment${rows.length !== 1 ? "s" : ""} ï¿½ Total units lost: ${totalLoss}`}
       >
         <TableShell
           cols={[
@@ -1929,10 +1929,10 @@ function ProductMovementTab() {
               </span>
             </td>
             <td className="p-4 text-sm text-slate-600">
-              {r.employee_name || "—"}
+              {r.employee_name || "ï¿½"}
             </td>
             <td className="p-4 text-sm text-slate-500 italic">
-              {r.note || "—"}
+              {r.note || "ï¿½"}
             </td>
           </tr>
         ))}
@@ -1980,7 +1980,7 @@ function STRReportTab() {
         search={search}
       />
       <CardShell
-        title="STR Report — Stock Transfer"
+        title="STR Report ï¿½ Stock Transfer"
         subtitle={`${rows.length} transfer${rows.length !== 1 ? "s" : ""}`}
       >
         <TableShell
@@ -2019,10 +2019,10 @@ function STRReportTab() {
                 </span>
               </td>
               <td className="p-4 text-sm text-slate-600">
-                {r.employee_name || "—"}
+                {r.employee_name || "ï¿½"}
               </td>
               <td className="p-4 text-sm text-slate-500 italic">
-                {r.note || "—"}
+                {r.note || "ï¿½"}
               </td>
             </tr>
           ))}
@@ -2119,7 +2119,7 @@ function ReplenishmentTab() {
             className="ml-auto flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
           >
             <ShoppingCart size={13} />
-            {drafting ? "Creating…" : `Create Draft POs (${suppliersWithItems} supplier${suppliersWithItems !== 1 ? "s" : ""})`}
+            {drafting ? "Creatingï¿½" : `Create Draft POs (${suppliersWithItems} supplier${suppliersWithItems !== 1 ? "s" : ""})`}
           </button>
         )}
       </div>
@@ -2131,7 +2131,7 @@ function ReplenishmentTab() {
             {draftResult.error ? draftResult.error : (
               <>
                 {draftResult.created.length > 0 && <p><strong>Draft POs created</strong> for: {draftResult.created.join(", ")}</p>}
-                {draftResult.failed.length > 0 && <p className="text-rose-600 mt-1">Failed: {draftResult.failed.join(", ")} — check permissions</p>}
+                {draftResult.failed.length > 0 && <p className="text-rose-600 mt-1">Failed: {draftResult.failed.join(", ")} ï¿½ check permissions</p>}
               </>
             )}
           </div>
@@ -2216,9 +2216,9 @@ function SupplierWiseTab() {
               {r.supplier_name}
             </td>
             <td className="p-4 text-sm text-slate-600">
-              {r.contact_person || "—"}
+              {r.contact_person || "ï¿½"}
             </td>
-            <td className="p-4 text-sm text-slate-600">{r.phone || "—"}</td>
+            <td className="p-4 text-sm text-slate-600">{r.phone || "ï¿½"}</td>
             <td className="p-4 text-center">
               <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold">
                 {r.total_pos}
@@ -2362,14 +2362,14 @@ function GRNReportTab() {
                 {fmtDate(r.received_at)}
               </td>
               <td className="p-4 font-mono text-slate-700">
-                {r.po_number || "—"}
+                {r.po_number || "ï¿½"}
               </td>
               <td className="p-4 font-medium text-slate-800">
-                {r.supplier_name || "—"}
+                {r.supplier_name || "ï¿½"}
               </td>
-              <td className="p-4 text-slate-600">{r.outlet_name || "—"}</td>
+              <td className="p-4 text-slate-600">{r.outlet_name || "ï¿½"}</td>
               <td className="p-4 text-slate-600">
-                {r.received_by_name || "—"}
+                {r.received_by_name || "ï¿½"}
               </td>
               <td className="p-4 text-center">
                 <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold">
@@ -2431,7 +2431,7 @@ function AttendanceTab() {
           hour: "2-digit",
           minute: "2-digit",
         })
-      : "—";
+      : "ï¿½";
 
   return (
     <CardShell title="Attendance Report" icon={Clock}>
@@ -2494,7 +2494,7 @@ function AttendanceTab() {
               {fmtTime(r.check_out)}
             </td>
             <td className="px-4 py-3 font-semibold text-slate-800 whitespace-nowrap">
-              {r.hours != null ? `${r.hours.toFixed(2)}h` : "—"}
+              {r.hours != null ? `${r.hours.toFixed(2)}h` : "ï¿½"}
             </td>
             <td className="px-4 py-3">
               <span
@@ -2558,7 +2558,7 @@ function OutletComparisonTab() {
             <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
+              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={(v) => `PKRs ${v}`} />
               <Tooltip
                 formatter={(v, name) => [name === "revenue" ? fmt(v) : v, name === "revenue" ? "Revenue" : "Orders"]}
                 contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
@@ -2571,7 +2571,7 @@ function OutletComparisonTab() {
 
       <CardShell
         title="Outlet Comparison"
-        subtitle={`${outlets.length} outlet${outlets.length !== 1 ? "s" : ""} · Total Revenue: ${fmt(totalRevenue)}`}
+        subtitle={`${outlets.length} outlet${outlets.length !== 1 ? "s" : ""} ï¿½ Total Revenue: ${fmt(totalRevenue)}`}
         action={
           <ExportButton
             onClick={() =>
@@ -2622,8 +2622,8 @@ const RFM_SEGMENTS = {
   "Potential Loyalist":{ color: "bg-sky-100 text-sky-800",        desc: "Recent buyers, starting to buy more" },
   "New Customer":     { color: "bg-teal-100 text-teal-800",       desc: "Bought recently for the first time" },
   "Need Attention":   { color: "bg-yellow-100 text-yellow-800",   desc: "Were good, but activity slowing" },
-  "At Risk":          { color: "bg-orange-100 text-orange-800",   desc: "Used to buy often — haven't returned" },
-  "Can't Lose Them":  { color: "bg-rose-100 text-rose-800",       desc: "High-value, now dormant — act fast" },
+  "At Risk":          { color: "bg-orange-100 text-orange-800",   desc: "Used to buy often ï¿½ haven't returned" },
+  "Can't Lose Them":  { color: "bg-rose-100 text-rose-800",       desc: "High-value, now dormant ï¿½ act fast" },
   "About to Sleep":   { color: "bg-slate-100 text-slate-700",     desc: "Low engagement, fading" },
   "Lost":             { color: "bg-gray-100 text-gray-600",       desc: "Inactive, minimal engagement" },
 };
@@ -2707,7 +2707,7 @@ function CustomerRFMTab() {
 
       <CardShell
         title="Customer RFM Analysis"
-        subtitle={`${filtered.length} customer${filtered.length !== 1 ? "s" : ""}${filterSeg ? ` · Filtered: ${filterSeg}` : ""} · Recency / Frequency scoring (1=low, 5=high)`}
+        subtitle={`${filtered.length} customer${filtered.length !== 1 ? "s" : ""}${filterSeg ? ` ï¿½ Filtered: ${filterSeg}` : ""} ï¿½ Recency / Frequency scoring (1=low, 5=high)`}
         action={
           <div className="flex items-center gap-2">
             {filterSeg && (
@@ -2921,7 +2921,7 @@ export default function Reports() {
         </p>
       </div>
 
-      {/* Grouped Tab Bar — horizontally scrollable */}
+      {/* Grouped Tab Bar ï¿½ horizontally scrollable */}
       <div className="overflow-x-auto shrink-0">
         <div className="flex gap-4 min-w-max pb-1">
           {GROUPS.map((group) => (

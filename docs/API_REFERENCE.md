@@ -1,131 +1,110 @@
-﻿# OneShopPOS API and Route Reference
+# OneShopPOS API and Route Reference
 
-Last Audited: 2026-02-26
+Last Audited: 2026-02-27
 
 Source of truth:
-- Backend APIs: `backend/index.js`
+- Backend APIs: `backend/routes/registerAllRoutes.js`, `backend/routes/tier4.js`
 - Frontend routes: `frontend/src/App.jsx`
 
 ---
 
-## Backend API Summary
+## Backend API Groups (Highlights)
 
-- Total `/api/*` endpoints: 229
-
-Top groups by first segment:
-- `integrations`: 25
-- `reports`: 20
-- `products`: 15
-- `customers`: 8
-- `orders`: 8
-- `hr`: 7
-- `crm`: 7
-- `quotations`: 7
-- `purchase-orders`: 7
-- `accounting`: 6
+Mature groups include:
+- `integrations/*`
+- `reports/*`
+- `products/*`
+- `customers/*`
+- `orders/*`
+- `hr/*`
+- `crm/*`
+- `quotations/*`
+- `accounting/*`
 
 Tier 4 groups:
-- `notifications`: 4
-- `company-profile`: 3
-- `accounting`: 6
-- `hr`: 7
-- `crm`: 7
-- `quotations`: 7
+- `notifications/*`
+- `company-profile/*`
+- `accounting/*`
+- `hr/*`
+- `crm/*`
+- `quotations/*`
 
 ---
 
-## Inventory / Products (Recent Additions)
+## Reports API Surface (Current)
 
-`GET /api/products` supports server-side search, sorting, and filtering via query params:
+Existing reporting endpoints remain active, and the following additive endpoints are implemented:
 
-- `search`: matches product name, barcode, or SKU
-- `sort`: `name | price | stock | min_qty | created_at`
-- `order`: `asc | desc`
-- `status`: `active | inactive`
-- `category_id`: numeric category id
+### Profit and margin
+- `GET /api/reports/profit-summary`
+- `GET /api/reports/profit-by-product`
+- `GET /api/reports/profit-by-outlet`
+- `GET /api/reports/discount-leakage`
 
-Bulk product operations:
+### Inventory health
+- `GET /api/reports/dead-stock`
+- `GET /api/reports/stock-aging`
+- `GET /api/reports/stockout-risk`
 
-- `POST /api/products/bulk-delete` with `{ ids: number[] }`
-- `POST /api/products/bulk-status` with `{ ids: number[], status: 'active' | 'inactive' }`
-- `POST /api/products/bulk-category` with `{ ids: number[], category_id: number }`
+### Exceptions
+- `GET /api/reports/exceptions?type=negative_margin_sales|high_discount_orders|frequent_voids_by_employee|frequent_returns_by_product`
 
-## Tier 4 Backend Endpoints
+### Forecasting and replenishment
+- `GET /api/reports/forecast-demand`
+- `GET /api/reports/replenishment-smart`
 
-### Notifications
-- `GET /api/notifications`
-- `GET /api/notifications/count`
-- `PUT /api/notifications/:id/read`
-- `PUT /api/notifications/read-all`
-
-### Company Profile
-- `GET /api/company-profile`
-- `PUT /api/company-profile`
-- `POST /api/company-profile/logo`
-
-### Accounting
-- `GET /api/accounting/pnl`
-- `GET /api/accounting/cashflow`
-- `GET /api/accounting/ap`
-- `GET /api/accounting/periods`
-- `POST /api/accounting/periods`
-- `PUT /api/accounting/periods/:id`
-
-### HR
-- `GET /api/hr/leave`
-- `POST /api/hr/leave`
-- `PUT /api/hr/leave/:id/status`
-- `GET /api/hr/payroll/periods`
-- `POST /api/hr/payroll/periods`
-- `POST /api/hr/payroll/periods/:id/generate`
-- `GET /api/hr/payroll/periods/:id/lines`
-
-### CRM and Quotations
-- `GET /api/crm/leads`
-- `POST /api/crm/leads`
-- `PUT /api/crm/leads/:id`
-- `DELETE /api/crm/leads/:id`
-- `POST /api/crm/leads/:id/activities`
-- `GET /api/crm/leads/:id/activities`
-- `POST /api/crm/leads/:id/convert`
-- `GET /api/quotations`
-- `POST /api/quotations`
-- `GET /api/quotations/:id`
-- `PUT /api/quotations/:id`
-- `PUT /api/quotations/:id/status`
-- `DELETE /api/quotations/:id`
-- `POST /api/quotations/:id/convert`
+### Scheduled exports and governance
+- `GET /api/reports/schedules`
+- `POST /api/reports/schedules`
+- `PUT /api/reports/schedules/:id`
+- `DELETE /api/reports/schedules/:id`
+- `POST /api/reports/schedules/:id/run-now`
+- `GET /api/reports/schedules/:id/runs`
+- `GET /api/reports/delivery-log`
+- `GET /api/reports/saved-views`
+- `POST /api/reports/saved-views`
+- `PUT /api/reports/saved-views/:id`
+- `DELETE /api/reports/saved-views/:id`
+- `GET /api/reports/governance/definitions`
+- `POST /api/reports/governance/definitions`
 
 ---
 
-## Frontend Route Summary
+## Query Contract Standardization
 
-- Total declared routes: 63
+New report endpoints support a consistent optional query envelope:
+- `date_from`, `date_to`
+- `outlet_id`
+- `employee_id`
+- `category_id`
+- `limit`, `offset`
+- `sort`, `order`
 
-Tier 4 routes:
-- `/accounting`
-- `/crm`
-- `/quotations`
-- `/hr/leave`
-- `/hr/payroll`
-- `/company-settings`
+---
 
-Tier 2 placeholders still present:
-- `/lookup`
-- `/custom-fields`
-- `/partners`
-- `/shopcast`
+## Feature Flags Relevant to Reports
+
+- `reports_enhanced_filters`
+- `reports_profit_layer`
+- `reports_inventory_health_plus`
+- `reports_exceptions`
+- `reports_scheduled_exports`
+
+---
+
+## Frontend Route Notes
+
+- Reports redesign wrapper remains feature-flagged (`ui_redesign_reports`)
+- Existing report routes remain backward compatible
 
 ---
 
 ## Regeneration Commands
 
-If API or route counts change, refresh using:
+If API or route inventory changes, refresh with local extraction scripts and route scans:
 
 ```bash
-# Backend endpoint extract (writes backend/_endpoint_list.txt)
-# Use the local extraction script/workflow used during docs update
-
-# Frontend route extract
-node -e "const fs=require('fs');const t=fs.readFileSync('frontend/src/App.jsx','utf8');const re=/path\s*=\s*\"([^\"]+)\"/g;const s=new Set();let m;while((m=re.exec(t)))s.add(m[1]);console.log(s.size);console.log([...s].sort().join('\n'));"
+# Backend endpoint inventory (project workflow)
+# Frontend route inventory
+node -e "const fs=require('fs');const t=fs.readFileSync('frontend/src/App.jsx','utf8');const re=/path\s*=\s*\"([^\"]+)\"/g;const s=new Set();let m;while((m=re.exec(t)))s.add(m[1]);console.log([...s].sort().join('\n'));"
 ```

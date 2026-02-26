@@ -1,7 +1,7 @@
-﻿# OneShopPOS - Project Status
+# OneShopPOS - Project Status
 
-Last Updated: 2026-02-26  
-Current Phase: Tier 4 completed, Shopify go-live validation in progress  
+Last Updated: 2026-02-27  
+Current Phase: Reports Power-Up Phase 1 + Phase 2 implemented (feature-flagged)  
 System State: Operational
 
 ---
@@ -10,70 +10,66 @@ System State: Operational
 
 - Backend API: `http://localhost:5000`
 - Frontend app: `http://localhost:5173`
-- Latest migration in runner: `migrate46.js`
-- Feature flags include Tier 4 keys:
-  - `notifications`
-  - `accounting_core`
-  - `crm_quotations`
-  - `advanced_hr`
-  - `multi_company`
-
-Shopify current snapshot:
-- Connection: active (`one-toy-store-dev.myshopify.com`)
-- Location mappings: configured
-- Product mappings: configured (at least one active mapping)
-- Reconciliation: working (live rows generated and resolvable)
-- Outbound sync events: working (recent event processed successfully)
-- Inbound webhook sync: pending full validation (webhook secret/base URL setup still required)
+- Latest migration in runner: `migrate55.js`
+- Reports feature flags available:
+  - `reports_enhanced_filters`
+  - `reports_profit_layer`
+  - `reports_inventory_health_plus`
+  - `reports_exceptions`
+  - `reports_scheduled_exports`
 
 ---
 
-## Delivered Through Tier 4
+## Reports Power-Up Delivery
 
-- Tier 1: Completed
-- Tier 2: Not started (placeholder routes still present)
-- Tier 3: Mostly completed (`3.1` email receipts still pending)
-- Tier 4: Completed and smoke-tested end-to-end
+- Phase 1 completed:
+  - profit endpoints and widgets
+  - inventory health endpoints
+  - exceptions endpoint/panel
+  - shared report filters + export metadata
+- Phase 2 completed:
+  - forecasting and smart replenishment endpoints
+  - scheduled report packs (DB tables + worker + run logs)
+  - saved views
+  - governance/report definition versions
 
 ---
 
-## Tier 4 Deliverables (Completed)
+## New Reports APIs (Additive)
 
-- Notifications module
-  - API: `/api/notifications*`
-  - UI: bell dropdown in app header
-- Company profile module
-  - API: `/api/company-profile*`
-  - UI: `/company-settings`
-- Accounting module
-  - API: `/api/accounting*`
-  - UI: `/accounting`
-- Advanced HR module
-  - API: `/api/hr/leave*`, `/api/hr/payroll*`
-  - UI: `/hr/leave`, `/hr/payroll`
-- CRM and Quotations module
-  - API: `/api/crm*`, `/api/quotations*`
-  - UI: `/crm`, `/quotations`
+- `/api/reports/profit-summary`
+- `/api/reports/profit-by-product`
+- `/api/reports/profit-by-outlet`
+- `/api/reports/discount-leakage`
+- `/api/reports/dead-stock`
+- `/api/reports/stock-aging`
+- `/api/reports/stockout-risk`
+- `/api/reports/exceptions`
+- `/api/reports/forecast-demand`
+- `/api/reports/replenishment-smart`
+- `/api/reports/schedules*`
+- `/api/reports/delivery-log`
+- `/api/reports/saved-views*`
+- `/api/reports/governance/definitions*`
 
 ---
 
 ## Latest Verification
 
 - `npm run preflight`: PASS
-- `npm run test:e2e-full`: 69 passed, 0 failed
-- `npm run test:tier4-smoke`: 53 passed, 0 failed
-- `npm run test:shopify-utils`: PASS
-- `npm run test:shopify-mock`: PASS
+- `npm run test:e2e-full`: PASS
+- `npm run build` (frontend): PASS
+- Live endpoint checks with reports flags ON: PASS
 
 ---
 
-## Shopify Remaining (Go-Live)
+## Operational Hardening
 
-1. Configure webhook secret in POS Shopify config.
-2. Configure same webhook secret in Shopify admin webhook subscriptions.
-3. Use public HTTPS callback URL (`APP_PUBLIC_BASE_URL`) reachable by Shopify.
-4. Run live inbound webhook test and confirm `inbound_processed > 0`.
-5. Capture UAT evidence in `docs/TESTING.md` and `docs/SHOPIFY_LIVE_RUNBOOK.md`.
+- Report schedule worker runs every 60s (disable with `REPORT_SCHEDULE_WORKER_DISABLED=1`)
+- Retention cleanup runs daily:
+  - schedule runs (`REPORT_RUNS_RETENTION_DAYS`, default 45)
+  - delivery logs (`REPORT_DELIVERY_RETENTION_DAYS`, default 60)
+  - exported report files (`REPORT_EXPORT_FILES_RETENTION_DAYS`, default 30)
 
 ---
 
@@ -83,4 +79,4 @@ Shopify current snapshot:
 2. Run `node backend/run_migrations.js`
 3. Run `npm run preflight` in `backend/`
 4. Run `npm run test:e2e-full` in `backend/`
-5. Run `npm run test:tier4-smoke` in `backend/`
+5. Run `npm run test:reports-phase2` in `backend/`

@@ -1,35 +1,37 @@
-﻿# OneShopPOS Documentation Index
+# OneShopPOS Documentation Index
 
-This folder contains current project documentation.
+Last Updated: 2026-02-27
+
+This folder contains the active project documentation. Archive files under `docs/archive/` are historical snapshots and should not be treated as current operating state.
 
 ## Core Docs
 
-- `STATUS.md` - Current delivery/status snapshot
-- `project-full-overview.md` - High-level full project context
-- `IMPROVEMENT_PLAN.md` - Tiered roadmap with completion states
+- `STATUS.md` - Current delivery and runtime status
+- `TESTING.md` - Current automated/manual test baseline
+- `project-full-overview.md` - Product, architecture, and delivery summary
+- `IMPROVEMENT_PLAN.md` - Multi-tier roadmap and completion state
 
 ## Technical Docs
 
-- `ARCHITECTURE.md` - Runtime architecture and module map
-- `API_REFERENCE.md` - API/route summary and Tier 4 endpoint inventory
-- `TESTING.md` - Latest test baselines and commands
-- `REDESIGN_BASELINE.md` - Redesign rollout baseline contract
+- `ARCHITECTURE.md` - Runtime architecture, modules, workers, migrations
+- `API_REFERENCE.md` - API groups and key endpoint inventory
+- `REDESIGN_BASELINE.md` - Redesign contract and rollout guardrails
 - `REDESIGN_MODULE_DONE_CHECKLIST.md` - Per-module redesign completion gate
 
 ## Domain Docs
 
-- `SHOPIFY_ALIGNMENT_PLAN.md`
-- `SHOPIFY_SYNC_PLAN.md`
-- `SHOPIFY_LIVE_RUNBOOK.md`
-- `odoo.md`
-- `LEGACY_ARTIFACTS_POLICY.md`
-- `LEGACY_UI_REMOVAL_GUARDRAIL.md`
+- `reportsupdateplan.md` - Reports Power-Up plan plus implementation status
+- `SHOPIFY_SYNC_PLAN.md` - Shopify integration implementation and remaining gaps
+- `SHOPIFY_LIVE_RUNBOOK.md` - Live Shopify go-live runbook
+- `LEGACY_ARTIFACTS_POLICY.md` - Archive policy for non-runtime artifacts
+- `LEGACY_UI_REMOVAL_GUARDRAIL.md` - Safe delete guardrails for legacy UI
 
 ## Suggested Reading Order
 
 1. `STATUS.md`
-2. `project-full-overview.md`
-3. `IMPROVEMENT_PLAN.md`
+2. `TESTING.md`
+3. `project-full-overview.md`
 4. `ARCHITECTURE.md`
 5. `API_REFERENCE.md`
-6. `TESTING.md`
+6. `reportsupdateplan.md`
+7. `IMPROVEMENT_PLAN.md`

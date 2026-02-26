@@ -447,6 +447,11 @@ const DEFAULT_FEATURE_FLAGS = {
   ui_redesign_supplier_payables: false,
   ui_redesign_promotions: false,
   ui_redesign_expenses: false,
+  reports_enhanced_filters: false,
+  reports_profit_layer: false,
+  reports_inventory_health_plus: false,
+  reports_exceptions: false,
+  reports_scheduled_exports: false,
 };
 
 function getFeatureFlagsMap(cb) {
@@ -529,7 +534,8 @@ function notifyLowStockForSale(cartItems, outletId) {
 
 const runtimeState = { isRestoreInProgress: false };
 
-const { processPendingShopifyInventoryEvents } = registerAllRoutes(app, {
+const { processPendingShopifyInventoryEvents, processPendingReportSchedules } =
+  registerAllRoutes(app, {
   db,
   fs,
   path,
@@ -646,10 +652,77 @@ function cleanupSyncEvents() {
   );
 }
 
+function cleanupReportScheduleArtifacts() {
+  const runsRetentionDays = Math.max(
+    1,
+    Number(process.env.REPORT_RUNS_RETENTION_DAYS || 45),
+  );
+  const deliveryRetentionDays = Math.max(
+    1,
+    Number(process.env.REPORT_DELIVERY_RETENTION_DAYS || 60),
+  );
+  const filesRetentionDays = Math.max(
+    1,
+    Number(process.env.REPORT_EXPORT_FILES_RETENTION_DAYS || 30),
+  );
+  const runsCutoff = new Date(
+    Date.now() - runsRetentionDays * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const deliveryCutoff = new Date(
+    Date.now() - deliveryRetentionDays * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const exportsDir = path.resolve(__dirname, "exports", "reports");
+  const filesCutoffMs = Date.now() - filesRetentionDays * 24 * 60 * 60 * 1000;
+
+  db.run(
+    "DELETE FROM report_schedule_runs WHERE datetime(COALESCE(run_finished_at, run_started_at, created_at)) < datetime(?)",
+    [runsCutoff],
+    function (err) {
+      if (err) console.error("[ReportCleanup] run cleanup error:", err.message);
+      else if (this.changes > 0) {
+        console.log(`[ReportCleanup] Deleted ${this.changes} old schedule runs`);
+      }
+    },
+  );
+
+  db.run(
+    "DELETE FROM report_delivery_log WHERE datetime(created_at) < datetime(?)",
+    [deliveryCutoff],
+    function (err) {
+      if (err)
+        console.error("[ReportCleanup] delivery cleanup error:", err.message);
+      else if (this.changes > 0) {
+        console.log(`[ReportCleanup] Deleted ${this.changes} old delivery logs`);
+      }
+    },
+  );
+
+  if (!fs.existsSync(exportsDir)) return;
+  let deleted = 0;
+  for (const fileName of fs.readdirSync(exportsDir)) {
+    const filePath = path.join(exportsDir, fileName);
+    try {
+      const st = fs.statSync(filePath);
+      if (!st.isFile()) continue;
+      if (st.mtimeMs < filesCutoffMs) {
+        fs.unlinkSync(filePath);
+        deleted += 1;
+      }
+    } catch (e) {
+      console.error("[ReportCleanup] file cleanup error:", e.message);
+    }
+  }
+  if (deleted > 0) {
+    console.log(`[ReportCleanup] Deleted ${deleted} old export files`);
+  }
+}
+
 runAutoBackup();
 cleanupSyncEvents();
+cleanupReportScheduleArtifacts();
 setInterval(runAutoBackup, 24 * 60 * 60 * 1000);
 setInterval(cleanupSyncEvents, 24 * 60 * 60 * 1000);
+setInterval(cleanupReportScheduleArtifacts, 24 * 60 * 60 * 1000);
 
 // Start server
 app.listen(PORT, () => {
@@ -662,4 +735,12 @@ if (!SHOPIFY_WORKER_DISABLED) {
   setInterval(() => {
     processPendingShopifyInventoryEvents(20, () => {});
   }, 30000);
+}
+
+const REPORT_SCHEDULE_WORKER_DISABLED =
+  String(process.env.REPORT_SCHEDULE_WORKER_DISABLED || "0") === "1";
+if (!REPORT_SCHEDULE_WORKER_DISABLED) {
+  setInterval(() => {
+    processPendingReportSchedules(5, () => {});
+  }, 60000);
 }

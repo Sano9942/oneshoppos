@@ -1,10 +1,10 @@
-﻿# OneShopPOS - Testing Record
+# OneShopPOS - Testing Record
 
-Last Updated: 2026-02-26
+Last Updated: 2026-02-27
 
 ---
 
-## Latest Automated Baseline
+## Automated Baseline
 
 ### Core Regression
 
@@ -19,93 +19,58 @@ npm run test:e2e-full
 Result:
 
 - `npm run preflight`: PASS
-- `npm run test:e2e-full`: 69 passed, 0 failed
+- `npm run test:e2e-full`: PASS
 
-### Tier 4 Focused Smoke
+### Reports Phase 2 Verification
+
+Command:
+
+```bash
+cd backend
+npm run test:reports-phase2
+```
+
+Coverage:
+
+- enables required report feature flags
+- validates forecasting and smart replenishment endpoints
+- creates/runs schedule and validates run history + delivery log
+- validates saved views CRUD path
+- validates governance definition create/list path
+- performs cleanup of created schedule/view test records
+
+### Additional Suites
 
 Command:
 
 ```bash
 cd backend
 npm run test:tier4-smoke
-```
-
-Result:
-
-- 53 passed, 0 failed
-
-Covers:
-
-- Notifications endpoints
-- Company profile endpoints
-- Accounting endpoints
-- HR leave and payroll endpoints
-- CRM and quotations endpoints
-- Frontend Tier 4 route declarations
-- Frontend Tier 4 nav path declarations
-
----
-
-## Shopify Test Commands
-
-```bash
-cd backend
 npm run test:shopify-utils
 npm run test:shopify-mock
 ```
 
 Latest result:
 
+- `npm run test:tier4-smoke`: PASS
 - `npm run test:shopify-utils`: PASS
 - `npm run test:shopify-mock`: PASS
 
 ---
 
-## Shopify Live Validation Progress (2026-02-26)
-
-Completed in live environment:
-
-- Shopify connection verified and live locations fetched.
-- Location mapping configured from POS outlet(s) to Shopify location(s).
-- Product mapping created via live auto-suggestion + apply flow.
-- Live reconciliation run succeeded and rows were generated.
-- Reconciliation corrective flow tested (request/approve/resolve path functional).
-- Outbound event lifecycle validated:
-  - one earlier event reached `dead_letter` due to invalid historical payload
-  - subsequent event retried and reached `processed` after reason normalization fix
-
-Current gap before full go-live signoff:
-
-- Inbound webhook production validation is still pending:
-  - webhook secret must be configured in POS + Shopify
-  - public HTTPS callback URL must be configured/reachable
-  - webhook delivery must be observed as inbound processed event(s)
-
----
-
 ## Manual Smoke Checklist
 
-1. Login and confirm role-based menu visibility
-2. Create and complete a POS sale, then verify sales history
-3. Open and close a cash shift
-4. Confirm low-stock visibility in inventory/dashboard
-5. Inventory bulk-actions smoke:
-   - verify `GET /api/products` sorting/filter query params return `200`
-   - select multiple rows in inventory and run bulk status/category updates
-   - run bulk delete on test rows only and confirm list refresh
-   - export selected rows and verify CSV contains only selected ids
-6. Open Tier 4 routes and confirm page render:
-   - `/accounting`
-   - `/crm`
-   - `/quotations`
-   - `/hr/leave`
-   - `/hr/payroll`
-   - `/company-settings`
+1. Login and verify role-based menu visibility.
+2. Create and complete a POS sale, then verify sales history.
+3. Open and close a cash shift.
+4. Confirm low-stock visibility in inventory/dashboard.
+5. Validate report tabs with PKR formatting and filters.
+6. Validate schedule run-now from reports panel and confirm file output exists in `backend/exports/reports`.
 
 ---
 
 ## Known Gaps
 
-- No browser automation suite (Playwright/Cypress)
-- Limited unit test coverage outside Shopify helpers
-- Tier 3.1 email/SMS receipt flow still pending implementation and tests
+- No browser automation suite (Playwright/Cypress).
+- Limited unit test coverage outside key backend helpers.
+- Shopify inbound webhook live validation remains environment-dependent.

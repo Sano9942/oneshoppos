@@ -6,6 +6,7 @@
     "start": "node index.js",
     "preflight": "node preflight.js",
     "test:e2e-full": "node e2e_full_test.js",
+    "test:reports-phase2": "node reports_phase2_test.js",
     "test:tier4-smoke": "node tier4_smoke_test.js",
     "test:shopify-utils": "node shopify_utils_test.js",
     "test:shopify-mock": "node shopify_mock_integration_test.js",

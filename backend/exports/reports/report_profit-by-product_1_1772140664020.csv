@@ -1,0 +1,11 @@
+# generated_at: 2026-02-26T21:17:44.020Z
+# data_as_of: 2026-02-26T21:17:44.020Z
+# currency: PKR
+# filters_applied: {"date_from":"2026-01-01"}
+Product,Barcode,Revenue,COGS,Gross Profit
+"API Brand Test Item","BR-TEST-API","200","0","200"
+"Test Product","98765","160","0","160"
+"Coca Cola","12345","22.5","0","22.5"
+"Chocolate Bar","88888","32","10.5","21.5"
+"Sparkling Water 500ml","77777","10","4.8","5.2"
+"'20 Toyota GR Supra - Hot Wheels Speed Graphics","4645643123156","0","0","0"
