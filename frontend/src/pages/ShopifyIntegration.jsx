@@ -893,7 +893,7 @@ export default function ShopifyIntegration() {
         )}
         {mappingCounts.locations === 0 && config.connected && (
           <div className="px-4 py-2 bg-amber-50 border-t border-amber-100 text-xs text-amber-700">
-            No location mappings configured â€” click "Fetch Live Locations" then map each POS outlet to a Shopify location below.
+            No location mappings configured — click "Fetch Live Locations" then map each POS outlet to a Shopify location below.
           </div>
         )}
       </div>
@@ -1103,8 +1103,8 @@ export default function ShopifyIntegration() {
             {importingInventory ? "Syncing..." : "Sync Inventory Levels from Shopify"}
           </button>
           <p className="text-xs text-slate-400">
-            <strong>Import Products</strong> â€” creates new POS products for Shopify variants that have a barcode, updates existing ones, and sets stock from Shopify inventory levels.<br />
-            <strong>Sync Inventory</strong> â€” for already-mapped products, overwrites POS stock quantities with the current Shopify values.
+            <strong>Import Products</strong> — creates new POS products for Shopify variants that have a barcode, updates existing ones, and sets stock from Shopify inventory levels.<br />
+            <strong>Sync Inventory</strong> — for already-mapped products, overwrites POS stock quantities with the current Shopify values.
           </p>
           <div className="border-t border-slate-100 pt-3">
             <button

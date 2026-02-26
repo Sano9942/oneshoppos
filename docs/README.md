@@ -23,6 +23,7 @@ This folder contains current project documentation.
 - `SHOPIFY_LIVE_RUNBOOK.md`
 - `odoo.md`
 - `LEGACY_ARTIFACTS_POLICY.md`
+- `LEGACY_UI_REMOVAL_GUARDRAIL.md`
 
 ## Suggested Reading Order
 

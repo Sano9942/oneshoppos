@@ -2,7 +2,7 @@ import { BrowserRouter as Router, Navigate, Route, Routes } from "react-router-d
 import { useAuth } from "./auth/AuthProvider";
 import RequireAuth from "./components/RequireAuth";
 import RequirePerm from "./components/RequirePerm";
-import AppLayoutSwitch from "./components/AppLayoutSwitch";
+import AppLayoutRedesign from "./components/AppLayoutRedesign";
 import AccessDenied from "./pages/AccessDenied";
 import AdministratorRoute from "./pages/AdministratorRoute";
 import Approvals from "./pages/Approvals";
@@ -68,7 +68,7 @@ function App() {
         <Route
           element={
               <RequireAuth>
-              <AppLayoutSwitch />
+              <AppLayoutRedesign />
             </RequireAuth>
           }
         >

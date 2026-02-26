@@ -43,7 +43,7 @@ const fmtDate = (d) =>
         month: "short",
         day: "numeric",
       })
-    : "—";
+    : "�";
 const fmtDateTime = (d) =>
   d
     ? new Date(d).toLocaleString(undefined, {
@@ -53,9 +53,9 @@ const fmtDateTime = (d) =>
         hour: "2-digit",
         minute: "2-digit",
       })
-    : "—";
+    : "�";
 
-// ─── CSV Export Utilities ─────────────────────────────────────────────────────
+// --- CSV Export Utilities -----------------------------------------------------
 
 const exportCSV = (filename, cols, rows) => {
   const headers = cols.map((c) => (typeof c === "string" ? c : c.header));
@@ -91,7 +91,7 @@ function ExportButton({ onClick }) {
   );
 }
 
-// ─── Shared UI Helpers ────────────────────────────────────────────────────────
+// --- Shared UI Helpers --------------------------------------------------------
 
 function TableShell({
   cols,
@@ -215,7 +215,7 @@ function CardShell({ title, subtitle, action, children }) {
   );
 }
 
-// ─── Tab: Overview Dashboard ──────────────────────────────────────────────────
+// --- Tab: Overview Dashboard --------------------------------------------------
 
 function OverviewTab() {
   const [data, setData] = useState(null);
@@ -401,7 +401,7 @@ function OverviewTab() {
   );
 }
 
-// ─── Tab: Sales Summary ───────────────────────────────────────────────────────
+// --- Tab: Sales Summary -------------------------------------------------------
 
 function SalesSummaryTab() {
   const [rows, setRows] = useState([]);
@@ -555,7 +555,7 @@ function SalesSummaryTab() {
 
       <CardShell
         title="Sales Summary"
-        subtitle={`${rows.length} sale${rows.length !== 1 ? "s" : ""} · Total: ${fmt(total)}`}
+        subtitle={`${rows.length} sale${rows.length !== 1 ? "s" : ""} � Total: ${fmt(total)}`}
         action={
           <ExportButton
             onClick={() =>
@@ -616,7 +616,7 @@ function SalesSummaryTab() {
   );
 }
 
-// ─── Tab: Sales Detail ────────────────────────────────────────────────────────
+// --- Tab: Sales Detail --------------------------------------------------------
 
 function SalesDetailTab() {
   const [rows, setRows] = useState([]);
@@ -661,7 +661,7 @@ function SalesDetailTab() {
       />
       <CardShell
         title="Sales Detail"
-        subtitle={`${rows.length} line item${rows.length !== 1 ? "s" : ""} · Revenue: ${fmt(totalRevenue)}`}
+        subtitle={`${rows.length} line item${rows.length !== 1 ? "s" : ""} � Revenue: ${fmt(totalRevenue)}`}
         action={
           <ExportButton
             onClick={() =>
@@ -734,7 +734,7 @@ function SalesDetailTab() {
   );
 }
 
-// ─── Tab: Sales & Stock ───────────────────────────────────────────────────────
+// --- Tab: Sales & Stock -------------------------------------------------------
 
 function SalesStockTab() {
   const [rows, setRows] = useState([]);
@@ -795,7 +795,7 @@ function SalesStockTab() {
   );
 }
 
-// ─── Tab: Inventory Dump ──────────────────────────────────────────────────────
+// --- Tab: Inventory Dump ------------------------------------------------------
 
 function InventoryDumpTab() {
   const [rows, setRows] = useState([]);
@@ -849,7 +849,7 @@ function InventoryDumpTab() {
       </div>
       <CardShell
         title="Inventory Dump"
-        subtitle={`${rows.length} records · Retail Value: ${fmt(totalRetail)} · Cost Value: ${fmt(totalCost)}`}
+        subtitle={`${rows.length} records � Retail Value: ${fmt(totalRetail)} � Cost Value: ${fmt(totalCost)}`}
         action={
           <ExportButton
             onClick={() =>
@@ -924,7 +924,7 @@ function InventoryDumpTab() {
   );
 }
 
-// ─── Tab: Category Wise ───────────────────────────────────────────────────────
+// --- Tab: Category Wise -------------------------------------------------------
 
 function CategoryWiseTab() {
   const [rows, setRows] = useState([]);
@@ -1025,7 +1025,7 @@ function CategoryWiseTab() {
   );
 }
 
-// ─── Tab: Customer Details ────────────────────────────────────────────────────
+// --- Tab: Customer Details ----------------------------------------------------
 
 function CustomerDetailsTab() {
   const [rows, setRows] = useState([]);
@@ -1115,10 +1115,10 @@ function CustomerDetailsTab() {
               </span>
             </td>
             <td className="p-4 text-sm text-slate-600">
-              {c.mobile || <span className="italic text-slate-400">—</span>}
+              {c.mobile || <span className="italic text-slate-400">�</span>}
             </td>
             <td className="p-4 text-sm text-slate-600">
-              {c.email || <span className="italic text-slate-400">—</span>}
+              {c.email || <span className="italic text-slate-400">�</span>}
             </td>
           </tr>
         ))}
@@ -1127,7 +1127,7 @@ function CustomerDetailsTab() {
   );
 }
 
-// ─── Tab: Customer Wise ───────────────────────────────────────────────────────
+// --- Tab: Customer Wise -------------------------------------------------------
 
 function CustomerWiseTab() {
   const [rows, setRows] = useState([]);
@@ -1180,7 +1180,7 @@ function CustomerWiseTab() {
   );
 }
 
-// ─── Tab: Order Wise ──────────────────────────────────────────────────────────
+// --- Tab: Order Wise ----------------------------------------------------------
 
 function OrderWiseTab() {
   const [rows, setRows] = useState([]);
@@ -1226,7 +1226,7 @@ function OrderWiseTab() {
       />
       <CardShell
         title="Order Wise Report"
-        subtitle={`${rows.length} order${rows.length !== 1 ? "s" : ""} — Excl. Tax ${fmt(totalExcl)} · Incl. Tax ${fmt(totalIncl)}`}
+        subtitle={`${rows.length} order${rows.length !== 1 ? "s" : ""} � Excl. Tax ${fmt(totalExcl)} � Incl. Tax ${fmt(totalIncl)}`}
         action={
           <ExportButton
             onClick={() =>
@@ -1280,7 +1280,7 @@ function OrderWiseTab() {
                     -{fmt(r.discount_amount)}
                   </span>
                 ) : (
-                  <span className="text-slate-400">—</span>
+                  <span className="text-slate-400">�</span>
                 )}
               </td>
               <td className="p-4 text-right font-bold text-slate-900">
@@ -1295,7 +1295,7 @@ function OrderWiseTab() {
   );
 }
 
-// ─── Tab: Item Wise ───────────────────────────────────────────────────────────
+// --- Tab: Item Wise -----------------------------------------------------------
 
 function ItemWiseTab() {
   const [rows, setRows] = useState([]);
@@ -1335,7 +1335,7 @@ function ItemWiseTab() {
       />
       <CardShell
         title="Item Wise Report"
-        subtitle={`${rows.length} product${rows.length !== 1 ? "s" : ""} · Revenue: ${fmt(totalRevenue)} · Profit: ${fmt(totalProfit)}`}
+        subtitle={`${rows.length} product${rows.length !== 1 ? "s" : ""} � Revenue: ${fmt(totalRevenue)} � Profit: ${fmt(totalProfit)}`}
         action={
           <ExportButton
             onClick={() =>
@@ -1400,7 +1400,7 @@ function ItemWiseTab() {
   );
 }
 
-// ─── Tab: Product Performance ─────────────────────────────────────────────────
+// --- Tab: Product Performance -------------------------------------------------
 
 function ProductPerformanceTab() {
   const [rows, setRows] = useState([]);
@@ -1489,7 +1489,7 @@ function ProductPerformanceTab() {
   );
 }
 
-// ─── Tab: Product Specification ───────────────────────────────────────────────
+// --- Tab: Product Specification -----------------------------------------------
 
 function ProductSpecTab() {
   const [rows, setRows] = useState([]);
@@ -1591,7 +1591,7 @@ function ProductSpecTab() {
   );
 }
 
-// ─── Tab: On Hand Inventory ───────────────────────────────────────────────────
+// --- Tab: On Hand Inventory ---------------------------------------------------
 
 function OnHandTab() {
   const [rows, setRows] = useState([]);
@@ -1644,7 +1644,7 @@ function OnHandTab() {
       </div>
       <CardShell
         title="On Hand Inventory"
-        subtitle={`${rows.length} records · Retail Value: ${fmt(totalRetail)}`}
+        subtitle={`${rows.length} records � Retail Value: ${fmt(totalRetail)}`}
         action={
           <ExportButton
             onClick={() =>
@@ -1717,7 +1717,7 @@ function OnHandTab() {
   );
 }
 
-// ─── Tab: Inventory Loss ──────────────────────────────────────────────────────
+// --- Tab: Inventory Loss ------------------------------------------------------
 
 function InventoryLossTab() {
   const [rows, setRows] = useState([]);
@@ -1756,7 +1756,7 @@ function InventoryLossTab() {
       />
       <CardShell
         title="Inventory Loss"
-        subtitle={`${rows.length} adjustment${rows.length !== 1 ? "s" : ""} · Total units lost: ${totalLoss}`}
+        subtitle={`${rows.length} adjustment${rows.length !== 1 ? "s" : ""} � Total units lost: ${totalLoss}`}
       >
         <TableShell
           cols={[
@@ -1797,7 +1797,7 @@ function InventoryLossTab() {
   );
 }
 
-// ─── Tab: Wastage ─────────────────────────────────────────────────────────────
+// --- Tab: Wastage -------------------------------------------------------------
 
 function WastageTab() {
   const [rows, setRows] = useState([]);
@@ -1882,7 +1882,7 @@ function WastageTab() {
   );
 }
 
-// ─── Tab: Product Movement ────────────────────────────────────────────────────
+// --- Tab: Product Movement ----------------------------------------------------
 
 function ProductMovementTab() {
   const [rows, setRows] = useState([]);
@@ -1929,10 +1929,10 @@ function ProductMovementTab() {
               </span>
             </td>
             <td className="p-4 text-sm text-slate-600">
-              {r.employee_name || "—"}
+              {r.employee_name || "�"}
             </td>
             <td className="p-4 text-sm text-slate-500 italic">
-              {r.note || "—"}
+              {r.note || "�"}
             </td>
           </tr>
         ))}
@@ -1941,7 +1941,7 @@ function ProductMovementTab() {
   );
 }
 
-// ─── Tab: STR Report ──────────────────────────────────────────────────────────
+// --- Tab: STR Report ----------------------------------------------------------
 
 function STRReportTab() {
   const [rows, setRows] = useState([]);
@@ -1980,7 +1980,7 @@ function STRReportTab() {
         search={search}
       />
       <CardShell
-        title="STR Report — Stock Transfer"
+        title="STR Report � Stock Transfer"
         subtitle={`${rows.length} transfer${rows.length !== 1 ? "s" : ""}`}
       >
         <TableShell
@@ -2019,10 +2019,10 @@ function STRReportTab() {
                 </span>
               </td>
               <td className="p-4 text-sm text-slate-600">
-                {r.employee_name || "—"}
+                {r.employee_name || "�"}
               </td>
               <td className="p-4 text-sm text-slate-500 italic">
-                {r.note || "—"}
+                {r.note || "�"}
               </td>
             </tr>
           ))}
@@ -2032,7 +2032,7 @@ function STRReportTab() {
   );
 }
 
-// ─── Tab: Replenishment ───────────────────────────────────────────────────────
+// --- Tab: Replenishment -------------------------------------------------------
 
 function ReplenishmentTab() {
   const [rows, setRows] = useState([]);
@@ -2058,7 +2058,7 @@ function ReplenishmentTab() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Group items by supplier → one Draft PO per supplier
+  // Group items by supplier ? one Draft PO per supplier
   const handleCreateDraftPOs = async () => {
     const withSupplier = rows.filter((r) => r.supplier_id);
     if (!withSupplier.length) {
@@ -2119,7 +2119,7 @@ function ReplenishmentTab() {
             className="ml-auto flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
           >
             <ShoppingCart size={13} />
-            {drafting ? "Creating…" : `Create Draft POs (${suppliersWithItems} supplier${suppliersWithItems !== 1 ? "s" : ""})`}
+            {drafting ? "Creating�" : `Create Draft POs (${suppliersWithItems} supplier${suppliersWithItems !== 1 ? "s" : ""})`}
           </button>
         )}
       </div>
@@ -2131,7 +2131,7 @@ function ReplenishmentTab() {
             {draftResult.error ? draftResult.error : (
               <>
                 {draftResult.created.length > 0 && <p><strong>Draft POs created</strong> for: {draftResult.created.join(", ")}</p>}
-                {draftResult.failed.length > 0 && <p className="text-rose-600 mt-1">Failed: {draftResult.failed.join(", ")} — check permissions</p>}
+                {draftResult.failed.length > 0 && <p className="text-rose-600 mt-1">Failed: {draftResult.failed.join(", ")} � check permissions</p>}
               </>
             )}
           </div>
@@ -2140,7 +2140,7 @@ function ReplenishmentTab() {
 
       <CardShell
         title="Replenishment Report"
-        subtitle={`${rows.length} product${rows.length !== 1 ? "s" : ""} need restocking (≤ ${threshold} units)`}
+        subtitle={`${rows.length} product${rows.length !== 1 ? "s" : ""} need restocking (= ${threshold} units)`}
       >
         <TableShell
           cols={["Product", "Barcode", "Supplier", "Outlet", "Qty on Hand", "Reorder Qty", "Status"]}
@@ -2178,7 +2178,7 @@ function ReplenishmentTab() {
   );
 }
 
-// ─── Tab: Supplier Wise ───────────────────────────────────────────────────────
+// --- Tab: Supplier Wise -------------------------------------------------------
 
 function SupplierWiseTab() {
   const [rows, setRows] = useState([]);
@@ -2216,9 +2216,9 @@ function SupplierWiseTab() {
               {r.supplier_name}
             </td>
             <td className="p-4 text-sm text-slate-600">
-              {r.contact_person || "—"}
+              {r.contact_person || "�"}
             </td>
-            <td className="p-4 text-sm text-slate-600">{r.phone || "—"}</td>
+            <td className="p-4 text-sm text-slate-600">{r.phone || "�"}</td>
             <td className="p-4 text-center">
               <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold">
                 {r.total_pos}
@@ -2237,7 +2237,7 @@ function SupplierWiseTab() {
   );
 }
 
-// ─── Tab: Purchase Orders Report ──────────────────────────────────────────────
+// --- Tab: Purchase Orders Report ----------------------------------------------
 
 function PurchaseOrdersReportTab() {
   const [rows, setRows] = useState([]);
@@ -2297,7 +2297,7 @@ function PurchaseOrdersReportTab() {
   );
 }
 
-// ─── GRN Report Tab ───────────────────────────────────────────────────────────
+// --- GRN Report Tab -----------------------------------------------------------
 
 function GRNReportTab() {
   const [rows, setRows] = useState([]);
@@ -2362,14 +2362,14 @@ function GRNReportTab() {
                 {fmtDate(r.received_at)}
               </td>
               <td className="p-4 font-mono text-slate-700">
-                {r.po_number || "—"}
+                {r.po_number || "�"}
               </td>
               <td className="p-4 font-medium text-slate-800">
-                {r.supplier_name || "—"}
+                {r.supplier_name || "�"}
               </td>
-              <td className="p-4 text-slate-600">{r.outlet_name || "—"}</td>
+              <td className="p-4 text-slate-600">{r.outlet_name || "�"}</td>
               <td className="p-4 text-slate-600">
-                {r.received_by_name || "—"}
+                {r.received_by_name || "�"}
               </td>
               <td className="p-4 text-center">
                 <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold">
@@ -2384,7 +2384,7 @@ function GRNReportTab() {
   );
 }
 
-// ─── Attendance Tab ───────────────────────────────────────────────────────────
+// --- Attendance Tab -----------------------------------------------------------
 
 function AttendanceTab() {
   const today = new Date().toISOString().slice(0, 10);
@@ -2431,7 +2431,7 @@ function AttendanceTab() {
           hour: "2-digit",
           minute: "2-digit",
         })
-      : "—";
+      : "�";
 
   return (
     <CardShell title="Attendance Report" icon={Clock}>
@@ -2494,7 +2494,7 @@ function AttendanceTab() {
               {fmtTime(r.check_out)}
             </td>
             <td className="px-4 py-3 font-semibold text-slate-800 whitespace-nowrap">
-              {r.hours != null ? `${r.hours.toFixed(2)}h` : "—"}
+              {r.hours != null ? `${r.hours.toFixed(2)}h` : "�"}
             </td>
             <td className="px-4 py-3">
               <span
@@ -2514,7 +2514,7 @@ function AttendanceTab() {
   );
 }
 
-// ─── Tab: Outlet Comparison ───────────────────────────────────────────────────
+// --- Tab: Outlet Comparison ---------------------------------------------------
 
 function OutletComparisonTab() {
   const [outlets, setOutlets] = useState([]);
@@ -2571,7 +2571,7 @@ function OutletComparisonTab() {
 
       <CardShell
         title="Outlet Comparison"
-        subtitle={`${outlets.length} outlet${outlets.length !== 1 ? "s" : ""} · Total Revenue: ${fmt(totalRevenue)}`}
+        subtitle={`${outlets.length} outlet${outlets.length !== 1 ? "s" : ""} � Total Revenue: ${fmt(totalRevenue)}`}
         action={
           <ExportButton
             onClick={() =>
@@ -2614,7 +2614,7 @@ function OutletComparisonTab() {
   );
 }
 
-// ─── Tab: Customer RFM Segmentation ───────────────────────────────────────────
+// --- Tab: Customer RFM Segmentation -------------------------------------------
 
 const RFM_SEGMENTS = {
   Champions:          { color: "bg-emerald-100 text-emerald-800", desc: "Buy recently, often, and spend the most" },
@@ -2622,8 +2622,8 @@ const RFM_SEGMENTS = {
   "Potential Loyalist":{ color: "bg-sky-100 text-sky-800",        desc: "Recent buyers, starting to buy more" },
   "New Customer":     { color: "bg-teal-100 text-teal-800",       desc: "Bought recently for the first time" },
   "Need Attention":   { color: "bg-yellow-100 text-yellow-800",   desc: "Were good, but activity slowing" },
-  "At Risk":          { color: "bg-orange-100 text-orange-800",   desc: "Used to buy often — haven't returned" },
-  "Can't Lose Them":  { color: "bg-rose-100 text-rose-800",       desc: "High-value, now dormant — act fast" },
+  "At Risk":          { color: "bg-orange-100 text-orange-800",   desc: "Used to buy often � haven't returned" },
+  "Can't Lose Them":  { color: "bg-rose-100 text-rose-800",       desc: "High-value, now dormant � act fast" },
   "About to Sleep":   { color: "bg-slate-100 text-slate-700",     desc: "Low engagement, fading" },
   "Lost":             { color: "bg-gray-100 text-gray-600",       desc: "Inactive, minimal engagement" },
 };
@@ -2707,7 +2707,7 @@ function CustomerRFMTab() {
 
       <CardShell
         title="Customer RFM Analysis"
-        subtitle={`${filtered.length} customer${filtered.length !== 1 ? "s" : ""}${filterSeg ? ` · Filtered: ${filterSeg}` : ""} · Recency / Frequency scoring (1=low, 5=high)`}
+        subtitle={`${filtered.length} customer${filtered.length !== 1 ? "s" : ""}${filterSeg ? ` � Filtered: ${filterSeg}` : ""} � Recency / Frequency scoring (1=low, 5=high)`}
         action={
           <div className="flex items-center gap-2">
             {filterSeg && (
@@ -2776,7 +2776,7 @@ function CustomerRFMTab() {
   );
 }
 
-// ─── Main Reports Page ────────────────────────────────────────────────────────
+// --- Main Reports Page --------------------------------------------------------
 
 const GROUPS = [
   {
@@ -2921,7 +2921,7 @@ export default function Reports() {
         </p>
       </div>
 
-      {/* Grouped Tab Bar — horizontally scrollable */}
+      {/* Grouped Tab Bar � horizontally scrollable */}
       <div className="overflow-x-auto shrink-0">
         <div className="flex gap-4 min-w-max pb-1">
           {GROUPS.map((group) => (

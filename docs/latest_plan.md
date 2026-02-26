@@ -236,3 +236,33 @@ Each wave closes only after:
 4. Tailwind + internal design system is the chosen stack.
 5. Rollout is phased with module-level feature flags.
 6. Inventory is the pilot module and reference pattern for all subsequent table-heavy screens.
+
+---
+
+## Incident Resolution Update (2026-02-27)
+
+Context:
+- Legacy page cleanup was interrupted when the agent/editor session became unresponsive mid-delete sequence.
+- Forensic capture was recorded at:
+  - `docs/archive/legacy-ui-cleanup-incident-2026-02-27_001049.md`
+
+Resolved findings:
+1. Root cause pattern: route-surface legacy pages were bulk-deleted while a small set of redesign pages still depended on retained legacy logic files.
+2. Current dependency truth:
+   - Retained logic dependencies in redesign layer:
+     - `AccountingRedesign -> ../Accounting`
+     - `ReportsRedesign -> ../Reports`
+     - `SalesHistoryRedesign -> ../InvoiceView`
+     - `ShopifyIntegrationRedesign -> ../ShopifyIntegration`
+3. Import-graph safety check passed for deleted route-surface pages:
+   - No deleted `frontend/src/pages/*.jsx` candidate is imported via `./<Page>` or `../<Page>` in `frontend/src`.
+4. Build gate passed:
+   - `frontend`: `npm run build`
+5. Manual route smoke remains required before final release signoff:
+   - `/dashboard`, `/inventory`, `/reports`, `/accounting`, `/sales-history`, `/integrations/shopify`
+
+Deletion criteria now locked:
+1. Delete only files that are both:
+   - route-surface legacy pages, and
+   - unreferenced by import graph.
+2. Do not delete retained legacy logic dependencies until redesign wrappers are refactored to remove those imports.
