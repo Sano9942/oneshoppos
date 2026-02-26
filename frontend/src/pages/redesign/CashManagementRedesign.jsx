@@ -15,7 +15,7 @@ import { Calculator, Download, RefreshCw } from "lucide-react";
 const DENOMS = [5000, 1000, 500, 100, 50, 20, 10, 5, 2, 1];
 
 function money(v) {
-  return `$${Number(v || 0).toFixed(2)}`;
+  return `PKRs ${Number(v || 0).toFixed(2)}`;
 }
 
 function fmtDate(ts) {

@@ -25,7 +25,7 @@ const EMPTY = {
 };
 
 function money(n) {
-  return `$${Number(n || 0).toFixed(2)}`;
+  return `PKRs ${Number(n || 0).toFixed(2)}`;
 }
 
 function exportCsv(rows) {

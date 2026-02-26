@@ -11,10 +11,11 @@ import {
   TableToolbar,
 } from "../../ui/primitives";
 import { API_BASE as API } from "../../config";
+import { useAuth } from "../../auth/AuthProvider";
 import { ArrowLeftRight, Plus, Search } from "lucide-react";
 
 function money(v) {
-  return `$${Number(v || 0).toFixed(2)}`;
+  return `PKRs ${Number(v || 0).toFixed(2)}`;
 }
 
 function fmtDate(ts) {
@@ -23,6 +24,7 @@ function fmtDate(ts) {
 
 export default function ReturnsRedesign() {
   const location = useLocation();
+  const { authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -60,7 +62,7 @@ export default function ReturnsRedesign() {
       const qs = new URLSearchParams();
       if (dateFrom) qs.set("date_from", dateFrom);
       if (dateTo) qs.set("date_to", dateTo);
-      const res = await fetch(`${API}/api/returns?${qs.toString()}`);
+      const res = await fetch(`${API}/api/returns?${qs.toString()}`, { headers: authHeaders() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load returns");
       setRows(data.returns || []);
@@ -74,8 +76,8 @@ export default function ReturnsRedesign() {
   const loadBootstrap = async () => {
     try {
       const [outRes, empRes] = await Promise.all([
-        fetch(`${API}/api/outlets`),
-        fetch(`${API}/api/employees`),
+        fetch(`${API}/api/outlets`, { headers: authHeaders() }),
+        fetch(`${API}/api/employees`, { headers: authHeaders() }),
       ]);
       const outData = await outRes.json();
       const empData = await empRes.json();
@@ -136,40 +138,67 @@ export default function ReturnsRedesign() {
     }
   };
 
+  const addProductToItems = (product) => {
+    setItems((prev) => {
+      const idx = prev.findIndex((x) => x.product_id === product.id);
+      if (idx >= 0) {
+        return prev.map((x, i) =>
+          i === idx ? { ...x, quantity: x.quantity + 1 } : x,
+        );
+      }
+      return [
+        {
+          product_id: product.id,
+          name: product.name,
+          barcode: product.barcode,
+          quantity: 1,
+          refund_price: Number(product.price || 0),
+        },
+        ...prev,
+      ];
+    });
+    setBarcodeInput("");
+    setSearchResults([]);
+  };
+
+  const [searchResults, setSearchResults] = useState([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+
   const scanToDraft = async (e) => {
     e.preventDefault();
     if (!barcodeInput.trim()) return;
     setBarcodeError("");
     try {
       const outletParam = form.outlet_id ? `?outlet_id=${form.outlet_id}` : "";
-      const res = await fetch(`${API}/api/products/scan/${encodeURIComponent(barcodeInput)}${outletParam}`);
+      const res = await fetch(
+        `${API}/api/products/scan/${encodeURIComponent(barcodeInput)}${outletParam}`,
+        { headers: authHeaders() },
+      );
       const data = await res.json();
       if (!res.ok) {
         setBarcodeError(data.error || "Product not found");
         return;
       }
-      const product = data.product;
-      setItems((prev) => {
-        const idx = prev.findIndex((x) => x.product_id === product.id);
-        if (idx >= 0) {
-          return prev.map((x, i) =>
-            i === idx ? { ...x, quantity: x.quantity + 1 } : x,
-          );
-        }
-        return [
-          {
-            product_id: product.id,
-            name: product.name,
-            barcode: product.barcode,
-            quantity: 1,
-            refund_price: Number(product.price || 0),
-          },
-          ...prev,
-        ];
-      });
-      setBarcodeInput("");
+      addProductToItems(data.product);
     } catch {
       setBarcodeError("Failed to scan item");
+    }
+  };
+
+  const searchProducts = async (query) => {
+    setBarcodeInput(query);
+    if (!query.trim()) { setSearchResults([]); setShowSearchResults(false); return; }
+    try {
+      const outletParam = form.outlet_id ? `&outlet_id=${form.outlet_id}` : "";
+      const res = await fetch(
+        `${API}/api/products/search?query=${encodeURIComponent(query)}${outletParam}`,
+        { headers: authHeaders() },
+      );
+      const data = await res.json();
+      setSearchResults(data.products || []);
+      setShowSearchResults(true);
+    } catch {
+      setSearchResults([]);
     }
   };
 
@@ -361,9 +390,25 @@ export default function ReturnsRedesign() {
                       ref={barcodeRef}
                       className="pl-8"
                       value={barcodeInput}
-                      onChange={(e) => setBarcodeInput(e.target.value)}
-                      placeholder="Scan barcode / SKU to add returned item"
+                      onChange={(e) => searchProducts(e.target.value)}
+                      onBlur={() => setTimeout(() => setShowSearchResults(false), 150)}
+                      placeholder="Search by name, barcode or SKU"
                     />
+                    {showSearchResults && searchResults.length > 0 ? (
+                      <div className="absolute left-0 right-0 top-9 z-20 max-h-52 overflow-auto rounded border border-[var(--ui-border)] bg-white shadow-lg">
+                        {searchResults.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className="block w-full border-b border-[var(--ui-border)] px-3 py-2 text-left text-sm hover:bg-[var(--ui-muted-surface)]"
+                            onMouseDown={() => addProductToItems(p)}
+                          >
+                            <p className="font-medium text-[var(--ui-text)]">{p.name}</p>
+                            <p className="text-xs text-[var(--ui-text-muted)]">{p.barcode || p.sku || "-"} | PKRs {Number(p.price || 0).toFixed(2)}</p>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                   {barcodeError ? <p className="mt-1 text-xs text-rose-700">{barcodeError}</p> : null}
                 </form>

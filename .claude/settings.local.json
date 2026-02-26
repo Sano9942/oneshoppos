@@ -8,7 +8,9 @@
       "Bash(cd:*)",
       "Bash(done)",
       "Bash(tail:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(test -f \"d:/newprojects/oneshoppos/backend/migrate53.js\")",
+      "Bash(test -f \"d:/newprojects/oneshoppos/backend/migrate54.js\")"
     ]
   }
 }

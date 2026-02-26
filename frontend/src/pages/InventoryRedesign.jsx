@@ -18,10 +18,10 @@ const PAGE_SIZE = 50;
 
 const BLANK_FORM = {
   name: "", barcode: "", sku: "", price: "", cost_price: "",
-  stock: "", category_id: "", status: "active", unit: "pcs",
+  stock: "", category_id: "", brand_id: "", status: "active", unit: "pcs",
 };
 
-function ProductModal({ product, categories, authHeaders, onClose, onSaved }) {
+function ProductModal({ product, categories, brands, authHeaders, onClose, onSaved }) {
   const isEdit = Boolean(product);
   const [form, setForm] = useState(
     isEdit
@@ -33,6 +33,7 @@ function ProductModal({ product, categories, authHeaders, onClose, onSaved }) {
           cost_price: product.cost_price ?? "",
           stock: product.total_stock ?? "",
           category_id: product.category_id || "",
+          brand_id: product.brand_id || "",
           status: product.status || "active",
           unit: product.unit || "pcs",
         }
@@ -40,6 +41,15 @@ function ProductModal({ product, categories, authHeaders, onClose, onSaved }) {
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [outletStock, setOutletStock] = useState([]);
+
+  useEffect(() => {
+    if (!isEdit || !product?.id) return;
+    fetch(`${API}/api/products/${product.id}/outlet-stock`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((d) => setOutletStock(d.outletStock || []))
+      .catch(() => setOutletStock([]));
+  }, [isEdit, product?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const upd = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -63,6 +73,7 @@ function ProductModal({ product, categories, authHeaders, onClose, onSaved }) {
           cost_price: form.cost_price !== "" ? Number(form.cost_price) : 0,
           stock: form.stock !== "" ? Number(form.stock) : 0,
           category_id: form.category_id || null,
+          brand_id: form.brand_id || null,
         }),
       });
       const data = await res.json();
@@ -130,6 +141,13 @@ function ProductModal({ product, categories, authHeaders, onClose, onSaved }) {
               </Select>
             </div>
             <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Brand</label>
+              <Select value={form.brand_id} onChange={(e) => upd("brand_id", e.target.value)}>
+                <option value="">No brand</option>
+                {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-[var(--ui-text-muted)]">Status</label>
               <Select value={form.status} onChange={(e) => upd("status", e.target.value)}>
                 <option value="active">Active</option>
@@ -138,6 +156,19 @@ function ProductModal({ product, categories, authHeaders, onClose, onSaved }) {
               </Select>
             </div>
           </div>
+          {isEdit && outletStock.length > 0 && (
+            <div className="rounded-lg border border-[var(--ui-border)] p-3">
+              <p className="mb-2 text-xs font-semibold uppercase text-[var(--ui-text-muted)]">Stock by Location</p>
+              <div className="space-y-1">
+                {outletStock.map((os) => (
+                  <div key={os.outlet_id} className="flex items-center justify-between text-sm">
+                    <span className="text-[var(--ui-text)]">{os.outlet_name}</span>
+                    <span className="font-semibold text-[var(--ui-text)]">{os.quantity} pcs</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex justify-end gap-2 border-t border-[var(--ui-border)] pt-3">
             <Button type="button" onClick={onClose} disabled={saving}>Cancel</Button>
             <Button tone="primary" type="submit" disabled={saving}>
@@ -170,6 +201,8 @@ export default function InventoryRedesign() {
   const { authHeaders } = useAuth();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
+  const [outlets, setOutlets] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [bulkWorking, setBulkWorking] = useState(false);
@@ -177,6 +210,7 @@ export default function InventoryRedesign() {
   const [sortField, setSortField] = useState("name");
   const [sortOrder, setSortOrder] = useState("asc");
   const [status, setStatus] = useState("");
+  const [outletFilter, setOutletFilter] = useState("");
   const [modalProduct, setModalProduct] = useState(undefined); // undefined=closed, null=new, object=edit
   const [categoryId, setCategoryId] = useState("");
   const [bulkCategoryTarget, setBulkCategoryTarget] = useState("");
@@ -189,6 +223,7 @@ export default function InventoryRedesign() {
       if (search) qs.set("search", search);
       if (status) qs.set("status", status);
       if (categoryId) qs.set("category_id", categoryId);
+      if (outletFilter) qs.set("outlet_id", outletFilter);
       qs.set("sort", sortField);
       qs.set("order", sortOrder);
       const res = await fetch(`${API}/api/products?${qs}`, {
@@ -207,9 +242,17 @@ export default function InventoryRedesign() {
 
   const fetchCategories = async () => {
     try {
-      const res = await fetch(`${API}/api/categories`, { headers: authHeaders() });
-      const data = await res.json();
-      setCategories(data.categories || []);
+      const [catRes, brandRes, outletRes] = await Promise.all([
+        fetch(`${API}/api/categories`, { headers: authHeaders() }),
+        fetch(`${API}/api/brands`, { headers: authHeaders() }),
+        fetch(`${API}/api/outlets`, { headers: authHeaders() }),
+      ]);
+      const catData = await catRes.json();
+      const brandData = await brandRes.json();
+      const outletData = await outletRes.json();
+      setCategories(catData.categories || []);
+      setBrands(brandData.brands || []);
+      setOutlets(outletData.outlets || []);
     } catch (err) {
       console.error(err);
     }
@@ -222,7 +265,7 @@ export default function InventoryRedesign() {
   useEffect(() => {
     const t = setTimeout(fetchProducts, search ? 250 : 0);
     return () => clearTimeout(t);
-  }, [search, sortField, sortOrder, status, categoryId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, sortField, sortOrder, status, categoryId, outletFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalPages = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
   const paged = useMemo(
@@ -338,6 +381,7 @@ export default function InventoryRedesign() {
               <Select value={status} onChange={(e) => setStatus(e.target.value)}>
                 <option value="">All statuses</option>
                 <option value="active">Active</option>
+                <option value="draft">Draft</option>
                 <option value="inactive">Inactive</option>
               </Select>
               <Select
@@ -349,6 +393,12 @@ export default function InventoryRedesign() {
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
+                ))}
+              </Select>
+              <Select value={outletFilter} onChange={(e) => setOutletFilter(e.target.value)}>
+                <option value="">All locations</option>
+                {outlets.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
                 ))}
               </Select>
               <Select
@@ -532,7 +582,7 @@ export default function InventoryRedesign() {
                     {p.barcode || "-"}
                   </td>
                   <td className="px-3 py-2 text-right text-[var(--ui-text)]">
-                    ${(Number(p.price || 0)).toFixed(2)}
+                    PKRs {(Number(p.price || 0)).toFixed(2)}
                   </td>
                   <td className="px-3 py-2 text-right text-[var(--ui-text)]">
                     {p.total_stock ?? 0}
@@ -590,6 +640,7 @@ export default function InventoryRedesign() {
       <ProductModal
         product={modalProduct}
         categories={categories}
+        brands={brands}
         authHeaders={authHeaders}
         onClose={() => setModalProduct(undefined)}
         onSaved={() => { setModalProduct(undefined); fetchProducts(); }}

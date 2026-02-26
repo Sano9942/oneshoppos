@@ -24,7 +24,7 @@ import {
 } from "../../ui/primitives";
 
 function money(value) {
-  return `$${Number(value || 0).toFixed(2)}`;
+  return `PKRs ${Number(value || 0).toFixed(2)}`;
 }
 
 function statusTone(status) {

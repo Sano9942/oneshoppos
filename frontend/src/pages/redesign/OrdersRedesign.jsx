@@ -470,7 +470,7 @@ export default function OrdersRedesign() {
                         </Badge>
                       </td>
                       <td className="px-3 py-2 text-right font-semibold text-[var(--ui-text)]">
-                        {Number(r.grand_total || 0).toFixed(2)}
+                        PKRs {Number(r.grand_total || 0).toFixed(2)}
                       </td>
                       <td className="px-3 py-2 text-center">
                         <Button
@@ -585,7 +585,7 @@ export default function OrdersRedesign() {
                         {i.title || i.sku || i.barcode || "Item"}
                       </p>
                       <p className="text-[var(--ui-text-muted)]">
-                        Qty {i.qty} | Unit {Number(i.unit_price || 0).toFixed(2)}
+                        Qty {i.qty} | Unit PKRs {Number(i.unit_price || 0).toFixed(2)}
                       </p>
                     </div>
                   ))}

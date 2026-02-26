@@ -15,11 +15,11 @@ import { useAuth } from "../../auth/AuthProvider";
 import { Search, ShoppingCart, Trash2, Plus, Minus, Pause, Play, CreditCard } from "lucide-react";
 
 function money(v) {
-  return `$${Number(v || 0).toFixed(2)}`;
+  return `PKRs ${Number(v || 0).toFixed(2)}`;
 }
 
 export default function POSRedesign() {
-  const { employee } = useAuth();
+  const { employee, authHeaders } = useAuth();
   const [outlets, setOutlets] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [selectedOutletId, setSelectedOutletId] = useState("");
@@ -48,8 +48,8 @@ export default function POSRedesign() {
   const loadBootstrap = async () => {
     try {
       const [outRes, custRes] = await Promise.all([
-        fetch(`${API}/api/outlets`),
-        fetch(`${API}/api/customers`),
+        fetch(`${API}/api/outlets`, { headers: authHeaders() }),
+        fetch(`${API}/api/customers`, { headers: authHeaders() }),
       ]);
       const outData = await outRes.json();
       const custData = await custRes.json();
@@ -67,7 +67,7 @@ export default function POSRedesign() {
   const loadParked = async (outletId = selectedOutletId) => {
     if (!outletId) return;
     try {
-      const res = await fetch(`${API}/api/parked-sales?outlet_id=${outletId}`);
+      const res = await fetch(`${API}/api/parked-sales?outlet_id=${outletId}`, { headers: authHeaders() });
       const data = await res.json();
       setParkedSales(data.parkedSales || []);
     } catch {

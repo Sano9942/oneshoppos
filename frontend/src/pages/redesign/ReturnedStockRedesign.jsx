@@ -14,7 +14,7 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 
 function money(v) {
-  return `$${Number(v || 0).toFixed(2)}`;
+  return `PKRs ${Number(v || 0).toFixed(2)}`;
 }
 
 function fmtDate(ts) {

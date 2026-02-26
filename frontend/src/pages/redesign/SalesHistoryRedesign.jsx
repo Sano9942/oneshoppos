@@ -14,7 +14,7 @@ import InvoiceView from "../InvoiceView";
 import { Ban, Download, FileText, Printer, RefreshCw, Search } from "lucide-react";
 
 function money(n) {
-  return `$${Number(n || 0).toFixed(2)}`;
+  return `PKRs ${Number(n || 0).toFixed(2)}`;
 }
 
 function formatDate(ts) {

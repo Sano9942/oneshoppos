@@ -23,7 +23,7 @@ import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import { Badge, Button, PageShell, SectionCard, Skeleton } from "../../ui/primitives";
 
-const fmt = (n) => "$" + (Number(n) || 0).toFixed(2);
+const fmt = (n) => "PKRs " + (Number(n) || 0).toFixed(2);
 const fmtDay = (d) => {
   const dt = new Date(d + "T00:00:00");
   return dt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -184,7 +184,7 @@ export default function DashboardRedesign() {
                     tickLine={false}
                   />
                   <YAxis
-                    tickFormatter={(v) => "$" + v}
+                    tickFormatter={(v) => "PKRs " + v}
                     tick={{ fontSize: 11, fill: "var(--ui-text-muted)" }}
                     axisLine={false}
                     tickLine={false}
