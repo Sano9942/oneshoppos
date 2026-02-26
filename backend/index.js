@@ -15,6 +15,7 @@ const {
   adjustShopifyInventory,
   fetchShopifyVariantCatalog,
   fetchInventoryLevel,
+  fetchRecentOrders,
 } = require("./shopify/client");
 const {
   retryDelayMinutesWithJitter,
@@ -29,19 +30,36 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 const SHOPIFY_SECRET_ENC_PREFIX = "enc:v1";
-const SHOPIFY_MAX_RETRY_ATTEMPTS = Math.max(1, parseInt(process.env.SHOPIFY_MAX_RETRY_ATTEMPTS || "5", 10));
+const SHOPIFY_MAX_RETRY_ATTEMPTS = Math.max(
+  1,
+  parseInt(process.env.SHOPIFY_MAX_RETRY_ATTEMPTS || "5", 10),
+);
 const DB_PATH = path.resolve(__dirname, "oneshop.db");
 const UPLOADS_DIR = path.resolve(__dirname, "uploads");
 const PRODUCT_UPLOADS_DIR = path.resolve(UPLOADS_DIR, "products");
 const COMPANY_UPLOADS_DIR = path.resolve(UPLOADS_DIR, "company");
-const RATE_LIMIT_WINDOW_MS = Math.max(1000, Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000));
-const RATE_LIMIT_GLOBAL_MAX = Math.max(1, Number(process.env.RATE_LIMIT_GLOBAL_MAX || 600));
-const RATE_LIMIT_AUTH_MAX = Math.max(1, Number(process.env.RATE_LIMIT_AUTH_MAX || 20));
-const RATE_LIMIT_WEBHOOK_MAX = Math.max(1, Number(process.env.RATE_LIMIT_WEBHOOK_MAX || 120));
+const RATE_LIMIT_WINDOW_MS = Math.max(
+  1000,
+  Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000),
+);
+const RATE_LIMIT_GLOBAL_MAX = Math.max(
+  1,
+  Number(process.env.RATE_LIMIT_GLOBAL_MAX || 600),
+);
+const RATE_LIMIT_AUTH_MAX = Math.max(
+  1,
+  Number(process.env.RATE_LIMIT_AUTH_MAX || 20),
+);
+const RATE_LIMIT_WEBHOOK_MAX = Math.max(
+  1,
+  Number(process.env.RATE_LIMIT_WEBHOOK_MAX || 120),
+);
 
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-if (!fs.existsSync(PRODUCT_UPLOADS_DIR)) fs.mkdirSync(PRODUCT_UPLOADS_DIR, { recursive: true });
-if (!fs.existsSync(COMPANY_UPLOADS_DIR)) fs.mkdirSync(COMPANY_UPLOADS_DIR, { recursive: true });
+if (!fs.existsSync(PRODUCT_UPLOADS_DIR))
+  fs.mkdirSync(PRODUCT_UPLOADS_DIR, { recursive: true });
+if (!fs.existsSync(COMPANY_UPLOADS_DIR))
+  fs.mkdirSync(COMPANY_UPLOADS_DIR, { recursive: true });
 
 function getShopifySecretKeyBuffer() {
   const raw = String(process.env.SHOPIFY_SECRET_KEY || "").trim();
@@ -63,7 +81,10 @@ function encryptShopifySecret(plainText) {
   if (!key) return value;
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  const encrypted = Buffer.concat([
+    cipher.update(value, "utf8"),
+    cipher.final(),
+  ]);
   const tag = cipher.getAuthTag();
   return `${SHOPIFY_SECRET_ENC_PREFIX}:${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
 }
@@ -74,16 +95,22 @@ function decryptShopifySecret(storedText) {
   if (!stored.startsWith(`${SHOPIFY_SECRET_ENC_PREFIX}:`)) return stored;
   const key = getShopifySecretKeyBuffer();
   if (!key) {
-    throw new Error("SHOPIFY_SECRET_KEY is required to decrypt Shopify secrets");
+    throw new Error(
+      "SHOPIFY_SECRET_KEY is required to decrypt Shopify secrets",
+    );
   }
   const parts = stored.split(":");
-  if (parts.length !== 5) throw new Error("Invalid encrypted Shopify secret format");
+  if (parts.length !== 5)
+    throw new Error("Invalid encrypted Shopify secret format");
   const iv = Buffer.from(parts[2], "base64");
   const tag = Buffer.from(parts[3], "base64");
   const encrypted = Buffer.from(parts[4], "base64");
   const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
   decipher.setAuthTag(tag);
-  const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+  const decrypted = Buffer.concat([
+    decipher.update(encrypted),
+    decipher.final(),
+  ]);
   return decrypted.toString("utf8");
 }
 
@@ -94,12 +121,19 @@ function logShopifyEvent(level, event, details = {}) {
     event,
     ...details,
   };
-  const logger = level === "error" ? console.error : level === "warn" ? console.warn : console.log;
+  const logger =
+    level === "error"
+      ? console.error
+      : level === "warn"
+        ? console.warn
+        : console.log;
   logger(JSON.stringify(payload));
 }
 
 function retryAfterSeconds(req, fallbackWindowMs) {
-  const resetAt = req.rateLimit?.resetTime ? new Date(req.rateLimit.resetTime).getTime() : Date.now() + fallbackWindowMs;
+  const resetAt = req.rateLimit?.resetTime
+    ? new Date(req.rateLimit.resetTime).getTime()
+    : Date.now() + fallbackWindowMs;
   return Math.max(1, Math.ceil((resetAt - Date.now()) / 1000));
 }
 
@@ -148,13 +182,18 @@ const webhookLimiter = rateLimit({
 
 // Middleware
 app.use(cors());
-app.use(express.json({
-  verify: (req, res, buf) => {
-    if (req.originalUrl && req.originalUrl.includes("/api/integrations/shopify/webhooks/")) {
-      req.rawBody = buf.toString("utf8");
-    }
-  },
-})); // Parse JSON bodies
+app.use(
+  express.json({
+    verify: (req, res, buf) => {
+      if (
+        req.originalUrl &&
+        req.originalUrl.includes("/api/integrations/shopify/webhooks/")
+      ) {
+        req.rawBody = buf.toString("utf8");
+      }
+    },
+  }),
+); // Parse JSON bodies
 app.use("/uploads", express.static(UPLOADS_DIR));
 app.use(globalLimiter);
 
@@ -183,9 +222,9 @@ function loadEmployeePerms(req, res, next) {
         (err2, rows) => {
           req.employeePerms = err2 ? [] : rows.map((r) => r.permission);
           next();
-        }
+        },
       );
-    }
+    },
   );
 }
 
@@ -195,7 +234,9 @@ function requirePerm(permission) {
     if (perms.includes("all_access") || perms.includes(permission)) {
       return next();
     }
-    return res.status(403).json({ error: "Forbidden: insufficient permissions" });
+    return res
+      .status(403)
+      .json({ error: "Forbidden: insufficient permissions" });
   };
 }
 
@@ -206,7 +247,9 @@ function requireAnyPerm(permissions) {
       perms.includes("all_access") ||
       permissions.some((p) => perms.includes(p));
     if (allowed) return next();
-    return res.status(403).json({ error: "Forbidden: insufficient permissions" });
+    return res
+      .status(403)
+      .json({ error: "Forbidden: insufficient permissions" });
   };
 }
 
@@ -255,36 +298,120 @@ const PERMISSION_RULES = [
     path: /^\/api\/reports(\/|$)/,
     anyPerms: ["view_reports", "manage_employees"],
   },
-  { methods: ["GET"], path: /^\/api\/attendance(\/|$)/, anyPerms: ["view_reports", "manage_employees"] },
+  {
+    methods: ["GET"],
+    path: /^\/api\/attendance(\/|$)/,
+    anyPerms: ["view_reports", "manage_employees"],
+  },
 
   // Setup/config mutation
-  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/categories(\/\d+)?$/, anyPerms: ["manage_inventory"] },
-  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/brands(\/\d+)?$/, anyPerms: ["manage_inventory"] },
-  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/products(\/\d+)?$/, anyPerms: ["manage_inventory"] },
-  { methods: ["POST"], path: /^\/api\/products\/bulk-import$/, anyPerms: ["manage_inventory"] },
-  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/attribute-sets(\/\d+)?$/, anyPerms: ["manage_inventory"] },
-  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/barcode-templates(\/\d+)?$/, anyPerms: ["manage_inventory"] },
-  { methods: ["POST"], path: /^\/api\/barcode-print-jobs$/, anyPerms: ["manage_inventory"] },
-  { methods: ["POST", "PUT"], path: /^\/api\/expenses(\/\d+)?$/, anyPerms: ["manage_inventory"] },
-  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/expense-categories(\/\d+)?$/, anyPerms: ["manage_inventory"] },
-  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/outlets(\/\d+)?$/, anyPerms: ["manage_employees"] },
-  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/receipt-templates(\/\d+)?$/, anyPerms: ["manage_employees"] },
+  {
+    methods: ["POST", "PUT", "DELETE"],
+    path: /^\/api\/categories(\/\d+)?$/,
+    anyPerms: ["manage_inventory"],
+  },
+  {
+    methods: ["POST", "PUT", "DELETE"],
+    path: /^\/api\/brands(\/\d+)?$/,
+    anyPerms: ["manage_inventory"],
+  },
+  {
+    methods: ["POST", "PUT", "DELETE"],
+    path: /^\/api\/products(\/\d+)?$/,
+    anyPerms: ["manage_inventory"],
+  },
+  {
+    methods: ["POST"],
+    path: /^\/api\/products\/bulk-import$/,
+    anyPerms: ["manage_inventory"],
+  },
+  {
+    methods: ["POST", "PUT", "DELETE"],
+    path: /^\/api\/attribute-sets(\/\d+)?$/,
+    anyPerms: ["manage_inventory"],
+  },
+  {
+    methods: ["POST", "PUT", "DELETE"],
+    path: /^\/api\/barcode-templates(\/\d+)?$/,
+    anyPerms: ["manage_inventory"],
+  },
+  {
+    methods: ["POST"],
+    path: /^\/api\/barcode-print-jobs$/,
+    anyPerms: ["manage_inventory"],
+  },
+  {
+    methods: ["POST", "PUT"],
+    path: /^\/api\/expenses(\/\d+)?$/,
+    anyPerms: ["manage_inventory"],
+  },
+  {
+    methods: ["POST", "PUT", "DELETE"],
+    path: /^\/api\/expense-categories(\/\d+)?$/,
+    anyPerms: ["manage_inventory"],
+  },
+  {
+    methods: ["POST", "PUT", "DELETE"],
+    path: /^\/api\/outlets(\/\d+)?$/,
+    anyPerms: ["manage_employees"],
+  },
+  {
+    methods: ["POST", "PUT", "DELETE"],
+    path: /^\/api\/receipt-templates(\/\d+)?$/,
+    anyPerms: ["manage_employees"],
+  },
 
   // Orders/procurement mutation
-  { methods: ["POST", "PUT", "DELETE"], path: /^\/api\/suppliers(\/\d+)?$/, anyPerms: ["manage_orders"] },
-  { methods: ["POST"], path: /^\/api\/supplier-returns$/, anyPerms: ["manage_orders"] },
-  { methods: ["POST"], path: /^\/api\/supplier-invoices\/\d+\/pay$/, anyPerms: ["manage_orders"] },
+  {
+    methods: ["POST", "PUT", "DELETE"],
+    path: /^\/api\/suppliers(\/\d+)?$/,
+    anyPerms: ["manage_orders"],
+  },
+  {
+    methods: ["POST"],
+    path: /^\/api\/supplier-returns$/,
+    anyPerms: ["manage_orders"],
+  },
+  {
+    methods: ["POST"],
+    path: /^\/api\/supplier-invoices\/\d+\/pay$/,
+    anyPerms: ["manage_orders"],
+  },
   { methods: ["POST"], path: /^\/api\/returns$/, anyPerms: ["manage_orders"] },
 
   // Approval workflow
-  { methods: ["GET"], path: /^\/api\/approvals$/, anyPerms: ["manage_orders", "manage_employees"] },
-  { methods: ["POST"], path: /^\/api\/purchase-orders\/\d+\/submit$/, anyPerms: ["manage_orders"] },
-  { methods: ["POST"], path: /^\/api\/purchase-orders\/\d+\/approve$/, anyPerms: ["manage_orders"] },
-  { methods: ["POST"], path: /^\/api\/transfers\/\d+\/submit$/, anyPerms: ["manage_orders"] },
-  { methods: ["POST"], path: /^\/api\/transfers\/\d+\/approve$/, anyPerms: ["manage_orders"] },
+  {
+    methods: ["GET"],
+    path: /^\/api\/approvals$/,
+    anyPerms: ["manage_orders", "manage_employees"],
+  },
+  {
+    methods: ["POST"],
+    path: /^\/api\/purchase-orders\/\d+\/submit$/,
+    anyPerms: ["manage_orders"],
+  },
+  {
+    methods: ["POST"],
+    path: /^\/api\/purchase-orders\/\d+\/approve$/,
+    anyPerms: ["manage_orders"],
+  },
+  {
+    methods: ["POST"],
+    path: /^\/api\/transfers\/\d+\/submit$/,
+    anyPerms: ["manage_orders"],
+  },
+  {
+    methods: ["POST"],
+    path: /^\/api\/transfers\/\d+\/approve$/,
+    anyPerms: ["manage_orders"],
+  },
 
   // POS-specific restricted flows
-  { methods: ["POST", "DELETE"], path: /^\/api\/parked-sales(\/\d+)?$/, anyPerms: ["pos_park"] },
+  {
+    methods: ["POST", "DELETE"],
+    path: /^\/api\/parked-sales(\/\d+)?$/,
+    anyPerms: ["pos_park"],
+  },
 ];
 
 const DEFAULT_FEATURE_FLAGS = {
@@ -343,12 +470,18 @@ function createNotification(type, title, message, link) {
   db.run(
     "INSERT INTO notifications (type, title, message, link) VALUES (?, ?, ?, ?)",
     [type, title, message, link || null],
-    () => {}
+    () => {},
   );
 }
 
 function notifyLowStockForSale(cartItems, outletId) {
-  const productIds = [...new Set((cartItems || []).map((i) => Number(i.original_product_id || i.product_id || i.id)).filter(Boolean))];
+  const productIds = [
+    ...new Set(
+      (cartItems || [])
+        .map((i) => Number(i.original_product_id || i.product_id || i.id))
+        .filter(Boolean),
+    ),
+  ];
   if (!productIds.length || !outletId) return;
   const placeholders = productIds.map(() => "?").join(",");
   db.all(
@@ -364,10 +497,10 @@ function notifyLowStockForSale(cartItems, outletId) {
           "low_stock",
           "Low Stock Alert",
           `${row.name} has ${row.quantity} units left`,
-          "/inventory"
+          "/inventory",
         );
       });
-    }
+    },
   );
 }
 
@@ -402,6 +535,7 @@ const { processPendingShopifyInventoryEvents } = registerAllRoutes(app, {
   adjustShopifyInventory,
   fetchShopifyVariantCatalog,
   fetchInventoryLevel,
+  fetchRecentOrders,
   retryDelayMinutesWithJitter,
   evaluateWebhookTimestampWindow,
   isRetryableInventoryEventStatus,
@@ -422,13 +556,14 @@ function runAutoBackup() {
   const dest = path.join(BACKUP_DIR, `oneshop_backup_${ts}.db`);
   try {
     fs.copyFileSync(DB_PATH, dest);
-    const files = fs.readdirSync(BACKUP_DIR)
+    const files = fs
+      .readdirSync(BACKUP_DIR)
       .filter((f) => f.startsWith("oneshop_backup_"))
       .sort();
     if (files.length > 7) {
-      files.slice(0, files.length - 7).forEach((f) =>
-        fs.unlinkSync(path.join(BACKUP_DIR, f))
-      );
+      files
+        .slice(0, files.length - 7)
+        .forEach((f) => fs.unlinkSync(path.join(BACKUP_DIR, f)));
     }
     console.log(`[AutoBackup] Saved → ${dest}`);
   } catch (e) {
@@ -446,7 +581,7 @@ function cleanupSyncEvents() {
       if (err) console.error("[SyncCleanup] Error:", err.message);
       else if (this.changes > 0)
         console.log(`[SyncCleanup] Deleted ${this.changes} old sync events`);
-    }
+    },
   );
 }
 
@@ -460,13 +595,10 @@ app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
 
-const SHOPIFY_WORKER_DISABLED = String(process.env.SHOPIFY_SYNC_WORKER_DISABLED || "0") === "1";
+const SHOPIFY_WORKER_DISABLED =
+  String(process.env.SHOPIFY_SYNC_WORKER_DISABLED || "0") === "1";
 if (!SHOPIFY_WORKER_DISABLED) {
   setInterval(() => {
     processPendingShopifyInventoryEvents(20, () => {});
   }, 30000);
 }
-
-
-
-

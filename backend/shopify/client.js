@@ -25,7 +25,9 @@ async function shopifyGraphqlRequest(connection, query, variables = {}) {
 
   const json = await res.json();
   if (!res.ok) {
-    throw new Error(json?.errors?.[0]?.message || `Shopify request failed (${res.status})`);
+    throw new Error(
+      json?.errors?.[0]?.message || `Shopify request failed (${res.status})`,
+    );
   }
   if (json?.errors?.length) {
     throw new Error(json.errors.map((e) => e.message).join("; "));
@@ -70,12 +72,18 @@ async function fetchShopifyLocations(connection) {
   }));
 }
 
-async function adjustShopifyInventory(connection, adjustments, reason = "correction") {
-  const changes = (adjustments || []).map((item) => ({
-    delta: Number(item.delta || 0),
-    inventoryItemId: toGid("InventoryItem", item.inventory_item_id),
-    locationId: toGid("Location", item.location_id),
-  })).filter((c) => c.delta !== 0 && c.inventoryItemId && c.locationId);
+async function adjustShopifyInventory(
+  connection,
+  adjustments,
+  reason = "correction",
+) {
+  const changes = (adjustments || [])
+    .map((item) => ({
+      delta: Number(item.delta || 0),
+      inventoryItemId: toGid("InventoryItem", item.inventory_item_id),
+      locationId: toGid("Location", item.location_id),
+    }))
+    .filter((c) => c.delta !== 0 && c.inventoryItemId && c.locationId);
 
   if (changes.length === 0) {
     return { applied: 0, userErrors: [] };
@@ -151,7 +159,10 @@ async function fetchShopifyVariantCatalog(connection, maxItems = 500) {
   const pageSize = 100;
 
   while (out.length < maxItems) {
-    const data = await shopifyGraphqlRequest(connection, query, { first: pageSize, after });
+    const data = await shopifyGraphqlRequest(connection, query, {
+      first: pageSize,
+      after,
+    });
     const root = data?.productVariants;
     const edges = root?.edges || [];
     for (const edge of edges) {
@@ -195,7 +206,9 @@ async function fetchInventoryLevel(connection, inventoryItemId, locationId) {
     locationId: toGid("Location", locationId),
   };
   const data = await shopifyGraphqlRequest(connection, query, variables);
-  const qtyRow = data?.inventoryItem?.inventoryLevel?.quantities?.find((q) => q.name === "available");
+  const qtyRow = data?.inventoryItem?.inventoryLevel?.quantities?.find(
+    (q) => q.name === "available",
+  );
   const qty = Number(qtyRow?.quantity || 0);
   return {
     inventory_item_id: variables.inventoryItemId,
@@ -204,10 +217,87 @@ async function fetchInventoryLevel(connection, inventoryItemId, locationId) {
   };
 }
 
+async function fetchRecentOrders(connection, first = 10) {
+  const query = `
+    query FetchOrders($first: Int!) {
+      orders(first: $first, sortKey: CREATED_AT, reverse: true) {
+        edges {
+          node {
+            id
+            name
+            currencyCode
+            subtotalPriceSet { shopMoney { amount } }
+            totalDiscountsSet { shopMoney { amount } }
+            totalTaxSet { shopMoney { amount } }
+            totalShippingPriceSet { shopMoney { amount } }
+            totalPriceSet { shopMoney { amount } }
+            financialStatus
+            displayFulfillmentStatus
+            createdAt
+            lineItems(first: 50) {
+              edges {
+                node {
+                  id
+                  sku
+                  title
+                  quantity
+                  variant { barcode }
+                  discountedUnitPriceSet { shopMoney { amount } }
+                  totalDiscountSet { shopMoney { amount } }
+                  taxLines { priceSet { shopMoney { amount } } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const data = await shopifyGraphqlRequest(connection, query, { first });
+  const edges = data?.orders?.edges || [];
+
+  return edges.map((edge) => {
+    const node = edge.node;
+    const lineItems = (node.lineItems?.edges || []).map((le) => {
+      const lnode = le.node;
+      const totalTax = (lnode.taxLines || []).reduce(
+        (acc, t) => acc + parseFloat(t.priceSet?.shopMoney?.amount || 0),
+        0,
+      );
+      return {
+        id: lnode.id,
+        sku: lnode.sku,
+        barcode: lnode.variant?.barcode || null,
+        title: lnode.title,
+        quantity: lnode.quantity,
+        price: lnode.discountedUnitPriceSet?.shopMoney?.amount,
+        total_discount: lnode.totalDiscountSet?.shopMoney?.amount,
+        total_tax: totalTax,
+      };
+    });
+
+    return {
+      id: node.id,
+      name: node.name,
+      currency: node.currencyCode,
+      subtotal_price: node.subtotalPriceSet?.shopMoney?.amount,
+      total_discounts: node.totalDiscountsSet?.shopMoney?.amount,
+      total_tax: node.totalTaxSet?.shopMoney?.amount,
+      total_shipping_price_set: node.totalShippingPriceSet,
+      total_price: node.totalPriceSet?.shopMoney?.amount,
+      financial_status: node.financialStatus?.toLowerCase(),
+      fulfillment_status: node.displayFulfillmentStatus?.toLowerCase(),
+      created_at: node.createdAt,
+      line_items: lineItems,
+    };
+  });
+}
+
 module.exports = {
   verifyConnection,
   fetchShopifyLocations,
   adjustShopifyInventory,
   fetchShopifyVariantCatalog,
-  fetchInventoryLevel,
+  fetchRecentOrders,
 };

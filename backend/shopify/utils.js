@@ -12,7 +12,10 @@ function baseRetryDelayMinutes(attemptCount) {
 function retryDelayMinutesWithJitter(attemptCount, randomFn = Math.random) {
   const base = baseRetryDelayMinutes(attemptCount);
   const jitterMax = base >= 60 ? 5 : base >= 15 ? 2 : 1;
-  const jitter = Math.floor((typeof randomFn === "function" ? randomFn() : Math.random()) * (jitterMax + 1));
+  const jitter = Math.floor(
+    (typeof randomFn === "function" ? randomFn() : Math.random()) *
+      (jitterMax + 1),
+  );
   return base + jitter;
 }
 
@@ -41,17 +44,26 @@ function normalizeRetryableStatus(status) {
 }
 
 function isRetryableInventoryEventStatus(status) {
-  return ["failed", "dead_letter", "retry", "failed_mapping"].includes(normalizeRetryableStatus(status));
+  return ["failed", "dead_letter", "retry", "failed_mapping"].includes(
+    normalizeRetryableStatus(status),
+  );
 }
 
-function canApproveReconciliationRequest({ requesterEmployeeId, approverEmployeeId }) {
+function canApproveReconciliationRequest({
+  requesterEmployeeId,
+  approverEmployeeId,
+}) {
   const requester = Number(requesterEmployeeId || 0) || null;
   const approver = Number(approverEmployeeId || 0) || null;
-  if (!requester || !approver) return true;
+  if (!requester || !approver) return false;
   return requester !== approver;
 }
 
-function buildWebhookIdempotencyKey({ webhookId, payload = {}, nowMs = Date.now() }) {
+function buildWebhookIdempotencyKey({
+  webhookId,
+  payload = {},
+  nowMs = Date.now(),
+}) {
   const hookId = String(webhookId || "").trim();
   if (hookId) return `shopify_webhook_${hookId}`;
   const orderId = String(payload?.id || payload?.order_id || "").trim();
@@ -70,8 +82,10 @@ function verifyWebhookSignature({ rawBody, providedHmac, webhookSecret }) {
     .digest("base64");
   const left = Buffer.from(expected, "utf8");
   const right = Buffer.from(provided, "utf8");
-  if (left.length !== right.length) return { ok: false, reason: "invalid_signature" };
-  if (!crypto.timingSafeEqual(left, right)) return { ok: false, reason: "invalid_signature" };
+  if (left.length !== right.length)
+    return { ok: false, reason: "invalid_signature" };
+  if (!crypto.timingSafeEqual(left, right))
+    return { ok: false, reason: "invalid_signature" };
   return { ok: true, expected };
 }
 
