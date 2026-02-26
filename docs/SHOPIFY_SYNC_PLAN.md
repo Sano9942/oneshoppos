@@ -1,8 +1,41 @@
 # OneShopPOS <-> Shopify Inventory Sync Plan
 
-## Current Implementation Status (As of February 24, 2026 - latest update)
+## Current Implementation Status (As of February 26, 2026 - latest update)
 
 This document started as a plan. The following items are now implemented in code.
+
+### Latest Hands-on Progress (2026-02-26)
+
+Additional integration fixes completed after the prior update:
+
+1. Mapping UX and behavior fixes
+- Added explicit Location Mapping UI in `ShopifyIntegration.jsx`.
+- Changed backend location mapping save behavior to replace existing mapping(s) per outlet (single active mapping target per outlet update action).
+
+2. Product suggestion and apply fixes
+- Fixed `auto-live` backend query bug (`pv.barcode` reference on schemas without that column).
+- Increased live suggestion search limit support to large catalogs (up to 10,000 variants).
+- Updated frontend suggestion request to use higher limit.
+- Fixed apply-suggestions handling for product-level rows (`variant_id = NULL`) to avoid unique-constraint failures.
+- Prevented already-mapped local rows from being repeatedly re-suggested.
+- Cleared frontend suggestion list after successful apply.
+
+3. Reconciliation approval workflow updates
+- Improved UI feedback when reconciliation fix request is already pending.
+- Kept requester/approver segregation for normal users.
+- Added allowed exception: `all_access` Administrator can self-approve or self-reject reconciliation fix requests.
+
+4. Outbound queue reason normalization
+- Added mapping from internal reason labels to Shopify-supported reason enums before calling `inventoryAdjustQuantities`.
+- Result: retrying outbound events with internal reasons now succeeds (processed) instead of staying in retry due to invalid reason errors.
+
+5. Current verified live state
+- Connection: active.
+- Location mapping: active.
+- Product mapping: active.
+- Reconciliation: active (rows generated and resolved/matched).
+- Outbound events: at least one processed successfully.
+- Inbound webhook processing: still pending full production validation.
 
 ### Implemented
 

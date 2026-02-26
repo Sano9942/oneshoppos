@@ -1,6 +1,6 @@
 ﻿# OneShopPOS - Testing Record
 
-Last Updated: 2026-02-25
+Last Updated: 2026-02-26
 
 ---
 
@@ -48,6 +48,30 @@ cd backend
 npm run test:shopify-utils
 npm run test:shopify-mock
 ```
+
+Latest result:
+- `npm run test:shopify-utils`: PASS
+- `npm run test:shopify-mock`: PASS
+
+---
+
+## Shopify Live Validation Progress (2026-02-26)
+
+Completed in live environment:
+- Shopify connection verified and live locations fetched.
+- Location mapping configured from POS outlet(s) to Shopify location(s).
+- Product mapping created via live auto-suggestion + apply flow.
+- Live reconciliation run succeeded and rows were generated.
+- Reconciliation corrective flow tested (request/approve/resolve path functional).
+- Outbound event lifecycle validated:
+  - one earlier event reached `dead_letter` due to invalid historical payload
+  - subsequent event retried and reached `processed` after reason normalization fix
+
+Current gap before full go-live signoff:
+- Inbound webhook production validation is still pending:
+  - webhook secret must be configured in POS + Shopify
+  - public HTTPS callback URL must be configured/reachable
+  - webhook delivery must be observed as inbound processed event(s)
 
 ---
 

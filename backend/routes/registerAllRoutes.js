@@ -5489,6 +5489,43 @@ function enqueueInventorySyncEvents(changes, context = {}, cb = () => {}) {
   });
 }
 
+function normalizeShopifyInventoryReason(rawReason) {
+  const reason = String(rawReason || "").trim().toLowerCase();
+  const valid = new Set([
+    "correction",
+    "cycle_count_available",
+    "damaged",
+    "movement_canceled",
+    "movement_created",
+    "movement_received",
+    "movement_updated",
+    "other",
+    "promotion",
+    "quality_control",
+    "received",
+    "reservation_created",
+    "reservation_deleted",
+    "reservation_updated",
+    "restock",
+    "safety_stock",
+    "shrinkage",
+  ]);
+  if (valid.has(reason)) return reason;
+
+  const map = {
+    sale: "shrinkage",
+    void: "restock",
+    return: "restock",
+    supplier_return: "movement_updated",
+    transfer_out: "movement_updated",
+    transfer_in: "movement_updated",
+    adjustment: "correction",
+    po_receive: "received",
+    manual_sync: "correction",
+  };
+  return map[reason] || "correction";
+}
+
 function processPendingShopifyInventoryEvents(limit = 25, cb = () => {}) {
   getActiveShopifyConnection((connErr, conn) => {
     if (connErr) return cb(connErr);
@@ -5544,10 +5581,11 @@ function processPendingShopifyInventoryEvents(limit = 25, cb = () => {}) {
           }
 
           try {
+            const shopifyReason = normalizeShopifyInventoryReason(parsed.reason);
             const result = await adjustShopifyInventory(
               conn,
               [{ inventory_item_id: inventoryItemId, location_id: locationId, delta }],
-              parsed.reason || "correction",
+              shopifyReason,
             );
             if ((result.userErrors || []).length > 0) {
               failed += 1;
@@ -6443,7 +6481,7 @@ app.post("/api/integrations/mappings/products/auto", requirePerm("manage_invento
 });
 
 app.post("/api/integrations/mappings/products/auto-live", requirePerm("manage_inventory"), (req, res) => {
-  const limit = Math.min(1000, Math.max(1, parseInt(req.body?.limit || "500", 10)));
+  const limit = Math.min(10000, Math.max(1, parseInt(req.body?.limit || "500", 10)));
   getActiveShopifyConnection(async (connErr, conn) => {
     if (connErr) return res.status(500).json({ error: connErr.message });
     if (!conn) return res.status(400).json({ error: "No active Shopify connection" });
@@ -6456,58 +6494,80 @@ app.post("/api/integrations/mappings/products/auto-live", requirePerm("manage_in
                 p.barcode as product_barcode,
                 pv.id as variant_id,
                 pv.sku as variant_sku,
-                pv.barcode as variant_barcode
+                NULL as variant_barcode
          FROM products p
          LEFT JOIN product_variants pv ON pv.product_id = p.id`,
         [],
         (localErr, localRows) => {
           if (localErr) return res.status(500).json({ error: localErr.message });
+          db.all(
+            `SELECT product_id,
+                    COALESCE(variant_id, -1) AS variant_key,
+                    shopify_variant_id
+             FROM shopify_product_map
+             WHERE is_active = 1`,
+            [],
+            (mappedErr, mappedRows) => {
+              if (mappedErr) return res.status(500).json({ error: mappedErr.message });
 
-          const byBarcode = new Map();
-          const bySku = new Map();
-          for (const rv of remoteVariants) {
-            const b = String(rv.barcode || "").trim().toLowerCase();
-            const s = String(rv.sku || "").trim().toLowerCase();
-            if (b && !byBarcode.has(b)) byBarcode.set(b, rv);
-            if (s && !bySku.has(s)) bySku.set(s, rv);
-          }
+              const existingLocalMap = new Map();
+              for (const row of mappedRows || []) {
+                existingLocalMap.set(`${row.product_id}:${row.variant_key}`, row.shopify_variant_id || "");
+              }
 
-          const suggestions = [];
-          for (const lr of localRows || []) {
-            const localBarcode = String(lr.variant_barcode || lr.product_barcode || "").trim().toLowerCase();
-            const localSku = String(lr.variant_sku || "").trim().toLowerCase();
+              const byBarcode = new Map();
+              const bySku = new Map();
+              for (const rv of remoteVariants) {
+                const b = String(rv.barcode || "").trim().toLowerCase();
+                const s = String(rv.sku || "").trim().toLowerCase();
+                if (b && !byBarcode.has(b)) byBarcode.set(b, rv);
+                if (s && !bySku.has(s)) bySku.set(s, rv);
+              }
 
-            let match = null;
-            let confidence = "";
-            if (localBarcode && byBarcode.has(localBarcode)) {
-              match = byBarcode.get(localBarcode);
-              confidence = "exact_barcode";
-            } else if (localSku && bySku.has(localSku)) {
-              match = bySku.get(localSku);
-              confidence = "exact_sku";
-            }
-            if (!match) continue;
+              const suggestions = [];
+              for (const lr of localRows || []) {
+                const localBarcode = String(lr.variant_barcode || lr.product_barcode || "").trim().toLowerCase();
+                const localSku = String(lr.variant_sku || "").trim().toLowerCase();
 
-            suggestions.push({
-              product_id: lr.product_id,
-              product_name: lr.product_name,
-              variant_id: lr.variant_id || null,
-              local_sku: lr.variant_sku || null,
-              local_barcode: lr.variant_barcode || lr.product_barcode || null,
-              shopify_product_id: match.product_id || null,
-              shopify_variant_id: match.variant_id || null,
-              shopify_inventory_item_id: match.inventory_item_id || null,
-              shopify_title: match.display_name || match.product_title || null,
-              confidence,
-            });
-          }
+                let match = null;
+                let confidence = "";
+                if (localBarcode && byBarcode.has(localBarcode)) {
+                  match = byBarcode.get(localBarcode);
+                  confidence = "exact_barcode";
+                } else if (localSku && bySku.has(localSku)) {
+                  match = bySku.get(localSku);
+                  confidence = "exact_sku";
+                }
+                if (!match) continue;
 
-          return res.json({
-            message: "Live mapping suggestions generated",
-            remote_count: remoteVariants.length,
-            suggestion_count: suggestions.length,
-            suggestions,
-          });
+                const localKey = `${lr.product_id}:${lr.variant_id || -1}`;
+                const mappedShopifyVariantId = existingLocalMap.get(localKey) || "";
+                if (mappedShopifyVariantId && mappedShopifyVariantId === String(match.variant_id || "")) {
+                  continue;
+                }
+
+                suggestions.push({
+                  product_id: lr.product_id,
+                  product_name: lr.product_name,
+                  variant_id: lr.variant_id || null,
+                  local_sku: lr.variant_sku || null,
+                  local_barcode: lr.variant_barcode || lr.product_barcode || null,
+                  shopify_product_id: match.product_id || null,
+                  shopify_variant_id: match.variant_id || null,
+                  shopify_inventory_item_id: match.inventory_item_id || null,
+                  shopify_title: match.display_name || match.product_title || null,
+                  confidence,
+                });
+              }
+
+              return res.json({
+                message: "Live mapping suggestions generated",
+                remote_count: remoteVariants.length,
+                suggestion_count: suggestions.length,
+                suggestions,
+              });
+            },
+          );
         },
       );
     } catch (e) {
@@ -6583,30 +6643,73 @@ app.post("/api/integrations/mappings/products/apply-suggestions", requirePerm("m
           return next();
         }
 
-        db.run(
-          `INSERT INTO shopify_product_map (
-             product_id, variant_id, shopify_product_id, shopify_variant_id, shopify_inventory_item_id, is_active, last_verified_at
-           ) VALUES (?, ?, ?, ?, ?, 1, datetime('now','localtime'))
-           ON CONFLICT(product_id, variant_id) DO UPDATE SET
-             shopify_product_id = excluded.shopify_product_id,
-             shopify_variant_id = excluded.shopify_variant_id,
-             shopify_inventory_item_id = excluded.shopify_inventory_item_id,
-             is_active = 1,
-             last_verified_at = datetime('now','localtime')`,
-          [productId, variantId, shopifyProductId, shopifyVariantId, shopifyInventoryItemId],
-          (upErr) => {
-            if (upErr) {
+        db.get(
+          `SELECT id
+           FROM shopify_product_map
+           WHERE product_id = ?
+             AND COALESCE(variant_id, -1) = COALESCE(?, -1)
+           LIMIT 1`,
+          [productId, variantId],
+          (localErr, localExisting) => {
+            if (localErr) {
               skipped += 1;
               conflicts.push({
                 product_id: productId,
                 variant_id: variantId,
                 shopify_variant_id: shopifyVariantId,
-                reason: upErr.message,
+                reason: localErr.message,
               });
-            } else {
-              applied += 1;
+              return next();
             }
-            return next();
+
+            if (localExisting?.id) {
+              db.run(
+                `UPDATE shopify_product_map
+                 SET shopify_product_id = ?,
+                     shopify_variant_id = ?,
+                     shopify_inventory_item_id = ?,
+                     is_active = 1,
+                     last_verified_at = datetime('now','localtime')
+                 WHERE id = ?`,
+                [shopifyProductId, shopifyVariantId, shopifyInventoryItemId, localExisting.id],
+                (upErr) => {
+                  if (upErr) {
+                    skipped += 1;
+                    conflicts.push({
+                      product_id: productId,
+                      variant_id: variantId,
+                      shopify_variant_id: shopifyVariantId,
+                      reason: upErr.message,
+                    });
+                  } else {
+                    applied += 1;
+                  }
+                  return next();
+                },
+              );
+              return;
+            }
+
+            db.run(
+              `INSERT INTO shopify_product_map (
+                 product_id, variant_id, shopify_product_id, shopify_variant_id, shopify_inventory_item_id, is_active, last_verified_at
+               ) VALUES (?, ?, ?, ?, ?, 1, datetime('now','localtime'))`,
+              [productId, variantId, shopifyProductId, shopifyVariantId, shopifyInventoryItemId],
+              (insErr) => {
+                if (insErr) {
+                  skipped += 1;
+                  conflicts.push({
+                    product_id: productId,
+                    variant_id: variantId,
+                    shopify_variant_id: shopifyVariantId,
+                    reason: insErr.message,
+                  });
+                } else {
+                  applied += 1;
+                }
+                return next();
+              },
+            );
           },
         );
       },
@@ -6636,17 +6739,34 @@ app.put("/api/integrations/mappings/locations/:outletId", requirePerm("manage_in
   if (!shopify_location_id) {
     return res.status(400).json({ error: "shopify_location_id is required" });
   }
-  db.run(
-    `INSERT INTO shopify_location_map (outlet_id, shopify_location_id, shopify_location_name)
-     VALUES (?, ?, ?)
-     ON CONFLICT(outlet_id, shopify_location_id) DO UPDATE SET
-       shopify_location_name = excluded.shopify_location_name`,
-    [outletId, String(shopify_location_id), shopify_location_name || null],
-    function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ message: "Location mapping saved" });
-    },
-  );
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
+    db.run("DELETE FROM shopify_location_map WHERE outlet_id = ?", [outletId], function (deleteErr) {
+      if (deleteErr) {
+        db.run("ROLLBACK");
+        return res.status(500).json({ error: deleteErr.message });
+      }
+      const replaced_count = this.changes || 0;
+      db.run(
+        `INSERT INTO shopify_location_map (outlet_id, shopify_location_id, shopify_location_name)
+         VALUES (?, ?, ?)`,
+        [outletId, String(shopify_location_id), shopify_location_name || null],
+        function (insertErr) {
+          if (insertErr) {
+            db.run("ROLLBACK");
+            return res.status(500).json({ error: insertErr.message });
+          }
+          db.run("COMMIT", (commitErr) => {
+            if (commitErr) {
+              db.run("ROLLBACK");
+              return res.status(500).json({ error: commitErr.message });
+            }
+            res.json({ message: "Location mapping saved", replaced_count });
+          });
+        },
+      );
+    });
+  });
 });
 
 app.get("/api/integrations/mappings/customers", requirePerm("manage_orders"), (req, res) => {
@@ -7065,7 +7185,9 @@ app.post("/api/reconciliation/inventory/:id/approve-fix", requireAnyPerm(["manag
         const requesterFromNotes = Number(parsedNotes.requester_employee_id || 0) || null;
         const requesterFromColumn = Number(approvalReq.requested_by || 0) || null;
         const requesterEmployeeId = requesterFromNotes || requesterFromColumn;
-        if (!canApproveReconciliationRequest({ requesterEmployeeId, approverEmployeeId })) {
+        const approverPerms = req.employeePerms || [];
+        const isAllAccessApprover = approverPerms.includes("all_access");
+        if (!isAllAccessApprover && !canApproveReconciliationRequest({ requesterEmployeeId, approverEmployeeId })) {
           return res.status(403).json({ error: "Requester cannot approve or reject their own reconciliation fix request" });
         }
 

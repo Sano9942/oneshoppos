@@ -33,6 +33,7 @@ export default function ShopifyIntegration() {
   const [loadingWebhookSetup, setLoadingWebhookSetup] = useState(false);
   const [loadingUatChecklist, setLoadingUatChecklist] = useState(false);
   const [loadingLocations, setLoadingLocations] = useState(false);
+  const [savingLocationOutletId, setSavingLocationOutletId] = useState(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [applyingSuggestions, setApplyingSuggestions] = useState(false);
   const [runningReconciliation, setRunningReconciliation] = useState(false);
@@ -55,6 +56,9 @@ export default function ShopifyIntegration() {
   const [uatChecklist, setUatChecklist] = useState(null);
   const [events, setEvents] = useState([]);
   const [liveLocations, setLiveLocations] = useState([]);
+  const [outlets, setOutlets] = useState([]);
+  const [locationMappings, setLocationMappings] = useState([]);
+  const [locationDraftByOutlet, setLocationDraftByOutlet] = useState({});
   const [liveSuggestions, setLiveSuggestions] = useState([]);
   const [excludedSuggestionKeys, setExcludedSuggestionKeys] = useState({});
   const [applySuggestionConflicts, setApplySuggestionConflicts] = useState([]);
@@ -74,6 +78,7 @@ export default function ShopifyIntegration() {
     locations: 0,
     customers: 0,
   });
+  const [pendingReconciliationApprovals, setPendingReconciliationApprovals] = useState({});
 
   const apiFetch = useCallback(
     (url, options = {}) => {
@@ -89,13 +94,15 @@ export default function ShopifyIntegration() {
     setLoading(true);
     setError("");
     try {
-      const [cfgRes, statusRes, eventsRes, prodMapRes, locMapRes, custMapRes] = await Promise.all([
+      const [cfgRes, statusRes, eventsRes, prodMapRes, locMapRes, custMapRes, outletsRes, approvalsRes] = await Promise.all([
         apiFetch(`${API}/integrations/shopify/config`),
         apiFetch(`${API}/integrations/shopify/status`),
         apiFetch(`${API}/integrations/shopify/events?limit=100`),
         apiFetch(`${API}/integrations/mappings/products`),
         apiFetch(`${API}/integrations/mappings/locations`),
         apiFetch(`${API}/integrations/mappings/customers`),
+        apiFetch(`${API}/outlets`),
+        apiFetch(`${API}/approvals`),
       ]);
 
       const cfg = await cfgRes.json();
@@ -104,6 +111,8 @@ export default function ShopifyIntegration() {
       const pm = await prodMapRes.json();
       const lm = await locMapRes.json();
       const cm = await custMapRes.json();
+      const outletsData = await outletsRes.json();
+      const approvalsData = await approvalsRes.json().catch(() => ({ approvals: [] }));
 
       if (!cfgRes.ok) throw new Error(cfg.error || "Failed loading config");
       if (!statusRes.ok) throw new Error(st.error || "Failed loading status");
@@ -130,10 +139,33 @@ export default function ShopifyIntegration() {
       setConfig(next);
       setStatus(st);
       setEvents(ev.events || []);
+      setLocationMappings(lm.mappings || []);
+      setOutlets(outletsData.outlets || []);
       setMappingCounts({
         products: (pm.mappings || []).length,
         locations: (lm.mappings || []).length,
         customers: (cm.mappings || []).length,
+      });
+      const pendingMap = {};
+      (approvalsData.approvals || []).forEach((a) => {
+        if (a.reference_type === "reconciliation" && a.status === "pending_approval") {
+          pendingMap[Number(a.reference_id)] = true;
+        }
+      });
+      setPendingReconciliationApprovals(pendingMap);
+      const preferredByOutlet = {};
+      (lm.mappings || []).forEach((row) => {
+        if (!preferredByOutlet[row.outlet_id]) {
+          preferredByOutlet[row.outlet_id] = row.shopify_location_id;
+        }
+      });
+      setLocationDraftByOutlet((prev) => {
+        const nextDraft = { ...prev };
+        (outletsData.outlets || []).forEach((outlet) => {
+          const mapped = preferredByOutlet[outlet.id] || "";
+          nextDraft[outlet.id] = nextDraft[outlet.id] || mapped;
+        });
+        return nextDraft;
       });
       await loadReconciliation(true);
       if (next.connected) {
@@ -185,6 +217,14 @@ export default function ShopifyIntegration() {
 
   const suggestionKey = (s, idx) =>
     `${s.product_id || "p"}:${s.variant_id || "v"}:${s.shopify_variant_id || "sv"}:${idx}`;
+
+  const mappingByOutlet = useMemo(() => {
+    const out = {};
+    (locationMappings || []).forEach((row) => {
+      if (!out[row.outlet_id]) out[row.outlet_id] = row;
+    });
+    return out;
+  }, [locationMappings]);
 
   const reviewedSuggestions = useMemo(
     () =>
@@ -382,6 +422,36 @@ export default function ShopifyIntegration() {
     }
   };
 
+  const saveLocationMapping = async (outletId) => {
+    const shopifyLocationId = String(locationDraftByOutlet[outletId] || "").trim();
+    if (!shopifyLocationId) {
+      setError("Please select a Shopify location before saving.");
+      return;
+    }
+    const selectedLocation = (liveLocations || []).find((loc) => String(loc.id) === shopifyLocationId);
+    setSavingLocationOutletId(outletId);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await apiFetch(`${API}/integrations/mappings/locations/${outletId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shopify_location_id: shopifyLocationId,
+          shopify_location_name: selectedLocation?.name || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save location mapping");
+      setSuccess("Location mapping saved.");
+      await loadAll();
+    } catch (e) {
+      setError(e.message || "Failed to save location mapping");
+    } finally {
+      setSavingLocationOutletId(null);
+    }
+  };
+
   const processPending = async () => {
     setProcessingQueue(true);
     setError("");
@@ -447,7 +517,7 @@ export default function ShopifyIntegration() {
       const res = await apiFetch(`${API}/integrations/mappings/products/auto-live`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ limit: 500 }),
+        body: JSON.stringify({ limit: 10000 }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate suggestions");
@@ -477,6 +547,8 @@ export default function ShopifyIntegration() {
       if (!res.ok) throw new Error(data.error || "Failed to apply suggestions");
       const conflictCount = (data.conflicts || []).length;
       setApplySuggestionConflicts(data.conflicts || []);
+      setLiveSuggestions([]);
+      setExcludedSuggestionKeys({});
       setSuccess(
         `Suggestion apply done. Applied: ${data.applied || 0}, Skipped: ${data.skipped || 0}, Conflicts: ${conflictCount}.`,
       );
@@ -553,6 +625,10 @@ export default function ShopifyIntegration() {
   };
 
   const requestReconciliationFix = async (id, mode) => {
+    if (pendingReconciliationApprovals[Number(id)]) {
+      setError("A reconciliation approval is already pending for this row. Review it in Approvals.");
+      return;
+    }
     const prompt =
       mode === "push_to_shopify"
         ? "Submit approval request to push local quantity to Shopify for this row?"
@@ -570,6 +646,7 @@ export default function ShopifyIntegration() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to submit corrective action request");
       setSuccess(data.message || "Corrective action approval request submitted.");
+      setPendingReconciliationApprovals((prev) => ({ ...prev, [Number(id)]: true }));
       await loadReconciliation(true);
     } catch (e) {
       setError(e.message || "Failed to submit corrective action request");
@@ -888,6 +965,71 @@ export default function ShopifyIntegration() {
         </div>
       </div>
 
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="text-base font-semibold text-slate-800">Location Mapping</h3>
+          <span className="text-xs text-slate-500">
+            {outlets.length} outlet(s), {liveLocations.length} live location(s)
+          </span>
+        </div>
+        {outlets.length === 0 ? (
+          <div className="p-4 text-sm text-slate-500">No outlets found. Create a POS outlet first.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-500">
+              <tr>
+                <th className="text-left p-3">POS Outlet</th>
+                <th className="text-left p-3">Current Mapping</th>
+                <th className="text-left p-3">Map To Shopify Location</th>
+                <th className="text-right p-3">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {outlets.map((outlet) => {
+                const existing = mappingByOutlet[outlet.id];
+                const draftValue = locationDraftByOutlet[outlet.id] || "";
+                return (
+                  <tr key={outlet.id} className="border-t border-slate-100">
+                    <td className="p-3 text-slate-700">{outlet.name}</td>
+                    <td className="p-3 text-slate-600">
+                      {existing?.shopify_location_name || existing?.shopify_location_id || "Not mapped"}
+                    </td>
+                    <td className="p-3">
+                      <select
+                        value={draftValue}
+                        onChange={(e) =>
+                          setLocationDraftByOutlet((prev) => ({ ...prev, [outlet.id]: e.target.value }))
+                        }
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-700"
+                        disabled={liveLocations.length === 0}
+                      >
+                        <option value="">
+                          {liveLocations.length === 0 ? "Fetch live locations first" : "Select Shopify location"}
+                        </option>
+                        {liveLocations.map((loc) => (
+                          <option key={loc.id} value={loc.id}>
+                            {loc.name} ({loc.id})
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="p-3 text-right">
+                      <button
+                        onClick={() => saveLocationMapping(outlet.id)}
+                        disabled={!draftValue || savingLocationOutletId === outlet.id}
+                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold disabled:opacity-60"
+                      >
+                        {savingLocationOutletId === outlet.id ? "Saving..." : "Save Mapping"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
       {liveLocations.length > 0 && (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100">
@@ -1128,18 +1270,29 @@ export default function ShopifyIntegration() {
                   <td className="p-3 text-slate-500">{r.resolution_status || "open"}</td>
                   <td className="p-3 text-right">
                     <div className="inline-flex gap-2">
-                      <button
-                        onClick={() => requestReconciliationFix(r.id, "push_to_shopify")}
-                        className="px-2 py-1 border border-slate-300 rounded text-xs text-slate-700 hover:bg-slate-50"
-                      >
-                        Request Push
-                      </button>
-                      <button
-                        onClick={() => requestReconciliationFix(r.id, "pull_to_local")}
-                        className="px-2 py-1 border border-slate-300 rounded text-xs text-slate-700 hover:bg-slate-50"
-                      >
-                        Request Pull
-                      </button>
+                      {(() => {
+                        const hasPendingApproval = Boolean(pendingReconciliationApprovals[Number(r.id)]);
+                        const isOpen = String(r.resolution_status || "open") === "open";
+                        const disableRequests = hasPendingApproval || !isOpen;
+                        return (
+                          <>
+                            <button
+                              onClick={() => requestReconciliationFix(r.id, "push_to_shopify")}
+                              disabled={disableRequests}
+                              className="px-2 py-1 border border-slate-300 rounded text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              {hasPendingApproval ? "Push Pending" : "Request Push"}
+                            </button>
+                            <button
+                              onClick={() => requestReconciliationFix(r.id, "pull_to_local")}
+                              disabled={disableRequests}
+                              className="px-2 py-1 border border-slate-300 rounded text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              {hasPendingApproval ? "Pull Pending" : "Request Pull"}
+                            </button>
+                          </>
+                        );
+                      })()}
                       <button
                         onClick={() => resolveReconciliation(r.id, "resolved")}
                         className="px-2 py-1 border border-slate-300 rounded text-xs text-slate-700 hover:bg-slate-50"

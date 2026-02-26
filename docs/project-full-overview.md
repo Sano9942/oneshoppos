@@ -1,7 +1,7 @@
 ﻿# OneShopPOS - Full Project Overview
 
 Generated: 2026-02-26  
-Last Updated: 2026-02-25
+Last Updated: 2026-02-26
 
 ---
 
@@ -139,3 +139,18 @@ Latest known results:
   - `/shopcast`
 - Tier 3.1 email/SMS receipts
 - Tier 5 technical debt (monolith split, rate limiting, offline mode, realtime updates, cleanup)
+
+---
+
+## 10. Shopify Progress Snapshot
+
+Completed:
+- Connection, live location fetch, location mapping, and product mapping are functional.
+- Reconciliation run and approval workflow are functional.
+- Outbound sync queue/events are functional and processed events are confirmed.
+
+Remaining:
+- Configure webhook secret and matching Shopify webhook secret.
+- Configure public HTTPS callback URL for webhook delivery.
+- Execute inbound webhook test and confirm inbound processed events.
+- Capture final UAT evidence and go-live checklist signoff.

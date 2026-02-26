@@ -1,7 +1,7 @@
 ﻿# OneShopPOS - Project Status
 
-Last Updated: 2026-02-25  
-Current Phase: Tier 4 implementation completed  
+Last Updated: 2026-02-26  
+Current Phase: Tier 4 completed, Shopify go-live validation in progress  
 System State: Operational
 
 ---
@@ -17,6 +17,14 @@ System State: Operational
   - `crm_quotations`
   - `advanced_hr`
   - `multi_company`
+
+Shopify current snapshot:
+- Connection: active (`one-toy-store-dev.myshopify.com`)
+- Location mappings: configured
+- Product mappings: configured (at least one active mapping)
+- Reconciliation: working (live rows generated and resolvable)
+- Outbound sync events: working (recent event processed successfully)
+- Inbound webhook sync: pending full validation (webhook secret/base URL setup still required)
 
 ---
 
@@ -54,6 +62,18 @@ System State: Operational
 - `npm run preflight`: PASS
 - `npm run test:e2e-full`: 69 passed, 0 failed
 - `npm run test:tier4-smoke`: 53 passed, 0 failed
+- `npm run test:shopify-utils`: PASS
+- `npm run test:shopify-mock`: PASS
+
+---
+
+## Shopify Remaining (Go-Live)
+
+1. Configure webhook secret in POS Shopify config.
+2. Configure same webhook secret in Shopify admin webhook subscriptions.
+3. Use public HTTPS callback URL (`APP_PUBLIC_BASE_URL`) reachable by Shopify.
+4. Run live inbound webhook test and confirm `inbound_processed > 0`.
+5. Capture UAT evidence in `docs/TESTING.md` and `docs/SHOPIFY_LIVE_RUNBOOK.md`.
 
 ---
 

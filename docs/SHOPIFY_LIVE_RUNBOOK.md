@@ -3,6 +3,22 @@
 ## Purpose
 This runbook is the exact sequence to move from integration-ready code to live Shopify validation and UAT signoff.
 
+## Current Progress Snapshot (2026-02-26)
+
+Completed already:
+- Connection saved and active in POS.
+- Live locations fetched from Shopify.
+- POS outlet-to-location mapping configured.
+- Product mapping applied.
+- Live reconciliation run and corrective workflow validated.
+- Outbound inventory sync event processed successfully.
+
+Still pending for final go-live:
+- Configure webhook secret in POS + Shopify with matching value.
+- Use public HTTPS callback URL reachable by Shopify.
+- Execute and verify inbound webhook delivery (`inbound_processed > 0`).
+- Capture final UAT evidence/signoff.
+
 ## 1) Environment Preparation
 1. Copy `backend/.env.shopify.example` to `backend/.env`.
 2. Set:
@@ -77,3 +93,18 @@ Proceed only when:
 3. Queue backlog/dead-letter are acceptable.
 4. UAT evidence checklist is complete and signed.
 
+---
+
+## Execution Checklist (Fill During Go-Live)
+
+- [x] Shopify connection active in POS
+- [x] Live locations fetched
+- [x] Location mapping configured
+- [x] Product mapping configured
+- [x] Outbound event processed successfully
+- [ ] Webhook secret configured in POS
+- [ ] Matching webhook secret configured in Shopify
+- [ ] Public HTTPS callback URL configured (`APP_PUBLIC_BASE_URL`)
+- [ ] Webhook subscriptions created for required topics
+- [ ] Inbound webhook test processed successfully
+- [ ] UAT evidence captured and signed
