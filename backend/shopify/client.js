@@ -5,8 +5,25 @@ function toGid(type, value) {
   return `gid://shopify/${type}/${raw}`;
 }
 
+function sanitizeShopDomain(value) {
+  let domain = String(value || "").trim();
+  domain = domain.replace(/^https?:\/\//i, "");
+  domain = domain.replace(/\/+$/g, "");
+  if (domain.includes("/")) {
+    domain = domain.split("/")[0];
+  }
+  return domain;
+}
+
+function previewBody(text, max = 180) {
+  return String(text || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+}
+
 async function shopifyGraphqlRequest(connection, query, variables = {}, _retries = 3) {
-  const shopDomain = String(connection?.shop_domain || "").trim();
+  const shopDomain = sanitizeShopDomain(connection?.shop_domain);
   const accessToken = String(connection?.access_token || "").trim();
   const apiVersion = String(connection?.api_version || "2025-10").trim();
   if (!shopDomain || !accessToken) {
@@ -23,10 +40,35 @@ async function shopifyGraphqlRequest(connection, query, variables = {}, _retries
     body: JSON.stringify({ query, variables }),
   });
 
-  const json = await res.json();
+  const contentType = String(res.headers.get("content-type") || "").toLowerCase();
+  const rawBody = await res.text();
+  let json = null;
+  if (rawBody) {
+    try {
+      json = JSON.parse(rawBody);
+    } catch (parseErr) {
+      const likelyJson =
+        contentType.includes("application/json") ||
+        rawBody.trim().startsWith("{") ||
+        rawBody.trim().startsWith("[");
+      if (likelyJson) {
+        throw new Error(
+          `Invalid JSON from Shopify (${res.status}). ${parseErr.message}. Body: ${previewBody(rawBody)}`,
+        );
+      }
+    }
+  }
+
+  if (!json) {
+    throw new Error(
+      `Non-JSON response from Shopify (${res.status}, content-type: ${contentType || "unknown"}). Body: ${previewBody(rawBody)}`,
+    );
+  }
+
   if (!res.ok) {
     throw new Error(
-      json?.errors?.[0]?.message || `Shopify request failed (${res.status})`,
+      json?.errors?.[0]?.message ||
+        `Shopify request failed (${res.status}). Body: ${previewBody(rawBody)}`,
     );
   }
 
