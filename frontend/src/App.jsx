@@ -4,38 +4,38 @@ import RequireAuth from "./components/RequireAuth";
 import RequirePerm from "./components/RequirePerm";
 import AppLayoutSwitch from "./components/AppLayoutSwitch";
 import AccessDenied from "./pages/AccessDenied";
-import Administrator from "./pages/Administrator";
+import AdministratorRoute from "./pages/AdministratorRoute";
 import Approvals from "./pages/Approvals";
 import Attendance from "./pages/Attendance";
-import AttributeSets from "./pages/AttributeSets";
-import BackupRestore from "./pages/BackupRestore";
+import AttributeSetsRoute from "./pages/AttributeSetsRoute";
+import BackupRestoreRoute from "./pages/BackupRestoreRoute";
 import BarcodeTemplates from "./pages/BarcodeTemplates";
-import Brands from "./pages/Brands";
-import Categories from "./pages/Categories";
-import Dashboard from "./pages/Dashboard";
-import Employees from "./pages/Employees";
-import Expenses from "./pages/Expenses";
+import BrandsRoute from "./pages/BrandsRoute";
+import CategoriesRoute from "./pages/CategoriesRoute";
+import DashboardRoute from "./pages/DashboardRoute";
+import EmployeesRoute from "./pages/EmployeesRoute";
+import ExpensesRoute from "./pages/ExpensesRoute";
 import InventoryRoute from "./pages/InventoryRoute";
 import Login from "./pages/Login";
-import Outlets from "./pages/Outlets";
+import OutletsRoute from "./pages/OutletsRoute";
 import PlaceholderPage from "./pages/PlaceholderPage";
-import Promotions from "./pages/Promotions";
-import PurchaseOrders from "./pages/PurchaseOrders";
+import PromotionsRoute from "./pages/PromotionsRoute";
+import PurchaseOrdersRoute from "./pages/PurchaseOrdersRoute";
 import ReceiptTemplates from "./pages/ReceiptTemplates";
-import Reports, { ReportTabStandalone } from "./pages/Reports";
-import ReturnedStock from "./pages/ReturnedStock";
-import ActionHistory from "./pages/ActionHistory";
-import Accounting from "./pages/Accounting";
-import StockAdjustments from "./pages/StockAdjustments";
-import SupplierPayables from "./pages/SupplierPayables";
-import Suppliers from "./pages/Suppliers";
-import ShopifyIntegration from "./pages/ShopifyIntegration";
-import Taxes from "./pages/Taxes";
-import Transfers from "./pages/Transfers";
-import CRM from "./pages/CRM";
-import Quotations from "./pages/Quotations";
-import HRManagement from "./pages/HRManagement";
-import CompanySettings from "./pages/CompanySettings";
+import ReportsRoute, { ReportTabStandaloneRoute } from "./pages/ReportsRoute";
+import ReturnedStockRoute from "./pages/ReturnedStockRoute";
+import ActionHistoryRoute from "./pages/ActionHistoryRoute";
+import AccountingRoute from "./pages/AccountingRoute";
+import StockAdjustmentsRoute from "./pages/StockAdjustmentsRoute";
+import SupplierPayablesRoute from "./pages/SupplierPayablesRoute";
+import SuppliersRoute from "./pages/SuppliersRoute";
+import ShopifyIntegrationRoute from "./pages/ShopifyIntegrationRoute";
+import TaxesRoute from "./pages/TaxesRoute";
+import TransfersRoute from "./pages/TransfersRoute";
+import CRMRoute from "./pages/CRMRoute";
+import QuotationsRoute from "./pages/QuotationsRoute";
+import HRManagementRoute from "./pages/HRManagementRoute";
+import CompanySettingsRoute from "./pages/CompanySettingsRoute";
 import POSRoute from "./pages/POSRoute";
 import OrdersRoute from "./pages/OrdersRoute";
 import CustomersRoute from "./pages/CustomersRoute";
@@ -72,7 +72,7 @@ function App() {
             </RequireAuth>
           }
         >
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard" element={<DashboardRoute />} />
           <Route path="/sales-history" element={<SalesHistoryRoute />} />
           <Route path="/cash-management" element={<CashManagementRoute />} />
           <Route path="/customers" element={<CustomersRoute />} />
@@ -80,7 +80,7 @@ function App() {
             path="/crm"
             element={
               <RequirePerm perm="manage_orders">
-                <CRM />
+                <CRMRoute />
               </RequirePerm>
             }
           />
@@ -88,11 +88,11 @@ function App() {
             path="/quotations"
             element={
               <RequirePerm perm="manage_orders">
-                <Quotations />
+                <QuotationsRoute />
               </RequirePerm>
             }
           />
-          <Route path="/attribute-sets" element={<AttributeSets />} />
+          <Route path="/attribute-sets" element={<AttributeSetsRoute />} />
           <Route
             path="/orders"
             element={
@@ -105,7 +105,7 @@ function App() {
           <Route path="/custom-fields" element={<PlaceholderPage />} />
           <Route path="/partners" element={<PlaceholderPage />} />
           <Route path="/shopcast" element={<PlaceholderPage />} />
-          <Route path="/reports" element={<Reports />} />
+          <Route path="/reports" element={<ReportsRoute />} />
           <Route path="/returns" element={<ReturnsRoute />} />
 
           <Route
@@ -120,7 +120,7 @@ function App() {
             path="/adjustments"
             element={
               <RequirePerm perm="manage_inventory">
-                <StockAdjustments />
+                <StockAdjustmentsRoute />
               </RequirePerm>
             }
           />
@@ -128,7 +128,7 @@ function App() {
             path="/transfers"
             element={
               <RequirePerm perm="manage_inventory">
-                <Transfers />
+                <TransfersRoute />
               </RequirePerm>
             }
           />
@@ -136,7 +136,7 @@ function App() {
             path="/promotions"
             element={
               <RequirePerm perm="manage_inventory">
-                <Promotions />
+                <PromotionsRoute />
               </RequirePerm>
             }
           />
@@ -144,7 +144,7 @@ function App() {
             path="/expenses"
             element={
               <RequirePerm perm="manage_inventory">
-                <Expenses />
+                <ExpensesRoute />
               </RequirePerm>
             }
           />
@@ -152,7 +152,7 @@ function App() {
             path="/accounting"
             element={
               <RequirePerm perm="view_reports">
-                <Accounting />
+                <AccountingRoute />
               </RequirePerm>
             }
           />
@@ -160,7 +160,7 @@ function App() {
             path="/categories"
             element={
               <RequirePerm perm="manage_inventory">
-                <Categories />
+                <CategoriesRoute />
               </RequirePerm>
             }
           />
@@ -168,7 +168,7 @@ function App() {
             path="/taxes"
             element={
               <RequirePerm perm="manage_inventory">
-                <Taxes />
+                <TaxesRoute />
               </RequirePerm>
             }
           />
@@ -176,7 +176,7 @@ function App() {
             path="/brands"
             element={
               <RequirePerm perm="manage_inventory">
-                <Brands />
+                <BrandsRoute />
               </RequirePerm>
             }
           />
@@ -193,7 +193,7 @@ function App() {
             path="/suppliers"
             element={
               <RequirePerm perm="manage_orders">
-                <Suppliers />
+                <SuppliersRoute />
               </RequirePerm>
             }
           />
@@ -201,7 +201,7 @@ function App() {
             path="/purchase-orders"
             element={
               <RequirePerm perm="manage_orders">
-                <PurchaseOrders />
+                <PurchaseOrdersRoute />
               </RequirePerm>
             }
           />
@@ -209,7 +209,7 @@ function App() {
             path="/supplier-payables"
             element={
               <RequirePerm perm="manage_orders">
-                <SupplierPayables />
+                <SupplierPayablesRoute />
               </RequirePerm>
             }
           />
@@ -225,7 +225,7 @@ function App() {
             path="/returned-stock"
             element={
               <RequirePerm perm="manage_orders">
-                <ReturnedStock />
+                <ReturnedStockRoute />
               </RequirePerm>
             }
           />
@@ -234,7 +234,7 @@ function App() {
             path="/employees"
             element={
               <RequirePerm perm="manage_employees">
-                <Employees />
+                <EmployeesRoute />
               </RequirePerm>
             }
           />
@@ -242,7 +242,7 @@ function App() {
             path="/outlets"
             element={
               <RequirePerm perm="manage_employees">
-                <Outlets />
+                <OutletsRoute />
               </RequirePerm>
             }
           />
@@ -250,7 +250,7 @@ function App() {
             path="/administrator"
             element={
               <RequirePerm perm="manage_employees">
-                <Administrator />
+                <AdministratorRoute />
               </RequirePerm>
             }
           />
@@ -258,7 +258,7 @@ function App() {
             path="/action-history"
             element={
               <RequirePerm perm="manage_employees">
-                <ActionHistory />
+                <ActionHistoryRoute />
               </RequirePerm>
             }
           />
@@ -266,7 +266,7 @@ function App() {
             path="/backup-restore"
             element={
               <RequirePerm perm="manage_employees">
-                <BackupRestore />
+                <BackupRestoreRoute />
               </RequirePerm>
             }
           />
@@ -274,7 +274,7 @@ function App() {
             path="/integrations/shopify"
             element={
               <RequirePerm perm="manage_inventory">
-                <ShopifyIntegration />
+                <ShopifyIntegrationRoute />
               </RequirePerm>
             }
           />
@@ -284,7 +284,7 @@ function App() {
             path="/hr/leave"
             element={
               <RequirePerm perm="manage_employees">
-                <HRManagement />
+                <HRManagementRoute />
               </RequirePerm>
             }
           />
@@ -292,7 +292,7 @@ function App() {
             path="/hr/payroll"
             element={
               <RequirePerm perm="manage_employees">
-                <HRManagement />
+                <HRManagementRoute />
               </RequirePerm>
             }
           />
@@ -300,78 +300,78 @@ function App() {
             path="/company-settings"
             element={
               <RequirePerm perm="manage_employees">
-                <CompanySettings />
+                <CompanySettingsRoute />
               </RequirePerm>
             }
           />
           <Route
             path="/reports/sales-summary"
-            element={<ReportTabStandalone tabId="sales-summary" />}
+            element={<ReportTabStandaloneRoute tabId="sales-summary" />}
           />
           <Route
             path="/reports/sales-detail"
-            element={<ReportTabStandalone tabId="sales-detail" />}
+            element={<ReportTabStandaloneRoute tabId="sales-detail" />}
           />
           <Route
             path="/reports/sales-and-stock"
-            element={<ReportTabStandalone tabId="sales-stock" />}
+            element={<ReportTabStandaloneRoute tabId="sales-stock" />}
           />
           <Route
             path="/reports/inventory-dump"
-            element={<ReportTabStandalone tabId="inventory-dump" />}
+            element={<ReportTabStandaloneRoute tabId="inventory-dump" />}
           />
           <Route
             path="/reports/category-wise"
-            element={<ReportTabStandalone tabId="category-wise" />}
+            element={<ReportTabStandaloneRoute tabId="category-wise" />}
           />
           <Route
             path="/reports/product-specification"
-            element={<ReportTabStandalone tabId="product-spec" />}
+            element={<ReportTabStandaloneRoute tabId="product-spec" />}
           />
           <Route
             path="/reports/order-wise"
-            element={<ReportTabStandalone tabId="order-wise" />}
+            element={<ReportTabStandaloneRoute tabId="order-wise" />}
           />
           <Route
             path="/reports/replenishment"
-            element={<ReportTabStandalone tabId="replenishment" />}
+            element={<ReportTabStandaloneRoute tabId="replenishment" />}
           />
           <Route
             path="/reports/on-hand-inventory"
-            element={<ReportTabStandalone tabId="on-hand" />}
+            element={<ReportTabStandaloneRoute tabId="on-hand" />}
           />
           <Route
             path="/reports/customer-details"
-            element={<ReportTabStandalone tabId="customer-details" />}
+            element={<ReportTabStandaloneRoute tabId="customer-details" />}
           />
           <Route
             path="/reports/customer-wise"
-            element={<ReportTabStandalone tabId="customer-wise" />}
+            element={<ReportTabStandaloneRoute tabId="customer-wise" />}
           />
           <Route
             path="/reports/supplier-wise"
-            element={<ReportTabStandalone tabId="supplier-wise" />}
+            element={<ReportTabStandaloneRoute tabId="supplier-wise" />}
           />
           <Route
             path="/reports/inventory-loss"
-            element={<ReportTabStandalone tabId="inventory-loss" />}
+            element={<ReportTabStandaloneRoute tabId="inventory-loss" />}
           />
           <Route
             path="/reports/item-wise"
-            element={<ReportTabStandalone tabId="item-wise" />}
+            element={<ReportTabStandaloneRoute tabId="item-wise" />}
           />
           <Route
             path="/reports/wastage"
-            element={<ReportTabStandalone tabId="wastage" />}
+            element={<ReportTabStandaloneRoute tabId="wastage" />}
           />
           <Route
             path="/reports/product-movement"
-            element={<ReportTabStandalone tabId="product-movement" />}
+            element={<ReportTabStandaloneRoute tabId="product-movement" />}
           />
           <Route path="/reports/parent-report" element={<PlaceholderPage />} />
           <Route
             path="/reports/product-performance"
-            element={<ReportTabStandalone tabId="product-performance" />}
+            element={<ReportTabStandaloneRoute tabId="product-performance" />}
           />
           <Route path="/receipt-templates" element={<ReceiptTemplates />} />
         </Route>

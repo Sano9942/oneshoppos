@@ -112,3 +112,11 @@ export function EmptyState({ title, body }) {
     </div>
   );
 }
+
+export function Skeleton({ className = "" }) {
+  return (
+    <div
+      className={`animate-pulse rounded bg-(--ui-muted-surface) ${className}`}
+    />
+  );
+}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, Search, Trash2 } from "lucide-react";
+import { Download, Plus, Search, Trash2, X } from "lucide-react";
 import { API_BASE as API } from "../config";
 import {
   Badge,
@@ -15,6 +15,140 @@ import {
 import { useAuth } from "../auth/AuthProvider";
 
 const PAGE_SIZE = 50;
+
+const BLANK_FORM = {
+  name: "", barcode: "", sku: "", price: "", cost_price: "",
+  stock: "", category_id: "", status: "active", unit: "pcs",
+};
+
+function ProductModal({ product, categories, authHeaders, onClose, onSaved }) {
+  const isEdit = Boolean(product);
+  const [form, setForm] = useState(
+    isEdit
+      ? {
+          name: product.name || "",
+          barcode: product.barcode || "",
+          sku: product.sku || "",
+          price: product.price ?? "",
+          cost_price: product.cost_price ?? "",
+          stock: product.total_stock ?? "",
+          category_id: product.category_id || "",
+          status: product.status || "active",
+          unit: product.unit || "pcs",
+        }
+      : { ...BLANK_FORM },
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const upd = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  const save = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) { setError("Product name is required."); return; }
+    if (form.price === "" || isNaN(Number(form.price))) { setError("Valid price is required."); return; }
+    setSaving(true);
+    setError("");
+    try {
+      const url = isEdit
+        ? `${API}/api/products/${product.id}`
+        : `${API}/api/products`;
+      const method = isEdit ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          price: Number(form.price),
+          cost_price: form.cost_price !== "" ? Number(form.cost_price) : 0,
+          stock: form.stock !== "" ? Number(form.stock) : 0,
+          category_id: form.category_id || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Save failed");
+      onSaved();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="w-full max-w-lg rounded-xl border border-[var(--ui-border)] bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[var(--ui-border)] px-5 py-4">
+          <h2 className="font-semibold text-[var(--ui-text)]">
+            {isEdit ? "Edit Product" : "Add Product"}
+          </h2>
+          <button onClick={onClose} className="text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]">
+            <X size={18} />
+          </button>
+        </div>
+        <form onSubmit={save} className="space-y-3 p-5">
+          {error && (
+            <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2 flex flex-col gap-1">
+              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Product Name *</label>
+              <Input value={form.name} onChange={(e) => upd("name", e.target.value)} placeholder="e.g. Blue T-Shirt" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Barcode</label>
+              <Input value={form.barcode} onChange={(e) => upd("barcode", e.target.value)} placeholder="Scan or type" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-[var(--ui-text-muted)]">SKU</label>
+              <Input value={form.sku} onChange={(e) => upd("sku", e.target.value)} placeholder="e.g. BTS-001" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Selling Price *</label>
+              <Input type="number" min="0" step="0.01" value={form.price} onChange={(e) => upd("price", e.target.value)} placeholder="0.00" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Cost Price</label>
+              <Input type="number" min="0" step="0.01" value={form.cost_price} onChange={(e) => upd("cost_price", e.target.value)} placeholder="0.00" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Opening Stock</label>
+              <Input type="number" min="0" value={form.stock} onChange={(e) => upd("stock", e.target.value)} placeholder="0" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Unit</label>
+              <Input value={form.unit} onChange={(e) => upd("unit", e.target.value)} placeholder="pcs" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Category</label>
+              <Select value={form.category_id} onChange={(e) => upd("category_id", e.target.value)}>
+                <option value="">No category</option>
+                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Status</label>
+              <Select value={form.status} onChange={(e) => upd("status", e.target.value)}>
+                <option value="active">Active</option>
+                <option value="draft">Draft</option>
+                <option value="inactive">Inactive</option>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 border-t border-[var(--ui-border)] pt-3">
+            <Button type="button" onClick={onClose} disabled={saving}>Cancel</Button>
+            <Button tone="primary" type="submit" disabled={saving}>
+              {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Product"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 function exportCSV(rows, filename) {
   if (!rows.length) return;
@@ -43,6 +177,7 @@ export default function InventoryRedesign() {
   const [sortField, setSortField] = useState("name");
   const [sortOrder, setSortOrder] = useState("asc");
   const [status, setStatus] = useState("");
+  const [modalProduct, setModalProduct] = useState(undefined); // undefined=closed, null=new, object=edit
   const [categoryId, setCategoryId] = useState("");
   const [bulkCategoryTarget, setBulkCategoryTarget] = useState("");
   const [page, setPage] = useState(1);
@@ -151,6 +286,7 @@ export default function InventoryRedesign() {
   const selectedCount = selectedIds.size;
 
   return (
+    <>
     <PageShell
       title="Products"
       subtitle="Shopify-style product listing with server filtering, sorting, and bulk operations."
@@ -175,6 +311,10 @@ export default function InventoryRedesign() {
           >
             <Download size={14} className="mr-1 inline" />
             Export all
+          </Button>
+          <Button tone="primary" onClick={() => setModalProduct(null)}>
+            <Plus size={14} className="mr-1 inline" />
+            Add Product
           </Button>
         </div>
       }
@@ -370,11 +510,12 @@ export default function InventoryRedesign() {
               {paged.map((p) => (
                 <tr
                   key={p.id}
-                  className={`border-t border-[var(--ui-border)] ${
-                    selectedIds.has(p.id) ? "bg-emerald-50" : "bg-white"
+                  className={`border-t border-[var(--ui-border)] cursor-pointer ${
+                    selectedIds.has(p.id) ? "bg-emerald-50" : "hover:bg-slate-50 bg-white"
                   }`}
+                  onClick={() => setModalProduct(p)}
                 >
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={selectedIds.has(p.id)}
@@ -403,7 +544,15 @@ export default function InventoryRedesign() {
                     {p.category_name || "-"}
                   </td>
                   <td className="px-3 py-2">
-                    <Badge tone={String(p.status || "active") === "active" ? "success" : "warning"}>
+                    <Badge
+                      tone={
+                        String(p.status || "active") === "active"
+                          ? "success"
+                          : String(p.status) === "draft"
+                            ? "warning"
+                            : "danger"
+                      }
+                    >
                       {p.status || "active"}
                     </Badge>
                   </td>
@@ -437,5 +586,15 @@ export default function InventoryRedesign() {
         </div>
       </SectionCard>
     </PageShell>
+    {modalProduct !== undefined && (
+      <ProductModal
+        product={modalProduct}
+        categories={categories}
+        authHeaders={authHeaders}
+        onClose={() => setModalProduct(undefined)}
+        onSaved={() => { setModalProduct(undefined); fetchProducts(); }}
+      />
+    )}
+    </>
   );
 }

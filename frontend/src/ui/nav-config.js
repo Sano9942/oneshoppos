@@ -11,6 +11,23 @@ import {
   BookOpen,
   UserPlus,
   FileText,
+  Tags,
+  Truck,
+  Percent,
+  Banknote,
+  ArrowLeftRight,
+  RotateCcw,
+  ClipboardList,
+  Building2,
+  DatabaseBackup,
+  Plug,
+  Tag,
+  CreditCard,
+  CheckSquare,
+  RefreshCw,
+  Layers,
+  BarChart2,
+  User,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -22,68 +39,73 @@ export const SHOPIFY_NAV_GROUPS = [
     label: "Commerce",
     items: [
       { name: "POS", path: "/pos", icon: MonitorPlay },
-      {
-        name: "Orders",
-        path: "/orders",
-        icon: ShoppingCart,
-        requiredPerm: "manage_orders",
-      },
+      { name: "Orders", path: "/orders", icon: ShoppingCart, requiredPerm: "manage_orders" },
       { name: "Customers", path: "/customers", icon: Users },
-      {
-        name: "Inventory",
-        path: "/inventory",
-        icon: Package,
-        requiredPerm: "manage_inventory",
-      },
-      {
-        name: "Stock Control",
-        path: "/purchase-orders",
-        icon: History,
-        requiredPerm: "manage_orders",
-      },
+      { name: "Returns", path: "/returns", icon: RotateCcw },
+      { name: "Sales History", path: "/sales-history", icon: Receipt },
+      { name: "Cash Management", path: "/cash-management", icon: Banknote },
+    ],
+  },
+  {
+    label: "Inventory",
+    items: [
+      { name: "Products", path: "/inventory", icon: Package, requiredPerm: "manage_inventory" },
+      { name: "Categories", path: "/categories", icon: Tags, requiredPerm: "manage_inventory" },
+      { name: "Brands", path: "/brands", icon: Tag, requiredPerm: "manage_inventory" },
+      { name: "Taxes", path: "/taxes", icon: BarChart2, requiredPerm: "manage_inventory" },
+      { name: "Attribute Sets", path: "/attribute-sets", icon: Layers, requiredPerm: "manage_inventory" },
+      { name: "Promotions", path: "/promotions", icon: Percent, requiredPerm: "manage_inventory" },
+    ],
+  },
+  {
+    label: "Stock Control",
+    items: [
+      { name: "Purchase Orders", path: "/purchase-orders", icon: History, requiredPerm: "manage_orders" },
+      { name: "Stock Adjustments", path: "/adjustments", icon: RefreshCw, requiredPerm: "manage_inventory" },
+      { name: "Transfers", path: "/transfers", icon: ArrowLeftRight, requiredPerm: "manage_inventory" },
+      { name: "Returned Stock", path: "/returned-stock", icon: Package, requiredPerm: "manage_orders" },
+      { name: "Supplier Payables", path: "/supplier-payables", icon: CreditCard, requiredPerm: "manage_orders", requiredFlag: "supplier_payables" },
+    ],
+  },
+  {
+    label: "Procurement",
+    items: [
+      { name: "Suppliers", path: "/suppliers", icon: Truck, requiredPerm: "manage_orders" },
+      { name: "Expenses", path: "/expenses", icon: Banknote, requiredPerm: "manage_inventory" },
+      { name: "Approvals", path: "/approvals", icon: CheckSquare, requiredPerm: "manage_orders", requiredFlag: "approvals" },
     ],
   },
   {
     label: "Insights",
     items: [
       { name: "Reports", path: "/reports", icon: Receipt },
-      {
-        name: "Accounting",
-        path: "/accounting",
-        icon: BookOpen,
-        requiredPerm: "view_reports",
-      },
+      { name: "Accounting", path: "/accounting", icon: BookOpen, requiredPerm: "view_reports", requiredFlag: "accounting_core" },
     ],
   },
   {
     label: "Operations",
     items: [
-      {
-        name: "CRM",
-        path: "/crm",
-        icon: UserPlus,
-        requiredPerm: "manage_orders",
-        requiredFlag: "crm_quotations",
-      },
-      {
-        name: "HR",
-        path: "/hr/leave",
-        icon: FileText,
-        requiredPerm: "manage_employees",
-        requiredFlag: "advanced_hr",
-      },
-      {
-        name: "Setup",
-        path: "/outlets",
-        icon: Settings,
-        requiredPerm: "manage_employees",
-      },
-      {
-        name: "Admin",
-        path: "/administrator",
-        icon: Shield,
-        requiredPerm: "manage_employees",
-      },
+      { name: "CRM", path: "/crm", icon: UserPlus, requiredPerm: "manage_orders", requiredFlag: "crm_quotations" },
+      { name: "Quotations", path: "/quotations", icon: FileText, requiredPerm: "manage_orders", requiredFlag: "crm_quotations" },
+      { name: "HR Leave", path: "/hr/leave", icon: User, requiredPerm: "manage_employees", requiredFlag: "advanced_hr" },
+      { name: "HR Payroll", path: "/hr/payroll", icon: FileText, requiredPerm: "manage_employees", requiredFlag: "advanced_hr" },
+    ],
+  },
+  {
+    label: "Setup",
+    items: [
+      { name: "Employees", path: "/employees", icon: Users, requiredPerm: "manage_employees" },
+      { name: "Outlets", path: "/outlets", icon: Building2, requiredPerm: "manage_employees" },
+      { name: "Company Profile", path: "/company-settings", icon: Settings, requiredPerm: "manage_employees", requiredFlag: "multi_company" },
+      { name: "Shopify Integration", path: "/integrations/shopify", icon: Plug, requiredPerm: "manage_inventory" },
+      { name: "Backup & Restore", path: "/backup-restore", icon: DatabaseBackup, requiredPerm: "manage_employees", requiredFlag: "backup_restore" },
+    ],
+  },
+  {
+    label: "Admin",
+    items: [
+      { name: "Administrator", path: "/administrator", icon: Shield, requiredPerm: "manage_employees" },
+      { name: "Action History", path: "/action-history", icon: ClipboardList, requiredPerm: "manage_employees" },
     ],
   },
 ];

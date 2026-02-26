@@ -435,6 +435,18 @@ const DEFAULT_FEATURE_FLAGS = {
   ui_redesign_sales_history: false,
   ui_redesign_cash_management: false,
   ui_redesign_returns: false,
+  ui_redesign_categories: false,
+  ui_redesign_brands: false,
+  ui_redesign_taxes: false,
+  ui_redesign_attribute_sets: false,
+  ui_redesign_stock_adjustments: false,
+  ui_redesign_transfers: false,
+  ui_redesign_returned_stock: false,
+  ui_redesign_suppliers: false,
+  ui_redesign_purchase_orders: false,
+  ui_redesign_supplier_payables: false,
+  ui_redesign_promotions: false,
+  ui_redesign_expenses: false,
 };
 
 function getFeatureFlagsMap(cb) {
