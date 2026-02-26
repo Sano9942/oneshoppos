@@ -7,7 +7,6 @@ This folder contains current project documentation.
 - `STATUS.md` - Current delivery/status snapshot
 - `project-full-overview.md` - High-level full project context
 - `IMPROVEMENT_PLAN.md` - Tiered roadmap with completion states
-- `tier 4 plan .md` - Tier 4 implementation and verification record
 
 ## Technical Docs
 
@@ -28,7 +27,6 @@ This folder contains current project documentation.
 1. `STATUS.md`
 2. `project-full-overview.md`
 3. `IMPROVEMENT_PLAN.md`
-4. `tier 4 plan .md`
-5. `ARCHITECTURE.md`
-6. `API_REFERENCE.md`
-7. `TESTING.md`
+4. `ARCHITECTURE.md`
+5. `API_REFERENCE.md`
+6. `TESTING.md`

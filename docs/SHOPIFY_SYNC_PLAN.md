@@ -182,11 +182,84 @@ Additional integration fixes completed after the prior update:
 - Inventory CSV export now includes these fields.
 - Bulk import upsert now accepts and persists these fields.
 
+14. Import from Shopify (Inbound Product + Inventory Pull) — added 2026-02-26
+- Added `fetchShopifyProductsFull(connection, maxItems = 2000)` in `backend/shopify/client.js`:
+  - GraphQL paginated query (pageSize = 50 products per request, up to 100 variants per product)
+  - Fetches: product id, title, descriptionHtml, productType, vendor, tags, status, and per-variant: id, sku, barcode, price, compareAtPrice, weight, weightUnit, inventoryItem.id, inventoryLevels per location with available quantities
+  - Loops with cursor pagination until `hasNextPage = false` or `maxItems` reached
+- Added `POST /api/integrations/shopify/import/products` (requires `manage_inventory`):
+  - Calls `fetchShopifyProductsFull` then upserts each barcoded variant into `products` table
+  - Uses `INSERT OR IGNORE ... ON CONFLICT(barcode) DO UPDATE` — safe for repeated runs
+  - Seeds `outlet_stock` per Shopify inventory_level using location map (outlet_id fallback to default outlet)
+  - Upserts `shopify_product_map` linking local product_id to Shopify product/variant/inventory_item IDs
+  - Returns `{ created, updated, skipped, errors }`
+- Added `POST /api/integrations/shopify/import/inventory` (requires `manage_inventory`):
+  - Cross-joins `shopify_product_map × shopify_location_map` to get all mapped pairs
+  - Fetches live Shopify `available` quantity per inventoryItemId + locationId
+  - Sets `outlet_stock.quantity` absolutely (not delta) — Shopify is treated as source of truth
+  - Returns `{ synced, failed, errors }`
+- Added "Import from Shopify" card in `ShopifyIntegration.jsx`:
+  - "Import Products from Shopify" button — runs full product + inventory seeding
+  - "Sync Inventory Levels from Shopify" button — re-pulls live quantities for already-mapped products
+  - Result panels for each action showing created/updated/skipped/synced/failed counts
+  - Both buttons disabled when not connected
+
+### Import from Shopify — Field-by-Field Reference Table
+
+| Field | Shopify Source | Imported to POS | Notes |
+|---|---|---|---|
+| name | `product.title` | `products.name` | Always imported |
+| barcode | `variant.barcode` | `products.barcode` | **Primary lookup key** — variants without barcode are skipped |
+| sku | `variant.sku` or `inventoryItem.sku` | `products.barcode` (secondary) | Used when barcode not set; still requires non-empty for upsert |
+| price | `variant.price` | `products.price` | Imported as REAL |
+| compare_at_price | `variant.compareAtPrice` | `products.compare_at_price` | Imported (0 if not set) |
+| description | `product.descriptionHtml` | `products.description_html` | HTML preserved |
+| product_type | `product.productType` | `products.product_type` | Imported as text |
+| vendor | `product.vendor` | `products.vendor` | Imported as text |
+| tags | `product.tags` | `products.tags` | Comma-joined string |
+| status | `product.status` | `products.status` | Lowercased (active/draft/archived) |
+| outlet_stock | `inventoryLevel.quantities[available]` | `outlet_stock.quantity` | Seeded per mapped location |
+| shopify_product_id | `product.id` | `shopify_product_map.shopify_product_id` | GID format |
+| shopify_variant_id | `variant.id` | `shopify_product_map.shopify_variant_id` | GID format |
+| shopify_inventory_item_id | `inventoryItem.id` | `shopify_product_map.shopify_inventory_item_id` | GID format |
+| weight | `variant.weight` + `variant.weightUnit` | **NOT written** | Fetched but dropped — no `weight` column in `products` table |
+| cost_price | n/a | `products.cost_price` = 0 | Shopify API does not expose cost price — must set manually |
+| gst / tax | n/a | `products.gst` = 0, `products.tax_id` = NULL | No tax data in Shopify product API — must assign manually |
+| category_id | n/a | `products.category_id` = NULL | No direct Shopify equivalent — assign manually after import |
+| brand_id | n/a | `products.brand_id` = NULL (if column exists) | No direct Shopify equivalent — assign manually |
+| images / media | n/a | **NOT imported** | Shopify images not fetched — upload manually |
+| stock (products.stock) | n/a | `products.stock` = 0 | `products.stock` is legacy field; real stock lives in `outlet_stock` |
+
+### Import Limits
+
+| Parameter | Value |
+|---|---|
+| Max products imported per call | 2,000 |
+| GraphQL page size | 50 products per request |
+| Max variants per product (per query) | 100 |
+| Max inventory levels per variant (per query) | 10 |
+| Variants without barcode | Skipped (not imported) |
+| Products without any barcoded variants | Skipped entirely |
+| Safe to re-run | Yes — upsert by barcode is idempotent |
+
+### After-Import Manual Steps
+
+After running "Import Products from Shopify", complete these fields manually in POS Inventory:
+
+1. **cost_price** — Shopify does not expose cost. Set via product edit or bulk import CSV.
+2. **tax / GST** — Assign appropriate tax rate via the tax_id field on each product.
+3. **category_id** — Map products to POS categories.
+4. **brand_id** — Assign brand if applicable.
+5. **product images** — Upload via Inventory edit (not fetched from Shopify).
+6. **weight** — Set shipping weight if needed for labels (column exists on `product_variants` not `products`).
+7. **min/max stock quantities** — Set reorder thresholds manually if applicable.
+
 ### Tests Executed
 
 1. Syntax and static checks
 - `node --check backend/index.js`
-- `node --check backend/shopify/client.js`
+- `node --check backend/shopify/client.js` (includes new `fetchShopifyProductsFull`)
+- `node --check backend/routes/registerAllRoutes.js` (includes new import routes)
 - `node --check backend/migrate41.js`
 - `node --check backend/migrate42.js`
 - `node --check backend/migrate43.js`
@@ -194,7 +267,7 @@ Additional integration fixes completed after the prior update:
 - `node --check backend/migrate45.js`
 - `node backend/shopify_utils_test.js`
 - `node backend/shopify_mock_integration_test.js`
-- ESLint on changed frontend files (including `ShopifyIntegration.jsx`, `App.jsx`, `AppLayout.jsx`, `Orders.jsx`)
+- ESLint on changed frontend files (including `ShopifyIntegration.jsx`, `App.jsx`, `AppLayout.jsx`, `Orders.jsx`) — 0 warnings/errors
 
 2. Migration execution
 - `migrate41.js` executed successfully.
@@ -251,6 +324,14 @@ Additional integration fixes completed after the prior update:
 - Runbook added: `docs/SHOPIFY_LIVE_RUNBOOK.md`
 - Env template added: `backend/.env.shopify.example`
 
+8. Import from Shopify — known gaps (post-import manual work)
+- **DONE**: Product + inventory import built (see item 14 above).
+- **Remaining gap**: `weight` / `weight_unit` fetched from Shopify but silently dropped — `products` table has no weight column. Weight lives on `product_variants`. If single-variant products need shipping weight in POS, add `weight` + `weight_unit` columns to `products` and write them on import.
+- **Remaining gap**: `cost_price` is always 0 on import — Shopify Admin GraphQL does not expose cost price in product queries. Populate via separate bulk import CSV or manual edit after Shopify import.
+- **Remaining gap**: Webhook-based automatic inbound product/inventory sync not yet implemented. Currently manual (button-click). Webhook automation is a future phase.
+- **Remaining gap**: Product images not fetched. Shopify `images` field not included in `fetchShopifyProductsFull` query. Add image URL storage + fetch if needed.
+- **Remaining gap**: Import limit is 2,000 products. For stores with more than 2,000 products, increase `maxItems` parameter or implement paginated batch import with progress tracking.
+
 ## Goal
 Build reliable bi-directional inventory sync between OneShopPOS and Shopify so stock updates from either side propagate correctly with auditability, retries, and conflict safety.
 
@@ -266,7 +347,8 @@ Build reliable bi-directional inventory sync between OneShopPOS and Shopify so s
 - Out of scope (phase 2+):
   - Full order import into POS
   - Returns/refund full parity automation
-  - Price/catalog sync
+  - Price/catalog sync (real-time push)
+  - Webhook-driven automatic product/inventory import (manual button flow is now built; auto-trigger is phase 2)
 
 ## Architecture Decisions
 

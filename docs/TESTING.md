@@ -9,6 +9,7 @@ Last Updated: 2026-02-26
 ### Core Regression
 
 Command:
+
 ```bash
 cd backend
 npm run preflight
@@ -16,21 +17,25 @@ npm run test:e2e-full
 ```
 
 Result:
+
 - `npm run preflight`: PASS
 - `npm run test:e2e-full`: 69 passed, 0 failed
 
 ### Tier 4 Focused Smoke
 
 Command:
+
 ```bash
 cd backend
 npm run test:tier4-smoke
 ```
 
 Result:
+
 - 53 passed, 0 failed
 
 Covers:
+
 - Notifications endpoints
 - Company profile endpoints
 - Accounting endpoints
@@ -50,6 +55,7 @@ npm run test:shopify-mock
 ```
 
 Latest result:
+
 - `npm run test:shopify-utils`: PASS
 - `npm run test:shopify-mock`: PASS
 
@@ -58,6 +64,7 @@ Latest result:
 ## Shopify Live Validation Progress (2026-02-26)
 
 Completed in live environment:
+
 - Shopify connection verified and live locations fetched.
 - Location mapping configured from POS outlet(s) to Shopify location(s).
 - Product mapping created via live auto-suggestion + apply flow.
@@ -68,6 +75,7 @@ Completed in live environment:
   - subsequent event retried and reached `processed` after reason normalization fix
 
 Current gap before full go-live signoff:
+
 - Inbound webhook production validation is still pending:
   - webhook secret must be configured in POS + Shopify
   - public HTTPS callback URL must be configured/reachable
@@ -81,7 +89,12 @@ Current gap before full go-live signoff:
 2. Create and complete a POS sale, then verify sales history
 3. Open and close a cash shift
 4. Confirm low-stock visibility in inventory/dashboard
-5. Open Tier 4 routes and confirm page render:
+5. Inventory bulk-actions smoke:
+   - verify `GET /api/products` sorting/filter query params return `200`
+   - select multiple rows in inventory and run bulk status/category updates
+   - run bulk delete on test rows only and confirm list refresh
+   - export selected rows and verify CSV contains only selected ids
+6. Open Tier 4 routes and confirm page render:
    - `/accounting`
    - `/crm`
    - `/quotations`

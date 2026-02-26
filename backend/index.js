@@ -14,6 +14,7 @@ const {
   fetchShopifyLocations,
   adjustShopifyInventory,
   fetchShopifyVariantCatalog,
+  fetchShopifyProductsFull,
   fetchInventoryLevel,
   fetchRecentOrders,
 } = require("./shopify/client");
@@ -534,6 +535,7 @@ const { processPendingShopifyInventoryEvents } = registerAllRoutes(app, {
   fetchShopifyLocations,
   adjustShopifyInventory,
   fetchShopifyVariantCatalog,
+  fetchShopifyProductsFull,
   fetchInventoryLevel,
   fetchRecentOrders,
   retryDelayMinutesWithJitter,
@@ -546,6 +548,43 @@ const { processPendingShopifyInventoryEvents } = registerAllRoutes(app, {
   decryptShopifySecret,
   logShopifyEvent,
 });
+
+function collectRegisteredRoutes(appInstance) {
+  const stack = appInstance?.router?.stack || [];
+  return stack
+    .filter((layer) => layer.route)
+    .flatMap((layer) =>
+      Object.keys(layer.route.methods || {}).map((method) => ({
+        method: method.toUpperCase(),
+        path: layer.route.path,
+      })),
+    );
+}
+
+function ensureCriticalRoutesRegistered(appInstance) {
+  const required = [
+    { method: "POST", path: "/api/products/bulk-import" },
+    { method: "POST", path: "/api/products/bulk-delete" },
+    { method: "POST", path: "/api/products/bulk-status" },
+    { method: "DELETE", path: "/api/integrations/shopify/import/products" },
+  ];
+  const registered = collectRegisteredRoutes(appInstance);
+  const missing = required.filter(
+    (target) =>
+      !registered.some(
+        (route) =>
+          route.method === target.method && route.path === target.path,
+      ),
+  );
+  if (missing.length) {
+    const summary = missing.map((m) => `${m.method} ${m.path}`).join(", ");
+    throw new Error(
+      `Critical route registration failed. Missing: ${summary}.`,
+    );
+  }
+}
+
+ensureCriticalRoutesRegistered(app);
 
 // --- 3.6 Auto DB Backup (daily, 7-copy retention) ---
 const BACKUP_DIR = path.resolve(__dirname, "backups");

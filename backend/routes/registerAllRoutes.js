@@ -27,6 +27,7 @@ module.exports = function registerAllRoutes(app, deps) {
     fetchShopifyLocations,
     adjustShopifyInventory,
     fetchShopifyVariantCatalog,
+    fetchShopifyProductsFull,
     fetchInventoryLevel,
     fetchRecentOrders,
     retryDelayMinutesWithJitter,
@@ -804,12 +805,44 @@ module.exports = function registerAllRoutes(app, deps) {
     });
   }
 
-  // Get all products (with aggregated stock)
+  // Get all products (with aggregated stock, sort/filter/search support)
   app.get("/api/products", (req, res) => {
+    const { search, sort, order, status, category_id } = req.query;
+
+    // Allowed sort columns (whitelist to prevent SQL injection)
+    const sortMap = {
+      name: "p.name",
+      price: "p.price",
+      stock: "total_stock",
+      min_qty: "p.min_qty",
+      created_at: "p.id",
+    };
+    const sortCol = sortMap[sort] || "p.name";
+    const sortDir = order === "desc" ? "DESC" : "ASC";
+
+    const conditions = [];
+    const params = [];
+
+    if (search) {
+      conditions.push("(p.name LIKE ? OR p.barcode LIKE ? OR p.sku LIKE ?)");
+      const q = `%${search}%`;
+      params.push(q, q, q);
+    }
+    if (status === "active" || status === "inactive") {
+      conditions.push("p.status = ?");
+      params.push(status);
+    }
+    if (category_id) {
+      conditions.push("p.category_id = ?");
+      params.push(Number(category_id));
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
     db.all(
       `
-        SELECT p.*, 
-               c.name as category_name, 
+        SELECT p.*,
+               c.name as category_name,
                t.name as tax_name, t.rate as tax_rate,
                s.name as supplier_name,
                b.name as brand_name,
@@ -825,9 +858,10 @@ module.exports = function registerAllRoutes(app, deps) {
         LEFT JOIN (
             SELECT product_id, SUM(stock) as total FROM product_variants GROUP BY product_id
         ) pv_sum ON p.id = pv_sum.product_id
-        ORDER BY p.name ASC
+        ${where}
+        ORDER BY ${sortCol} ${sortDir}
     `,
-      [],
+      params,
       (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ products: rows });
@@ -1417,6 +1451,106 @@ module.exports = function registerAllRoutes(app, deps) {
         return res.status(404).json({ error: "Product not found" });
       res.json({ message: "Product deleted" });
     });
+  });
+
+  // Bulk delete products by IDs
+  // Cleans up dependent rows; preserves sale/PO history (FK OFF so orphaned refs remain).
+  app.post("/api/products/bulk-delete", requirePerm("manage_inventory"), (req, res) => {
+    const ids = (req.body?.ids || []).map(Number).filter(Boolean);
+    if (!ids.length) return res.status(400).json({ error: "No product IDs provided." });
+
+    const CHUNK = 400;
+    const chunks = [];
+    for (let i = 0; i < ids.length; i += CHUNK) chunks.push(ids.slice(i, i + CHUNK));
+
+    let totalDeleted = 0;
+    let chunkIdx = 0;
+
+    db.run("PRAGMA foreign_keys = OFF", (fkErr) => {
+      if (fkErr) return res.status(500).json({ error: fkErr.message });
+
+      const finish = (err) => {
+        db.run("PRAGMA foreign_keys = ON", () => {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json({ deleted: totalDeleted });
+        });
+      };
+
+      const processChunk = () => {
+        if (chunkIdx >= chunks.length) return finish(null);
+        const batch = chunks[chunkIdx++];
+        const ph = batch.map(() => "?").join(",");
+        db.run(`DELETE FROM shopify_product_map WHERE product_id IN (${ph})`, batch, (e1) => {
+          if (e1) return finish(e1);
+          db.run(`DELETE FROM outlet_stock WHERE product_id IN (${ph})`, batch, (e2) => {
+            if (e2) return finish(e2);
+            db.run(`DELETE FROM stock_adjustments WHERE product_id IN (${ph})`, batch, (e3) => {
+              if (e3) return finish(e3);
+              db.run(`DELETE FROM product_variants WHERE product_id IN (${ph})`, batch, (e4) => {
+                if (e4) return finish(e4);
+                db.run(`DELETE FROM product_media WHERE product_id IN (${ph})`, batch, (e5) => {
+                  if (e5) return finish(e5);
+                  db.run(`DELETE FROM products WHERE id IN (${ph})`, batch, function (e6) {
+                    if (e6) return finish(e6);
+                    totalDeleted += this.changes || 0;
+                    processChunk();
+                  });
+                });
+              });
+            });
+          });
+        });
+      };
+      processChunk();
+    });
+  });
+
+  // Bulk update product status (active/inactive)
+  app.post("/api/products/bulk-status", requirePerm("manage_inventory"), (req, res) => {
+    const ids = (req.body?.ids || []).map(Number).filter(Boolean);
+    const { status } = req.body || {};
+    if (!ids.length) return res.status(400).json({ error: "No product IDs provided." });
+    if (status !== "active" && status !== "inactive")
+      return res.status(400).json({ error: "status must be 'active' or 'inactive'." });
+
+    const CHUNK = 400;
+    let updated = 0;
+    let i = 0;
+    const go = () => {
+      if (i >= ids.length) return res.json({ updated });
+      const batch = ids.slice(i, i + CHUNK);
+      i += CHUNK;
+      const ph = batch.map(() => "?").join(",");
+      db.run(`UPDATE products SET status = ? WHERE id IN (${ph})`, [status, ...batch], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        updated += this.changes || 0;
+        go();
+      });
+    };
+    go();
+  });
+
+  // Bulk assign category to products
+  app.post("/api/products/bulk-category", requirePerm("manage_inventory"), (req, res) => {
+    const ids = (req.body?.ids || []).map(Number).filter(Boolean);
+    const categoryId = Number(req.body?.category_id) || null;
+    if (!ids.length) return res.status(400).json({ error: "No product IDs provided." });
+
+    const CHUNK = 400;
+    let updated = 0;
+    let i = 0;
+    const go = () => {
+      if (i >= ids.length) return res.json({ updated });
+      const batch = ids.slice(i, i + CHUNK);
+      i += CHUNK;
+      const ph = batch.map(() => "?").join(",");
+      db.run(`UPDATE products SET category_id = ? WHERE id IN (${ph})`, [categoryId, ...batch], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        updated += this.changes || 0;
+        go();
+      });
+    };
+    go();
   });
 
   // --- ROUTES: SUPPLIERS ---
@@ -7142,6 +7276,339 @@ module.exports = function registerAllRoutes(app, deps) {
             });
           });
       });
+    },
+  );
+
+  // --- IMPORT: Pull products from Shopify into POS ---
+  // Creates/updates products by barcode (upsert). Also creates product mappings.
+  app.post(
+    "/api/integrations/shopify/import/products",
+    requirePerm("manage_inventory"),
+    (req, res) => {
+      getActiveShopifyConnection((connErr, conn) => {
+        if (connErr) return res.status(500).json({ error: connErr.message });
+        if (!conn) return res.status(400).json({ error: "No active Shopify connection" });
+
+        // Fetch all outlets to determine a default outlet for stock seeding
+        db.all("SELECT id FROM outlets ORDER BY id ASC LIMIT 1", [], (outErr, outRows) => {
+          if (outErr) return res.status(500).json({ error: outErr.message });
+          const defaultOutletId = outRows?.[0]?.id || null;
+
+          // Fetch location mappings so we know which outlet maps to which Shopify location
+          db.all(
+            "SELECT outlet_id, shopify_location_id FROM shopify_location_map",
+            [],
+            (mapErr, locationMaps) => {
+              if (mapErr) return res.status(500).json({ error: mapErr.message });
+
+              // Build a map: shopify_location_id -> outlet_id
+              const locationToOutlet = {};
+              (locationMaps || []).forEach((lm) => {
+                locationToOutlet[lm.shopify_location_id] = lm.outlet_id;
+              });
+
+              fetchShopifyProductsFull(conn, 10000)
+                .then((shopifyProducts) => {
+                  if (!shopifyProducts || shopifyProducts.length === 0) {
+                    return res.json({ created: 0, updated: 0, skipped: 0, errors: [] });
+                  }
+
+                  let created = 0;
+                  let updated = 0;
+                  let skipped = 0;
+                  const errors = [];
+                  let idx = 0;
+
+                  const processNext = () => {
+                    if (idx >= shopifyProducts.length) {
+                      return res.json({ created, updated, skipped, errors });
+                    }
+
+                    const sp = shopifyProducts[idx];
+                    idx += 1;
+
+                    // Only import variants that have a barcode (needed for POS lookup)
+                    const importableVariants = sp.variants.filter((v) => v.barcode && v.barcode.trim());
+
+                    if (importableVariants.length === 0) {
+                      skipped += 1;
+                      return processNext();
+                    }
+
+                    // Process each variant as a POS product (one product per barcode)
+                    let vIdx = 0;
+                    const processVariant = () => {
+                      if (vIdx >= importableVariants.length) return processNext();
+                      const v = importableVariants[vIdx];
+                      vIdx += 1;
+
+                      const barcode = v.barcode.trim();
+                      const name = sp.title || barcode;
+
+                      // Check if product already exists
+                      db.get("SELECT id FROM products WHERE barcode = ?", [barcode], (findErr, existing) => {
+                        if (findErr) {
+                          errors.push({ barcode, error: findErr.message });
+                          return processVariant();
+                        }
+
+                        // Auto-create category from Shopify product_type, then run upsert
+                        const productTypeName = (sp.product_type || "").trim();
+                        const doUpsert = (categoryId) => {
+                          db.run(
+                            `INSERT INTO products (barcode, sku, name, price, compare_at_price, description_html, product_type, vendor, tags, status, cost_price, category_id, stock, unit)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'pcs')
+                             ON CONFLICT(barcode) DO UPDATE SET
+                               sku = excluded.sku,
+                               name = excluded.name,
+                               price = excluded.price,
+                               compare_at_price = excluded.compare_at_price,
+                               description_html = excluded.description_html,
+                               product_type = excluded.product_type,
+                               vendor = excluded.vendor,
+                               tags = excluded.tags,
+                               status = excluded.status,
+                               cost_price = CASE WHEN excluded.cost_price > 0 THEN excluded.cost_price ELSE products.cost_price END,
+                               category_id = CASE WHEN excluded.category_id IS NOT NULL THEN excluded.category_id ELSE products.category_id END`,
+                            [
+                              barcode,
+                              v.sku || null,
+                              name,
+                              v.price || 0,
+                              v.compare_at_price || 0,
+                              sp.description_html || null,
+                              sp.product_type || null,
+                              sp.vendor || null,
+                              sp.tags || null,
+                              sp.status || "active",
+                              v.cost_price || 0,
+                              categoryId,
+                            ],
+                            function (upsertErr) {
+                              if (upsertErr) {
+                                errors.push({ barcode, error: upsertErr.message });
+                                return processVariant();
+                              }
+
+                              const productId = existing ? existing.id : this.lastID;
+                              if (existing) updated += 1;
+                              else created += 1;
+
+                              // Upsert product mapping
+                              db.run(
+                                `INSERT INTO shopify_product_map (product_id, shopify_product_id, shopify_variant_id, shopify_inventory_item_id, is_active, last_verified_at)
+                                 VALUES (?, ?, ?, ?, 1, datetime('now','localtime'))
+                                 ON CONFLICT(shopify_product_id, shopify_variant_id) DO UPDATE SET
+                                   product_id = excluded.product_id,
+                                   shopify_inventory_item_id = excluded.shopify_inventory_item_id,
+                                   is_active = 1,
+                                   last_verified_at = datetime('now','localtime')`,
+                                [productId, sp.shopify_product_id, v.shopify_variant_id, v.shopify_inventory_item_id],
+                              );
+
+                              // Seed outlet stock from Shopify inventory levels
+                              const levels = v.inventory_levels || [];
+                              if (levels.length === 0 && defaultOutletId) {
+                                db.run(
+                                  `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+                                   VALUES (?, ?, 0)
+                                   ON CONFLICT(product_id, outlet_id) DO NOTHING`,
+                                  [productId, defaultOutletId],
+                                  () => processVariant(),
+                                );
+                                return;
+                              }
+
+                              let lIdx = 0;
+                              const processLevel = () => {
+                                if (lIdx >= levels.length) return processVariant();
+                                const lvl = levels[lIdx];
+                                lIdx += 1;
+                                const outletId = locationToOutlet[lvl.shopify_location_id] || defaultOutletId;
+                                if (!outletId) return processLevel();
+                                db.run(
+                                  `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+                                   VALUES (?, ?, ?)
+                                   ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = ?`,
+                                  [productId, outletId, lvl.available, lvl.available],
+                                  () => processLevel(),
+                                );
+                              };
+                              processLevel();
+                            },
+                          );
+                        };
+
+                        // Resolve category: upsert from Shopify product_type, then call doUpsert
+                        if (productTypeName) {
+                          db.run(
+                            `INSERT INTO categories (name) VALUES (?)
+                             ON CONFLICT(name) DO NOTHING`,
+                            [productTypeName],
+                            () => {
+                              db.get(
+                                "SELECT id FROM categories WHERE name = ? LIMIT 1",
+                                [productTypeName],
+                                (catErr, catRow) => {
+                                  doUpsert(catErr || !catRow ? null : catRow.id);
+                                },
+                              );
+                            },
+                          );
+                        } else {
+                          doUpsert(null);
+                        }
+                      });
+                    };
+                    processVariant();
+                  };
+                  processNext();
+                })
+                .catch((err) => {
+                  res.status(500).json({ error: `Shopify fetch failed: ${err.message}` });
+                });
+            },
+          );
+        });
+      });
+    },
+  );
+
+  // --- IMPORT: Sync inventory levels from Shopify into POS (mapped products only) ---
+  // For every mapped product/location pair, SET the POS stock to Shopify's current quantity.
+  app.post(
+    "/api/integrations/shopify/import/inventory",
+    requirePerm("manage_inventory"),
+    (req, res) => {
+      getActiveShopifyConnection((connErr, conn) => {
+        if (connErr) return res.status(500).json({ error: connErr.message });
+        if (!conn) return res.status(400).json({ error: "No active Shopify connection" });
+
+        // Load all active product mappings + location mappings
+        db.all(
+          `SELECT spm.product_id, spm.shopify_inventory_item_id,
+                  slm.outlet_id, slm.shopify_location_id
+           FROM shopify_product_map spm
+           JOIN shopify_location_map slm ON 1=1
+           WHERE spm.is_active = 1 AND spm.shopify_inventory_item_id IS NOT NULL AND spm.shopify_inventory_item_id != ''`,
+          [],
+          (mapErr, mappings) => {
+            if (mapErr) return res.status(500).json({ error: mapErr.message });
+            if (!mappings || mappings.length === 0) {
+              return res.status(400).json({ error: "No active product+location mappings found. Map products and locations first." });
+            }
+
+            let synced = 0;
+            let failed = 0;
+            const errors = [];
+            let idx = 0;
+
+            const processNext = () => {
+              if (idx >= mappings.length) {
+                return res.json({ synced, failed, errors });
+              }
+
+              const m = mappings[idx];
+              idx += 1;
+
+              fetchInventoryLevel(conn, m.shopify_inventory_item_id, m.shopify_location_id)
+                .then((lvl) => {
+                  const qty = Number.isFinite(lvl.available) ? lvl.available : 0;
+                  db.run(
+                    `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+                     VALUES (?, ?, ?)
+                     ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = ?`,
+                    [m.product_id, m.outlet_id, qty, qty],
+                    (stockErr) => {
+                      if (stockErr) {
+                        failed += 1;
+                        errors.push({ product_id: m.product_id, outlet_id: m.outlet_id, error: stockErr.message });
+                      } else {
+                        synced += 1;
+                      }
+                      processNext();
+                    },
+                  );
+                })
+                .catch((fetchErr) => {
+                  failed += 1;
+                  errors.push({ product_id: m.product_id, outlet_id: m.outlet_id, error: fetchErr.message });
+                  processNext();
+                });
+            };
+            processNext();
+          },
+        );
+      });
+    },
+  );
+
+  // Delete all products that were imported from Shopify (have a shopify_product_map entry).
+  // Also clears their dependent rows: shopify_product_map, outlet_stock, product_variants,
+  // stock_adjustments. Temporarily disables FK enforcement so products with historic
+  // sale_items are not blocked (sale history is preserved with a NULL product_id).
+  app.delete(
+    "/api/integrations/shopify/import/products",
+    requirePerm("manage_inventory"),
+    (req, res) => {
+      db.all(
+        "SELECT DISTINCT product_id FROM shopify_product_map WHERE product_id IS NOT NULL",
+        [],
+        (listErr, rows) => {
+          if (listErr) return res.status(500).json({ error: listErr.message });
+          const productIds = rows.map((r) => r.product_id).filter(Boolean);
+          if (productIds.length === 0) {
+            return res.json({ deleted: 0, message: "No Shopify-imported products found." });
+          }
+          // SQLite has a 999-parameter limit; chunk into batches of 400
+          const CHUNK = 400;
+          const chunks = [];
+          for (let i = 0; i < productIds.length; i += CHUNK) {
+            chunks.push(productIds.slice(i, i + CHUNK));
+          }
+          let totalDeleted = 0;
+          let chunkIdx = 0;
+
+          // Disable FK enforcement for this operation so historic sale_items
+          // that reference these products don't block the delete.
+          db.run("PRAGMA foreign_keys = OFF", (fkOffErr) => {
+            if (fkOffErr) return res.status(500).json({ error: fkOffErr.message });
+
+            const finish = (err) => {
+              // Always re-enable FK enforcement before responding
+              db.run("PRAGMA foreign_keys = ON", () => {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ deleted: totalDeleted, message: `Deleted ${totalDeleted} Shopify-imported product(s).` });
+              });
+            };
+
+            const processChunk = () => {
+              if (chunkIdx >= chunks.length) return finish(null);
+              const ids = chunks[chunkIdx];
+              chunkIdx += 1;
+              const ph = ids.map(() => "?").join(",");
+              db.run(`DELETE FROM shopify_product_map WHERE product_id IN (${ph})`, ids, (e1) => {
+                if (e1) return finish(e1);
+                db.run(`DELETE FROM outlet_stock WHERE product_id IN (${ph})`, ids, (e2) => {
+                  if (e2) return finish(e2);
+                  db.run(`DELETE FROM product_variants WHERE product_id IN (${ph})`, ids, (e3) => {
+                    if (e3) return finish(e3);
+                    db.run(`DELETE FROM stock_adjustments WHERE product_id IN (${ph})`, ids, (e4) => {
+                      if (e4) return finish(e4);
+                      db.run(`DELETE FROM products WHERE id IN (${ph})`, ids, function(e5) {
+                        if (e5) return finish(e5);
+                        totalDeleted += (this.changes || 0);
+                        processChunk();
+                      });
+                    });
+                  });
+                });
+              });
+            };
+            processChunk();
+          });
+        },
+      );
     },
   );
 

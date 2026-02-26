@@ -61,6 +61,19 @@ export default function Inventory() {
   const [products, setProducts] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Bulk selection & actions
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkWorking, setBulkWorking] = useState(false);
+  const [bulkCategoryTarget, setBulkCategoryTarget] = useState("");
+
+  // Sorting
+  const [sortField, setSortField] = useState("name");
+  const [sortOrder, setSortOrder] = useState("asc");
+
+  // Filters
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
+
   // Bulk Import State
   const [importResults, setImportResults] = useState(null); // null | { results: [] }
   const [isImporting, setIsImporting] = useState(false);
@@ -108,12 +121,19 @@ export default function Inventory() {
   const [outlets, setOutlets] = useState([]);
   const [attributeSets, setAttributeSets] = useState([]);
 
-  // Fetch Products
+  // Fetch Products (server-side sort + filter)
   const fetchProducts = async () => {
     try {
-      const res = await fetch(`${API}/api/products`);
+      const qs = new URLSearchParams();
+      if (searchTerm) qs.set("search", searchTerm);
+      qs.set("sort", sortField);
+      qs.set("order", sortOrder);
+      if (filterStatus) qs.set("status", filterStatus);
+      if (filterCategory) qs.set("category_id", filterCategory);
+      const res = await fetch(`${API}/api/products?${qs}`);
       const data = await res.json();
       setProducts(data.products || []);
+      setSelectedIds(new Set()); // clear selection on re-fetch
     } catch (err) {
       console.error("Failed to fetch products", err);
     }
@@ -147,28 +167,39 @@ export default function Inventory() {
   useEffect(() => {
     fetchProducts();
     fetchDropdowns();
-  }, []); // Initial data load - external API calls, not cascading renders
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Filter Products locally based on search
-  const filteredProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.barcode.includes(searchTerm),
-  );
+  // Re-fetch when sort, filter, or search changes (debounced for search)
+  useEffect(() => {
+    setCurrentPage(1);
+    const t = setTimeout(fetchProducts, searchTerm ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [searchTerm, sortField, sortOrder, filterStatus, filterCategory]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Calculate Pagination Data
+  // Pagination on server-filtered list (no local filter needed)
+  const filteredProducts = products;
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredProducts.slice(
-    indexOfFirstItem,
-    indexOfLastItem,
-  );
+  const currentItems = filteredProducts.slice(indexOfFirstItem, indexOfLastItem);
 
-  // Reset to page 1 when searching
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]); // Derived state reset - intentional pattern
+  // Sorting helper
+  const toggleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  };
+
+  const SortIcon = ({ field }) => {
+    if (sortField !== field)
+      return <span className="ml-1 text-slate-300">[ ]</span>;
+    return (
+      <span className="ml-1 text-blue-500">{sortOrder === "asc" ? "^" : "v"}</span>
+    );
+  };
 
   const openModal = (product = null) => {
     if (product) {
@@ -446,6 +477,117 @@ export default function Inventory() {
     }
   };
 
+  // Bulk selection helpers
+  const toggleSelectAll = () => {
+    if (currentItems.every((p) => selectedIds.has(p.id))) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        currentItems.forEach((p) => next.delete(p.id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        currentItems.forEach((p) => next.add(p.id));
+        return next;
+      });
+    }
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const bulkDelete = async () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    if (!window.confirm(`Delete ${ids.length} product(s)? This cannot be undone.`)) return;
+    setBulkWorking(true);
+    try {
+      const res = await fetch(`${API}/api/products/bulk-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      alert(`Deleted ${data.deleted} product(s).`);
+      setSelectedIds(new Set());
+      fetchProducts();
+    } catch (err) {
+      alert("Bulk delete failed: " + err.message);
+    } finally {
+      setBulkWorking(false);
+    }
+  };
+
+  const bulkSetStatus = async (status) => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    setBulkWorking(true);
+    try {
+      const res = await fetch(`${API}/api/products/bulk-status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, status }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSelectedIds(new Set());
+      fetchProducts();
+    } catch (err) {
+      alert("Bulk status update failed: " + err.message);
+    } finally {
+      setBulkWorking(false);
+    }
+  };
+
+  const bulkAssignCategory = async () => {
+    const ids = [...selectedIds];
+    if (!ids.length || !bulkCategoryTarget) return;
+    setBulkWorking(true);
+    try {
+      const res = await fetch(`${API}/api/products/bulk-category`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, category_id: Number(bulkCategoryTarget) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setBulkCategoryTarget("");
+      setSelectedIds(new Set());
+      fetchProducts();
+    } catch (err) {
+      alert("Bulk category update failed: " + err.message);
+    } finally {
+      setBulkWorking(false);
+    }
+  };
+
+  const exportSelected = () => {
+    const rows = products.filter((p) => selectedIds.has(p.id));
+    if (!rows.length) return;
+    exportCSV(
+      rows.map((p) => ({
+        barcode: p.barcode,
+        sku: p.sku || "",
+        name: p.name,
+        price: p.price,
+        cost_price: p.cost_price,
+        status: p.status,
+        category: p.category_name || "",
+        vendor: p.vendor || "",
+        product_type: p.product_type || "",
+        total_stock: p.total_stock,
+      })),
+      "selected-products.csv",
+    );
+  };
+
   const handleImport = (e) => {
     const file = e.target.files[0];
     e.target.value = ""; // reset so same file can be re-selected
@@ -515,7 +657,7 @@ export default function Inventory() {
           </button>
           <label className="border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all cursor-pointer">
             <Upload size={18} />
-            {isImporting ? "Importing…" : "Bulk Upload"}
+            {isImporting ? "Importing..." : "Bulk Upload"}
             <input
               type="file"
               accept=".csv"
@@ -538,7 +680,7 @@ export default function Inventory() {
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
           <div className="flex justify-between items-center px-5 py-3 bg-slate-50 border-b border-slate-200">
             <span className="font-bold text-slate-700 text-sm">
-              Import Results —{" "}
+              Import Results -{" "}
               {importResults.filter((r) => r.status !== "error").length}{" "}
               succeeded,{" "}
               {importResults.filter((r) => r.status === "error").length} failed
@@ -576,23 +718,103 @@ export default function Inventory() {
       )}
 
       {/* Toolbar / Search */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex gap-4 items-center">
-        <div className="relative flex-1 max-w-md">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-3 flex flex-wrap gap-3 items-center">
+        <div className="relative flex-1 min-w-[180px] max-w-md">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <Search className="h-5 w-5 text-slate-400" />
           </div>
           <input
             type="text"
-            placeholder="Search by name or barcode..."
+            placeholder="Search by name, barcode or SKU..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg leading-5 bg-slate-50 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 sm:text-sm transition-colors"
           />
         </div>
-        <div className="text-sm font-medium text-slate-500">
-          Showing {filteredProducts.length} items
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:outline-none focus:border-blue-500"
+        >
+          <option value="">All Status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <select
+          value={filterCategory}
+          onChange={(e) => setFilterCategory(e.target.value)}
+          className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-slate-50 focus:outline-none focus:border-blue-500"
+        >
+          <option value="">All Categories</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <div className="text-sm font-medium text-slate-500 ml-auto">
+          {filteredProducts.length} items
         </div>
       </div>
+
+      {/* Bulk action toolbar - visible when rows are selected */}
+      {selectedIds.size > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-3 flex flex-wrap gap-3 items-center">
+          <span className="text-sm font-semibold text-blue-700">{selectedIds.size} selected</span>
+          <button
+            onClick={bulkDelete}
+            disabled={bulkWorking}
+            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg disabled:opacity-50 flex items-center gap-1"
+          >
+            <Trash2 size={13} /> Delete
+          </button>
+          <button
+            onClick={() => bulkSetStatus("active")}
+            disabled={bulkWorking}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg disabled:opacity-50"
+          >
+            Set Active
+          </button>
+          <button
+            onClick={() => bulkSetStatus("inactive")}
+            disabled={bulkWorking}
+            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold rounded-lg disabled:opacity-50"
+          >
+            Set Inactive
+          </button>
+          <div className="flex gap-2 items-center">
+            <select
+              value={bulkCategoryTarget}
+              onChange={(e) => setBulkCategoryTarget(e.target.value)}
+              className="border border-blue-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
+            >
+              <option value="">Assign category...</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            {bulkCategoryTarget && (
+              <button
+                onClick={bulkAssignCategory}
+                disabled={bulkWorking}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg disabled:opacity-50 flex items-center gap-1"
+              >
+                <Tag size={13} /> Apply
+              </button>
+            )}
+          </div>
+          <button
+            onClick={exportSelected}
+            className="px-3 py-1.5 border border-blue-300 text-blue-700 hover:bg-blue-100 text-xs font-semibold rounded-lg flex items-center gap-1"
+          >
+            <Download size={13} /> Export Selected
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="ml-auto text-xs text-slate-500 hover:text-slate-700"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden w-full">
@@ -600,23 +822,43 @@ export default function Inventory() {
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50/80">
               <tr>
+                <th className="px-4 py-4 w-10">
+                  <input
+                    type="checkbox"
+                    checked={currentItems.length > 0 && currentItems.every((p) => selectedIds.has(p.id))}
+                    onChange={toggleSelectAll}
+                    className="rounded border-slate-300"
+                  />
+                </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   Barcode
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Product Name
+                <th
+                  className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700"
+                  onClick={() => toggleSort("name")}
+                >
+                  Product Name<SortIcon field="name" />
                 </th>
-                <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Price
+                <th
+                  className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700"
+                  onClick={() => toggleSort("price")}
+                >
+                  Price<SortIcon field="price" />
                 </th>
                 <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   Unit
                 </th>
-                <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Min QTY
+                <th
+                  className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700"
+                  onClick={() => toggleSort("min_qty")}
+                >
+                  Min QTY<SortIcon field="min_qty" />
                 </th>
-                <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Stock Level
+                <th
+                  className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700"
+                  onClick={() => toggleSort("stock")}
+                >
+                  Stock Level<SortIcon field="stock" />
                 </th>
                 <th className="px-6 py-4"></th>
               </tr>
@@ -625,8 +867,16 @@ export default function Inventory() {
               {currentItems.map((product) => (
                 <tr
                   key={product.id}
-                  className="hover:bg-slate-50 transition-colors"
+                  className={`hover:bg-slate-50 transition-colors ${selectedIds.has(product.id) ? "bg-blue-50" : ""}`}
                 >
+                  <td className="px-4 py-4 w-10">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(product.id)}
+                      onChange={() => toggleSelect(product.id)}
+                      className="rounded border-slate-300"
+                    />
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-mono">
                     {product.barcode}
                   </td>
@@ -677,7 +927,7 @@ export default function Inventory() {
               {filteredProducts.length === 0 && (
                 <tr>
                   <td
-                    colSpan="7"
+                    colSpan="8"
                     className="px-6 py-12 text-center text-slate-500"
                   >
                     <Package className="mx-auto h-12 w-12 text-slate-300 mb-3" />

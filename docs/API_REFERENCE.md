@@ -1,6 +1,6 @@
 ﻿# OneShopPOS API and Route Reference
 
-Last Audited: 2026-02-25
+Last Audited: 2026-02-26
 
 Source of truth:
 - Backend APIs: `backend/index.js`
@@ -15,7 +15,7 @@ Source of truth:
 Top groups by first segment:
 - `integrations`: 25
 - `reports`: 20
-- `products`: 12
+- `products`: 15
 - `customers`: 8
 - `orders`: 8
 - `hr`: 7
@@ -33,6 +33,22 @@ Tier 4 groups:
 - `quotations`: 7
 
 ---
+
+## Inventory / Products (Recent Additions)
+
+`GET /api/products` supports server-side search, sorting, and filtering via query params:
+
+- `search`: matches product name, barcode, or SKU
+- `sort`: `name | price | stock | min_qty | created_at`
+- `order`: `asc | desc`
+- `status`: `active | inactive`
+- `category_id`: numeric category id
+
+Bulk product operations:
+
+- `POST /api/products/bulk-delete` with `{ ids: number[] }`
+- `POST /api/products/bulk-status` with `{ ids: number[], status: 'active' | 'inactive' }`
+- `POST /api/products/bulk-category` with `{ ids: number[], category_id: number }`
 
 ## Tier 4 Backend Endpoints
 

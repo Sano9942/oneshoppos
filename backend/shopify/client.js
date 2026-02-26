@@ -5,7 +5,7 @@ function toGid(type, value) {
   return `gid://shopify/${type}/${raw}`;
 }
 
-async function shopifyGraphqlRequest(connection, query, variables = {}) {
+async function shopifyGraphqlRequest(connection, query, variables = {}, _retries = 3) {
   const shopDomain = String(connection?.shop_domain || "").trim();
   const accessToken = String(connection?.access_token || "").trim();
   const apiVersion = String(connection?.api_version || "2025-10").trim();
@@ -29,6 +29,16 @@ async function shopifyGraphqlRequest(connection, query, variables = {}) {
       json?.errors?.[0]?.message || `Shopify request failed (${res.status})`,
     );
   }
+
+  // Handle throttled responses (HTTP 200 but rate-limited)
+  const throttleStatus = json?.extensions?.cost?.throttleStatus;
+  if (throttleStatus === "THROTTLED") {
+    if (_retries <= 0) throw new Error("Shopify API throttled: too many retries");
+    const retryAfterMs = (json?.extensions?.cost?.requestedQueryCost || 500) > 500 ? 2000 : 1000;
+    await new Promise((r) => setTimeout(r, retryAfterMs));
+    return shopifyGraphqlRequest(connection, query, variables, _retries - 1);
+  }
+
   if (json?.errors?.length) {
     throw new Error(json.errors.map((e) => e.message).join("; "));
   }
@@ -294,10 +304,122 @@ async function fetchRecentOrders(connection, first = 10) {
   });
 }
 
+// Fetch full product catalog from Shopify with inventory levels per location.
+// Returns an array of product objects ready for import into POS.
+async function fetchShopifyProductsFull(connection, maxItems = 10000) {
+  const query = `
+    query FetchProducts($first: Int!, $after: String) {
+      products(first: $first, after: $after) {
+        edges {
+          cursor
+          node {
+            id
+            title
+            descriptionHtml
+            productType
+            vendor
+            tags
+            status
+            variants(first: 15) {
+              edges {
+                node {
+                  id
+                  sku
+                  barcode
+                  price
+                  compareAtPrice
+                  inventoryItem {
+                    id
+                    inventoryLevels(first: 3) {
+                      edges {
+                        node {
+                          location { id }
+                          quantities(names: ["available"]) {
+                            name
+                            quantity
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  `;
+
+  const out = [];
+  let after = null;
+  const pageSize = 10;
+  // Small delay between pages to avoid hitting Shopify's leaky-bucket rate limit
+  const pageDelayMs = 500;
+
+  while (out.length < maxItems) {
+    const data = await shopifyGraphqlRequest(connection, query, { first: pageSize, after });
+    if (!data) break; // Throttled after retries or unexpected null — stop safely
+    const root = data?.products;
+    const edges = root?.edges || [];
+
+    for (const edge of edges) {
+      const p = edge?.node || {};
+      const variants = (p.variants?.edges || []).map((ve) => {
+        const v = ve?.node || {};
+        const invLevels = (v.inventoryItem?.inventoryLevels?.edges || []).map((le) => {
+          const l = le?.node || {};
+          const qty = (l.quantities || []).find((q) => q.name === "available");
+          return {
+            shopify_location_id: l.location?.id || "",
+            available: Number(qty?.quantity || 0),
+          };
+        });
+        return {
+          shopify_variant_id: v.id || "",
+          shopify_inventory_item_id: v.inventoryItem?.id || "",
+          sku: v.sku || "",
+          barcode: v.barcode || "",
+          price: parseFloat(v.price || 0),
+          compare_at_price: parseFloat(v.compareAtPrice || 0),
+          inventory_levels: invLevels,
+        };
+      });
+
+      out.push({
+        shopify_product_id: p.id || "",
+        title: p.title || "",
+        description_html: p.descriptionHtml || "",
+        product_type: p.productType || "",
+        vendor: p.vendor || "",
+        tags: Array.isArray(p.tags) ? p.tags.join(",") : (p.tags || ""),
+        status: (p.status || "ACTIVE").toLowerCase(),
+        variants,
+      });
+
+      if (out.length >= maxItems) break;
+    }
+
+    const hasNext = Boolean(root?.pageInfo?.hasNextPage);
+    after = root?.pageInfo?.endCursor || null;
+    if (!hasNext || !after) break;
+
+    // Pace requests to stay within Shopify's rate limit bucket
+    await new Promise((r) => setTimeout(r, pageDelayMs));
+  }
+
+  return out;
+}
+
 module.exports = {
   verifyConnection,
   fetchShopifyLocations,
   adjustShopifyInventory,
   fetchShopifyVariantCatalog,
+  fetchShopifyProductsFull,
   fetchRecentOrders,
 };

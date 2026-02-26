@@ -21,7 +21,20 @@
       "Bash(ls:*)",
       "Bash(npm install:*)",
       "Bash(grep:*)",
-      "Read(//d/newprojects/oneshoppos/**)"
+      "Read(//d/newprojects/oneshoppos/**)",
+      "Bash(npx eslint src/pages/ShopifyIntegration.jsx --max-warnings=0)",
+      "Bash(cmd //c \"taskkill /F /PID 7080\")",
+      "Bash(cmd //c \"taskkill /F /PID 2468\")",
+      "Bash(cmd //c \"taskkill /F /PID 19112\")",
+      "Bash(cmd //c \"taskkill /F /PID 2812\")",
+      "Bash(npx eslint src/pages/ShopifyIntegration.jsx --no-eslintrc --rule '{\"\"no-undef\"\": \"\"off\"\", \"\"no-unused-vars\"\": \"\"off\"\"}')",
+      "Bash(npx eslint src/pages/ShopifyIntegration.jsx)",
+      "Bash(# Check if any routes are mounted on this path curl -s -X GET \"\"http://localhost:5000/api/integrations/shopify/config\"\")",
+      "Bash(# The real running backend - check if DELETE is actually there by looking at logs from startup # First check if backend is still running curl -s http://localhost:5000/api/health)",
+      "Bash(sed 's/.*CREATE TABLE //')",
+      "Bash(sed 's/ .*//')",
+      "Bash(sed 's/ \\(.*//')",
+      "Read(//d/newprojects/oneshoppos/frontend/**)"
     ]
   }
 }

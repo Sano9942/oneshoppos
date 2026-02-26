@@ -39,6 +39,11 @@ export default function ShopifyIntegration() {
   const [runningReconciliation, setRunningReconciliation] = useState(false);
   const [loadingReconciliation, setLoadingReconciliation] = useState(false);
   const [loadingEvents, setLoadingEvents] = useState(false);
+  const [importingProducts, setImportingProducts] = useState(false);
+  const [importingInventory, setImportingInventory] = useState(false);
+  const [deletingImport, setDeletingImport] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const [inventorySyncResult, setInventorySyncResult] = useState(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -443,8 +448,12 @@ export default function ShopifyIntegration() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save location mapping");
-      setSuccess("Location mapping saved.");
-      await loadAll();
+      setSuccess(`Mapped "${selectedLocation?.name || shopifyLocationId}" saved successfully.`);
+      // Reload only location mappings so liveLocations dropdown stays populated
+      const lmRes = await apiFetch(`${API}/integrations/mappings/locations`);
+      const lm = await lmRes.json();
+      setLocationMappings(lm.mappings || []);
+      setMappingCounts((prev) => ({ ...prev, locations: (lm.mappings || []).length }));
     } catch (e) {
       setError(e.message || "Failed to save location mapping");
     } finally {
@@ -492,6 +501,63 @@ export default function ShopifyIntegration() {
       setError(e.message || "Failed to queue retries");
     } finally {
       setRetryingFailed(false);
+    }
+  };
+
+  const importProductsFromShopify = async () => {
+    setImportingProducts(true);
+    setImportResult(null);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await apiFetch(`${API}/integrations/shopify/import/products`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Import failed");
+      setImportResult(data);
+      setSuccess(`Import complete: ${data.created || 0} created, ${data.updated || 0} updated, ${data.skipped || 0} skipped.`);
+      await loadAll();
+    } catch (e) {
+      setError(e.message || "Product import failed");
+    } finally {
+      setImportingProducts(false);
+    }
+  };
+
+  const syncInventoryFromShopify = async () => {
+    setImportingInventory(true);
+    setInventorySyncResult(null);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await apiFetch(`${API}/integrations/shopify/import/inventory`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Inventory sync failed");
+      setInventorySyncResult(data);
+      setSuccess(`Inventory synced: ${data.synced || 0} stock records updated from Shopify.`);
+    } catch (e) {
+      setError(e.message || "Inventory sync failed");
+    } finally {
+      setImportingInventory(false);
+    }
+  };
+
+  const deleteShopifyImportedProducts = async () => {
+    if (!window.confirm("This will permanently delete ALL products that were imported from Shopify, along with their stock records and Shopify mappings. This cannot be undone. Continue?")) return;
+    setDeletingImport(true);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await apiFetch(`${API}/integrations/shopify/import/products`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Delete failed");
+      setImportResult(null);
+      setInventorySyncResult(null);
+      setSuccess(data.message || `Deleted ${data.deleted || 0} Shopify-imported product(s).`);
+      await loadAll();
+    } catch (e) {
+      setError(e.message || "Delete failed");
+    } finally {
+      setDeletingImport(false);
     }
   };
 
@@ -782,6 +848,56 @@ export default function ShopifyIntegration() {
         </div>
       </div>
 
+      {/* Inventory Sync Status */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="text-base font-semibold text-slate-800">Inventory Sync Status</h3>
+          <span className={`text-xs px-2 py-1 rounded-full ${config.connected ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+            {config.connected ? "Connected" : "Not connected"}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-slate-100">
+          <div className="p-4">
+            <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">Last Sync</div>
+            <div className="text-sm font-semibold text-slate-800">
+              {status?.last_sync_at ? new Date(status.last_sync_at).toLocaleString() : "Never"}
+            </div>
+          </div>
+          <div className="p-4">
+            <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">Processed Events</div>
+            <div className="text-sm font-semibold text-slate-800">
+              {status?.event_stats?.processed ?? 0}
+              <span className="text-xs text-slate-400 ml-1">/ {status?.event_stats?.total ?? 0} total</span>
+            </div>
+          </div>
+          <div className="p-4">
+            <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">Pending / Failed</div>
+            <div className="text-sm font-semibold text-slate-800">
+              {status?.event_stats?.pending ?? 0}
+              <span className="text-xs text-slate-400 mx-1">/</span>
+              <span className="text-rose-600">{status?.event_stats?.failed ?? 0}</span>
+            </div>
+          </div>
+          <div className="p-4">
+            <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">Mapped Products</div>
+            <div className="text-sm font-semibold text-slate-800">
+              {mappingCounts.products}
+              <span className="text-xs text-slate-400 ml-1">products</span>
+            </div>
+          </div>
+        </div>
+        {status?.last_error && (
+          <div className="px-4 py-2 bg-rose-50 border-t border-rose-100 text-xs text-rose-700">
+            Last error: {status.last_error}
+          </div>
+        )}
+        {mappingCounts.locations === 0 && config.connected && (
+          <div className="px-4 py-2 bg-amber-50 border-t border-amber-100 text-xs text-amber-700">
+            No location mappings configured — click "Fetch Live Locations" then map each POS outlet to a Shopify location below.
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div className="xl:col-span-2 bg-white border border-slate-200 rounded-xl p-5">
           <h3 className="text-lg font-semibold text-slate-800 mb-4">Connection Settings</h3>
@@ -962,6 +1078,69 @@ export default function ShopifyIntegration() {
               {status?.last_run?.status || "n/a"}
             </span>
           </div>
+        </div>
+
+        {/* Import from Shopify */}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+          <h3 className="text-lg font-semibold text-slate-800">Import from Shopify</h3>
+          <p className="text-xs text-slate-500">
+            Pull products and inventory levels directly from Shopify into POS. Products are matched by barcode and created or updated automatically.
+          </p>
+          <button
+            onClick={importProductsFromShopify}
+            disabled={importingProducts || !config.connected}
+            className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-sm font-semibold disabled:opacity-60"
+          >
+            <Download size={14} />
+            {importingProducts ? "Importing..." : "Import Products from Shopify"}
+          </button>
+          <button
+            onClick={syncInventoryFromShopify}
+            disabled={importingInventory || !config.connected}
+            className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-sm font-semibold disabled:opacity-60"
+          >
+            <RefreshCw size={14} />
+            {importingInventory ? "Syncing..." : "Sync Inventory Levels from Shopify"}
+          </button>
+          <p className="text-xs text-slate-400">
+            <strong>Import Products</strong> — creates new POS products for Shopify variants that have a barcode, updates existing ones, and sets stock from Shopify inventory levels.<br />
+            <strong>Sync Inventory</strong> — for already-mapped products, overwrites POS stock quantities with the current Shopify values.
+          </p>
+          <div className="border-t border-slate-100 pt-3">
+            <button
+              onClick={deleteShopifyImportedProducts}
+              disabled={deletingImport}
+              className="w-full inline-flex justify-center items-center gap-2 px-3 py-2 border border-rose-300 text-rose-600 hover:bg-rose-50 rounded-lg text-sm font-semibold disabled:opacity-60"
+            >
+              {deletingImport ? "Deleting..." : "Delete All Shopify-Imported Products"}
+            </button>
+            <p className="text-xs text-rose-400 mt-1">Removes all products that were imported from Shopify and clears their stock + mappings. Use before re-testing import.</p>
+          </div>
+          {importResult && (
+            <div className="mt-2 p-3 bg-violet-50 border border-violet-200 rounded-lg text-xs space-y-1">
+              <div className="font-semibold text-violet-800">Last Product Import</div>
+              <div className="flex gap-4 text-slate-700">
+                <span>Created: <strong>{importResult.created}</strong></span>
+                <span>Updated: <strong>{importResult.updated}</strong></span>
+                <span>Skipped: <strong>{importResult.skipped}</strong></span>
+              </div>
+              {importResult.errors?.length > 0 && (
+                <div className="text-rose-600 mt-1">{importResult.errors.length} error(s). First: {importResult.errors[0]?.error}</div>
+              )}
+            </div>
+          )}
+          {inventorySyncResult && (
+            <div className="mt-2 p-3 bg-teal-50 border border-teal-200 rounded-lg text-xs space-y-1">
+              <div className="font-semibold text-teal-800">Last Inventory Sync</div>
+              <div className="flex gap-4 text-slate-700">
+                <span>Synced: <strong>{inventorySyncResult.synced}</strong></span>
+                <span>Failed: <strong>{inventorySyncResult.failed}</strong></span>
+              </div>
+              {inventorySyncResult.errors?.length > 0 && (
+                <div className="text-rose-600 mt-1">{inventorySyncResult.errors.length} error(s). First: {inventorySyncResult.errors[0]?.error}</div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
