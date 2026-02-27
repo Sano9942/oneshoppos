@@ -22,7 +22,12 @@ function previewBody(text, max = 180) {
     .slice(0, max);
 }
 
-async function shopifyGraphqlRequest(connection, query, variables = {}, _retries = 3) {
+async function shopifyGraphqlRequest(
+  connection,
+  query,
+  variables = {},
+  _retries = 3,
+) {
   const shopDomain = sanitizeShopDomain(connection?.shop_domain);
   const accessToken = String(connection?.access_token || "").trim();
   const apiVersion = String(connection?.api_version || "2025-10").trim();
@@ -40,7 +45,9 @@ async function shopifyGraphqlRequest(connection, query, variables = {}, _retries
     body: JSON.stringify({ query, variables }),
   });
 
-  const contentType = String(res.headers.get("content-type") || "").toLowerCase();
+  const contentType = String(
+    res.headers.get("content-type") || "",
+  ).toLowerCase();
   const rawBody = await res.text();
   let json = null;
   if (rawBody) {
@@ -75,8 +82,10 @@ async function shopifyGraphqlRequest(connection, query, variables = {}, _retries
   // Handle throttled responses (HTTP 200 but rate-limited)
   const throttleStatus = json?.extensions?.cost?.throttleStatus;
   if (throttleStatus === "THROTTLED") {
-    if (_retries <= 0) throw new Error("Shopify API throttled: too many retries");
-    const retryAfterMs = (json?.extensions?.cost?.requestedQueryCost || 500) > 500 ? 2000 : 1000;
+    if (_retries <= 0)
+      throw new Error("Shopify API throttled: too many retries");
+    const retryAfterMs =
+      (json?.extensions?.cost?.requestedQueryCost || 500) > 500 ? 2000 : 1000;
     await new Promise((r) => setTimeout(r, retryAfterMs));
     return shopifyGraphqlRequest(connection, query, variables, _retries - 1);
   }
@@ -269,6 +278,46 @@ async function fetchInventoryLevel(connection, inventoryItemId, locationId) {
   };
 }
 
+async function fetchInventoryLevelsBatch(
+  connection,
+  inventoryItemIds,
+  locationId,
+) {
+  const query = `
+    query InventoryLevels($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on InventoryItem {
+          id
+          inventoryLevel(locationId: "${toGid("Location", locationId)}") {
+            id
+            quantities(names: ["available"]) {
+              name
+              quantity
+            }
+          }
+        }
+      }
+    }
+  `;
+  const gids = (inventoryItemIds || []).map((id) => toGid("InventoryItem", id));
+  if (gids.length === 0) return [];
+
+  const data = await shopifyGraphqlRequest(connection, query, { ids: gids });
+  const nodes = data?.nodes || [];
+
+  return nodes.map((node) => {
+    const qtyRow = node?.inventoryLevel?.quantities?.find(
+      (q) => q.name === "available",
+    );
+    const qty = Number(qtyRow?.quantity || 0);
+    return {
+      inventory_item_id: node?.id || "",
+      location_id: toGid("Location", locationId),
+      available: Number.isFinite(qty) ? qty : 0,
+    };
+  });
+}
+
 async function fetchRecentOrders(connection, first = 10) {
   const query = `
     query FetchOrders($first: Int!) {
@@ -404,7 +453,10 @@ async function fetchShopifyProductsFull(connection, maxItems = 10000) {
   const pageDelayMs = 500;
 
   while (out.length < maxItems) {
-    const data = await shopifyGraphqlRequest(connection, query, { first: pageSize, after });
+    const data = await shopifyGraphqlRequest(connection, query, {
+      first: pageSize,
+      after,
+    });
     if (!data) break; // Throttled after retries or unexpected null — stop safely
     const root = data?.products;
     const edges = root?.edges || [];
@@ -413,14 +465,18 @@ async function fetchShopifyProductsFull(connection, maxItems = 10000) {
       const p = edge?.node || {};
       const variants = (p.variants?.edges || []).map((ve) => {
         const v = ve?.node || {};
-        const invLevels = (v.inventoryItem?.inventoryLevels?.edges || []).map((le) => {
-          const l = le?.node || {};
-          const qty = (l.quantities || []).find((q) => q.name === "available");
-          return {
-            shopify_location_id: l.location?.id || "",
-            available: Number(qty?.quantity || 0),
-          };
-        });
+        const invLevels = (v.inventoryItem?.inventoryLevels?.edges || []).map(
+          (le) => {
+            const l = le?.node || {};
+            const qty = (l.quantities || []).find(
+              (q) => q.name === "available",
+            );
+            return {
+              shopify_location_id: l.location?.id || "",
+              available: Number(qty?.quantity || 0),
+            };
+          },
+        );
         return {
           shopify_variant_id: v.id || "",
           shopify_inventory_item_id: v.inventoryItem?.id || "",
@@ -438,7 +494,7 @@ async function fetchShopifyProductsFull(connection, maxItems = 10000) {
         description_html: p.descriptionHtml || "",
         product_type: p.productType || "",
         vendor: p.vendor || "",
-        tags: Array.isArray(p.tags) ? p.tags.join(",") : (p.tags || ""),
+        tags: Array.isArray(p.tags) ? p.tags.join(",") : p.tags || "",
         status: (p.status || "ACTIVE").toLowerCase(),
         variants,
       });
@@ -463,5 +519,7 @@ module.exports = {
   adjustShopifyInventory,
   fetchShopifyVariantCatalog,
   fetchShopifyProductsFull,
+  fetchInventoryLevel,
+  fetchInventoryLevelsBatch,
   fetchRecentOrders,
 };

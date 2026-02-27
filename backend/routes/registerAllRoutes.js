@@ -29,6 +29,7 @@ module.exports = function registerAllRoutes(app, deps) {
     fetchShopifyVariantCatalog,
     fetchShopifyProductsFull,
     fetchInventoryLevel,
+    fetchInventoryLevelsBatch,
     fetchRecentOrders,
     retryDelayMinutesWithJitter,
     evaluateWebhookTimestampWindow,
@@ -155,7 +156,10 @@ module.exports = function registerAllRoutes(app, deps) {
             updated_at: null,
           };
         });
-        const extras = (rows || []).filter((r) => !Object.prototype.hasOwnProperty.call(DEFAULT_FEATURE_FLAGS, r.key));
+        const extras = (rows || []).filter(
+          (r) =>
+            !Object.prototype.hasOwnProperty.call(DEFAULT_FEATURE_FLAGS, r.key),
+        );
         return res.json({ flags: [...mergedDefaults, ...extras] });
       },
     );
@@ -980,11 +984,25 @@ module.exports = function registerAllRoutes(app, deps) {
 
   // Search products by name or barcode (for autocomplete and search)
   app.get("/api/products/search", (req, res) => {
-    const { query, outlet_id } = req.query;
+    const { query, outlet_id, field } = req.query;
 
     if (!query) return res.json({ products: [] });
 
     const searchQuery = `%${query}%`;
+    let whereClause =
+      "p.name LIKE ? OR p.barcode LIKE ? OR p.sku LIKE ? OR CAST(p.price AS TEXT) LIKE ?";
+    let params = [searchQuery, searchQuery, searchQuery, searchQuery];
+
+    if (field === "barcode") {
+      whereClause = "p.barcode LIKE ?";
+      params = [searchQuery];
+    } else if (field === "sku") {
+      whereClause = "p.sku LIKE ?";
+      params = [searchQuery];
+    } else if (field === "price") {
+      whereClause = "p.price = ?";
+      params = [query];
+    }
 
     let sql = `
         SELECT p.*, t.rate as tax_rate, t.name as tax_name,
@@ -992,13 +1010,13 @@ module.exports = function registerAllRoutes(app, deps) {
         FROM products p
         LEFT JOIN taxes t ON p.tax_id = t.id
         LEFT JOIN outlet_stock os ON p.id = os.product_id ${outlet_id ? `AND os.outlet_id = ${outlet_id}` : ""}
-        WHERE p.name LIKE ? OR p.barcode LIKE ? OR p.sku LIKE ?
+        WHERE ${whereClause}
         GROUP BY p.id
         ORDER BY p.name ASC
         LIMIT 50
     `;
 
-    db.all(sql, [searchQuery, searchQuery, searchQuery], (err, rows) => {
+    db.all(sql, params, (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
 
       // Normalize Tax Output for the POS Terminal
@@ -1514,103 +1532,153 @@ module.exports = function registerAllRoutes(app, deps) {
 
   // Bulk delete products by IDs
   // Cleans up dependent rows; preserves sale/PO history (FK OFF so orphaned refs remain).
-  app.post("/api/products/bulk-delete", requirePerm("manage_inventory"), (req, res) => {
-    const ids = (req.body?.ids || []).map(Number).filter(Boolean);
-    if (!ids.length) return res.status(400).json({ error: "No product IDs provided." });
+  app.post(
+    "/api/products/bulk-delete",
+    requirePerm("manage_inventory"),
+    (req, res) => {
+      const ids = (req.body?.ids || []).map(Number).filter(Boolean);
+      if (!ids.length)
+        return res.status(400).json({ error: "No product IDs provided." });
 
-    const CHUNK = 400;
-    const chunks = [];
-    for (let i = 0; i < ids.length; i += CHUNK) chunks.push(ids.slice(i, i + CHUNK));
+      const CHUNK = 400;
+      const chunks = [];
+      for (let i = 0; i < ids.length; i += CHUNK)
+        chunks.push(ids.slice(i, i + CHUNK));
 
-    let totalDeleted = 0;
-    let chunkIdx = 0;
+      let totalDeleted = 0;
+      let chunkIdx = 0;
 
-    db.run("PRAGMA foreign_keys = OFF", (fkErr) => {
-      if (fkErr) return res.status(500).json({ error: fkErr.message });
+      db.run("PRAGMA foreign_keys = OFF", (fkErr) => {
+        if (fkErr) return res.status(500).json({ error: fkErr.message });
 
-      const finish = (err) => {
-        db.run("PRAGMA foreign_keys = ON", () => {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ deleted: totalDeleted });
-        });
-      };
-
-      const processChunk = () => {
-        if (chunkIdx >= chunks.length) return finish(null);
-        const batch = chunks[chunkIdx++];
-        const ph = batch.map(() => "?").join(",");
-        db.run(`DELETE FROM shopify_product_map WHERE product_id IN (${ph})`, batch, (e1) => {
-          if (e1) return finish(e1);
-          db.run(`DELETE FROM outlet_stock WHERE product_id IN (${ph})`, batch, (e2) => {
-            if (e2) return finish(e2);
-            db.run(`DELETE FROM stock_adjustments WHERE product_id IN (${ph})`, batch, (e3) => {
-              if (e3) return finish(e3);
-              db.run(`DELETE FROM product_variants WHERE product_id IN (${ph})`, batch, (e4) => {
-                if (e4) return finish(e4);
-                db.run(`DELETE FROM product_media WHERE product_id IN (${ph})`, batch, (e5) => {
-                  if (e5) return finish(e5);
-                  db.run(`DELETE FROM products WHERE id IN (${ph})`, batch, function (e6) {
-                    if (e6) return finish(e6);
-                    totalDeleted += this.changes || 0;
-                    processChunk();
-                  });
-                });
-              });
-            });
+        const finish = (err) => {
+          db.run("PRAGMA foreign_keys = ON", () => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ deleted: totalDeleted });
           });
-        });
-      };
-      processChunk();
-    });
-  });
+        };
+
+        const processChunk = () => {
+          if (chunkIdx >= chunks.length) return finish(null);
+          const batch = chunks[chunkIdx++];
+          const ph = batch.map(() => "?").join(",");
+          db.run(
+            `DELETE FROM shopify_product_map WHERE product_id IN (${ph})`,
+            batch,
+            (e1) => {
+              if (e1) return finish(e1);
+              db.run(
+                `DELETE FROM outlet_stock WHERE product_id IN (${ph})`,
+                batch,
+                (e2) => {
+                  if (e2) return finish(e2);
+                  db.run(
+                    `DELETE FROM stock_adjustments WHERE product_id IN (${ph})`,
+                    batch,
+                    (e3) => {
+                      if (e3) return finish(e3);
+                      db.run(
+                        `DELETE FROM product_variants WHERE product_id IN (${ph})`,
+                        batch,
+                        (e4) => {
+                          if (e4) return finish(e4);
+                          db.run(
+                            `DELETE FROM product_media WHERE product_id IN (${ph})`,
+                            batch,
+                            (e5) => {
+                              if (e5) return finish(e5);
+                              db.run(
+                                `DELETE FROM products WHERE id IN (${ph})`,
+                                batch,
+                                function (e6) {
+                                  if (e6) return finish(e6);
+                                  totalDeleted += this.changes || 0;
+                                  processChunk();
+                                },
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          );
+        };
+        processChunk();
+      });
+    },
+  );
 
   // Bulk update product status (active/inactive)
-  app.post("/api/products/bulk-status", requirePerm("manage_inventory"), (req, res) => {
-    const ids = (req.body?.ids || []).map(Number).filter(Boolean);
-    const { status } = req.body || {};
-    if (!ids.length) return res.status(400).json({ error: "No product IDs provided." });
-    if (status !== "active" && status !== "inactive")
-      return res.status(400).json({ error: "status must be 'active' or 'inactive'." });
+  app.post(
+    "/api/products/bulk-status",
+    requirePerm("manage_inventory"),
+    (req, res) => {
+      const ids = (req.body?.ids || []).map(Number).filter(Boolean);
+      const { status } = req.body || {};
+      if (!ids.length)
+        return res.status(400).json({ error: "No product IDs provided." });
+      if (status !== "active" && status !== "inactive")
+        return res
+          .status(400)
+          .json({ error: "status must be 'active' or 'inactive'." });
 
-    const CHUNK = 400;
-    let updated = 0;
-    let i = 0;
-    const go = () => {
-      if (i >= ids.length) return res.json({ updated });
-      const batch = ids.slice(i, i + CHUNK);
-      i += CHUNK;
-      const ph = batch.map(() => "?").join(",");
-      db.run(`UPDATE products SET status = ? WHERE id IN (${ph})`, [status, ...batch], function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        updated += this.changes || 0;
-        go();
-      });
-    };
-    go();
-  });
+      const CHUNK = 400;
+      let updated = 0;
+      let i = 0;
+      const go = () => {
+        if (i >= ids.length) return res.json({ updated });
+        const batch = ids.slice(i, i + CHUNK);
+        i += CHUNK;
+        const ph = batch.map(() => "?").join(",");
+        db.run(
+          `UPDATE products SET status = ? WHERE id IN (${ph})`,
+          [status, ...batch],
+          function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            updated += this.changes || 0;
+            go();
+          },
+        );
+      };
+      go();
+    },
+  );
 
   // Bulk assign category to products
-  app.post("/api/products/bulk-category", requirePerm("manage_inventory"), (req, res) => {
-    const ids = (req.body?.ids || []).map(Number).filter(Boolean);
-    const categoryId = Number(req.body?.category_id) || null;
-    if (!ids.length) return res.status(400).json({ error: "No product IDs provided." });
+  app.post(
+    "/api/products/bulk-category",
+    requirePerm("manage_inventory"),
+    (req, res) => {
+      const ids = (req.body?.ids || []).map(Number).filter(Boolean);
+      const categoryId = Number(req.body?.category_id) || null;
+      if (!ids.length)
+        return res.status(400).json({ error: "No product IDs provided." });
 
-    const CHUNK = 400;
-    let updated = 0;
-    let i = 0;
-    const go = () => {
-      if (i >= ids.length) return res.json({ updated });
-      const batch = ids.slice(i, i + CHUNK);
-      i += CHUNK;
-      const ph = batch.map(() => "?").join(",");
-      db.run(`UPDATE products SET category_id = ? WHERE id IN (${ph})`, [categoryId, ...batch], function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        updated += this.changes || 0;
-        go();
-      });
-    };
-    go();
-  });
+      const CHUNK = 400;
+      let updated = 0;
+      let i = 0;
+      const go = () => {
+        if (i >= ids.length) return res.json({ updated });
+        const batch = ids.slice(i, i + CHUNK);
+        i += CHUNK;
+        const ph = batch.map(() => "?").join(",");
+        db.run(
+          `UPDATE products SET category_id = ? WHERE id IN (${ph})`,
+          [categoryId, ...batch],
+          function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            updated += this.changes || 0;
+            go();
+          },
+        );
+      };
+      go();
+    },
+  );
 
   // --- ROUTES: SUPPLIERS ---
 
@@ -4297,7 +4365,10 @@ module.exports = function registerAllRoutes(app, deps) {
   }
 
   function parsePaging(req) {
-    const limit = Math.max(1, Math.min(500, parseInt(req.query.limit || 100, 10)));
+    const limit = Math.max(
+      1,
+      Math.min(500, parseInt(req.query.limit || 100, 10)),
+    );
     const offset = Math.max(0, parseInt(req.query.offset || 0, 10));
     return { limit, offset };
   }
@@ -4334,8 +4405,14 @@ module.exports = function registerAllRoutes(app, deps) {
         res.json({
           summary: {
             ...row,
-            margin_pct: grossSales > 0 ? Number(((grossProfit / grossSales) * 100).toFixed(2)) : 0,
-            net_margin_pct: grossSales > 0 ? Number(((netProfit / grossSales) * 100).toFixed(2)) : 0,
+            margin_pct:
+              grossSales > 0
+                ? Number(((grossProfit / grossSales) * 100).toFixed(2))
+                : 0,
+            net_margin_pct:
+              grossSales > 0
+                ? Number(((netProfit / grossSales) * 100).toFixed(2))
+                : 0,
           },
         });
       });
@@ -4346,9 +4423,20 @@ module.exports = function registerAllRoutes(app, deps) {
     "/api/reports/profit-by-product",
     requireFeature("reports_profit_layer"),
     (req, res) => {
-      const sortable = new Set(["revenue", "gross_profit", "margin_pct", "units_sold", "product_name"]);
-      const sort = sortable.has(String(req.query.sort || "")) ? req.query.sort : "gross_profit";
-      const order = String(req.query.order || "desc").toLowerCase() === "asc" ? "ASC" : "DESC";
+      const sortable = new Set([
+        "revenue",
+        "gross_profit",
+        "margin_pct",
+        "units_sold",
+        "product_name",
+      ]);
+      const sort = sortable.has(String(req.query.sort || ""))
+        ? req.query.sort
+        : "gross_profit";
+      const order =
+        String(req.query.order || "desc").toLowerCase() === "asc"
+          ? "ASC"
+          : "DESC";
       const { limit, offset } = parsePaging(req);
       const { where, params } = buildReportFilterParts(req);
       const sql = `
@@ -4484,9 +4572,14 @@ module.exports = function registerAllRoutes(app, deps) {
     "/api/reports/dead-stock",
     requireFeature("reports_inventory_health_plus"),
     (req, res) => {
-      const inactiveDays = Math.max(1, Math.min(3650, parseInt(req.query.inactive_days || 60, 10)));
+      const inactiveDays = Math.max(
+        1,
+        Math.min(3650, parseInt(req.query.inactive_days || 60, 10)),
+      );
       const outletFilter = req.query.outlet_id ? "AND os.outlet_id = ?" : "";
-      const params = req.query.outlet_id ? [inactiveDays, req.query.outlet_id] : [inactiveDays];
+      const params = req.query.outlet_id
+        ? [inactiveDays, req.query.outlet_id]
+        : [inactiveDays];
       const sql = `
       SELECT
         p.id AS product_id,
@@ -4558,7 +4651,10 @@ module.exports = function registerAllRoutes(app, deps) {
     "/api/reports/stockout-risk",
     requireFeature("reports_inventory_health_plus"),
     (req, res) => {
-      const lookbackDays = Math.max(7, Math.min(365, parseInt(req.query.lookback_days || 30, 10)));
+      const lookbackDays = Math.max(
+        7,
+        Math.min(365, parseInt(req.query.lookback_days || 30, 10)),
+      );
       const sql = `
       WITH sales_velocity AS (
         SELECT
@@ -4603,8 +4699,21 @@ module.exports = function registerAllRoutes(app, deps) {
       LIMIT 500
     `;
       const params = req.query.outlet_id
-        ? [lookbackDays, lookbackDays, lookbackDays, lookbackDays, lookbackDays, req.query.outlet_id]
-        : [lookbackDays, lookbackDays, lookbackDays, lookbackDays, lookbackDays];
+        ? [
+            lookbackDays,
+            lookbackDays,
+            lookbackDays,
+            lookbackDays,
+            lookbackDays,
+            req.query.outlet_id,
+          ]
+        : [
+            lookbackDays,
+            lookbackDays,
+            lookbackDays,
+            lookbackDays,
+            lookbackDays,
+          ];
       db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ rows, lookback_days: lookbackDays });
@@ -4647,7 +4756,10 @@ module.exports = function registerAllRoutes(app, deps) {
       }
 
       if (type === "high_discount_orders") {
-        const thresholdPct = Math.max(0, Math.min(100, Number(req.query.threshold_pct || 20)));
+        const thresholdPct = Math.max(
+          0,
+          Math.min(100, Number(req.query.threshold_pct || 20)),
+        );
         const sql = `
         SELECT
           s.id AS sale_id,
@@ -4739,14 +4851,20 @@ module.exports = function registerAllRoutes(app, deps) {
     if (!raw) return {};
     try {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+        return parsed;
       return {};
     } catch {
       return {};
     }
   }
 
-  function nextRunAtIso(frequency, runHour = 6, runMinute = 0, fromDate = new Date()) {
+  function nextRunAtIso(
+    frequency,
+    runHour = 6,
+    runMinute = 0,
+    fromDate = new Date(),
+  ) {
     const next = new Date(fromDate);
     next.setSeconds(0, 0);
     next.setHours(Number(runHour) || 6, Number(runMinute) || 0, 0, 0);
@@ -4762,7 +4880,10 @@ module.exports = function registerAllRoutes(app, deps) {
   function buildForecastRows(filters, cb) {
     const lookbackDays = Math.max(
       7,
-      Math.min(365, parseInt(filters.lookback_days || filters.lookbackDays || 28, 10)),
+      Math.min(
+        365,
+        parseInt(filters.lookback_days || filters.lookbackDays || 28, 10),
+      ),
     );
     const where = [
       "s.voided = 0",
@@ -4874,7 +4995,10 @@ module.exports = function registerAllRoutes(app, deps) {
     (rows || []).forEach((row) => {
       lines.push(
         columns
-          .map((c) => `"${String(row[c.key] == null ? "" : row[c.key]).replace(/"/g, '""')}"`)
+          .map(
+            (c) =>
+              `"${String(row[c.key] == null ? "" : row[c.key]).replace(/"/g, '""')}"`,
+          )
           .join(","),
       );
     });
@@ -5019,54 +5143,80 @@ module.exports = function registerAllRoutes(app, deps) {
       function (insertErr) {
         if (insertErr) return cb(insertErr);
         const runId = this.lastID;
-        getRowsForScheduleReport(schedule.report_key, filters, (rowsErr, rows) => {
-          if (rowsErr) {
-            db.run(
-              "UPDATE report_schedule_runs SET status='failed', run_finished_at=datetime('now','localtime'), error_message=? WHERE id=?",
-              [rowsErr.message, runId],
-            );
-            db.run(
-              "INSERT INTO report_delivery_log (schedule_run_id, schedule_id, channel, recipient, status, message) VALUES (?, ?, 'file', ?, 'failed', ?)",
-              [runId, schedule.id, schedule.recipient || null, rowsErr.message],
-            );
-            return cb(rowsErr);
-          }
+        getRowsForScheduleReport(
+          schedule.report_key,
+          filters,
+          (rowsErr, rows) => {
+            if (rowsErr) {
+              db.run(
+                "UPDATE report_schedule_runs SET status='failed', run_finished_at=datetime('now','localtime'), error_message=? WHERE id=?",
+                [rowsErr.message, runId],
+              );
+              db.run(
+                "INSERT INTO report_delivery_log (schedule_run_id, schedule_id, channel, recipient, status, message) VALUES (?, ?, 'file', ?, 'failed', ?)",
+                [
+                  runId,
+                  schedule.id,
+                  schedule.recipient || null,
+                  rowsErr.message,
+                ],
+              );
+              return cb(rowsErr);
+            }
 
-          const fileName = `report_${schedule.report_key}_${schedule.id}_${Date.now()}.csv`;
-          const filePath = path.join(REPORT_EXPORT_DIR, fileName);
-          const csv = toCsvLines(rows, columnsForScheduleReport(schedule.report_key), filters);
-          try {
-            fs.writeFileSync(filePath, csv, "utf8");
-          } catch (e) {
-            db.run(
-              "UPDATE report_schedule_runs SET status='failed', run_finished_at=datetime('now','localtime'), error_message=? WHERE id=?",
-              [e.message, runId],
+            const fileName = `report_${schedule.report_key}_${schedule.id}_${Date.now()}.csv`;
+            const filePath = path.join(REPORT_EXPORT_DIR, fileName);
+            const csv = toCsvLines(
+              rows,
+              columnsForScheduleReport(schedule.report_key),
+              filters,
             );
-            db.run(
-              "INSERT INTO report_delivery_log (schedule_run_id, schedule_id, channel, recipient, status, message) VALUES (?, ?, 'file', ?, 'failed', ?)",
-              [runId, schedule.id, schedule.recipient || null, e.message],
-            );
-            return cb(e);
-          }
+            try {
+              fs.writeFileSync(filePath, csv, "utf8");
+            } catch (e) {
+              db.run(
+                "UPDATE report_schedule_runs SET status='failed', run_finished_at=datetime('now','localtime'), error_message=? WHERE id=?",
+                [e.message, runId],
+              );
+              db.run(
+                "INSERT INTO report_delivery_log (schedule_run_id, schedule_id, channel, recipient, status, message) VALUES (?, ?, 'file', ?, 'failed', ?)",
+                [runId, schedule.id, schedule.recipient || null, e.message],
+              );
+              return cb(e);
+            }
 
-          db.run(
-            `UPDATE report_schedule_runs
+            db.run(
+              `UPDATE report_schedule_runs
              SET status='success', run_finished_at=datetime('now','localtime'),
                  file_path=?, row_count=?
              WHERE id=?`,
-            [filePath, rows.length, runId],
-          );
-          db.run(
-            "INSERT INTO report_delivery_log (schedule_run_id, schedule_id, channel, recipient, status, message) VALUES (?, ?, 'file', ?, 'sent', ?)",
-            [runId, schedule.id, schedule.recipient || null, `Generated file: ${fileName}`],
-          );
-          const nextRun = nextRunAtIso(schedule.frequency, schedule.run_hour, schedule.run_minute);
-          db.run(
-            "UPDATE report_schedules SET last_run_at=datetime('now','localtime'), next_run_at=?, updated_at=datetime('now','localtime') WHERE id=?",
-            [nextRun, schedule.id],
-          );
-          return cb(null, { run_id: runId, file_path: filePath, row_count: rows.length });
-        });
+              [filePath, rows.length, runId],
+            );
+            db.run(
+              "INSERT INTO report_delivery_log (schedule_run_id, schedule_id, channel, recipient, status, message) VALUES (?, ?, 'file', ?, 'sent', ?)",
+              [
+                runId,
+                schedule.id,
+                schedule.recipient || null,
+                `Generated file: ${fileName}`,
+              ],
+            );
+            const nextRun = nextRunAtIso(
+              schedule.frequency,
+              schedule.run_hour,
+              schedule.run_minute,
+            );
+            db.run(
+              "UPDATE report_schedules SET last_run_at=datetime('now','localtime'), next_run_at=?, updated_at=datetime('now','localtime') WHERE id=?",
+              [nextRun, schedule.id],
+            );
+            return cb(null, {
+              run_id: runId,
+              file_path: filePath,
+              row_count: rows.length,
+            });
+          },
+        );
       },
     );
   }
@@ -5131,7 +5281,9 @@ module.exports = function registerAllRoutes(app, deps) {
         filters = {},
       } = req.body || {};
       if (!name || !report_key) {
-        return res.status(400).json({ error: "name and report_key are required" });
+        return res
+          .status(400)
+          .json({ error: "name and report_key are required" });
       }
       const nextRun = nextRunAtIso(frequency, run_hour, run_minute);
       db.run(
@@ -5175,7 +5327,11 @@ module.exports = function registerAllRoutes(app, deps) {
         filters,
         is_active,
       } = req.body || {};
-      const nextRun = nextRunAtIso(frequency || "daily", run_hour || 6, run_minute || 0);
+      const nextRun = nextRunAtIso(
+        frequency || "daily",
+        run_hour || 6,
+        run_minute || 0,
+      );
       db.run(
         `UPDATE report_schedules
          SET name = COALESCE(?, name),
@@ -5205,7 +5361,8 @@ module.exports = function registerAllRoutes(app, deps) {
         ],
         function (err) {
           if (err) return res.status(500).json({ error: err.message });
-          if (!this.changes) return res.status(404).json({ error: "Schedule not found" });
+          if (!this.changes)
+            return res.status(404).json({ error: "Schedule not found" });
           res.json({ ok: true, next_run_at: nextRun });
         },
       );
@@ -5217,11 +5374,16 @@ module.exports = function registerAllRoutes(app, deps) {
     requirePerm("manage_employees"),
     requireFeature("reports_scheduled_exports"),
     (req, res) => {
-      db.run("DELETE FROM report_schedules WHERE id = ?", [req.params.id], function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!this.changes) return res.status(404).json({ error: "Schedule not found" });
-        res.json({ ok: true });
-      });
+      db.run(
+        "DELETE FROM report_schedules WHERE id = ?",
+        [req.params.id],
+        function (err) {
+          if (err) return res.status(500).json({ error: err.message });
+          if (!this.changes)
+            return res.status(404).json({ error: "Schedule not found" });
+          res.json({ ok: true });
+        },
+      );
     },
   );
 
@@ -5230,14 +5392,19 @@ module.exports = function registerAllRoutes(app, deps) {
     requirePerm("manage_employees"),
     requireFeature("reports_scheduled_exports"),
     (req, res) => {
-      db.get("SELECT * FROM report_schedules WHERE id = ?", [req.params.id], (err, schedule) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!schedule) return res.status(404).json({ error: "Schedule not found" });
-        runSingleSchedule(schedule, (runErr, payload) => {
-          if (runErr) return res.status(500).json({ error: runErr.message });
-          res.json({ ok: true, run: payload });
-        });
-      });
+      db.get(
+        "SELECT * FROM report_schedules WHERE id = ?",
+        [req.params.id],
+        (err, schedule) => {
+          if (err) return res.status(500).json({ error: err.message });
+          if (!schedule)
+            return res.status(404).json({ error: "Schedule not found" });
+          runSingleSchedule(schedule, (runErr, payload) => {
+            if (runErr) return res.status(500).json({ error: runErr.message });
+            res.json({ ok: true, run: payload });
+          });
+        },
+      );
     },
   );
 
@@ -5304,9 +5471,18 @@ module.exports = function registerAllRoutes(app, deps) {
     requireAnyPerm(["view_reports", "manage_employees"]),
     requireFeature("reports_scheduled_exports"),
     (req, res) => {
-      const { report_key, name, scope = "personal", role_id = null, filters = {}, is_default = false } = req.body || {};
+      const {
+        report_key,
+        name,
+        scope = "personal",
+        role_id = null,
+        filters = {},
+        is_default = false,
+      } = req.body || {};
       if (!report_key || !name) {
-        return res.status(400).json({ error: "report_key and name are required" });
+        return res
+          .status(400)
+          .json({ error: "report_key and name are required" });
       }
       db.run(
         `INSERT INTO saved_report_views
@@ -5351,7 +5527,8 @@ module.exports = function registerAllRoutes(app, deps) {
         ],
         function (err) {
           if (err) return res.status(500).json({ error: err.message });
-          if (!this.changes) return res.status(404).json({ error: "Saved view not found" });
+          if (!this.changes)
+            return res.status(404).json({ error: "Saved view not found" });
           res.json({ ok: true });
         },
       );
@@ -5363,11 +5540,16 @@ module.exports = function registerAllRoutes(app, deps) {
     requireAnyPerm(["view_reports", "manage_employees"]),
     requireFeature("reports_scheduled_exports"),
     (req, res) => {
-      db.run("DELETE FROM saved_report_views WHERE id = ?", [req.params.id], function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!this.changes) return res.status(404).json({ error: "Saved view not found" });
-        res.json({ ok: true });
-      });
+      db.run(
+        "DELETE FROM saved_report_views WHERE id = ?",
+        [req.params.id],
+        function (err) {
+          if (err) return res.status(500).json({ error: err.message });
+          if (!this.changes)
+            return res.status(404).json({ error: "Saved view not found" });
+          res.json({ ok: true });
+        },
+      );
     },
   );
 
@@ -5392,15 +5574,28 @@ module.exports = function registerAllRoutes(app, deps) {
     requirePerm("manage_employees"),
     requireFeature("reports_scheduled_exports"),
     (req, res) => {
-      const { report_key, version, query_signature = null, notes = null } = req.body || {};
+      const {
+        report_key,
+        version,
+        query_signature = null,
+        notes = null,
+      } = req.body || {};
       if (!report_key || !version) {
-        return res.status(400).json({ error: "report_key and version are required" });
+        return res
+          .status(400)
+          .json({ error: "report_key and version are required" });
       }
       db.run(
         `INSERT INTO report_definition_versions
          (report_key, version, query_signature, notes, created_by)
          VALUES (?, ?, ?, ?, ?)`,
-        [report_key, version, query_signature, notes, req.headers["x-employee-id"] || null],
+        [
+          report_key,
+          version,
+          query_signature,
+          notes,
+          req.headers["x-employee-id"] || null,
+        ],
         function (err) {
           if (err) return res.status(500).json({ error: err.message });
           res.json({ id: this.lastID });
@@ -8504,76 +8699,96 @@ module.exports = function registerAllRoutes(app, deps) {
     (req, res) => {
       getActiveShopifyConnection((connErr, conn) => {
         if (connErr) return res.status(500).json({ error: connErr.message });
-        if (!conn) return res.status(400).json({ error: "No active Shopify connection" });
+        if (!conn)
+          return res
+            .status(400)
+            .json({ error: "No active Shopify connection" });
 
         // Fetch all outlets to determine a default outlet for stock seeding
-        db.all("SELECT id FROM outlets ORDER BY id ASC LIMIT 1", [], (outErr, outRows) => {
-          if (outErr) return res.status(500).json({ error: outErr.message });
-          const defaultOutletId = outRows?.[0]?.id || null;
+        db.all(
+          "SELECT id FROM outlets ORDER BY id ASC LIMIT 1",
+          [],
+          (outErr, outRows) => {
+            if (outErr) return res.status(500).json({ error: outErr.message });
+            const defaultOutletId = outRows?.[0]?.id || null;
 
-          // Fetch location mappings so we know which outlet maps to which Shopify location
-          db.all(
-            "SELECT outlet_id, shopify_location_id FROM shopify_location_map",
-            [],
-            (mapErr, locationMaps) => {
-              if (mapErr) return res.status(500).json({ error: mapErr.message });
+            // Fetch location mappings so we know which outlet maps to which Shopify location
+            db.all(
+              "SELECT outlet_id, shopify_location_id FROM shopify_location_map",
+              [],
+              (mapErr, locationMaps) => {
+                if (mapErr)
+                  return res.status(500).json({ error: mapErr.message });
 
-              // Build a map: shopify_location_id -> outlet_id
-              const locationToOutlet = {};
-              (locationMaps || []).forEach((lm) => {
-                locationToOutlet[lm.shopify_location_id] = lm.outlet_id;
-              });
+                // Build a map: shopify_location_id -> outlet_id
+                const locationToOutlet = {};
+                (locationMaps || []).forEach((lm) => {
+                  locationToOutlet[lm.shopify_location_id] = lm.outlet_id;
+                });
 
-              fetchShopifyProductsFull(conn, 10000)
-                .then((shopifyProducts) => {
-                  if (!shopifyProducts || shopifyProducts.length === 0) {
-                    return res.json({ created: 0, updated: 0, skipped: 0, errors: [] });
-                  }
-
-                  let created = 0;
-                  let updated = 0;
-                  let skipped = 0;
-                  const errors = [];
-                  let idx = 0;
-
-                  const processNext = () => {
-                    if (idx >= shopifyProducts.length) {
-                      return res.json({ created, updated, skipped, errors });
+                fetchShopifyProductsFull(conn, 10000)
+                  .then((shopifyProducts) => {
+                    if (!shopifyProducts || shopifyProducts.length === 0) {
+                      return res.json({
+                        created: 0,
+                        updated: 0,
+                        skipped: 0,
+                        errors: [],
+                      });
                     }
 
-                    const sp = shopifyProducts[idx];
-                    idx += 1;
+                    let created = 0;
+                    let updated = 0;
+                    let skipped = 0;
+                    const errors = [];
+                    let idx = 0;
 
-                    // Only import variants that have a barcode (needed for POS lookup)
-                    const importableVariants = sp.variants.filter((v) => v.barcode && v.barcode.trim());
+                    const processNext = () => {
+                      if (idx >= shopifyProducts.length) {
+                        return res.json({ created, updated, skipped, errors });
+                      }
 
-                    if (importableVariants.length === 0) {
-                      skipped += 1;
-                      return processNext();
-                    }
+                      const sp = shopifyProducts[idx];
+                      idx += 1;
 
-                    // Process each variant as a POS product (one product per barcode)
-                    let vIdx = 0;
-                    const processVariant = () => {
-                      if (vIdx >= importableVariants.length) return processNext();
-                      const v = importableVariants[vIdx];
-                      vIdx += 1;
+                      // Only import variants that have a barcode (needed for POS lookup)
+                      const importableVariants = sp.variants.filter(
+                        (v) => v.barcode && v.barcode.trim(),
+                      );
 
-                      const barcode = v.barcode.trim();
-                      const name = sp.title || barcode;
+                      if (importableVariants.length === 0) {
+                        skipped += 1;
+                        return processNext();
+                      }
 
-                      // Check if product already exists
-                      db.get("SELECT id FROM products WHERE barcode = ?", [barcode], (findErr, existing) => {
-                        if (findErr) {
-                          errors.push({ barcode, error: findErr.message });
-                          return processVariant();
-                        }
+                      // Process each variant as a POS product (one product per barcode)
+                      let vIdx = 0;
+                      const processVariant = () => {
+                        if (vIdx >= importableVariants.length)
+                          return processNext();
+                        const v = importableVariants[vIdx];
+                        vIdx += 1;
 
-                        // Auto-create category from Shopify product_type, then run upsert
-                        const productTypeName = (sp.product_type || "").trim();
-                        const doUpsert = (categoryId) => {
-                          db.run(
-                            `INSERT INTO products (barcode, sku, name, price, compare_at_price, description_html, product_type, vendor, tags, status, cost_price, category_id, stock, unit)
+                        const barcode = v.barcode.trim();
+                        const name = sp.title || barcode;
+
+                        // Check if product already exists
+                        db.get(
+                          "SELECT id FROM products WHERE barcode = ?",
+                          [barcode],
+                          (findErr, existing) => {
+                            if (findErr) {
+                              errors.push({ barcode, error: findErr.message });
+                              return processVariant();
+                            }
+
+                            // Auto-create category from Shopify product_type, then run upsert
+                            const productTypeName = (
+                              sp.product_type || ""
+                            ).trim();
+                            const doUpsert = (categoryId) => {
+                              db.run(
+                                `INSERT INTO products (barcode, sku, name, price, compare_at_price, description_html, product_type, vendor, tags, status, cost_price, category_id, stock, unit)
                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'pcs')
                              ON CONFLICT(barcode) DO UPDATE SET
                                sku = excluded.sku,
@@ -8587,106 +8802,131 @@ module.exports = function registerAllRoutes(app, deps) {
                                status = excluded.status,
                                cost_price = CASE WHEN excluded.cost_price > 0 THEN excluded.cost_price ELSE products.cost_price END,
                                category_id = CASE WHEN excluded.category_id IS NOT NULL THEN excluded.category_id ELSE products.category_id END`,
-                            [
-                              barcode,
-                              v.sku || null,
-                              name,
-                              v.price || 0,
-                              v.compare_at_price || 0,
-                              sp.description_html || null,
-                              sp.product_type || null,
-                              sp.vendor || null,
-                              sp.tags || null,
-                              sp.status || "active",
-                              v.cost_price || 0,
-                              categoryId,
-                            ],
-                            function (upsertErr) {
-                              if (upsertErr) {
-                                errors.push({ barcode, error: upsertErr.message });
-                                return processVariant();
-                              }
+                                [
+                                  barcode,
+                                  v.sku || null,
+                                  name,
+                                  v.price || 0,
+                                  v.compare_at_price || 0,
+                                  sp.description_html || null,
+                                  sp.product_type || null,
+                                  sp.vendor || null,
+                                  sp.tags || null,
+                                  sp.status || "active",
+                                  v.cost_price || 0,
+                                  categoryId,
+                                ],
+                                function (upsertErr) {
+                                  if (upsertErr) {
+                                    errors.push({
+                                      barcode,
+                                      error: upsertErr.message,
+                                    });
+                                    return processVariant();
+                                  }
 
-                              const productId = existing ? existing.id : this.lastID;
-                              if (existing) updated += 1;
-                              else created += 1;
+                                  const productId = existing
+                                    ? existing.id
+                                    : this.lastID;
+                                  if (existing) updated += 1;
+                                  else created += 1;
 
-                              // Upsert product mapping
-                              db.run(
-                                `INSERT INTO shopify_product_map (product_id, shopify_product_id, shopify_variant_id, shopify_inventory_item_id, is_active, last_verified_at)
+                                  // Upsert product mapping
+                                  db.run(
+                                    `INSERT INTO shopify_product_map (product_id, shopify_product_id, shopify_variant_id, shopify_inventory_item_id, is_active, last_verified_at)
                                  VALUES (?, ?, ?, ?, 1, datetime('now','localtime'))
                                  ON CONFLICT(shopify_product_id, shopify_variant_id) DO UPDATE SET
                                    product_id = excluded.product_id,
                                    shopify_inventory_item_id = excluded.shopify_inventory_item_id,
                                    is_active = 1,
                                    last_verified_at = datetime('now','localtime')`,
-                                [productId, sp.shopify_product_id, v.shopify_variant_id, v.shopify_inventory_item_id],
-                              );
+                                    [
+                                      productId,
+                                      sp.shopify_product_id,
+                                      v.shopify_variant_id,
+                                      v.shopify_inventory_item_id,
+                                    ],
+                                  );
 
-                              // Seed outlet stock from Shopify inventory levels
-                              const levels = v.inventory_levels || [];
-                              if (levels.length === 0 && defaultOutletId) {
-                                db.run(
-                                  `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+                                  // Seed outlet stock from Shopify inventory levels
+                                  const levels = v.inventory_levels || [];
+                                  if (levels.length === 0 && defaultOutletId) {
+                                    db.run(
+                                      `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
                                    VALUES (?, ?, 0)
                                    ON CONFLICT(product_id, outlet_id) DO NOTHING`,
-                                  [productId, defaultOutletId],
-                                  () => processVariant(),
-                                );
-                                return;
-                              }
+                                      [productId, defaultOutletId],
+                                      () => processVariant(),
+                                    );
+                                    return;
+                                  }
 
-                              let lIdx = 0;
-                              const processLevel = () => {
-                                if (lIdx >= levels.length) return processVariant();
-                                const lvl = levels[lIdx];
-                                lIdx += 1;
-                                const outletId = locationToOutlet[lvl.shopify_location_id] || defaultOutletId;
-                                if (!outletId) return processLevel();
-                                db.run(
-                                  `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+                                  let lIdx = 0;
+                                  const processLevel = () => {
+                                    if (lIdx >= levels.length)
+                                      return processVariant();
+                                    const lvl = levels[lIdx];
+                                    lIdx += 1;
+                                    const outletId =
+                                      locationToOutlet[
+                                        lvl.shopify_location_id
+                                      ] || defaultOutletId;
+                                    if (!outletId) return processLevel();
+                                    db.run(
+                                      `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
                                    VALUES (?, ?, ?)
                                    ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = ?`,
-                                  [productId, outletId, lvl.available, lvl.available],
-                                  () => processLevel(),
-                                );
-                              };
-                              processLevel();
-                            },
-                          );
-                        };
-
-                        // Resolve category: upsert from Shopify product_type, then call doUpsert
-                        if (productTypeName) {
-                          db.run(
-                            `INSERT INTO categories (name) VALUES (?)
-                             ON CONFLICT(name) DO NOTHING`,
-                            [productTypeName],
-                            () => {
-                              db.get(
-                                "SELECT id FROM categories WHERE name = ? LIMIT 1",
-                                [productTypeName],
-                                (catErr, catRow) => {
-                                  doUpsert(catErr || !catRow ? null : catRow.id);
+                                      [
+                                        productId,
+                                        outletId,
+                                        lvl.available,
+                                        lvl.available,
+                                      ],
+                                      () => processLevel(),
+                                    );
+                                  };
+                                  processLevel();
                                 },
                               );
-                            },
-                          );
-                        } else {
-                          doUpsert(null);
-                        }
-                      });
+                            };
+
+                            // Resolve category: upsert from Shopify product_type, then call doUpsert
+                            if (productTypeName) {
+                              db.run(
+                                `INSERT INTO categories (name) VALUES (?)
+                             ON CONFLICT(name) DO NOTHING`,
+                                [productTypeName],
+                                () => {
+                                  db.get(
+                                    "SELECT id FROM categories WHERE name = ? LIMIT 1",
+                                    [productTypeName],
+                                    (catErr, catRow) => {
+                                      doUpsert(
+                                        catErr || !catRow ? null : catRow.id,
+                                      );
+                                    },
+                                  );
+                                },
+                              );
+                            } else {
+                              doUpsert(null);
+                            }
+                          },
+                        );
+                      };
+                      processVariant();
                     };
-                    processVariant();
-                  };
-                  processNext();
-                })
-                .catch((err) => {
-                  res.status(500).json({ error: `Shopify fetch failed: ${err.message}` });
-                });
-            },
-          );
-        });
+                    processNext();
+                  })
+                  .catch((err) => {
+                    res
+                      .status(500)
+                      .json({ error: `Shopify fetch failed: ${err.message}` });
+                  });
+              },
+            );
+          },
+        );
       });
     },
   );
@@ -8699,7 +8939,10 @@ module.exports = function registerAllRoutes(app, deps) {
     (req, res) => {
       getActiveShopifyConnection((connErr, conn) => {
         if (connErr) return res.status(500).json({ error: connErr.message });
-        if (!conn) return res.status(400).json({ error: "No active Shopify connection" });
+        if (!conn)
+          return res
+            .status(400)
+            .json({ error: "No active Shopify connection" });
 
         // Load all active product mappings + location mappings
         db.all(
@@ -8712,7 +8955,10 @@ module.exports = function registerAllRoutes(app, deps) {
           (mapErr, mappings) => {
             if (mapErr) return res.status(500).json({ error: mapErr.message });
             if (!mappings || mappings.length === 0) {
-              return res.status(400).json({ error: "No active product+location mappings found. Map products and locations first." });
+              return res.status(400).json({
+                error:
+                  "No active product+location mappings found. Map products and locations first.",
+              });
             }
 
             let synced = 0;
@@ -8728,9 +8974,15 @@ module.exports = function registerAllRoutes(app, deps) {
               const m = mappings[idx];
               idx += 1;
 
-              fetchInventoryLevel(conn, m.shopify_inventory_item_id, m.shopify_location_id)
+              fetchInventoryLevel(
+                conn,
+                m.shopify_inventory_item_id,
+                m.shopify_location_id,
+              )
                 .then((lvl) => {
-                  const qty = Number.isFinite(lvl.available) ? lvl.available : 0;
+                  const qty = Number.isFinite(lvl.available)
+                    ? lvl.available
+                    : 0;
                   db.run(
                     `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
                      VALUES (?, ?, ?)
@@ -8739,7 +8991,11 @@ module.exports = function registerAllRoutes(app, deps) {
                     (stockErr) => {
                       if (stockErr) {
                         failed += 1;
-                        errors.push({ product_id: m.product_id, outlet_id: m.outlet_id, error: stockErr.message });
+                        errors.push({
+                          product_id: m.product_id,
+                          outlet_id: m.outlet_id,
+                          error: stockErr.message,
+                        });
                       } else {
                         synced += 1;
                       }
@@ -8749,7 +9005,11 @@ module.exports = function registerAllRoutes(app, deps) {
                 })
                 .catch((fetchErr) => {
                   failed += 1;
-                  errors.push({ product_id: m.product_id, outlet_id: m.outlet_id, error: fetchErr.message });
+                  errors.push({
+                    product_id: m.product_id,
+                    outlet_id: m.outlet_id,
+                    error: fetchErr.message,
+                  });
                   processNext();
                 });
             };
@@ -8775,7 +9035,10 @@ module.exports = function registerAllRoutes(app, deps) {
           if (listErr) return res.status(500).json({ error: listErr.message });
           const productIds = rows.map((r) => r.product_id).filter(Boolean);
           if (productIds.length === 0) {
-            return res.json({ deleted: 0, message: "No Shopify-imported products found." });
+            return res.json({
+              deleted: 0,
+              message: "No Shopify-imported products found.",
+            });
           }
           // SQLite has a 999-parameter limit; chunk into batches of 400
           const CHUNK = 400;
@@ -8789,13 +9052,17 @@ module.exports = function registerAllRoutes(app, deps) {
           // Disable FK enforcement for this operation so historic sale_items
           // that reference these products don't block the delete.
           db.run("PRAGMA foreign_keys = OFF", (fkOffErr) => {
-            if (fkOffErr) return res.status(500).json({ error: fkOffErr.message });
+            if (fkOffErr)
+              return res.status(500).json({ error: fkOffErr.message });
 
             const finish = (err) => {
               // Always re-enable FK enforcement before responding
               db.run("PRAGMA foreign_keys = ON", () => {
                 if (err) return res.status(500).json({ error: err.message });
-                res.json({ deleted: totalDeleted, message: `Deleted ${totalDeleted} Shopify-imported product(s).` });
+                res.json({
+                  deleted: totalDeleted,
+                  message: `Deleted ${totalDeleted} Shopify-imported product(s).`,
+                });
               });
             };
 
@@ -8804,23 +9071,43 @@ module.exports = function registerAllRoutes(app, deps) {
               const ids = chunks[chunkIdx];
               chunkIdx += 1;
               const ph = ids.map(() => "?").join(",");
-              db.run(`DELETE FROM shopify_product_map WHERE product_id IN (${ph})`, ids, (e1) => {
-                if (e1) return finish(e1);
-                db.run(`DELETE FROM outlet_stock WHERE product_id IN (${ph})`, ids, (e2) => {
-                  if (e2) return finish(e2);
-                  db.run(`DELETE FROM product_variants WHERE product_id IN (${ph})`, ids, (e3) => {
-                    if (e3) return finish(e3);
-                    db.run(`DELETE FROM stock_adjustments WHERE product_id IN (${ph})`, ids, (e4) => {
-                      if (e4) return finish(e4);
-                      db.run(`DELETE FROM products WHERE id IN (${ph})`, ids, function(e5) {
-                        if (e5) return finish(e5);
-                        totalDeleted += (this.changes || 0);
-                        processChunk();
-                      });
-                    });
-                  });
-                });
-              });
+              db.run(
+                `DELETE FROM shopify_product_map WHERE product_id IN (${ph})`,
+                ids,
+                (e1) => {
+                  if (e1) return finish(e1);
+                  db.run(
+                    `DELETE FROM outlet_stock WHERE product_id IN (${ph})`,
+                    ids,
+                    (e2) => {
+                      if (e2) return finish(e2);
+                      db.run(
+                        `DELETE FROM product_variants WHERE product_id IN (${ph})`,
+                        ids,
+                        (e3) => {
+                          if (e3) return finish(e3);
+                          db.run(
+                            `DELETE FROM stock_adjustments WHERE product_id IN (${ph})`,
+                            ids,
+                            (e4) => {
+                              if (e4) return finish(e4);
+                              db.run(
+                                `DELETE FROM products WHERE id IN (${ph})`,
+                                ids,
+                                function (e5) {
+                                  if (e5) return finish(e5);
+                                  totalDeleted += this.changes || 0;
+                                  processChunk();
+                                },
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              );
             };
             processChunk();
           });
@@ -9517,53 +9804,88 @@ module.exports = function registerAllRoutes(app, deps) {
             const rowsToInsert = [];
             let matched = 0;
             let mismatch = 0;
-            let errors = 0;
+            let errorsCount = 0;
 
-            for (const row of mappedRows) {
-              const localQty = Number(row.local_qty || 0);
-              try {
-                const remote = await fetchInventoryLevel(
-                  conn,
-                  row.shopify_inventory_item_id,
-                  row.shopify_location_id,
+            // Batch processing for Shopify fetching
+            const batchSize = 50;
+            for (let i = 0; i < mappedRows.length; i += batchSize) {
+              const batch = mappedRows.slice(i, i + batchSize);
+              const inventoryItemIds = batch.map(
+                (r) => r.shopify_inventory_item_id,
+              );
+              // Assuming all items in batch share the same Shopify location for this specific reconciliation context,
+              // or grouping by location if they differ. The current 'Run' logic uses slm.shopify_location_id per row.
+              // To handle mixed locations, we group by location_id.
+              const byLocation = {};
+              batch.forEach((r) => {
+                if (!byLocation[r.shopify_location_id])
+                  byLocation[r.shopify_location_id] = [];
+                byLocation[r.shopify_location_id].push(r);
+              });
+
+              for (const locId of Object.keys(byLocation)) {
+                const locBatch = byLocation[locId];
+                const itemIds = locBatch.map(
+                  (r) => r.shopify_inventory_item_id,
                 );
-                const externalQty = Number(remote.available || 0);
-                const diff = Number((localQty - externalQty).toFixed(4));
-                const status = diff === 0 ? "matched" : "mismatch";
-                if (status === "matched") matched += 1;
-                else mismatch += 1;
-                rowsToInsert.push({
-                  product_id: row.product_id,
-                  variant_id: row.variant_id || null,
-                  outlet_id: row.outlet_id,
-                  external_location_id: row.shopify_location_id,
-                  local_qty: localQty,
-                  external_qty: externalQty,
-                  diff,
-                  status,
-                  resolution_status: "open",
-                  resolution_note: null,
-                });
-              } catch (e) {
-                errors += 1;
-                rowsToInsert.push({
-                  product_id: row.product_id,
-                  variant_id: row.variant_id || null,
-                  outlet_id: row.outlet_id,
-                  external_location_id: row.shopify_location_id,
-                  local_qty: localQty,
-                  external_qty: 0,
-                  diff: localQty,
-                  status: "error",
-                  resolution_status: "open",
-                  resolution_note: String(
-                    e.message || "Failed fetching Shopify quantity",
-                  ),
-                });
+                try {
+                  const remoteLevels = await fetchInventoryLevelsBatch(
+                    conn,
+                    itemIds,
+                    locId,
+                  );
+                  const remoteMap = new Map(
+                    remoteLevels.map((l) => [l.inventory_item_id, l.available]),
+                  );
+
+                  for (const row of locBatch) {
+                    const localQty = Number(row.local_qty || 0);
+                    const externalQty = Number(
+                      remoteMap.get(
+                        `gid://shopify/InventoryItem/${row.shopify_inventory_item_id}`,
+                      ) ?? 0,
+                    );
+                    const diff = Number((localQty - externalQty).toFixed(4));
+                    const status = diff === 0 ? "matched" : "mismatch";
+                    if (status === "matched") matched += 1;
+                    else mismatch += 1;
+                    rowsToInsert.push({
+                      product_id: row.product_id,
+                      variant_id: row.variant_id || null,
+                      outlet_id: row.outlet_id,
+                      external_location_id: locId,
+                      local_qty: localQty,
+                      external_qty: externalQty,
+                      diff,
+                      status,
+                      resolution_status: "open",
+                      resolution_note: null,
+                    });
+                  }
+                } catch (e) {
+                  errorsCount += locBatch.length;
+                  locBatch.forEach((row) => {
+                    rowsToInsert.push({
+                      product_id: row.product_id,
+                      variant_id: row.variant_id || null,
+                      outlet_id: row.outlet_id,
+                      external_location_id: locId,
+                      local_qty: Number(row.local_qty || 0),
+                      external_qty: 0,
+                      diff: Number(row.local_qty || 0),
+                      status: "error",
+                      resolution_status: "open",
+                      resolution_note: String(
+                        e.message || "Batch fetch failed",
+                      ),
+                    });
+                  });
+                }
               }
             }
 
             db.serialize(() => {
+              db.run("BEGIN TRANSACTION");
               db.run("DELETE FROM inventory_reconciliation");
               const stmt = db.prepare(
                 `INSERT INTO inventory_reconciliation (
@@ -9587,14 +9909,20 @@ module.exports = function registerAllRoutes(app, deps) {
                 ]);
               }
               stmt.finalize((finErr) => {
-                if (finErr)
+                if (finErr) {
+                  db.run("ROLLBACK");
                   return res.status(500).json({ error: finErr.message });
-                return res.json({
-                  message: "Live reconciliation completed",
-                  row_count: rowsToInsert.length,
-                  matched,
-                  mismatch,
-                  errors,
+                }
+                db.run("COMMIT", (commitErr) => {
+                  if (commitErr)
+                    return res.status(500).json({ error: commitErr.message });
+                  return res.json({
+                    message: "Live reconciliation completed",
+                    row_count: rowsToInsert.length,
+                    matched,
+                    mismatch,
+                    errors: errorsCount,
+                  });
                 });
               });
             });
@@ -9642,6 +9970,88 @@ module.exports = function registerAllRoutes(app, deps) {
           res.json({ message: "Reconciliation row updated" });
         },
       );
+    },
+  );
+
+  app.post(
+    "/api/reconciliation/inventory/bulk-resolve",
+    requirePerm("manage_inventory"),
+    (req, res) => {
+      const {
+        ids,
+        resolution_status = "resolved",
+        resolution_note = null,
+      } = req.body || {};
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: "ids must be a non-empty array" });
+      }
+      const allowed = ["open", "resolved", "ignored"];
+      if (!allowed.includes(String(resolution_status))) {
+        return res.status(400).json({
+          error: `resolution_status must be one of: ${allowed.join(", ")}`,
+        });
+      }
+      const resolvedBy = req.headers["x-employee-id"]
+        ? Number(req.headers["x-employee-id"])
+        : null;
+
+      db.serialize(() => {
+        db.run("BEGIN TRANSACTION");
+        const chunkSize = 500;
+        let totalUpdated = 0;
+        let finalErr = null;
+
+        const processChunks = (index) => {
+          if (index >= ids.length) {
+            if (finalErr) {
+              db.run("ROLLBACK");
+              return res.status(500).json({ error: finalErr.message });
+            }
+            db.run("COMMIT", (commitErr) => {
+              if (commitErr)
+                return res.status(500).json({ error: commitErr.message });
+              logActionHistory(
+                req,
+                "reconciliation_bulk_resolve",
+                `Bulk resolved ${totalUpdated} rows to ${resolution_status}`,
+              );
+              res.json({
+                message: `Successfully updated ${totalUpdated} reconciliation rows`,
+              });
+            });
+            return;
+          }
+
+          const chunk = ids.slice(index, index + chunkSize);
+          const placeholders = chunk.map(() => "?").join(",");
+          db.run(
+            `UPDATE inventory_reconciliation
+             SET resolution_status = ?,
+                 resolution_note = ?,
+                 resolved_by = ?,
+                 resolved_at = CASE WHEN ? = 'open' THEN NULL ELSE datetime('now','localtime') END
+             WHERE id IN (${placeholders})`,
+            [
+              resolution_status,
+              resolution_note,
+              resolvedBy,
+              resolution_status,
+              ...chunk,
+            ],
+            function (err) {
+              if (err) {
+                finalErr = err;
+                processChunks(ids.length); // skip to end
+              } else {
+                totalUpdated += this.changes;
+                processChunks(index + chunkSize);
+              }
+            },
+          );
+        };
+
+        processChunks(0);
+      });
     },
   );
 
@@ -9775,6 +10185,78 @@ module.exports = function registerAllRoutes(app, deps) {
       },
     );
   }
+
+  app.post(
+    "/api/reconciliation/inventory/bulk-fix",
+    requirePerm("manage_inventory"),
+    (req, res) => {
+      const { ids, mode } = req.body || {};
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: "ids must be a non-empty array" });
+      }
+      if (!["push_to_shopify", "pull_to_local"].includes(mode)) {
+        return res
+          .status(400)
+          .json({ error: "mode must be 'push_to_shopify' or 'pull_to_local'" });
+      }
+
+      const results = { success: 0, fail: 0, errors: [] };
+      const idChunkSize = 500;
+      const allRows = [];
+
+      const fetchRows = async (index) => {
+        if (index >= ids.length) {
+          if (!allRows.length)
+            return res
+              .status(404)
+              .json({ error: "No matching reconciliation rows found" });
+
+          const fixChunkSize = 20;
+          for (let i = 0; i < allRows.length; i += fixChunkSize) {
+            const chunk = allRows.slice(i, i + fixChunkSize);
+            await Promise.all(
+              chunk.map(
+                (row) =>
+                  new Promise((resolve) => {
+                    executeReconciliationFix(req, row, mode, (fixErr) => {
+                      if (fixErr) {
+                        results.fail++;
+                        results.errors.push(
+                          `Row #${row.id}: ${fixErr.message}`,
+                        );
+                      } else {
+                        results.success++;
+                      }
+                      resolve();
+                    });
+                  }),
+              ),
+            );
+          }
+
+          return res.json({
+            message: `Bulk fix complete: ${results.success} succeeded, ${results.fail} failed`,
+            ...results,
+          });
+        }
+
+        const currentIds = ids.slice(index, index + idChunkSize);
+        db.all(
+          `SELECT * FROM inventory_reconciliation WHERE id IN (${currentIds
+            .map(() => "?")
+            .join(",")})`,
+          currentIds,
+          async (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            allRows.push(...(rows || []));
+            fetchRows(index + idChunkSize);
+          },
+        );
+      };
+
+      fetchRows(0);
+    },
+  );
 
   app.post(
     "/api/reconciliation/inventory/:id/request-fix",

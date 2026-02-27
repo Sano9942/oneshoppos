@@ -1,4 +1,4 @@
-import { API_BASE as API } from '../config';
+import { API_BASE as API } from "../config";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -32,6 +32,9 @@ export default function POS() {
   const { employee, hasPerm } = useAuth();
   const [cart, setCart] = useState([]);
   const [barcodeInput, setBarcodeInput] = useState("");
+  const [barcodeSearch, setBarcodeSearch] = useState("");
+  const [skuSearch, setSkuSearch] = useState("");
+  const [priceSearch, setPriceSearch] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [error, setError] = useState("");
@@ -70,14 +73,11 @@ export default function POS() {
   const handleOverrideSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch(
-        `${API}/api/employees/validate-pin`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pin_code: overridePin }),
-        },
-      );
+      const res = await fetch(`${API}/api/employees/validate-pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin_code: overridePin }),
+      });
       const data = await res.json();
       if (!res.ok) {
         setOverrideError("Invalid Manager PIN");
@@ -144,7 +144,10 @@ export default function POS() {
   // F2 focuses the product search bar
   useEffect(() => {
     const handler = (e) => {
-      if (e.key === "F2") { e.preventDefault(); inputRef.current?.focus(); }
+      if (e.key === "F2") {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -176,7 +179,8 @@ export default function POS() {
   }, []);
 
   useEffect(() => {
-    if (!employee?.id || !selectedOutletId || attendanceId || isRegisterLocked) return;
+    if (!employee?.id || !selectedOutletId || attendanceId || isRegisterLocked)
+      return;
     fetch(`${API}/api/attendance/checkin`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -200,7 +204,10 @@ export default function POS() {
   }, [selectedOutletId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!selectedCustomerId) { setCustomerWalletBalance(0); return; }
+    if (!selectedCustomerId) {
+      setCustomerWalletBalance(0);
+      return;
+    }
     fetch(`${API}/api/customers/${selectedCustomerId}/wallet`)
       .then((r) => r.json())
       .then((d) => setCustomerWalletBalance(d.balance || 0))
@@ -210,7 +217,11 @@ export default function POS() {
   // Evaluate promotions whenever cart changes (debounced 400ms)
   useEffect(() => {
     if (promoTimeoutRef.current) clearTimeout(promoTimeoutRef.current);
-    if (cart.length === 0) { setAppliedPromotions([]); setPromoDiscount(0); return; }
+    if (cart.length === 0) {
+      setAppliedPromotions([]);
+      setPromoDiscount(0);
+      return;
+    }
     promoTimeoutRef.current = setTimeout(async () => {
       try {
         const orderTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
@@ -230,16 +241,16 @@ export default function POS() {
         const data = await res.json();
         setAppliedPromotions(data.applied_promotions || []);
         setPromoDiscount(data.total_promotion_discount || 0);
-      } catch { /* fail silently — promotions are non-blocking */ }
+      } catch {
+        /* fail silently — promotions are non-blocking */
+      }
     }, 400);
     return () => clearTimeout(promoTimeoutRef.current);
   }, [cart]);
 
   useEffect(() => {
     if (!selectedOutletId) return;
-    fetch(
-      `${API}/api/shifts/active?outlet_id=${selectedOutletId}`,
-    )
+    fetch(`${API}/api/shifts/active?outlet_id=${selectedOutletId}`)
       .then((r) => r.json())
       .then(() => {})
       .catch((err) => {
@@ -354,7 +365,8 @@ export default function POS() {
         effective_tax_rate: item.effective_tax_rate || 0,
       }));
       setCart(restoredItems);
-      if (data.parkedSale.customer_id) setSelectedCustomerId(String(data.parkedSale.customer_id));
+      if (data.parkedSale.customer_id)
+        setSelectedCustomerId(String(data.parkedSale.customer_id));
       setOrderNote(data.parkedSale.notes || "");
       // Delete from DB after restore
       await fetch(`${API}/api/parked-sales/${sale.id}`, { method: "DELETE" });
@@ -386,9 +398,19 @@ export default function POS() {
     setIsCheckoutModalOpen(true);
   };
 
-  const handleSearchInput = (e) => {
+  const handleSearchInput = (e, field = "all") => {
     const query = e.target.value;
-    setBarcodeInput(query);
+
+    // Clear other search fields to avoid confusion
+    if (field !== "all") setBarcodeInput("");
+    if (field !== "barcode") setBarcodeSearch("");
+    if (field !== "sku") setSkuSearch("");
+    if (field !== "price") setPriceSearch("");
+
+    if (field === "all") setBarcodeInput(query);
+    if (field === "barcode") setBarcodeSearch(query);
+    if (field === "sku") setSkuSearch(query);
+    if (field === "price") setPriceSearch(query);
 
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
 
@@ -403,8 +425,9 @@ export default function POS() {
         const outletParam = selectedOutletId
           ? `&outlet_id=${selectedOutletId}`
           : "";
+        const fieldParam = field !== "all" ? `&field=${field}` : "";
         const res = await fetch(
-          `${API}/api/products/search?query=${query}${outletParam}`,
+          `${API}/api/products/search?query=${query}${outletParam}${fieldParam}`,
         );
         const data = await res.json();
         setSearchResults(data.products || []);
@@ -413,6 +436,15 @@ export default function POS() {
         console.error("Search failed", err);
       }
     }, 300);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (searchResults.length > 0) {
+        addItemToCart(searchResults[0]);
+      }
+    }
   };
 
   const addItemToCart = (product) => {
@@ -443,9 +475,8 @@ export default function POS() {
       if (existingItem) {
         if (existingItem.quantity >= availableStock) {
           setError(
-            `Cannot add more. Only ${availableStock} in stock at this outlet.`,
+            `Warning: Selling past available stock (${availableStock} left).`,
           );
-          return prevCart;
         }
         return prevCart.map((item) =>
           item.id === product.id
@@ -454,14 +485,16 @@ export default function POS() {
         );
       } else {
         if (availableStock <= 0) {
-          setError(`Out of stock at this outlet!`);
-          return prevCart;
+          setError(`Warning: Item out of stock at this outlet.`);
         }
         return [{ ...product, quantity: 1, availableStock }, ...prevCart];
       }
     });
 
     setBarcodeInput("");
+    setBarcodeSearch("");
+    setSkuSearch("");
+    setPriceSearch("");
     setSearchResults([]);
     setShowDropdown(false);
     inputRef.current?.focus();
@@ -521,8 +554,9 @@ export default function POS() {
         if (item.id === id) {
           const newQty = item.quantity + delta;
           if (delta > 0 && newQty > item.availableStock) {
-            setError(`Only ${item.availableStock} in stock.`);
-            return item;
+            setError(
+              `Warning: Selling past available stock (${item.availableStock} left).`,
+            );
           }
           return { ...item, quantity: newQty };
         }
@@ -575,14 +609,20 @@ export default function POS() {
         const data = await res.json();
 
         // Fetch active receipt template (fall back to defaults if none configured)
-        let tmpl = { header_text: "OneShopPOS", footer_text: "Thank you for your purchase!", show_barcode: false };
+        let tmpl = {
+          header_text: "OneShopPOS",
+          footer_text: "Thank you for your purchase!",
+          show_barcode: false,
+        };
         try {
           const tmplRes = await fetch(`${API}/api/receipt-templates/active`);
           if (tmplRes.ok) {
             const tmplData = await tmplRes.json();
             if (tmplData.template) tmpl = tmplData.template;
           }
-        } catch { /* use defaults */ }
+        } catch {
+          /* use defaults */
+        }
 
         const printWindow = window.open("", "_blank", "width=400,height=600");
 
@@ -614,7 +654,7 @@ export default function POS() {
           receiptHTML += `
             <tr>
               <td>${item.quantity}x ${item.name}</td>
-              <td class="right">$${(item.price * item.quantity).toFixed(2)}</td>
+              <td class="right">PKRs ${(item.price * item.quantity).toFixed(2)}</td>
             </tr>
           `;
         });
@@ -625,25 +665,25 @@ export default function POS() {
               <table>
                 <tr>
                    <td>Subtotal</td>
-                   <td class="right">$${subtotal.toFixed(2)}</td>
+                   <td class="right">PKRs ${subtotal.toFixed(2)}</td>
                 </tr>
                 <tr>
                    <td>Tax</td>
-                   <td class="right">$${taxTotal.toFixed(2)}</td>
+                   <td class="right">PKRs ${taxTotal.toFixed(2)}</td>
                 </tr>
                 ${
                   pointsRedeemed > 0
                     ? `
                 <tr>
                    <td>Pts Redeemed</td>
-                   <td class="right">-$${pointsRedeemed.toFixed(2)}</td>
+                   <td class="right">-PKRs ${pointsRedeemed.toFixed(2)}</td>
                 </tr>
                 `
                     : ""
                 }
                 <tr class="bold text-lg">
                   <td>TOTAL</td>
-                  <td class="right">$${total.toFixed(2)}</td>
+                  <td class="right">PKRs ${total.toFixed(2)}</td>
                 </tr>
         `;
 
@@ -651,7 +691,7 @@ export default function POS() {
           receiptHTML += `
                 <tr>
                   <td>Tendered ${p.method}</td>
-                  <td class="right">$${p.amount.toFixed(2)}</td>
+                  <td class="right">PKRs ${p.amount.toFixed(2)}</td>
                 </tr>
             `;
         });
@@ -659,7 +699,7 @@ export default function POS() {
         receiptHTML += `
                 <tr class="bold">
                   <td>CHANGE DUE</td>
-                  <td class="right">$${changeDue.toFixed(2)}</td>
+                  <td class="right">PKRs ${changeDue.toFixed(2)}</td>
                 </tr>
               </table>
               <div class="divider"></div>
@@ -710,14 +750,11 @@ export default function POS() {
     if (!unlockPin) return;
 
     try {
-      const res = await fetch(
-        `${API}/api/employees/validate-pin`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pin_code: unlockPin }),
-        },
-      );
+      const res = await fetch(`${API}/api/employees/validate-pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin_code: unlockPin }),
+      });
 
       const data = await res.json();
 
@@ -744,10 +781,9 @@ export default function POS() {
   const handleLockRegister = async () => {
     if (attendanceId) {
       try {
-        await fetch(
-          `${API}/api/attendance/${attendanceId}/checkout`,
-          { method: "POST" },
-        );
+        await fetch(`${API}/api/attendance/${attendanceId}/checkout`, {
+          method: "POST",
+        });
       } catch (e) {
         console.error("Failed to checkout", e);
       }
@@ -883,7 +919,10 @@ export default function POS() {
                 <Tag size={14} /> Park Sale
               </button>
               <button
-                onClick={() => { setShowParkedModal(true); fetchParkedSales(); }}
+                onClick={() => {
+                  setShowParkedModal(true);
+                  fetchParkedSales();
+                }}
                 className="flex items-center gap-2 text-[#8066FF] border border-indigo-100 bg-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-indigo-50 transition-colors shadow-sm"
               >
                 <Clock size={14} /> Parked Sales
@@ -923,9 +962,44 @@ export default function POS() {
           </div>
 
           <div className="mb-4 relative">
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={barcodeSearch}
+                  onChange={(e) => handleSearchInput(e, "barcode")}
+                  onKeyDown={handleKeyDown}
+                  className="block w-full pl-3 pr-3 py-2 border border-slate-200 shadow-sm rounded-xl leading-5 bg-white placeholder-slate-300 focus:outline-none focus:border-[#8066FF] focus:ring-1 focus:ring-[#8066FF] font-medium text-xs transition-all"
+                  placeholder="By Barcode"
+                />
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={skuSearch}
+                  onChange={(e) => handleSearchInput(e, "sku")}
+                  onKeyDown={handleKeyDown}
+                  className="block w-full pl-3 pr-3 py-2 border border-slate-200 shadow-sm rounded-xl leading-5 bg-white placeholder-slate-300 focus:outline-none focus:border-[#8066FF] focus:ring-1 focus:ring-[#8066FF] font-medium text-xs transition-all"
+                  placeholder="By SKU"
+                />
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={priceSearch}
+                  onChange={(e) => handleSearchInput(e, "price")}
+                  onKeyDown={handleKeyDown}
+                  className="block w-full pl-3 pr-3 py-2 border border-slate-200 shadow-sm rounded-xl leading-5 bg-white placeholder-slate-300 focus:outline-none focus:border-[#8066FF] focus:ring-1 focus:ring-[#8066FF] font-medium text-xs transition-all"
+                  placeholder="By Price"
+                />
+              </div>
+            </div>
+
             <h3 className="text-sm font-bold text-slate-800 mb-2 flex items-center justify-between">
-              Search Product
-              <span className="text-[10px] text-slate-400 font-normal bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">F2</span>
+              Unified Search (Name, Barcode, SKU, Price)
+              <span className="text-[10px] text-slate-400 font-normal bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                F2
+              </span>
             </h3>
             <form
               onSubmit={handleScanSubmit}
@@ -939,11 +1013,12 @@ export default function POS() {
                 type="text"
                 value={barcodeInput}
                 onChange={handleSearchInput}
+                onKeyDown={handleKeyDown}
                 onFocus={() => {
                   if (searchResults.length > 0) setShowDropdown(true);
                 }}
                 className="block w-full pl-10 pr-3 py-3 border border-slate-200 shadow-sm rounded-xl leading-5 bg-white placeholder-slate-300 focus:outline-none focus:border-[#8066FF] focus:ring-1 focus:ring-[#8066FF] font-medium text-sm transition-all"
-                placeholder="Search for Product"
+                placeholder="Enter Product Name (Everything)..."
                 autoComplete="off"
                 disabled={isCheckoutModalOpen}
                 autoFocus
@@ -1021,12 +1096,20 @@ export default function POS() {
                         className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors"
                       >
                         <td className="py-3">
-                          <div className="font-bold text-slate-800 text-sm">{item.name}</div>
-                          {item.availableStock > 0 && item.quantity >= Math.ceil(item.availableStock * 0.8) && (
-                            <div className={`text-[10px] font-bold mt-0.5 ${item.quantity >= item.availableStock ? "text-rose-500" : "text-amber-500"}`}>
-                              {item.quantity >= item.availableStock ? "⚠ Max stock reached" : `⚠ ${item.availableStock - item.quantity} left in stock`}
-                            </div>
-                          )}
+                          <div className="font-bold text-slate-800 text-sm">
+                            {item.name}
+                          </div>
+                          {item.availableStock > 0 &&
+                            item.quantity >=
+                              Math.ceil(item.availableStock * 0.8) && (
+                              <div
+                                className={`text-[10px] font-bold mt-0.5 ${item.quantity >= item.availableStock ? "text-rose-500" : "text-amber-500"}`}
+                              >
+                                {item.quantity >= item.availableStock
+                                  ? "⚠ Max stock reached"
+                                  : `⚠ ${item.availableStock - item.quantity} left in stock`}
+                              </div>
+                            )}
                         </td>
                         <td className="py-3 text-center">
                           <div className="inline-flex items-center gap-1">
@@ -1222,7 +1305,9 @@ export default function POS() {
               <span className="text-white">PKRs {subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span>Discount {discountType === "percent" ? "%" : "Amount"}</span>
+              <span>
+                Discount {discountType === "percent" ? "%" : "Amount"}
+              </span>
               <span className="flex items-center gap-1.5 text-white">
                 {discountType === "percent"
                   ? `${parseFloat(discountInput || 0).toFixed(1)}%`
@@ -1242,9 +1327,16 @@ export default function POS() {
             {promoDiscount > 0 && (
               <div className="text-sm pt-2">
                 {appliedPromotions.map((ap) => (
-                  <div key={ap.promotion_id} className="flex justify-between items-center text-emerald-400">
-                    <span className="font-medium truncate max-w-40">🏷 {ap.name}</span>
-                    <span className="font-bold">- PKRs {ap.discount.toFixed(2)}</span>
+                  <div
+                    key={ap.promotion_id}
+                    className="flex justify-between items-center text-emerald-400"
+                  >
+                    <span className="font-medium truncate max-w-40">
+                      🏷 {ap.name}
+                    </span>
+                    <span className="font-bold">
+                      - PKRs {ap.discount.toFixed(2)}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -1340,10 +1432,16 @@ export default function POS() {
                       type="button"
                       onClick={() => {
                         setPaymentMethod("Wallet");
-                        const walletAmt = Math.min(remainingBalance, customerWalletBalance);
-                        if (walletAmt > 0) setPaymentAmountInput(walletAmt.toFixed(2));
+                        const walletAmt = Math.min(
+                          remainingBalance,
+                          customerWalletBalance,
+                        );
+                        if (walletAmt > 0)
+                          setPaymentAmountInput(walletAmt.toFixed(2));
                       }}
-                      disabled={!selectedCustomerId || customerWalletBalance <= 0}
+                      disabled={
+                        !selectedCustomerId || customerWalletBalance <= 0
+                      }
                       className={`py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-bold transition-all border-2 ${paymentMethod === "Wallet" ? "border-[#8066FF] bg-[#8066FF]/5 text-[#8066FF]" : "border-slate-100 bg-white hover:border-slate-300 text-slate-600"} disabled:opacity-40 disabled:cursor-not-allowed`}
                     >
                       <Wallet size={18} /> Wallet
@@ -1351,7 +1449,12 @@ export default function POS() {
                   </div>
                   {selectedCustomerId && (
                     <p className="text-xs text-slate-500 mt-2">
-                      Customer wallet balance: <span className={`font-bold ${customerWalletBalance > 0 ? "text-emerald-600" : "text-slate-400"}`}>PKRs {customerWalletBalance.toFixed(2)}</span>
+                      Customer wallet balance:{" "}
+                      <span
+                        className={`font-bold ${customerWalletBalance > 0 ? "text-emerald-600" : "text-slate-400"}`}
+                      >
+                        PKRs {customerWalletBalance.toFixed(2)}
+                      </span>
                     </p>
                   )}
                 </div>
@@ -1384,15 +1487,28 @@ export default function POS() {
                   </div>
                   {/* Quick-amount shortcuts */}
                   <div className="flex gap-2 mt-3 flex-wrap">
-                    <button type="button"
-                      onClick={() => setPaymentAmountInput(remainingBalance.toFixed(2))}
-                      className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition-colors">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPaymentAmountInput(remainingBalance.toFixed(2))
+                      }
+                      className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition-colors"
+                    >
                       Exact
                     </button>
                     {[50, 100, 500, 1000].map((amt) => (
-                      <button key={amt} type="button"
-                        onClick={() => setPaymentAmountInput((Math.ceil(remainingBalance / amt) * amt).toFixed(2))}
-                        className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-bold transition-colors">
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() =>
+                          setPaymentAmountInput(
+                            (Math.ceil(remainingBalance / amt) * amt).toFixed(
+                              2,
+                            ),
+                          )
+                        }
+                        className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-bold transition-colors"
+                      >
                         +{amt}
                       </button>
                     ))}
@@ -1585,14 +1701,19 @@ export default function POS() {
                           {sale.employee_name ? ` • ${sale.employee_name}` : ""}
                         </div>
                         {sale.notes && (
-                          <div className="text-xs text-slate-400 mt-1">{sale.notes}</div>
+                          <div className="text-xs text-slate-400 mt-1">
+                            {sale.notes}
+                          </div>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() =>
                             executeWithPermission("pos_void", async () => {
-                              await fetch(`${API}/api/parked-sales/${sale.id}`, { method: "DELETE" });
+                              await fetch(
+                                `${API}/api/parked-sales/${sale.id}`,
+                                { method: "DELETE" },
+                              );
                               fetchParkedSales();
                             })
                           }

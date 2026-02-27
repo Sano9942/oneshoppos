@@ -16,6 +16,7 @@ const {
   fetchShopifyVariantCatalog,
   fetchShopifyProductsFull,
   fetchInventoryLevel,
+  fetchInventoryLevelsBatch,
   fetchRecentOrders,
 } = require("./shopify/client");
 const {
@@ -185,6 +186,7 @@ const webhookLimiter = rateLimit({
 app.use(cors());
 app.use(
   express.json({
+    limit: "10mb",
     verify: (req, res, buf) => {
       if (
         req.originalUrl &&
@@ -536,46 +538,46 @@ const runtimeState = { isRestoreInProgress: false };
 
 const { processPendingShopifyInventoryEvents, processPendingReportSchedules } =
   registerAllRoutes(app, {
-  db,
-  fs,
-  path,
-  multer,
-  sqlite3,
-  requirePerm,
-  requireAnyPerm,
-  requireFeature,
-  createNotification,
-  notifyLowStockForSale,
-  loadEmployeePerms,
-  ensureDefaultRolePermissions,
-  PERMISSION_RULES,
-  DEFAULT_FEATURE_FLAGS,
-  runtimeState,
-  authLimiter,
-  webhookLimiter,
-  PRODUCT_UPLOADS_DIR,
-  COMPANY_UPLOADS_DIR,
-  UPLOADS_DIR,
-  DB_PATH,
-  SHOPIFY_MAX_RETRY_ATTEMPTS,
-  createTier4Router,
-  verifyConnection,
-  fetchShopifyLocations,
-  adjustShopifyInventory,
-  fetchShopifyVariantCatalog,
-  fetchShopifyProductsFull,
-  fetchInventoryLevel,
-  fetchRecentOrders,
-  retryDelayMinutesWithJitter,
-  evaluateWebhookTimestampWindow,
-  isRetryableInventoryEventStatus,
-  canApproveReconciliationRequest,
-  buildWebhookIdempotencyKey,
-  verifyWebhookSignature,
-  encryptShopifySecret,
-  decryptShopifySecret,
-  logShopifyEvent,
-});
+    db,
+    fs,
+    path,
+    multer,
+    sqlite3,
+    requirePerm,
+    requireAnyPerm,
+    requireFeature,
+    createNotification,
+    notifyLowStockForSale,
+    loadEmployeePerms,
+    ensureDefaultRolePermissions,
+    PERMISSION_RULES,
+    DEFAULT_FEATURE_FLAGS,
+    runtimeState,
+    authLimiter,
+    webhookLimiter,
+    PRODUCT_UPLOADS_DIR,
+    COMPANY_UPLOADS_DIR,
+    UPLOADS_DIR,
+    DB_PATH,
+    SHOPIFY_MAX_RETRY_ATTEMPTS,
+    createTier4Router,
+    verifyConnection,
+    fetchShopifyLocations,
+    adjustShopifyInventory,
+    fetchShopifyVariantCatalog,
+    fetchShopifyProductsFull,
+    fetchInventoryLevel,
+    fetchRecentOrders,
+    retryDelayMinutesWithJitter,
+    evaluateWebhookTimestampWindow,
+    isRetryableInventoryEventStatus,
+    canApproveReconciliationRequest,
+    buildWebhookIdempotencyKey,
+    verifyWebhookSignature,
+    encryptShopifySecret,
+    decryptShopifySecret,
+    logShopifyEvent,
+  });
 
 function collectRegisteredRoutes(appInstance) {
   const stack = appInstance?.router?.stack || [];
@@ -600,15 +602,12 @@ function ensureCriticalRoutesRegistered(appInstance) {
   const missing = required.filter(
     (target) =>
       !registered.some(
-        (route) =>
-          route.method === target.method && route.path === target.path,
+        (route) => route.method === target.method && route.path === target.path,
       ),
   );
   if (missing.length) {
     const summary = missing.map((m) => `${m.method} ${m.path}`).join(", ");
-    throw new Error(
-      `Critical route registration failed. Missing: ${summary}.`,
-    );
+    throw new Error(`Critical route registration failed. Missing: ${summary}.`);
   }
 }
 
@@ -675,12 +674,14 @@ function cleanupReportScheduleArtifacts() {
   const filesCutoffMs = Date.now() - filesRetentionDays * 24 * 60 * 60 * 1000;
 
   db.run(
-    "DELETE FROM report_schedule_runs WHERE datetime(COALESCE(run_finished_at, run_started_at, created_at)) < datetime(?)",
+    "DELETE FROM report_schedule_runs WHERE datetime(COALESCE(run_finished_at, run_started_at)) < datetime(?)",
     [runsCutoff],
     function (err) {
       if (err) console.error("[ReportCleanup] run cleanup error:", err.message);
       else if (this.changes > 0) {
-        console.log(`[ReportCleanup] Deleted ${this.changes} old schedule runs`);
+        console.log(
+          `[ReportCleanup] Deleted ${this.changes} old schedule runs`,
+        );
       }
     },
   );
@@ -692,7 +693,9 @@ function cleanupReportScheduleArtifacts() {
       if (err)
         console.error("[ReportCleanup] delivery cleanup error:", err.message);
       else if (this.changes > 0) {
-        console.log(`[ReportCleanup] Deleted ${this.changes} old delivery logs`);
+        console.log(
+          `[ReportCleanup] Deleted ${this.changes} old delivery logs`,
+        );
       }
     },
   );
