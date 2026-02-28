@@ -1,7 +1,5 @@
 module.exports = function registerReportsRoutes(app, deps) {
-  const { db, requirePerm, requireAnyPerm, path, fs, UPLOADS_DIR } = deps;
-
-  let processPendingReportSchedules;
+  const { db, requirePerm, requireAnyPerm, requireFeature, createNotification, path, fs, UPLOADS_DIR } = deps;
 
 // --- REPORTS DASHBOARD ---
 

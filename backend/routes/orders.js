@@ -7,10 +7,9 @@ module.exports = function registerOrderRoutes(app, deps) {
     fetchInventoryLevel, fetchInventoryLevelsBatch, fetchRecentOrders,
     retryDelayMinutesWithJitter, evaluateWebhookTimestampWindow,
     isRetryableInventoryEventStatus, buildWebhookIdempotencyKey,
-    logShopifyEvent, DB_PATH, sqlite3
+    logShopifyEvent, DB_PATH, sqlite3, multer,
+    SHOPIFY_MAX_RETRY_ATTEMPTS, decryptShopifySecret
   } = deps;
-
-  let processPendingShopifyInventoryEvents;
 
 // --- ROUTES: ORDERS (Website order staging before live Shopify integration) ---
 

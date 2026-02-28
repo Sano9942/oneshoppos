@@ -1,5 +1,5 @@
 module.exports = function registerGRNRoutes(app, deps) {
-  const { db, requirePerm, createNotification } = deps;
+  const { db, requirePerm, requireFeature, createNotification } = deps;
 
 // --- GRN (Goods Received Notes) ---
 

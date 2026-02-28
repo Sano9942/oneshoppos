@@ -1,5 +1,5 @@
 module.exports = function registerBarcodeExpenseRoutes(app, deps) {
-  const { db, requirePerm, path, fs } = deps;
+  const { db, requirePerm, requireFeature, sqlite3, multer, path, fs, UPLOADS_DIR, DB_PATH, runtimeState } = deps;
 
 // --- BARCODE TEMPLATES ---
 

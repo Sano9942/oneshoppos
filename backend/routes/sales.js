@@ -1,5 +1,5 @@
 module.exports = function registerSalesRoutes(app, deps) {
-  const { db, requirePerm, createNotification, notifyLowStockForSale, path, fs, UPLOADS_DIR } = deps;
+  const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale, path, fs, UPLOADS_DIR } = deps;
 
 // --- SALES HISTORY ROUTES ---
 

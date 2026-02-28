@@ -1,5 +1,5 @@
 module.exports = function registerPromotionRoutes(app, deps) {
-  const { db } = deps;
+  const { db, requirePerm } = deps;
 
 // --- PROMOTIONS ENGINE ---
 
