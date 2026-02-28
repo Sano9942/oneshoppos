@@ -261,39 +261,34 @@ function OverviewTab() {
     zReport,
   } = data;
   return (
-    <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">
-                Total Revenue Today
-              </p>
-              <h3 className="text-3xl font-bold text-slate-900">
-                {fmt(totalRevenueToday)}
-              </h3>
-            </div>
-            <div className="bg-blue-100 p-3 rounded-xl">
-              <DollarSign className="text-blue-600 w-6 h-6" />
-            </div>
-          </div>
-          <div className="text-xs text-slate-500 border-t border-slate-100 pt-3">
-            {zReport.length > 0
-              ? zReport.map((z) => (
-                  <span key={z.payment_method} className="inline-block mr-3">
-                    {z.payment_method}:{" "}
-                    <span className="font-semibold text-slate-700">
-                      {fmt(z.total)}
-                    </span>
-                  </span>
-                ))
-              : "No sales yet today"}
-          </div>
+    <div className="space-y-6">
+      {/* Hero: Revenue */}
+      <div className="bg-linear-to-br from-blue-600 to-blue-800 rounded-2xl p-7 shadow-md text-white">
+        <p className="text-sm font-medium text-blue-200 mb-2 uppercase tracking-wider">
+          Total Revenue Today
+        </p>
+        <h2 className="text-5xl font-bold tracking-tight mb-3">
+          {fmt(totalRevenueToday)}
+        </h2>
+        <div className="flex flex-wrap gap-3 text-sm text-blue-100">
+          {zReport.length > 0
+            ? zReport.map((z) => (
+                <span key={z.payment_method} className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-300 inline-block" />
+                  {z.payment_method}:{" "}
+                  <span className="font-semibold text-white">{fmt(z.total)}</span>
+                </span>
+              ))
+            : <span className="text-blue-300 italic">No sales yet today</span>}
         </div>
+      </div>
+
+      {/* Supporting KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-          <div className="flex justify-between items-start mb-4">
+          <div className="flex justify-between items-start mb-3">
             <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
                 Net Profit Today
               </p>
               <h3 className="text-3xl font-bold text-emerald-600">
@@ -301,17 +296,17 @@ function OverviewTab() {
               </h3>
             </div>
             <div className="bg-emerald-100 p-3 rounded-xl">
-              <TrendingUp className="text-emerald-600 w-6 h-6" />
+              <TrendingUp className="text-emerald-600 w-5 h-5" />
             </div>
           </div>
-          <p className="text-xs text-slate-500 mt-2">
+          <p className="text-xs text-slate-400 border-t border-slate-100 pt-3">
             Gross Sales minus Cost of Goods Sold
           </p>
         </div>
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-          <div className="flex justify-between items-start mb-4">
+          <div className="flex justify-between items-start mb-3">
             <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
                 Est. Inventory Retail Value
               </p>
               <h3 className="text-3xl font-bold text-indigo-600">
@@ -319,14 +314,12 @@ function OverviewTab() {
               </h3>
             </div>
             <div className="bg-indigo-100 p-3 rounded-xl">
-              <PackageX className="text-indigo-600 w-6 h-6" />
+              <PackageX className="text-indigo-600 w-5 h-5" />
             </div>
           </div>
-          <p className="text-xs text-slate-500 mt-2">
+          <p className="text-xs text-slate-400 border-t border-slate-100 pt-3">
             Base Cost Value:{" "}
-            <span className="font-semibold">
-              {fmt(inventoryValue.cost_value)}
-            </span>
+            <span className="font-semibold text-slate-600">{fmt(inventoryValue.cost_value)}</span>
           </p>
         </div>
       </div>
@@ -2841,6 +2834,25 @@ const GROUPS = [
   },
 ];
 
+function TabBreadcrumb({ activeTab }) {
+  for (const group of GROUPS) {
+    const tab = group.tabs.find((t) => t.id === activeTab);
+    if (!tab) continue;
+    const GroupIcon = group.tabs[0].icon;
+    const TabIcon = tab.icon;
+    return (
+      <div className="flex items-center gap-2 text-xs text-slate-400 mb-4 shrink-0">
+        <GroupIcon size={13} className="text-slate-400" />
+        <span className="font-medium text-slate-500">{group.label}</span>
+        <span className="text-slate-300">/</span>
+        <TabIcon size={13} className="text-blue-500" />
+        <span className="font-semibold text-slate-700">{tab.label}</span>
+      </div>
+    );
+  }
+  return null;
+}
+
 function TabContent({ activeTab }) {
   switch (activeTab) {
     case "overview":
@@ -2909,50 +2921,78 @@ export function ReportTabStandalone({ tabId }) {
 export default function Reports() {
   const [activeTab, setActiveTab] = useState("overview");
 
+  const activeGroup = GROUPS.find((g) => g.tabs.some((t) => t.id === activeTab));
+
   return (
     <div className="flex flex-col h-full gap-4">
       {/* Header */}
-      <div>
+      <div className="shrink-0">
         <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-1">
           Reports
         </h1>
         <p className="text-slate-500">
-          20 reports across sales, inventory, operations, and procurement.
+          {GROUPS.reduce((n, g) => n + g.tabs.length, 0)} reports across sales,
+          inventory, operations, and procurement.
         </p>
       </div>
 
-      {/* Grouped Tab Bar � horizontally scrollable */}
-      <div className="overflow-x-auto shrink-0">
-        <div className="flex gap-4 min-w-max pb-1">
-          {GROUPS.map((group) => (
-            <div key={group.label} className="flex flex-col gap-1">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">
-                {group.label}
-              </span>
-              <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-                {group.tabs.map(({ id, label, icon: Icon }) => (
-                  <button
-                    key={id}
-                    onClick={() => setActiveTab(id)}
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
-                      activeTab === id
-                        ? "bg-white text-slate-900 shadow-sm"
-                        : "text-slate-500 hover:text-slate-700"
-                    }`}
-                  >
-                    <Icon size={13} />
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
+      {/* Two-panel layout: group sidebar + sub-tabs + content */}
+      <div className="flex flex-1 min-h-0 gap-0">
+        {/* Left: group icon sidebar */}
+        <div className="flex flex-col gap-1 shrink-0 w-[72px] py-1 pr-2 border-r border-slate-200">
+          {GROUPS.map((group) => {
+            const isActive = group === activeGroup;
+            const GroupIcon = group.tabs[0].icon;
+            return (
+              <button
+                key={group.label}
+                onClick={() => setActiveTab(group.tabs[0].id)}
+                title={group.label}
+                className={`flex flex-col items-center gap-1 px-2 py-3 rounded-xl text-xs font-medium transition-all ${
+                  isActive
+                    ? "bg-blue-50 text-blue-700"
+                    : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                <GroupIcon size={18} />
+                <span className="text-[10px] leading-tight text-center">
+                  {group.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
-      </div>
 
-      {/* Tab Content */}
-      <div className="flex-1 overflow-auto min-h-0">
-        <TabContent activeTab={activeTab} />
+        {/* Right: sub-tab strip + content */}
+        <div className="flex flex-col flex-1 min-w-0 pl-4 gap-3">
+          {/* Sub-tab pill strip for the active group */}
+          {activeGroup && (
+            <div className="flex gap-1 shrink-0 bg-slate-100 rounded-xl p-1 w-fit">
+              {activeGroup.tabs.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => setActiveTab(id)}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+                    activeTab === id
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  <Icon size={13} />
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Content area */}
+          <div className="flex-1 overflow-auto min-h-0 flex flex-col">
+            <TabBreadcrumb activeTab={activeTab} />
+            <div className="flex-1 min-h-0">
+              <TabContent activeTab={activeTab} />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
