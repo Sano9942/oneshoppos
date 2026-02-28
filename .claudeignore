@@ -1,0 +1,84 @@
+# Dependencies - never read these
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Built output - generated, not source
+frontend/dist/
+
+# Database files - binary, not readable
+backend/backups/
+*.db
+*.db-shm
+*.db-wal
+
+# Generated report exports - not source code
+backend/exports/
+
+# Lock files - too large, not useful to Claude
+backend/package-lock.json
+frontend/package-lock.json
+
+# All old migration files (only read migrate45.js - the latest)
+backend/migrate.js
+backend/migrate2.js
+backend/migrate3.js
+backend/migrate4.js
+backend/migrate5.js
+backend/migrate6.js
+backend/migrate7.js
+backend/migrate8.js
+backend/migrate9.js
+backend/migrate10.js
+backend/migrate11.js
+backend/migrate12.js
+backend/migrate13.js
+backend/migrate14.js
+backend/migrate15.js
+backend/migrate16.js
+backend/migrate17.js
+backend/migrate18.js
+backend/migrate19.js
+backend/migrate20.js
+backend/migrate21.js
+backend/migrate22.js
+backend/migrate23.js
+backend/migrate24.js
+backend/migrate25.js
+backend/migrate26.js
+backend/migrate27.js
+backend/migrate28.js
+backend/migrate29.js
+backend/migrate30.js
+backend/migrate31.js
+backend/migrate32.js
+backend/migrate33.js
+backend/migrate34.js
+backend/migrate35.js
+backend/migrate36.js
+backend/migrate37.js
+backend/migrate38.js
+backend/migrate39.js
+backend/migrate40.js
+backend/migrate41.js
+backend/migrate42.js
+backend/migrate43.js
+backend/migrate44.js
+
+# Test files - not needed for development tasks
+backend/e2e_full_test.js
+backend/e2e_test.js
+backend/api_test.js
+backend/reports_phase2_test.js
+backend/shopify_mock_integration_test.js
+backend/tier4_smoke_test.js
+
+# Diagnostic / utility scripts - one-off tools, not source code
+backend/check_counts_v3.js
+backend/check_sync.js
+backend/diagnose_routes.js
+backend/dumpDb.js
+backend/dumpDb2.js
+backend/health_check.js
+backend/inspect_schema.js
+backend/preflight.js
