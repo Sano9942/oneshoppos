@@ -311,6 +311,9 @@ module.exports = function registerAllRoutes(app, deps) {
     // --- BARCODE TEMPLATES & EXPENSES ---
   require("./barcode-expenses")(app, deps);
 
+    // --- ATTENDANCE ---
+  require("./attendance")(app, deps);
+
   return {
     processPendingShopifyInventoryEvents:
       typeof processPendingShopifyInventoryEvents === "function"

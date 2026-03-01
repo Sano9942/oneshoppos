@@ -13,6 +13,7 @@ import {
 } from "../../ui/primitives";
 
 const EMPTY_FORM = { name: "", role_id: 3, pin_code: "" };
+const EMPTY_ATT = { work_hours_per_day: 8, monthly_leave_allowance: 2 };
 
 export default function EmployeesRedesign() {
   const [employees, setEmployees] = useState([]);
@@ -24,6 +25,7 @@ export default function EmployeesRedesign() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [attConfig, setAttConfig] = useState(EMPTY_ATT);
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -60,13 +62,26 @@ export default function EmployeesRedesign() {
   const openCreate = () => {
     setEditing(null);
     setForm(EMPTY_FORM);
+    setAttConfig(EMPTY_ATT);
     setModalOpen(true);
   };
 
-  const openEdit = (emp) => {
+  const openEdit = async (emp) => {
     setEditing(emp);
     setForm({ name: emp.name, role_id: emp.role_id, pin_code: "" });
+    setAttConfig(EMPTY_ATT);
     setModalOpen(true);
+    // Fetch attendance config (non-blocking — populate when ready)
+    try {
+      const res = await fetch(`${API}/api/employees/${emp.id}/attendance-config`);
+      const data = await res.json();
+      if (res.ok) {
+        setAttConfig({
+          work_hours_per_day: data.work_hours_per_day ?? 8,
+          monthly_leave_allowance: data.monthly_leave_allowance ?? 2,
+        });
+      }
+    } catch {}
   };
 
   const save = async (e) => {
@@ -87,6 +102,17 @@ export default function EmployeesRedesign() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save employee");
+      // Save attendance config when editing an existing employee
+      if (editing) {
+        await fetch(`${API}/api/employees/${editing.id}/attendance-config`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            work_hours_per_day: Number(attConfig.work_hours_per_day),
+            monthly_leave_allowance: Number(attConfig.monthly_leave_allowance),
+          }),
+        });
+      }
       setModalOpen(false);
       await load();
     } catch (e2) {
@@ -244,6 +270,38 @@ export default function EmployeesRedesign() {
                 onChange={(e) => setForm((p) => ({ ...p, pin_code: e.target.value }))}
                 required={!editing}
               />
+              {/* Attendance Config — shown when editing */}
+              {editing && (
+                <div className="border-t border-(--ui-border) pt-3 mt-1 space-y-2">
+                  <p className="text-xs font-semibold text-(--ui-text-muted) uppercase tracking-wide">
+                    Attendance Config
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs text-(--ui-text-muted) mb-1">Hours / Day</label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="24"
+                        step="0.5"
+                        value={attConfig.work_hours_per_day}
+                        onChange={(e) => setAttConfig((p) => ({ ...p, work_hours_per_day: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-(--ui-text-muted) mb-1">Leave Days / Month</label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="31"
+                        step="1"
+                        value={attConfig.monthly_leave_allowance}
+                        onChange={(e) => setAttConfig((p) => ({ ...p, monthly_leave_allowance: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="flex gap-2 pt-2">
                 <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
                 <Button tone="primary" type="submit" disabled={saving}>

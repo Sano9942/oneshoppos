@@ -87,7 +87,7 @@ export default function ShopifyIntegration() {
   });
   const [reconFilters, setReconFilters] = useState({
     status: "",
-    resolution_status: "",
+    resolution_status: "open",
   });
   const [mappingCounts, setMappingCounts] = useState({
     products: 0,

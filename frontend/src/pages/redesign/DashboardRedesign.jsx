@@ -3,11 +3,14 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   BarChart3,
+  Clock,
+  Coffee,
   CreditCard,
   Package,
   ShoppingBag,
   TrendingDown,
   TrendingUp,
+  UserCheck,
   Users,
 } from "lucide-react";
 import {
@@ -218,6 +221,77 @@ export default function DashboardRedesign() {
           </div>
         </SectionCard>
       </div>
+
+      {/* Attendance Today */}
+      {(() => {
+        const att = data?.attendanceSummary;
+        const tiles = [
+          { label: "Clocked In",   value: att?.clocked_in   ?? 0, icon: UserCheck, color: "text-emerald-600", bg: "bg-emerald-500" },
+          { label: "On Break",     value: att?.on_break      ?? 0, icon: Coffee,    color: "text-amber-600",  bg: "bg-amber-400"  },
+          { label: "Clocked Out",  value: att?.clocked_out  ?? 0, icon: Clock,     color: "text-slate-500",  bg: "bg-slate-400"  },
+          { label: "Not Started",  value: att?.not_started  ?? 0, icon: Users,     color: "text-rose-500",   bg: "bg-rose-400"   },
+        ];
+        return (
+          <SectionCard className="mb-4">
+            <CardHeader
+              icon={UserCheck}
+              title="Attendance Today"
+              action={
+                <Button size="sm" onClick={() => navigate("/attendance")}>
+                  <ArrowRight size={13} className="mr-1 inline" /> View All
+                </Button>
+              }
+            />
+            <div className="grid grid-cols-2 gap-px sm:grid-cols-4 bg-(--ui-border) border-t border-(--ui-border)">
+              {tiles.map(({ label, value, icon: Icon, color, bg }) => (
+                <div key={label} className="flex items-center gap-3 bg-(--ui-surface) px-5 py-4">
+                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${bg}/10`}>
+                    <Icon size={16} className={color} />
+                  </div>
+                  <div>
+                    {loading ? (
+                      <>
+                        <Skeleton className="mb-1 h-6 w-8" />
+                        <Skeleton className="h-3 w-20" />
+                      </>
+                    ) : (
+                      <>
+                        <p className={`text-2xl font-bold ${color}`}>{value}</p>
+                        <p className="text-xs text-(--ui-text-muted)">{label}</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {!loading && att?.details?.length > 0 && (
+              <div className="flex flex-wrap gap-2 px-5 py-3 border-t border-(--ui-border)">
+                {att.details.map((emp) => {
+                  const tone =
+                    emp.status === "clocked_in"  ? "text-emerald-700 bg-emerald-50 border-emerald-200" :
+                    emp.status === "on_break"    ? "text-amber-700 bg-amber-50 border-amber-200" :
+                    emp.status === "clocked_out" ? "text-slate-600 bg-slate-50 border-slate-200" :
+                                                   "text-rose-600 bg-rose-50 border-rose-200";
+                  const label =
+                    emp.status === "clocked_in"  ? "In" :
+                    emp.status === "on_break"    ? `Break${emp.break_reason ? ` (${emp.break_reason})` : ""}` :
+                    emp.status === "clocked_out" ? "Done" : "—";
+                  return (
+                    <span
+                      key={emp.id}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${tone}`}
+                    >
+                      {emp.name}
+                      <span className="opacity-60">·</span>
+                      {label}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </SectionCard>
+        );
+      })()}
 
       {/* Middle row: chart + low stock */}
       <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-3">

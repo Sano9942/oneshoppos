@@ -105,6 +105,49 @@ module.exports = function registerReportsRoutes(app, deps) {
       const todayExpenses = expenseRows[0]?.total || 0;
       const netProfitToday = todayProfit - todayExpenses;
 
+      // 8. Attendance today — clocked in, on break, clocked out, not started
+      const attendanceToday = await getQuery(`
+        SELECT
+          e.id,
+          e.name,
+          s.session_type,
+          s.break_reason,
+          COALESCE(
+            (SELECT COALESCE(SUM(duration_hours),0)
+             FROM attendance_sessions
+             WHERE employee_id = e.id
+               AND session_type = 'work'
+               AND session_end IS NOT NULL
+               AND date(session_start,'localtime') = date('now','localtime')
+            ), 0
+          ) AS net_work_hours
+        FROM employees e
+        LEFT JOIN attendance_sessions s
+          ON s.employee_id = e.id
+          AND s.session_end IS NULL
+          AND date(s.session_start,'localtime') = date('now','localtime')
+        WHERE e.active != 0
+        GROUP BY e.id
+      `);
+
+      const attendanceSummary = {
+        clocked_in: attendanceToday.filter(r => r.session_type === 'work').length,
+        on_break:   attendanceToday.filter(r => r.session_type === 'break').length,
+        clocked_out: attendanceToday.filter(r => r.session_type === null && r.net_work_hours > 0).length,
+        not_started: attendanceToday.filter(r => r.session_type === null && r.net_work_hours === 0).length,
+        total_employees: attendanceToday.length,
+        details: attendanceToday.map(r => ({
+          id: r.id,
+          name: r.name,
+          status: r.session_type === 'work' ? 'clocked_in'
+                : r.session_type === 'break' ? 'on_break'
+                : r.net_work_hours > 0 ? 'clocked_out'
+                : 'not_started',
+          break_reason: r.break_reason || null,
+          net_work_hours: r.net_work_hours,
+        })),
+      };
+
       res.json({
         zReport,
         totalRevenueToday,
@@ -121,6 +164,7 @@ module.exports = function registerReportsRoutes(app, deps) {
           retail_value: 0,
           cost_value: 0,
         },
+        attendanceSummary,
       });
     } catch (err) {
       console.error("Report Error:", err);
@@ -388,91 +432,6 @@ module.exports = function registerReportsRoutes(app, deps) {
         "Other",
       ],
     });
-  });
-
-  // --- EMPLOYEE ATTENDANCE ---
-
-  app.get("/api/attendance", (req, res) => {
-    const { date_from, date_to, employee_id } = req.query;
-    const where = [];
-    const params = [];
-    if (date_from) {
-      where.push("date(ea.check_in,'localtime') >= ?");
-      params.push(date_from);
-    }
-    if (date_to) {
-      where.push("date(ea.check_in,'localtime') <= ?");
-      params.push(date_to);
-    }
-    if (employee_id) {
-      where.push("ea.employee_id = ?");
-      params.push(employee_id);
-    }
-    const sql = `
-    SELECT ea.*, e.name AS employee_name, e.role, o.name AS outlet_name
-    FROM employee_attendance ea
-    JOIN employees e ON ea.employee_id = e.id
-    JOIN outlets o ON ea.outlet_id = o.id
-    ${where.length ? "WHERE " + where.join(" AND ") : ""}
-    ORDER BY ea.check_in DESC`;
-    db.all(sql, params, (err, rows) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ records: rows });
-    });
-  });
-
-  app.post("/api/attendance/checkin", (req, res) => {
-    const { employee_id, outlet_id } = req.body;
-    if (!employee_id || !outlet_id)
-      return res
-        .status(400)
-        .json({ error: "employee_id and outlet_id are required" });
-    db.run(
-      "INSERT INTO employee_attendance (employee_id, outlet_id, status) VALUES (?, ?, 'present')",
-      [employee_id, outlet_id],
-      function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        db.get(
-          "SELECT * FROM employee_attendance WHERE id = ?",
-          [this.lastID],
-          (err2, row) => {
-            if (err2) return res.status(500).json({ error: err2.message });
-            res.json({ attendance: row });
-          },
-        );
-      },
-    );
-  });
-
-  app.post("/api/attendance/:id/checkout", (req, res) => {
-    const { id } = req.params;
-    db.get(
-      "SELECT * FROM employee_attendance WHERE id = ?",
-      [id],
-      (err, record) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!record)
-          return res.status(404).json({ error: "Attendance record not found" });
-        if (record.check_out)
-          return res.status(400).json({ error: "Already clocked out" });
-        const now = new Date().toISOString().replace("T", " ").slice(0, 19);
-        const hours = parseFloat(
-          ((new Date() - new Date(record.check_in)) / 3600000).toFixed(2),
-        );
-        db.run(
-          "UPDATE employee_attendance SET check_out = ?, hours = ? WHERE id = ?",
-          [now, hours, id],
-          function (err2) {
-            if (err2) return res.status(500).json({ error: err2.message });
-            res.json({
-              message: "Clocked out successfully",
-              hours,
-              check_out: now,
-            });
-          },
-        );
-      },
-    );
   });
 
   // --- EXTENDED REPORTS ---

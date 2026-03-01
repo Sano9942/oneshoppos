@@ -5,12 +5,11 @@
   "scripts": {
     "start": "node index.js",
     "preflight": "node preflight.js",
-    "test:e2e-full": "node e2e_full_test.js",
-    "test:reports-phase2": "node reports_phase2_test.js",
-    "test:tier4-smoke": "node tier4_smoke_test.js",
-    "test:shopify-utils": "node shopify_utils_test.js",
-    "test:shopify-mock": "node shopify_mock_integration_test.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [],
   "author": "",
@@ -23,5 +22,9 @@
     "express-rate-limit": "^7.5.1",
     "multer": "^2.0.2",
     "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "supertest": "^7.2.2",
+    "vitest": "^4.0.18"
   }
 }

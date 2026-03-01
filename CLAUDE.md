@@ -29,7 +29,7 @@ oneshoppos/
 │   │   ├── inventory.js          # /api/transfers + /api/adjustments
 │   │   ├── reports.js            # ALL /api/reports/* (~2193 lines - largest backend file)
 │   │   ├── returns.js            # /api/returns
-│   │   ├── attendance.js         # /api/attendance
+│   │   ├── attendance.js         # /api/attendance + /api/attendance/pin-* (kiosk) + /api/employees/:id/attendance-config
 │   │   ├── attribute-sets.js     # /api/attribute-sets
 │   │   ├── receipt-templates.js  # /api/receipt-templates + action history
 │   │   ├── supplier-returns.js   # /api/supplier-returns
@@ -42,7 +42,7 @@ oneshoppos/
 │   ├── shopify/
 │   │   ├── client.js             # Shopify GraphQL API client (~525 lines)
 │   │   └── utils.js              # Retry logic, webhook HMAC verification
-│   └── migrate55.js              # Latest DB migration — READ THIS for schema questions
+│   └── migrate56.js              # Latest DB migration — READ THIS for schema questions
 └── frontend/
     └── src/
         ├── components/           # Reusable UI components (all small, < 200 lines)
@@ -59,6 +59,7 @@ oneshoppos/
             ├── [*Route.jsx]              # Route files — each renders its redesign/ counterpart
             └── redesign/                 # Active UI — ALL pages now rendered here
                 ├── POSRedesign.jsx
+                ├── KioskRedesign.jsx         # PIN clock-in terminal (standalone, no sidebar)
                 ├── InventoryRedesign.jsx
                 ├── ReportsRedesign.jsx
                 ├── AttendanceRedesign.jsx
@@ -71,14 +72,14 @@ oneshoppos/
 ## Key Architecture Facts
 - All API routes are in `backend/routes/<domain>.js` — read only the relevant file
 - `registerAllRoutes.js` is now just an orchestrator (324 lines) — no routes defined there
-- Database schema: read only `backend/migrate55.js` (latest), never older migrations
+- Database schema: read only `backend/migrate56.js` (latest), never older migrations
 - SQLite DB file: `backend/oneshop.db`
-- Frontend: port 5173 (Vite dev), Backend: port 3001
+- Frontend: port 5173 (Vite dev), Backend: port 5000
 
 ## When Working on Backend
 - Find which file owns the route: check the table in this file above
 - Read ONLY that route file — do not read registerAllRoutes.js for route logic
-- Schema questions → `backend/migrate55.js` only
+- Schema questions → `backend/migrate56.js` only
 - Server middleware/config → `backend/index.js`
 - Shopify API calls → `backend/shopify/client.js`, webhook/retry logic → `backend/shopify/utils.js`
 
@@ -97,7 +98,7 @@ oneshoppos/
 - `backend/exports/` (generated CSV reports)
 - `backend/backups/` (database backups)
 - `frontend/dist/` (build output)
-- Any migration file except `migrate55.js`
+- Any migration file except `migrate56.js`
 - Test files (`*_test.js`, `e2e_*.js`, etc.)
 - Diagnostic scripts (`check_*.js`, `diagnose_*.js`, `dumpDb*.js`, etc.)
 
@@ -113,4 +114,6 @@ oneshoppos/
 - Mar 2026: Completed redesign migration — Attendance, Approvals, BarcodeTemplates, ReceiptTemplates now all have *Redesign.jsx wrappers; all routes in App.jsx point to redesign/
 - Mar 2026: Added Attendance, Barcode Templates, Receipt Templates to nav-config.js; removed requiredFlag gate from Approvals so it shows for any manage_orders user
 - Mar 2026: Full audit — all 36 nav entries, routes, redesign pages, and 26 backend modules confirmed wired. Gaps: 5 placeholder routes (lookup, custom-fields, partners, shopcast, reports/parent-report) and e-invoicing + supplier-returns have no frontend UI
-- See `REFACTOR_NOTES.md` for full details
+- Mar 2026: Attendance module overhaul — PIN kiosk, session/break tracking, net hours, employee attendance config. migrate56.js is now latest. attendance.js properly registered (was dead code). See `REFACTOR_NOTES.md` for full details
+- Mar 2026: POS and Kiosk nav entries use `newTab: true` — clicking them opens a new browser tab. `AppLayoutRedesign.jsx` renders `<a target="_blank">` for items with this flag instead of `<NavLink>`
+- Mar 2026: SQLite `date()` in index fix — `idx_att_sessions_emp_date` was created with `date(session_start,'localtime')` which SQLite rejects as non-deterministic. Fixed to index on raw `session_start` column; `date()` in WHERE clauses is unaffected

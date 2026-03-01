@@ -37,6 +37,7 @@ import QuotationsRoute from "./pages/QuotationsRoute";
 import HRManagementRoute from "./pages/HRManagementRoute";
 import CompanySettingsRoute from "./pages/CompanySettingsRoute";
 import POSRoute from "./pages/POSRoute";
+import KioskRedesign from "./pages/redesign/KioskRedesign";
 import OrdersRoute from "./pages/OrdersRoute";
 import CustomersRoute from "./pages/CustomersRoute";
 import SalesHistoryRoute from "./pages/SalesHistoryRoute";
@@ -61,6 +62,14 @@ function App() {
           element={
               <RequireAuth>
               <POSRoute />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/kiosk"
+          element={
+            <RequireAuth>
+              <KioskRedesign />
             </RequireAuth>
           }
         />

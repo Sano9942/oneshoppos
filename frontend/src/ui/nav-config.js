@@ -30,6 +30,7 @@ import {
   User,
   Clock,
   Printer,
+  Monitor,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -40,7 +41,7 @@ export const SHOPIFY_NAV_GROUPS = [
   {
     label: "Commerce",
     items: [
-      { name: "POS", path: "/pos", icon: MonitorPlay },
+      { name: "POS", path: "/pos", icon: MonitorPlay, newTab: true },
       { name: "Orders", path: "/orders", icon: ShoppingCart, requiredPerm: "manage_orders" },
       { name: "Customers", path: "/customers", icon: Users },
       { name: "Returns", path: "/returns", icon: RotateCcw },
@@ -87,6 +88,7 @@ export const SHOPIFY_NAV_GROUPS = [
   {
     label: "Operations",
     items: [
+      { name: "Kiosk", path: "/kiosk", icon: Monitor, newTab: true },
       { name: "CRM", path: "/crm", icon: UserPlus, requiredPerm: "manage_orders", requiredFlag: "crm_quotations" },
       { name: "Quotations", path: "/quotations", icon: FileText, requiredPerm: "manage_orders", requiredFlag: "crm_quotations" },
       { name: "Attendance", path: "/attendance", icon: Clock, requiredPerm: "manage_employees" },

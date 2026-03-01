@@ -59,15 +59,27 @@ export default function AppLayoutRedesign() {
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const active = location.pathname.startsWith(item.path);
-                  return (
+                  const linkClass = `flex items-center gap-2 rounded-[var(--ui-radius-sm)] px-2.5 py-2 text-sm font-medium transition ${
+                    active
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "text-[var(--ui-text)] hover:bg-[var(--ui-muted-surface)]"
+                  } ${collapsed ? "justify-center" : ""}`;
+                  return item.newTab ? (
+                    <a
+                      key={item.name}
+                      href={item.path}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={linkClass}
+                    >
+                      <Icon size={16} />
+                      {!collapsed ? <span>{item.name}</span> : null}
+                    </a>
+                  ) : (
                     <NavLink
                       key={item.name}
                       to={item.path}
-                      className={`flex items-center gap-2 rounded-[var(--ui-radius-sm)] px-2.5 py-2 text-sm font-medium transition ${
-                        active
-                          ? "bg-emerald-100 text-emerald-800"
-                          : "text-[var(--ui-text)] hover:bg-[var(--ui-muted-surface)]"
-                      } ${collapsed ? "justify-center" : ""}`}
+                      className={linkClass}
                     >
                       <Icon size={16} />
                       {!collapsed ? <span>{item.name}</span> : null}

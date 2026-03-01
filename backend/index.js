@@ -306,6 +306,20 @@ const PERMISSION_RULES = [
     path: /^\/api\/attendance(\/|$)/,
     anyPerms: ["view_reports", "manage_employees"],
   },
+  // Attendance manual edit (manager write)
+  {
+    methods: ["PUT"],
+    path: /^\/api\/attendance\/\d+$/,
+    anyPerms: ["manage_employees"],
+  },
+  // Attendance config on employee record
+  {
+    methods: ["GET", "PUT"],
+    path: /^\/api\/employees\/\d+\/attendance-config$/,
+    anyPerms: ["manage_employees"],
+  },
+  // Note: POST /api/attendance/pin-* endpoints are intentionally ungated
+  // (kiosk actions — the employee PIN is the authentication)
 
   // Setup/config mutation
   {

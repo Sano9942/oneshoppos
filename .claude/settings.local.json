@@ -23,7 +23,15 @@
       "Bash(do grep -q \"path=\"\"$path\"\"\" /d/newprojects/oneshoppos/frontend/src/App.jsx)",
       "Bash(echo \"MISSING: $path\")",
       "Bash(for file in /d/newprojects/oneshoppos/frontend/src/pages/*Route.jsx)",
-      "Bash(do basename \"$file\")"
+      "Bash(do basename \"$file\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({**d.get\\(''dependencies'',{}\\), **d.get\\(''devDependencies'',{}\\)}, indent=2\\)\\)\")",
+      "Bash(npx vitest run tests/integration/health.test.js)",
+      "Bash(npx vitest run tests/integration/sales.test.js tests/integration/returns.test.js tests/integration/inventory.test.js)",
+      "Bash(npx vitest run)",
+      "Bash(npx vitest run tests/integration/auth.test.js tests/integration/rbac.test.js tests/integration/feature-flags.test.js)",
+      "Bash(npx vitest run tests/integration/shifts.test.js)",
+      "Bash(npx vitest run tests/integration/promotions.test.js)",
+      "Bash(npx vitest run tests/integration/purchase-orders.test.js tests/integration/supplier-payables.test.js)"
     ]
   }
 }
