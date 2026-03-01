@@ -1,7 +1,16 @@
 module.exports = function registerReportsRoutes(app, deps) {
-  const { db, requirePerm, requireAnyPerm, requireFeature, createNotification, path, fs, UPLOADS_DIR } = deps;
+  const {
+    db,
+    requirePerm,
+    requireAnyPerm,
+    requireFeature,
+    createNotification,
+    path,
+    fs,
+    UPLOADS_DIR,
+  } = deps;
 
-// --- REPORTS DASHBOARD ---
+  // --- REPORTS DASHBOARD ---
 
   app.get("/api/reports/dashboard", async (req, res) => {
     try {
@@ -126,23 +135,32 @@ module.exports = function registerReportsRoutes(app, deps) {
           ON s.employee_id = e.id
           AND s.session_end IS NULL
           AND date(s.session_start,'localtime') = date('now','localtime')
-        WHERE e.active != 0
         GROUP BY e.id
       `);
 
       const attendanceSummary = {
-        clocked_in: attendanceToday.filter(r => r.session_type === 'work').length,
-        on_break:   attendanceToday.filter(r => r.session_type === 'break').length,
-        clocked_out: attendanceToday.filter(r => r.session_type === null && r.net_work_hours > 0).length,
-        not_started: attendanceToday.filter(r => r.session_type === null && r.net_work_hours === 0).length,
+        clocked_in: attendanceToday.filter((r) => r.session_type === "work")
+          .length,
+        on_break: attendanceToday.filter((r) => r.session_type === "break")
+          .length,
+        clocked_out: attendanceToday.filter(
+          (r) => r.session_type === null && r.net_work_hours > 0,
+        ).length,
+        not_started: attendanceToday.filter(
+          (r) => r.session_type === null && r.net_work_hours === 0,
+        ).length,
         total_employees: attendanceToday.length,
-        details: attendanceToday.map(r => ({
+        details: attendanceToday.map((r) => ({
           id: r.id,
           name: r.name,
-          status: r.session_type === 'work' ? 'clocked_in'
-                : r.session_type === 'break' ? 'on_break'
-                : r.net_work_hours > 0 ? 'clocked_out'
-                : 'not_started',
+          status:
+            r.session_type === "work"
+              ? "clocked_in"
+              : r.session_type === "break"
+                ? "on_break"
+                : r.net_work_hours > 0
+                  ? "clocked_out"
+                  : "not_started",
           break_reason: r.break_reason || null,
           net_work_hours: r.net_work_hours,
         })),

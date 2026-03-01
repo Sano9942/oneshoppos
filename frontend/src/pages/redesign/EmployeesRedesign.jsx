@@ -12,7 +12,7 @@ import {
   TableToolbar,
 } from "../../ui/primitives";
 
-const EMPTY_FORM = { name: "", role_id: 3, pin_code: "" };
+const EMPTY_FORM = { name: "", role_id: 3, pin_code: "", salary_type: "monthly", monthly_salary: "", hourly_rate: "", daily_rate: "" };
 const EMPTY_ATT = { work_hours_per_day: 8, monthly_leave_allowance: 2 };
 
 export default function EmployeesRedesign() {
@@ -68,7 +68,7 @@ export default function EmployeesRedesign() {
 
   const openEdit = async (emp) => {
     setEditing(emp);
-    setForm({ name: emp.name, role_id: emp.role_id, pin_code: "" });
+    setForm({ name: emp.name, role_id: emp.role_id, pin_code: "", salary_type: emp.salary_type || "monthly", monthly_salary: emp.monthly_salary || "", hourly_rate: emp.hourly_rate || "", daily_rate: emp.daily_rate || "" });
     setAttConfig(EMPTY_ATT);
     setModalOpen(true);
     // Fetch attendance config (non-blocking — populate when ready)
@@ -93,7 +93,14 @@ export default function EmployeesRedesign() {
         ? `${API}/api/employees/${editing.id}`
         : `${API}/api/employees`;
       const method = editing ? "PUT" : "POST";
-      const body = { name: form.name, role_id: Number(form.role_id) };
+      const body = {
+        name: form.name,
+        role_id: Number(form.role_id),
+        salary_type: form.salary_type || "monthly",
+        monthly_salary: Number(form.monthly_salary || 0),
+        hourly_rate: Number(form.hourly_rate || 0),
+        daily_rate: Number(form.daily_rate || 0),
+      };
       if (form.pin_code) body.pin_code = form.pin_code;
       const res = await fetch(url, {
         method,
@@ -244,7 +251,7 @@ export default function EmployeesRedesign() {
 
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-sm p-5">
+          <SectionCard className="w-full max-w-md p-5">
             <h3 className="mb-3 text-lg font-semibold text-(--ui-text)">
               {editing ? "Edit Employee" : "Add Employee"}
             </h3>
@@ -270,6 +277,60 @@ export default function EmployeesRedesign() {
                 onChange={(e) => setForm((p) => ({ ...p, pin_code: e.target.value }))}
                 required={!editing}
               />
+              {/* Salary Config */}
+              <div className="border-t border-(--ui-border) pt-3 mt-1 space-y-2">
+                <p className="text-xs font-semibold text-(--ui-text-muted) uppercase tracking-wide">
+                  Salary Config
+                </p>
+                <Select
+                  value={form.salary_type}
+                  onChange={(e) => setForm((p) => ({ ...p, salary_type: e.target.value }))}
+                >
+                  <option value="monthly">Monthly Salary</option>
+                  <option value="hourly">Hourly Rate</option>
+                  <option value="daily">Daily Rate</option>
+                </Select>
+                {form.salary_type === "monthly" && (
+                  <div>
+                    <label className="block text-xs text-(--ui-text-muted) mb-1">Monthly Salary</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="100"
+                      placeholder="e.g. 30000"
+                      value={form.monthly_salary}
+                      onChange={(e) => setForm((p) => ({ ...p, monthly_salary: e.target.value }))}
+                    />
+                  </div>
+                )}
+                {form.salary_type === "hourly" && (
+                  <div>
+                    <label className="block text-xs text-(--ui-text-muted) mb-1">Hourly Rate</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="10"
+                      placeholder="e.g. 200"
+                      value={form.hourly_rate}
+                      onChange={(e) => setForm((p) => ({ ...p, hourly_rate: e.target.value }))}
+                    />
+                    <p className="text-xs text-(--ui-text-muted) mt-1">Overtime (beyond daily hours) paid at 1.5x</p>
+                  </div>
+                )}
+                {form.salary_type === "daily" && (
+                  <div>
+                    <label className="block text-xs text-(--ui-text-muted) mb-1">Daily Rate</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="100"
+                      placeholder="e.g. 1500"
+                      value={form.daily_rate}
+                      onChange={(e) => setForm((p) => ({ ...p, daily_rate: e.target.value }))}
+                    />
+                  </div>
+                )}
+              </div>
               {/* Attendance Config — shown when editing */}
               {editing && (
                 <div className="border-t border-(--ui-border) pt-3 mt-1 space-y-2">

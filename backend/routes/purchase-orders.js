@@ -5,11 +5,14 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
     try {
       const fn = deps.enqueueInventorySyncEvents;
       if (typeof fn === "function") return fn(changes, context, cb);
-    } catch { /* ignore */ }
-    if (typeof cb === "function") cb(null, { queued: 0, skipped: changes.length });
+    } catch {
+      /* ignore */
+    }
+    if (typeof cb === "function")
+      cb(null, { queued: 0, skipped: changes.length });
   }
 
-// --- ROUTES: PURCHASE ORDERS ---
+  // --- ROUTES: PURCHASE ORDERS ---
 
   // Get all purchase orders (with supplier names)
   app.get("/api/purchase-orders", (req, res) => {
@@ -137,6 +140,10 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
         if (!po) return res.status(404).json({ error: "PO not found" });
         if (po.status === "Received")
           return res.status(400).json({ error: "PO already received" });
+        if (po.status !== "Approved")
+          return res
+            .status(400)
+            .json({ error: "Only Approved POs can be received" });
 
         db.all(
           "SELECT poi.*, p.name as product_name FROM purchase_order_items poi JOIN products p ON poi.product_id = p.id WHERE poi.po_id = ?",

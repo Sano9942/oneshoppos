@@ -4,7 +4,13 @@
  * Targets bug: B12 (shift close has no upper-bound timestamp on sales query)
  */
 
-const { createTestApp, closeDb, dbAll, dbGet, dbRun } = require("../helpers/createTestApp");
+const {
+  createTestApp,
+  closeDb,
+  dbAll,
+  dbGet,
+  dbRun,
+} = require("../helpers/createTestApp");
 const { makeRequest, ADMIN_ID } = require("../helpers/request");
 
 let app, db;
@@ -28,7 +34,9 @@ describe("POST /api/shifts/open — Open Shift", () => {
     expect(res.status).toBe(200);
     expect(res.body.shift_id).toBeDefined();
 
-    const shift = await dbGet(db, "SELECT * FROM cash_shifts WHERE id = ?", [res.body.shift_id]);
+    const shift = await dbGet(db, "SELECT * FROM cash_shifts WHERE id = ?", [
+      res.body.shift_id,
+    ]);
     expect(shift.status).toBe("open");
     expect(shift.opening_float).toBe(500);
   });
@@ -53,9 +61,14 @@ describe("POST /api/shifts/open — Open Shift", () => {
 
   it("missing opening_float returns 400", async () => {
     // Close outlet 2's shift first so we can test fresh
-    const active = await dbGet(db, "SELECT id FROM cash_shifts WHERE outlet_id = 2 AND status = 'open'");
+    const active = await dbGet(
+      db,
+      "SELECT id FROM cash_shifts WHERE outlet_id = 2 AND status = 'open'",
+    );
     if (active) {
-      await dbRun(db, "UPDATE cash_shifts SET status = 'closed' WHERE id = ?", [active.id]);
+      await dbRun(db, "UPDATE cash_shifts SET status = 'closed' WHERE id = ?", [
+        active.id,
+      ]);
     }
 
     const res = await makeRequest(app, ADMIN_ID)
@@ -93,7 +106,10 @@ describe("POST /api/shifts/:id/close — Close Shift", () => {
 
   beforeAll(async () => {
     // Get the open shift for outlet 1
-    const shift = await dbGet(db, "SELECT id FROM cash_shifts WHERE outlet_id = 1 AND status = 'open'");
+    const shift = await dbGet(
+      db,
+      "SELECT id FROM cash_shifts WHERE outlet_id = 1 AND status = 'open'",
+    );
     shiftId = shift.id;
 
     // Create a cash sale during this shift
@@ -115,6 +131,11 @@ describe("POST /api/shifts/:id/close — Close Shift", () => {
         outlet_id: 1,
         employee_id: ADMIN_ID,
       });
+
+    // Add a small delay to ensure subsequent tests have distinct timestamps
+    // SQLite timestamps are second-precision in 'localtime' date() calls usually,
+    // and overlapping seconds cause "leaks" in the test's intentional BUG B12 check.
+    await new Promise((resolve) => setTimeout(resolve, 1100));
   });
 
   it("close calculates expected_cash = opening_float + cash_sales - cash_refunds", async () => {
@@ -247,7 +268,11 @@ describe("POST /api/shifts/:id/close — Close Shift", () => {
 
     expect(closeRes.status).toBe(200);
 
-    const denoms = await dbAll(db, "SELECT * FROM shift_denominations WHERE shift_id = ?", [openRes.body.shift_id]);
+    const denoms = await dbAll(
+      db,
+      "SELECT * FROM shift_denominations WHERE shift_id = ?",
+      [openRes.body.shift_id],
+    );
     // Only count > 0 denominations are stored
     expect(denoms.length).toBe(1);
     expect(denoms[0].denomination).toBe(100);

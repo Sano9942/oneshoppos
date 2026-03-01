@@ -4,7 +4,13 @@
  * Tests: /api/supplier-invoices, /api/supplier-invoices/:id/pay, /api/supplier-aging
  */
 
-const { createTestApp, closeDb, dbAll, dbGet, dbRun } = require("../helpers/createTestApp");
+const {
+  createTestApp,
+  closeDb,
+  dbAll,
+  dbGet,
+  dbRun,
+} = require("../helpers/createTestApp");
 const { makeRequest, ADMIN_ID, MANAGER_ID } = require("../helpers/request");
 
 let app, db;
@@ -24,6 +30,11 @@ beforeAll(async () => {
       items: [{ product_id: 1, quantity: 10, cost_price: 100 }],
     });
 
+  await dbRun(
+    db,
+    "UPDATE purchase_orders SET status = 'Approved' WHERE id = ?",
+    [poRes.body.id],
+  );
   await makeRequest(app, MANAGER_ID)
     .post(`/api/purchase-orders/${poRes.body.id}/receive`)
     .send({ outlet_id: 1 });
@@ -31,7 +42,11 @@ beforeAll(async () => {
   // Wait for async invoice creation (B6 — outside txn)
   await new Promise((r) => setTimeout(r, 100));
 
-  const inv = await dbGet(db, "SELECT id FROM supplier_invoices WHERE po_id = ?", [poRes.body.id]);
+  const inv = await dbGet(
+    db,
+    "SELECT id FROM supplier_invoices WHERE po_id = ?",
+    [poRes.body.id],
+  );
   invoiceId = inv.id;
 });
 
@@ -67,7 +82,11 @@ describe("POST /api/supplier-invoices/:id/pay", () => {
   it("second partial summing to full → status paid", async () => {
     const res = await makeRequest(app, MANAGER_ID)
       .post(`/api/supplier-invoices/${invoiceId}/pay`)
-      .send({ amount: 600, payment_method: "Bank Transfer", paid_by: MANAGER_ID });
+      .send({
+        amount: 600,
+        payment_method: "Bank Transfer",
+        paid_by: MANAGER_ID,
+      });
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("paid");
@@ -91,12 +110,21 @@ describe("POST /api/supplier-invoices/:id/pay", () => {
         total_cost: 200,
         items: [{ product_id: 3, quantity: 1, cost_price: 200 }],
       });
+    await dbRun(
+      db,
+      "UPDATE purchase_orders SET status = 'Approved' WHERE id = ?",
+      [poRes.body.id],
+    );
     await makeRequest(app, MANAGER_ID)
       .post(`/api/purchase-orders/${poRes.body.id}/receive`)
       .send({ outlet_id: 1 });
     await new Promise((r) => setTimeout(r, 100));
 
-    const inv = await dbGet(db, "SELECT id FROM supplier_invoices WHERE po_id = ?", [poRes.body.id]);
+    const inv = await dbGet(
+      db,
+      "SELECT id FROM supplier_invoices WHERE po_id = ?",
+      [poRes.body.id],
+    );
 
     const res = await makeRequest(app, MANAGER_ID)
       .post(`/api/supplier-invoices/${inv.id}/pay`)
@@ -109,7 +137,9 @@ describe("POST /api/supplier-invoices/:id/pay", () => {
 
 describe("GET /api/supplier-invoices/:id — Detail with payments", () => {
   it("returns invoice with payment history", async () => {
-    const res = await makeRequest(app, ADMIN_ID).get(`/api/supplier-invoices/${invoiceId}`);
+    const res = await makeRequest(app, ADMIN_ID).get(
+      `/api/supplier-invoices/${invoiceId}`,
+    );
     expect(res.status).toBe(200);
     expect(res.body.invoice).toBeDefined();
     expect(res.body.payments).toBeDefined();
