@@ -135,8 +135,8 @@ export default function BackupRestoreRedesign() {
               <Download size={18} />
             </div>
             <div>
-              <p className="font-semibold text-[var(--ui-text)]">Download Backup</p>
-              <p className="text-xs text-[var(--ui-text-muted)]">Export current database as SQLite file</p>
+              <p className="font-semibold text-(--ui-text)">Download Backup</p>
+              <p className="text-xs text-(--ui-text-muted)">Export current database as SQLite file</p>
             </div>
           </div>
           <Button tone="primary" onClick={handleDownload} disabled={loading} className="w-full">
@@ -155,8 +155,8 @@ export default function BackupRestoreRedesign() {
               <Upload size={18} />
             </div>
             <div>
-              <p className="font-semibold text-[var(--ui-text)]">Restore from Backup</p>
-              <p className="text-xs text-[var(--ui-text-muted)]">Replace current data with a backup file</p>
+              <p className="font-semibold text-(--ui-text)">Restore from Backup</p>
+              <p className="text-xs text-(--ui-text-muted)">Replace current data with a backup file</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -164,12 +164,12 @@ export default function BackupRestoreRedesign() {
               ref={fileRef}
               type="file"
               accept=".sqlite,.db"
-              className="block w-full text-sm text-[var(--ui-text-muted)] file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--ui-muted-surface)] file:px-3 file:py-1.5 file:text-xs file:font-medium"
+              className="block w-full text-sm text-(--ui-text-muted) file:mr-3 file:rounded-lg file:border-0 file:bg-(--ui-muted-surface) file:px-3 file:py-1.5 file:text-xs file:font-medium"
               onChange={(e) => handleRestore(e.target.files?.[0])}
               disabled={restoring}
             />
             {restoring && (
-              <RefreshCw size={15} className="animate-spin text-[var(--ui-text-muted)]" />
+              <RefreshCw size={15} className="animate-spin text-(--ui-text-muted)" />
             )}
           </div>
           <p className="mt-2 text-xs text-rose-500">
@@ -181,14 +181,14 @@ export default function BackupRestoreRedesign() {
 
       {/* Backup Log */}
       <SectionCard>
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--ui-border)]">
-          <History size={15} className="text-[var(--ui-accent)]" />
-          <p className="font-medium text-[var(--ui-text)]">Backup Log</p>
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-(--ui-border)">
+          <History size={15} className="text-(--ui-accent)" />
+          <p className="font-medium text-(--ui-text)">Backup Log</p>
           <Badge tone="default" className="ml-auto">{log.length} entries</Badge>
         </div>
         <div className="overflow-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+            <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
               <tr>
                 <th className="px-3 py-2 text-left">Timestamp</th>
                 <th className="px-3 py-2 text-left">Type</th>
@@ -198,8 +198,8 @@ export default function BackupRestoreRedesign() {
             </thead>
             <tbody>
               {log.map((entry, i) => (
-                <tr key={i} className="border-t border-[var(--ui-border)] hover:bg-[var(--ui-muted-surface)]">
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--ui-text-muted)]">
+                <tr key={i} className="border-t border-(--ui-border) hover:bg-(--ui-muted-surface)">
+                  <td className="whitespace-nowrap px-3 py-2 text-xs text-(--ui-text-muted)">
                     {fmt(entry.created_at || entry.timestamp)}
                   </td>
                   <td className="px-3 py-2">
@@ -208,8 +208,8 @@ export default function BackupRestoreRedesign() {
                       {entry.type || "backup"}
                     </Badge>
                   </td>
-                  <td className="px-3 py-2 text-[var(--ui-text)]">{entry.performed_by || "—"}</td>
-                  <td className="px-3 py-2 text-right text-[var(--ui-text-muted)]">
+                  <td className="px-3 py-2 text-(--ui-text)">{entry.performed_by || "—"}</td>
+                  <td className="px-3 py-2 text-right text-(--ui-text-muted)">
                     {fmtBytes(entry.file_size)}
                   </td>
                 </tr>
@@ -218,7 +218,7 @@ export default function BackupRestoreRedesign() {
           </table>
           {log.length === 0 && (
             <EmptyState
-              icon={<Database size={32} className="text-[var(--ui-text-muted)]" />}
+              icon={<Database size={32} className="text-(--ui-text-muted)" />}
               title="No backup history"
               body="Your backup activity will appear here."
             />

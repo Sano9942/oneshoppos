@@ -5,11 +5,11 @@ import RequirePerm from "./components/RequirePerm";
 import AppLayoutRedesign from "./components/AppLayoutRedesign";
 import AccessDenied from "./pages/AccessDenied";
 import AdministratorRoute from "./pages/AdministratorRoute";
-import Approvals from "./pages/Approvals";
-import Attendance from "./pages/Attendance";
+import ApprovalsRedesign from "./pages/redesign/ApprovalsRedesign";
+import AttendanceRedesign from "./pages/redesign/AttendanceRedesign";
 import AttributeSetsRoute from "./pages/AttributeSetsRoute";
 import BackupRestoreRoute from "./pages/BackupRestoreRoute";
-import BarcodeTemplates from "./pages/BarcodeTemplates";
+import BarcodeTemplatesRedesign from "./pages/redesign/BarcodeTemplatesRedesign";
 import BrandsRoute from "./pages/BrandsRoute";
 import CategoriesRoute from "./pages/CategoriesRoute";
 import DashboardRoute from "./pages/DashboardRoute";
@@ -21,7 +21,7 @@ import OutletsRoute from "./pages/OutletsRoute";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import PromotionsRoute from "./pages/PromotionsRoute";
 import PurchaseOrdersRoute from "./pages/PurchaseOrdersRoute";
-import ReceiptTemplates from "./pages/ReceiptTemplates";
+import ReceiptTemplatesRedesign from "./pages/redesign/ReceiptTemplatesRedesign";
 import ReportsRoute, { ReportTabStandaloneRoute } from "./pages/ReportsRoute";
 import ReturnedStockRoute from "./pages/ReturnedStockRoute";
 import ActionHistoryRoute from "./pages/ActionHistoryRoute";
@@ -184,7 +184,7 @@ function App() {
             path="/barcode-templates"
             element={
               <RequirePerm perm="manage_inventory">
-                <BarcodeTemplates />
+                <BarcodeTemplatesRedesign />
               </RequirePerm>
             }
           />
@@ -217,7 +217,7 @@ function App() {
             path="/approvals"
             element={
               <RequirePerm perm="manage_orders">
-                <Approvals />
+                <ApprovalsRedesign />
               </RequirePerm>
             }
           />
@@ -279,7 +279,7 @@ function App() {
             }
           />
 
-          <Route path="/attendance" element={<Attendance />} />
+          <Route path="/attendance" element={<AttendanceRedesign />} />
           <Route
             path="/hr/leave"
             element={
@@ -373,7 +373,7 @@ function App() {
             path="/reports/product-performance"
             element={<ReportTabStandaloneRoute tabId="product-performance" />}
           />
-          <Route path="/receipt-templates" element={<ReceiptTemplates />} />
+          <Route path="/receipt-templates" element={<ReceiptTemplatesRedesign />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

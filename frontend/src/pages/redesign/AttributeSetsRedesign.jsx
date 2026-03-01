@@ -203,8 +203,8 @@ export default function AttributeSetsRedesign() {
         <SectionCard className="xl:col-span-7">
           <TableToolbar
             left={
-              <div className="relative min-w-[240px]">
-                <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]" />
+              <div className="relative min-w-60">
+                <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)" />
                 <Input
                   className="pl-8"
                   placeholder="Search attribute sets"
@@ -213,12 +213,12 @@ export default function AttributeSetsRedesign() {
                 />
               </div>
             }
-            right={<span className="text-xs text-[var(--ui-text-muted)]">{visibleRows.length} sets</span>}
+            right={<span className="text-xs text-(--ui-text-muted)">{visibleRows.length} sets</span>}
           />
 
           <div className="overflow-auto">
-            <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-              <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+            <table className="min-w-full border-t border-(--ui-border) text-sm">
+              <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                 <tr>
                   <th className="px-3 py-2 text-left">Set</th>
                   <th className="px-3 py-2 text-center">Attributes</th>
@@ -229,15 +229,15 @@ export default function AttributeSetsRedesign() {
                 {!loading && visibleRows.map((row) => (
                   <tr
                     key={row.id}
-                    className={`border-t border-[var(--ui-border)] ${selectedId === row.id ? "bg-emerald-50" : ""}`}
+                    className={`border-t border-(--ui-border) ${selectedId === row.id ? "bg-emerald-50" : ""}`}
                   >
                     <td className="px-3 py-2">
                       <button className="text-left" onClick={() => setSelectedId(row.id)}>
-                        <p className="font-medium text-[var(--ui-text)]">{row.name}</p>
-                        <p className="text-xs text-[var(--ui-text-muted)]">{row.description || "No description"}</p>
+                        <p className="font-medium text-(--ui-text)">{row.name}</p>
+                        <p className="text-xs text-(--ui-text-muted)">{row.description || "No description"}</p>
                       </button>
                     </td>
-                    <td className="px-3 py-2 text-center text-[var(--ui-text)]">{(row.attributes || []).length}</td>
+                    <td className="px-3 py-2 text-center text-(--ui-text)">{(row.attributes || []).length}</td>
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex gap-2">
                         <Button size="sm" onClick={() => openEdit(row)}>Edit</Button>
@@ -248,7 +248,7 @@ export default function AttributeSetsRedesign() {
                 ))}
               </tbody>
             </table>
-            {loading ? <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading sets...</div> : null}
+            {loading ? <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading sets...</div> : null}
             {!loading && visibleRows.length === 0 ? <EmptyState title="No attribute sets" body="Create your first set to manage product variants." /> : null}
           </div>
         </SectionCard>
@@ -259,16 +259,16 @@ export default function AttributeSetsRedesign() {
           ) : (
             <div className="space-y-4">
               <div>
-                <h3 className="text-lg font-semibold text-[var(--ui-text)]">{selected.name}</h3>
-                <p className="text-xs text-[var(--ui-text-muted)]">{selected.description || "No description"}</p>
+                <h3 className="text-lg font-semibold text-(--ui-text)">{selected.name}</h3>
+                <p className="text-xs text-(--ui-text-muted)">{selected.description || "No description"}</p>
               </div>
               <div className="max-h-[420px] space-y-2 overflow-auto">
                 {(selected.attributes || []).map((attr) => (
                   <SectionCard key={attr.id} className="p-2">
-                    <p className="text-sm font-semibold text-[var(--ui-text)]">{attr.name}</p>
+                    <p className="text-sm font-semibold text-(--ui-text)">{attr.name}</p>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {(attr.options || []).length === 0 ? (
-                        <span className="text-xs text-[var(--ui-text-muted)]">No options</span>
+                        <span className="text-xs text-(--ui-text-muted)">No options</span>
                       ) : (
                         attr.options.map((opt) => (
                           <Badge key={opt.id}>{opt.value}</Badge>
@@ -286,7 +286,7 @@ export default function AttributeSetsRedesign() {
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="max-h-[90vh] w-full max-w-2xl overflow-auto p-4">
-            <h3 className="text-lg font-semibold text-[var(--ui-text)]">
+            <h3 className="text-lg font-semibold text-(--ui-text)">
               {form.id ? "Edit Attribute Set" : "Create Attribute Set"}
             </h3>
             <form className="mt-3 space-y-3" onSubmit={save}>
@@ -295,12 +295,12 @@ export default function AttributeSetsRedesign() {
 
               <SectionCard className="p-3">
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-semibold text-[var(--ui-text)]">Attributes</p>
+                  <p className="text-sm font-semibold text-(--ui-text)">Attributes</p>
                   <Button size="sm" type="button" onClick={addAttribute}>Add Attribute</Button>
                 </div>
                 <div className="space-y-3">
                   {(form.attributes || []).map((attr, idx) => (
-                    <div key={`attr-${idx}`} className="rounded border border-[var(--ui-border)] p-2">
+                    <div key={`attr-${idx}`} className="rounded border border-(--ui-border) p-2">
                       <div className="mb-2 flex gap-2">
                         <Input
                           placeholder="Attribute name (e.g. Size)"

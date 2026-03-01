@@ -282,20 +282,20 @@ export default function ReturnsRedesign() {
           <TableToolbar
             left={
               <>
-                <div className="relative min-w-[240px]">
-                  <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]" />
+                <div className="relative min-w-60">
+                  <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)" />
                   <Input className="pl-8" placeholder="Search return, outlet, employee" value={search} onChange={(e) => setSearch(e.target.value)} />
                 </div>
                 <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
                 <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
               </>
             }
-            right={<span className="text-xs text-[var(--ui-text-muted)]">{visibleRows.length} returns</span>}
+            right={<span className="text-xs text-(--ui-text-muted)">{visibleRows.length} returns</span>}
           />
 
           <div className="overflow-auto">
-            <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-              <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+            <table className="min-w-full border-t border-(--ui-border) text-sm">
+              <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                 <tr>
                   <th className="px-3 py-2 text-left">Return</th>
                   <th className="px-3 py-2 text-left">Timestamp</th>
@@ -310,20 +310,20 @@ export default function ReturnsRedesign() {
                   visibleRows.map((r) => (
                     <tr
                       key={r.id}
-                      className={`cursor-pointer border-t border-[var(--ui-border)] hover:bg-[var(--ui-muted-surface)] ${selected?.id === r.id ? "bg-emerald-50" : ""}`}
+                      className={`cursor-pointer border-t border-(--ui-border) hover:bg-(--ui-muted-surface) ${selected?.id === r.id ? "bg-emerald-50" : ""}`}
                       onClick={() => loadDetail(r)}
                     >
-                      <td className="px-3 py-2 font-medium text-[var(--ui-text)]">RTN-{r.id}</td>
-                      <td className="px-3 py-2 text-[var(--ui-text-muted)]">{fmtDate(r.timestamp)}</td>
-                      <td className="px-3 py-2 text-[var(--ui-text-muted)]">{r.outlet_name || "-"}</td>
-                      <td className="px-3 py-2 text-[var(--ui-text-muted)]">{r.employee_name || "-"}</td>
-                      <td className="px-3 py-2 text-center text-[var(--ui-text)]">{r.item_count || 0}</td>
+                      <td className="px-3 py-2 font-medium text-(--ui-text)">RTN-{r.id}</td>
+                      <td className="px-3 py-2 text-(--ui-text-muted)">{fmtDate(r.timestamp)}</td>
+                      <td className="px-3 py-2 text-(--ui-text-muted)">{r.outlet_name || "-"}</td>
+                      <td className="px-3 py-2 text-(--ui-text-muted)">{r.employee_name || "-"}</td>
+                      <td className="px-3 py-2 text-center text-(--ui-text)">{r.item_count || 0}</td>
                       <td className="px-3 py-2 text-right font-semibold text-rose-700">{money(r.total_refund)}</td>
                     </tr>
                   ))}
               </tbody>
             </table>
-            {loading ? <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading returns...</div> : null}
+            {loading ? <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading returns...</div> : null}
             {!loading && visibleRows.length === 0 ? (
               <EmptyState title="No returns" body="Process a return to populate this list." />
             ) : null}
@@ -334,38 +334,38 @@ export default function ReturnsRedesign() {
           {!selected ? (
             <EmptyState title="Select a return" body="Click a return row to inspect restocked items and metadata." />
           ) : detailLoading ? (
-            <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading details...</div>
+            <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading details...</div>
           ) : !detail ? (
             <EmptyState title="Detail unavailable" body="Try selecting the return again." />
           ) : (
             <div className="space-y-4">
               <div>
-                <h3 className="text-lg font-semibold text-[var(--ui-text)]">Return RTN-{selected.id}</h3>
-                <p className="text-xs text-[var(--ui-text-muted)]">{fmtDate(selected.timestamp)}</p>
+                <h3 className="text-lg font-semibold text-(--ui-text)">Return RTN-{selected.id}</h3>
+                <p className="text-xs text-(--ui-text-muted)">{fmtDate(selected.timestamp)}</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <SectionCard className="p-2 text-center">
-                  <p className="text-xs text-[var(--ui-text-muted)]">Method</p>
-                  <p className="font-semibold text-[var(--ui-text)]">{detail.returnData.refund_method}</p>
+                  <p className="text-xs text-(--ui-text-muted)">Method</p>
+                  <p className="font-semibold text-(--ui-text)">{detail.returnData.refund_method}</p>
                 </SectionCard>
                 <SectionCard className="p-2 text-center">
-                  <p className="text-xs text-[var(--ui-text-muted)]">Total</p>
+                  <p className="text-xs text-(--ui-text-muted)">Total</p>
                   <p className="font-semibold text-rose-700">{money(detail.returnData.total_refund)}</p>
                 </SectionCard>
               </div>
               {detail.returnData.reason ? (
-                <div className="rounded border border-[var(--ui-border)] p-2 text-sm text-[var(--ui-text)]">
+                <div className="rounded border border-(--ui-border) p-2 text-sm text-(--ui-text)">
                   <span className="font-semibold">Reason:</span> {detail.returnData.reason}
                 </div>
               ) : null}
 
               <div>
-                <h4 className="mb-2 text-sm font-semibold text-[var(--ui-text)]">Restocked Items</h4>
+                <h4 className="mb-2 text-sm font-semibold text-(--ui-text)">Restocked Items</h4>
                 <div className="max-h-52 space-y-2 overflow-auto">
                   {(detail.items || []).map((i) => (
-                    <div key={i.id} className="rounded border border-[var(--ui-border)] p-2 text-xs">
-                      <p className="font-medium text-[var(--ui-text)]">{i.product_name}</p>
-                      <p className="text-[var(--ui-text-muted)]">{i.quantity} x {money(i.refund_price)}</p>
+                    <div key={i.id} className="rounded border border-(--ui-border) p-2 text-xs">
+                      <p className="font-medium text-(--ui-text)">{i.product_name}</p>
+                      <p className="text-(--ui-text-muted)">{i.quantity} x {money(i.refund_price)}</p>
                     </div>
                   ))}
                 </div>
@@ -378,14 +378,14 @@ export default function ReturnsRedesign() {
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="h-[85vh] w-full max-w-6xl overflow-hidden p-0">
-            <div className="border-b border-[var(--ui-border)] p-3">
-              <h3 className="text-lg font-semibold text-[var(--ui-text)]">Process Return</h3>
+            <div className="border-b border-(--ui-border) p-3">
+              <h3 className="text-lg font-semibold text-(--ui-text)">Process Return</h3>
             </div>
             <div className="grid h-[calc(85vh-58px)] grid-cols-1 xl:grid-cols-12">
-              <div className="xl:col-span-7 border-r border-[var(--ui-border)] p-3">
+              <div className="xl:col-span-7 border-r border-(--ui-border) p-3">
                 <form onSubmit={scanToDraft} className="mb-3">
                   <div className="relative">
-                    <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]" />
+                    <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)" />
                     <Input
                       ref={barcodeRef}
                       className="pl-8"
@@ -395,16 +395,16 @@ export default function ReturnsRedesign() {
                       placeholder="Search by name, barcode or SKU"
                     />
                     {showSearchResults && searchResults.length > 0 ? (
-                      <div className="absolute left-0 right-0 top-9 z-20 max-h-52 overflow-auto rounded border border-[var(--ui-border)] bg-white shadow-lg">
+                      <div className="absolute left-0 right-0 top-9 z-20 max-h-52 overflow-auto rounded border border-(--ui-border) bg-white shadow-lg">
                         {searchResults.map((p) => (
                           <button
                             key={p.id}
                             type="button"
-                            className="block w-full border-b border-[var(--ui-border)] px-3 py-2 text-left text-sm hover:bg-[var(--ui-muted-surface)]"
+                            className="block w-full border-b border-(--ui-border) px-3 py-2 text-left text-sm hover:bg-(--ui-muted-surface)"
                             onMouseDown={() => addProductToItems(p)}
                           >
-                            <p className="font-medium text-[var(--ui-text)]">{p.name}</p>
-                            <p className="text-xs text-[var(--ui-text-muted)]">{p.barcode || p.sku || "-"} | PKRs {Number(p.price || 0).toFixed(2)}</p>
+                            <p className="font-medium text-(--ui-text)">{p.name}</p>
+                            <p className="text-xs text-(--ui-text-muted)">{p.barcode || p.sku || "-"} | PKRs {Number(p.price || 0).toFixed(2)}</p>
                           </button>
                         ))}
                       </div>
@@ -413,9 +413,9 @@ export default function ReturnsRedesign() {
                   {barcodeError ? <p className="mt-1 text-xs text-rose-700">{barcodeError}</p> : null}
                 </form>
 
-                <div className="h-[calc(100%-44px)] overflow-auto rounded border border-[var(--ui-border)]">
+                <div className="h-[calc(100%-44px)] overflow-auto rounded border border-(--ui-border)">
                   <table className="min-w-full text-sm">
-                    <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+                    <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                       <tr>
                         <th className="px-3 py-2 text-left">Item</th>
                         <th className="px-3 py-2 text-center">Qty</th>
@@ -425,10 +425,10 @@ export default function ReturnsRedesign() {
                     </thead>
                     <tbody>
                       {items.map((item, idx) => (
-                        <tr key={`${item.product_id}-${idx}`} className="border-t border-[var(--ui-border)]">
+                        <tr key={`${item.product_id}-${idx}`} className="border-t border-(--ui-border)">
                           <td className="px-3 py-2">
-                            <p className="font-medium text-[var(--ui-text)]">{item.name}</p>
-                            <p className="text-xs text-[var(--ui-text-muted)]">{item.barcode || "-"}</p>
+                            <p className="font-medium text-(--ui-text)">{item.name}</p>
+                            <p className="text-xs text-(--ui-text-muted)">{item.barcode || "-"}</p>
                           </td>
                           <td className="px-3 py-2 text-center">
                             <Input
@@ -508,7 +508,7 @@ export default function ReturnsRedesign() {
 
                 <SectionCard className="mt-3 p-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-[var(--ui-text-muted)]">Total Refund</span>
+                    <span className="text-sm text-(--ui-text-muted)">Total Refund</span>
                     <span className="text-lg font-semibold text-rose-700">{money(draftTotal)}</span>
                   </div>
                   <div className="mt-2">

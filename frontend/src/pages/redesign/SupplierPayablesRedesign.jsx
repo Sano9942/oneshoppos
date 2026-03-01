@@ -192,18 +192,18 @@ export default function SupplierPayablesRedesign() {
 
       <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
         <SectionCard className="p-3">
-          <p className="text-xs text-[var(--ui-text-muted)]">Suppliers With Due</p>
-          <p className="text-2xl font-semibold text-[var(--ui-text)]">{aging.length}</p>
+          <p className="text-xs text-(--ui-text-muted)">Suppliers With Due</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">{aging.length}</p>
         </SectionCard>
         <SectionCard className="p-3">
-          <p className="text-xs text-[var(--ui-text-muted)]">Open Invoices</p>
-          <p className="text-2xl font-semibold text-[var(--ui-text)]">
+          <p className="text-xs text-(--ui-text-muted)">Open Invoices</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">
             {invoices.filter((inv) => inv.status !== "paid").length}
           </p>
         </SectionCard>
         <SectionCard className="p-3">
-          <p className="text-xs text-[var(--ui-text-muted)]">Total Outstanding</p>
-          <p className="text-2xl font-semibold text-[var(--ui-text)]">{money(totalOutstanding)}</p>
+          <p className="text-xs text-(--ui-text-muted)">Total Outstanding</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">{money(totalOutstanding)}</p>
         </SectionCard>
       </div>
 
@@ -240,21 +240,21 @@ export default function SupplierPayablesRedesign() {
                 ))}
               </div>
             ) : (
-              <span className="text-xs text-[var(--ui-text-muted)]">Click a supplier row to expand invoices</span>
+              <span className="text-xs text-(--ui-text-muted)">Click a supplier row to expand invoices</span>
             )
           }
         />
       </SectionCard>
 
       {loading ? (
-        <SectionCard className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading...</SectionCard>
+        <SectionCard className="p-8 text-center text-sm text-(--ui-text-muted)">Loading...</SectionCard>
       ) : null}
 
       {!loading && tab === "aging" ? (
         <SectionCard>
           <div className="overflow-auto">
-            <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-              <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+            <table className="min-w-full border-t border-(--ui-border) text-sm">
+              <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                 <tr>
                   <th className="px-3 py-2 text-left">Supplier</th>
                   <th className="px-3 py-2 text-left">Phone</th>
@@ -269,29 +269,29 @@ export default function SupplierPayablesRedesign() {
                 {aging.map((row) => (
                   <Fragment key={row.id}>
                     <tr
-                      className="cursor-pointer border-t border-[var(--ui-border)] hover:bg-[var(--ui-muted-surface)]"
+                      className="cursor-pointer border-t border-(--ui-border) hover:bg-(--ui-muted-surface)"
                       onClick={() => toggleSupplier(row.id)}
                     >
-                      <td className="px-3 py-2 font-medium text-[var(--ui-text)]">{row.supplier_name}</td>
-                      <td className="px-3 py-2 text-[var(--ui-text-muted)]">{row.phone || "-"}</td>
-                      <td className="px-3 py-2 text-right text-[var(--ui-text)]">{row.invoice_count}</td>
-                      <td className="px-3 py-2 text-right text-[var(--ui-text)]">{money(row.total_invoiced)}</td>
+                      <td className="px-3 py-2 font-medium text-(--ui-text)">{row.supplier_name}</td>
+                      <td className="px-3 py-2 text-(--ui-text-muted)">{row.phone || "-"}</td>
+                      <td className="px-3 py-2 text-right text-(--ui-text)">{row.invoice_count}</td>
+                      <td className="px-3 py-2 text-right text-(--ui-text)">{money(row.total_invoiced)}</td>
                       <td className="px-3 py-2 text-right text-emerald-700">{money(row.total_paid)}</td>
                       <td className="px-3 py-2 text-right font-semibold text-rose-700">
                         {money(row.total_due)}
                       </td>
-                      <td className="px-3 py-2 text-right text-[var(--ui-text-muted)]">
+                      <td className="px-3 py-2 text-right text-(--ui-text-muted)">
                         {expandedSupplierId === row.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                       </td>
                     </tr>
                     {expandedSupplierId === row.id ? (
-                      <tr className="border-t border-[var(--ui-border)] bg-[var(--ui-muted-surface)]/70">
+                      <tr className="border-t border-(--ui-border) bg-(--ui-muted-surface)/70">
                         <td colSpan={7} className="px-4 py-3">
                           {(supplierInvoices[row.id] || []).length === 0 ? (
-                            <p className="text-xs text-[var(--ui-text-muted)]">No invoices found</p>
+                            <p className="text-xs text-(--ui-text-muted)">No invoices found</p>
                           ) : (
                             <table className="min-w-full text-xs">
-                              <thead className="text-[var(--ui-text-muted)]">
+                              <thead className="text-(--ui-text-muted)">
                                 <tr>
                                   <th className="py-1 text-left">Invoice</th>
                                   <th className="py-1 text-right">Amount</th>
@@ -304,11 +304,11 @@ export default function SupplierPayablesRedesign() {
                               </thead>
                               <tbody>
                                 {(supplierInvoices[row.id] || []).map((inv) => (
-                                  <tr key={inv.id} className="border-t border-[var(--ui-border)]">
-                                    <td className="py-1.5 font-mono text-[var(--ui-text)]">
+                                  <tr key={inv.id} className="border-t border-(--ui-border)">
+                                    <td className="py-1.5 font-mono text-(--ui-text)">
                                       {inv.invoice_number || `#${inv.id}`}
                                     </td>
-                                    <td className="py-1.5 text-right text-[var(--ui-text)]">{money(inv.amount)}</td>
+                                    <td className="py-1.5 text-right text-(--ui-text)">{money(inv.amount)}</td>
                                     <td className="py-1.5 text-right text-emerald-700">{money(inv.amount_paid)}</td>
                                     <td className="py-1.5 text-right font-semibold text-rose-700">
                                       {money(calcDue(inv))}
@@ -316,7 +316,7 @@ export default function SupplierPayablesRedesign() {
                                     <td className="py-1.5">
                                       <Badge tone={STATUS_TONE[inv.status] || "default"}>{inv.status}</Badge>
                                     </td>
-                                    <td className="py-1.5 text-[var(--ui-text-muted)]">
+                                    <td className="py-1.5 text-(--ui-text-muted)">
                                       {new Date(inv.created_at).toLocaleDateString()}
                                     </td>
                                     <td className="py-1.5 text-right">
@@ -358,8 +358,8 @@ export default function SupplierPayablesRedesign() {
       {!loading && tab === "invoices" ? (
         <SectionCard>
           <div className="overflow-auto">
-            <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-              <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+            <table className="min-w-full border-t border-(--ui-border) text-sm">
+              <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                 <tr>
                   <th className="px-3 py-2 text-left">Invoice</th>
                   <th className="px-3 py-2 text-left">Supplier</th>
@@ -373,18 +373,18 @@ export default function SupplierPayablesRedesign() {
               </thead>
               <tbody>
                 {invoices.map((inv) => (
-                  <tr key={inv.id} className="border-t border-[var(--ui-border)]">
-                    <td className="px-3 py-2 font-mono text-[var(--ui-text)]">
+                  <tr key={inv.id} className="border-t border-(--ui-border)">
+                    <td className="px-3 py-2 font-mono text-(--ui-text)">
                       {inv.invoice_number || `#${inv.id}`}
                     </td>
-                    <td className="px-3 py-2 text-[var(--ui-text)]">{inv.supplier_name}</td>
-                    <td className="px-3 py-2 text-right text-[var(--ui-text)]">{money(inv.amount)}</td>
+                    <td className="px-3 py-2 text-(--ui-text)">{inv.supplier_name}</td>
+                    <td className="px-3 py-2 text-right text-(--ui-text)">{money(inv.amount)}</td>
                     <td className="px-3 py-2 text-right text-emerald-700">{money(inv.amount_paid)}</td>
                     <td className="px-3 py-2 text-right font-semibold text-rose-700">{money(calcDue(inv))}</td>
                     <td className="px-3 py-2">
                       <Badge tone={STATUS_TONE[inv.status] || "default"}>{inv.status}</Badge>
                     </td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">
+                    <td className="px-3 py-2 text-(--ui-text-muted)">
                       {new Date(inv.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -412,25 +412,25 @@ export default function SupplierPayablesRedesign() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="w-full max-w-md p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-[var(--ui-text)]">Record Payment</h3>
-              <button className="text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]" onClick={closePayModal}>
+              <h3 className="text-lg font-semibold text-(--ui-text)">Record Payment</h3>
+              <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={closePayModal}>
                 <X size={16} />
               </button>
             </div>
-            <div className="mb-3 rounded border border-[var(--ui-border)] bg-[var(--ui-muted-surface)] p-3 text-sm">
-              <p className="text-[var(--ui-text-muted)]">
-                Invoice: <span className="font-mono text-[var(--ui-text)]">{payModal.invoice_number || `#${payModal.id}`}</span>
+            <div className="mb-3 rounded border border-(--ui-border) bg-(--ui-muted-surface) p-3 text-sm">
+              <p className="text-(--ui-text-muted)">
+                Invoice: <span className="font-mono text-(--ui-text)">{payModal.invoice_number || `#${payModal.id}`}</span>
               </p>
-              <p className="text-[var(--ui-text-muted)]">
-                Supplier: <span className="text-[var(--ui-text)]">{payModal.supplier_name}</span>
+              <p className="text-(--ui-text-muted)">
+                Supplier: <span className="text-(--ui-text)">{payModal.supplier_name}</span>
               </p>
-              <p className="text-[var(--ui-text-muted)]">
+              <p className="text-(--ui-text-muted)">
                 Outstanding: <span className="font-semibold text-rose-700">{money(calcDue(payModal))}</span>
               </p>
             </div>
             <div className="space-y-2">
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Amount</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Amount</label>
                 <Input
                   type="number"
                   step="0.01"
@@ -440,7 +440,7 @@ export default function SupplierPayablesRedesign() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Payment Method</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Payment Method</label>
                 <div className="flex gap-2">
                   {["Cash", "Bank Transfer", "Cheque"].map((m) => (
                     <Button
@@ -456,16 +456,16 @@ export default function SupplierPayablesRedesign() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Reference</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Reference</label>
                   <Input value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="Cheque/transfer ref" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Paid By</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Paid By</label>
                   <Input value={payBy} onChange={(e) => setPayBy(e.target.value)} placeholder="Name" />
                 </div>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Notes</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Notes</label>
                 <Input value={payNotes} onChange={(e) => setPayNotes(e.target.value)} />
               </div>
             </div>

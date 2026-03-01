@@ -1,11 +1,11 @@
 export function PageShell({ title, subtitle, right, children }) {
   return (
-    <div className="ui-shell-bg min-h-full w-full rounded-xl border border-[var(--ui-border)] p-5">
+    <div className="ui-shell-bg min-h-full w-full rounded-xl border border-(--ui-border) p-5">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-[var(--ui-text)]">{title}</h1>
+          <h1 className="text-2xl font-semibold text-(--ui-text)">{title}</h1>
           {subtitle ? (
-            <p className="mt-1 text-sm text-[var(--ui-text-muted)]">{subtitle}</p>
+            <p className="mt-1 text-sm text-(--ui-text-muted)">{subtitle}</p>
           ) : null}
         </div>
         {right || null}
@@ -18,7 +18,7 @@ export function PageShell({ title, subtitle, right, children }) {
 export function SectionCard({ children, className = "" }) {
   return (
     <section
-      className={`rounded-[var(--ui-radius-md)] border border-[var(--ui-border)] bg-[var(--ui-surface)] shadow-[var(--ui-shadow)] ${className}`}
+      className={`rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) shadow-(--ui-shadow) ${className}`}
     >
       {children}
     </section>
@@ -34,16 +34,16 @@ export function Button({
 }) {
   const toneClass =
     tone === "primary"
-      ? "bg-[var(--ui-primary)] text-white hover:bg-[var(--ui-primary-strong)]"
+      ? "bg-(--ui-primary) text-white hover:bg-(--ui-primary-strong)"
       : tone === "danger"
-        ? "bg-[var(--ui-danger)] text-white hover:opacity-90"
+        ? "bg-(--ui-danger) text-white hover:opacity-90"
         : tone === "plain"
-          ? "bg-transparent text-[var(--ui-text-muted)] hover:bg-[var(--ui-muted-surface)]"
-          : "bg-[var(--ui-surface)] text-[var(--ui-text)] border border-[var(--ui-border)] hover:bg-[var(--ui-muted-surface)]";
+          ? "bg-transparent text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
+          : "bg-(--ui-surface) text-(--ui-text) border border-(--ui-border) hover:bg-(--ui-muted-surface)";
   const sizeClass = size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm";
   return (
     <button
-      className={`ui-focus-ring rounded-[var(--ui-radius-sm)] font-medium transition ${toneClass} ${sizeClass} ${className}`}
+      className={`ui-focus-ring rounded-(--ui-radius-sm) font-medium transition ${toneClass} ${sizeClass} ${className}`}
       {...props}
     >
       {children}
@@ -54,7 +54,7 @@ export function Button({
 export function Input({ className = "", ...props }) {
   return (
     <input
-      className={`ui-focus-ring w-full rounded-[var(--ui-radius-sm)] border border-[var(--ui-border)] bg-white px-3 py-2 text-sm text-[var(--ui-text)] placeholder:text-[var(--ui-text-muted)] ${className}`}
+      className={`ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text) placeholder:text-(--ui-text-muted) ${className}`}
       {...props}
     />
   );
@@ -63,7 +63,7 @@ export function Input({ className = "", ...props }) {
 export function Select({ className = "", children, ...props }) {
   return (
     <select
-      className={`ui-focus-ring rounded-[var(--ui-radius-sm)] border border-[var(--ui-border)] bg-white px-3 py-2 text-sm text-[var(--ui-text)] ${className}`}
+      className={`ui-focus-ring rounded-(--ui-radius-sm) border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text) ${className}`}
       {...props}
     >
       {children}
@@ -89,7 +89,7 @@ export function Badge({ tone = "default", children }) {
 
 export function TableToolbar({ left, right }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--ui-border)] p-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-(--ui-border) p-3">
       <div className="flex flex-wrap items-center gap-2">{left}</div>
       <div className="flex flex-wrap items-center gap-2">{right}</div>
     </div>
@@ -98,7 +98,7 @@ export function TableToolbar({ left, right }) {
 
 export function BulkActionBar({ children }) {
   return (
-    <div className="rounded-[var(--ui-radius-sm)] border border-emerald-200 bg-emerald-50 p-3">
+    <div className="rounded-(--ui-radius-sm) border border-emerald-200 bg-emerald-50 p-3">
       <div className="flex flex-wrap items-center gap-2">{children}</div>
     </div>
   );
@@ -107,8 +107,8 @@ export function BulkActionBar({ children }) {
 export function EmptyState({ title, body }) {
   return (
     <div className="px-4 py-10 text-center">
-      <p className="text-base font-semibold text-[var(--ui-text)]">{title}</p>
-      {body ? <p className="mt-1 text-sm text-[var(--ui-text-muted)]">{body}</p> : null}
+      <p className="text-base font-semibold text-(--ui-text)">{title}</p>
+      {body ? <p className="mt-1 text-sm text-(--ui-text-muted)">{body}</p> : null}
     </div>
   );
 }

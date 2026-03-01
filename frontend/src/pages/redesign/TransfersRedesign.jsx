@@ -125,13 +125,13 @@ export default function TransfersRedesign() {
 
       <SectionCard>
         <TableToolbar
-          left={<div className="relative min-w-[240px]"><Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]" /><Input className="pl-8" placeholder="Search product, barcode, outlet" value={search} onChange={(e) => setSearch(e.target.value)} /></div>}
-          right={<span className="text-xs text-[var(--ui-text-muted)]">{visibleRows.length} transfers</span>}
+          left={<div className="relative min-w-60"><Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)" /><Input className="pl-8" placeholder="Search product, barcode, outlet" value={search} onChange={(e) => setSearch(e.target.value)} /></div>}
+          right={<span className="text-xs text-(--ui-text-muted)">{visibleRows.length} transfers</span>}
         />
 
         <div className="overflow-auto">
-          <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-            <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+          <table className="min-w-full border-t border-(--ui-border) text-sm">
+            <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
               <tr>
                 <th className="px-3 py-2 text-left">Date</th>
                 <th className="px-3 py-2 text-left">Product</th>
@@ -144,19 +144,19 @@ export default function TransfersRedesign() {
             </thead>
             <tbody>
               {!loading && visibleRows.map((r) => (
-                <tr key={r.id} className="border-t border-[var(--ui-border)]">
-                  <td className="px-3 py-2 text-[var(--ui-text-muted)]">{fmtDate(r.timestamp)}</td>
-                  <td className="px-3 py-2"><p className="font-medium text-[var(--ui-text)]">{r.product_name}</p><p className="text-xs text-[var(--ui-text-muted)]">{r.barcode || "-"}</p></td>
-                  <td className="px-3 py-2 text-[var(--ui-text-muted)]">{r.from_outlet_name}</td>
-                  <td className="px-3 py-2 text-[var(--ui-text-muted)]">{r.to_outlet_name}</td>
+                <tr key={r.id} className="border-t border-(--ui-border)">
+                  <td className="px-3 py-2 text-(--ui-text-muted)">{fmtDate(r.timestamp)}</td>
+                  <td className="px-3 py-2"><p className="font-medium text-(--ui-text)">{r.product_name}</p><p className="text-xs text-(--ui-text-muted)">{r.barcode || "-"}</p></td>
+                  <td className="px-3 py-2 text-(--ui-text-muted)">{r.from_outlet_name}</td>
+                  <td className="px-3 py-2 text-(--ui-text-muted)">{r.to_outlet_name}</td>
                   <td className="px-3 py-2 text-right"><Badge>{r.quantity}</Badge></td>
-                  <td className="px-3 py-2 text-[var(--ui-text-muted)]">{r.note || "-"}</td>
-                  <td className="px-3 py-2 text-[var(--ui-text-muted)]">{r.employee_name || "Admin"}</td>
+                  <td className="px-3 py-2 text-(--ui-text-muted)">{r.note || "-"}</td>
+                  <td className="px-3 py-2 text-(--ui-text-muted)">{r.employee_name || "Admin"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {loading ? <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading transfers...</div> : null}
+          {loading ? <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading transfers...</div> : null}
           {!loading && visibleRows.length === 0 ? <EmptyState title="No transfers" body="Create a transfer to move stock between outlets." /> : null}
         </div>
       </SectionCard>
@@ -164,7 +164,7 @@ export default function TransfersRedesign() {
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="w-full max-w-md p-4">
-            <h3 className="text-lg font-semibold text-[var(--ui-text)]">New Transfer</h3>
+            <h3 className="text-lg font-semibold text-(--ui-text)">New Transfer</h3>
             <form className="mt-3 space-y-2" onSubmit={save}>
               <Select required value={form.product_id} onChange={(e) => setForm((p) => ({ ...p, product_id: e.target.value }))}>
                 <option value="">Select product</option>

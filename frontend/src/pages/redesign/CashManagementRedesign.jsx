@@ -227,22 +227,22 @@ export default function CashManagementRedesign() {
       ) : null}
 
       <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-4">
-        <SectionCard className="p-3"><p className="text-xs text-[var(--ui-text-muted)]">Total Sale Cash</p><p className="text-xl font-semibold text-[var(--ui-text)]">{money(kpis.totalSaleCash)}</p></SectionCard>
-        <SectionCard className="p-3"><p className="text-xs text-[var(--ui-text-muted)]">Cash In</p><p className="text-xl font-semibold text-[var(--ui-text)]">{money(kpis.cashIn)}</p></SectionCard>
-        <SectionCard className="p-3"><p className="text-xs text-[var(--ui-text-muted)]">Cash In Hand</p><p className="text-xl font-semibold text-[var(--ui-text)]">{money(kpis.cashInHand)}</p></SectionCard>
-        <SectionCard className="p-3"><p className="text-xs text-[var(--ui-text-muted)]">Closed Shifts</p><p className="text-xl font-semibold text-[var(--ui-text)]">{kpis.closedShifts}</p></SectionCard>
+        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Total Sale Cash</p><p className="text-xl font-semibold text-(--ui-text)">{money(kpis.totalSaleCash)}</p></SectionCard>
+        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Cash In</p><p className="text-xl font-semibold text-(--ui-text)">{money(kpis.cashIn)}</p></SectionCard>
+        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Cash In Hand</p><p className="text-xl font-semibold text-(--ui-text)">{money(kpis.cashInHand)}</p></SectionCard>
+        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Closed Shifts</p><p className="text-xl font-semibold text-(--ui-text)">{kpis.closedShifts}</p></SectionCard>
       </div>
 
       <SectionCard className="mb-3 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase text-[var(--ui-text-muted)]">Active Shift</p>
+            <p className="text-xs uppercase text-(--ui-text-muted)">Active Shift</p>
             {activeShift ? (
-              <p className="text-sm font-semibold text-[var(--ui-text)]">
+              <p className="text-sm font-semibold text-(--ui-text)">
                 #{activeShift.id} | {activeShift.outlet_name} | Opened {fmtDate(activeShift.opened_at)}
               </p>
             ) : (
-              <p className="text-sm text-[var(--ui-text-muted)]">No open shift in selected outlet.</p>
+              <p className="text-sm text-(--ui-text-muted)">No open shift in selected outlet.</p>
             )}
           </div>
           <div className="flex gap-2">
@@ -263,12 +263,12 @@ export default function CashManagementRedesign() {
 
       <SectionCard>
         <TableToolbar
-          left={<span className="text-sm text-[var(--ui-text-muted)]">Shift History</span>}
-          right={<span className="text-xs text-[var(--ui-text-muted)]">{rows.length} rows</span>}
+          left={<span className="text-sm text-(--ui-text-muted)">Shift History</span>}
+          right={<span className="text-xs text-(--ui-text-muted)">{rows.length} rows</span>}
         />
         <div className="overflow-auto">
-          <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-            <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+          <table className="min-w-full border-t border-(--ui-border) text-sm">
+            <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
               <tr>
                 <th className="px-3 py-2 text-left">Opened</th>
                 <th className="px-3 py-2 text-left">Closed</th>
@@ -283,16 +283,16 @@ export default function CashManagementRedesign() {
             </thead>
             <tbody>
               {!loading && rows.map((r) => (
-                <tr key={r.id} className="border-t border-[var(--ui-border)]">
-                  <td className="px-3 py-2 text-[var(--ui-text-muted)]">{fmtDate(r.opened_at)}</td>
-                  <td className="px-3 py-2 text-[var(--ui-text-muted)]">{fmtDate(r.closed_at)}</td>
-                  <td className="px-3 py-2 text-[var(--ui-text)]">{r.outlet_name}</td>
-                  <td className="px-3 py-2 text-[var(--ui-text-muted)]">{r.employee_name || "Admin"}</td>
-                  <td className="px-3 py-2 text-right text-[var(--ui-text)]">{money(r.opening_float)}</td>
-                  <td className="px-3 py-2 text-right text-[var(--ui-text)]">{r.expected_cash == null ? "-" : money(r.expected_cash)}</td>
+                <tr key={r.id} className="border-t border-(--ui-border)">
+                  <td className="px-3 py-2 text-(--ui-text-muted)">{fmtDate(r.opened_at)}</td>
+                  <td className="px-3 py-2 text-(--ui-text-muted)">{fmtDate(r.closed_at)}</td>
+                  <td className="px-3 py-2 text-(--ui-text)">{r.outlet_name}</td>
+                  <td className="px-3 py-2 text-(--ui-text-muted)">{r.employee_name || "Admin"}</td>
+                  <td className="px-3 py-2 text-right text-(--ui-text)">{money(r.opening_float)}</td>
+                  <td className="px-3 py-2 text-right text-(--ui-text)">{r.expected_cash == null ? "-" : money(r.expected_cash)}</td>
                   <td className="px-3 py-2 text-right">
                     {r.closing_cash == null ? (
-                      <span className="text-[var(--ui-text-muted)]">-</span>
+                      <span className="text-(--ui-text-muted)">-</span>
                     ) : (
                       <button className="text-blue-700 hover:underline" onClick={() => loadDenominations(r)}>{money(r.closing_cash)}</button>
                     )}
@@ -307,7 +307,7 @@ export default function CashManagementRedesign() {
               ))}
             </tbody>
           </table>
-          {loading ? <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading shifts...</div> : null}
+          {loading ? <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading shifts...</div> : null}
           {!loading && rows.length === 0 ? <EmptyState title="No shifts" body="Open your first shift to start reconciliation." /> : null}
         </div>
       </SectionCard>
@@ -315,7 +315,7 @@ export default function CashManagementRedesign() {
       {openModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="w-full max-w-md p-4">
-            <h3 className="text-lg font-semibold text-[var(--ui-text)]">Open Shift</h3>
+            <h3 className="text-lg font-semibold text-(--ui-text)">Open Shift</h3>
             <form className="mt-3 space-y-2" onSubmit={openShift}>
               <Input
                 required
@@ -347,12 +347,12 @@ export default function CashManagementRedesign() {
       {closeModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="w-full max-w-lg p-4">
-            <h3 className="text-lg font-semibold text-[var(--ui-text)]">Close Shift {activeShift ? `#${activeShift.id}` : ""}</h3>
+            <h3 className="text-lg font-semibold text-(--ui-text)">Close Shift {activeShift ? `#${activeShift.id}` : ""}</h3>
             {closeResult ? (
               <div className="mt-3 space-y-2 text-sm">
-                <p className="text-[var(--ui-text)]">Expected: {money(closeResult.expected_cash)}</p>
-                <p className="text-[var(--ui-text)]">Counted: {money(closeResult.closing_cash)}</p>
-                <p className="font-semibold text-[var(--ui-text)]">Variance: {money(closeResult.variance)}</p>
+                <p className="text-(--ui-text)">Expected: {money(closeResult.expected_cash)}</p>
+                <p className="text-(--ui-text)">Counted: {money(closeResult.closing_cash)}</p>
+                <p className="font-semibold text-(--ui-text)">Variance: {money(closeResult.variance)}</p>
                 <Button
                   onClick={() => {
                     setCloseModal(false);
@@ -369,14 +369,14 @@ export default function CashManagementRedesign() {
             ) : (
               <form className="mt-3 space-y-3" onSubmit={closeShift}>
                 <SectionCard className="p-2">
-                  <div className="mb-2 flex items-center gap-2 text-sm text-[var(--ui-text)]">
+                  <div className="mb-2 flex items-center gap-2 text-sm text-(--ui-text)">
                     <Calculator size={14} />
                     Denomination Count
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     {denoms.map((d, idx) => (
                       <div key={d.denomination}>
-                        <p className="text-xs text-[var(--ui-text-muted)]">{d.denomination}</p>
+                        <p className="text-xs text-(--ui-text-muted)">{d.denomination}</p>
                         <Input
                           type="number"
                           min="0"
@@ -392,7 +392,7 @@ export default function CashManagementRedesign() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-2 text-sm font-semibold text-[var(--ui-text)]">Counted Total: {money(closingCash)}</p>
+                  <p className="mt-2 text-sm font-semibold text-(--ui-text)">Counted Total: {money(closingCash)}</p>
                 </SectionCard>
 
                 <Select value={varianceReason} onChange={(e) => setVarianceReason(e.target.value)}>
@@ -422,10 +422,10 @@ export default function CashManagementRedesign() {
       {denomDetail ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="w-full max-w-md p-4">
-            <h3 className="text-lg font-semibold text-[var(--ui-text)]">Shift #{denomDetail.shift.id} Denominations</h3>
+            <h3 className="text-lg font-semibold text-(--ui-text)">Shift #{denomDetail.shift.id} Denominations</h3>
             <div className="mt-3 max-h-72 overflow-auto">
               {(denomDetail.rows || []).map((r, idx) => (
-                <div key={`${r.denomination}-${idx}`} className="flex items-center justify-between border-b border-[var(--ui-border)] py-2 text-sm">
+                <div key={`${r.denomination}-${idx}`} className="flex items-center justify-between border-b border-(--ui-border) py-2 text-sm">
                   <span>{r.denomination} x {r.count}</span>
                   <span className="font-semibold">{money(r.subtotal)}</span>
                 </div>

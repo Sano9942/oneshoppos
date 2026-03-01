@@ -299,10 +299,11 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./parked-sales")(app, deps);
 
     // --- ROUTES: ORDERS ---
-  const { processPendingShopifyInventoryEvents } = require("./orders")(app, deps) || {};
+  const { processPendingShopifyInventoryEvents, enqueueInventorySyncEvents } = require("./orders")(app, deps) || {};
+  const shopifyDeps = { ...deps, processPendingShopifyInventoryEvents, enqueueInventorySyncEvents };
 
     // --- ROUTES: SHOPIFY ---
-  require("./shopify")(app, deps);
+  require("./shopify")(app, shopifyDeps);
 
     // --- ROUTES: RECONCILIATION & APPROVALS ---
   require("./reconciliation")(app, deps);

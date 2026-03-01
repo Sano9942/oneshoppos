@@ -139,15 +139,15 @@ export default function HRManagementRedesign() {
       )}
 
       {/* Tab bar */}
-      <div className="mb-4 flex gap-1 border-b border-[var(--ui-border)]">
+      <div className="mb-4 flex gap-1 border-b border-(--ui-border)">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               tab === t.id
-                ? "border-[var(--ui-accent)] text-[var(--ui-accent)]"
-                : "border-transparent text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
+                ? "border-(--ui-accent) text-(--ui-accent)"
+                : "border-transparent text-(--ui-text-muted) hover:text-(--ui-text)"
             }`}
           >
             {t.label}
@@ -160,7 +160,7 @@ export default function HRManagementRedesign() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* Create leave form */}
           <SectionCard className="p-4">
-            <p className="mb-3 font-semibold text-[var(--ui-text)]">Submit Leave Request</p>
+            <p className="mb-3 font-semibold text-(--ui-text)">Submit Leave Request</p>
             <form className="space-y-2" onSubmit={submitLeave}>
               <Select
                 required
@@ -203,7 +203,7 @@ export default function HRManagementRedesign() {
                 onChange={(e) => setLeaveForm((f) => ({ ...f, reason: e.target.value }))}
                 rows={3}
                 placeholder="Reason"
-                className="w-full rounded-lg border border-[var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2 text-sm text-[var(--ui-text)] placeholder-[var(--ui-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--ui-accent)]/20"
+                className="w-full rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-sm text-(--ui-text) placeholder-(--ui-text-muted) focus:outline-none focus:ring-2 focus:ring-(--ui-accent)/20"
               />
               <Button tone="primary" type="submit" disabled={submittingLeave}>
                 {submittingLeave ? "Submitting..." : "Submit Leave"}
@@ -213,10 +213,10 @@ export default function HRManagementRedesign() {
 
           {/* Leave requests table */}
           <SectionCard className="p-4">
-            <p className="mb-3 font-semibold text-[var(--ui-text)]">Requests ({leaves.length})</p>
+            <p className="mb-3 font-semibold text-(--ui-text)">Requests ({leaves.length})</p>
             <div className="overflow-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+                <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                   <tr>
                     <th className="px-2 py-2 text-left">Employee</th>
                     <th className="px-2 py-2 text-left">Type</th>
@@ -227,10 +227,10 @@ export default function HRManagementRedesign() {
                 </thead>
                 <tbody>
                   {leaves.map((r) => (
-                    <tr key={r.id} className="border-t border-[var(--ui-border)]">
-                      <td className="px-2 py-2 font-medium text-[var(--ui-text)]">{r.employee_name}</td>
-                      <td className="px-2 py-2 capitalize text-[var(--ui-text-muted)]">{r.type}</td>
-                      <td className="px-2 py-2 text-xs text-[var(--ui-text-muted)]">
+                    <tr key={r.id} className="border-t border-(--ui-border)">
+                      <td className="px-2 py-2 font-medium text-(--ui-text)">{r.employee_name}</td>
+                      <td className="px-2 py-2 capitalize text-(--ui-text-muted)">{r.type}</td>
+                      <td className="px-2 py-2 text-xs text-(--ui-text-muted)">
                         {fmtDate(r.start_date)} → {fmtDate(r.end_date)}
                       </td>
                       <td className="px-2 py-2">
@@ -268,7 +268,7 @@ export default function HRManagementRedesign() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* Create period */}
             <SectionCard className="p-4">
-              <p className="mb-3 font-semibold text-[var(--ui-text)]">Create Payroll Period</p>
+              <p className="mb-3 font-semibold text-(--ui-text)">Create Payroll Period</p>
               <form className="space-y-2" onSubmit={createPeriod}>
                 <Input
                   required
@@ -298,23 +298,23 @@ export default function HRManagementRedesign() {
 
             {/* Periods list */}
             <SectionCard className="p-4">
-              <p className="mb-3 font-semibold text-[var(--ui-text)]">Periods ({periods.length})</p>
+              <p className="mb-3 font-semibold text-(--ui-text)">Periods ({periods.length})</p>
               <div className="max-h-64 space-y-2 overflow-auto">
                 {periods.length === 0 && (
-                  <p className="text-sm text-[var(--ui-text-muted)]">No payroll periods yet.</p>
+                  <p className="text-sm text-(--ui-text-muted)">No payroll periods yet.</p>
                 )}
                 {periods.map((p) => (
                   <div
                     key={p.id}
                     className={`flex items-center justify-between rounded-lg border p-3 transition-colors ${
                       selectedPeriod === String(p.id)
-                        ? "border-[var(--ui-accent)] bg-[var(--ui-accent)]/5"
-                        : "border-[var(--ui-border)] hover:bg-[var(--ui-muted-surface)]"
+                        ? "border-(--ui-accent) bg-(--ui-accent)/5"
+                        : "border-(--ui-border) hover:bg-(--ui-muted-surface)"
                     }`}
                   >
                     <div>
-                      <p className="text-sm font-medium text-[var(--ui-text)]">{p.period_name}</p>
-                      <p className="text-xs text-[var(--ui-text-muted)]">
+                      <p className="text-sm font-medium text-(--ui-text)">{p.period_name}</p>
+                      <p className="text-xs text-(--ui-text-muted)">
                         {fmtDate(p.start_date)} → {fmtDate(p.end_date)}
                       </p>
                       <Badge tone={PERIOD_STATUS_TONE[p.status] || "default"} className="mt-1 capitalize">
@@ -344,11 +344,11 @@ export default function HRManagementRedesign() {
 
           {/* Payroll lines */}
           <SectionCard>
-            <div className="border-b border-[var(--ui-border)] px-4 py-3">
-              <p className="font-semibold text-[var(--ui-text)]">
+            <div className="border-b border-(--ui-border) px-4 py-3">
+              <p className="font-semibold text-(--ui-text)">
                 Payroll Lines
                 {selectedPeriod && periods.find((p) => String(p.id) === selectedPeriod) && (
-                  <span className="ml-2 text-sm font-normal text-[var(--ui-text-muted)]">
+                  <span className="ml-2 text-sm font-normal text-(--ui-text-muted)">
                     — {periods.find((p) => String(p.id) === selectedPeriod)?.period_name}
                   </span>
                 )}
@@ -356,7 +356,7 @@ export default function HRManagementRedesign() {
             </div>
             <div className="overflow-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+                <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                   <tr>
                     <th className="px-3 py-2 text-left">Employee</th>
                     <th className="px-3 py-2 text-left">Type</th>
@@ -371,14 +371,14 @@ export default function HRManagementRedesign() {
                 </thead>
                 <tbody>
                   {lines.map((l) => (
-                    <tr key={l.id} className="border-t border-[var(--ui-border)] hover:bg-[var(--ui-muted-surface)]">
-                      <td className="px-3 py-2 font-medium text-[var(--ui-text)]">{l.employee_name}</td>
-                      <td className="px-3 py-2 capitalize text-[var(--ui-text-muted)]">{l.salary_type}</td>
-                      <td className="px-3 py-2 text-right text-[var(--ui-text-muted)]">{money(l.base_rate)}</td>
-                      <td className="px-3 py-2 text-right text-[var(--ui-text-muted)]">{l.total_hours ?? "—"}</td>
-                      <td className="px-3 py-2 text-right text-[var(--ui-text-muted)]">{l.total_days ?? "—"}</td>
-                      <td className="px-3 py-2 text-right text-[var(--ui-text-muted)]">{l.leave_days ?? "—"}</td>
-                      <td className="px-3 py-2 text-right text-[var(--ui-text)]">{money(l.gross_pay)}</td>
+                    <tr key={l.id} className="border-t border-(--ui-border) hover:bg-(--ui-muted-surface)">
+                      <td className="px-3 py-2 font-medium text-(--ui-text)">{l.employee_name}</td>
+                      <td className="px-3 py-2 capitalize text-(--ui-text-muted)">{l.salary_type}</td>
+                      <td className="px-3 py-2 text-right text-(--ui-text-muted)">{money(l.base_rate)}</td>
+                      <td className="px-3 py-2 text-right text-(--ui-text-muted)">{l.total_hours ?? "—"}</td>
+                      <td className="px-3 py-2 text-right text-(--ui-text-muted)">{l.total_days ?? "—"}</td>
+                      <td className="px-3 py-2 text-right text-(--ui-text-muted)">{l.leave_days ?? "—"}</td>
+                      <td className="px-3 py-2 text-right text-(--ui-text)">{money(l.gross_pay)}</td>
                       <td className="px-3 py-2 text-right text-rose-600">{money(l.deductions)}</td>
                       <td className="px-3 py-2 text-right font-semibold text-emerald-600">{money(l.net_pay)}</td>
                     </tr>
@@ -386,7 +386,7 @@ export default function HRManagementRedesign() {
                 </tbody>
               </table>
               {!selectedPeriod && (
-                <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">
+                <div className="p-8 text-center text-sm text-(--ui-text-muted)">
                   Select a period above to view its payroll lines.
                 </div>
               )}

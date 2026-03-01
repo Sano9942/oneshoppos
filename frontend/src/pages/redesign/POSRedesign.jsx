@@ -849,7 +849,7 @@ export default function POSRedesign() {
             </div>
             <div className="p-5">
               <textarea value={orderNote} onChange={(e) => setOrderNote(e.target.value)} autoFocus
-                className="w-full border-2 border-slate-200 rounded-lg px-4 py-3 focus:border-[#8066FF] outline-none min-h-[100px] resize-none text-slate-800"
+                className="w-full border-2 border-slate-200 rounded-lg px-4 py-3 focus:border-[#8066FF] outline-none min-h-25 resize-none text-slate-800"
                 placeholder="Add instructions or comments for this order…"
               />
               <button onClick={() => setShowNoteModal(false)}

@@ -14,7 +14,7 @@ export default function ShopifyIntegrationRedesign() {
   return (
     <div className="flex h-full flex-col">
       {/* Design-system header strip */}
-      <div className="shrink-0 border-b border-[var(--ui-border)] bg-[var(--ui-surface)] px-6 py-4">
+      <div className="shrink-0 border-b border-(--ui-border) bg-(--ui-surface) px-6 py-4">
         <div className="flex items-center gap-3">
           {/* Shopify wordmark colour dot */}
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#96BF48]/10">
@@ -28,8 +28,8 @@ export default function ShopifyIntegrationRedesign() {
             </svg>
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-[var(--ui-text)]">Shopify Integration</h1>
-            <p className="mt-0.5 text-sm text-[var(--ui-text-muted)]">
+            <h1 className="text-xl font-semibold text-(--ui-text)">Shopify Integration</h1>
+            <p className="mt-0.5 text-sm text-(--ui-text-muted)">
               Sync products, inventory, and customers between OneShop POS and Shopify.
             </p>
           </div>

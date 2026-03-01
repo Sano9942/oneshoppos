@@ -213,7 +213,7 @@ export default function QuotationsRedesign() {
         )}
 
         <SectionCard className="mb-4 p-4">
-          <p className="mb-2 text-xs font-semibold uppercase text-[var(--ui-text-muted)]">Header</p>
+          <p className="mb-2 text-xs font-semibold uppercase text-(--ui-text-muted)">Header</p>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
             <Select value={form.customer_id} onChange={(e) => setForm((f) => ({ ...f, customer_id: e.target.value }))}>
               <option value="">Customer</option>
@@ -237,7 +237,7 @@ export default function QuotationsRedesign() {
         </SectionCard>
 
         <SectionCard className="mb-4 p-4">
-          <p className="mb-2 text-xs font-semibold uppercase text-[var(--ui-text-muted)]">Line Items</p>
+          <p className="mb-2 text-xs font-semibold uppercase text-(--ui-text-muted)">Line Items</p>
           <div className="space-y-2">
             {items.map((it, idx) => (
               <div key={idx} className="grid grid-cols-2 gap-2 md:grid-cols-5">
@@ -275,8 +275,8 @@ export default function QuotationsRedesign() {
                   onChange={(e) => updateItem(idx, "tax_rate", Number(e.target.value))}
                   placeholder="Tax %"
                 />
-                <div className="flex items-center justify-between rounded-lg border border-[var(--ui-border)] px-3 py-2 text-sm">
-                  <span className="font-medium text-[var(--ui-text)]">
+                <div className="flex items-center justify-between rounded-lg border border-(--ui-border) px-3 py-2 text-sm">
+                  <span className="font-medium text-(--ui-text)">
                     {money(Number(it.quantity || 0) * Number(it.unit_price || 0))}
                   </span>
                   <button
@@ -299,7 +299,7 @@ export default function QuotationsRedesign() {
         </SectionCard>
 
         <SectionCard className="mb-4 p-4">
-          <p className="mb-2 text-xs font-semibold uppercase text-[var(--ui-text-muted)]">Discount &amp; Notes</p>
+          <p className="mb-2 text-xs font-semibold uppercase text-(--ui-text-muted)">Discount &amp; Notes</p>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
             <Select value={form.discount_type} onChange={(e) => setForm((f) => ({ ...f, discount_type: e.target.value }))}>
               <option value="fixed">Fixed Discount</option>
@@ -324,16 +324,16 @@ export default function QuotationsRedesign() {
         {/* Totals */}
         <SectionCard className="mb-4 p-4">
           <div className="space-y-1 text-sm">
-            <div className="flex justify-between text-[var(--ui-text-muted)]">
+            <div className="flex justify-between text-(--ui-text-muted)">
               <span>Subtotal</span><span>{money(subtotal)}</span>
             </div>
-            <div className="flex justify-between text-[var(--ui-text-muted)]">
+            <div className="flex justify-between text-(--ui-text-muted)">
               <span>Tax</span><span>{money(taxTotal)}</span>
             </div>
-            <div className="flex justify-between text-[var(--ui-text-muted)]">
+            <div className="flex justify-between text-(--ui-text-muted)">
               <span>Discount</span><span>-{money(discountValue)}</span>
             </div>
-            <div className="flex justify-between border-t border-[var(--ui-border)] pt-1 font-bold text-[var(--ui-text)]">
+            <div className="flex justify-between border-t border-(--ui-border) pt-1 font-bold text-(--ui-text)">
               <span>Total</span><span>{money(total)}</span>
             </div>
           </div>
@@ -368,8 +368,8 @@ export default function QuotationsRedesign() {
         <TableToolbar
           left={
             <div className="flex flex-wrap gap-2">
-              <div className="relative min-w-[220px]">
-                <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]" />
+              <div className="relative min-w-55">
+                <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)" />
                 <Input
                   className="pl-8"
                   placeholder="Search quotations"
@@ -385,11 +385,11 @@ export default function QuotationsRedesign() {
               </Select>
             </div>
           }
-          right={<span className="text-xs text-[var(--ui-text-muted)]">{visible.length} quotations</span>}
+          right={<span className="text-xs text-(--ui-text-muted)">{visible.length} quotations</span>}
         />
         <div className="overflow-auto">
-          <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-            <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+          <table className="min-w-full border-t border-(--ui-border) text-sm">
+            <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
               <tr>
                 <th className="px-3 py-2 text-left">#</th>
                 <th className="px-3 py-2 text-left">Customer</th>
@@ -402,14 +402,14 @@ export default function QuotationsRedesign() {
             <tbody>
               {!loading &&
                 visible.map((q) => (
-                  <tr key={q.id} className="border-t border-[var(--ui-border)] hover:bg-[var(--ui-muted-surface)]">
-                    <td className="px-3 py-2 font-medium text-[var(--ui-text)]">#{q.id}</td>
-                    <td className="px-3 py-2 text-[var(--ui-text)]">{q.customer_name || "—"}</td>
+                  <tr key={q.id} className="border-t border-(--ui-border) hover:bg-(--ui-muted-surface)">
+                    <td className="px-3 py-2 font-medium text-(--ui-text)">#{q.id}</td>
+                    <td className="px-3 py-2 text-(--ui-text)">{q.customer_name || "—"}</td>
                     <td className="px-3 py-2">
                       <Badge tone={STATUS_TONE[q.status] || "default"} className="capitalize">{q.status}</Badge>
                     </td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">{fmtDate(q.valid_until)}</td>
-                    <td className="px-3 py-2 text-right font-semibold text-[var(--ui-text)]">{money(q.total_amount)}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{fmtDate(q.valid_until)}</td>
+                    <td className="px-3 py-2 text-right font-semibold text-(--ui-text)">{money(q.total_amount)}</td>
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex flex-wrap justify-end gap-1">
                         <Button size="sm" onClick={() => openEdit(q.id)}>Edit</Button>
@@ -428,7 +428,7 @@ export default function QuotationsRedesign() {
                 ))}
             </tbody>
           </table>
-          {loading && <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading quotations...</div>}
+          {loading && <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading quotations...</div>}
           {!loading && visible.length === 0 && (
             <EmptyState title="No quotations" body="Create your first quotation to get started." />
           )}

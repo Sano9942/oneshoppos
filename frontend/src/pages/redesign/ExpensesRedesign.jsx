@@ -290,15 +290,15 @@ export default function ExpensesRedesign() {
           left={
             <div className="flex flex-wrap items-end gap-2">
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">From</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">From</label>
                 <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">To</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">To</label>
                 <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Category</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Category</label>
                 <Select value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
                   <option value="">All Categories</option>
                   {categories.map((c) => (
@@ -309,7 +309,7 @@ export default function ExpensesRedesign() {
                 </Select>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Outlet</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Outlet</label>
                 <Select value={filterOutlet} onChange={(e) => setFilterOutlet(e.target.value)}>
                   <option value="">All Outlets</option>
                   {outlets.map((o) => (
@@ -341,22 +341,22 @@ export default function ExpensesRedesign() {
       </SectionCard>
 
       {loading ? (
-        <SectionCard className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading...</SectionCard>
+        <SectionCard className="p-8 text-center text-sm text-(--ui-text-muted)">Loading...</SectionCard>
       ) : null}
 
       {!loading && activeTab === "expenses" ? (
         <SectionCard>
           <TableToolbar
-            left={<span className="text-sm text-[var(--ui-text-muted)]">{rows.length} records</span>}
+            left={<span className="text-sm text-(--ui-text-muted)">{rows.length} records</span>}
             right={
-              <span className="text-sm font-semibold text-[var(--ui-text)]">
+              <span className="text-sm font-semibold text-(--ui-text)">
                 Filtered Total: {money(filteredTotal)}
               </span>
             }
           />
           <div className="overflow-auto">
-            <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-              <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+            <table className="min-w-full border-t border-(--ui-border) text-sm">
+              <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                 <tr>
                   <th className="px-3 py-2 text-left">Date</th>
                   <th className="px-3 py-2 text-left">Category</th>
@@ -369,13 +369,13 @@ export default function ExpensesRedesign() {
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.id} className="border-t border-[var(--ui-border)]">
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">{row.expense_date}</td>
-                    <td className="px-3 py-2 text-[var(--ui-text)]">{row.category_name || "Uncategorized"}</td>
-                    <td className="px-3 py-2 text-[var(--ui-text)]">{row.description || "-"}</td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">{row.outlet_name || "-"}</td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">{row.employee_name || "-"}</td>
-                    <td className="px-3 py-2 text-right font-semibold text-[var(--ui-text)]">
+                  <tr key={row.id} className="border-t border-(--ui-border)">
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{row.expense_date}</td>
+                    <td className="px-3 py-2 text-(--ui-text)">{row.category_name || "Uncategorized"}</td>
+                    <td className="px-3 py-2 text-(--ui-text)">{row.description || "-"}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{row.outlet_name || "-"}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{row.employee_name || "-"}</td>
+                    <td className="px-3 py-2 text-right font-semibold text-(--ui-text)">
                       {money(row.amount)}
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -394,11 +394,11 @@ export default function ExpensesRedesign() {
               </tbody>
               {rows.length ? (
                 <tfoot>
-                  <tr className="border-t border-[var(--ui-border)] bg-[var(--ui-muted-surface)]">
-                    <td colSpan={5} className="px-3 py-2 text-right text-sm font-semibold text-[var(--ui-text)]">
+                  <tr className="border-t border-(--ui-border) bg-(--ui-muted-surface)">
+                    <td colSpan={5} className="px-3 py-2 text-right text-sm font-semibold text-(--ui-text)">
                       Total Expenses
                     </td>
-                    <td className="px-3 py-2 text-right text-sm font-semibold text-[var(--ui-text)]">
+                    <td className="px-3 py-2 text-right text-sm font-semibold text-(--ui-text)">
                       {money(filteredTotal)}
                     </td>
                     <td />
@@ -416,16 +416,16 @@ export default function ExpensesRedesign() {
       {!loading && activeTab === "summary" ? (
         <SectionCard>
           <TableToolbar
-            left={<span className="text-sm font-medium text-[var(--ui-text)]">Expenses by Category</span>}
+            left={<span className="text-sm font-medium text-(--ui-text)">Expenses by Category</span>}
             right={
-              <span className="text-sm font-semibold text-[var(--ui-text)]">
+              <span className="text-sm font-semibold text-(--ui-text)">
                 Grand Total: {money(grandTotal)}
               </span>
             }
           />
           <div className="overflow-auto">
-            <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-              <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+            <table className="min-w-full border-t border-(--ui-border) text-sm">
+              <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                 <tr>
                   <th className="px-3 py-2 text-left">Category</th>
                   <th className="px-3 py-2 text-right">Transactions</th>
@@ -435,15 +435,15 @@ export default function ExpensesRedesign() {
               </thead>
               <tbody>
                 {summary.map((row, idx) => (
-                  <tr key={`${row.category || "uncategorized"}-${idx}`} className="border-t border-[var(--ui-border)]">
-                    <td className="px-3 py-2 font-medium text-[var(--ui-text)]">
+                  <tr key={`${row.category || "uncategorized"}-${idx}`} className="border-t border-(--ui-border)">
+                    <td className="px-3 py-2 font-medium text-(--ui-text)">
                       {row.category || "Uncategorized"}
                     </td>
-                    <td className="px-3 py-2 text-right text-[var(--ui-text-muted)]">{row.count}</td>
-                    <td className="px-3 py-2 text-right font-semibold text-[var(--ui-text)]">
+                    <td className="px-3 py-2 text-right text-(--ui-text-muted)">{row.count}</td>
+                    <td className="px-3 py-2 text-right font-semibold text-(--ui-text)">
                       {money(row.total)}
                     </td>
-                    <td className="px-3 py-2 text-right text-[var(--ui-text-muted)]">
+                    <td className="px-3 py-2 text-right text-(--ui-text-muted)">
                       {grandTotal > 0 ? `${((Number(row.total || 0) / grandTotal) * 100).toFixed(1)}%` : "0.0%"}
                     </td>
                   </tr>
@@ -461,10 +461,10 @@ export default function ExpensesRedesign() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="w-full max-w-lg p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-[var(--ui-text)]">
+              <h3 className="text-lg font-semibold text-(--ui-text)">
                 {modal === "add" ? "Add Expense" : "Edit Expense"}
               </h3>
-              <button className="text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]" onClick={closeModal}>
+              <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={closeModal}>
                 <X size={16} />
               </button>
             </div>
@@ -476,7 +476,7 @@ export default function ExpensesRedesign() {
             <form className="space-y-3" onSubmit={saveExpense}>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Amount (PKRs)</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Amount (PKRs)</label>
                   <Input
                     type="number"
                     min="0.01"
@@ -487,7 +487,7 @@ export default function ExpensesRedesign() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Date</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Date</label>
                   <Input
                     type="date"
                     value={form.expense_date}
@@ -496,7 +496,7 @@ export default function ExpensesRedesign() {
                 </div>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Category</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Category</label>
                 <Select
                   value={form.category_id}
                   onChange={(e) => setForm((prev) => ({ ...prev, category_id: e.target.value }))}
@@ -510,7 +510,7 @@ export default function ExpensesRedesign() {
                 </Select>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Description</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Description</label>
                 <Input
                   value={form.description}
                   onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
@@ -518,7 +518,7 @@ export default function ExpensesRedesign() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Reference</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Reference</label>
                 <Input
                   value={form.reference}
                   onChange={(e) => setForm((prev) => ({ ...prev, reference: e.target.value }))}
@@ -527,7 +527,7 @@ export default function ExpensesRedesign() {
               </div>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Outlet</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Outlet</label>
                   <Select
                     value={form.outlet_id}
                     onChange={(e) => setForm((prev) => ({ ...prev, outlet_id: e.target.value }))}
@@ -541,7 +541,7 @@ export default function ExpensesRedesign() {
                   </Select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Employee</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Employee</label>
                   <Select
                     value={form.employee_id}
                     onChange={(e) => setForm((prev) => ({ ...prev, employee_id: e.target.value }))}
@@ -572,9 +572,9 @@ export default function ExpensesRedesign() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="w-full max-w-md p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-[var(--ui-text)]">Expense Categories</h3>
+              <h3 className="text-lg font-semibold text-(--ui-text)">Expense Categories</h3>
               <button
-                className="text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]"
+                className="text-(--ui-text-muted) hover:text-(--ui-text)"
                 onClick={() => setCatPanelOpen(false)}
               >
                 <X size={16} />
@@ -590,15 +590,15 @@ export default function ExpensesRedesign() {
                 {catSaving ? "Adding..." : "Add"}
               </Button>
             </form>
-            <div className="max-h-64 overflow-auto rounded border border-[var(--ui-border)]">
+            <div className="max-h-64 overflow-auto rounded border border-(--ui-border)">
               {!categories.length ? (
-                <p className="p-4 text-center text-sm text-[var(--ui-text-muted)]">No categories yet.</p>
+                <p className="p-4 text-center text-sm text-(--ui-text-muted)">No categories yet.</p>
               ) : (
                 <table className="min-w-full text-sm">
                   <tbody>
                     {categories.map((c) => (
-                      <tr key={c.id} className="border-t border-[var(--ui-border)] first:border-t-0">
-                        <td className="px-3 py-2 text-[var(--ui-text)]">{c.name}</td>
+                      <tr key={c.id} className="border-t border-(--ui-border) first:border-t-0">
+                        <td className="px-3 py-2 text-(--ui-text)">{c.name}</td>
                         <td className="px-3 py-2 text-right">
                           <Button size="sm" tone="danger" onClick={() => deleteCategory(c.id)}>
                             <Trash2 size={12} className="mr-1 inline" />

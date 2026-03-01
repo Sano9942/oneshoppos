@@ -346,10 +346,10 @@ export default function PurchaseOrdersRedesign() {
           <SectionCard>
             <TableToolbar
               left={
-                <div className="relative min-w-[280px]">
+                <div className="relative min-w-70">
                   <Search
                     size={14}
-                    className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]"
+                    className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)"
                   />
                   <Input
                     className="pl-8"
@@ -360,7 +360,7 @@ export default function PurchaseOrdersRedesign() {
                 </div>
               }
               right={
-                <span className="text-xs text-[var(--ui-text-muted)]">
+                <span className="text-xs text-(--ui-text-muted)">
                   {searchResults.length} results
                 </span>
               }
@@ -371,12 +371,12 @@ export default function PurchaseOrdersRedesign() {
                   {searchResults.map((p) => (
                     <button
                       key={p.id}
-                      className="rounded border border-[var(--ui-border)] p-3 text-left hover:bg-[var(--ui-muted-surface)]"
+                      className="rounded border border-(--ui-border) p-3 text-left hover:bg-(--ui-muted-surface)"
                       onClick={() => addToCart(p)}
                     >
-                      <p className="font-medium text-[var(--ui-text)]">{p.name}</p>
-                      <p className="mt-0.5 text-xs text-[var(--ui-text-muted)]">{p.barcode || "-"}</p>
-                      <p className="mt-1 text-xs font-semibold text-[var(--ui-text)]">
+                      <p className="font-medium text-(--ui-text)">{p.name}</p>
+                      <p className="mt-0.5 text-xs text-(--ui-text-muted)">{p.barcode || "-"}</p>
+                      <p className="mt-1 text-xs font-semibold text-(--ui-text)">
                         Cost: {money(p.cost_price)}
                       </p>
                     </button>
@@ -392,10 +392,10 @@ export default function PurchaseOrdersRedesign() {
           </SectionCard>
 
           <SectionCard className="p-3">
-            <h3 className="text-base font-semibold text-[var(--ui-text)]">PO Draft</h3>
+            <h3 className="text-base font-semibold text-(--ui-text)">PO Draft</h3>
             <div className="mt-3 space-y-2">
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Supplier</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Supplier</label>
                 <Select
                   value={form.supplier_id}
                   onChange={(e) => setForm((prev) => ({ ...prev, supplier_id: e.target.value }))}
@@ -409,7 +409,7 @@ export default function PurchaseOrdersRedesign() {
                 </Select>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Due Date</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Due Date</label>
                 <Input
                   type="date"
                   value={form.due_date}
@@ -420,14 +420,14 @@ export default function PurchaseOrdersRedesign() {
 
             <div className="mt-3 max-h-[38vh] space-y-2 overflow-auto">
               {cart.map((item) => (
-                <div key={item.product_id} className="rounded border border-[var(--ui-border)] p-2">
+                <div key={item.product_id} className="rounded border border-(--ui-border) p-2">
                   <div className="mb-1 flex items-start justify-between gap-2">
                     <div>
-                      <p className="text-sm font-medium text-[var(--ui-text)]">{item.name}</p>
-                      <p className="text-xs text-[var(--ui-text-muted)]">{item.barcode || "-"}</p>
+                      <p className="text-sm font-medium text-(--ui-text)">{item.name}</p>
+                      <p className="text-xs text-(--ui-text-muted)">{item.barcode || "-"}</p>
                     </div>
                     <button
-                      className="text-[var(--ui-text-muted)] hover:text-rose-600"
+                      className="text-(--ui-text-muted) hover:text-rose-600"
                       onClick={() => removeCartItem(item.product_id)}
                     >
                       <X size={14} />
@@ -451,14 +451,14 @@ export default function PurchaseOrdersRedesign() {
                 </div>
               ))}
               {!cart.length ? (
-                <p className="py-6 text-center text-sm text-[var(--ui-text-muted)]">Cart is empty.</p>
+                <p className="py-6 text-center text-sm text-(--ui-text-muted)">Cart is empty.</p>
               ) : null}
             </div>
 
-            <div className="mt-3 border-t border-[var(--ui-border)] pt-3">
+            <div className="mt-3 border-t border-(--ui-border) pt-3">
               <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="text-[var(--ui-text-muted)]">Draft Total</span>
-                <span className="font-semibold text-[var(--ui-text)]">{money(cartTotal)}</span>
+                <span className="text-(--ui-text-muted)">Draft Total</span>
+                <span className="font-semibold text-(--ui-text)">{money(cartTotal)}</span>
               </div>
               <Button tone="primary" className="w-full" onClick={createPO} disabled={saving}>
                 {saving ? "Submitting..." : "Submit Purchase Order"}
@@ -497,28 +497,28 @@ export default function PurchaseOrdersRedesign() {
 
         <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-4">
           <SectionCard className="p-3">
-            <p className="text-xs text-[var(--ui-text-muted)]">Status</p>
+            <p className="text-xs text-(--ui-text-muted)">Status</p>
             <div className="mt-1">
               <Badge tone={statusTone(po.status)}>{po.status}</Badge>
             </div>
           </SectionCard>
           <SectionCard className="p-3">
-            <p className="text-xs text-[var(--ui-text-muted)]">Supplier</p>
-            <p className="mt-1 text-sm font-medium text-[var(--ui-text)]">{po.supplier_name}</p>
+            <p className="text-xs text-(--ui-text-muted)">Supplier</p>
+            <p className="mt-1 text-sm font-medium text-(--ui-text)">{po.supplier_name}</p>
           </SectionCard>
           <SectionCard className="p-3">
-            <p className="text-xs text-[var(--ui-text-muted)]">Due Date</p>
-            <p className="mt-1 text-sm font-medium text-[var(--ui-text)]">{po.due_date || "-"}</p>
+            <p className="text-xs text-(--ui-text-muted)">Due Date</p>
+            <p className="mt-1 text-sm font-medium text-(--ui-text)">{po.due_date || "-"}</p>
           </SectionCard>
           <SectionCard className="p-3">
-            <p className="text-xs text-[var(--ui-text-muted)]">Total Cost</p>
-            <p className="mt-1 text-sm font-semibold text-[var(--ui-text)]">{money(po.total_cost)}</p>
+            <p className="text-xs text-(--ui-text-muted)">Total Cost</p>
+            <p className="mt-1 text-sm font-semibold text-(--ui-text)">{money(po.total_cost)}</p>
           </SectionCard>
         </div>
 
         <SectionCard>
           <TableToolbar
-            left={<span className="text-sm font-medium text-[var(--ui-text)]">Line Items</span>}
+            left={<span className="text-sm font-medium text-(--ui-text)">Line Items</span>}
             right={
               <div className="flex items-center gap-2">
                 {po.status === "Draft" ? (
@@ -541,8 +541,8 @@ export default function PurchaseOrdersRedesign() {
             }
           />
           <div className="overflow-auto">
-            <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-              <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+            <table className="min-w-full border-t border-(--ui-border) text-sm">
+              <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                 <tr>
                   <th className="px-3 py-2 text-left">Item</th>
                   <th className="px-3 py-2 text-left">Barcode</th>
@@ -553,12 +553,12 @@ export default function PurchaseOrdersRedesign() {
               </thead>
               <tbody>
                 {items.map((item) => (
-                  <tr key={item.id} className="border-t border-[var(--ui-border)]">
-                    <td className="px-3 py-2 text-[var(--ui-text)]">{item.name}</td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">{item.barcode || "-"}</td>
-                    <td className="px-3 py-2 text-right text-[var(--ui-text)]">{money(item.cost_price)}</td>
-                    <td className="px-3 py-2 text-right text-[var(--ui-text)]">{item.quantity}</td>
-                    <td className="px-3 py-2 text-right font-medium text-[var(--ui-text)]">
+                  <tr key={item.id} className="border-t border-(--ui-border)">
+                    <td className="px-3 py-2 text-(--ui-text)">{item.name}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{item.barcode || "-"}</td>
+                    <td className="px-3 py-2 text-right text-(--ui-text)">{money(item.cost_price)}</td>
+                    <td className="px-3 py-2 text-right text-(--ui-text)">{item.quantity}</td>
+                    <td className="px-3 py-2 text-right font-medium text-(--ui-text)">
                       {money(Number(item.quantity || 0) * Number(item.cost_price || 0))}
                     </td>
                   </tr>
@@ -572,14 +572,14 @@ export default function PurchaseOrdersRedesign() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
             <SectionCard className="w-full max-w-2xl p-4">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-[var(--ui-text)]">Receive PO (Create GRN)</h3>
-                <button className="text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]" onClick={() => setGrnOpen(false)}>
+                <h3 className="text-lg font-semibold text-(--ui-text)">Receive PO (Create GRN)</h3>
+                <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={() => setGrnOpen(false)}>
                   <X size={16} />
                 </button>
               </div>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Receiving Outlet</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Receiving Outlet</label>
                   <Select value={grnOutletId} onChange={(e) => setGrnOutletId(e.target.value)}>
                     <option value="">Select outlet</option>
                     {outlets.map((o) => (
@@ -590,7 +590,7 @@ export default function PurchaseOrdersRedesign() {
                   </Select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Received By</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Received By</label>
                   <Select value={grnReceivedBy} onChange={(e) => setGrnReceivedBy(e.target.value)}>
                     <option value="">Select employee</option>
                     {employees.map((e) => (
@@ -602,18 +602,18 @@ export default function PurchaseOrdersRedesign() {
                 </div>
               </div>
               <div className="mt-2">
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Notes</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Notes</label>
                 <Input value={grnNotes} onChange={(e) => setGrnNotes(e.target.value)} placeholder="Optional receiving notes" />
               </div>
-              <div className="mt-3 max-h-[35vh] space-y-2 overflow-auto border-t border-[var(--ui-border)] pt-3">
+              <div className="mt-3 max-h-[35vh] space-y-2 overflow-auto border-t border-(--ui-border) pt-3">
                 {items.map((item) => (
                   <div
                     key={item.id}
-                    className="grid grid-cols-[1fr_140px] items-center gap-2 rounded border border-[var(--ui-border)] p-2"
+                    className="grid grid-cols-[1fr_140px] items-center gap-2 rounded border border-(--ui-border) p-2"
                   >
                     <div>
-                      <p className="text-sm font-medium text-[var(--ui-text)]">{item.name}</p>
-                      <p className="text-xs text-[var(--ui-text-muted)]">
+                      <p className="text-sm font-medium text-(--ui-text)">{item.name}</p>
+                      <p className="text-xs text-(--ui-text-muted)">
                         Ordered: {item.quantity} | {item.barcode || "-"}
                       </p>
                     </div>
@@ -676,18 +676,18 @@ export default function PurchaseOrdersRedesign() {
 
       <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
         <SectionCard className="p-3">
-          <p className="text-xs text-[var(--ui-text-muted)]">Total POs</p>
-          <p className="text-2xl font-semibold text-[var(--ui-text)]">{rows.length}</p>
+          <p className="text-xs text-(--ui-text-muted)">Total POs</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">{rows.length}</p>
         </SectionCard>
         <SectionCard className="p-3">
-          <p className="text-xs text-[var(--ui-text-muted)]">Pending Approval</p>
-          <p className="text-2xl font-semibold text-[var(--ui-text)]">
+          <p className="text-xs text-(--ui-text-muted)">Pending Approval</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">
             {rows.filter((r) => r.status === "pending_approval").length}
           </p>
         </SectionCard>
         <SectionCard className="p-3">
-          <p className="text-xs text-[var(--ui-text-muted)]">Received</p>
-          <p className="text-2xl font-semibold text-[var(--ui-text)]">
+          <p className="text-xs text-(--ui-text-muted)">Received</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">
             {rows.filter((r) => r.status === "Received").length}
           </p>
         </SectionCard>
@@ -696,10 +696,10 @@ export default function PurchaseOrdersRedesign() {
       <SectionCard>
         <TableToolbar
           left={
-            <div className="relative min-w-[260px]">
+            <div className="relative min-w-65">
               <Search
                 size={14}
-                className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]"
+                className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)"
               />
               <Input
                 className="pl-8"
@@ -709,11 +709,11 @@ export default function PurchaseOrdersRedesign() {
               />
             </div>
           }
-          right={<span className="text-xs text-[var(--ui-text-muted)]">{visibleRows.length} rows</span>}
+          right={<span className="text-xs text-(--ui-text-muted)">{visibleRows.length} rows</span>}
         />
         <div className="overflow-auto">
-          <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-            <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+          <table className="min-w-full border-t border-(--ui-border) text-sm">
+            <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
               <tr>
                 <th className="px-3 py-2 text-left">PO</th>
                 <th className="px-3 py-2 text-left">Supplier</th>
@@ -726,16 +726,16 @@ export default function PurchaseOrdersRedesign() {
             <tbody>
               {!loading &&
                 visibleRows.map((po) => (
-                  <tr key={po.id} className="border-t border-[var(--ui-border)]">
-                    <td className="px-3 py-2 font-medium text-[var(--ui-text)]">{poNumber(po.id)}</td>
-                    <td className="px-3 py-2 text-[var(--ui-text)]">{po.supplier_name}</td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">
+                  <tr key={po.id} className="border-t border-(--ui-border)">
+                    <td className="px-3 py-2 font-medium text-(--ui-text)">{poNumber(po.id)}</td>
+                    <td className="px-3 py-2 text-(--ui-text)">{po.supplier_name}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">
                       {new Date(po.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-3 py-2">
                       <Badge tone={statusTone(po.status)}>{po.status}</Badge>
                     </td>
-                    <td className="px-3 py-2 text-right text-[var(--ui-text)]">{money(po.total_cost)}</td>
+                    <td className="px-3 py-2 text-right text-(--ui-text)">{money(po.total_cost)}</td>
                     <td className="px-3 py-2 text-right">
                       <Button size="sm" onClick={() => loadDetail(po.id)}>
                         View
@@ -747,7 +747,7 @@ export default function PurchaseOrdersRedesign() {
             </tbody>
           </table>
           {loading ? (
-            <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">
+            <div className="p-8 text-center text-sm text-(--ui-text-muted)">
               Loading purchase orders...
             </div>
           ) : null}

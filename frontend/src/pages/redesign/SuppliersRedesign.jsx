@@ -142,16 +142,16 @@ export default function SuppliersRedesign() {
 
       <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
         <SectionCard className="p-3">
-          <p className="text-xs text-[var(--ui-text-muted)]">Total Suppliers</p>
-          <p className="text-2xl font-semibold text-[var(--ui-text)]">{rows.length}</p>
+          <p className="text-xs text-(--ui-text-muted)">Total Suppliers</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">{rows.length}</p>
         </SectionCard>
         <SectionCard className="p-3">
-          <p className="text-xs text-[var(--ui-text-muted)]">Visible</p>
-          <p className="text-2xl font-semibold text-[var(--ui-text)]">{visibleRows.length}</p>
+          <p className="text-xs text-(--ui-text-muted)">Visible</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">{visibleRows.length}</p>
         </SectionCard>
         <SectionCard className="p-3">
-          <p className="text-xs text-[var(--ui-text-muted)]">With Contact Person</p>
-          <p className="text-2xl font-semibold text-[var(--ui-text)]">
+          <p className="text-xs text-(--ui-text-muted)">With Contact Person</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">
             {rows.filter((r) => r.contact_person).length}
           </p>
         </SectionCard>
@@ -160,10 +160,10 @@ export default function SuppliersRedesign() {
       <SectionCard>
         <TableToolbar
           left={
-            <div className="relative min-w-[260px]">
+            <div className="relative min-w-65">
               <Search
                 size={14}
-                className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]"
+                className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)"
               />
               <Input
                 className="pl-8"
@@ -173,11 +173,11 @@ export default function SuppliersRedesign() {
               />
             </div>
           }
-          right={<span className="text-xs text-[var(--ui-text-muted)]">{visibleRows.length} rows</span>}
+          right={<span className="text-xs text-(--ui-text-muted)">{visibleRows.length} rows</span>}
         />
         <div className="overflow-auto">
-          <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-            <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+          <table className="min-w-full border-t border-(--ui-border) text-sm">
+            <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
               <tr>
                 <th className="px-3 py-2 text-left">Supplier</th>
                 <th className="px-3 py-2 text-left">Contact Person</th>
@@ -189,16 +189,16 @@ export default function SuppliersRedesign() {
             <tbody>
               {!loading &&
                 visibleRows.map((row) => (
-                  <tr key={row.id} className="border-t border-[var(--ui-border)]">
-                    <td className="px-3 py-2 font-medium text-[var(--ui-text)]">
+                  <tr key={row.id} className="border-t border-(--ui-border)">
+                    <td className="px-3 py-2 font-medium text-(--ui-text)">
                       <span className="inline-flex items-center gap-1">
                         <Truck size={12} />
                         {row.name}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">{row.contact_person || "-"}</td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">{row.phone || "-"}</td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">{row.email || "-"}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{row.contact_person || "-"}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{row.phone || "-"}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{row.email || "-"}</td>
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex gap-2">
                         <Button size="sm" onClick={() => openEdit(row)}>
@@ -215,7 +215,7 @@ export default function SuppliersRedesign() {
             </tbody>
           </table>
           {loading ? (
-            <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading suppliers...</div>
+            <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading suppliers...</div>
           ) : null}
           {!loading && visibleRows.length === 0 ? (
             <EmptyState title="No suppliers" body="Add a supplier to manage procurement workflows." />
@@ -226,12 +226,12 @@ export default function SuppliersRedesign() {
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="w-full max-w-xl p-4">
-            <h3 className="text-lg font-semibold text-[var(--ui-text)]">
+            <h3 className="text-lg font-semibold text-(--ui-text)">
               {form.id ? "Edit Supplier" : "Create Supplier"}
             </h3>
             <form className="mt-3 space-y-3" onSubmit={save}>
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Company Name</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Company Name</label>
                 <Input
                   required
                   placeholder="Supplier name"
@@ -241,7 +241,7 @@ export default function SuppliersRedesign() {
               </div>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Contact Person</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Contact Person</label>
                   <Input
                     placeholder="Primary contact"
                     value={form.contact_person}
@@ -249,7 +249,7 @@ export default function SuppliersRedesign() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Phone</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Phone</label>
                   <Input
                     placeholder="Phone number"
                     value={form.phone}
@@ -258,7 +258,7 @@ export default function SuppliersRedesign() {
                 </div>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Email</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Email</label>
                 <Input
                   type="email"
                   placeholder="Email address"
@@ -267,10 +267,10 @@ export default function SuppliersRedesign() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Address</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Address</label>
                 <textarea
                   rows={3}
-                  className="ui-focus-ring w-full rounded-[var(--ui-radius-sm)] border border-[var(--ui-border)] bg-white px-3 py-2 text-sm text-[var(--ui-text)] placeholder:text-[var(--ui-text-muted)]"
+                  className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text) placeholder:text-(--ui-text-muted)"
                   placeholder="Address"
                   value={form.address}
                   onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}

@@ -129,20 +129,20 @@ export default function EmployeesRedesign() {
 
       <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
         <SectionCard className="p-3">
-          <p className="text-xs text-[var(--ui-text-muted)]">Total</p>
-          <p className="text-2xl font-semibold text-[var(--ui-text)]">{employees.length}</p>
+          <p className="text-xs text-(--ui-text-muted)">Total</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">{employees.length}</p>
         </SectionCard>
         <SectionCard className="p-3">
-          <p className="text-xs text-[var(--ui-text-muted)]">Visible</p>
-          <p className="text-2xl font-semibold text-[var(--ui-text)]">{visible.length}</p>
+          <p className="text-xs text-(--ui-text-muted)">Visible</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">{visible.length}</p>
         </SectionCard>
         <SectionCard className="p-3">
-          <p className="text-xs text-[var(--ui-text-muted)]">Roles</p>
-          <p className="text-2xl font-semibold text-[var(--ui-text)]">{roles.length}</p>
+          <p className="text-xs text-(--ui-text-muted)">Roles</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">{roles.length}</p>
         </SectionCard>
         <SectionCard className="p-3">
-          <p className="text-xs text-[var(--ui-text-muted)]">Active</p>
-          <p className="text-2xl font-semibold text-[var(--ui-text)]">
+          <p className="text-xs text-(--ui-text-muted)">Active</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">
             {employees.filter((e) => e.active !== false).length}
           </p>
         </SectionCard>
@@ -151,8 +151,8 @@ export default function EmployeesRedesign() {
       <SectionCard>
         <TableToolbar
           left={
-            <div className="relative min-w-[240px]">
-              <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]" />
+            <div className="relative min-w-60">
+              <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)" />
               <Input
                 className="pl-8"
                 placeholder="Search employees"
@@ -161,11 +161,11 @@ export default function EmployeesRedesign() {
               />
             </div>
           }
-          right={<span className="text-xs text-[var(--ui-text-muted)]">{visible.length} employees</span>}
+          right={<span className="text-xs text-(--ui-text-muted)">{visible.length} employees</span>}
         />
         <div className="overflow-auto">
-          <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-            <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+          <table className="min-w-full border-t border-(--ui-border) text-sm">
+            <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
               <tr>
                 <th className="px-3 py-2 text-left">Employee</th>
                 <th className="px-3 py-2 text-left">Role</th>
@@ -176,13 +176,13 @@ export default function EmployeesRedesign() {
             <tbody>
               {!loading &&
                 visible.map((emp) => (
-                  <tr key={emp.id} className="border-t border-[var(--ui-border)] hover:bg-[var(--ui-muted-surface)]">
+                  <tr key={emp.id} className="border-t border-(--ui-border) hover:bg-(--ui-muted-surface)">
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--ui-accent)]/10 text-[var(--ui-accent)]">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-(--ui-accent)/10 text-(--ui-accent)">
                           <User size={13} />
                         </div>
-                        <span className="font-medium text-[var(--ui-text)]">{emp.name}</span>
+                        <span className="font-medium text-(--ui-text)">{emp.name}</span>
                       </div>
                     </td>
                     <td className="px-3 py-2">
@@ -191,7 +191,7 @@ export default function EmployeesRedesign() {
                         {emp.role_name || roleLabel(emp.role_id)}
                       </Badge>
                     </td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">
+                    <td className="px-3 py-2 text-(--ui-text-muted)">
                       <Lock size={12} className="mr-1 inline" />
                       ••••
                     </td>
@@ -208,7 +208,7 @@ export default function EmployeesRedesign() {
             </tbody>
           </table>
           {loading && (
-            <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading employees...</div>
+            <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading employees...</div>
           )}
           {!loading && visible.length === 0 && (
             <EmptyState title="No employees found" body="Add your first employee to get started." />
@@ -219,7 +219,7 @@ export default function EmployeesRedesign() {
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="w-full max-w-sm p-5">
-            <h3 className="mb-3 text-lg font-semibold text-[var(--ui-text)]">
+            <h3 className="mb-3 text-lg font-semibold text-(--ui-text)">
               {editing ? "Edit Employee" : "Add Employee"}
             </h3>
             <form className="space-y-2" onSubmit={save}>

@@ -46,11 +46,26 @@ oneshoppos/
 └── frontend/
     └── src/
         ├── components/           # Reusable UI components (all small, < 200 lines)
+        ├── ui/
+        │   └── primitives.jsx    # Shared design-system components (PageShell, Button, Input, etc.)
         └── pages/                # Full page views
-            ├── Reports.jsx           # (~2999 lines - largest frontend file)
-            ├── ShopifyIntegration.jsx # (~2108 lines)
-            ├── POS.jsx               # (~1867 lines)
-            └── [other pages]
+            ├── Reports.jsx               # (~2999 lines) — wrapped by ReportsRedesign.jsx
+            ├── ShopifyIntegration.jsx    # (~2108 lines) — wrapped by ShopifyIntegrationRedesign.jsx
+            ├── Accounting.jsx            # wrapped by AccountingRedesign.jsx
+            ├── Attendance.jsx            # wrapped by AttendanceRedesign.jsx
+            ├── Approvals.jsx             # wrapped by ApprovalsRedesign.jsx
+            ├── BarcodeTemplates.jsx      # wrapped by BarcodeTemplatesRedesign.jsx
+            ├── ReceiptTemplates.jsx      # wrapped by ReceiptTemplatesRedesign.jsx
+            ├── [*Route.jsx]              # Route files — each renders its redesign/ counterpart
+            └── redesign/                 # Active UI — ALL pages now rendered here
+                ├── POSRedesign.jsx
+                ├── InventoryRedesign.jsx
+                ├── ReportsRedesign.jsx
+                ├── AttendanceRedesign.jsx
+                ├── ApprovalsRedesign.jsx
+                ├── BarcodeTemplatesRedesign.jsx
+                ├── ReceiptTemplatesRedesign.jsx
+                └── [all other *Redesign.jsx files]
 ```
 
 ## Key Architecture Facts
@@ -68,9 +83,14 @@ oneshoppos/
 - Shopify API calls → `backend/shopify/client.js`, webhook/retry logic → `backend/shopify/utils.js`
 
 ## When Working on Frontend
-- Pages are in `frontend/src/pages/`
-- Shared components are in `frontend/src/components/`
-- Always tell Claude the exact component name and approximate line number
+- **Active pages** are in `frontend/src/pages/redesign/` — always edit the `*Redesign.jsx` file
+- `*Route.jsx` files in `pages/` just render the redesign counterpart — no logic there
+- Legacy originals in `pages/` (`Reports.jsx`, `ShopifyIntegration.jsx`, `Accounting.jsx`, `Attendance.jsx`, `Approvals.jsx`, `BarcodeTemplates.jsx`, `ReceiptTemplates.jsx`) — do NOT delete; they are imported by their Redesign counterparts
+- All redesign wrappers use `PageShell` from `frontend/src/ui/primitives.jsx` and render the original as a child
+- Nav is driven by `frontend/src/ui/nav-config.js` — add entries here to make pages visible in the sidebar
+- Shared design-system primitives: `frontend/src/ui/primitives.jsx`
+- Shared components: `frontend/src/components/`
+- Tailwind v4: use `(--css-var)` syntax not `[var(--css-var)]`
 
 ## Do NOT Read (already in .claudeignore)
 - `node_modules/` in either folder
@@ -81,6 +101,16 @@ oneshoppos/
 - Test files (`*_test.js`, `e2e_*.js`, etc.)
 - Diagnostic scripts (`check_*.js`, `diagnose_*.js`, `dumpDb*.js`, etc.)
 
+## Backend: Key Dependency Injection Notes
+- `orders.js` exports `processPendingShopifyInventoryEvents` + `enqueueInventorySyncEvents` — captured by `registerAllRoutes.js` and passed to `shopify.js` via `shopifyDeps`
+- `sales.js`, `returns.js`, `inventory.js`, `purchase-orders.js`, `supplier-returns.js` use a defensive wrapper for `enqueueInventorySyncEvents` — checks `deps.enqueueInventorySyncEvents`, no-ops gracefully if absent
+- `reconciliation.js` has its own inlined `logActionHistory` (same impl as `orders.js`)
+- `shopify/utils.js` exports `maskSecret` + `getActiveShopifyConnection` — used by `shopify.js` and `reconciliation.js` via thin wrappers
+
 ## Refactor History
 - Feb 2026: Split registerAllRoutes.js (was 11,630 lines) into 26 focused files
+- Mar 2026: Fixed 3 waves of post-refactor ReferenceErrors (enqueueInventorySyncEvents, getActiveShopifyConnection, maskSecret, logActionHistory, processPendingShopifyInventoryEvents)
+- Mar 2026: Completed redesign migration — Attendance, Approvals, BarcodeTemplates, ReceiptTemplates now all have *Redesign.jsx wrappers; all routes in App.jsx point to redesign/
+- Mar 2026: Added Attendance, Barcode Templates, Receipt Templates to nav-config.js; removed requiredFlag gate from Approvals so it shows for any manage_orders user
+- Mar 2026: Full audit — all 36 nav entries, routes, redesign pages, and 26 backend modules confirmed wired. Gaps: 5 placeholder routes (lookup, custom-fields, partners, shopcast, reports/parent-report) and e-invoicing + supplier-returns have no frontend UI
 - See `REFACTOR_NOTES.md` for full details

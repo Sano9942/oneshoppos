@@ -223,9 +223,9 @@ export default function SalesHistoryRedesign() {
       ) : null}
 
       <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
-        <SectionCard className="p-3"><p className="text-xs text-[var(--ui-text-muted)]">Transactions</p><p className="text-2xl font-semibold text-[var(--ui-text)]">{total}</p></SectionCard>
-        <SectionCard className="p-3"><p className="text-xs text-[var(--ui-text-muted)]">Visible Rows</p><p className="text-2xl font-semibold text-[var(--ui-text)]">{visibleRows.length}</p></SectionCard>
-        <SectionCard className="p-3"><p className="text-xs text-[var(--ui-text-muted)]">Voided</p><p className="text-2xl font-semibold text-rose-700">{rows.filter((r) => Number(r.voided || 0) === 1).length}</p></SectionCard>
+        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Transactions</p><p className="text-2xl font-semibold text-(--ui-text)">{total}</p></SectionCard>
+        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Visible Rows</p><p className="text-2xl font-semibold text-(--ui-text)">{visibleRows.length}</p></SectionCard>
+        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Voided</p><p className="text-2xl font-semibold text-rose-700">{rows.filter((r) => Number(r.voided || 0) === 1).length}</p></SectionCard>
       </div>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
@@ -233,8 +233,8 @@ export default function SalesHistoryRedesign() {
           <TableToolbar
             left={
               <>
-                <div className="relative min-w-[260px]">
-                  <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]" />
+                <div className="relative min-w-65">
+                  <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)" />
                   <Input
                     className="pl-8"
                     placeholder="Search receipt, cashier, outlet"
@@ -244,7 +244,7 @@ export default function SalesHistoryRedesign() {
                 </div>
                 <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
                 <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-                <div className="flex gap-1 rounded border border-[var(--ui-border)] p-1">
+                <div className="flex gap-1 rounded border border-(--ui-border) p-1">
                   {[
                     ["all", "All"],
                     ["completed", "Completed"],
@@ -252,7 +252,7 @@ export default function SalesHistoryRedesign() {
                   ].map(([id, label]) => (
                     <button
                       key={id}
-                      className={`rounded px-2 py-1 text-xs ${activeTab === id ? "bg-[var(--ui-primary)] text-white" : "text-[var(--ui-text-muted)] hover:bg-[var(--ui-muted-surface)]"}`}
+                      className={`rounded px-2 py-1 text-xs ${activeTab === id ? "bg-(--ui-primary) text-white" : "text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"}`}
                       onClick={() => setActiveTab(id)}
                     >
                       {label}
@@ -261,12 +261,12 @@ export default function SalesHistoryRedesign() {
                 </div>
               </>
             }
-            right={<span className="text-xs text-[var(--ui-text-muted)]">Page {page} of {pages}</span>}
+            right={<span className="text-xs text-(--ui-text-muted)">Page {page} of {pages}</span>}
           />
 
           <div className="overflow-auto">
-            <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-              <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+            <table className="min-w-full border-t border-(--ui-border) text-sm">
+              <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                 <tr>
                   <th className="px-3 py-2 text-left">Receipt</th>
                   <th className="px-3 py-2 text-left">Timestamp</th>
@@ -282,15 +282,15 @@ export default function SalesHistoryRedesign() {
                   visibleRows.map((r) => (
                     <tr
                       key={r.id}
-                      className={`cursor-pointer border-t border-[var(--ui-border)] hover:bg-[var(--ui-muted-surface)] ${selected?.id === r.id ? "bg-emerald-50" : ""}`}
+                      className={`cursor-pointer border-t border-(--ui-border) hover:bg-(--ui-muted-surface) ${selected?.id === r.id ? "bg-emerald-50" : ""}`}
                       onClick={() => loadDetail(r)}
                     >
-                      <td className="px-3 py-2 font-medium text-[var(--ui-text)]">#{r.id}</td>
-                      <td className="px-3 py-2 text-[var(--ui-text-muted)]">{formatDate(r.timestamp)}</td>
-                      <td className="px-3 py-2 text-[var(--ui-text-muted)]">{r.employee_name || "-"}</td>
-                      <td className="px-3 py-2 text-[var(--ui-text-muted)]">{r.outlet_name || "-"}</td>
-                      <td className="px-3 py-2 text-center text-[var(--ui-text)]">{r.item_count || 0}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-[var(--ui-text)]">{money(r.total_amount)}</td>
+                      <td className="px-3 py-2 font-medium text-(--ui-text)">#{r.id}</td>
+                      <td className="px-3 py-2 text-(--ui-text-muted)">{formatDate(r.timestamp)}</td>
+                      <td className="px-3 py-2 text-(--ui-text-muted)">{r.employee_name || "-"}</td>
+                      <td className="px-3 py-2 text-(--ui-text-muted)">{r.outlet_name || "-"}</td>
+                      <td className="px-3 py-2 text-center text-(--ui-text)">{r.item_count || 0}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-(--ui-text)">{money(r.total_amount)}</td>
                       <td className="px-3 py-2">
                         <Badge tone={Number(r.voided || 0) ? "danger" : "success"}>
                           {Number(r.voided || 0) ? "voided" : "active"}
@@ -300,12 +300,12 @@ export default function SalesHistoryRedesign() {
                   ))}
               </tbody>
             </table>
-            {loading ? <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading sales...</div> : null}
+            {loading ? <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading sales...</div> : null}
             {!loading && visibleRows.length === 0 ? (
               <EmptyState title="No sales found" body="Adjust filters and try again." />
             ) : null}
           </div>
-          <div className="flex items-center justify-end gap-2 border-t border-[var(--ui-border)] p-3">
+          <div className="flex items-center justify-end gap-2 border-t border-(--ui-border) p-3">
             <Button size="sm" disabled={page <= 1} onClick={() => loadSales(page - 1)}>Previous</Button>
             <Button size="sm" disabled={page >= pages} onClick={() => loadSales(page + 1)}>Next</Button>
           </div>
@@ -315,27 +315,27 @@ export default function SalesHistoryRedesign() {
           {!selected ? (
             <EmptyState title="Select a sale" body="Click a row to inspect items and actions." />
           ) : detailLoading ? (
-            <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading details...</div>
+            <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading details...</div>
           ) : !detail ? (
             <EmptyState title="Details unavailable" body="Try reloading this sale." />
           ) : (
             <div className="space-y-4">
               <div>
-                <h3 className="text-lg font-semibold text-[var(--ui-text)]">Receipt #{selected.id}</h3>
-                <p className="text-xs text-[var(--ui-text-muted)]">{formatDate(selected.timestamp)}</p>
+                <h3 className="text-lg font-semibold text-(--ui-text)">Receipt #{selected.id}</h3>
+                <p className="text-xs text-(--ui-text-muted)">{formatDate(selected.timestamp)}</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <SectionCard className="p-2 text-center"><p className="text-xs text-[var(--ui-text-muted)]">Total</p><p className="font-semibold text-[var(--ui-text)]">{money(detail.sale.total_amount)}</p></SectionCard>
-                <SectionCard className="p-2 text-center"><p className="text-xs text-[var(--ui-text-muted)]">Payments</p><p className="font-semibold text-[var(--ui-text)]">{(detail.payments || []).length}</p></SectionCard>
+                <SectionCard className="p-2 text-center"><p className="text-xs text-(--ui-text-muted)">Total</p><p className="font-semibold text-(--ui-text)">{money(detail.sale.total_amount)}</p></SectionCard>
+                <SectionCard className="p-2 text-center"><p className="text-xs text-(--ui-text-muted)">Payments</p><p className="font-semibold text-(--ui-text)">{(detail.payments || []).length}</p></SectionCard>
               </div>
 
               <div>
-                <h4 className="mb-2 text-sm font-semibold text-[var(--ui-text)]">Items</h4>
+                <h4 className="mb-2 text-sm font-semibold text-(--ui-text)">Items</h4>
                 <div className="max-h-44 space-y-2 overflow-auto">
                   {(detail.items || []).map((item) => (
-                    <div key={item.id} className="rounded border border-[var(--ui-border)] p-2 text-xs">
-                      <p className="font-medium text-[var(--ui-text)]">{item.product_name}</p>
-                      <p className="text-[var(--ui-text-muted)]">{item.quantity} x {money(item.price_at_sale)}</p>
+                    <div key={item.id} className="rounded border border-(--ui-border) p-2 text-xs">
+                      <p className="font-medium text-(--ui-text)">{item.product_name}</p>
+                      <p className="text-(--ui-text-muted)">{item.quantity} x {money(item.price_at_sale)}</p>
                     </div>
                   ))}
                 </div>

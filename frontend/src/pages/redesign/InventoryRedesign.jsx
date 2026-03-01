@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Search, Trash2, X } from "lucide-react";
-import { API_BASE as API } from "../config";
+import { API_BASE as API } from "../../config";
 import {
   Badge,
   BulkActionBar,
@@ -11,8 +11,8 @@ import {
   SectionCard,
   Select,
   TableToolbar,
-} from "../ui/primitives";
-import { useAuth } from "../auth/AuthProvider";
+} from "../../ui/primitives";
+import { useAuth } from "../../auth/AuthProvider";
 
 const PAGE_SIZE = 50;
 
@@ -91,12 +91,12 @@ function ProductModal({ product, categories, brands, authHeaders, onClose, onSav
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-lg rounded-xl border border-[var(--ui-border)] bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-[var(--ui-border)] px-5 py-4">
-          <h2 className="font-semibold text-[var(--ui-text)]">
+      <div className="w-full max-w-lg rounded-xl border border-(--ui-border) bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-(--ui-border) px-5 py-4">
+          <h2 className="font-semibold text-(--ui-text)">
             {isEdit ? "Edit Product" : "Add Product"}
           </h2>
-          <button onClick={onClose} className="text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]">
+          <button onClick={onClose} className="text-(--ui-text-muted) hover:text-(--ui-text)">
             <X size={18} />
           </button>
         </div>
@@ -106,49 +106,49 @@ function ProductModal({ product, categories, brands, authHeaders, onClose, onSav
           )}
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2 flex flex-col gap-1">
-              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Product Name *</label>
+              <label className="text-xs font-medium text-(--ui-text-muted)">Product Name *</label>
               <Input value={form.name} onChange={(e) => upd("name", e.target.value)} placeholder="e.g. Blue T-Shirt" />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Barcode</label>
+              <label className="text-xs font-medium text-(--ui-text-muted)">Barcode</label>
               <Input value={form.barcode} onChange={(e) => upd("barcode", e.target.value)} placeholder="Scan or type" />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-[var(--ui-text-muted)]">SKU</label>
+              <label className="text-xs font-medium text-(--ui-text-muted)">SKU</label>
               <Input value={form.sku} onChange={(e) => upd("sku", e.target.value)} placeholder="e.g. BTS-001" />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Selling Price *</label>
+              <label className="text-xs font-medium text-(--ui-text-muted)">Selling Price *</label>
               <Input type="number" min="0" step="0.01" value={form.price} onChange={(e) => upd("price", e.target.value)} placeholder="0.00" />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Cost Price</label>
+              <label className="text-xs font-medium text-(--ui-text-muted)">Cost Price</label>
               <Input type="number" min="0" step="0.01" value={form.cost_price} onChange={(e) => upd("cost_price", e.target.value)} placeholder="0.00" />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Opening Stock</label>
+              <label className="text-xs font-medium text-(--ui-text-muted)">Opening Stock</label>
               <Input type="number" min="0" value={form.stock} onChange={(e) => upd("stock", e.target.value)} placeholder="0" />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Unit</label>
+              <label className="text-xs font-medium text-(--ui-text-muted)">Unit</label>
               <Input value={form.unit} onChange={(e) => upd("unit", e.target.value)} placeholder="pcs" />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Category</label>
+              <label className="text-xs font-medium text-(--ui-text-muted)">Category</label>
               <Select value={form.category_id} onChange={(e) => upd("category_id", e.target.value)}>
                 <option value="">No category</option>
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Brand</label>
+              <label className="text-xs font-medium text-(--ui-text-muted)">Brand</label>
               <Select value={form.brand_id} onChange={(e) => upd("brand_id", e.target.value)}>
                 <option value="">No brand</option>
                 {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </Select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-[var(--ui-text-muted)]">Status</label>
+              <label className="text-xs font-medium text-(--ui-text-muted)">Status</label>
               <Select value={form.status} onChange={(e) => upd("status", e.target.value)}>
                 <option value="active">Active</option>
                 <option value="draft">Draft</option>
@@ -157,19 +157,19 @@ function ProductModal({ product, categories, brands, authHeaders, onClose, onSav
             </div>
           </div>
           {isEdit && outletStock.length > 0 && (
-            <div className="rounded-lg border border-[var(--ui-border)] p-3">
-              <p className="mb-2 text-xs font-semibold uppercase text-[var(--ui-text-muted)]">Stock by Location</p>
+            <div className="rounded-lg border border-(--ui-border) p-3">
+              <p className="mb-2 text-xs font-semibold uppercase text-(--ui-text-muted)">Stock by Location</p>
               <div className="space-y-1">
                 {outletStock.map((os) => (
                   <div key={os.outlet_id} className="flex items-center justify-between text-sm">
-                    <span className="text-[var(--ui-text)]">{os.outlet_name}</span>
-                    <span className="font-semibold text-[var(--ui-text)]">{os.quantity} pcs</span>
+                    <span className="text-(--ui-text)">{os.outlet_name}</span>
+                    <span className="font-semibold text-(--ui-text)">{os.quantity} pcs</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
-          <div className="flex justify-end gap-2 border-t border-[var(--ui-border)] pt-3">
+          <div className="flex justify-end gap-2 border-t border-(--ui-border) pt-3">
             <Button type="button" onClick={onClose} disabled={saving}>Cancel</Button>
             <Button tone="primary" type="submit" disabled={saving}>
               {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Product"}
@@ -366,10 +366,10 @@ export default function InventoryRedesign() {
         <TableToolbar
           left={
             <>
-              <div className="relative min-w-[260px]">
+              <div className="relative min-w-65">
                 <Search
                   size={14}
-                  className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]"
+                  className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)"
                 />
                 <Input
                   className="pl-8"
@@ -421,7 +421,7 @@ export default function InventoryRedesign() {
               </Select>
             </>
           }
-          right={<p className="text-sm text-[var(--ui-text-muted)]">{products.length} items</p>}
+          right={<p className="text-sm text-(--ui-text-muted)">{products.length} items</p>}
         />
 
         <div className="p-3">
@@ -527,9 +527,9 @@ export default function InventoryRedesign() {
         </div>
 
         <div className="overflow-auto">
-          <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-            <thead className="bg-[var(--ui-muted-surface)]">
-              <tr className="text-left text-xs uppercase tracking-wide text-[var(--ui-text-muted)]">
+          <table className="min-w-full border-t border-(--ui-border) text-sm">
+            <thead className="bg-(--ui-muted-surface)">
+              <tr className="text-left text-xs uppercase tracking-wide text-(--ui-text-muted)">
                 <th className="px-3 py-2">
                   <input
                     type="checkbox"
@@ -560,7 +560,7 @@ export default function InventoryRedesign() {
               {paged.map((p) => (
                 <tr
                   key={p.id}
-                  className={`border-t border-[var(--ui-border)] cursor-pointer ${
+                  className={`border-t border-(--ui-border) cursor-pointer ${
                     selectedIds.has(p.id) ? "bg-emerald-50" : "hover:bg-slate-50 bg-white"
                   }`}
                   onClick={() => setModalProduct(p)}
@@ -573,24 +573,24 @@ export default function InventoryRedesign() {
                     />
                   </td>
                   <td className="px-3 py-2">
-                    <div className="font-medium text-[var(--ui-text)]">{p.name}</div>
-                    <div className="text-xs text-[var(--ui-text-muted)]">
+                    <div className="font-medium text-(--ui-text)">{p.name}</div>
+                    <div className="text-xs text-(--ui-text-muted)">
                       {p.vendor || "-"} {p.product_type ? `| ${p.product_type}` : ""}
                     </div>
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs text-[var(--ui-text-muted)]">
+                  <td className="px-3 py-2 font-mono text-xs text-(--ui-text-muted)">
                     {p.barcode || "-"}
                   </td>
-                  <td className="px-3 py-2 text-right text-[var(--ui-text)]">
+                  <td className="px-3 py-2 text-right text-(--ui-text)">
                     PKRs {(Number(p.price || 0)).toFixed(2)}
                   </td>
-                  <td className="px-3 py-2 text-right text-[var(--ui-text)]">
+                  <td className="px-3 py-2 text-right text-(--ui-text)">
                     {p.total_stock ?? 0}
                   </td>
-                  <td className="px-3 py-2 text-right text-[var(--ui-text)]">
+                  <td className="px-3 py-2 text-right text-(--ui-text)">
                     {p.min_qty ?? 0}
                   </td>
-                  <td className="px-3 py-2 text-[var(--ui-text-muted)]">
+                  <td className="px-3 py-2 text-(--ui-text-muted)">
                     {p.category_name || "-"}
                   </td>
                   <td className="px-3 py-2">
@@ -617,8 +617,8 @@ export default function InventoryRedesign() {
             />
           ) : null}
         </div>
-        <div className="flex items-center justify-between border-t border-[var(--ui-border)] p-3">
-          <span className="text-xs text-[var(--ui-text-muted)]">
+        <div className="flex items-center justify-between border-t border-(--ui-border) p-3">
+          <span className="text-xs text-(--ui-text-muted)">
             Page {page} of {totalPages}
           </span>
           <div className="flex gap-2">

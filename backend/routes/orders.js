@@ -1401,5 +1401,5 @@ module.exports = function registerOrderRoutes(app, deps) {
     });
   }
 
-  return { processPendingShopifyInventoryEvents };
+  return { processPendingShopifyInventoryEvents, enqueueInventorySyncEvents };
 };

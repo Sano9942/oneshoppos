@@ -159,8 +159,8 @@ export default function AdministratorRedesign() {
       <SectionCard>
         <TableToolbar
           left={
-            <div className="relative min-w-[240px]">
-              <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]" />
+            <div className="relative min-w-60">
+              <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)" />
               <Input
                 className="pl-8"
                 placeholder="Search roles"
@@ -169,11 +169,11 @@ export default function AdministratorRedesign() {
               />
             </div>
           }
-          right={<span className="text-xs text-[var(--ui-text-muted)]">{visible.length} roles</span>}
+          right={<span className="text-xs text-(--ui-text-muted)">{visible.length} roles</span>}
         />
         <div className="overflow-auto">
-          <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-            <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+          <table className="min-w-full border-t border-(--ui-border) text-sm">
+            <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
               <tr>
                 <th className="px-3 py-2 text-left">Role</th>
                 <th className="px-3 py-2 text-left">Permissions</th>
@@ -183,17 +183,17 @@ export default function AdministratorRedesign() {
             <tbody>
               {!loading &&
                 visible.map((role) => (
-                  <tr key={role.id} className="border-t border-[var(--ui-border)] hover:bg-[var(--ui-muted-surface)]">
+                  <tr key={role.id} className="border-t border-(--ui-border) hover:bg-(--ui-muted-surface)">
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
-                        <Shield size={14} className="text-[var(--ui-accent)]" />
-                        <span className="font-medium text-[var(--ui-text)]">{role.name}</span>
+                        <Shield size={14} className="text-(--ui-accent)" />
+                        <span className="font-medium text-(--ui-text)">{role.name}</span>
                         {isDefault(role.id) && (
                           <Badge tone="info">System</Badge>
                         )}
                       </div>
                       {role.description && (
-                        <p className="mt-0.5 text-xs text-[var(--ui-text-muted)]">{role.description}</p>
+                        <p className="mt-0.5 text-xs text-(--ui-text-muted)">{role.description}</p>
                       )}
                     </td>
                     <td className="px-3 py-2">
@@ -207,7 +207,7 @@ export default function AdministratorRedesign() {
                           <Badge tone="default">+{role.permissions.length - 4} more</Badge>
                         )}
                         {(role.permissions || []).length === 0 && (
-                          <span className="text-xs text-[var(--ui-text-muted)]">No permissions</span>
+                          <span className="text-xs text-(--ui-text-muted)">No permissions</span>
                         )}
                       </div>
                     </td>
@@ -225,7 +225,7 @@ export default function AdministratorRedesign() {
                 ))}
             </tbody>
           </table>
-          {loading && <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading roles...</div>}
+          {loading && <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading roles...</div>}
           {!loading && visible.length === 0 && (
             <EmptyState title="No roles found" body="Create custom roles to control access." />
           )}
@@ -235,7 +235,7 @@ export default function AdministratorRedesign() {
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="w-full max-w-lg p-5">
-            <h3 className="mb-3 text-lg font-semibold text-[var(--ui-text)]">
+            <h3 className="mb-3 text-lg font-semibold text-(--ui-text)">
               {editing ? "Edit Role" : "Create Role"}
             </h3>
             <form className="space-y-3" onSubmit={save}>
@@ -252,10 +252,10 @@ export default function AdministratorRedesign() {
               />
 
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase text-[var(--ui-text-muted)]">Permissions</p>
+                <p className="mb-2 text-xs font-semibold uppercase text-(--ui-text-muted)">Permissions</p>
                 {PERM_GROUPS.map((cat) => (
                   <div key={cat} className="mb-2">
-                    <p className="mb-1 text-xs text-[var(--ui-text-muted)]">{cat}</p>
+                    <p className="mb-1 text-xs text-(--ui-text-muted)">{cat}</p>
                     <div className="grid grid-cols-2 gap-1">
                       {AVAILABLE_PERMISSIONS.filter((p) => p.category === cat).map((perm) => {
                         const checked = rolePerms.includes(perm.id);
@@ -266,8 +266,8 @@ export default function AdministratorRedesign() {
                             onClick={() => togglePerm(perm.id)}
                             className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
                               checked
-                                ? "border-[var(--ui-accent)] bg-[var(--ui-accent)]/5 text-[var(--ui-accent)]"
-                                : "border-[var(--ui-border)] text-[var(--ui-text-muted)] hover:bg-[var(--ui-muted-surface)]"
+                                ? "border-(--ui-accent) bg-(--ui-accent)/5 text-(--ui-accent)"
+                                : "border-(--ui-border) text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
                             }`}
                           >
                             {checked ? <Check size={11} /> : <X size={11} />}

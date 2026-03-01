@@ -16,7 +16,14 @@
       "Bash(git rm frontend/src/pages/POS.jsx frontend/src/pages/Reports.jsx frontend/src/pages/ShopifyIntegration.jsx frontend/src/pages/Accounting.jsx)",
       "Bash(git rm -f frontend/src/pages/POS.jsx)",
       "Bash(git rm frontend/src/pages/Reports.jsx frontend/src/pages/ShopifyIntegration.jsx frontend/src/pages/Accounting.jsx)",
-      "Bash(git mv frontend/src/pages/InventoryRedesign.jsx frontend/src/pages/redesign/InventoryRedesign.jsx)"
+      "Bash(git mv frontend/src/pages/InventoryRedesign.jsx frontend/src/pages/redesign/InventoryRedesign.jsx)",
+      "Bash(sqlite3 backend/oneshop.db \"SELECT id, name, pin, role FROM employees WHERE name LIKE ''%hassan%'' OR name LIKE ''%Hassan%'';\")",
+      "Bash(xargs -I {} basename {})",
+      "Bash(while read path)",
+      "Bash(do grep -q \"path=\"\"$path\"\"\" /d/newprojects/oneshoppos/frontend/src/App.jsx)",
+      "Bash(echo \"MISSING: $path\")",
+      "Bash(for file in /d/newprojects/oneshoppos/frontend/src/pages/*Route.jsx)",
+      "Bash(do basename \"$file\")"
     ]
   }
 }

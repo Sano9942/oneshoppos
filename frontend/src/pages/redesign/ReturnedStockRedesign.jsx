@@ -192,12 +192,12 @@ export default function ReturnedStockRedesign() {
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
         <SectionCard className="xl:col-span-8">
           <TableToolbar
-            left={<div className="relative min-w-[240px]"><Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]" /><Input className="pl-8" placeholder="Search supplier or reference" value={search} onChange={(e) => setSearch(e.target.value)} /></div>}
-            right={<span className="text-xs text-[var(--ui-text-muted)]">{visibleRows.length} returns</span>}
+            left={<div className="relative min-w-60"><Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)" /><Input className="pl-8" placeholder="Search supplier or reference" value={search} onChange={(e) => setSearch(e.target.value)} /></div>}
+            right={<span className="text-xs text-(--ui-text-muted)">{visibleRows.length} returns</span>}
           />
           <div className="overflow-auto">
-            <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-              <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+            <table className="min-w-full border-t border-(--ui-border) text-sm">
+              <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                 <tr>
                   <th className="px-3 py-2 text-left">RMA</th>
                   <th className="px-3 py-2 text-left">Supplier</th>
@@ -210,19 +210,19 @@ export default function ReturnedStockRedesign() {
               </thead>
               <tbody>
                 {!loading && visibleRows.map((r) => (
-                  <tr key={r.id} className={`cursor-pointer border-t border-[var(--ui-border)] hover:bg-[var(--ui-muted-surface)] ${selectedId === r.id ? "bg-emerald-50" : ""}`} onClick={() => loadDetail(r.id)}>
-                    <td className="px-3 py-2 font-medium text-[var(--ui-text)]">#{r.id} {r.reference_number ? `(${r.reference_number})` : ""}</td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">{r.supplier_name || "-"}</td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">{r.outlet_name || "-"}</td>
-                    <td className="px-3 py-2 text-center text-[var(--ui-text)]">{r.item_count || 0}</td>
-                    <td className="px-3 py-2 text-right font-semibold text-[var(--ui-text)]">{money(r.total_value)}</td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">{fmtDate(r.return_date)}</td>
+                  <tr key={r.id} className={`cursor-pointer border-t border-(--ui-border) hover:bg-(--ui-muted-surface) ${selectedId === r.id ? "bg-emerald-50" : ""}`} onClick={() => loadDetail(r.id)}>
+                    <td className="px-3 py-2 font-medium text-(--ui-text)">#{r.id} {r.reference_number ? `(${r.reference_number})` : ""}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{r.supplier_name || "-"}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{r.outlet_name || "-"}</td>
+                    <td className="px-3 py-2 text-center text-(--ui-text)">{r.item_count || 0}</td>
+                    <td className="px-3 py-2 text-right font-semibold text-(--ui-text)">{money(r.total_value)}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{fmtDate(r.return_date)}</td>
                     <td className="px-3 py-2"><Badge tone="success">{r.status || "completed"}</Badge></td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {loading ? <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading supplier returns...</div> : null}
+            {loading ? <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading supplier returns...</div> : null}
             {!loading && visibleRows.length === 0 ? <EmptyState title="No supplier returns" body="Create an RMA to send stock back to a supplier." /> : null}
           </div>
         </SectionCard>
@@ -231,24 +231,24 @@ export default function ReturnedStockRedesign() {
           {!selectedId ? (
             <EmptyState title="Select an RMA" body="Click a row to inspect returned items." />
           ) : detailLoading ? (
-            <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading details...</div>
+            <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading details...</div>
           ) : !detail ? (
             <EmptyState title="Details unavailable" body="Try selecting the RMA again." />
           ) : (
             <div className="space-y-4">
               <div>
-                <h3 className="text-lg font-semibold text-[var(--ui-text)]">RMA #{detail.returnData.id}</h3>
-                <p className="text-xs text-[var(--ui-text-muted)]">{detail.returnData.supplier_name || "Unknown supplier"}</p>
+                <h3 className="text-lg font-semibold text-(--ui-text)">RMA #{detail.returnData.id}</h3>
+                <p className="text-xs text-(--ui-text-muted)">{detail.returnData.supplier_name || "Unknown supplier"}</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <SectionCard className="p-2 text-center"><p className="text-xs text-[var(--ui-text-muted)]">Items</p><p className="font-semibold text-[var(--ui-text)]">{(detail.items || []).length}</p></SectionCard>
-                <SectionCard className="p-2 text-center"><p className="text-xs text-[var(--ui-text-muted)]">Total</p><p className="font-semibold text-[var(--ui-text)]">{money(detail.returnData.total_value)}</p></SectionCard>
+                <SectionCard className="p-2 text-center"><p className="text-xs text-(--ui-text-muted)">Items</p><p className="font-semibold text-(--ui-text)">{(detail.items || []).length}</p></SectionCard>
+                <SectionCard className="p-2 text-center"><p className="text-xs text-(--ui-text-muted)">Total</p><p className="font-semibold text-(--ui-text)">{money(detail.returnData.total_value)}</p></SectionCard>
               </div>
               <div className="max-h-64 space-y-2 overflow-auto">
                 {(detail.items || []).map((item) => (
-                  <div key={item.id} className="rounded border border-[var(--ui-border)] p-2 text-xs">
-                    <p className="font-medium text-[var(--ui-text)]">{item.product_name}</p>
-                    <p className="text-[var(--ui-text-muted)]">Qty {item.quantity} | Unit {money(item.unit_price)}</p>
+                  <div key={item.id} className="rounded border border-(--ui-border) p-2 text-xs">
+                    <p className="font-medium text-(--ui-text)">{item.product_name}</p>
+                    <p className="text-(--ui-text-muted)">Qty {item.quantity} | Unit {money(item.unit_price)}</p>
                   </div>
                 ))}
               </div>
@@ -260,22 +260,22 @@ export default function ReturnedStockRedesign() {
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="max-h-[90vh] w-full max-w-4xl overflow-auto p-4">
-            <h3 className="text-lg font-semibold text-[var(--ui-text)]">New Supplier Return</h3>
+            <h3 className="text-lg font-semibold text-(--ui-text)">New Supplier Return</h3>
             <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-12">
               <div className="xl:col-span-7">
                 <SectionCard className="p-3">
-                  <p className="mb-2 text-sm font-semibold text-[var(--ui-text)]">Items</p>
+                  <p className="mb-2 text-sm font-semibold text-(--ui-text)">Items</p>
                   <Select onChange={(e) => { addItemToDraft(e.target.value); e.target.value = ""; }}>
                     <option value="">Add product...</option>
                     {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.barcode || p.sku || "-"})</option>)}
                   </Select>
                   <div className="mt-2 max-h-72 overflow-auto">
                     {draftItems.length === 0 ? (
-                      <p className="text-xs text-[var(--ui-text-muted)]">No items added.</p>
+                      <p className="text-xs text-(--ui-text-muted)">No items added.</p>
                     ) : (
                       draftItems.map((item, idx) => (
-                        <div key={`${item.product_id}-${idx}`} className="mt-2 rounded border border-[var(--ui-border)] p-2">
-                          <p className="text-sm font-medium text-[var(--ui-text)]">{item.name}</p>
+                        <div key={`${item.product_id}-${idx}`} className="mt-2 rounded border border-(--ui-border) p-2">
+                          <p className="text-sm font-medium text-(--ui-text)">{item.name}</p>
                           <div className="mt-1 grid grid-cols-3 gap-2">
                             <Input type="number" min="1" value={item.quantity} onChange={(e) => setDraftItems((prev) => prev.map((x, i) => i === idx ? { ...x, quantity: Number(e.target.value || 1) } : x))} />
                             <Input type="number" min="0" step="0.01" value={item.unit_price} onChange={(e) => setDraftItems((prev) => prev.map((x, i) => i === idx ? { ...x, unit_price: Number(e.target.value || 0) } : x))} />
@@ -291,7 +291,7 @@ export default function ReturnedStockRedesign() {
 
               <form className="xl:col-span-5" onSubmit={save}>
                 <SectionCard className="p-3">
-                  <p className="mb-2 text-sm font-semibold text-[var(--ui-text)]">Return Details</p>
+                  <p className="mb-2 text-sm font-semibold text-(--ui-text)">Return Details</p>
                   <div className="space-y-2">
                     <Select required value={form.outlet_id} onChange={(e) => setForm((p) => ({ ...p, outlet_id: e.target.value }))}>
                       <option value="">Select outlet</option>
@@ -304,9 +304,9 @@ export default function ReturnedStockRedesign() {
                     <Input placeholder="Reference number" value={form.reference_number} onChange={(e) => setForm((p) => ({ ...p, reference_number: e.target.value }))} />
                     <Input placeholder="General reason" value={form.reason} onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value }))} />
                   </div>
-                  <div className="mt-3 rounded border border-[var(--ui-border)] p-2 text-sm">
-                    <p className="text-[var(--ui-text-muted)]">Total Value</p>
-                    <p className="text-lg font-semibold text-[var(--ui-text)]">{money(draftTotal)}</p>
+                  <div className="mt-3 rounded border border-(--ui-border) p-2 text-sm">
+                    <p className="text-(--ui-text-muted)">Total Value</p>
+                    <p className="text-lg font-semibold text-(--ui-text)">{money(draftTotal)}</p>
                   </div>
                   <div className="mt-3 flex gap-2">
                     <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>

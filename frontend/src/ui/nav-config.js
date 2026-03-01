@@ -28,6 +28,8 @@ import {
   Layers,
   BarChart2,
   User,
+  Clock,
+  Printer,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -72,7 +74,7 @@ export const SHOPIFY_NAV_GROUPS = [
     items: [
       { name: "Suppliers", path: "/suppliers", icon: Truck, requiredPerm: "manage_orders" },
       { name: "Expenses", path: "/expenses", icon: Banknote, requiredPerm: "manage_inventory" },
-      { name: "Approvals", path: "/approvals", icon: CheckSquare, requiredPerm: "manage_orders", requiredFlag: "approvals" },
+      { name: "Approvals", path: "/approvals", icon: CheckSquare, requiredPerm: "manage_orders" },
     ],
   },
   {
@@ -87,6 +89,7 @@ export const SHOPIFY_NAV_GROUPS = [
     items: [
       { name: "CRM", path: "/crm", icon: UserPlus, requiredPerm: "manage_orders", requiredFlag: "crm_quotations" },
       { name: "Quotations", path: "/quotations", icon: FileText, requiredPerm: "manage_orders", requiredFlag: "crm_quotations" },
+      { name: "Attendance", path: "/attendance", icon: Clock, requiredPerm: "manage_employees" },
       { name: "HR Leave", path: "/hr/leave", icon: User, requiredPerm: "manage_employees", requiredFlag: "advanced_hr" },
       { name: "HR Payroll", path: "/hr/payroll", icon: FileText, requiredPerm: "manage_employees", requiredFlag: "advanced_hr" },
     ],
@@ -98,6 +101,8 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Outlets", path: "/outlets", icon: Building2, requiredPerm: "manage_employees" },
       { name: "Company Profile", path: "/company-settings", icon: Settings, requiredPerm: "manage_employees", requiredFlag: "multi_company" },
       { name: "Shopify Integration", path: "/integrations/shopify", icon: Plug, requiredPerm: "manage_inventory" },
+      { name: "Barcode Templates", path: "/barcode-templates", icon: Printer, requiredPerm: "manage_inventory" },
+      { name: "Receipt Templates", path: "/receipt-templates", icon: FileText, requiredPerm: "manage_inventory" },
       { name: "Backup & Restore", path: "/backup-restore", icon: DatabaseBackup, requiredPerm: "manage_employees", requiredFlag: "backup_restore" },
     ],
   },

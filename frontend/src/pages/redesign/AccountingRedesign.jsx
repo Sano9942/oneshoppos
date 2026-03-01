@@ -11,9 +11,9 @@ import Accounting from "../Accounting";
 export default function AccountingRedesign() {
   return (
     <div className="flex h-full flex-col">
-      <div className="shrink-0 border-b border-[var(--ui-border)] bg-[var(--ui-surface)] px-6 py-4">
-        <h1 className="text-xl font-semibold text-[var(--ui-text)]">Accounting</h1>
-        <p className="mt-0.5 text-sm text-[var(--ui-text-muted)]">
+      <div className="shrink-0 border-b border-(--ui-border) bg-(--ui-surface) px-6 py-4">
+        <h1 className="text-xl font-semibold text-(--ui-text)">Accounting</h1>
+        <p className="mt-0.5 text-sm text-(--ui-text-muted)">
           Profit &amp; Loss, cash flow, and accounts payable/receivable.
         </p>
       </div>

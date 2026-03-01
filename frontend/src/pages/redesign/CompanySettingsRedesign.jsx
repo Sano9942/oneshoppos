@@ -19,7 +19,7 @@ const DEFAULT_FORM = {
 function FormField({ label, children }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-[var(--ui-text-muted)]">{label}</label>
+      <label className="text-xs font-medium text-(--ui-text-muted)">{label}</label>
       {children}
     </div>
   );
@@ -116,8 +116,8 @@ export default function CompanySettingsRedesign() {
         {/* Business Identity */}
         <SectionCard className="p-5">
           <div className="mb-3 flex items-center gap-2">
-            <Building2 size={15} className="text-[var(--ui-accent)]" />
-            <h2 className="font-semibold text-[var(--ui-text)]">Business Identity</h2>
+            <Building2 size={15} className="text-(--ui-accent)" />
+            <h2 className="font-semibold text-(--ui-text)">Business Identity</h2>
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <FormField label="Company Name">
@@ -184,7 +184,7 @@ export default function CompanySettingsRedesign() {
 
         {/* Tax & Legal */}
         <SectionCard className="p-5">
-          <h2 className="mb-3 font-semibold text-[var(--ui-text)]">Tax &amp; Legal</h2>
+          <h2 className="mb-3 font-semibold text-(--ui-text)">Tax &amp; Legal</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <FormField label="NTN (National Tax Number)">
               <Input
@@ -205,7 +205,7 @@ export default function CompanySettingsRedesign() {
 
         {/* Branding & Currency */}
         <SectionCard className="p-5">
-          <h2 className="mb-3 font-semibold text-[var(--ui-text)]">Branding &amp; Currency</h2>
+          <h2 className="mb-3 font-semibold text-(--ui-text)">Branding &amp; Currency</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <FormField label="Currency Symbol">
               <Input
@@ -224,19 +224,19 @@ export default function CompanySettingsRedesign() {
           </div>
 
           {/* Logo upload */}
-          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-[var(--ui-border)] p-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-(--ui-border) p-3">
             {form.logo_url && (
               <img
                 src={`${API}${form.logo_url}`}
                 alt="Company logo"
-                className="h-12 w-auto rounded-md border border-[var(--ui-border)] object-contain p-1"
+                className="h-12 w-auto rounded-md border border-(--ui-border) object-contain p-1"
               />
             )}
             <div className="flex flex-1 items-center gap-2">
               <input
                 type="file"
                 accept="image/*"
-                className="flex-1 text-sm text-[var(--ui-text-muted)] file:mr-2 file:rounded-lg file:border-0 file:bg-[var(--ui-muted-surface)] file:px-3 file:py-1.5 file:text-xs file:font-medium"
+                className="flex-1 text-sm text-(--ui-text-muted) file:mr-2 file:rounded-lg file:border-0 file:bg-(--ui-muted-surface) file:px-3 file:py-1.5 file:text-xs file:font-medium"
                 onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
               />
               <Button
@@ -254,8 +254,8 @@ export default function CompanySettingsRedesign() {
         {/* Regional */}
         <SectionCard className="p-5">
           <div className="mb-3 flex items-center gap-2">
-            <Globe size={15} className="text-[var(--ui-accent)]" />
-            <h2 className="font-semibold text-[var(--ui-text)]">Regional Settings</h2>
+            <Globe size={15} className="text-(--ui-accent)" />
+            <h2 className="font-semibold text-(--ui-text)">Regional Settings</h2>
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <FormField label="Fiscal Year Start (MM-DD)">

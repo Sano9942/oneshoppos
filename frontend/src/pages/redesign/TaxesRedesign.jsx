@@ -121,24 +121,24 @@ export default function TaxesRedesign() {
       ) : null}
 
       <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
-        <SectionCard className="p-3"><p className="text-xs text-[var(--ui-text-muted)]">Total Rules</p><p className="text-2xl font-semibold text-[var(--ui-text)]">{rows.length}</p></SectionCard>
-        <SectionCard className="p-3"><p className="text-xs text-[var(--ui-text-muted)]">Default Rules</p><p className="text-2xl font-semibold text-[var(--ui-text)]">{rows.filter((r) => Number(r.is_default || 0) === 1).length}</p></SectionCard>
-        <SectionCard className="p-3"><p className="text-xs text-[var(--ui-text-muted)]">Visible</p><p className="text-2xl font-semibold text-[var(--ui-text)]">{visibleRows.length}</p></SectionCard>
+        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Total Rules</p><p className="text-2xl font-semibold text-(--ui-text)">{rows.length}</p></SectionCard>
+        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Default Rules</p><p className="text-2xl font-semibold text-(--ui-text)">{rows.filter((r) => Number(r.is_default || 0) === 1).length}</p></SectionCard>
+        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Visible</p><p className="text-2xl font-semibold text-(--ui-text)">{visibleRows.length}</p></SectionCard>
       </div>
 
       <SectionCard>
         <TableToolbar
           left={
-            <div className="relative min-w-[240px]">
-              <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]" />
+            <div className="relative min-w-60">
+              <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)" />
               <Input className="pl-8" placeholder="Search tax rules" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
           }
-          right={<span className="text-xs text-[var(--ui-text-muted)]">{visibleRows.length} rows</span>}
+          right={<span className="text-xs text-(--ui-text-muted)">{visibleRows.length} rows</span>}
         />
         <div className="overflow-auto">
-          <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-            <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+          <table className="min-w-full border-t border-(--ui-border) text-sm">
+            <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
               <tr>
                 <th className="px-3 py-2 text-left">Name</th>
                 <th className="px-3 py-2 text-right">Rate %</th>
@@ -148,9 +148,9 @@ export default function TaxesRedesign() {
             </thead>
             <tbody>
               {!loading && visibleRows.map((row) => (
-                <tr key={row.id} className="border-t border-[var(--ui-border)]">
-                  <td className="px-3 py-2 font-medium text-[var(--ui-text)]">{row.name}</td>
-                  <td className="px-3 py-2 text-right text-[var(--ui-text)]">{Number(row.rate || 0).toFixed(2)}%</td>
+                <tr key={row.id} className="border-t border-(--ui-border)">
+                  <td className="px-3 py-2 font-medium text-(--ui-text)">{row.name}</td>
+                  <td className="px-3 py-2 text-right text-(--ui-text)">{Number(row.rate || 0).toFixed(2)}%</td>
                   <td className="px-3 py-2">
                     {Number(row.is_default || 0) === 1 ? <Badge tone="success">default</Badge> : <Badge>optional</Badge>}
                   </td>
@@ -164,7 +164,7 @@ export default function TaxesRedesign() {
               ))}
             </tbody>
           </table>
-          {loading ? <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading taxes...</div> : null}
+          {loading ? <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading taxes...</div> : null}
           {!loading && visibleRows.length === 0 ? <EmptyState title="No tax rules" body="Create a tax rule to apply on products." /> : null}
         </div>
       </SectionCard>
@@ -172,11 +172,11 @@ export default function TaxesRedesign() {
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="w-full max-w-md p-4">
-            <h3 className="text-lg font-semibold text-[var(--ui-text)]">{form.id ? "Edit Tax Rule" : "Create Tax Rule"}</h3>
+            <h3 className="text-lg font-semibold text-(--ui-text)">{form.id ? "Edit Tax Rule" : "Create Tax Rule"}</h3>
             <form className="mt-3 space-y-2" onSubmit={save}>
               <Input required placeholder="Tax name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
               <Input required type="number" min="0" max="100" step="0.01" placeholder="Rate" value={form.rate} onChange={(e) => setForm((p) => ({ ...p, rate: e.target.value }))} />
-              <label className="flex items-center gap-2 rounded border border-[var(--ui-border)] p-2 text-sm text-[var(--ui-text)]">
+              <label className="flex items-center gap-2 rounded border border-(--ui-border) p-2 text-sm text-(--ui-text)">
                 <input type="checkbox" checked={form.is_default} onChange={(e) => setForm((p) => ({ ...p, is_default: e.target.checked }))} />
                 Set as default tax
               </label>

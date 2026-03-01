@@ -68,8 +68,8 @@ export default function ActionHistoryRedesign() {
       <SectionCard>
         <TableToolbar
           left={
-            <div className="relative min-w-[260px]">
-              <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]" />
+            <div className="relative min-w-65">
+              <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)" />
               <Input
                 className="pl-8"
                 placeholder="Search actions, employees, entities..."
@@ -78,11 +78,11 @@ export default function ActionHistoryRedesign() {
               />
             </div>
           }
-          right={<span className="text-xs text-[var(--ui-text-muted)]">{logs.length} entries</span>}
+          right={<span className="text-xs text-(--ui-text-muted)">{logs.length} entries</span>}
         />
         <div className="overflow-auto">
-          <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-            <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+          <table className="min-w-full border-t border-(--ui-border) text-sm">
+            <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
               <tr>
                 <th className="px-3 py-2 text-left">Timestamp</th>
                 <th className="px-3 py-2 text-left">Employee</th>
@@ -96,23 +96,23 @@ export default function ActionHistoryRedesign() {
                 logs.map((log, i) => (
                   <tr
                     key={log.id ?? i}
-                    className="border-t border-[var(--ui-border)] hover:bg-[var(--ui-muted-surface)]"
+                    className="border-t border-(--ui-border) hover:bg-(--ui-muted-surface)"
                   >
-                    <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--ui-text-muted)]">
+                    <td className="whitespace-nowrap px-3 py-2 text-xs text-(--ui-text-muted)">
                       {fmtDate(log.created_at || log.timestamp)}
                     </td>
-                    <td className="px-3 py-2 font-medium text-[var(--ui-text)]">
+                    <td className="px-3 py-2 font-medium text-(--ui-text)">
                       {log.employee_name || log.performed_by || "System"}
                     </td>
                     <td className="px-3 py-2">
-                      <span className="rounded-md bg-[var(--ui-accent)]/10 px-1.5 py-0.5 text-xs font-medium text-[var(--ui-accent)]">
+                      <span className="rounded-md bg-(--ui-accent)/10 px-1.5 py-0.5 text-xs font-medium text-(--ui-accent)">
                         {log.action || "—"}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">
+                    <td className="px-3 py-2 text-(--ui-text-muted)">
                       {log.entity_type ? `${log.entity_type}${log.entity_id ? ` #${log.entity_id}` : ""}` : "—"}
                     </td>
-                    <td className="max-w-xs truncate px-3 py-2 text-xs text-[var(--ui-text-muted)]">
+                    <td className="max-w-xs truncate px-3 py-2 text-xs text-(--ui-text-muted)">
                       {log.details || log.description || "—"}
                     </td>
                   </tr>
@@ -120,7 +120,7 @@ export default function ActionHistoryRedesign() {
             </tbody>
           </table>
           {loading && (
-            <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading audit log...</div>
+            <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading audit log...</div>
           )}
           {!loading && logs.length === 0 && (
             <EmptyState title="No action history" body="System events will appear here." />

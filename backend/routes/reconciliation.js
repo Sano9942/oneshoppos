@@ -10,6 +10,19 @@ module.exports = function registerReconciliationRoutes(app, deps) {
 
   function getActiveShopifyConnection(cb) { return _getActiveShopifyConnection(db, decryptShopifySecret, cb); }
 
+  function logActionHistory(req, actionType, description, cb = () => {}) {
+    const employeeId = req.headers["x-employee-id"];
+    if (!employeeId) return cb();
+    db.get("SELECT name FROM employees WHERE id = ?", [employeeId], (err, row) => {
+      const userName = err ? "System" : row?.name || "System";
+      db.run(
+        "INSERT INTO action_history (user_name, action_type, description) VALUES (?, ?, ?)",
+        [userName, actionType, description],
+        () => cb(),
+      );
+    });
+  }
+
 // --- ROUTES: RECONCILIATION (internal) ---
 
   app.get(

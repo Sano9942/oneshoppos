@@ -358,26 +358,26 @@ export default function PromotionsRedesign() {
 
       <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
         <SectionCard className="p-3">
-          <p className="text-xs text-[var(--ui-text-muted)]">Total Promotions</p>
-          <p className="text-2xl font-semibold text-[var(--ui-text)]">{stats.total}</p>
+          <p className="text-xs text-(--ui-text-muted)">Total Promotions</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">{stats.total}</p>
         </SectionCard>
         <SectionCard className="p-3">
-          <p className="text-xs text-[var(--ui-text-muted)]">Active</p>
-          <p className="text-2xl font-semibold text-[var(--ui-text)]">{stats.active}</p>
+          <p className="text-xs text-(--ui-text-muted)">Active</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">{stats.active}</p>
         </SectionCard>
         <SectionCard className="p-3">
-          <p className="text-xs text-[var(--ui-text-muted)]">Inactive</p>
-          <p className="text-2xl font-semibold text-[var(--ui-text)]">{stats.inactive}</p>
+          <p className="text-xs text-(--ui-text-muted)">Inactive</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">{stats.inactive}</p>
         </SectionCard>
       </div>
 
       <SectionCard className="mb-3">
         <TableToolbar
           left={
-            <div className="relative min-w-[260px]">
+            <div className="relative min-w-65">
               <Search
                 size={14}
-                className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]"
+                className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)"
               />
               <Input
                 className="pl-8"
@@ -387,11 +387,11 @@ export default function PromotionsRedesign() {
               />
             </div>
           }
-          right={<span className="text-xs text-[var(--ui-text-muted)]">{visibleRows.length} rows</span>}
+          right={<span className="text-xs text-(--ui-text-muted)">{visibleRows.length} rows</span>}
         />
         <div className="overflow-auto">
-          <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-            <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+          <table className="min-w-full border-t border-(--ui-border) text-sm">
+            <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
               <tr>
                 <th className="px-3 py-2 text-left">Name</th>
                 <th className="px-3 py-2 text-left">Type</th>
@@ -405,20 +405,20 @@ export default function PromotionsRedesign() {
             <tbody>
               {!loading &&
                 visibleRows.map((row) => (
-                  <tr key={row.id} className="border-t border-[var(--ui-border)]">
-                    <td className="px-3 py-2 font-medium text-[var(--ui-text)]">{row.name}</td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">{TYPE_LABELS[row.type] || row.type}</td>
-                    <td className="px-3 py-2 text-[var(--ui-text)]">
+                  <tr key={row.id} className="border-t border-(--ui-border)">
+                    <td className="px-3 py-2 font-medium text-(--ui-text)">{row.name}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{TYPE_LABELS[row.type] || row.type}</td>
+                    <td className="px-3 py-2 text-(--ui-text)">
                       {describeValue(row)}
                       {(row.type === "threshold_percent" || row.type === "threshold_fixed") &&
                       Number(row.min_order_amount || 0) > 0
                         ? ` (min PKRs ${Number(row.min_order_amount).toFixed(2)})`
                         : ""}
                     </td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">
+                    <td className="px-3 py-2 text-(--ui-text-muted)">
                       {APPLIES_LABELS[row.applies_to] || row.applies_to}
                     </td>
-                    <td className="px-3 py-2 text-[var(--ui-text-muted)]">
+                    <td className="px-3 py-2 text-(--ui-text-muted)">
                       {row.starts_at || "-"} {row.ends_at ? `to ${row.ends_at}` : ""}
                     </td>
                     <td className="px-3 py-2 text-center">
@@ -449,7 +449,7 @@ export default function PromotionsRedesign() {
             </tbody>
           </table>
           {loading ? (
-            <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">Loading promotions...</div>
+            <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading promotions...</div>
           ) : null}
           {!loading && visibleRows.length === 0 ? (
             <EmptyState title="No promotions" body="Create your first promotion rule to start discount campaigns." />
@@ -460,13 +460,13 @@ export default function PromotionsRedesign() {
       <SectionCard>
         <TableToolbar
           left={
-            <span className="inline-flex items-center gap-1 text-sm font-medium text-[var(--ui-text)]">
+            <span className="inline-flex items-center gap-1 text-sm font-medium text-(--ui-text)">
               <Percent size={14} />
               Quote Test
             </span>
           }
           right={
-            <span className="text-xs text-[var(--ui-text-muted)]">
+            <span className="text-xs text-(--ui-text-muted)">
               Cart Total: PKRs {quoteOrderTotal.toFixed(2)}
             </span>
           }
@@ -493,8 +493,8 @@ export default function PromotionsRedesign() {
               </Button>
             </div>
             <div className="overflow-auto">
-              <table className="min-w-full border border-[var(--ui-border)] text-sm">
-                <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+              <table className="min-w-full border border-(--ui-border) text-sm">
+                <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                   <tr>
                     <th className="px-3 py-2 text-left">Item</th>
                     <th className="px-3 py-2 text-right">Qty</th>
@@ -505,13 +505,13 @@ export default function PromotionsRedesign() {
                 </thead>
                 <tbody>
                   {quoteItems.map((item) => (
-                    <tr key={item.product_id} className="border-t border-[var(--ui-border)]">
-                      <td className="px-3 py-2 text-[var(--ui-text)]">{item.name}</td>
-                      <td className="px-3 py-2 text-right text-[var(--ui-text)]">{item.quantity}</td>
-                      <td className="px-3 py-2 text-right text-[var(--ui-text)]">
+                    <tr key={item.product_id} className="border-t border-(--ui-border)">
+                      <td className="px-3 py-2 text-(--ui-text)">{item.name}</td>
+                      <td className="px-3 py-2 text-right text-(--ui-text)">{item.quantity}</td>
+                      <td className="px-3 py-2 text-right text-(--ui-text)">
                         PKRs {Number(item.price || 0).toFixed(2)}
                       </td>
-                      <td className="px-3 py-2 text-right font-medium text-[var(--ui-text)]">
+                      <td className="px-3 py-2 text-right font-medium text-(--ui-text)">
                         PKRs {(Number(item.price || 0) * Number(item.quantity || 0)).toFixed(2)}
                       </td>
                       <td className="px-3 py-2 text-right">
@@ -524,15 +524,15 @@ export default function PromotionsRedesign() {
                 </tbody>
               </table>
               {!quoteItems.length ? (
-                <p className="py-3 text-center text-xs text-[var(--ui-text-muted)]">
+                <p className="py-3 text-center text-xs text-(--ui-text-muted)">
                   Add items to evaluate promotion effects.
                 </p>
               ) : null}
             </div>
           </div>
-          <div className="rounded border border-[var(--ui-border)] p-3">
-            <h3 className="text-sm font-semibold text-[var(--ui-text)]">Evaluation Result</h3>
-            <p className="mt-1 text-xs text-[var(--ui-text-muted)]">
+          <div className="rounded border border-(--ui-border) p-3">
+            <h3 className="text-sm font-semibold text-(--ui-text)">Evaluation Result</h3>
+            <p className="mt-1 text-xs text-(--ui-text-muted)">
               Runs active promotions for the sample cart using backend quote logic.
             </p>
             <div className="mt-3 flex gap-2">
@@ -556,9 +556,9 @@ export default function PromotionsRedesign() {
                     PKRs {Number(quoteResult.total_promotion_discount || 0).toFixed(2)}
                   </p>
                 </div>
-                <div className="max-h-56 overflow-auto rounded border border-[var(--ui-border)]">
+                <div className="max-h-56 overflow-auto rounded border border-(--ui-border)">
                   <table className="min-w-full text-xs">
-                    <thead className="bg-[var(--ui-muted-surface)] text-[var(--ui-text-muted)]">
+                    <thead className="bg-(--ui-muted-surface) text-(--ui-text-muted)">
                       <tr>
                         <th className="px-2 py-1 text-left">Promotion</th>
                         <th className="px-2 py-1 text-left">Type</th>
@@ -567,10 +567,10 @@ export default function PromotionsRedesign() {
                     </thead>
                     <tbody>
                       {(quoteResult.applied_promotions || []).map((ap) => (
-                        <tr key={ap.promotion_id} className="border-t border-[var(--ui-border)]">
-                          <td className="px-2 py-1 text-[var(--ui-text)]">{ap.name}</td>
-                          <td className="px-2 py-1 text-[var(--ui-text-muted)]">{ap.type}</td>
-                          <td className="px-2 py-1 text-right text-[var(--ui-text)]">
+                        <tr key={ap.promotion_id} className="border-t border-(--ui-border)">
+                          <td className="px-2 py-1 text-(--ui-text)">{ap.name}</td>
+                          <td className="px-2 py-1 text-(--ui-text-muted)">{ap.type}</td>
+                          <td className="px-2 py-1 text-right text-(--ui-text)">
                             PKRs {Number(ap.discount || 0).toFixed(2)}
                           </td>
                         </tr>
@@ -578,7 +578,7 @@ export default function PromotionsRedesign() {
                     </tbody>
                   </table>
                   {!quoteResult.applied_promotions?.length ? (
-                    <p className="p-2 text-center text-xs text-[var(--ui-text-muted)]">
+                    <p className="p-2 text-center text-xs text-(--ui-text-muted)">
                       No promotions applied for this cart.
                     </p>
                   ) : null}
@@ -593,10 +593,10 @@ export default function PromotionsRedesign() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="w-full max-w-2xl p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-[var(--ui-text)]">
+              <h3 className="text-lg font-semibold text-(--ui-text)">
                 {editing ? "Edit Promotion" : "New Promotion"}
               </h3>
-              <button className="text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]" onClick={closeModal}>
+              <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={closeModal}>
                 <X size={16} />
               </button>
             </div>
@@ -607,7 +607,7 @@ export default function PromotionsRedesign() {
             ) : null}
             <form className="space-y-3" onSubmit={savePromotion}>
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Promotion Name</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Promotion Name</label>
                 <Input
                   value={form.name}
                   onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
@@ -617,7 +617,7 @@ export default function PromotionsRedesign() {
               </div>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Type</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Type</label>
                   <Select
                     value={form.type}
                     onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value }))}
@@ -630,7 +630,7 @@ export default function PromotionsRedesign() {
                   </Select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Value</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Value</label>
                   <Input
                     type="number"
                     min="0"
@@ -645,7 +645,7 @@ export default function PromotionsRedesign() {
               {form.type === "bxgy" ? (
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Buy Qty (X)</label>
+                    <label className="mb-1 block text-xs text-(--ui-text-muted)">Buy Qty (X)</label>
                     <Input
                       type="number"
                       min="1"
@@ -654,7 +654,7 @@ export default function PromotionsRedesign() {
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Get Qty (Y)</label>
+                    <label className="mb-1 block text-xs text-(--ui-text-muted)">Get Qty (Y)</label>
                     <Input
                       type="number"
                       min="1"
@@ -667,7 +667,7 @@ export default function PromotionsRedesign() {
 
               {form.type === "threshold_percent" || form.type === "threshold_fixed" ? (
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">
                     Minimum Order Amount (PKRs)
                   </label>
                   <Input
@@ -683,7 +683,7 @@ export default function PromotionsRedesign() {
               ) : null}
 
               <div>
-                <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Applies To</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Applies To</label>
                 <Select
                   value={form.applies_to}
                   onChange={(e) =>
@@ -705,7 +705,7 @@ export default function PromotionsRedesign() {
 
               {form.applies_to === "product" ? (
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Product</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Product</label>
                   <Select
                     value={form.product_id}
                     onChange={(e) => setForm((prev) => ({ ...prev, product_id: e.target.value }))}
@@ -722,7 +722,7 @@ export default function PromotionsRedesign() {
 
               {form.applies_to === "category" ? (
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Category</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Category</label>
                   <Select
                     value={form.category_id}
                     onChange={(e) => setForm((prev) => ({ ...prev, category_id: e.target.value }))}
@@ -739,7 +739,7 @@ export default function PromotionsRedesign() {
 
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">Start Date</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Start Date</label>
                   <Input
                     type="date"
                     value={form.starts_at}
@@ -747,7 +747,7 @@ export default function PromotionsRedesign() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-[var(--ui-text-muted)]">End Date</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">End Date</label>
                   <Input
                     type="date"
                     value={form.ends_at}

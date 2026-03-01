@@ -161,9 +161,9 @@ export default function CRMRedesign() {
           const count = leads.filter((l) => String(l.stage || "").toLowerCase() === stage).length;
           return (
             <SectionCard key={stage} className="p-3">
-              <p className="text-xs capitalize text-[var(--ui-text-muted)]">{stage}</p>
-              <p className="text-xl font-bold text-[var(--ui-text)]">{count}</p>
-              <p className="mt-0.5 text-xs text-[var(--ui-text-muted)]">{money(totalByStage(stage))}</p>
+              <p className="text-xs capitalize text-(--ui-text-muted)">{stage}</p>
+              <p className="text-xl font-bold text-(--ui-text)">{count}</p>
+              <p className="mt-0.5 text-xs text-(--ui-text-muted)">{money(totalByStage(stage))}</p>
             </SectionCard>
           );
         })}
@@ -171,7 +171,7 @@ export default function CRMRedesign() {
 
       {/* Kanban board */}
       {loading ? (
-        <div className="py-12 text-center text-sm text-[var(--ui-text-muted)]">Loading pipeline...</div>
+        <div className="py-12 text-center text-sm text-(--ui-text-muted)">Loading pipeline...</div>
       ) : (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
           {STAGES.map((stage) => {
@@ -180,25 +180,25 @@ export default function CRMRedesign() {
               <div key={stage} className="flex flex-col gap-2">
                 <div className="flex items-center gap-2 px-1">
                   <Badge tone={STAGE_TONE[stage]} className="capitalize">{stage}</Badge>
-                  <span className="text-xs text-[var(--ui-text-muted)]">{stageleads.length}</span>
+                  <span className="text-xs text-(--ui-text-muted)">{stageleads.length}</span>
                 </div>
                 {stageleads.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-[var(--ui-border)] p-4 text-center text-xs text-[var(--ui-text-muted)]">
+                  <div className="rounded-lg border border-dashed border-(--ui-border) p-4 text-center text-xs text-(--ui-text-muted)">
                     No leads
                   </div>
                 )}
                 {stageleads.map((lead) => (
                   <SectionCard key={lead.id} className="p-3">
                     <div className="flex items-start justify-between gap-1">
-                      <p className="text-sm font-semibold text-[var(--ui-text)]">{lead.name}</p>
+                      <p className="text-sm font-semibold text-(--ui-text)">{lead.name}</p>
                       <Badge tone={PRIORITY_TONE[lead.priority] || "default"} className="shrink-0 capitalize text-[10px]">
                         {lead.priority}
                       </Badge>
                     </div>
                     {lead.company && (
-                      <p className="mt-0.5 text-xs text-[var(--ui-text-muted)]">{lead.company}</p>
+                      <p className="mt-0.5 text-xs text-(--ui-text-muted)">{lead.company}</p>
                     )}
-                    <p className="mt-1 text-xs font-medium text-[var(--ui-accent)]">{money(lead.expected_value)}</p>
+                    <p className="mt-1 text-xs font-medium text-(--ui-accent)">{money(lead.expected_value)}</p>
 
                     {/* Stage move buttons */}
                     <div className="mt-2 flex flex-wrap gap-1">
@@ -206,16 +206,16 @@ export default function CRMRedesign() {
                         <button
                           key={s}
                           onClick={() => setStage(lead, s)}
-                          className="rounded border border-[var(--ui-border)] bg-[var(--ui-surface)] px-1.5 py-0.5 text-[10px] capitalize text-[var(--ui-text-muted)] hover:bg-[var(--ui-muted-surface)] transition-colors"
+                          className="rounded border border-(--ui-border) bg-(--ui-surface) px-1.5 py-0.5 text-[10px] capitalize text-(--ui-text-muted) hover:bg-(--ui-muted-surface) transition-colors"
                         >
                           → {s}
                         </button>
                       ))}
                     </div>
 
-                    <div className="mt-2 flex gap-2 border-t border-[var(--ui-border)] pt-2">
+                    <div className="mt-2 flex gap-2 border-t border-(--ui-border) pt-2">
                       <button
-                        className="text-xs text-[var(--ui-accent)] hover:underline"
+                        className="text-xs text-(--ui-accent) hover:underline"
                         onClick={() => openActivity(lead)}
                       >
                         Activity
@@ -242,8 +242,8 @@ export default function CRMRedesign() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="w-full max-w-lg p-5">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-[var(--ui-text)]">Add Lead</h3>
-              <button onClick={() => setModalOpen(false)} className="text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]">
+              <h3 className="text-lg font-semibold text-(--ui-text)">Add Lead</h3>
+              <button onClick={() => setModalOpen(false)} className="text-(--ui-text-muted) hover:text-(--ui-text)">
                 <X size={16} />
               </button>
             </div>
@@ -267,7 +267,7 @@ export default function CRMRedesign() {
                 {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
               </Select>
               <textarea
-                className="col-span-2 rounded-lg border border-[var(--ui-border)] bg-[var(--ui-surface)] px-3 py-2 text-sm text-[var(--ui-text)] placeholder-[var(--ui-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--ui-accent)]/20"
+                className="col-span-2 rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-sm text-(--ui-text) placeholder-(--ui-text-muted) focus:outline-none focus:ring-2 focus:ring-(--ui-accent)/20"
                 rows={2}
                 placeholder="Notes"
                 value={form.notes}
@@ -287,10 +287,10 @@ export default function CRMRedesign() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="flex w-full max-w-lg flex-col p-5" style={{ maxHeight: "80vh" }}>
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-[var(--ui-text)]">
+              <h3 className="text-lg font-semibold text-(--ui-text)">
                 Activities — {activityLead.name}
               </h3>
-              <button onClick={() => setActivityLead(null)} className="text-[var(--ui-text-muted)] hover:text-[var(--ui-text)]">
+              <button onClick={() => setActivityLead(null)} className="text-(--ui-text-muted) hover:text-(--ui-text)">
                 <X size={16} />
               </button>
             </div>
@@ -307,14 +307,14 @@ export default function CRMRedesign() {
               </Button>
             </form>
 
-            <div className="flex-1 overflow-auto divide-y divide-[var(--ui-border)] rounded-lg border border-[var(--ui-border)]">
+            <div className="flex-1 overflow-auto divide-y divide-(--ui-border) rounded-lg border border-(--ui-border)">
               {activities.length === 0 && (
-                <p className="p-4 text-center text-sm text-[var(--ui-text-muted)]">No activities yet.</p>
+                <p className="p-4 text-center text-sm text-(--ui-text-muted)">No activities yet.</p>
               )}
               {activities.map((a) => (
                 <div key={a.id} className="p-3">
-                  <p className="text-sm text-[var(--ui-text)]">{a.description}</p>
-                  <p className="mt-0.5 text-xs text-[var(--ui-text-muted)]">
+                  <p className="text-sm text-(--ui-text)">{a.description}</p>
+                  <p className="mt-0.5 text-xs text-(--ui-text-muted)">
                     {a.employee_name || "System"} · {fmtDate(a.created_at)}
                   </p>
                 </div>

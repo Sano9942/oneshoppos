@@ -11,7 +11,8 @@ module.exports = function registerShopifyRoutes(app, deps) {
     isRetryableInventoryEventStatus, canApproveReconciliationRequest,
     buildWebhookIdempotencyKey, verifyWebhookSignature,
     encryptShopifySecret, decryptShopifySecret, logShopifyEvent,
-    createNotification, runtimeState
+    createNotification, runtimeState,
+    processPendingShopifyInventoryEvents, enqueueInventorySyncEvents
   } = deps;
 
   function maskSecret(secret) { return _maskSecret(secret, decryptShopifySecret); }

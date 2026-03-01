@@ -274,15 +274,15 @@ export default function OrdersRedesign() {
     >
       <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
         <SectionCard className="p-3">
-          <p className="text-xs uppercase text-[var(--ui-text-muted)]">Total Orders</p>
-          <p className="mt-1 text-2xl font-semibold text-[var(--ui-text)]">{totals.total}</p>
+          <p className="text-xs uppercase text-(--ui-text-muted)">Total Orders</p>
+          <p className="mt-1 text-2xl font-semibold text-(--ui-text)">{totals.total}</p>
         </SectionCard>
         <SectionCard className="p-3">
-          <p className="text-xs uppercase text-[var(--ui-text-muted)]">Open</p>
+          <p className="text-xs uppercase text-(--ui-text-muted)">Open</p>
           <p className="mt-1 text-2xl font-semibold text-amber-700">{totals.open}</p>
         </SectionCard>
         <SectionCard className="p-3">
-          <p className="text-xs uppercase text-[var(--ui-text-muted)]">Paid</p>
+          <p className="text-xs uppercase text-(--ui-text-muted)">Paid</p>
           <p className="mt-1 text-2xl font-semibold text-emerald-700">{totals.paid}</p>
         </SectionCard>
       </div>
@@ -298,10 +298,10 @@ export default function OrdersRedesign() {
           <TableToolbar
             left={
               <>
-                <div className="relative min-w-[220px]">
+                <div className="relative min-w-55">
                   <Search
                     size={14}
-                    className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]"
+                    className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)"
                   />
                   <Input
                     className="pl-8"
@@ -354,7 +354,7 @@ export default function OrdersRedesign() {
               </>
             }
             right={
-              <span className="text-xs text-[var(--ui-text-muted)]">
+              <span className="text-xs text-(--ui-text-muted)">
                 {rows.length} orders
               </span>
             }
@@ -417,8 +417,8 @@ export default function OrdersRedesign() {
           </div>
 
           <div className="overflow-auto">
-            <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-              <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+            <table className="min-w-full border-t border-(--ui-border) text-sm">
+              <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                 <tr>
                   <th className="px-3 py-2">
                     <input
@@ -439,7 +439,7 @@ export default function OrdersRedesign() {
               <tbody>
                 {!loading &&
                   paged.map((r) => (
-                    <tr key={r.id} className="border-t border-[var(--ui-border)]">
+                    <tr key={r.id} className="border-t border-(--ui-border)">
                       <td className="px-3 py-2">
                         <input
                           type="checkbox"
@@ -448,12 +448,12 @@ export default function OrdersRedesign() {
                         />
                       </td>
                       <td className="px-3 py-2">
-                        <p className="font-semibold text-[var(--ui-text)]">
+                        <p className="font-semibold text-(--ui-text)">
                           #{r.external_order_number || r.external_order_id || r.id}
                         </p>
-                        <p className="text-xs text-[var(--ui-text-muted)]">{r.source || "-"}</p>
+                        <p className="text-xs text-(--ui-text-muted)">{r.source || "-"}</p>
                       </td>
-                      <td className="px-3 py-2 text-[var(--ui-text)]">
+                      <td className="px-3 py-2 text-(--ui-text)">
                         {r.customer_name || "Walk-in"}
                       </td>
                       <td className="px-3 py-2">
@@ -469,7 +469,7 @@ export default function OrdersRedesign() {
                           {r.fulfillment_status || "-"}
                         </Badge>
                       </td>
-                      <td className="px-3 py-2 text-right font-semibold text-[var(--ui-text)]">
+                      <td className="px-3 py-2 text-right font-semibold text-(--ui-text)">
                         PKRs {Number(r.grand_total || 0).toFixed(2)}
                       </td>
                       <td className="px-3 py-2 text-center">
@@ -487,7 +487,7 @@ export default function OrdersRedesign() {
               </tbody>
             </table>
             {loading ? (
-              <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">
+              <div className="p-8 text-center text-sm text-(--ui-text-muted)">
                 Loading orders...
               </div>
             ) : null}
@@ -495,8 +495,8 @@ export default function OrdersRedesign() {
               <EmptyState title="No orders found" body="Adjust filters or refresh data." />
             ) : null}
           </div>
-          <div className="flex items-center justify-between border-t border-[var(--ui-border)] p-3">
-            <span className="text-xs text-[var(--ui-text-muted)]">
+          <div className="flex items-center justify-between border-t border-(--ui-border) p-3">
+            <span className="text-xs text-(--ui-text-muted)">
               Page {page} of {totalPages}
             </span>
             <div className="flex gap-2">
@@ -523,10 +523,10 @@ export default function OrdersRedesign() {
           ) : (
             <div className="space-y-4">
               <div>
-                <h3 className="text-lg font-semibold text-[var(--ui-text)]">
+                <h3 className="text-lg font-semibold text-(--ui-text)">
                   Order #{selectedOrder.external_order_number || selectedOrder.external_order_id}
                 </h3>
-                <p className="text-xs text-[var(--ui-text-muted)]">
+                <p className="text-xs text-(--ui-text-muted)">
                   {selectedOrder.customer_name || "Walk-in"}
                 </p>
               </div>
@@ -574,17 +574,17 @@ export default function OrdersRedesign() {
               </div>
 
               <div>
-                <h4 className="mb-2 text-sm font-semibold text-[var(--ui-text)]">Items</h4>
+                <h4 className="mb-2 text-sm font-semibold text-(--ui-text)">Items</h4>
                 <div className="max-h-44 space-y-2 overflow-auto">
                   {(detail.items || []).map((i) => (
                     <div
                       key={i.id}
-                      className="rounded border border-[var(--ui-border)] p-2 text-xs"
+                      className="rounded border border-(--ui-border) p-2 text-xs"
                     >
-                      <p className="font-medium text-[var(--ui-text)]">
+                      <p className="font-medium text-(--ui-text)">
                         {i.title || i.sku || i.barcode || "Item"}
                       </p>
-                      <p className="text-[var(--ui-text-muted)]">
+                      <p className="text-(--ui-text-muted)">
                         Qty {i.qty} | Unit PKRs {Number(i.unit_price || 0).toFixed(2)}
                       </p>
                     </div>

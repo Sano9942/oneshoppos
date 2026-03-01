@@ -145,6 +145,55 @@ No need to split a file you're not currently touching.
 - ✅ Updated `CLAUDE.md` to reflect new route file structure
 - ✅ Database grown to 55 migrations (`migrate55.js` is current latest)
 
+### Frontend Redesign Migration Completed (Session Mar 2026)
+
+**Problem:** 4 pages (`Attendance`, `Approvals`, `BarcodeTemplates`, `ReceiptTemplates`) bypassed the `redesign/` shell entirely — their routes in `App.jsx` pointed directly to the old page files, so they rendered without the sidebar, header, or shared `PageShell` chrome.
+
+**Fix:** Created thin `*Redesign.jsx` wrappers in `frontend/src/pages/redesign/` for all 4:
+
+| New File | Wraps | Route |
+|----------|-------|-------|
+| `AttendanceRedesign.jsx` | `Attendance.jsx` | `/attendance` |
+| `ApprovalsRedesign.jsx` | `Approvals.jsx` | `/approvals` |
+| `BarcodeTemplatesRedesign.jsx` | `BarcodeTemplates.jsx` | `/barcode-templates` |
+| `ReceiptTemplatesRedesign.jsx` | `ReceiptTemplates.jsx` | `/receipt-templates` |
+
+Each wrapper uses `PageShell` from `primitives.jsx` and renders the original as a child — zero business logic duplicated.
+
+**`App.jsx` changes:** Swapped 4 direct imports + JSX usages to point to the redesign counterparts.
+
+**Status:** All routes in `App.jsx` now render through `redesign/`. No pages bypass the shell.
+
+### Nav Visibility Fix (Session Mar 2026)
+
+**Problem:** Even with redesign wrappers in place and routes defined, the 3 pages were invisible — they had no entries in `frontend/src/ui/nav-config.js` (the sidebar nav source of truth). Approvals had a nav entry but was hidden behind `requiredFlag: "approvals"` unnecessarily.
+
+**Fixes in `nav-config.js`:**
+- Added `Attendance` → Operations group (`requiredPerm: "manage_employees"`)
+- Added `Barcode Templates` → Setup group (`requiredPerm: "manage_inventory"`)
+- Added `Receipt Templates` → Setup group (`requiredPerm: "manage_inventory"`)
+- Removed `requiredFlag: "approvals"` from Approvals — flag is always-on by default anyway
+
+**Key rule:** A page needs 3 things to be visible: (1) a route in `App.jsx`, (2) a `*Redesign.jsx` wrapper, and (3) an entry in `nav-config.js`.
+
+### Full Wiring Audit (Session Mar 2026)
+
+Confirmed all 36 nav entries, all App.jsx routes, all 37 redesign pages, and all 26 backend route modules are properly connected. No silent gaps.
+
+**Known incomplete features (intentional — no frontend UI):**
+
+| Gap | Type | Notes |
+|-----|------|-------|
+| `/lookup` | PlaceholderPage | Not in nav, not built |
+| `/custom-fields` | PlaceholderPage | Not in nav, not built |
+| `/partners` | PlaceholderPage | Not in nav, not built |
+| `/shopcast` | PlaceholderPage | Not in nav, not built |
+| `/reports/parent-report` | PlaceholderPage | Report tab, not built |
+| E-Invoicing | Backend only | `POST /api/e-invoicing/validate` + `/transmit` in `barcode-expenses.js` — no frontend page |
+| Supplier Returns | Backend only | `supplier-returns.js` mounted, no `/supplier-returns` route or nav entry |
+
+---
+
 ### Bug Fixes Applied (Session Mar 2026) — Post-Refactor ReferenceError Audit
 
 After the refactor split, several route files had bare calls to helper functions that were private to `orders.js`. These caused silent `ReferenceError` crashes at runtime (not at startup), visible as 500 errors from the frontend.
@@ -169,3 +218,20 @@ After the refactor split, several route files had bare calls to helper functions
 - `backend/routes/supplier-returns.js` — added `enqueueInventorySyncEvents` defensive wrapper
 
 **Note:** `sales.js` already had the defensive wrapper from the original refactor session — it was the only file that was correctly handled at the time.
+
+### Additional Fixes (Session Mar 2026 — follow-up)
+
+**`logActionHistory`** — private to `orders.js`, found crashing in `reconciliation.js:295` when bulk-resolving reconciliation rows (caused server crash + auth rate-limit lockout).
+- **Fix:** Inlined directly into `reconciliation.js` (only depends on `db`).
+
+**`processPendingShopifyInventoryEvents` + `enqueueInventorySyncEvents`** — both defined and used inside `orders.js`, also called bare in `shopify.js`. `orders.js` only returned `processPendingShopifyInventoryEvents`; `enqueueInventorySyncEvents` was never exported. The defensive wrappers in `sales.js` / `returns.js` / etc. silently no-op'd because the function was never injected into deps.
+- **Fix:** `orders.js` now returns both functions. `registerAllRoutes.js` captures both and passes them via `shopifyDeps` to `shopify.js`. `shopify.js` destructures both from deps.
+
+**Files changed (follow-up):**
+- `backend/routes/orders.js` — return now includes `enqueueInventorySyncEvents`
+- `backend/routes/registerAllRoutes.js` — captures both, builds `shopifyDeps = { ...deps, processPendingShopifyInventoryEvents, enqueueInventorySyncEvents }`, passes to `shopify.js`
+- `backend/routes/shopify.js` — added both to deps destructure
+- `backend/routes/reconciliation.js` — inlined `logActionHistory`
+
+**Status of defensive wrappers in sales/returns/inventory/purchase-orders/supplier-returns:**
+These still work correctly — they check `deps.enqueueInventorySyncEvents` at call time. With the real function now injected into deps, they will use it instead of the no-op fallback.

@@ -299,10 +299,10 @@ export default function CustomersRedesign() {
         <SectionCard className="xl:col-span-8">
           <TableToolbar
             left={
-              <div className="relative min-w-[240px]">
+              <div className="relative min-w-60">
                 <Search
                   size={14}
-                  className="pointer-events-none absolute left-2.5 top-2.5 text-[var(--ui-text-muted)]"
+                  className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)"
                 />
                 <Input
                   className="pl-8"
@@ -313,7 +313,7 @@ export default function CustomersRedesign() {
               </div>
             }
             right={
-              <span className="text-xs text-[var(--ui-text-muted)]">
+              <span className="text-xs text-(--ui-text-muted)">
                 {rows.length} customers
               </span>
             }
@@ -346,8 +346,8 @@ export default function CustomersRedesign() {
           </div>
 
           <div className="overflow-auto">
-            <table className="min-w-full border-t border-[var(--ui-border)] text-sm">
-              <thead className="bg-[var(--ui-muted-surface)] text-xs uppercase text-[var(--ui-text-muted)]">
+            <table className="min-w-full border-t border-(--ui-border) text-sm">
+              <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                 <tr>
                   <th className="px-3 py-2">
                     <input
@@ -370,7 +370,7 @@ export default function CustomersRedesign() {
                   paged.map((r) => (
                     <tr
                       key={r.id}
-                      className={`border-t border-[var(--ui-border)] ${
+                      className={`border-t border-(--ui-border) ${
                         detail?.id === r.id ? "bg-emerald-50" : ""
                       }`}
                     >
@@ -389,22 +389,22 @@ export default function CustomersRedesign() {
                           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
                             <UserRound size={12} />
                           </span>
-                          <span className="font-medium text-[var(--ui-text)]">{r.name}</span>
+                          <span className="font-medium text-(--ui-text)">{r.name}</span>
                         </button>
                       </td>
-                      <td className="px-3 py-2 text-[var(--ui-text-muted)]">
+                      <td className="px-3 py-2 text-(--ui-text-muted)">
                         {r.mobile || "-"}
                       </td>
-                      <td className="px-3 py-2 text-[var(--ui-text-muted)]">
+                      <td className="px-3 py-2 text-(--ui-text-muted)">
                         {r.email || "-"}
                       </td>
                       <td className="px-3 py-2 text-center">
                         <Badge tone="success">{r.loyalty_points || 0}</Badge>
                       </td>
-                      <td className="px-3 py-2 text-center text-[var(--ui-text)]">
+                      <td className="px-3 py-2 text-center text-(--ui-text)">
                         {r.order_count || 0}
                       </td>
-                      <td className="px-3 py-2 text-right font-semibold text-[var(--ui-text)]">
+                      <td className="px-3 py-2 text-right font-semibold text-(--ui-text)">
                         {money(r.total_spent)}
                       </td>
                       <td className="px-3 py-2 text-center">
@@ -426,7 +426,7 @@ export default function CustomersRedesign() {
               </tbody>
             </table>
             {loading ? (
-              <div className="p-8 text-center text-sm text-[var(--ui-text-muted)]">
+              <div className="p-8 text-center text-sm text-(--ui-text-muted)">
                 Loading customers...
               </div>
             ) : null}
@@ -434,8 +434,8 @@ export default function CustomersRedesign() {
               <EmptyState title="No customers found" body="Add your first customer to begin." />
             ) : null}
           </div>
-          <div className="flex items-center justify-between border-t border-[var(--ui-border)] p-3">
-            <span className="text-xs text-[var(--ui-text-muted)]">
+          <div className="flex items-center justify-between border-t border-(--ui-border) p-3">
+            <span className="text-xs text-(--ui-text-muted)">
               Page {page} of {totalPages}
             </span>
             <div className="flex gap-2">
@@ -462,28 +462,28 @@ export default function CustomersRedesign() {
           ) : (
             <div className="space-y-4">
               <div>
-                <h3 className="text-lg font-semibold text-[var(--ui-text)]">{detail.name}</h3>
-                <p className="text-xs text-[var(--ui-text-muted)]">
+                <h3 className="text-lg font-semibold text-(--ui-text)">{detail.name}</h3>
+                <p className="text-xs text-(--ui-text-muted)">
                   {detail.email || detail.mobile || "No contact info"}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <SectionCard className="p-2 text-center">
-                  <p className="text-xs text-[var(--ui-text-muted)]">Orders</p>
-                  <p className="text-lg font-semibold text-[var(--ui-text)]">
+                  <p className="text-xs text-(--ui-text-muted)">Orders</p>
+                  <p className="text-lg font-semibold text-(--ui-text)">
                     {detail.order_count || 0}
                   </p>
                 </SectionCard>
                 <SectionCard className="p-2 text-center">
-                  <p className="text-xs text-[var(--ui-text-muted)]">Spent</p>
-                  <p className="text-lg font-semibold text-[var(--ui-text)]">
+                  <p className="text-xs text-(--ui-text-muted)">Spent</p>
+                  <p className="text-lg font-semibold text-(--ui-text)">
                     {money(detail.total_spent)}
                   </p>
                 </SectionCard>
               </div>
 
               <SectionCard className="p-2">
-                <p className="mb-2 text-xs text-[var(--ui-text-muted)]">Loyalty points</p>
+                <p className="mb-2 text-xs text-(--ui-text-muted)">Loyalty points</p>
                 <div className="flex gap-2">
                   <Input
                     type="number"
@@ -497,7 +497,7 @@ export default function CustomersRedesign() {
               </SectionCard>
 
               <SectionCard className="p-2">
-                <p className="mb-2 text-xs text-[var(--ui-text-muted)]">
+                <p className="mb-2 text-xs text-(--ui-text-muted)">
                   Wallet balance: {money(walletBalance)}
                 </p>
                 <div className="space-y-2">
@@ -521,17 +521,17 @@ export default function CustomersRedesign() {
               </SectionCard>
 
               <div>
-                <h4 className="mb-2 text-sm font-semibold text-[var(--ui-text)]">
+                <h4 className="mb-2 text-sm font-semibold text-(--ui-text)">
                   Recent Sales
                 </h4>
                 <div className="max-h-52 space-y-2 overflow-auto">
                   {customerSales.length === 0 ? (
-                    <p className="text-xs text-[var(--ui-text-muted)]">No sales yet.</p>
+                    <p className="text-xs text-(--ui-text-muted)">No sales yet.</p>
                   ) : (
                     customerSales.slice(0, 20).map((s) => (
-                      <div key={s.id} className="rounded border border-[var(--ui-border)] p-2 text-xs">
-                        <p className="font-medium text-[var(--ui-text)]">Sale #{s.id}</p>
-                        <p className="text-[var(--ui-text-muted)]">
+                      <div key={s.id} className="rounded border border-(--ui-border) p-2 text-xs">
+                        <p className="font-medium text-(--ui-text)">Sale #{s.id}</p>
+                        <p className="text-(--ui-text-muted)">
                           {new Date(s.timestamp).toLocaleDateString()} | {money(s.total_amount)}
                         </p>
                       </div>
@@ -547,7 +547,7 @@ export default function CustomersRedesign() {
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="w-full max-w-md p-4">
-            <h3 className="text-lg font-semibold text-[var(--ui-text)]">
+            <h3 className="text-lg font-semibold text-(--ui-text)">
               {editing ? "Edit Customer" : "Add Customer"}
             </h3>
             <form className="mt-3 space-y-2" onSubmit={submitForm}>
