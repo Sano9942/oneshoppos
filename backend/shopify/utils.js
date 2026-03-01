@@ -89,6 +89,40 @@ function verifyWebhookSignature({ rawBody, providedHmac, webhookSecret }) {
   return { ok: true, expected };
 }
 
+// Returns a masked preview of a Shopify secret (first4...last4).
+// decryptFn is injected so this module stays free of DB/crypto deps.
+function maskSecret(secret, decryptFn) {
+  let value = String(secret || "");
+  if (typeof decryptFn === "function") {
+    try { value = decryptFn(value); } catch { /* keep raw on decrypt failure */ }
+  }
+  if (!value) return "";
+  if (value.length <= 8) return "********";
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
+// Fetches the single active Shopify connection row and decrypts secrets.
+// db and decryptFn are injected to keep this module free of direct DB imports.
+function getActiveShopifyConnection(db, decryptFn, cb) {
+  db.get(
+    `SELECT * FROM shopify_connections WHERE is_active = 1 ORDER BY id DESC LIMIT 1`,
+    [],
+    (err, row) => {
+      if (err || !row) return cb(err, row);
+      try {
+        const hydrated = {
+          ...row,
+          access_token: decryptFn(row.access_token),
+          webhook_secret: decryptFn(row.webhook_secret),
+        };
+        return cb(null, hydrated);
+      } catch (e) {
+        return cb(e);
+      }
+    },
+  );
+}
+
 module.exports = {
   baseRetryDelayMinutes,
   retryDelayMinutesWithJitter,
@@ -97,4 +131,6 @@ module.exports = {
   canApproveReconciliationRequest,
   buildWebhookIdempotencyKey,
   verifyWebhookSignature,
+  maskSecret,
+  getActiveShopifyConnection,
 };

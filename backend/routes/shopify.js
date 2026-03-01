@@ -1,3 +1,5 @@
+const { maskSecret: _maskSecret, getActiveShopifyConnection: _getActiveShopifyConnection } = require("../shopify/utils");
+
 module.exports = function registerShopifyRoutes(app, deps) {
   const {
     db, requirePerm, requireAnyPerm, requireFeature,
@@ -11,6 +13,9 @@ module.exports = function registerShopifyRoutes(app, deps) {
     encryptShopifySecret, decryptShopifySecret, logShopifyEvent,
     createNotification, runtimeState
   } = deps;
+
+  function maskSecret(secret) { return _maskSecret(secret, decryptShopifySecret); }
+  function getActiveShopifyConnection(cb) { return _getActiveShopifyConnection(db, decryptShopifySecret, cb); }
 
 // --- ROUTES: SHOPIFY CONNECTOR ---
 

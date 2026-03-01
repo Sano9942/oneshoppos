@@ -1,6 +1,69 @@
 module.exports = function registerSalesRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale, path, fs, UPLOADS_DIR } = deps;
 
+  // --- HELPERS (inlined because these functions live in other route modules) ---
+
+  function generateInvoiceNumber(cb) {
+    const year = new Date().getFullYear();
+    db.serialize(() => {
+      db.run(
+        "INSERT INTO invoice_sequences (year, last_seq) VALUES (?, 1) ON CONFLICT(year) DO UPDATE SET last_seq = last_seq + 1",
+        [year],
+        function (err) {
+          if (err) return cb(err);
+          db.get(
+            "SELECT last_seq FROM invoice_sequences WHERE year = ?",
+            [year],
+            (err2, row) => {
+              if (err2) return cb(err2);
+              const seq = String(row.last_seq).padStart(5, "0");
+              cb(null, `INV-${year}-${seq}`);
+            },
+          );
+        },
+      );
+    });
+  }
+
+  function assignInvoiceNumberToSale(saleId, retriesLeft, cb) {
+    generateInvoiceNumber((invErr, invoiceNumber) => {
+      if (invErr || !invoiceNumber) {
+        if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1, cb);
+        return cb(invErr || new Error("Failed to generate invoice number"));
+      }
+      db.run(
+        "UPDATE sales SET invoice_number = ? WHERE id = ? AND invoice_number IS NULL",
+        [invoiceNumber, saleId],
+        function (updateErr) {
+          if (updateErr) {
+            if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1, cb);
+            return cb(updateErr);
+          }
+          if (this.changes > 0) return cb(null, invoiceNumber);
+          db.get("SELECT invoice_number FROM sales WHERE id = ?", [saleId], (rowErr, row) => {
+            if (rowErr) {
+              if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1, cb);
+              return cb(rowErr);
+            }
+            if (row && row.invoice_number) return cb(null, row.invoice_number);
+            if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1, cb);
+            return cb(new Error("Invoice number update affected zero rows"));
+          });
+        },
+      );
+    });
+  }
+
+  // enqueueInventorySyncEvents is a Shopify sync helper defined in orders.js.
+  // For sales, we call it as a no-op if unavailable (sync is non-blocking).
+  function enqueueInventorySyncEvents(changes, context, cb) {
+    try {
+      const ordersModule = deps.enqueueInventorySyncEvents;
+      if (typeof ordersModule === "function") return ordersModule(changes, context, cb);
+    } catch { /* ignore */ }
+    if (typeof cb === "function") cb(null, { queued: 0, skipped: changes.length });
+  }
+
 // --- SALES HISTORY ROUTES ---
 
   // GET all sales (paginated, filterable)

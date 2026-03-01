@@ -1,6 +1,14 @@
 module.exports = function registerPurchaseOrderRoutes(app, deps) {
   const { db, requirePerm, createNotification } = deps;
 
+  function enqueueInventorySyncEvents(changes, context, cb) {
+    try {
+      const fn = deps.enqueueInventorySyncEvents;
+      if (typeof fn === "function") return fn(changes, context, cb);
+    } catch { /* ignore */ }
+    if (typeof cb === "function") cb(null, { queued: 0, skipped: changes.length });
+  }
+
 // --- ROUTES: PURCHASE ORDERS ---
 
   // Get all purchase orders (with supplier names)

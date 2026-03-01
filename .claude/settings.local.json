@@ -10,7 +10,13 @@
       "Bash(tail:*)",
       "Bash(find:*)",
       "Bash(test -f \"d:/newprojects/oneshoppos/backend/migrate53.js\")",
-      "Bash(test -f \"d:/newprojects/oneshoppos/backend/migrate54.js\")"
+      "Bash(test -f \"d:/newprojects/oneshoppos/backend/migrate54.js\")",
+      "Bash(wc -l d:/newprojects/oneshoppos/backend/routes/*.js)",
+      "Bash(wc -l d:/newprojects/oneshoppos/frontend/src/pages/redesign/*.jsx)",
+      "Bash(git rm frontend/src/pages/POS.jsx frontend/src/pages/Reports.jsx frontend/src/pages/ShopifyIntegration.jsx frontend/src/pages/Accounting.jsx)",
+      "Bash(git rm -f frontend/src/pages/POS.jsx)",
+      "Bash(git rm frontend/src/pages/Reports.jsx frontend/src/pages/ShopifyIntegration.jsx frontend/src/pages/Accounting.jsx)",
+      "Bash(git mv frontend/src/pages/InventoryRedesign.jsx frontend/src/pages/redesign/InventoryRedesign.jsx)"
     ]
   }
 }

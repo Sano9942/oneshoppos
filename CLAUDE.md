@@ -40,13 +40,14 @@ oneshoppos/
 │   │   ├── barcode-expenses.js   # Barcodes, expenses, backup/restore, e-invoicing
 │   │   └── tier4.js              # Tier 4 features router (~1248 lines)
 │   ├── shopify/
-│   │   └── client.js             # Shopify GraphQL API client (~525 lines)
-│   └── migrate45.js              # Latest DB migration — READ THIS for schema questions
+│   │   ├── client.js             # Shopify GraphQL API client (~525 lines)
+│   │   └── utils.js              # Retry logic, webhook HMAC verification
+│   └── migrate55.js              # Latest DB migration — READ THIS for schema questions
 └── frontend/
     └── src/
         ├── components/           # Reusable UI components (all small, < 200 lines)
         └── pages/                # Full page views
-            ├── Reports.jsx           # (~2959 lines - largest frontend file)
+            ├── Reports.jsx           # (~2999 lines - largest frontend file)
             ├── ShopifyIntegration.jsx # (~2108 lines)
             ├── POS.jsx               # (~1867 lines)
             └── [other pages]
@@ -55,16 +56,16 @@ oneshoppos/
 ## Key Architecture Facts
 - All API routes are in `backend/routes/<domain>.js` — read only the relevant file
 - `registerAllRoutes.js` is now just an orchestrator (324 lines) — no routes defined there
-- Database schema: read only `backend/migrate45.js` (latest), never older migrations
+- Database schema: read only `backend/migrate55.js` (latest), never older migrations
 - SQLite DB file: `backend/oneshop.db`
 - Frontend: port 5173 (Vite dev), Backend: port 3001
 
 ## When Working on Backend
 - Find which file owns the route: check the table in this file above
 - Read ONLY that route file — do not read registerAllRoutes.js for route logic
-- Schema questions → `backend/migrate45.js` only
+- Schema questions → `backend/migrate55.js` only
 - Server middleware/config → `backend/index.js`
-- Shopify API calls → `backend/shopify/client.js`
+- Shopify API calls → `backend/shopify/client.js`, webhook/retry logic → `backend/shopify/utils.js`
 
 ## When Working on Frontend
 - Pages are in `frontend/src/pages/`
@@ -76,7 +77,7 @@ oneshoppos/
 - `backend/exports/` (generated CSV reports)
 - `backend/backups/` (database backups)
 - `frontend/dist/` (build output)
-- Any migration file except `migrate45.js`
+- Any migration file except `migrate55.js`
 - Test files (`*_test.js`, `e2e_*.js`, etc.)
 - Diagnostic scripts (`check_*.js`, `diagnose_*.js`, `dumpDb*.js`, etc.)
 

@@ -1,10 +1,14 @@
+const { getActiveShopifyConnection: _getActiveShopifyConnection } = require("../shopify/utils");
+
 module.exports = function registerReconciliationRoutes(app, deps) {
   const {
     db, requirePerm, requireAnyPerm, requireFeature,
     canApproveReconciliationRequest, createNotification,
     adjustShopifyInventory, fetchInventoryLevel,
-    logShopifyEvent, runtimeState
+    logShopifyEvent, runtimeState, decryptShopifySecret
   } = deps;
+
+  function getActiveShopifyConnection(cb) { return _getActiveShopifyConnection(db, decryptShopifySecret, cb); }
 
 // --- ROUTES: RECONCILIATION (internal) ---
 
