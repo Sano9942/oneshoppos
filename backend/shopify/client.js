@@ -405,6 +405,7 @@ async function fetchShopifyProductsFull(connection, maxItems = 10000) {
           cursor
           node {
             id
+            handle
             title
             descriptionHtml
             productType
@@ -490,6 +491,7 @@ async function fetchShopifyProductsFull(connection, maxItems = 10000) {
 
       out.push({
         shopify_product_id: p.id || "",
+        shopify_handle: p.handle || "",
         title: p.title || "",
         description_html: p.descriptionHtml || "",
         product_type: p.productType || "",

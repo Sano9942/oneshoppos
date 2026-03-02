@@ -299,8 +299,8 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./parked-sales")(app, deps);
 
     // --- ROUTES: ORDERS ---
-  const { processPendingShopifyInventoryEvents, enqueueInventorySyncEvents } = require("./orders")(app, deps) || {};
-  const shopifyDeps = { ...deps, processPendingShopifyInventoryEvents, enqueueInventorySyncEvents };
+  const { processPendingShopifyInventoryEvents, enqueueInventorySyncEvents, upsertWebOrderFromShopifyPayload } = require("./orders")(app, deps) || {};
+  const shopifyDeps = { ...deps, processPendingShopifyInventoryEvents, enqueueInventorySyncEvents, upsertWebOrderFromShopifyPayload };
 
     // --- ROUTES: SHOPIFY ---
   require("./shopify")(app, shopifyDeps);

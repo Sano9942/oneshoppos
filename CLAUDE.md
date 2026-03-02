@@ -1,11 +1,14 @@
 # OneShopPOS - Project Guide for Claude
 
 ## What This Is
+
 A full-stack Point of Sale (POS) system with Shopify integration.
+
 - Backend: Node.js + Express v5 + SQLite3
 - Frontend: React 19 + Vite 7 + Tailwind CSS v4
 
 ## Project Structure
+
 ```
 oneshoppos/
 ├── backend/
@@ -34,14 +37,23 @@ oneshoppos/
 │   │   ├── receipt-templates.js  # /api/receipt-templates + action history
 │   │   ├── supplier-returns.js   # /api/supplier-returns
 │   │   ├── parked-sales.js       # /api/parked-sales
-│   │   ├── orders.js             # /api/orders (~1407 lines)
-│   │   ├── shopify.js            # /api/integrations/shopify* (~1909 lines)
+│   │   ├── orders.js             # /api/orders
+│   │   ├── shopify/              # /api/integrations/shopify* (modular — 8 files)
+│   │   │   ├── index.js          # Entry point — wires sub-modules, shared deps
+│   │   │   ├── config.js         # GET/PUT /config, POST /disconnect
+│   │   │   ├── health.js         # /status, /verify, /live-validation, /webhooks/setup, /uat-checklist
+│   │   │   ├── sync.js           # /events, /retry-event, /process-pending, /retry-failed, /push-inventory
+│   │   │   ├── orders.js         # POST /sync/pull-orders
+│   │   │   ├── webhooks.js       # POST /webhooks/orders-create (HMAC + idempotency + replay window)
+│   │   │   ├── import.js         # POST/DELETE /import/products, POST /import/inventory
+│   │   │   └── mappings.js       # /mappings/products (CRUD + auto + live + apply), /locations, /customers
 │   │   ├── reconciliation.js     # /api/reconciliation + /api/approvals (~1101 lines)
 │   │   ├── barcode-expenses.js   # Barcodes, expenses, backup/restore, e-invoicing
 │   │   └── tier4.js              # Tier 4 features router (~1248 lines)
 │   ├── shopify/
 │   │   ├── client.js             # Shopify GraphQL API client (~525 lines)
-│   │   └── utils.js              # Retry logic, webhook HMAC verification
+│   │   ├── utils.js              # Retry logic, webhook HMAC verification
+│   │   └── order-service.js      # upsertWebOrderFromShopifyPayload + stock policy helpers (factory)
 │   ├── category-tree.js          # Category tree enrichment, descendants, leaf validation
 │   └── migrate59.js              # Latest DB migration — READ THIS for schema questions
 └── frontend/
@@ -74,7 +86,9 @@ oneshoppos/
 ```
 
 ## Key Architecture Facts
-- All API routes are in `backend/routes/<domain>.js` — read only the relevant file
+
+- Most API routes are in `backend/routes/<domain>.js` — read only the relevant file
+- Shopify integration routes are **modular**: `backend/routes/shopify/` (8 files). Entry point is `index.js`; sub-modules are `config`, `health`, `sync`, `orders`, `webhooks`, `import`, `mappings`
 - `registerAllRoutes.js` is now just an orchestrator (324 lines) — no routes defined there
 - Database schema: read only `backend/migrate59.js` (latest), never older migrations
 - Internal product categories are hierarchical; products and category promotions may target leaf categories only
@@ -85,14 +99,18 @@ oneshoppos/
 - Frontend: port 5173 (Vite dev), Backend: port 5000
 
 ## When Working on Backend
+
 - Find which file owns the route: check the table in this file above
 - Read ONLY that route file — do not read registerAllRoutes.js for route logic
 - Schema questions → `backend/migrate59.js` only
 - Category tree logic → `backend/category-tree.js`
 - Server middleware/config → `backend/index.js`
 - Shopify API calls → `backend/shopify/client.js`, webhook/retry logic → `backend/shopify/utils.js`
+- Shopify routes → `backend/routes/shopify/<module>.js` (not a single file anymore)
+- Shopify order upsert service → `backend/shopify/order-service.js`
 
 ## When Working on Frontend
+
 - **Active pages** are in `frontend/src/pages/redesign/` — always edit the `*Redesign.jsx` file
 - `*Route.jsx` files in `pages/` just render the redesign counterpart — no logic there
 - Legacy originals in `pages/` (`Reports.jsx`, `ShopifyIntegration.jsx`, `Accounting.jsx`, `Attendance.jsx`, `Approvals.jsx`, `BarcodeTemplates.jsx`, `ReceiptTemplates.jsx`) — do NOT delete; they are imported by their Redesign counterparts
@@ -104,24 +122,28 @@ oneshoppos/
 - Tailwind v4: use `(--css-var)` syntax not `[var(--css-var)]`
 
 ## Do NOT Read (already in .claudeignore)
+
 - `node_modules/` in either folder
 - `backend/exports/` (generated CSV reports)
 - `backend/backups/` (database backups)
 - `frontend/dist/` (build output)
-- Any migration file except `migrate59.js`
+- Any migration file except `migrate60.js`
 - Test files (`*_test.js`, `e2e_*.js`, etc.)
 - Diagnostic scripts (`check_*.js`, `diagnose_*.js`, `dumpDb*.js`, etc.)
 
 ## Backend: Key Dependency Injection Notes
-- `orders.js` exports `processPendingShopifyInventoryEvents` + `enqueueInventorySyncEvents` — captured by `registerAllRoutes.js` and passed to `shopify.js` via `shopifyDeps`
+
+- `orders.js` exports `processPendingShopifyInventoryEvents` + `enqueueInventorySyncEvents` + `upsertWebOrderFromShopifyPayload` — all three captured by `registerAllRoutes.js` and passed to `routes/shopify/` via `shopifyDeps`
+- `backend/shopify/order-service.js` is the canonical home of `upsertWebOrderFromShopifyPayload` and its 5 helper functions (stock policy, outlet resolution, item mapping). Instantiated via factory: `require('./order-service')(db, getActiveShopifyConnection)`
 - `sales.js`, `returns.js`, `inventory.js`, `purchase-orders.js`, `supplier-returns.js` use a defensive wrapper for `enqueueInventorySyncEvents` — checks `deps.enqueueInventorySyncEvents`, no-ops gracefully if absent
 - `reconciliation.js` has its own inlined `logActionHistory` (same impl as `orders.js`)
-- `shopify/utils.js` exports `maskSecret` + `getActiveShopifyConnection` — used by `shopify.js` and `reconciliation.js` via thin wrappers
+- `shopify/utils.js` exports `maskSecret` + `getActiveShopifyConnection` — used by `routes/shopify/index.js` and `reconciliation.js` via thin wrappers
 
 ## Refactor History
+
 - Feb 2026: Split registerAllRoutes.js (was 11,630 lines) into 26 focused files
 - Mar 2026: Fixed 3 waves of post-refactor ReferenceErrors (enqueueInventorySyncEvents, getActiveShopifyConnection, maskSecret, logActionHistory, processPendingShopifyInventoryEvents)
-- Mar 2026: Completed redesign migration — Attendance, Approvals, BarcodeTemplates, ReceiptTemplates now all have *Redesign.jsx wrappers; all routes in App.jsx point to redesign/
+- Mar 2026: Completed redesign migration — Attendance, Approvals, BarcodeTemplates, ReceiptTemplates now all have \*Redesign.jsx wrappers; all routes in App.jsx point to redesign/
 - Mar 2026: Added Attendance, Barcode Templates, Receipt Templates to nav-config.js; removed requiredFlag gate from Approvals so it shows for any manage_orders user
 - Mar 2026: Full audit — all 36 nav entries, routes, redesign pages, and 26 backend modules confirmed wired. Remaining intentional gaps are the 5 placeholder routes (`/lookup`, `/custom-fields`, `/partners`, `/shopcast`, `/reports/parent-report`).
 - Mar 2026: Attendance module overhaul — PIN kiosk, session/break tracking, net hours, employee attendance config. `migrate56.js` introduced the attendance schema changes at that stage, and `attendance.js` was properly registered after previously being dead code. See `REFACTOR_NOTES.md` for full details.
@@ -135,3 +157,5 @@ oneshoppos/
 - Mar 2026: Toy-store rollout completed on the live DB. Shopify-style internal categories were imported, `Toys & Games` was added as the primary top-level tree, sample products were reclassified into toy leaves, and recommended toy brands/tags were seeded.
 - Mar 2026: Shopify import path made hierarchy-safe. `shopify.js` no longer auto-creates categories from Shopify `product_type`; it only assigns `category_id` when there is exactly one matching existing leaf, otherwise it preserves product metadata and leaves category assignment unchanged/null.
 - Mar 2026: Permanent inventory/reports smoke coverage added. `frontend/tests/e2e/inventory-reports-smoke.spec.js` verifies inventory editing of `product_type`/`vendor`/`tags` plus category-wise CSV export and report API validity.
+- Mar 2026: Shopify Integration V2 Phase 2 — backend modularization complete. `backend/routes/shopify.js` (1,929-line monolith) deleted and replaced with `backend/routes/shopify/` (8 focused modules: `index`, `config`, `health`, `sync`, `orders`, `webhooks`, `import`, `mappings`). Critical bug fixed: `upsertWebOrderFromShopifyPayload` extracted to `backend/shopify/order-service.js` and correctly threaded through `registerAllRoutes.js` → `shopifyDeps` → all Shopify route modules.
+- Mar 2026: Shopify Integration V2 Phase 3 — data model hardening. `migrate60.js` creates `shopify_product_metadata` (Shopify-native taxonomy: handle, status, product_type, vendor, tags, published_at, updated_at) with `ON DELETE CASCADE` + unique index. `client.js` now returns `shopify_handle` from product queries. `import.js` fire-and-forgets a metadata upsert after every product write. `run_migrations.js` updated.

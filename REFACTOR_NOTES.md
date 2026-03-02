@@ -268,8 +268,9 @@ Both are then returned from `registerAllRoutes` to `index.js` as before.
 ### When Working on This Project
 
 - **Backend route issue?** → Read only the relevant route file (e.g. `backend/routes/products.js`)
+- **Shopify route issue?** → Read `backend/routes/shopify/<module>.js` — 8 focused modules (not a single file)
 - **Global middleware?** → Read `backend/routes/registerAllRoutes.js` (324 lines)
-- **Database schema?** → Read only `backend/migrate59.js` (latest migration, 59 total)
+- **Database schema?** → Read only `backend/migrate60.js` (latest migration, 60 total)
 - **Frontend page issue?** → Read the specific page in `frontend/src/pages/`
 - **Server startup/config?** → Read `backend/index.js`
 
@@ -284,13 +285,13 @@ Use `/clear` between unrelated tasks and `/compact` when conversations get long.
 These are still large and worth splitting when you actively work on them.
 No need to split a file you're not currently touching.
 
-| File                | Lines  | Suggested Split                                                       |
-| ------------------- | ------ | --------------------------------------------------------------------- |
-| `reports.js`        | ~2,193 | `reports-dashboard.js` + `reports-extended.js` + `cash-management.js` |
-| `shopify.js`        | ~1,909 | `shopify-config.js` + `shopify-import.js` + `shopify-mappings.js`     |
-| `orders.js`         | ~1,407 | Order creation vs order sync/Shopify logic                            |
-| `tier4.js`          | ~1,248 | By feature: notifications, HR, CRM, quotations, attachments           |
-| `reconciliation.js` | ~1,101 | `reconciliation.js` + `approvals.js`                                  |
+| File                | Lines     | Suggested Split                                                         |
+| ------------------- | --------- | ----------------------------------------------------------------------- |
+| `reports.js`        | ~2,193    | `reports-dashboard.js` + `reports-extended.js` + `cash-management.js`   |
+| ~~`shopify.js`~~    | ~~1,909~~ | **DONE** — Split in Mar 2026 into `backend/routes/shopify/` (8 modules) |
+| `orders.js`         | ~1,407    | Order creation vs order sync/Shopify logic                              |
+| `tier4.js`          | ~1,248    | By feature: notifications, HR, CRM, quotations, attachments             |
+| `reconciliation.js` | ~1,101    | `reconciliation.js` + `approvals.js`                                    |
 
 ### Frontend Pages — Candidates for Component Splitting
 
@@ -307,7 +308,8 @@ No need to split a file you're not currently touching.
 - ✅ Updated `.claudeignore` to block all old migrations, test files, diagnostic scripts
 - ✅ Created `CLAUDE.md` project guide
 - ✅ Updated `CLAUDE.md` to reflect new route file structure
-- ✅ Database grown to 59 migrations (`migrate59.js` is current latest)
+- ✅ Database grown to 60 migrations (`migrate60.js` is current latest)
+- ✅ **Shopify Integration V2 (Mar 2026)** — `shopify.js` monolith (1,929 lines) deleted; replaced by `backend/routes/shopify/` (8 modules). Critical dep bug fixed (`upsertWebOrderFromShopifyPayload`). `migrate60.js` adds `shopify_product_metadata` for Shopify-native taxonomy.
 
 ### Frontend Redesign Migration Completed (Session Mar 2026)
 
@@ -347,15 +349,15 @@ Confirmed all 36 nav entries, all App.jsx routes, all 37 redesign pages, and all
 
 **Known incomplete features (intentional — no frontend UI):**
 
-| Gap                      | Type            | Notes                                                                                      |
-| ------------------------ | --------------- | ------------------------------------------------------------------------------------------ |
-| `/lookup`                | PlaceholderPage | Not in nav, not built                                                                      |
-| `/custom-fields`         | PlaceholderPage | Not in nav, not built                                                                      |
-| `/partners`              | PlaceholderPage | Not in nav, not built                                                                      |
-| `/shopcast`              | PlaceholderPage | Not in nav, not built                                                                      |
-| `/reports/parent-report` | PlaceholderPage | Report tab, not built                                                                      |
+| Gap                      | Type                      | Notes                                                                                                                                                                                         |
+| ------------------------ | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/lookup`                | PlaceholderPage           | Not in nav, not built                                                                                                                                                                         |
+| `/custom-fields`         | PlaceholderPage           | Not in nav, not built                                                                                                                                                                         |
+| `/partners`              | PlaceholderPage           | Not in nav, not built                                                                                                                                                                         |
+| `/shopcast`              | PlaceholderPage           | Not in nav, not built                                                                                                                                                                         |
+| `/reports/parent-report` | PlaceholderPage           | Report tab, not built                                                                                                                                                                         |
 | E-Invoicing              | ~~Backend only~~ **Done** | `GET /api/sales/:id/invoice` + `/export` in `barcode-expenses.js`. Frontend: `InvoiceView.jsx` (print + Export JSON), wired into `SalesHistoryRedesign.jsx` via "Invoice" button per sale row |
-| Supplier Returns         | ~~Backend only~~ **Done** | `supplier-returns.js` mounted. Frontend: `ReturnedStockRedesign.jsx` fully built, route `/returned-stock` in `App.jsx`, "Returned Stock" nav entry in `nav-config.js` (Stock Control group)    |
+| Supplier Returns         | ~~Backend only~~ **Done** | `supplier-returns.js` mounted. Frontend: `ReturnedStockRedesign.jsx` fully built, route `/returned-stock` in `App.jsx`, "Returned Stock" nav entry in `nav-config.js` (Stock Control group)   |
 
 ---
 

@@ -649,7 +649,7 @@ This plan does not implement tenant support now, but V2 code boundaries should s
 
 ## Phased Implementation Plan
 
-## Phase 1: Full Contract Audit
+## Phase 1: Full Contract Audit — ✅ COMPLETE
 
 Before refactoring, document:
 
@@ -667,38 +667,39 @@ Deliverables:
 - mutation-risk map
 - open issue list
 
-## Phase 2: Backend Modularization Without Behavior Change
+## Phase 2: Backend Modularization Without Behavior Change — ✅ COMPLETE (Mar 2026)
 
-Split [backend/routes/shopify.js](/d:/newprojects/oneshoppos/backend/routes/shopify.js) into smaller route modules.
+**What was implemented:**
 
-Requirements:
+- `backend/routes/shopify.js` (1,929 lines) deleted
+- Replaced by `backend/routes/shopify/` with 8 focused modules:
+  - `index.js` — entry point, shared dep wiring
+  - `config.js` — 3 routes: GET/PUT config, POST disconnect
+  - `health.js` — 6 routes: status, verify, locations/live, live-validation, webhooks/setup, uat-checklist
+  - `sync.js` — 5 routes: events, retry-event, process-pending, retry-failed, push-inventory
+  - `orders.js` — 1 route: pull-orders
+  - `webhooks.js` — 1 route: orders-create (HMAC sig verify, replay window, idempotency)
+  - `import.js` — 3 routes: POST/DELETE products, POST inventory
+  - `mappings.js` — 9 routes: products CRUD + auto + live + apply-suggestions, locations, customers
+- Critical bug fixed: `upsertWebOrderFromShopifyPayload` extracted to `backend/shopify/order-service.js`, properly threaded through `registerAllRoutes.js` → `shopifyDeps`
+- All 28 routes verified present and loading correctly (static audit + Node require test)
 
-- keep endpoints stable
-- keep response shapes stable initially
-- move shared logic into services
-- avoid mixing refactor with new business behavior in the same step
+## Phase 3: Shopify Data Model Hardening — ✅ COMPLETE (Mar 2026)
 
-Success criteria:
+**What was implemented:**
 
-- route behavior unchanged
-- easier testability
-- smaller modules by concern
-
-## Phase 3: Shopify Data Model Hardening
-
-Add explicit Shopify classification persistence.
-
-Requirements:
-
-- preserve Shopify-native category data separately
-- keep internal category assignment independent
-- preserve current safe importer behavior until mapping rules are upgraded
-
-Success criteria:
-
-- imported Shopify classification is queryable
-- no category corruption
-- no forced category guessing
+- `backend/migrate60.js` — creates `shopify_product_metadata` table:
+  - `product_id` (FK → products, ON DELETE CASCADE)
+  - `shopify_product_id`, `shopify_handle`, `shopify_status`
+  - `shopify_product_type`, `shopify_vendor`, `shopify_tags`
+  - `shopify_published_at`, `shopify_updated_at`, `last_imported_at`, `created_at`
+  - UNIQUE constraints on `product_id` and `shopify_product_id`
+  - Index `idx_spm_shopify_product_id` for fast lookups
+- `backend/run_migrations.js` updated to include `migrate60.js`
+- `backend/shopify/client.js` — `handle` field added to `fetchShopifyProductsFull` GraphQL product query; returned as `shopify_handle` in product objects
+- `backend/routes/shopify/import.js` — fire-and-forget upsert into `shopify_product_metadata` after every product import (`ON CONFLICT(product_id)` keeps data fresh on re-import)
+- DELETE `/import/products` automatically cascades deletes to `shopify_product_metadata` via FK
+- Existing product fields (`product_type`, `vendor`, `tags`, `description_html`) remain on `products` table unchanged
 
 ## Phase 4: Import and Mapping Modernization
 
@@ -765,15 +766,16 @@ Success criteria:
 
 ## Backend File Impact Map
 
-Likely files to touch during implementation:
+Likely files touched during implementation:
 
-- [backend/routes/shopify.js](/d:/newprojects/oneshoppos/backend/routes/shopify.js)
+- ~~[backend/routes/shopify.js]~~ → **replaced by `backend/routes/shopify/` (8 modules)**
 - [backend/routes/orders.js](/d:/newprojects/oneshoppos/backend/routes/orders.js)
 - [backend/routes/reconciliation.js](/d:/newprojects/oneshoppos/backend/routes/reconciliation.js)
-- [backend/shopify/client.js](/d:/newprojects/oneshoppos/backend/shopify/client.js)
+- [backend/shopify/client.js](/d:/newprojects/oneshoppos/backend/shopify/client.js) ✅ updated
 - [backend/shopify/utils.js](/d:/newprojects/oneshoppos/backend/shopify/utils.js)
+- [backend/shopify/order-service.js](/d:/newprojects/oneshoppos/backend/shopify/order-service.js) ✅ new
 - [backend/index.js](/d:/newprojects/oneshoppos/backend/index.js)
-- new migrations for Shopify metadata/settings if approved
+- `backend/migrate60.js` ✅ new — `shopify_product_metadata`
 - test helpers in [backend/tests/helpers/seedSchema.js](/d:/newprojects/oneshoppos/backend/tests/helpers/seedSchema.js)
 
 ## Frontend File Impact Map
@@ -891,11 +893,9 @@ Shopify Integration V2 implementation is complete when:
 
 ## Recommended Next Step
 
-Before implementation begins:
+**Phases 1–3 are complete (Mar 2026).** Remaining phases for full V2:
 
-1. Review this plan.
-2. Approve the module split strategy.
-3. Approve the Shopify classification storage strategy.
-4. Decide whether to start with backend modularization or frontend workspace redesign first.
-
-No implementation should begin until explicit approval is given.
+- **Phase 4** — Import and Mapping Modernization (import run summaries, unmapped tracking, better suggestion reasons)
+- **Phase 5** — Frontend Shopify Workspace Redesign (modular workspace replacing the monolithic `ShopifyIntegration.jsx`)
+- **Phase 6** — Observability and Diagnostics Upgrade
+- **Phase 7** — Hardening and Regression Coverage (backend Shopify integration tests, Playwright smoke)
