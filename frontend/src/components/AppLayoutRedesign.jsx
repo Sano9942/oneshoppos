@@ -27,22 +27,22 @@ export default function AppLayoutRedesign() {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--ui-bg)]">
+    <div className="flex h-screen overflow-hidden bg-(--ui-bg)">
       <aside
-        className={`${collapsed ? "w-20" : "w-72"} relative flex h-full flex-col border-r border-[var(--ui-border)] bg-white transition-all`}
+        className={`${collapsed ? "w-20" : "w-72"} relative flex h-full flex-col border-r border-(--ui-border) bg-white transition-all`}
       >
         <button
-          className="ui-focus-ring absolute -right-3 top-5 rounded-full border border-[var(--ui-border)] bg-white p-1 text-[var(--ui-text-muted)] shadow"
+          className="ui-focus-ring absolute -right-3 top-5 rounded-full border border-(--ui-border) bg-white p-1 text-(--ui-text-muted) shadow"
           onClick={() => setCollapsed((v) => !v)}
         >
           {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>
-        <div className="border-b border-[var(--ui-border)] px-4 py-4">
-          <div className="text-sm font-semibold tracking-wide text-[var(--ui-text-muted)]">
+        <div className="border-b border-(--ui-border) px-4 py-4">
+          <div className="text-sm font-semibold tracking-wide text-(--ui-text-muted)">
             ONESHOPPOS
           </div>
           {!collapsed ? (
-            <div className="mt-1 text-lg font-semibold text-[var(--ui-text)]">
+            <div className="mt-1 text-lg font-semibold text-(--ui-text)">
               Admin
             </div>
           ) : null}
@@ -51,7 +51,7 @@ export default function AppLayoutRedesign() {
           {nav.map((group) => (
             <div key={group.label}>
               {!collapsed ? (
-                <p className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--ui-text-muted)]">
+                <p className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-wide text-(--ui-text-muted)">
                   {group.label}
                 </p>
               ) : null}
@@ -62,7 +62,7 @@ export default function AppLayoutRedesign() {
                   const linkClass = `flex items-center gap-2 rounded-[var(--ui-radius-sm)] px-2.5 py-2 text-sm font-medium transition ${
                     active
                       ? "bg-emerald-100 text-emerald-800"
-                      : "text-[var(--ui-text)] hover:bg-[var(--ui-muted-surface)]"
+                      : "text-(--ui-text) hover:bg-(--ui-muted-surface)"
                   } ${collapsed ? "justify-center" : ""}`;
                   return item.newTab ? (
                     <a
@@ -92,12 +92,12 @@ export default function AppLayoutRedesign() {
         </nav>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 items-center justify-between border-b border-[var(--ui-border)] bg-white px-5">
+        <header className="flex h-16 items-center justify-between border-b border-(--ui-border) bg-white px-5">
           <div className="w-full max-w-xl">
             <div className="relative">
               <Search
                 size={14}
-                className="pointer-events-none absolute left-3 top-2.5 text-[var(--ui-text-muted)]"
+                className="pointer-events-none absolute left-3 top-2.5 text-(--ui-text-muted)"
               />
               <Input
                 className="pl-8"
@@ -106,11 +106,11 @@ export default function AppLayoutRedesign() {
             </div>
           </div>
           <div className="ml-4 flex items-center gap-4">
-            <button className="ui-focus-ring rounded-md p-1.5 text-[var(--ui-text-muted)] hover:bg-[var(--ui-muted-surface)]">
+            <button className="ui-focus-ring rounded-md p-1.5 text-(--ui-text-muted) hover:bg-(--ui-muted-surface)">
               <Bell size={16} />
             </button>
             <button
-              className="ui-focus-ring rounded-md px-2 py-1 text-xs text-[var(--ui-text-muted)] hover:bg-[var(--ui-muted-surface)]"
+              className="ui-focus-ring rounded-md px-2 py-1 text-xs text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
               onClick={async () => {
                 await logout();
                 navigate("/login", { replace: true });
@@ -118,7 +118,7 @@ export default function AppLayoutRedesign() {
             >
               Logout
             </button>
-            <div className="flex items-center gap-2 rounded-md border border-[var(--ui-border)] px-2 py-1.5 text-xs">
+            <div className="flex items-center gap-2 rounded-md border border-(--ui-border) px-2 py-1.5 text-xs">
               <User size={14} />
               <span>{employee?.name || "Employee"}</span>
             </div>
