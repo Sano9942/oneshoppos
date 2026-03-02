@@ -1,14 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { loginAsAdmin } from "./helpers/auth";
 
 test.describe("POS Checkout Flow", () => {
   test.beforeEach(async ({ page }) => {
-    // Login as Admin
-    await page.goto("/login");
-    await page.getByPlaceholder(/Employee name/i).fill("Hassan");
-    await page.locator('input[type="password"]').fill("2580");
-    await page.getByRole("button", { name: /login/i }).click();
-    await expect(page).toHaveURL(/.*dashboard/);
-    await expect(page.getByText(/ONESHOPPOS/i)).toBeVisible();
+    await loginAsAdmin(page);
   });
 
   test("should complete a cash sale successfully", async ({ page }) => {

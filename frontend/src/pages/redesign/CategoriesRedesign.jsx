@@ -1,16 +1,31 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { ArrowRightLeft, FolderPlus, Plus, Search, Trash2 } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
+  Badge,
   Button,
   EmptyState,
   Input,
   PageShell,
   SectionCard,
+  Select,
   TableToolbar,
 } from "../../ui/primitives";
+import {
+  indentLabel,
+  leafCategories,
+  parentOptions,
+  sortCategories,
+} from "../../utils/categoryTree";
 
-const EMPTY = { id: null, name: "", description: "" };
+const EMPTY = {
+  id: null,
+  name: "",
+  description: "",
+  parent_id: "",
+  is_active: "1",
+  sort_order: "0",
+};
 
 export default function CategoriesRedesign() {
   const [rows, setRows] = useState([]);
@@ -20,6 +35,10 @@ export default function CategoriesRedesign() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
+  const [conversionPrompt, setConversionPrompt] = useState(null);
+  const [moveModal, setMoveModal] = useState(null);
+  const [moveTargetId, setMoveTargetId] = useState("");
+  const [moveSaving, setMoveSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -28,7 +47,7 @@ export default function CategoriesRedesign() {
       const res = await fetch(`${API}/api/categories`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load categories");
-      setRows(data.categories || []);
+      setRows(sortCategories(data.categories || []));
     } catch (e) {
       setError(e.message || "Failed to load categories");
     } finally {
@@ -43,10 +62,10 @@ export default function CategoriesRedesign() {
   const visibleRows = useMemo(() => {
     if (!search.trim()) return rows;
     const q = search.toLowerCase();
-    return rows.filter(
-      (r) =>
-        String(r.name || "").toLowerCase().includes(q) ||
-        String(r.description || "").toLowerCase().includes(q),
+    return rows.filter((r) =>
+      [r.name, r.description, r.path_label].some((v) =>
+        String(v || "").toLowerCase().includes(q),
+      ),
     );
   }, [rows, search]);
 
@@ -55,11 +74,22 @@ export default function CategoriesRedesign() {
     setModalOpen(true);
   };
 
+  const openAddChild = (row) => {
+    setForm({
+      ...EMPTY,
+      parent_id: String(row.id),
+    });
+    setModalOpen(true);
+  };
+
   const openEdit = (row) => {
     setForm({
       id: row.id,
       name: row.name || "",
       description: row.description || "",
+      parent_id: row.parent_id ? String(row.parent_id) : "",
+      is_active: String(Number(row.is_active ?? 1)),
+      sort_order: String(row.sort_order ?? 0),
     });
     setModalOpen(true);
   };
@@ -74,10 +104,26 @@ export default function CategoriesRedesign() {
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: form.name, description: form.description }),
+        body: JSON.stringify({
+          name: form.name,
+          description: form.description,
+          parent_id: form.parent_id ? Number(form.parent_id) : null,
+          is_active: Number(form.is_active),
+          sort_order: Number(form.sort_order || 0),
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save category");
+      if (!res.ok) {
+        if (!form.id && data.code === "parent_has_products" && form.parent_id) {
+          setConversionPrompt({
+            form: { ...form },
+            parentId: Number(form.parent_id),
+            directProductCount: Number(data.direct_product_count || 0),
+          });
+          return;
+        }
+        throw new Error(data.error || "Failed to save category");
+      }
       setModalOpen(false);
       setForm(EMPTY);
       await load();
@@ -88,8 +134,65 @@ export default function CategoriesRedesign() {
     }
   };
 
+  const confirmCreateChildAndMove = async () => {
+    if (!conversionPrompt) return;
+    setSaving(true);
+    setError("");
+    try {
+      const promptForm = conversionPrompt.form;
+      const res = await fetch(`${API}/api/categories/create-child-and-move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: promptForm.name,
+          description: promptForm.description,
+          parent_id: promptForm.parent_id ? Number(promptForm.parent_id) : null,
+          is_active: Number(promptForm.is_active),
+          sort_order: Number(promptForm.sort_order || 0),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create child category");
+      setConversionPrompt(null);
+      setModalOpen(false);
+      setForm(EMPTY);
+      await load();
+    } catch (e) {
+      setError(e.message || "Failed to create child category");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openMoveProducts = (row) => {
+    setMoveModal(row);
+    setMoveTargetId("");
+  };
+
+  const moveProducts = async () => {
+    if (!moveModal || !moveTargetId) return;
+    setMoveSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`${API}/api/categories/${moveModal.id}/move-products`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target_category_id: Number(moveTargetId) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to move products");
+      setMoveModal(null);
+      setMoveTargetId("");
+      await load();
+    } catch (e) {
+      setError(e.message || "Failed to move products");
+    } finally {
+      setMoveSaving(false);
+    }
+  };
+
   const remove = async (row) => {
-    if (!window.confirm(`Delete category "${row.name}"?`)) return;
+    if (!window.confirm(`Delete category "${row.path_label || row.name}"?`)) return;
     setError("");
     try {
       const res = await fetch(`${API}/api/categories/${row.id}`, { method: "DELETE" });
@@ -101,10 +204,25 @@ export default function CategoriesRedesign() {
     }
   };
 
+  const selectableParents = useMemo(
+    () => parentOptions(rows, form.id ? Number(form.id) : null),
+    [rows, form.id],
+  );
+  const moveTargetOptions = useMemo(() => {
+    if (!moveModal) return [];
+    const allLeaves = leafCategories(rows).filter((row) => Number(row.id) !== Number(moveModal.id));
+    const childLeaves = allLeaves.filter((row) =>
+      Array.isArray(row.path_ids) && row.path_ids.includes(Number(moveModal.id)),
+    );
+    return childLeaves.length ? childLeaves : allLeaves;
+  }, [moveModal, rows]);
+  const rootCount = rows.filter((r) => r.parent_id == null).length;
+  const leafCount = rows.filter((r) => r.is_leaf).length;
+
   return (
     <PageShell
       title="Categories"
-      subtitle="Wave B redesign: canonical list-management pattern for taxonomy modules."
+      subtitle="Hierarchical internal category tree for product organization and reporting."
       right={
         <Button tone="primary" onClick={openCreate}>
           <Plus size={14} className="mr-1 inline" />
@@ -118,10 +236,11 @@ export default function CategoriesRedesign() {
         </SectionCard>
       ) : null}
 
-      <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+      <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-4">
         <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Total Categories</p><p className="text-2xl font-semibold text-(--ui-text)">{rows.length}</p></SectionCard>
+        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Top Level</p><p className="text-2xl font-semibold text-(--ui-text)">{rootCount}</p></SectionCard>
+        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Leaf Categories</p><p className="text-2xl font-semibold text-(--ui-text)">{leafCount}</p></SectionCard>
         <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Visible</p><p className="text-2xl font-semibold text-(--ui-text)">{visibleRows.length}</p></SectionCard>
-        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">With Description</p><p className="text-2xl font-semibold text-(--ui-text)">{rows.filter((r) => r.description).length}</p></SectionCard>
       </div>
 
       <SectionCard>
@@ -137,14 +256,17 @@ export default function CategoriesRedesign() {
               />
             </div>
           }
-          right={<span className="text-xs text-(--ui-text-muted)">{visibleRows.length} rows</span>}
+          right={<span className="text-xs text-(--ui-text-muted)">Delete is blocked when children or products exist</span>}
         />
         <div className="overflow-auto">
           <table className="min-w-full border-t border-(--ui-border) text-sm">
             <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
               <tr>
-                <th className="px-3 py-2 text-left">Name</th>
-                <th className="px-3 py-2 text-left">Description</th>
+                <th className="px-3 py-2 text-left">Category</th>
+                <th className="px-3 py-2 text-left">Type</th>
+                <th className="px-3 py-2 text-left">Products</th>
+                <th className="px-3 py-2 text-left">Children</th>
+                <th className="px-3 py-2 text-left">Status</th>
                 <th className="px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
@@ -152,10 +274,36 @@ export default function CategoriesRedesign() {
               {!loading &&
                 visibleRows.map((row) => (
                   <tr key={row.id} className="border-t border-(--ui-border)">
-                    <td className="px-3 py-2 font-medium text-(--ui-text)">{row.name}</td>
-                    <td className="px-3 py-2 text-(--ui-text-muted)">{row.description || "-"}</td>
+                    <td className="px-3 py-2">
+                      <div className="font-medium text-(--ui-text)">{indentLabel(row)}</div>
+                      <div className="text-xs text-(--ui-text-muted)">{row.description || row.path_label}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Badge tone={row.is_leaf ? "success" : "default"}>
+                        {row.is_leaf ? "Leaf" : "Parent"}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">
+                      Direct {row.product_count_direct || 0} / Rollup {row.product_count_rollup || 0}
+                    </td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{row.child_count || 0}</td>
+                    <td className="px-3 py-2">
+                      <Badge tone={Number(row.is_active || 0) === 1 ? "success" : "default"}>
+                        {Number(row.is_active || 0) === 1 ? "Active" : "Inactive"}
+                      </Badge>
+                    </td>
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex gap-2">
+                        <Button size="sm" onClick={() => openAddChild(row)}>
+                          <FolderPlus size={12} className="mr-1 inline" />
+                          Add Child
+                        </Button>
+                        {Number(row.product_count_direct || 0) > 0 ? (
+                          <Button size="sm" onClick={() => openMoveProducts(row)}>
+                            <ArrowRightLeft size={12} className="mr-1 inline" />
+                            Move Products
+                          </Button>
+                        ) : null}
                         <Button size="sm" onClick={() => openEdit(row)}>Edit</Button>
                         <Button size="sm" tone="danger" onClick={() => remove(row)}>
                           <Trash2 size={12} className="mr-1 inline" />
@@ -169,18 +317,18 @@ export default function CategoriesRedesign() {
           </table>
           {loading ? <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading categories...</div> : null}
           {!loading && visibleRows.length === 0 ? (
-            <EmptyState title="No categories" body="Create a category to organize inventory." />
+            <EmptyState title="No categories" body="Create categories and nest them to organize inventory." />
           ) : null}
         </div>
       </SectionCard>
 
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-md p-4">
+          <SectionCard className="w-full max-w-lg p-4">
             <h3 className="text-lg font-semibold text-(--ui-text)">
               {form.id ? "Edit Category" : "Create Category"}
             </h3>
-            <form className="mt-3 space-y-2" onSubmit={save}>
+            <form className="mt-3 space-y-3" onSubmit={save}>
               <Input
                 required
                 placeholder="Category name"
@@ -192,6 +340,45 @@ export default function CategoriesRedesign() {
                 value={form.description}
                 onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
               />
+              <div>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">Parent Category</label>
+                <Select
+                  value={form.parent_id}
+                  onChange={(e) => setForm((p) => ({ ...p, parent_id: e.target.value }))}
+                >
+                  <option value="">Top level</option>
+                  {selectableParents.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {indentLabel(row)}
+                    </option>
+                  ))}
+                </Select>
+                {form.parent_id ? (
+                  <p className="mt-1 text-xs text-(--ui-text-muted)">
+                    If the selected parent currently holds products, you will be prompted to move them into this new child.
+                  </p>
+                ) : null}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Status</label>
+                  <Select
+                    value={form.is_active}
+                    onChange={(e) => setForm((p) => ({ ...p, is_active: e.target.value }))}
+                  >
+                    <option value="1">Active</option>
+                    <option value="0">Inactive</option>
+                  </Select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Sort Order</label>
+                  <Input
+                    type="number"
+                    value={form.sort_order}
+                    onChange={(e) => setForm((p) => ({ ...p, sort_order: e.target.value }))}
+                  />
+                </div>
+              </div>
               <div className="flex gap-2 pt-2">
                 <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
                 <Button tone="primary" type="submit" disabled={saving}>
@@ -199,6 +386,74 @@ export default function CategoriesRedesign() {
                 </Button>
               </div>
             </form>
+          </SectionCard>
+        </div>
+      ) : null}
+      {conversionPrompt ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 p-3">
+          <SectionCard className="w-full max-w-lg p-4">
+            <h3 className="text-lg font-semibold text-(--ui-text)">Convert Parent to Tree</h3>
+            <p className="mt-2 text-sm text-(--ui-text-muted)">
+              The selected parent category currently has{" "}
+              <span className="font-semibold text-(--ui-text)">
+                {conversionPrompt.directProductCount}
+              </span>{" "}
+              directly assigned product(s). To keep products on leaf categories only, create this child and move those products into it.
+            </p>
+            <div className="mt-3 rounded-lg border border-(--ui-border) bg-(--ui-muted-surface) p-3 text-sm">
+              <div className="font-medium text-(--ui-text)">
+                New child: {conversionPrompt.form.name || "Untitled category"}
+              </div>
+              <div className="text-(--ui-text-muted)">
+                Products will move to this child automatically.
+              </div>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <Button type="button" onClick={() => setConversionPrompt(null)} disabled={saving}>
+                Cancel
+              </Button>
+              <Button tone="primary" type="button" onClick={confirmCreateChildAndMove} disabled={saving}>
+                {saving ? "Creating..." : "Create Child and Move Products"}
+              </Button>
+            </div>
+          </SectionCard>
+        </div>
+      ) : null}
+      {moveModal ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 p-3">
+          <SectionCard className="w-full max-w-lg p-4">
+            <h3 className="text-lg font-semibold text-(--ui-text)">Move Category Products</h3>
+            <p className="mt-2 text-sm text-(--ui-text-muted)">
+              Move all directly assigned products from{" "}
+              <span className="font-semibold text-(--ui-text)">
+                {moveModal.path_label || moveModal.name}
+              </span>{" "}
+              into another leaf category.
+            </p>
+            <div className="mt-3">
+              <label className="mb-1 block text-xs text-(--ui-text-muted)">Target Leaf Category</label>
+              <Select value={moveTargetId} onChange={(e) => setMoveTargetId(e.target.value)}>
+                <option value="">Select target category</option>
+                {moveTargetOptions.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {indentLabel(row)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <Button type="button" onClick={() => setMoveModal(null)} disabled={moveSaving}>
+                Cancel
+              </Button>
+              <Button
+                tone="primary"
+                type="button"
+                onClick={moveProducts}
+                disabled={!moveTargetId || moveSaving}
+              >
+                {moveSaving ? "Moving..." : "Move Products"}
+              </Button>
+            </div>
           </SectionCard>
         </div>
       ) : null}

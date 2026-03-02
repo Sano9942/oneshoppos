@@ -14,8 +14,11 @@ const db = new sqlite3.Database(dbPath, (err) => {
       // Categories Table
       db.run(`CREATE TABLE IF NOT EXISTS categories (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL UNIQUE,
-          description TEXT
+          name TEXT NOT NULL,
+          description TEXT,
+          parent_id INTEGER REFERENCES categories(id) ON DELETE RESTRICT,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          is_active INTEGER NOT NULL DEFAULT 1
       )`);
 
       // Taxes Table
@@ -114,6 +117,23 @@ const db = new sqlite3.Database(dbPath, (err) => {
 
       // Enable Foreign Keys
       db.run(`PRAGMA foreign_keys = ON;`);
+      db.run(
+        `CREATE INDEX IF NOT EXISTS idx_categories_parent_id ON categories(parent_id)`,
+        (err) => {
+          if (err && !String(err.message || "").includes("no such column")) {
+            console.error("idx_categories_parent_id:", err.message);
+          }
+        },
+      );
+      db.run(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_parent_name_unique
+         ON categories(COALESCE(parent_id, -1), lower(name))`,
+        (err) => {
+          if (err && !String(err.message || "").includes("no such column")) {
+            console.error("idx_categories_parent_name_unique:", err.message);
+          }
+        },
+      );
     });
   }
 });

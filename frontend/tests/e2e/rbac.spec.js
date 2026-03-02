@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { loginAsAdmin } from "./helpers/auth";
 
 test.describe("RBAC Access Control", () => {
   test("Cashier should not access Admin settings", async ({ page }) => {
@@ -23,13 +24,7 @@ test.describe("RBAC Access Control", () => {
   });
 
   test("Admin should access all pages", async ({ page }) => {
-    // 1. Login as Admin (Hassan / 2580)
-    await page.goto("/login");
-    await page.getByPlaceholder(/Employee name/i).fill("Hassan");
-    await page.locator('input[type="password"]').fill("2580");
-    await page.getByRole("button", { name: /login/i }).click();
-    await expect(page).toHaveURL(/.*dashboard/);
-    await expect(page.getByText(/ONESHOPPOS/i)).toBeVisible();
+    await loginAsAdmin(page);
 
     // 2. Go to Inventory
     await page.goto("/inventory");

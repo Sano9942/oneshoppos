@@ -18,6 +18,30 @@ module.exports = function registerShopifyRoutes(app, deps) {
   function maskSecret(secret) { return _maskSecret(secret, decryptShopifySecret); }
   function getActiveShopifyConnection(cb) { return _getActiveShopifyConnection(db, decryptShopifySecret, cb); }
 
+  function resolveImportCategoryId(productTypeName, cb) {
+    const normalized = String(productTypeName || "").trim();
+    if (!normalized) return cb(null, null);
+
+    db.all(
+      `SELECT c.id, COUNT(ch.id) AS child_count
+       FROM categories c
+       LEFT JOIN categories ch ON ch.parent_id = c.id
+       WHERE lower(c.name) = lower(?)
+       GROUP BY c.id`,
+      [normalized],
+      (err, rows) => {
+        if (err) return cb(err);
+        const leafMatches = (rows || []).filter(
+          (row) => Number(row.child_count || 0) === 0,
+        );
+        if (leafMatches.length !== 1) {
+          return cb(null, null);
+        }
+        return cb(null, Number(leafMatches[0].id));
+      },
+    );
+  }
+
 // --- ROUTES: SHOPIFY CONNECTOR ---
 
   app.get(
@@ -966,7 +990,8 @@ module.exports = function registerShopifyRoutes(app, deps) {
                               return processVariant();
                             }
 
-                            // Auto-create category from Shopify product_type, then run upsert
+                            // Preserve Shopify product_type, but only assign category_id
+                            // when it matches exactly one existing leaf category.
                             const productTypeName = (
                               sp.product_type || ""
                             ).trim();
@@ -1074,24 +1099,13 @@ module.exports = function registerShopifyRoutes(app, deps) {
                               );
                             };
 
-                            // Resolve category: upsert from Shopify product_type, then call doUpsert
+                            // Do not auto-create categories from Shopify product_type.
+                            // That field is custom merchant data in Shopify and can be
+                            // ambiguous against our internal hierarchy.
                             if (productTypeName) {
-                              db.run(
-                                `INSERT INTO categories (name) VALUES (?)
-                             ON CONFLICT(name) DO NOTHING`,
-                                [productTypeName],
-                                () => {
-                                  db.get(
-                                    "SELECT id FROM categories WHERE name = ? LIMIT 1",
-                                    [productTypeName],
-                                    (catErr, catRow) => {
-                                      doUpsert(
-                                        catErr || !catRow ? null : catRow.id,
-                                      );
-                                    },
-                                  );
-                                },
-                              );
+                              resolveImportCategoryId(productTypeName, (catErr, categoryId) => {
+                                doUpsert(catErr ? null : categoryId);
+                              });
                             } else {
                               doUpsert(null);
                             }

@@ -4,8 +4,9 @@
  * Targets bug: B10 (BXGY treats cart lines independently — doesn't combine quantities)
  */
 
-const { createTestApp, closeDb, dbAll, dbGet, dbRun } = require("../helpers/createTestApp");
-const { makeRequest, ADMIN_ID, MANAGER_ID, CASHIER_ID } = require("../helpers/request");
+import { beforeAll, afterAll, describe, it, expect } from "vitest";
+import { createTestApp, closeDb, dbAll, dbGet, dbRun } from "../helpers/createTestApp";
+import { makeRequest, ADMIN_ID, MANAGER_ID, CASHIER_ID } from "../helpers/request";
 
 let app, db;
 
@@ -178,6 +179,32 @@ describe("POST /api/promotions/quote — Percent Promotions", () => {
 
     // Reset
     await dbRun(db, "UPDATE promotions SET active = 0, ends_at = NULL WHERE id = ?", [percentPromoId]);
+  });
+});
+
+describe("Promotion category validation", () => {
+  it("rejects category promotions for parent categories", async () => {
+    await dbRun(
+      db,
+      `INSERT INTO categories (id, name, description, parent_id, sort_order, is_active)
+       VALUES (50, 'Parent Category', '', NULL, 0, 1)`,
+    );
+    await dbRun(
+      db,
+      `INSERT INTO categories (id, name, description, parent_id, sort_order, is_active)
+       VALUES (51, 'Child Category', '', 50, 0, 1)`,
+    );
+
+    const res = await makeRequest(app, ADMIN_ID).post("/api/promotions").send({
+      name: "Invalid Parent Promo",
+      type: "percent",
+      value: 10,
+      applies_to: "category",
+      category_id: 50,
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/leaf categories/i);
   });
 });
 

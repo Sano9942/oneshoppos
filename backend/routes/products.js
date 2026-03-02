@@ -1,3 +1,9 @@
+const {
+  fetchEnrichedCategories,
+  getCategoryById,
+  getDescendantLeafIds,
+} = require("../category-tree");
+
 module.exports = function registerProductRoutes(app, deps) {
   const { db, multer, requirePerm, PRODUCT_UPLOADS_DIR, UPLOADS_DIR } = deps;
 
@@ -88,8 +94,36 @@ module.exports = function registerProductRoutes(app, deps) {
     });
   }
 
+  async function validateLeafCategory(categoryId) {
+    if (categoryId == null || categoryId === "") return null;
+    const category = await getCategoryById(db, categoryId);
+    if (!category) return "Category not found";
+    const leafIds = await getDescendantLeafIds(db, category.id);
+    if (leafIds.length !== 1 || Number(leafIds[0]) !== Number(category.id)) {
+      return "Products can only be assigned to leaf categories";
+    }
+    return null;
+  }
+
+  async function decorateProductsWithCategoryPaths(rows) {
+    const categories = await fetchEnrichedCategories(db);
+    const byId = new Map(categories.map((row) => [Number(row.id), row]));
+    return (rows || []).map((row) => {
+      const category = row.category_id ? byId.get(Number(row.category_id)) : null;
+      return {
+        ...row,
+        category_name: category?.name || row.category_name || null,
+        category_path_label:
+          category?.path_label || row.category_name || row.category_path_label || null,
+        category_parent_id: category?.parent_id ?? null,
+        category_depth: category?.depth ?? null,
+      };
+    });
+  }
+
   // Get all products (with aggregated stock, sort/filter/search support)
-  app.get("/api/products", (req, res) => {
+  app.get("/api/products", async (req, res) => {
+    try {
     const { search, sort, order, status, category_id, outlet_id } = req.query;
 
     // Allowed sort columns (whitelist to prevent SQL injection)
@@ -116,8 +150,17 @@ module.exports = function registerProductRoutes(app, deps) {
       params.push(status);
     }
     if (category_id) {
-      conditions.push("p.category_id = ?");
-      params.push(Number(category_id));
+      const leafIds = await getDescendantLeafIds(db, Number(category_id));
+      if (!leafIds.length) {
+        return res.json({ products: [] });
+      }
+      if (leafIds.length === 1) {
+        conditions.push("p.category_id = ?");
+        params.push(Number(leafIds[0]));
+      } else {
+        conditions.push(`p.category_id IN (${leafIds.map(() => "?").join(",")})`);
+        params.push(...leafIds.map(Number));
+      }
     }
     if (outlet_id) {
       conditions.push("os_loc.outlet_id = ?");
@@ -155,10 +198,13 @@ module.exports = function registerProductRoutes(app, deps) {
         ORDER BY ${sortCol} ${sortDir}
     `;
 
-    db.all(sql, params, (err, rows) => {
+    db.all(sql, params, async (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ products: rows });
+      res.json({ products: await decorateProductsWithCategoryPaths(rows) });
     });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Get variants for a specific product
@@ -302,7 +348,7 @@ module.exports = function registerProductRoutes(app, deps) {
   });
 
   // Add a new product (and optionally set initial stock for a specific outlet)
-  app.post("/api/products", (req, res) => {
+  app.post("/api/products", async (req, res) => {
     const {
       barcode,
       sku,
@@ -330,6 +376,14 @@ module.exports = function registerProductRoutes(app, deps) {
       media,
       image_urls,
     } = req.body;
+    try {
+      const categoryError = await validateLeafCategory(category_id);
+      if (categoryError) {
+        return res.status(400).json({ error: categoryError });
+      }
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
     const productMediaItems = normalizeProductMediaInput(media, image_urls);
 
     db.serialize(() => {
@@ -619,7 +673,7 @@ module.exports = function registerProductRoutes(app, deps) {
   });
 
   // Update a product (Prices, Names, Categories... NOT Stock. Stock is handled via Adjustments/Transfers)
-  app.put("/api/products/:id", (req, res) => {
+  app.put("/api/products/:id", async (req, res) => {
     const { id } = req.params;
     const {
       name,
@@ -644,6 +698,17 @@ module.exports = function registerProductRoutes(app, deps) {
       image_urls,
       variants, // Optional array of variants to update
     } = req.body;
+    try {
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, "category_id")) {
+        const categoryError = await validateLeafCategory(category_id);
+        if (categoryError) {
+          return res.status(400).json({ error: categoryError });
+        }
+      }
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
     const shouldReplaceMedia =
       Object.prototype.hasOwnProperty.call(req.body || {}, "media") ||
       Object.prototype.hasOwnProperty.call(req.body || {}, "image_urls");
@@ -881,11 +946,17 @@ module.exports = function registerProductRoutes(app, deps) {
   app.post(
     "/api/products/bulk-category",
     requirePerm("manage_inventory"),
-    (req, res) => {
+    async (req, res) => {
       const ids = (req.body?.ids || []).map(Number).filter(Boolean);
       const categoryId = Number(req.body?.category_id) || null;
       if (!ids.length)
         return res.status(400).json({ error: "No product IDs provided." });
+      if (categoryId) {
+        const categoryError = await validateLeafCategory(categoryId);
+        if (categoryError) {
+          return res.status(400).json({ error: categoryError });
+        }
+      }
 
       const CHUNK = 400;
       let updated = 0;

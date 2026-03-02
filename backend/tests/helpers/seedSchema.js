@@ -12,8 +12,11 @@ const TABLES = [
   // ── Foundation tables (no FKs or only self-referencing) ──────────────
   `CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    description TEXT
+    name TEXT NOT NULL,
+    description TEXT,
+    parent_id INTEGER REFERENCES categories(id) ON DELETE RESTRICT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1
   )`,
   `CREATE TABLE IF NOT EXISTS taxes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -889,6 +892,8 @@ const TABLES = [
 
 const INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_att_sessions_emp_date ON attendance_sessions(employee_id, session_start)`,
+  `CREATE INDEX IF NOT EXISTS idx_categories_parent_id ON categories(parent_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_parent_name_unique ON categories(COALESCE(parent_id, -1), lower(name))`,
 ];
 
 function seedSchema(db) {

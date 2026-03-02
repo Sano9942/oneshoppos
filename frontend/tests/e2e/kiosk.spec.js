@@ -1,13 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { loginAsAdmin } from "./helpers/auth";
 
 test.describe("Attendance Kiosk Flow", () => {
   test("should clock in and out successfully", async ({ page }) => {
-    // 0. Login as an Admin first to unlock the app
-    await page.goto("/login");
-    await page.getByPlaceholder(/Employee name/i).fill("Hassan");
-    await page.locator('input[type="password"]').fill("2580");
-    await page.getByRole("button", { name: /login/i }).click();
-    await expect(page).toHaveURL(/.*dashboard/);
+    await loginAsAdmin(page);
 
     // 1. Go to Kiosk page
     await page.goto("/kiosk");

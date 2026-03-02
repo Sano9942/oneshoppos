@@ -1,5 +1,18 @@
+const { getCategoryById, getDescendantLeafIds } = require("../category-tree");
+
 module.exports = function registerPromotionRoutes(app, deps) {
   const { db, requirePerm } = deps;
+
+  async function validatePromotionCategory(categoryId) {
+    if (!categoryId) return null;
+    const category = await getCategoryById(db, categoryId);
+    if (!category) return "Category not found";
+    const leafIds = await getDescendantLeafIds(db, category.id);
+    if (leafIds.length !== 1 || Number(leafIds[0]) !== Number(category.id)) {
+      return "Promotions can only target leaf categories";
+    }
+    return null;
+  }
 
 // --- PROMOTIONS ENGINE ---
 
@@ -16,7 +29,7 @@ module.exports = function registerPromotionRoutes(app, deps) {
   });
 
   // POST create promotion
-  app.post("/api/promotions", requirePerm("manage_inventory"), (req, res) => {
+  app.post("/api/promotions", requirePerm("manage_inventory"), async (req, res) => {
     const {
       name,
       type,
@@ -32,6 +45,12 @@ module.exports = function registerPromotionRoutes(app, deps) {
     } = req.body;
     if (!name || !type || value === undefined)
       return res.status(400).json({ error: "name, type, value are required" });
+    if (applies_to === "category") {
+      const categoryError = await validatePromotionCategory(category_id);
+      if (categoryError) {
+        return res.status(400).json({ error: categoryError });
+      }
+    }
     db.run(
       `INSERT INTO promotions (name, type, value, min_order_amount, buy_qty, get_qty, applies_to, product_id, category_id, starts_at, ends_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -59,7 +78,7 @@ module.exports = function registerPromotionRoutes(app, deps) {
   app.put(
     "/api/promotions/:id",
     requirePerm("manage_inventory"),
-    (req, res) => {
+    async (req, res) => {
       const { id } = req.params;
       const {
         name,
@@ -75,6 +94,12 @@ module.exports = function registerPromotionRoutes(app, deps) {
         starts_at,
         ends_at,
       } = req.body;
+      if (applies_to === "category") {
+        const categoryError = await validatePromotionCategory(category_id);
+        if (categoryError) {
+          return res.status(400).json({ error: categoryError });
+        }
+      }
       db.run(
         `UPDATE promotions SET name=?, type=?, value=?, min_order_amount=?, buy_qty=?, get_qty=?,
      applies_to=?, product_id=?, category_id=?, active=?, starts_at=?, ends_at=? WHERE id=?`,

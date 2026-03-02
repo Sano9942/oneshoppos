@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestApp, closeDb, dbGet, dbAll } from "../helpers/createTestApp";
+import { createTestApp, closeDb, dbGet, dbAll, dbRun } from "../helpers/createTestApp";
 import { makeRequest, ADMIN_ID } from "../helpers/request";
 
 describe("Reports Accuracy Integration Tests", () => {
@@ -110,6 +110,37 @@ describe("Reports Accuracy Integration Tests", () => {
     // 4. Cross-verify
     expect(itemTotalRevenue).toBe(catTotalRevenue);
     expect(itemTotalRevenue).toBe(200); // 100*1 + 50*2
+  });
+
+  it("should allow parent category filters to include descendant leaf categories", async () => {
+    await dbRun(
+      db,
+      `INSERT INTO categories (id, name, description, parent_id, sort_order, is_active)
+       VALUES (70, 'Parent Filter', '', NULL, 0, 1)`,
+    );
+    await dbRun(
+      db,
+      `INSERT INTO categories (id, name, description, parent_id, sort_order, is_active)
+       VALUES (71, 'Leaf Filter', '', 70, 0, 1)`,
+    );
+    await dbRun(db, "UPDATE products SET category_id = 71 WHERE id = 1");
+
+    await makeRequest(app, ADMIN_ID)
+      .post("/api/sales")
+      .send({
+        cartItems: [{ id: 1, price: 100, quantity: 1 }],
+        paymentMethod: "Cash",
+        outlet_id: OUTLET_ID,
+      });
+
+    const res = await makeRequest(app, ADMIN_ID).get(
+      "/api/reports/category-wise?category_id=70",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].category).toBe("Parent Filter > Leaf Filter");
+    expect(res.body.data[0].revenue).toBe(100);
   });
 
   it("should verify Dashboard inventory value matches Inventory Dump", async () => {

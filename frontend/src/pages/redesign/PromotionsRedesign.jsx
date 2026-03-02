@@ -12,6 +12,7 @@ import {
   Select,
   TableToolbar,
 } from "../../ui/primitives";
+import { indentLabel, leafCategories, sortCategories } from "../../utils/categoryTree";
 
 const TYPE_LABELS = {
   percent: "% Off (matched items)",
@@ -111,7 +112,7 @@ export default function PromotionsRedesign() {
         fetch(`${API}/categories`, { headers: authHeaders() }).then((r) => r.json()),
       ]);
       setProducts(productsRes.products || []);
-      setCategories(categoriesRes.categories || []);
+      setCategories(sortCategories(categoriesRes.categories || []));
     } catch {
       // Non-blocking for list load.
     }
@@ -728,9 +729,9 @@ export default function PromotionsRedesign() {
                     onChange={(e) => setForm((prev) => ({ ...prev, category_id: e.target.value }))}
                   >
                     <option value="">Select category</option>
-                    {categories.map((c) => (
+                    {leafCategories(categories).map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.name}
+                        {indentLabel(c)}
                       </option>
                     ))}
                   </Select>

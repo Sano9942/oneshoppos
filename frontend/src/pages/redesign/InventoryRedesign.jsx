@@ -13,15 +13,18 @@ import {
   TableToolbar,
 } from "../../ui/primitives";
 import { useAuth } from "../../auth/AuthProvider";
+import { indentLabel, leafCategories, sortCategories } from "../../utils/categoryTree";
 
 const PAGE_SIZE = 50;
 
 const BLANK_FORM = {
   name: "", barcode: "", sku: "", price: "", cost_price: "",
   stock: "", category_id: "", brand_id: "", status: "active", unit: "pcs",
+  product_type: "", vendor: "", tags: "",
 };
 
 function ProductModal({ product, categories, brands, authHeaders, onClose, onSaved }) {
+  const assignableCategories = useMemo(() => leafCategories(categories), [categories]);
   const isEdit = Boolean(product);
   const [form, setForm] = useState(
     isEdit
@@ -36,6 +39,9 @@ function ProductModal({ product, categories, brands, authHeaders, onClose, onSav
           brand_id: product.brand_id || "",
           status: product.status || "active",
           unit: product.unit || "pcs",
+          product_type: product.product_type || "",
+          vendor: product.vendor || "",
+          tags: product.tags || "",
         }
       : { ...BLANK_FORM },
   );
@@ -137,7 +143,7 @@ function ProductModal({ product, categories, brands, authHeaders, onClose, onSav
               <label className="text-xs font-medium text-(--ui-text-muted)">Category</label>
               <Select value={form.category_id} onChange={(e) => upd("category_id", e.target.value)}>
                 <option value="">No category</option>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {assignableCategories.map((c) => <option key={c.id} value={c.id}>{indentLabel(c)}</option>)}
               </Select>
             </div>
             <div className="flex flex-col gap-1">
@@ -146,6 +152,18 @@ function ProductModal({ product, categories, brands, authHeaders, onClose, onSav
                 <option value="">No brand</option>
                 {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-(--ui-text-muted)">Product Type</label>
+              <Input value={form.product_type} onChange={(e) => upd("product_type", e.target.value)} placeholder="e.g. STEM Robotics Kit" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-(--ui-text-muted)">Vendor</label>
+              <Input value={form.vendor} onChange={(e) => upd("vendor", e.target.value)} placeholder="e.g. LEGO" />
+            </div>
+            <div className="col-span-2 flex flex-col gap-1">
+              <label className="text-xs font-medium text-(--ui-text-muted)">Tags</label>
+              <Input value={form.tags} onChange={(e) => upd("tags", e.target.value)} placeholder="Comma-separated tags, e.g. Age 5+,STEM,Indoor,Gift" />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-(--ui-text-muted)">Status</label>
@@ -250,7 +268,7 @@ export default function InventoryRedesign() {
       const catData = await catRes.json();
       const brandData = await brandRes.json();
       const outletData = await outletRes.json();
-      setCategories(catData.categories || []);
+      setCategories(sortCategories(catData.categories || []));
       setBrands(brandData.brands || []);
       setOutlets(outletData.outlets || []);
     } catch (err) {
@@ -345,6 +363,10 @@ export default function InventoryRedesign() {
                   name: p.name,
                   status: p.status || "active",
                   category: p.category_name || "",
+                  category_path: p.category_path_label || p.category_name || "",
+                  product_type: p.product_type || "",
+                  vendor: p.vendor || "",
+                  tags: p.tags || "",
                   price: p.price,
                   stock: p.total_stock,
                 })),
@@ -391,7 +413,7 @@ export default function InventoryRedesign() {
                 <option value="">All categories</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name}
+                    {indentLabel(c)}
                   </option>
                 ))}
               </Select>
@@ -480,9 +502,9 @@ export default function InventoryRedesign() {
                 onChange={(e) => setBulkCategoryTarget(e.target.value)}
               >
                 <option value="">Assign category...</option>
-                {categories.map((c) => (
+                {leafCategories(categories).map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name}
+                    {indentLabel(c)}
                   </option>
                 ))}
               </Select>
@@ -509,6 +531,10 @@ export default function InventoryRedesign() {
                         barcode: p.barcode,
                         name: p.name,
                         status: p.status || "active",
+                        category_path: p.category_path_label || p.category_name || "",
+                        product_type: p.product_type || "",
+                        vendor: p.vendor || "",
+                        tags: p.tags || "",
                         price: p.price,
                         stock: p.total_stock,
                       })),
@@ -591,7 +617,7 @@ export default function InventoryRedesign() {
                     {p.min_qty ?? 0}
                   </td>
                   <td className="px-3 py-2 text-(--ui-text-muted)">
-                    {p.category_name || "-"}
+                    {p.category_path_label || p.category_name || "-"}
                   </td>
                   <td className="px-3 py-2">
                     <Badge

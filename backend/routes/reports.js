@@ -1,3 +1,8 @@
+const {
+  fetchEnrichedCategories,
+  getDescendantLeafIds,
+} = require("../category-tree");
+
 module.exports = function registerReportsRoutes(app, deps) {
   const {
     db,
@@ -9,6 +14,24 @@ module.exports = function registerReportsRoutes(app, deps) {
     fs,
     UPLOADS_DIR,
   } = deps;
+
+  async function buildCategoryMetaMap() {
+    const categories = await fetchEnrichedCategories(db);
+    return new Map(categories.map((row) => [Number(row.id), row]));
+  }
+
+  function withCategoryPaths(rows, categoryMeta, sourceKey = "category_id") {
+    return (rows || []).map((row) => {
+      const categoryId = row[sourceKey] == null ? null : Number(row[sourceKey]);
+      const category = categoryId != null ? categoryMeta.get(categoryId) : null;
+      return {
+        ...row,
+        category: category?.path_label || row.category || "Uncategorized",
+        category_path_label:
+          category?.path_label || row.category || "Uncategorized",
+      };
+    });
+  }
 
   // --- REPORTS DASHBOARD ---
 
@@ -529,6 +552,7 @@ module.exports = function registerReportsRoutes(app, deps) {
   app.get("/api/reports/sales-stock", (req, res) => {
     const sql = `
     SELECT p.id, p.name, p.barcode, COALESCE(cat.name,'—') AS category,
+           p.category_id,
            COALESCE(SUM(DISTINCT os.quantity),0) AS total_stock,
            COALESCE(SUM(si.quantity),0) AS units_sold,
            COALESCE(SUM(si.quantity * si.price_at_sale),0) AS revenue
@@ -538,9 +562,10 @@ module.exports = function registerReportsRoutes(app, deps) {
     LEFT JOIN sale_items si ON p.id = si.product_id
     GROUP BY p.id
     ORDER BY units_sold DESC`;
-    db.all(sql, [], (err, rows) => {
+    db.all(sql, [], async (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ rows });
+      const categoryMeta = await buildCategoryMetaMap();
+      res.json({ rows: withCategoryPaths(rows, categoryMeta) });
     });
   });
 
@@ -555,7 +580,7 @@ module.exports = function registerReportsRoutes(app, deps) {
     }
     const sql = `
     SELECT o.name AS outlet_name, p.name AS product_name, p.barcode,
-           COALESCE(cat.name,'—') AS category, COALESCE(b.name,'—') AS brand,
+           COALESCE(cat.name,'—') AS category, p.category_id, COALESCE(b.name,'—') AS brand,
            p.price, p.cost_price, os.quantity,
            (os.quantity * p.price) AS retail_value,
            (os.quantity * p.cost_price) AS cost_value
@@ -566,15 +591,16 @@ module.exports = function registerReportsRoutes(app, deps) {
     LEFT JOIN brands b ON p.brand_id = b.id
     ${where.length ? "WHERE " + where.join(" AND ") : ""}
     ORDER BY o.name, p.name`;
-    db.all(sql, params, (err, rows) => {
+    db.all(sql, params, async (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ rows });
+      const categoryMeta = await buildCategoryMetaMap();
+      res.json({ rows: withCategoryPaths(rows, categoryMeta) });
     });
   });
 
   // Category Wise: sales grouped by product category
-  app.get("/api/reports/category-wise", (req, res) => {
-    const { date_from, date_to } = req.query;
+  app.get("/api/reports/category-wise", async (req, res) => {
+    const { date_from, date_to, category_id } = req.query;
     let where = ["s.voided = 0"];
     const params = [];
     if (date_from) {
@@ -585,8 +611,20 @@ module.exports = function registerReportsRoutes(app, deps) {
       where.push("date(s.timestamp,'localtime') <= ?");
       params.push(date_to);
     }
+    if (category_id) {
+      const leafIds = await getDescendantLeafIds(db, Number(category_id));
+      if (!leafIds.length) return res.json({ data: [] });
+      if (leafIds.length === 1) {
+        where.push("p.category_id = ?");
+        params.push(Number(leafIds[0]));
+      } else {
+        where.push(`p.category_id IN (${leafIds.map(() => "?").join(",")})`);
+        params.push(...leafIds.map(Number));
+      }
+    }
     const sql = `
-    SELECT COALESCE(cat.name,'Uncategorized') AS category,
+    SELECT p.category_id,
+           COALESCE(cat.name,'Uncategorized') AS category,
            SUM(si.quantity) AS units_sold,
            SUM(si.quantity * si.price_at_sale) AS revenue,
            SUM(si.quantity * si.cost_price_at_sale) AS cost,
@@ -596,12 +634,13 @@ module.exports = function registerReportsRoutes(app, deps) {
     JOIN sales s ON si.sale_id = s.id
     LEFT JOIN categories cat ON p.category_id = cat.id
     WHERE ${where.join(" AND ")}
-    GROUP BY cat.id
+    GROUP BY p.category_id
     ORDER BY revenue DESC`;
-    db.all(sql, params, (err, rows) => {
+    db.all(sql, params, async (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
       const total = rows.reduce((s, r) => s + r.revenue, 0);
-      const data = rows.map((r) => ({
+      const categoryMeta = await buildCategoryMetaMap();
+      const data = withCategoryPaths(rows, categoryMeta).map((r) => ({
         ...r,
         pct: total > 0 ? ((r.revenue / total) * 100).toFixed(1) : "0.0",
       }));
@@ -620,7 +659,7 @@ module.exports = function registerReportsRoutes(app, deps) {
     }
     const sql = `
     SELECT p.id, p.barcode, p.name, p.price, p.cost_price,
-           COALESCE(cat.name,'—') AS category, COALESCE(b.name,'—') AS brand,
+           COALESCE(cat.name,'—') AS category, p.category_id, COALESCE(b.name,'—') AS brand,
            COALESCE(sup.name,'—') AS supplier,
            COALESCE(t.name,'—') AS tax_name, COALESCE(t.rate, p.gst, 0) AS tax_rate
     FROM products p
@@ -630,9 +669,10 @@ module.exports = function registerReportsRoutes(app, deps) {
     LEFT JOIN taxes t ON p.tax_id = t.id
     ${where.length ? "WHERE " + where.join(" AND ") : ""}
     ORDER BY p.name`;
-    db.all(sql, params, (err, rows) => {
+    db.all(sql, params, async (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ rows });
+      const categoryMeta = await buildCategoryMetaMap();
+      res.json({ rows: withCategoryPaths(rows, categoryMeta) });
     });
   });
 
@@ -880,7 +920,7 @@ module.exports = function registerReportsRoutes(app, deps) {
     });
   });
 
-  function buildReportFilterParts(req, aliases = {}) {
+  async function buildReportFilterParts(req, aliases = {}) {
     const {
       sale = "s",
       product = "p",
@@ -915,8 +955,16 @@ module.exports = function registerReportsRoutes(app, deps) {
       params.push(employee_id);
     }
     if (category_id && product) {
-      where.push(`${product}.category_id = ?`);
-      params.push(category_id);
+      const leafIds = await getDescendantLeafIds(db, Number(category_id));
+      if (!leafIds.length) {
+        where.push("1 = 0");
+      } else if (leafIds.length === 1) {
+        where.push(`${product}.category_id = ?`);
+        params.push(Number(leafIds[0]));
+      } else {
+        where.push(`${product}.category_id IN (${leafIds.map(() => "?").join(",")})`);
+        params.push(...leafIds.map(Number));
+      }
     }
     if (item) where.push(`${item}.quantity > 0`);
 
@@ -935,8 +983,8 @@ module.exports = function registerReportsRoutes(app, deps) {
   app.get(
     "/api/reports/profit-summary",
     requireFeature("reports_profit_layer"),
-    (req, res) => {
-      const { where, params } = buildReportFilterParts(req);
+    async (req, res) => {
+      const { where, params } = await buildReportFilterParts(req);
       const sql = `
       SELECT
         COUNT(DISTINCT s.id) AS orders,
@@ -981,7 +1029,7 @@ module.exports = function registerReportsRoutes(app, deps) {
   app.get(
     "/api/reports/profit-by-product",
     requireFeature("reports_profit_layer"),
-    (req, res) => {
+    async (req, res) => {
       const sortable = new Set([
         "revenue",
         "gross_profit",
@@ -997,12 +1045,13 @@ module.exports = function registerReportsRoutes(app, deps) {
           ? "ASC"
           : "DESC";
       const { limit, offset } = parsePaging(req);
-      const { where, params } = buildReportFilterParts(req);
+      const { where, params } = await buildReportFilterParts(req);
       const sql = `
       SELECT
         p.id AS product_id,
         p.name AS product_name,
         p.barcode,
+        p.category_id,
         COALESCE(cat.name, 'Uncategorized') AS category,
         ROUND(COALESCE(SUM(si.quantity), 0), 2) AS units_sold,
         ROUND(COALESCE(SUM(si.quantity * si.price_at_sale), 0), 2) AS revenue,
@@ -1026,9 +1075,13 @@ module.exports = function registerReportsRoutes(app, deps) {
       ORDER BY ${sort} ${order}
       LIMIT ? OFFSET ?
     `;
-      db.all(sql, [...params, limit, offset], (err, rows) => {
+      db.all(sql, [...params, limit, offset], async (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ rows, paging: { limit, offset } });
+        const categoryMeta = await buildCategoryMetaMap();
+        res.json({
+          rows: withCategoryPaths(rows, categoryMeta),
+          paging: { limit, offset },
+        });
       });
     },
   );
@@ -1036,8 +1089,8 @@ module.exports = function registerReportsRoutes(app, deps) {
   app.get(
     "/api/reports/profit-by-outlet",
     requireFeature("reports_profit_layer"),
-    (req, res) => {
-      const { where, params } = buildReportFilterParts(req, {
+    async (req, res) => {
+      const { where, params } = await buildReportFilterParts(req, {
         sale: "s",
         product: "p",
         item: "si",
@@ -1079,8 +1132,8 @@ module.exports = function registerReportsRoutes(app, deps) {
   app.get(
     "/api/reports/discount-leakage",
     requireFeature("reports_profit_layer"),
-    (req, res) => {
-      const { where, params } = buildReportFilterParts(req, {
+    async (req, res) => {
+      const { where, params } = await buildReportFilterParts(req, {
         sale: "s",
         product: "p",
         item: "si",
@@ -1436,7 +1489,7 @@ module.exports = function registerReportsRoutes(app, deps) {
     return next.toISOString().slice(0, 19).replace("T", " ");
   }
 
-  function buildForecastRows(filters, cb) {
+  async function buildForecastRows(filters, cb) {
     const lookbackDays = Math.max(
       7,
       Math.min(
@@ -1454,8 +1507,16 @@ module.exports = function registerReportsRoutes(app, deps) {
       params.push(filters.outlet_id);
     }
     if (filters.category_id) {
-      where.push("p.category_id = ?");
-      params.push(filters.category_id);
+      const leafIds = await getDescendantLeafIds(db, Number(filters.category_id));
+      if (!leafIds.length) {
+        where.push("1 = 0");
+      } else if (leafIds.length === 1) {
+        where.push("p.category_id = ?");
+        params.push(Number(leafIds[0]));
+      } else {
+        where.push(`p.category_id IN (${leafIds.map(() => "?").join(",")})`);
+        params.push(...leafIds.map(Number));
+      }
     }
     const sql = `
       SELECT

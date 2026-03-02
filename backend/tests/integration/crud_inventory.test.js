@@ -24,6 +24,11 @@ describe("Inventory CRUD Integration Tests", () => {
 
   describe("Categories CRUD", () => {
     let categoryId;
+    let childCategoryId;
+    let parentWithProductsId;
+    let parentProductId;
+    let convertedChildId;
+    let siblingLeafId;
 
     it("should create a new category", async () => {
       const res = await makeRequest(app, ADMIN_ID)
@@ -43,6 +48,23 @@ describe("Inventory CRUD Integration Tests", () => {
       expect(res.body.categories.some((c) => c.id === categoryId)).toBe(true);
     });
 
+    it("should create a child category with path metadata", async () => {
+      const res = await makeRequest(app, ADMIN_ID)
+        .post("/api/categories")
+        .send({
+          name: "Kitchen Devices",
+          parent_id: categoryId,
+        });
+      expect(res.status).toBe(200);
+      childCategoryId = res.body.id;
+
+      const listRes = await makeRequest(app, ADMIN_ID).get("/api/categories");
+      const child = listRes.body.categories.find((c) => c.id === childCategoryId);
+      expect(child.depth).toBe(1);
+      expect(child.path_label).toBe("Home Appliances > Kitchen Devices");
+      expect(child.is_leaf).toBe(true);
+    });
+
     it("should update a category", async () => {
       const res = await makeRequest(app, ADMIN_ID)
         .put(`/api/categories/${categoryId}`)
@@ -54,6 +76,90 @@ describe("Inventory CRUD Integration Tests", () => {
         categoryId,
       ]);
       expect(cat.name).toBe("Digital Gadgets");
+    });
+
+    it("should reject deleting a category with children", async () => {
+      const res = await makeRequest(app, ADMIN_ID).delete(`/api/categories/${categoryId}`);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/child categories/i);
+    });
+
+    it("should delete an empty leaf category", async () => {
+      const res = await makeRequest(app, ADMIN_ID).delete(`/api/categories/${childCategoryId}`);
+      expect(res.status).toBe(200);
+    });
+
+    it("should block normal child creation under a category with assigned products", async () => {
+      const parentRes = await makeRequest(app, ADMIN_ID)
+        .post("/api/categories")
+        .send({
+          name: "Fashion Root",
+        });
+      expect(parentRes.status).toBe(200);
+      parentWithProductsId = parentRes.body.id;
+
+      const productRes = await makeRequest(app, ADMIN_ID).post("/api/products").send({
+        name: "Flat Fashion Product",
+        barcode: "FASHION-FLAT-001",
+        price: 2500,
+        category_id: parentWithProductsId,
+      });
+      expect(productRes.status).toBe(200);
+      parentProductId = productRes.body.id;
+
+      const blockedRes = await makeRequest(app, ADMIN_ID)
+        .post("/api/categories")
+        .send({
+          name: "Shirts",
+          parent_id: parentWithProductsId,
+        });
+      expect(blockedRes.status).toBe(400);
+      expect(blockedRes.body.code).toBe("parent_has_products");
+    });
+
+    it("should create a child and move products in one guided conversion", async () => {
+      const res = await makeRequest(app, ADMIN_ID)
+        .post("/api/categories/create-child-and-move")
+        .send({
+          name: "Shirts",
+          parent_id: parentWithProductsId,
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.moved_products).toBe(1);
+      convertedChildId = res.body.category.id;
+
+      const movedProduct = await dbGet(
+        db,
+        "SELECT category_id FROM products WHERE id = ?",
+        [parentProductId],
+      );
+      expect(Number(movedProduct.category_id)).toBe(Number(convertedChildId));
+    });
+
+    it("should bulk move products from one category to another leaf", async () => {
+      const siblingRes = await makeRequest(app, ADMIN_ID)
+        .post("/api/categories")
+        .send({
+          name: "Accessories",
+          parent_id: parentWithProductsId,
+        });
+      expect(siblingRes.status).toBe(200);
+      siblingLeafId = siblingRes.body.id;
+
+      const res = await makeRequest(app, ADMIN_ID)
+        .post(`/api/categories/${convertedChildId}/move-products`)
+        .send({
+          target_category_id: siblingLeafId,
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.moved_products).toBe(1);
+
+      const movedProduct = await dbGet(
+        db,
+        "SELECT category_id FROM products WHERE id = ?",
+        [parentProductId],
+      );
+      expect(Number(movedProduct.category_id)).toBe(Number(siblingLeafId));
     });
   });
 
@@ -77,6 +183,23 @@ describe("Inventory CRUD Integration Tests", () => {
 
   describe("Products CRUD (Simple)", () => {
     let productId;
+    let parentCategoryId;
+    let leafCategoryId;
+
+    beforeAll(async () => {
+      await dbRun(
+        db,
+        `INSERT INTO categories (id, name, description, parent_id, sort_order, is_active)
+         VALUES (20, 'Devices', '', NULL, 0, 1)`,
+      );
+      await dbRun(
+        db,
+        `INSERT INTO categories (id, name, description, parent_id, sort_order, is_active)
+         VALUES (21, 'Wearables', '', 20, 0, 1)`,
+      );
+      parentCategoryId = 20;
+      leafCategoryId = 21;
+    });
 
     it("should create a simple product", async () => {
       const res = await makeRequest(app, ADMIN_ID).post("/api/products").send({
@@ -84,7 +207,7 @@ describe("Inventory CRUD Integration Tests", () => {
         barcode: "1122334455",
         price: 15000,
         cost_price: 10000,
-        category_id: 1,
+        category_id: leafCategoryId,
         unit: "pcs",
       });
       expect(res.status).toBe(200);
@@ -111,6 +234,17 @@ describe("Inventory CRUD Integration Tests", () => {
         productId,
       ]);
       expect(p.price).toBe(16000);
+    });
+
+    it("should reject assigning a parent category to a product", async () => {
+      const res = await makeRequest(app, ADMIN_ID).post("/api/products").send({
+        name: "Invalid Parent Product",
+        barcode: "PARENT-001",
+        price: 1200,
+        category_id: parentCategoryId,
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/leaf categories/i);
     });
 
     it("should delete a product", async () => {
@@ -182,6 +316,17 @@ describe("Inventory CRUD Integration Tests", () => {
   });
 
   describe("Bulk Operations", () => {
+    it("should reject bulk assigning a parent category", async () => {
+      const res = await makeRequest(app, ADMIN_ID)
+        .post("/api/products/bulk-category")
+        .send({
+          ids: [1, 2],
+          category_id: 20,
+        });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/leaf categories/i);
+    });
+
     it("should bulk import products", async () => {
       const res = await makeRequest(app, ADMIN_ID)
         .post("/api/products/bulk-import")
@@ -218,6 +363,18 @@ describe("Inventory CRUD Integration Tests", () => {
         });
       expect(res.status).toBe(200);
       expect(res.body.deleted).toBe(2);
+    });
+
+    it("should filter products by parent category including descendants", async () => {
+      await makeRequest(app, ADMIN_ID).post("/api/products").send({
+        name: "Hierarchy Filter Product",
+        barcode: "HIER-001",
+        price: 999,
+        category_id: 21,
+      });
+      const res = await makeRequest(app, ADMIN_ID).get("/api/products?category_id=20");
+      expect(res.status).toBe(200);
+      expect(res.body.products.some((p) => p.name === "Hierarchy Filter Product")).toBe(true);
     });
   });
 });

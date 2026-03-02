@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ChevronDown, ChevronUp, Download, RefreshCw } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import useReportFilters from "../../hooks/useReportFilters";
+import { indentLabel, sortCategories } from "../../utils/categoryTree";
 
 const money = (v) => `PKRs ${Number(v || 0).toFixed(2)}`;
 
@@ -34,7 +35,7 @@ function toCsv(filename, rows, columns, meta) {
   URL.revokeObjectURL(url);
 }
 
-function Filters({ filters, setFilters, show }) {
+function Filters({ filters, setFilters, show, categories }) {
   if (!show) return null;
   return (
     <div className="mb-3 grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-5">
@@ -68,14 +69,20 @@ function Filters({ filters, setFilters, show }) {
         }
         className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
       />
-      <input
-        placeholder="Category ID"
+      <select
         value={filters.category_id}
         onChange={(e) =>
           setFilters((p) => ({ ...p, category_id: e.target.value }))
         }
         className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-      />
+      >
+        <option value="">All categories</option>
+        {(categories || []).map((category) => (
+          <option key={category.id} value={category.id}>
+            {indentLabel(category)}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -100,6 +107,7 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
   const [savedViews, setSavedViews] = useState([]);
   const [definitions, setDefinitions] = useState([]);
   const [deliveryLog, setDeliveryLog] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [scheduleDraft, setScheduleDraft] = useState({
     name: "",
     report_key: "profit-by-product",
@@ -291,6 +299,13 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
   };
 
   useEffect(() => {
+    fetch(`${API}/api/categories`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((data) => setCategories(sortCategories(data.categories || [])))
+      .catch(() => setCategories([]));
+  }, [authHeaders]);
+
+  useEffect(() => {
     if (!isExpanded) return;
     if (
       !flags.reports_profit_layer &&
@@ -357,6 +372,7 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
             filters={filters}
             setFilters={setFilters}
             show={flags.reports_enhanced_filters}
+            categories={categories}
           />
           {error ? <p className="mb-2 text-sm text-rose-600">{error}</p> : null}
           {loading ? (

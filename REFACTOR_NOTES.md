@@ -2,6 +2,162 @@
 
 ## What Was Done & Why
 
+## Latest Status Update (March 2026)
+
+### Hierarchical Internal Categories Shipped
+
+The project now supports true hierarchical internal product categories.
+
+**Schema:**
+
+- `backend/migrate57.js` introduced the hierarchical category columns
+- `categories` now has:
+  - `parent_id`
+  - `sort_order`
+  - `is_active`
+- index added on `categories.parent_id`
+
+### Category Schema and FK Hardening (March 2026)
+
+The first hierarchy rollout exposed two follow-up schema issues that were fixed immediately after launch.
+
+**`migrate58.js`:**
+
+- removed the old global unique constraint on `categories.name`
+- replaced it with sibling-level uniqueness via:
+  - `idx_categories_parent_name_unique`
+- this allows valid trees with repeated leaf names under different parents, for example:
+  - `Apparel & Accessories > Men > Shoes`
+  - `Apparel & Accessories > Women > Shoes`
+
+**`migrate59.js`:**
+
+- repaired `products.category_id` and `promotions.category_id`
+- after the category-table rebuild in `migrate58`, both tables still referenced `categories_old`
+- this caused runtime failures such as:
+  - `SQLITE_ERROR: no such table: main.categories_old`
+- `migrate59.js` repairs those FKs back to `categories`
+
+**Current state:**
+
+- `backend/migrate59.js` is now the latest migration
+- `backend/run_migrations.js` includes both `migrate58.js` and `migrate59.js`
+- full migration chain rerun completed successfully on the live DB
+
+**Core backend behavior:**
+
+- New shared utility: `backend/category-tree.js`
+- `backend/routes/categories.js` now supports tree-aware CRUD:
+  - parent assignment
+  - sibling-name validation
+  - cycle prevention
+  - delete blockers for child categories and assigned products
+  - enriched category responses with `depth`, `path_label`, `is_leaf`, direct counts, and rollup counts
+- `backend/routes/products.js` now:
+  - enforces `category_id` must be a leaf on create/update/bulk-assign
+  - returns `category_path_label`
+  - expands parent-category filters to descendant leaf categories
+- `backend/routes/promotions.js` now enforces leaf-only category promotions
+- `backend/routes/reports.js` now expands parent-category filters to descendant leaves and uses category path labels where needed
+
+**Frontend behavior:**
+
+- `frontend/src/pages/redesign/CategoriesRedesign.jsx` is now a tree-based category manager
+- `InventoryRedesign.jsx` uses path labels and leaf-only category assignment
+- `PromotionsRedesign.jsx` uses path labels and leaf-only category selection
+- `ReportsPowerUpPanel.jsx` now uses category selectors aligned with descendant-aware backend filtering
+- Shared UI helpers live in `frontend/src/utils/categoryTree.js`
+
+**Operational outcome:**
+
+- Existing flat categories remained valid after migration as top-level leaves
+- Products kept a single `category_id`
+- Internal categories remain separate from Shopify taxonomy by design
+
+### Migration Reliability Improved
+
+`backend/migrate54.js` had an old rerun problem where stale `expenses_old` state could cause repeated migration runs to fail.
+
+**Fix:**
+
+- `migrate54.js` is now rerun-safe/idempotent
+- stale `expenses_old` cleanup is handled before rebuild
+- future `node backend/run_migrations.js` runs are clean even after partial old-state leftovers
+
+### Repeatable Smoke Coverage Added
+
+The hierarchical categories rollout now has repeatable browser smoke coverage.
+
+**E2E additions:**
+
+- Shared Playwright admin login helper: `frontend/tests/e2e/helpers/auth.js`
+- Updated E2E specs to reuse the helper instead of duplicating credentials
+- Added `frontend/tests/e2e/hierarchical-categories.spec.js`
+- Added `frontend/tests/e2e/inventory-reports-smoke.spec.js`
+
+**What the smoke spec covers:**
+
+- login via the real app flow
+- category tree UI
+- inventory product/category path display
+- category-scoped promotions
+- category-wise reports
+- inventory editing of `product_type`, `vendor`, and `tags`
+- category-wise CSV export
+
+**Important implementation note:**
+
+- Playwright now enters through `/` and uses SPA navigation rather than direct deep links
+- this avoids `vite preview` route-rewrite issues that caused earlier flaky failures
+
+### Toy-Store Rollout (March 2026)
+
+The app was expanded from a generic Shopify-style internal tree into a toy-store-first setup while keeping the broader taxonomy available.
+
+**Live DB changes applied:**
+
+- imported the Shopify-style internal category tree
+- imported a dedicated `Toys & Games` tree and set it as the primary top-level root via sort order
+- cleaned up old flat categories and reassigned the existing sample products into toy-specific leaf categories
+- seeded recommended toy brands into `brands`
+- seeded recommended toy-store tags and product types into the sample products
+
+**Examples now in the live tree:**
+
+- `Toys & Games > Building & Construction > Blocks`
+- `Toys & Games > Vehicles & Remote Control > Die-Cast Cars`
+- `Toys & Games > Educational & STEM > Robotics Kits`
+- `Toys & Games > Board Games & Puzzles > Jigsaw Puzzles`
+- `Toys & Games > Plush & Soft Toys > Teddy Bears`
+
+**Supporting scripts added:**
+
+- `backend/import_shopify_style_categories.js`
+- `backend/import_toy_store_categories.js`
+- `backend/setup_toy_store_defaults.js`
+
+### Shopify Import Safety Update (March 2026)
+
+The old Shopify import logic no longer matched the hierarchical internal category model.
+
+**Problem:**
+
+- `shopify.js` previously auto-created categories from Shopify `product_type`
+- it relied on `ON CONFLICT(name) DO NOTHING`
+- that broke after `migrate58.js` removed global uniqueness on `categories.name`
+
+**Fix:**
+
+- Shopify import no longer auto-creates categories from `product_type`
+- it now assigns `category_id` only when `product_type` matches exactly one existing leaf category
+- otherwise the product still imports safely and preserves:
+  - `product_type`
+  - `vendor`
+  - `tags`
+- internal category assignment is left unchanged/null when the match is ambiguous or missing
+
+---
+
 ### Problem
 
 The user was hitting Claude Pro usage caps very quickly when working on this project.
@@ -29,7 +185,7 @@ Every backend task required Claude to read the entire file, consuming massive am
 | File                   | Lines  | Domain                                                                     |
 | ---------------------- | ------ | -------------------------------------------------------------------------- |
 | `taxes.js`             | ~52    | Tax CRUD                                                                   |
-| `categories.js`        | ~52    | Category CRUD                                                              |
+| `categories.js`        | ~236   | Hierarchical internal category CRUD + tree metadata                        |
 | `outlets.js`           | ~52    | Outlet CRUD                                                                |
 | `auth.js`              | ~82    | Login / logout / /me                                                       |
 | `employees.js`         | ~93    | Employee management                                                        |
@@ -113,7 +269,7 @@ Both are then returned from `registerAllRoutes` to `index.js` as before.
 
 - **Backend route issue?** → Read only the relevant route file (e.g. `backend/routes/products.js`)
 - **Global middleware?** → Read `backend/routes/registerAllRoutes.js` (324 lines)
-- **Database schema?** → Read only `backend/migrate56.js` (latest migration, 56 total)
+- **Database schema?** → Read only `backend/migrate59.js` (latest migration, 59 total)
 - **Frontend page issue?** → Read the specific page in `frontend/src/pages/`
 - **Server startup/config?** → Read `backend/index.js`
 
@@ -151,7 +307,7 @@ No need to split a file you're not currently touching.
 - ✅ Updated `.claudeignore` to block all old migrations, test files, diagnostic scripts
 - ✅ Created `CLAUDE.md` project guide
 - ✅ Updated `CLAUDE.md` to reflect new route file structure
-- ✅ Database grown to 56 migrations (`migrate56.js` is current latest)
+- ✅ Database grown to 59 migrations (`migrate59.js` is current latest)
 
 ### Frontend Redesign Migration Completed (Session Mar 2026)
 
@@ -265,7 +421,7 @@ The attendance module had multiple critical issues:
 
 ### Solution
 
-**Database — `backend/migrate56.js` (new, now the latest migration):**
+**Database — `backend/migrate56.js` (attendance migration at the time; superseded later by `migrate57.js`):**
 
 - `ALTER TABLE employees ADD COLUMN work_hours_per_day REAL DEFAULT 8`
 - `ALTER TABLE employees ADD COLUMN monthly_leave_allowance INTEGER DEFAULT 2`
@@ -396,7 +552,7 @@ backend/
   tests/
     helpers/
       createTestApp.js          # App factory with in-memory DB
-      seedSchema.js             # Schema from db.js + migrate56.js
+      seedSchema.js             # Schema from db.js + latest migration set
       seedData.js               # Standard fixtures
       request.js                # Supertest wrapper with auth headers
     unit/
