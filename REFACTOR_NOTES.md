@@ -156,6 +156,35 @@ The old Shopify import logic no longer matched the hierarchical internal categor
   - `tags`
 - internal category assignment is left unchanged/null when the match is ambiguous or missing
 
+### Advanced Reporting Dashboard Shipped (March 2026)
+
+OneShopPOS now features a comprehensive analytics suite that matches industry leaders (Square, Toast, Lightspeed).
+
+**Backend Enhancements (`backend/routes/reports.js`):**
+
+- **Executive Dashboard:**
+  - `GET /api/reports/comparative-trends`: Calculates revenue/orders for Today, Yesterday, and Same Day Last Week with percentage variances.
+  - `GET /api/reports/heatmaps`: Generates a 168-point 24x7 matrix for hourly revenue density.
+- **Sales Analytics:**
+  - `GET /api/reports/revenue-leaks`: Aggregates voids, refunds, and discounts by value and employee risk.
+  - `GET /api/reports/product-mix`: Identifies top product pairs bought together in common transactions.
+- **Inventory & Merchandising:**
+  - `GET /api/reports/retail-matrix`: Quadrant analysis (Stars, Plowhorses, Puzzles, Dogs) based on volume vs. margin.
+- **Customer Insights:**
+  - `GET /api/reports/customer-retention`: Split of New vs. Returning vs. Walk-in revenue.
+  - `GET /api/reports/customer-capture-rate`: Employee ranking by how often they attach customer profiles.
+- **Labor & Loss Prevention:**
+  - `GET /api/reports/labor-performance`: Sales per Hour worked by correlating attendance with transactions.
+  - `GET /api/reports/loss-prevention`: "Risk Ratio %" (Voids + Refunds) / Total Sales per employee.
+
+**Frontend Integration (`frontend/src/pages/Reports.jsx`):**
+
+- The `Reports` component was transformed into a modular tabbed interface.
+- 11 new React components were added to render visualizations (Heatmaps, Metric Cards, and Data Tables).
+- Nav Sidebar updated with 6 Logical Groups: Sales, Customers, Inventory, Operations, Procurement, and HR.
+- All new reports are natively integrated into the existing `ReportsRedesign.jsx` shell and respect existing RBAC permissions.
+- **Note:** `Reports.jsx` grew significantly to ~3,745 lines to house these components in-situ per existing architectural patterns.
+
 ---
 
 ### Problem

@@ -93,7 +93,7 @@ Current shape:
 
 - `ReportsRedesign.jsx` wraps the legacy `Reports.jsx`
 - `ReportsPowerUpPanel.jsx` adds feature-flagged advanced analytics above the legacy reports UI
-- the current system is partly modernized, but still structurally anchored to the old tabbed page
+- March 2026 update: **Advanced Reporting Dashboard Shipped.** Implemented 11 new React-based analytics tabs including Heatmaps, Retail Matrix, and Comparative Trends. Backend endpoints now support core industry-standard metrics for SaaS/Retail.
 
 ### Backend
 
@@ -113,34 +113,43 @@ Current shape:
 ## Reports V2 Principles
 
 1. Category paths everywhere
+
 - Use path-aware category labels consistently in UI and exports
 - Avoid flat labels where ambiguity can occur
 
 2. Filters must behave consistently
+
 - Same filter semantics across report types unless there is a documented reason not to
 
 3. Tables remain first-class
+
 - Charts support insight
 - Tables remain authoritative for export, audit, and operations
 
 4. Drilldown over duplication
+
 - Summary views should lead into detailed filtered views instead of creating multiple nearly-identical reports
 
 5. Domain-first navigation
+
 - Reports should be grouped by business purpose, not just historical tab order
 
 6. Safe for SQLite
+
 - Heavy reports must be paged, scoped, or optimized
 
 7. Universal core first
+
 - The default reporting system must work for any retail tenant
 - Vertical-specific needs should be layered as optional packs, not treated as the default
 
 8. Tenant-safe design
+
 - The information architecture should support SaaS tenants across multiple verticals
 - Retail-specific terminology should be isolated where possible
 
 9. Roll out incrementally
+
 - Build V2 around existing capability, not as a risky all-at-once rewrite
 
 ---
@@ -150,9 +159,11 @@ Current shape:
 ### 1. Executive
 
 Purpose:
+
 - fast overview for owner/admin
 
 Reports:
+
 - sales snapshot
 - gross profit snapshot
 - stock health snapshot
@@ -164,9 +175,11 @@ Reports:
 ### 2. Sales
 
 Purpose:
+
 - core revenue and transaction visibility
 
 Reports:
+
 - sales summary
 - sales detail
 - item-wise sales
@@ -177,9 +190,11 @@ Reports:
 ### 3. Inventory
 
 Purpose:
+
 - stock quantity, value, risk, aging, movement
 
 Reports:
+
 - on-hand inventory
 - inventory dump
 - sales & stock
@@ -194,9 +209,11 @@ Reports:
 ### 4. Catalog
 
 Purpose:
+
 - product structure, category, brand, completeness, and merchandising quality
 
 Reports:
+
 - product specification
 - category performance by path
 - top-level category performance
@@ -209,9 +226,11 @@ Reports:
 ### 5. Promotions
 
 Purpose:
+
 - understand discount effect and promo usage
 
 Reports:
+
 - promotion effectiveness
 - promotion usage by category
 - discount leakage
@@ -221,9 +240,11 @@ Reports:
 ### 6. Customers
 
 Purpose:
+
 - buying behavior and value
 
 Reports:
+
 - customer sales summary
 - wallet activity
 - loyalty activity
@@ -233,9 +254,11 @@ Reports:
 ### 7. Staff
 
 Purpose:
+
 - employee reporting tied to store operations
 
 Reports:
+
 - attendance summary
 - session/break behavior
 - cashier sales performance
@@ -244,9 +267,11 @@ Reports:
 ### 8. Finance
 
 Purpose:
+
 - cost, margin, payable, and reconciliation visibility
 
 Reports:
+
 - gross profit layer
 - net profit layer
 - supplier payable summaries
@@ -256,9 +281,11 @@ Reports:
 ### 9. Exceptions
 
 Purpose:
+
 - detect bad data, risky transactions, and control failures
 
 Reports:
+
 - negative margin sales
 - high discount orders
 - frequent returns
@@ -270,9 +297,11 @@ Reports:
 ### 10. Shopify / Sync
 
 Purpose:
+
 - operational sync visibility
 
 Reports:
+
 - imported products summary
 - unmapped imported products
 - ambiguous category matches
@@ -282,9 +311,11 @@ Reports:
 ### 11. Governance / Audit
 
 Purpose:
+
 - saved views, schedules, report definitions, and delivery logs
 
 Reports:
+
 - scheduled exports
 - saved views
 - report definitions
@@ -506,6 +537,7 @@ The current reports experience is large, legacy-heavy, and visually fragmented.
 Recommended page structure:
 
 1. Header area
+
 - page title
 - summary subtitle
 - quick actions:
@@ -515,6 +547,7 @@ Recommended page structure:
   - schedule
 
 2. KPI summary row
+
 - sales
 - gross profit
 - stock value
@@ -522,17 +555,21 @@ Recommended page structure:
 - exception count
 
 3. Domain navigation
+
 - sidebar or segmented domain nav
 
 4. Shared filter bar
+
 - sticky on scroll
 
 5. Main content area
+
 - overview cards first
 - then table/chart modules
 - drilldown links inside each module
 
 6. Empty and loading states
+
 - each report section must have clean loading, empty, and error treatment
 
 ### Visual Direction
@@ -719,6 +756,7 @@ Domain modules:
 - define final V2 navigation and naming
 
 Deliverable:
+
 - report inventory map
 - keep/merge/add list
 
@@ -730,9 +768,10 @@ Deliverable:
 - standardize loading/error/empty states
 
 Deliverable:
+
 - reusable reporting shell
 
-### Phase 3: Shell and Navigation Redesign
+### Phase 3: Shell and Navigation Redesign [DONE]
 
 - redesign reports landing page
 - add domain-based navigation
@@ -740,18 +779,20 @@ Deliverable:
 - integrate existing power-up modules into the new shell
 
 Deliverable:
+
 - modern V2 reports shell
 
-### Phase 4: Core Report Modernization
+### Phase 4: Core Report Modernization [DONE]
 
 - update core sales and inventory reports
 - update category-wise and product-spec views
 - update category labels and exports everywhere
 
 Deliverable:
+
 - hierarchy-safe existing reports
 
-### Phase 5: New Catalog and Merchandising Reports
+### Phase 5: New Catalog and Merchandising Reports [DONE]
 
 - brand performance
 - product type performance
@@ -759,6 +800,7 @@ Deliverable:
 - top-level category performance
 
 Deliverable:
+
 - universal merchandising intelligence layer
 
 ### Phase 6: Vertical Pack Layer
@@ -768,9 +810,10 @@ Deliverable:
 - keep vertical logic isolated from the universal core
 
 Deliverable:
+
 - extensible vertical reporting model
 
-### Phase 7: Promotions and Exceptions
+### Phase 7: Promotions and Exceptions [DONE]
 
 - promotion effectiveness
 - discount leakage improvements
@@ -778,6 +821,7 @@ Deliverable:
 - Shopify import exception views
 
 Deliverable:
+
 - control and exception reporting layer
 
 ### Phase 8: Governance and Scheduling Integration
@@ -785,6 +829,7 @@ Deliverable:
 - move saved views / schedules / definitions / delivery log into the new structure
 
 Deliverable:
+
 - unified reporting admin experience
 
 ### Phase 9: Testing and Polish
@@ -795,6 +840,7 @@ Deliverable:
 - mobile cleanup
 
 Deliverable:
+
 - stable Reports V2
 
 ---

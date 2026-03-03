@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   BarChart3,
   TrendingUp,
@@ -27,13 +27,24 @@ import {
   Download,
   Building2,
   GitBranch,
+  LayoutGrid,
+  Target,
+  Activity,
+  ShieldAlert,
 } from "lucide-react";
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, CartesianGrid,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
 } from "recharts";
 
-import { API_BASE as API } from '../config';
+import { API_BASE as API } from "../config";
 
 const fmt = (n) => "PKRs " + Number(n || 0).toFixed(2);
 const fmtDate = (d) =>
@@ -198,6 +209,145 @@ function DateRangeFilter({
   );
 }
 
+function GlobalFilterBar({ filters, setFilters, meta }) {
+  const { outlets = [], categories = [], brands = [], employees = [] } = meta;
+
+  const handleReset = () => {
+    setFilters({
+      dateFrom: "",
+      dateTo: "",
+      outletId: "",
+      employeeId: "",
+      categoryId: "",
+      brandId: "",
+      search: "",
+    });
+  };
+
+  const hasActiveFilters = Object.values(filters).some((v) => !!v);
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 mb-4 flex flex-wrap gap-3 items-center sticky top-0 z-10">
+      {/* Search */}
+      <div className="relative min-w-50 flex-1">
+        <Search
+          size={14}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+        />
+        <input
+          type="text"
+          placeholder="Global search..."
+          value={filters.search}
+          onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+          className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-medium"
+        />
+      </div>
+
+      {/* Date Range */}
+      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
+        <Clock size={14} className="text-slate-400" />
+        <input
+          type="date"
+          value={filters.dateFrom}
+          onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+          className="bg-transparent border-none text-xs font-semibold focus:ring-0 p-0 w-28"
+          title="Date From"
+        />
+        <span className="text-slate-300">|</span>
+        <input
+          type="date"
+          value={filters.dateTo}
+          onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+          className="bg-transparent border-none text-xs font-semibold focus:ring-0 p-0 w-28"
+          title="Date To"
+        />
+      </div>
+
+      {/* Outlet Selector */}
+      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 min-w-35">
+        <Building2 size={14} className="text-slate-400" />
+        <select
+          value={filters.outletId}
+          onChange={(e) => setFilters({ ...filters, outletId: e.target.value })}
+          className="bg-transparent border-none text-xs font-semibold focus:ring-0 p-0 flex-1 cursor-pointer"
+        >
+          <option value="">All Outlets</option>
+          {outlets.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Category Selector */}
+      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 min-w-35">
+        <LayoutGrid size={14} className="text-slate-400" />
+        <select
+          value={filters.categoryId}
+          onChange={(e) =>
+            setFilters({ ...filters, categoryId: e.target.value })
+          }
+          className="bg-transparent border-none text-xs font-semibold focus:ring-0 p-0 flex-1 cursor-pointer"
+        >
+          <option value="">All Categories</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.path_label || c.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Brand Selector */}
+      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 min-w-30">
+        <Tag size={14} className="text-slate-400" />
+        <select
+          value={filters.brandId}
+          onChange={(e) => setFilters({ ...filters, brandId: e.target.value })}
+          className="bg-transparent border-none text-xs font-semibold focus:ring-0 p-0 flex-1 cursor-pointer"
+        >
+          <option value="">All Brands</option>
+          {brands.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Employee Selector */}
+      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 min-w-30">
+        <Users size={14} className="text-slate-400" />
+        <select
+          value={filters.employeeId}
+          onChange={(e) =>
+            setFilters({ ...filters, employeeId: e.target.value })
+          }
+          className="bg-transparent border-none text-xs font-semibold focus:ring-0 p-0 flex-1 cursor-pointer"
+        >
+          <option value="">All Staff</option>
+          {employees.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Reset */}
+      {hasActiveFilters && (
+        <button
+          onClick={handleReset}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition-colors border border-red-100"
+        >
+          <RotateCcw size={12} /> Reset
+        </button>
+      )}
+    </div>
+  );
+}
+
 function CardShell({ title, subtitle, action, children }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
@@ -217,21 +367,31 @@ function CardShell({ title, subtitle, action, children }) {
 
 // --- Tab: Overview Dashboard --------------------------------------------------
 
-function OverviewTab() {
+function OverviewTab({ filters }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams({
+        outlet_id: filters.outletId,
+      });
+      const res = await fetch(`${API}/api/reports/dashboard?${p}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      const d = await res.json();
+      setData(d);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.outletId]);
+
   useEffect(() => {
-    fetch(`${API}/api/reports/dashboard`)
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed to fetch");
-        return r.json();
-      })
-      .then(setData)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
+    load();
+  }, [load]);
 
   if (loading)
     return (
@@ -271,15 +431,20 @@ function OverviewTab() {
           {fmt(totalRevenueToday)}
         </h2>
         <div className="flex flex-wrap gap-3 text-sm text-blue-100">
-          {zReport.length > 0
-            ? zReport.map((z) => (
-                <span key={z.payment_method} className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-300 inline-block" />
-                  {z.payment_method}:{" "}
-                  <span className="font-semibold text-white">{fmt(z.total)}</span>
-                </span>
-              ))
-            : <span className="text-blue-300 italic">No sales yet today</span>}
+          {zReport.length > 0 ? (
+            zReport.map((z) => (
+              <span
+                key={z.payment_method}
+                className="flex items-center gap-1.5"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-300 inline-block" />
+                {z.payment_method}:{" "}
+                <span className="font-semibold text-white">{fmt(z.total)}</span>
+              </span>
+            ))
+          ) : (
+            <span className="text-blue-300 italic">No sales yet today</span>
+          )}
         </div>
       </div>
 
@@ -319,7 +484,9 @@ function OverviewTab() {
           </div>
           <p className="text-xs text-slate-400 border-t border-slate-100 pt-3">
             Base Cost Value:{" "}
-            <span className="font-semibold text-slate-600">{fmt(inventoryValue.cost_value)}</span>
+            <span className="font-semibold text-slate-600">
+              {fmt(inventoryValue.cost_value)}
+            </span>
           </p>
         </div>
       </div>
@@ -396,20 +563,19 @@ function OverviewTab() {
 
 // --- Tab: Sales Summary -------------------------------------------------------
 
-function SalesSummaryTab() {
+function SalesSummaryTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const p = new URLSearchParams({
-        search,
-        date_from: dateFrom,
-        date_to: dateTo,
+        search: filters.search,
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+        employee_id: filters.employeeId,
       });
       const res = await fetch(`${API}/api/reports/sales-summary?${p}`);
       const d = await res.json();
@@ -419,7 +585,13 @@ function SalesSummaryTab() {
     } finally {
       setLoading(false);
     }
-  }, [search, dateFrom, dateTo]);
+  }, [
+    filters.search,
+    filters.dateFrom,
+    filters.dateTo,
+    filters.outletId,
+    filters.employeeId,
+  ]);
 
   useEffect(() => {
     load();
@@ -448,16 +620,6 @@ function SalesSummaryTab() {
 
   return (
     <div className="flex flex-col gap-3">
-      <DateRangeFilter
-        dateFrom={dateFrom}
-        setDateFrom={setDateFrom}
-        dateTo={dateTo}
-        setDateTo={setDateTo}
-        search={search}
-        setSearch={setSearch}
-        searchPlaceholder="Search order # or customer..."
-      />
-
       {/* KPI Strip */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center gap-3">
@@ -501,13 +663,7 @@ function SalesSummaryTab() {
               margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
             >
               <defs>
-                <linearGradient
-                  id="revenueGrad"
-                  x1="0"
-                  y1="0"
-                  x2="0"
-                  y2="1"
-                >
+                <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
                   <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                 </linearGradient>
@@ -611,20 +767,19 @@ function SalesSummaryTab() {
 
 // --- Tab: Sales Detail --------------------------------------------------------
 
-function SalesDetailTab() {
+function SalesDetailTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const p = new URLSearchParams({
-        search,
-        date_from: dateFrom,
-        date_to: dateTo,
+        search: filters.search,
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+        employee_id: filters.employeeId,
       });
       const res = await fetch(`${API}/api/reports/sales-detail?${p}`);
       const d = await res.json();
@@ -634,7 +789,13 @@ function SalesDetailTab() {
     } finally {
       setLoading(false);
     }
-  }, [search, dateFrom, dateTo]);
+  }, [
+    filters.search,
+    filters.dateFrom,
+    filters.dateTo,
+    filters.outletId,
+    filters.employeeId,
+  ]);
 
   useEffect(() => {
     load();
@@ -643,15 +804,6 @@ function SalesDetailTab() {
 
   return (
     <div className="flex flex-col gap-3">
-      <DateRangeFilter
-        dateFrom={dateFrom}
-        setDateFrom={setDateFrom}
-        dateTo={dateTo}
-        setDateTo={setDateTo}
-        search={search}
-        setSearch={setSearch}
-        searchPlaceholder="Search product or order #..."
-      />
       <CardShell
         title="Sales Detail"
         subtitle={`${rows.length} line item${rows.length !== 1 ? "s" : ""} � Revenue: ${fmt(totalRevenue)}`}
@@ -729,17 +881,31 @@ function SalesDetailTab() {
 
 // --- Tab: Sales & Stock -------------------------------------------------------
 
-function SalesStockTab() {
+function SalesStockTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams({
+        outlet_id: filters.outletId,
+        category_id: filters.categoryId,
+        brand_id: filters.brandId,
+      });
+      const res = await fetch(`${API}/api/reports/sales-stock?${p}`);
+      const d = await res.json();
+      setRows(d.rows || []);
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.outletId, filters.categoryId, filters.brandId]);
+
   useEffect(() => {
-    fetch(`${API}/api/reports/sales-stock`)
-      .then((r) => r.json())
-      .then((d) => setRows(d.rows || []))
-      .catch(() => setRows([]))
-      .finally(() => setLoading(false));
-  }, []);
+    load();
+  }, [load]);
 
   return (
     <CardShell
@@ -790,24 +956,20 @@ function SalesStockTab() {
 
 // --- Tab: Inventory Dump ------------------------------------------------------
 
-function InventoryDumpTab() {
+function InventoryDumpTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [outlets, setOutlets] = useState([]);
-  const [outletId, setOutletId] = useState("");
-
-  useEffect(() => {
-    fetch(`${API}/api/outlets`)
-      .then((r) => r.json())
-      .then((d) => setOutlets(d.outlets || []))
-      .catch(() => {});
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = outletId ? `?outlet_id=${outletId}` : "";
-      const res = await fetch(`${API}/api/reports/inventory-dump${p}`);
+      const p = new URLSearchParams({
+        outlet_id: filters.outletId,
+        category_id: filters.categoryId,
+        brand_id: filters.brandId,
+        search: filters.search,
+      });
+      const res = await fetch(`${API}/api/reports/inventory-dump?${p}`);
       const d = await res.json();
       setRows(d.rows || []);
     } catch {
@@ -815,34 +977,20 @@ function InventoryDumpTab() {
     } finally {
       setLoading(false);
     }
-  }, [outletId]);
+  }, [filters.outletId, filters.categoryId, filters.brandId, filters.search]);
 
   useEffect(() => {
     load();
   }, [load]);
+
   const totalRetail = rows.reduce((s, r) => s + r.retail_value, 0);
   const totalCost = rows.reduce((s, r) => s + r.cost_value, 0);
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex items-center gap-3">
-        <label className="text-sm font-medium text-slate-600">Outlet</label>
-        <select
-          value={outletId}
-          onChange={(e) => setOutletId(e.target.value)}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-        >
-          <option value="">All Outlets</option>
-          {outlets.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.name}
-            </option>
-          ))}
-        </select>
-      </div>
       <CardShell
         title="Inventory Dump"
-        subtitle={`${rows.length} records � Retail Value: ${fmt(totalRetail)} � Cost Value: ${fmt(totalCost)}`}
+        subtitle={`${rows.length} records • Retail Value: ${fmt(totalRetail)} • Cost Value: ${fmt(totalCost)}`}
         action={
           <ExportButton
             onClick={() =>
@@ -919,17 +1067,18 @@ function InventoryDumpTab() {
 
 // --- Tab: Category Wise -------------------------------------------------------
 
-function CategoryWiseTab() {
+function CategoryWiseTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [search] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+      });
       const res = await fetch(`${API}/api/reports/category-wise?${p}`);
       const d = await res.json();
       setRows(d.data || []);
@@ -938,7 +1087,7 @@ function CategoryWiseTab() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
 
   useEffect(() => {
     load();
@@ -946,13 +1095,6 @@ function CategoryWiseTab() {
 
   return (
     <div className="flex flex-col gap-3">
-      <DateRangeFilter
-        dateFrom={dateFrom}
-        setDateFrom={setDateFrom}
-        dateTo={dateTo}
-        setDateTo={setDateTo}
-        search={search}
-      />
       <CardShell
         title="Category Wise Sales"
         subtitle="Revenue and profit breakdown by product category"
@@ -1020,17 +1162,18 @@ function CategoryWiseTab() {
 
 // --- Tab: Customer Details ----------------------------------------------------
 
-function CustomerDetailsTab() {
+function CustomerDetailsTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
 
-  const fetch_ = useCallback(async (q = "") => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(
-        `${API}/api/reports/customer-details?search=${encodeURIComponent(q)}`,
-      );
+      const p = new URLSearchParams({
+        search: filters.search,
+        outlet_id: filters.outletId,
+      });
+      const res = await fetch(`${API}/api/reports/customer-details?${p}`);
       const data = await res.json();
       setRows(data.customers || []);
     } catch {
@@ -1038,41 +1181,14 @@ function CustomerDetailsTab() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filters.search, filters.outletId]);
 
   useEffect(() => {
-    fetch_();
-  }, [fetch_]);
-  useEffect(() => {
-    const t = setTimeout(() => fetch_(search), 300);
-    return () => clearTimeout(t);
-  }, [search, fetch_]);
+    load();
+  }, [load]);
 
   return (
     <CardShell title="Customer Details">
-      <div className="p-3 border-b border-slate-200 bg-slate-50">
-        <div className="relative max-w-xs">
-          <Search
-            size={13}
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
-          />
-          <input
-            type="text"
-            placeholder="Search name or mobile..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-8 pr-8 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-            >
-              <X size={13} />
-            </button>
-          )}
-        </div>
-      </div>
       <TableShell
         cols={[
           "Date Created",
@@ -1122,17 +1238,31 @@ function CustomerDetailsTab() {
 
 // --- Tab: Customer Wise -------------------------------------------------------
 
-function CustomerWiseTab() {
+function CustomerWiseTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+      });
+      const res = await fetch(`${API}/api/reports/customer-wise?${p}`);
+      const d = await res.json();
+      setRows(d.data || []);
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+
   useEffect(() => {
-    fetch(`${API}/api/reports/customer-wise`)
-      .then((r) => r.json())
-      .then((d) => setRows(d.data || []))
-      .catch(() => setRows([]))
-      .finally(() => setLoading(false));
-  }, []);
+    load();
+  }, [load]);
 
   return (
     <CardShell
@@ -1175,20 +1305,19 @@ function CustomerWiseTab() {
 
 // --- Tab: Order Wise ----------------------------------------------------------
 
-function OrderWiseTab() {
+function OrderWiseTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const p = new URLSearchParams({
-        search,
-        date_from: dateFrom,
-        date_to: dateTo,
+        search: filters.search,
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+        employee_id: filters.employeeId,
       });
       const res = await fetch(`${API}/api/reports/order-wise?${p}`);
       const d = await res.json();
@@ -1198,7 +1327,13 @@ function OrderWiseTab() {
     } finally {
       setLoading(false);
     }
-  }, [search, dateFrom, dateTo]);
+  }, [
+    filters.search,
+    filters.dateFrom,
+    filters.dateTo,
+    filters.outletId,
+    filters.employeeId,
+  ]);
 
   useEffect(() => {
     load();
@@ -1208,15 +1343,6 @@ function OrderWiseTab() {
 
   return (
     <div className="flex flex-col gap-3">
-      <DateRangeFilter
-        dateFrom={dateFrom}
-        setDateFrom={setDateFrom}
-        dateTo={dateTo}
-        setDateTo={setDateTo}
-        search={search}
-        setSearch={setSearch}
-        searchPlaceholder="Search order # or customer..."
-      />
       <CardShell
         title="Order Wise Report"
         subtitle={`${rows.length} order${rows.length !== 1 ? "s" : ""} � Excl. Tax ${fmt(totalExcl)} � Incl. Tax ${fmt(totalIncl)}`}
@@ -1290,17 +1416,21 @@ function OrderWiseTab() {
 
 // --- Tab: Item Wise -----------------------------------------------------------
 
-function ItemWiseTab() {
+function ItemWiseTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [search] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+        category_id: filters.categoryId,
+        brand_id: filters.brandId,
+        search: filters.search,
+      });
       const res = await fetch(`${API}/api/reports/item-wise?${p}`);
       const d = await res.json();
       setRows(d.rows || []);
@@ -1309,7 +1439,14 @@ function ItemWiseTab() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }, [
+    filters.dateFrom,
+    filters.dateTo,
+    filters.outletId,
+    filters.categoryId,
+    filters.brandId,
+    filters.search,
+  ]);
 
   useEffect(() => {
     load();
@@ -1319,13 +1456,6 @@ function ItemWiseTab() {
 
   return (
     <div className="flex flex-col gap-3">
-      <DateRangeFilter
-        dateFrom={dateFrom}
-        setDateFrom={setDateFrom}
-        dateTo={dateTo}
-        setDateTo={setDateTo}
-        search={search}
-      />
       <CardShell
         title="Item Wise Report"
         subtitle={`${rows.length} product${rows.length !== 1 ? "s" : ""} � Revenue: ${fmt(totalRevenue)} � Profit: ${fmt(totalProfit)}`}
@@ -1395,17 +1525,20 @@ function ItemWiseTab() {
 
 // --- Tab: Product Performance -------------------------------------------------
 
-function ProductPerformanceTab() {
+function ProductPerformanceTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [search] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+        category_id: filters.categoryId,
+        brand_id: filters.brandId,
+      });
       const res = await fetch(`${API}/api/reports/product-performance?${p}`);
       const d = await res.json();
       setRows(d.rows || []);
@@ -1414,7 +1547,13 @@ function ProductPerformanceTab() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }, [
+    filters.dateFrom,
+    filters.dateTo,
+    filters.outletId,
+    filters.categoryId,
+    filters.brandId,
+  ]);
 
   useEffect(() => {
     load();
@@ -1422,13 +1561,6 @@ function ProductPerformanceTab() {
 
   return (
     <div className="flex flex-col gap-3">
-      <DateRangeFilter
-        dateFrom={dateFrom}
-        setDateFrom={setDateFrom}
-        dateTo={dateTo}
-        setDateTo={setDateTo}
-        search={search}
-      />
       <CardShell
         title="Product Performance"
         subtitle="Products ranked by gross profit margin %"
@@ -1484,17 +1616,19 @@ function ProductPerformanceTab() {
 
 // --- Tab: Product Specification -----------------------------------------------
 
-function ProductSpecTab() {
+function ProductSpecTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
 
-  const load = useCallback(async (q = "") => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(
-        `${API}/api/reports/product-spec?search=${encodeURIComponent(q)}`,
-      );
+      const p = new URLSearchParams({
+        search: filters.search,
+        category_id: filters.categoryId,
+        brand_id: filters.brandId,
+      });
+      const res = await fetch(`${API}/api/reports/product-spec?${p}`);
       const d = await res.json();
       setRows(d.rows || []);
     } catch {
@@ -1502,44 +1636,17 @@ function ProductSpecTab() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filters.search, filters.categoryId, filters.brandId]);
 
   useEffect(() => {
     load();
   }, [load]);
-  useEffect(() => {
-    const t = setTimeout(() => load(search), 300);
-    return () => clearTimeout(t);
-  }, [search, load]);
 
   return (
     <CardShell
       title="Product Specification"
       subtitle="Full product catalogue with all fields"
     >
-      <div className="p-3 border-b border-slate-200 bg-slate-50">
-        <div className="relative max-w-xs">
-          <Search
-            size={13}
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
-          />
-          <input
-            type="text"
-            placeholder="Search name or barcode..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-8 pr-8 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-            >
-              <X size={13} />
-            </button>
-          )}
-        </div>
-      </div>
       <TableShell
         cols={[
           "ID",
@@ -1586,24 +1693,20 @@ function ProductSpecTab() {
 
 // --- Tab: On Hand Inventory ---------------------------------------------------
 
-function OnHandTab() {
+function OnHandTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [outlets, setOutlets] = useState([]);
-  const [outletId, setOutletId] = useState("");
-
-  useEffect(() => {
-    fetch(`${API}/api/outlets`)
-      .then((r) => r.json())
-      .then((d) => setOutlets(d.outlets || []))
-      .catch(() => {});
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = outletId ? `?outlet_id=${outletId}` : "";
-      const res = await fetch(`${API}/api/reports/on-hand${p}`);
+      const p = new URLSearchParams({
+        outlet_id: filters.outletId,
+        category_id: filters.categoryId,
+        brand_id: filters.brandId,
+        search: filters.search,
+      });
+      const res = await fetch(`${API}/api/reports/on-hand?${p}`);
       const d = await res.json();
       setRows(d.rows || []);
     } catch {
@@ -1611,7 +1714,7 @@ function OnHandTab() {
     } finally {
       setLoading(false);
     }
-  }, [outletId]);
+  }, [filters.outletId, filters.categoryId, filters.brandId, filters.search]);
 
   useEffect(() => {
     load();
@@ -1620,21 +1723,6 @@ function OnHandTab() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex items-center gap-3">
-        <label className="text-sm font-medium text-slate-600">Outlet</label>
-        <select
-          value={outletId}
-          onChange={(e) => setOutletId(e.target.value)}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-        >
-          <option value="">All Outlets</option>
-          {outlets.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.name}
-            </option>
-          ))}
-        </select>
-      </div>
       <CardShell
         title="On Hand Inventory"
         subtitle={`${rows.length} records � Retail Value: ${fmt(totalRetail)}`}
@@ -1712,17 +1800,19 @@ function OnHandTab() {
 
 // --- Tab: Inventory Loss ------------------------------------------------------
 
-function InventoryLossTab() {
+function InventoryLossTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [search] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+        search: filters.search,
+      });
       const res = await fetch(`${API}/api/reports/inventory-loss?${p}`);
       const d = await res.json();
       setRows(d.rows || []);
@@ -1731,7 +1821,7 @@ function InventoryLossTab() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletId, filters.search]);
 
   useEffect(() => {
     load();
@@ -1740,13 +1830,6 @@ function InventoryLossTab() {
 
   return (
     <div className="flex flex-col gap-3">
-      <DateRangeFilter
-        dateFrom={dateFrom}
-        setDateFrom={setDateFrom}
-        dateTo={dateTo}
-        setDateTo={setDateTo}
-        search={search}
-      />
       <CardShell
         title="Inventory Loss"
         subtitle={`${rows.length} adjustment${rows.length !== 1 ? "s" : ""} � Total units lost: ${totalLoss}`}
@@ -1792,17 +1875,19 @@ function InventoryLossTab() {
 
 // --- Tab: Wastage -------------------------------------------------------------
 
-function WastageTab() {
+function WastageTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [search] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+        search: filters.search,
+      });
       const res = await fetch(`${API}/api/reports/wastage?${p}`);
       const d = await res.json();
       setRows(d.rows || []);
@@ -1811,7 +1896,7 @@ function WastageTab() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletId, filters.search]);
 
   useEffect(() => {
     load();
@@ -1819,13 +1904,6 @@ function WastageTab() {
 
   return (
     <div className="flex flex-col gap-3">
-      <DateRangeFilter
-        dateFrom={dateFrom}
-        setDateFrom={setDateFrom}
-        dateTo={dateTo}
-        setDateTo={setDateTo}
-        search={search}
-      />
       <CardShell
         title="Wastage Report"
         subtitle="Stock adjustments with Damaged or Expired reason"
@@ -1877,17 +1955,32 @@ function WastageTab() {
 
 // --- Tab: Product Movement ----------------------------------------------------
 
-function ProductMovementTab() {
+function ProductMovementTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+        search: filters.search,
+      });
+      const res = await fetch(`${API}/api/transfers?${p}`);
+      const d = await res.json();
+      setRows(Array.isArray(d) ? d : []);
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.dateFrom, filters.dateTo, filters.outletId, filters.search]);
+
   useEffect(() => {
-    fetch(`${API}/api/transfers`)
-      .then((r) => r.json())
-      .then((d) => setRows(Array.isArray(d) ? d : []))
-      .catch(() => setRows([]))
-      .finally(() => setLoading(false));
-  }, []);
+    load();
+  }, [load]);
 
   return (
     <CardShell
@@ -1936,28 +2029,27 @@ function ProductMovementTab() {
 
 // --- Tab: STR Report ----------------------------------------------------------
 
-function STRReportTab() {
+function STRReportTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [search] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const all = await fetch(`${API}/api/transfers`).then((r) => r.json());
-      let data = Array.isArray(all) ? all : [];
-      if (dateFrom) data = data.filter((r) => r.timestamp >= dateFrom);
-      if (dateTo)
-        data = data.filter((r) => r.timestamp <= dateTo + "T23:59:59");
-      setRows(data);
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+      });
+      const res = await fetch(`${API}/api/reports/str-report?${p}`);
+      const d = await res.json();
+      setRows(d.rows || d || []);
     } catch {
       setRows([]);
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
 
   useEffect(() => {
     load();
@@ -1965,13 +2057,6 @@ function STRReportTab() {
 
   return (
     <div className="flex flex-col gap-3">
-      <DateRangeFilter
-        dateFrom={dateFrom}
-        setDateFrom={setDateFrom}
-        dateTo={dateTo}
-        setDateTo={setDateTo}
-        search={search}
-      />
       <CardShell
         title="STR Report � Stock Transfer"
         subtitle={`${rows.length} transfer${rows.length !== 1 ? "s" : ""}`}
@@ -2027,19 +2112,23 @@ function STRReportTab() {
 
 // --- Tab: Replenishment -------------------------------------------------------
 
-function ReplenishmentTab() {
+function ReplenishmentTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [threshold, setThreshold] = useState(10);
+  const [threshold] = useState(10);
   const [drafting, setDrafting] = useState(false);
   const [draftResult, setDraftResult] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(
-        `${API}/api/reports/replenishment?threshold=${threshold}`,
-      );
+      const p = new URLSearchParams({
+        threshold,
+        outlet_id: filters.outletId,
+        category_id: filters.categoryId,
+        brand_id: filters.brandId,
+      });
+      const res = await fetch(`${API}/api/reports/replenishment?${p}`);
       const d = await res.json();
       setRows(d.rows || []);
     } catch {
@@ -2047,35 +2136,57 @@ function ReplenishmentTab() {
     } finally {
       setLoading(false);
     }
-  }, [threshold]);
+  }, [threshold, filters.outletId, filters.categoryId, filters.brandId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   // Group items by supplier ? one Draft PO per supplier
   const handleCreateDraftPOs = async () => {
     const withSupplier = rows.filter((r) => r.supplier_id);
     if (!withSupplier.length) {
-      setDraftResult({ error: "No items have a supplier assigned. Edit products to add suppliers." });
+      setDraftResult({
+        error:
+          "No items have a supplier assigned. Edit products to add suppliers.",
+      });
       return;
     }
     const bySupplier = {};
     withSupplier.forEach((r) => {
-      if (!bySupplier[r.supplier_id]) bySupplier[r.supplier_id] = { supplier_name: r.supplier_name, items: [] };
+      if (!bySupplier[r.supplier_id])
+        bySupplier[r.supplier_id] = {
+          supplier_name: r.supplier_name,
+          items: [],
+        };
       const reorderQty = Math.max(1, (r.min_qty || 10) - r.quantity);
-      bySupplier[r.supplier_id].items.push({ product_id: r.product_id, quantity: reorderQty, cost_price: r.cost_price || 0 });
+      bySupplier[r.supplier_id].items.push({
+        product_id: r.product_id,
+        quantity: reorderQty,
+        cost_price: r.cost_price || 0,
+      });
     });
 
     setDrafting(true);
     setDraftResult(null);
     const created = [];
     const failed = [];
-    for (const [supplierId, { supplier_name, items }] of Object.entries(bySupplier)) {
-      const totalCost = items.reduce((s, i) => s + i.quantity * i.cost_price, 0);
+    for (const [supplierId, { supplier_name, items }] of Object.entries(
+      bySupplier,
+    )) {
+      const totalCost = items.reduce(
+        (s, i) => s + i.quantity * i.cost_price,
+        0,
+      );
       try {
         const res = await fetch(`${API}/api/purchase-orders`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ supplier_id: parseInt(supplierId), total_cost: totalCost, items }),
+          body: JSON.stringify({
+            supplier_id: parseInt(supplierId),
+            total_cost: totalCost,
+            items,
+          }),
         });
         if (res.ok) created.push(supplier_name);
         else failed.push(supplier_name);
@@ -2088,23 +2199,21 @@ function ReplenishmentTab() {
   };
 
   const suppliersWithItems = useMemo(() => {
-    const ids = new Set(rows.filter((r) => r.supplier_id).map((r) => r.supplier_id));
+    const ids = new Set(
+      rows.filter((r) => r.supplier_id).map((r) => r.supplier_id),
+    );
     return ids.size;
   }, [rows]);
 
   return (
     <div className="flex flex-col gap-3">
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex flex-wrap items-center gap-3">
-        <label className="text-sm font-medium text-slate-600">Threshold (units)</label>
-        <input
-          type="number"
-          min={0}
-          max={1000}
-          value={threshold}
-          onChange={(e) => setThreshold(parseInt(e.target.value) || 0)}
-          className="w-24 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-        />
-        <span className="text-xs text-slate-500">Show products at or below this quantity</span>
+        <span className="text-sm font-medium text-slate-600">
+          Replenishment Tools
+        </span>
+        <span className="text-xs text-slate-500">
+          Products at or below threshold (10 units)
+        </span>
         {rows.length > 0 && (
           <button
             onClick={handleCreateDraftPOs}
@@ -2112,19 +2221,34 @@ function ReplenishmentTab() {
             className="ml-auto flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
           >
             <ShoppingCart size={13} />
-            {drafting ? "Creating�" : `Create Draft POs (${suppliersWithItems} supplier${suppliersWithItems !== 1 ? "s" : ""})`}
+            {drafting
+              ? "Creating�"
+              : `Create Draft POs (${suppliersWithItems} supplier${suppliersWithItems !== 1 ? "s" : ""})`}
           </button>
         )}
       </div>
 
       {draftResult && (
-        <div className={`rounded-xl border px-4 py-3 text-sm flex items-start gap-2 ${draftResult.error ? "bg-rose-50 border-rose-200 text-rose-700" : "bg-emerald-50 border-emerald-200 text-emerald-800"}`}>
+        <div
+          className={`rounded-xl border px-4 py-3 text-sm flex items-start gap-2 ${draftResult.error ? "bg-rose-50 border-rose-200 text-rose-700" : "bg-emerald-50 border-emerald-200 text-emerald-800"}`}
+        >
           <AlertTriangle size={16} className="mt-0.5 shrink-0" />
           <div>
-            {draftResult.error ? draftResult.error : (
+            {draftResult.error ? (
+              draftResult.error
+            ) : (
               <>
-                {draftResult.created.length > 0 && <p><strong>Draft POs created</strong> for: {draftResult.created.join(", ")}</p>}
-                {draftResult.failed.length > 0 && <p className="text-rose-600 mt-1">Failed: {draftResult.failed.join(", ")} � check permissions</p>}
+                {draftResult.created.length > 0 && (
+                  <p>
+                    <strong>Draft POs created</strong> for:{" "}
+                    {draftResult.created.join(", ")}
+                  </p>
+                )}
+                {draftResult.failed.length > 0 && (
+                  <p className="text-rose-600 mt-1">
+                    Failed: {draftResult.failed.join(", ")} � check permissions
+                  </p>
+                )}
               </>
             )}
           </div>
@@ -2136,7 +2260,15 @@ function ReplenishmentTab() {
         subtitle={`${rows.length} product${rows.length !== 1 ? "s" : ""} need restocking (= ${threshold} units)`}
       >
         <TableShell
-          cols={["Product", "Barcode", "Supplier", "Outlet", "Qty on Hand", "Reorder Qty", "Status"]}
+          cols={[
+            "Product",
+            "Barcode",
+            "Supplier",
+            "Outlet",
+            "Qty on Hand",
+            "Reorder Qty",
+            "Status",
+          ]}
           loading={loading}
           empty={rows.length === 0}
           emptyIcon={RotateCcw}
@@ -2145,20 +2277,32 @@ function ReplenishmentTab() {
             const reorderQty = Math.max(1, (r.min_qty || 10) - r.quantity);
             return (
               <tr key={i} className="hover:bg-slate-50 transition-colors">
-                <td className="p-4 font-medium text-slate-800">{r.product_name}</td>
-                <td className="p-4 text-xs font-mono text-slate-500">{r.barcode}</td>
-                <td className="p-4 text-sm text-slate-600">{r.supplier_name}</td>
+                <td className="p-4 font-medium text-slate-800">
+                  {r.product_name}
+                </td>
+                <td className="p-4 text-xs font-mono text-slate-500">
+                  {r.barcode}
+                </td>
+                <td className="p-4 text-sm text-slate-600">
+                  {r.supplier_name}
+                </td>
                 <td className="p-4 text-sm text-slate-600">{r.outlet_name}</td>
                 <td className="p-4 text-center">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${r.quantity === 0 ? "bg-rose-100 text-rose-800" : "bg-orange-100 text-orange-800"}`}>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-xs font-bold ${r.quantity === 0 ? "bg-rose-100 text-rose-800" : "bg-orange-100 text-orange-800"}`}
+                  >
                     {r.quantity}
                   </span>
                 </td>
                 <td className="p-4 text-center">
-                  <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold">{reorderQty}</span>
+                  <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold">
+                    {reorderQty}
+                  </span>
                 </td>
                 <td className="p-4">
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${r.quantity === 0 ? "bg-rose-100 text-rose-700" : "bg-orange-100 text-orange-700"}`}>
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold ${r.quantity === 0 ? "bg-rose-100 text-rose-700" : "bg-orange-100 text-orange-700"}`}
+                  >
                     {r.quantity === 0 ? "Out of Stock" : "Low Stock"}
                   </span>
                 </td>
@@ -2173,17 +2317,29 @@ function ReplenishmentTab() {
 
 // --- Tab: Supplier Wise -------------------------------------------------------
 
-function SupplierWiseTab() {
+function SupplierWiseTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams({
+        outlet_id: filters.outletId,
+      });
+      const res = await fetch(`${API}/api/reports/supplier-wise?${p}`);
+      const d = await res.json();
+      setRows(d.rows || []);
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.outletId]);
+
   useEffect(() => {
-    fetch(`${API}/api/reports/supplier-wise`)
-      .then((r) => r.json())
-      .then((d) => setRows(d.rows || []))
-      .catch(() => setRows([]))
-      .finally(() => setLoading(false));
-  }, []);
+    load();
+  }, [load]);
 
   return (
     <CardShell
@@ -2232,17 +2388,32 @@ function SupplierWiseTab() {
 
 // --- Tab: Purchase Orders Report ----------------------------------------------
 
-function PurchaseOrdersReportTab() {
+function PurchaseOrdersReportTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams({
+        outlet_id: filters.outletId,
+        search: filters.search,
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+      });
+      const res = await fetch(`${API}/api/purchase-orders?${p}`);
+      const d = await res.json();
+      setRows(d.purchase_orders || []);
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.outletId, filters.search, filters.dateFrom, filters.dateTo]);
+
   useEffect(() => {
-    fetch(`${API}/api/purchase-orders`)
-      .then((r) => r.json())
-      .then((d) => setRows(d.purchase_orders || []))
-      .catch(() => setRows([]))
-      .finally(() => setLoading(false));
-  }, []);
+    load();
+  }, [load]);
 
   const statusColor = (s) =>
     s === "Received"
@@ -2292,18 +2463,19 @@ function PurchaseOrdersReportTab() {
 
 // --- GRN Report Tab -----------------------------------------------------------
 
-function GRNReportTab() {
+function GRNReportTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams();
-      if (dateFrom) p.set("date_from", dateFrom);
-      if (dateTo) p.set("date_to", dateTo);
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+        search: filters.search,
+      });
       const r = await fetch(`${API}/api/grn?${p}`);
       const d = await r.json();
       setRows(d.grns || []);
@@ -2312,7 +2484,7 @@ function GRNReportTab() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletId, filters.search]);
 
   useEffect(() => {
     load();
@@ -2320,13 +2492,6 @@ function GRNReportTab() {
 
   return (
     <div className="flex flex-col gap-3">
-      <DateRangeFilter
-        dateFrom={dateFrom}
-        setDateFrom={setDateFrom}
-        dateTo={dateTo}
-        setDateTo={setDateTo}
-        onApply={load}
-      />
       <CardShell
         title="GRN Report"
         subtitle={`${rows.length} goods received note${rows.length !== 1 ? "s" : ""}`}
@@ -2379,29 +2544,19 @@ function GRNReportTab() {
 
 // --- Attendance Tab -----------------------------------------------------------
 
-function AttendanceTab() {
-  const today = new Date().toISOString().slice(0, 10);
+function AttendanceTab({ filters }) {
   const [records, setRecords] = useState([]);
-  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [dateFrom, setDateFrom] = useState(today);
-  const [dateTo, setDateTo] = useState(today);
-  const [employeeId, setEmployeeId] = useState("");
-
-  useEffect(() => {
-    fetch(`${API}/api/employees`)
-      .then((r) => r.json())
-      .then((d) => setEmployees(d.employees || []))
-      .catch(() => {});
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams();
-      if (dateFrom) p.set("date_from", dateFrom);
-      if (dateTo) p.set("date_to", dateTo);
-      if (employeeId) p.set("employee_id", employeeId);
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        employee_id: filters.employeeId,
+        outlet_id: filters.outletId,
+      });
       const r = await fetch(`${API}/api/attendance?${p}`);
       const d = await r.json();
       setRecords(d.records || []);
@@ -2410,7 +2565,7 @@ function AttendanceTab() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, employeeId]);
+  }, [filters.dateFrom, filters.dateTo, filters.employeeId, filters.outletId]);
 
   useEffect(() => {
     load();
@@ -2429,25 +2584,6 @@ function AttendanceTab() {
   return (
     <CardShell title="Attendance Report" icon={Clock}>
       <div className="flex flex-wrap gap-3 items-end mb-4">
-        <DateRangeFilter
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          onFromChange={setDateFrom}
-          onToChange={setDateTo}
-          onApply={load}
-        />
-        <select
-          value={employeeId}
-          onChange={(e) => setEmployeeId(e.target.value)}
-          className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">All Employees</option>
-          {employees.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.name}
-            </option>
-          ))}
-        </select>
         <span className="ml-auto text-sm font-semibold text-slate-600 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-lg">
           Total: {totalHours.toFixed(2)}h
         </span>
@@ -2509,18 +2645,17 @@ function AttendanceTab() {
 
 // --- Tab: Outlet Comparison ---------------------------------------------------
 
-function OutletComparisonTab() {
+function OutletComparisonTab({ filters }) {
   const [outlets, setOutlets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams();
-      if (dateFrom) p.set("date_from", dateFrom);
-      if (dateTo) p.set("date_to", dateTo);
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+      });
       const res = await fetch(`${API}/api/reports/outlet-comparison?${p}`);
       const d = await res.json();
       setOutlets(d.outlets || []);
@@ -2529,32 +2664,55 @@ function OutletComparisonTab() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }, [filters.dateFrom, filters.dateTo]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const totalRevenue = outlets.reduce((s, o) => s + o.revenue, 0);
-  const chartData = outlets.map((o) => ({ name: o.name, revenue: +o.revenue.toFixed(2), orders: o.order_count }));
+  const chartData = outlets.map((o) => ({
+    name: o.name,
+    revenue: +o.revenue.toFixed(2),
+    orders: o.order_count,
+  }));
 
   return (
     <div className="flex flex-col gap-3">
-      <DateRangeFilter
-        dateFrom={dateFrom} setDateFrom={setDateFrom}
-        dateTo={dateTo} setDateTo={setDateTo}
-      />
-
       {/* Bar chart */}
       {!loading && chartData.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-          <p className="text-sm font-semibold text-slate-700 mb-3">Revenue by Outlet</p>
+          <p className="text-sm font-semibold text-slate-700 mb-3">
+            Revenue by Outlet
+          </p>
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+            <BarChart
+              data={chartData}
+              margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={(v) => `PKRs ${v}`} />
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 11, fill: "#64748b" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: "#94a3b8" }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => `PKRs ${v}`}
+              />
               <Tooltip
-                formatter={(v, name) => [name === "revenue" ? fmt(v) : v, name === "revenue" ? "Revenue" : "Orders"]}
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
+                formatter={(v, name) => [
+                  name === "revenue" ? fmt(v) : v,
+                  name === "revenue" ? "Revenue" : "Orders",
+                ]}
+                contentStyle={{
+                  fontSize: 12,
+                  borderRadius: 8,
+                  border: "1px solid #e2e8f0",
+                }}
               />
               <Bar dataKey="revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} />
             </BarChart>
@@ -2568,19 +2726,30 @@ function OutletComparisonTab() {
         action={
           <ExportButton
             onClick={() =>
-              exportCSV("outlet-comparison.csv", [
-                { header: "Outlet", key: "name" },
-                { header: "Orders", key: "order_count" },
-                { header: "Revenue", key: "revenue" },
-                { header: "Avg Basket", key: "avg_basket" },
-                { header: "Unique Customers", key: "unique_customers" },
-              ], outlets)
+              exportCSV(
+                "outlet-comparison.csv",
+                [
+                  { header: "Outlet", key: "name" },
+                  { header: "Orders", key: "order_count" },
+                  { header: "Revenue", key: "revenue" },
+                  { header: "Avg Basket", key: "avg_basket" },
+                  { header: "Unique Customers", key: "unique_customers" },
+                ],
+                outlets,
+              )
             }
           />
         }
       >
         <TableShell
-          cols={["Outlet", "Orders", "Revenue", "Avg Basket", "Unique Customers", "% of Total"]}
+          cols={[
+            "Outlet",
+            "Orders",
+            "Revenue",
+            "Avg Basket",
+            "Unique Customers",
+            "% of Total",
+          ]}
           loading={loading}
           empty={outlets.length === 0}
           emptyIcon={Building2}
@@ -2589,14 +2758,25 @@ function OutletComparisonTab() {
             <tr key={o.id} className="hover:bg-slate-50 transition-colors">
               <td className="p-4 font-semibold text-slate-800">{o.name}</td>
               <td className="p-4 text-center">
-                <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold">{o.order_count}</span>
+                <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold">
+                  {o.order_count}
+                </span>
               </td>
-              <td className="p-4 text-right font-bold text-slate-900">{fmt(o.revenue)}</td>
-              <td className="p-4 text-right text-sm text-slate-600">{fmt(o.avg_basket)}</td>
-              <td className="p-4 text-center text-sm text-slate-600">{o.unique_customers}</td>
+              <td className="p-4 text-right font-bold text-slate-900">
+                {fmt(o.revenue)}
+              </td>
+              <td className="p-4 text-right text-sm text-slate-600">
+                {fmt(o.avg_basket)}
+              </td>
+              <td className="p-4 text-center text-sm text-slate-600">
+                {o.unique_customers}
+              </td>
               <td className="p-4 text-center">
                 <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-xs font-semibold">
-                  {totalRevenue > 0 ? ((o.revenue / totalRevenue) * 100).toFixed(1) : "0.0"}%
+                  {totalRevenue > 0
+                    ? ((o.revenue / totalRevenue) * 100).toFixed(1)
+                    : "0.0"}
+                  %
                 </span>
               </td>
             </tr>
@@ -2610,15 +2790,42 @@ function OutletComparisonTab() {
 // --- Tab: Customer RFM Segmentation -------------------------------------------
 
 const RFM_SEGMENTS = {
-  Champions:          { color: "bg-emerald-100 text-emerald-800", desc: "Buy recently, often, and spend the most" },
-  "Loyal":            { color: "bg-blue-100 text-blue-800",       desc: "Regular buyers with solid spend" },
-  "Potential Loyalist":{ color: "bg-sky-100 text-sky-800",        desc: "Recent buyers, starting to buy more" },
-  "New Customer":     { color: "bg-teal-100 text-teal-800",       desc: "Bought recently for the first time" },
-  "Need Attention":   { color: "bg-yellow-100 text-yellow-800",   desc: "Were good, but activity slowing" },
-  "At Risk":          { color: "bg-orange-100 text-orange-800",   desc: "Used to buy often � haven't returned" },
-  "Can't Lose Them":  { color: "bg-rose-100 text-rose-800",       desc: "High-value, now dormant � act fast" },
-  "About to Sleep":   { color: "bg-slate-100 text-slate-700",     desc: "Low engagement, fading" },
-  "Lost":             { color: "bg-gray-100 text-gray-600",       desc: "Inactive, minimal engagement" },
+  Champions: {
+    color: "bg-emerald-100 text-emerald-800",
+    desc: "Buy recently, often, and spend the most",
+  },
+  Loyal: {
+    color: "bg-blue-100 text-blue-800",
+    desc: "Regular buyers with solid spend",
+  },
+  "Potential Loyalist": {
+    color: "bg-sky-100 text-sky-800",
+    desc: "Recent buyers, starting to buy more",
+  },
+  "New Customer": {
+    color: "bg-teal-100 text-teal-800",
+    desc: "Bought recently for the first time",
+  },
+  "Need Attention": {
+    color: "bg-yellow-100 text-yellow-800",
+    desc: "Were good, but activity slowing",
+  },
+  "At Risk": {
+    color: "bg-orange-100 text-orange-800",
+    desc: "Used to buy often � haven't returned",
+  },
+  "Can't Lose Them": {
+    color: "bg-rose-100 text-rose-800",
+    desc: "High-value, now dormant � act fast",
+  },
+  "About to Sleep": {
+    color: "bg-slate-100 text-slate-700",
+    desc: "Low engagement, fading",
+  },
+  Lost: {
+    color: "bg-gray-100 text-gray-600",
+    desc: "Inactive, minimal engagement",
+  },
 };
 
 function getSegment(r, f) {
@@ -2629,17 +2836,23 @@ function getSegment(r, f) {
   if (r >= 3 && f >= 3) return "Need Attention";
   if (r >= 2 && f >= 3) return "At Risk";
   if (r === 1 && f >= 4) return "Can't Lose Them";
-  if (r >= 2)            return "About to Sleep";
+  if (r >= 2) return "About to Sleep";
   return "Lost";
 }
 
 function scoreRFMCustomers(customers) {
   if (!customers.length) return [];
   const n = customers.length;
-  const byRecency = [...customers].sort((a, b) => a.recency_days - b.recency_days);
-  const byFreq    = [...customers].sort((a, b) => b.order_count - a.order_count);
-  const rRank = new Map(byRecency.map((c, i) => [c.id, Math.max(1, 5 - Math.floor((i / n) * 5))]));
-  const fRank = new Map(byFreq.map((c, i) => [c.id, Math.max(1, 5 - Math.floor((i / n) * 5))]));
+  const byRecency = [...customers].sort(
+    (a, b) => a.recency_days - b.recency_days,
+  );
+  const byFreq = [...customers].sort((a, b) => b.order_count - a.order_count);
+  const rRank = new Map(
+    byRecency.map((c, i) => [c.id, Math.max(1, 5 - Math.floor((i / n) * 5))]),
+  );
+  const fRank = new Map(
+    byFreq.map((c, i) => [c.id, Math.max(1, 5 - Math.floor((i / n) * 5))]),
+  );
   return customers.map((c) => {
     const r = rRank.get(c.id) || 1;
     const f = fRank.get(c.id) || 1;
@@ -2647,31 +2860,49 @@ function scoreRFMCustomers(customers) {
   });
 }
 
-function CustomerRFMTab() {
+function CustomerRFMTab({ filters }) {
   const [raw, setRaw] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterSeg, setFilterSeg] = useState("");
 
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams({
+        outlet_id: filters.outletId,
+      });
+      const res = await fetch(`${API}/api/reports/customer-rfm?${p}`);
+      const d = await res.json();
+      setRaw(d.customers || []);
+    } catch {
+      setRaw([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.outletId]);
+
   useEffect(() => {
-    fetch(`${API}/api/reports/customer-rfm`)
-      .then((r) => r.json())
-      .then((d) => setRaw(d.customers || []))
-      .catch(() => setRaw([]))
-      .finally(() => setLoading(false));
-  }, []);
+    load();
+  }, [load]);
 
   const scored = useMemo(() => scoreRFMCustomers(raw), [raw]);
-  const filtered = filterSeg ? scored.filter((c) => c.segment === filterSeg) : scored;
+  const filtered = filterSeg
+    ? scored.filter((c) => c.segment === filterSeg)
+    : scored;
 
   const segmentCounts = useMemo(() => {
     const map = {};
-    scored.forEach((c) => { map[c.segment] = (map[c.segment] || 0) + 1; });
+    scored.forEach((c) => {
+      map[c.segment] = (map[c.segment] || 0) + 1;
+    });
     return map;
   }, [scored]);
 
   const ScoreBox = ({ value }) => (
-    <span className={`inline-flex items-center justify-center w-6 h-6 rounded text-xs font-bold
-      ${value >= 4 ? "bg-emerald-100 text-emerald-800" : value === 3 ? "bg-yellow-100 text-yellow-800" : "bg-rose-100 text-rose-800"}`}>
+    <span
+      className={`inline-flex items-center justify-center w-6 h-6 rounded text-xs font-bold
+      ${value >= 4 ? "bg-emerald-100 text-emerald-800" : value === 3 ? "bg-yellow-100 text-yellow-800" : "bg-rose-100 text-rose-800"}`}
+    >
       {value}
     </span>
   );
@@ -2691,8 +2922,14 @@ function CustomerRFMTab() {
                   : "border-slate-200 bg-white hover:border-slate-300"
               }`}
             >
-              <p className="text-xl font-bold text-slate-900">{segmentCounts[seg] || 0}</p>
-              <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${color}`}>{seg}</span>
+              <p className="text-xl font-bold text-slate-900">
+                {segmentCounts[seg] || 0}
+              </p>
+              <span
+                className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${color}`}
+              >
+                {seg}
+              </span>
             </button>
           ))}
         </div>
@@ -2704,36 +2941,53 @@ function CustomerRFMTab() {
         action={
           <div className="flex items-center gap-2">
             {filterSeg && (
-              <button onClick={() => setFilterSeg("")} className="text-xs text-slate-500 hover:text-red-600 flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-red-50 transition-colors">
+              <button
+                onClick={() => setFilterSeg("")}
+                className="text-xs text-slate-500 hover:text-red-600 flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+              >
                 <X size={11} /> Clear
               </button>
             )}
             <ExportButton
               onClick={() =>
-                exportCSV("customer-rfm.csv", [
-                  { header: "Customer", key: "name" },
-                  { header: "Mobile", key: "mobile" },
-                  { header: "Email", key: "email" },
-                  { header: "Orders", key: "order_count" },
-                  { header: "Total Spent", key: "total_spent" },
-                  { header: "Recency (days)", key: "recency_days" },
-                  { header: "R Score", key: "r_score" },
-                  { header: "F Score", key: "f_score" },
-                  { header: "Segment", key: "segment" },
-                ], filtered)
+                exportCSV(
+                  "customer-rfm.csv",
+                  [
+                    { header: "Customer", key: "name" },
+                    { header: "Mobile", key: "mobile" },
+                    { header: "Email", key: "email" },
+                    { header: "Orders", key: "order_count" },
+                    { header: "Total Spent", key: "total_spent" },
+                    { header: "Recency (days)", key: "recency_days" },
+                    { header: "R Score", key: "r_score" },
+                    { header: "F Score", key: "f_score" },
+                    { header: "Segment", key: "segment" },
+                  ],
+                  filtered,
+                )
               }
             />
           </div>
         }
       >
         <TableShell
-          cols={["Customer", "Last Purchase", "Orders", "Total Spent", "R", "F", "Segment"]}
+          cols={[
+            "Customer",
+            "Last Purchase",
+            "Orders",
+            "Total Spent",
+            "R",
+            "F",
+            "Segment",
+          ]}
           loading={loading}
           empty={filtered.length === 0}
           emptyIcon={Users}
         >
           {filtered.map((c) => {
-            const seg = RFM_SEGMENTS[c.segment] || { color: "bg-slate-100 text-slate-700" };
+            const seg = RFM_SEGMENTS[c.segment] || {
+              color: "bg-slate-100 text-slate-700",
+            };
             return (
               <tr key={c.id} className="hover:bg-slate-50 transition-colors">
                 <td className="p-4">
@@ -2742,23 +2996,41 @@ function CustomerRFMTab() {
                       {c.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="font-semibold text-slate-800 text-sm">{c.name}</p>
-                      {c.mobile && <p className="text-xs text-slate-400">{c.mobile}</p>}
+                      <p className="font-semibold text-slate-800 text-sm">
+                        {c.name}
+                      </p>
+                      {c.mobile && (
+                        <p className="text-xs text-slate-400">{c.mobile}</p>
+                      )}
                     </div>
                   </div>
                 </td>
                 <td className="p-4 text-sm text-slate-500 whitespace-nowrap">
                   {fmtDate(c.last_order_at)}
-                  <span className="block text-xs text-slate-400">{c.recency_days}d ago</span>
+                  <span className="block text-xs text-slate-400">
+                    {c.recency_days}d ago
+                  </span>
                 </td>
                 <td className="p-4 text-center">
-                  <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold">{c.order_count}</span>
+                  <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold">
+                    {c.order_count}
+                  </span>
                 </td>
-                <td className="p-4 text-right font-bold text-slate-900">{fmt(c.total_spent)}</td>
-                <td className="p-4 text-center"><ScoreBox value={c.r_score} /></td>
-                <td className="p-4 text-center"><ScoreBox value={c.f_score} /></td>
+                <td className="p-4 text-right font-bold text-slate-900">
+                  {fmt(c.total_spent)}
+                </td>
+                <td className="p-4 text-center">
+                  <ScoreBox value={c.r_score} />
+                </td>
+                <td className="p-4 text-center">
+                  <ScoreBox value={c.f_score} />
+                </td>
                 <td className="p-4">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${seg.color}`}>{c.segment}</span>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-xs font-semibold ${seg.color}`}
+                  >
+                    {c.segment}
+                  </span>
                 </td>
               </tr>
             );
@@ -2771,11 +3043,663 @@ function CustomerRFMTab() {
 
 // --- Main Reports Page --------------------------------------------------------
 
+// ==============================================================================
+// ADVANCED REPORTING TABS
+// ==============================================================================
+
+const MetricCard = ({ title, value, compPct, compLabel }) => (
+  <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col gap-2">
+    <h3 className="text-sm font-medium text-slate-500">{title}</h3>
+    <div className="text-2xl font-bold text-slate-900">{value}</div>
+    <div
+      className={
+        "text-xs font-semibold " +
+        (compPct > 0
+          ? "text-emerald-600"
+          : compPct < 0
+            ? "text-rose-600"
+            : "text-slate-500")
+      }
+    >
+      {compPct > 0 ? "↑" : compPct < 0 ? "↓" : ""} {Math.abs(compPct)}%
+      <span className="font-normal text-slate-400 ml-1">vs {compLabel}</span>
+    </div>
+  </div>
+);
+
+// --- Tab: Comparative Trends --------------------------------------------------
+function ComparativeTrendsTab({ filters }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams({
+        outlet_id: filters.outletId,
+      });
+      const res = await fetch(`${API}/api/reports/comparative-trends?${p}`);
+      const d = await res.json();
+      setData(d);
+    } catch {
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.outletId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (loading)
+    return <div className="p-4 text-slate-500">Loading trends...</div>;
+  if (!data || !data.data)
+    return <div className="p-4 text-slate-500">No data available</div>;
+
+  const { today } = data.data;
+  const { comparisons } = data;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <h2 className="text-lg font-bold text-slate-800">Today's Performance</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard
+          title="Revenue (vs Yesterday)"
+          value={fmt(today.revenue)}
+          compPct={comparisons.day_over_day_revenue_pct}
+          compLabel="Yesterday"
+        />
+        <MetricCard
+          title="Orders (vs Yesterday)"
+          value={today.orders}
+          compPct={comparisons.day_over_day_orders_pct}
+          compLabel="Yesterday"
+        />
+        <MetricCard
+          title="Revenue (vs Last Week)"
+          value={fmt(today.revenue)}
+          compPct={comparisons.week_over_week_revenue_pct}
+          compLabel="Last Week"
+        />
+        <MetricCard
+          title="Orders (vs Last Week)"
+          value={today.orders}
+          compPct={comparisons.week_over_week_orders_pct}
+          compLabel="Last Week"
+        />
+      </div>
+    </div>
+  );
+}
+
+// --- Tab: Heatmaps ------------------------------------------------------------
+function HeatmapsTab({ filters }) {
+  const [heatmap, setHeatmap] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+      });
+      const res = await fetch(`${API}/api/reports/heatmaps?${p}`);
+      const d = await res.json();
+      setHeatmap(d.heatmap || []);
+    } catch {
+      setHeatmap([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (loading)
+    return <div className="p-4 text-slate-500">Loading heatmap...</div>;
+
+  const days = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+  const maxRev = Math.max(...heatmap.map((h) => h.revenue), 1);
+
+  return (
+    <CardShell
+      title="Hourly Sales Heatmap"
+      subtitle="Revenue density by hour of day"
+    >
+      <div className="overflow-x-auto">
+        <div className="min-w-200 grid grid-cols-[auto_repeat(24,1fr)] gap-1 text-xs">
+          <div className="font-semibold text-slate-500 pt-6 pr-2 text-right">
+            Day
+          </div>
+          {Array.from({ length: 24 }).map((_, h) => (
+            <div
+              key={h}
+              className="text-center font-medium text-slate-400 pb-2"
+            >
+              {h === 0
+                ? "12a"
+                : h < 12
+                  ? h + "a"
+                  : h === 12
+                    ? "12p"
+                    : h - 12 + "p"}
+            </div>
+          ))}
+          {days.map((dayName, d) => (
+            <React.Fragment key={dayName}>
+              <div className="font-semibold text-slate-600 self-center pr-2 text-right">
+                {dayName.slice(0, 3)}
+              </div>
+              {Array.from({ length: 24 }).map((_, h) => {
+                const cell = heatmap.find(
+                  (x) => x.day_of_week === d && x.hour_of_day === h,
+                );
+                const rev = cell ? cell.revenue : 0;
+                const intensity = Math.min(
+                  100,
+                  Math.round((rev / maxRev) * 100),
+                );
+                return (
+                  <div
+                    key={h}
+                    title={dayName + " " + cell?.label + ": " + fmt(rev)}
+                    className="aspect-square rounded flex items-center justify-center relative group"
+                    style={{
+                      backgroundColor:
+                        "rgba(59, 130, 246, " + intensity / 100 + ")",
+                    }}
+                  >
+                    {rev > 0 && (
+                      <span className="opacity-0 group-hover:opacity-100 absolute bg-gray-900 text-white text-[10px] p-1 rounded z-10 whitespace-nowrap">
+                        {fmt(rev)}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+    </CardShell>
+  );
+}
+
+// --- Tab: Revenue Leaks -------------------------------------------------------
+function RevenueLeaksTab({ filters }) {
+  const [data, setData] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+        employee_id: filters.employeeId,
+      });
+      const res = await fetch(`${API}/api/reports/revenue-leaks?${p}`);
+      const d = await res.json();
+      setData(d);
+    } catch {
+      setData(null);
+    }
+  }, [filters.dateFrom, filters.dateTo, filters.outletId, filters.employeeId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+  if (!data) return <div className="p-4 text-slate-500">Loading...</div>;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-rose-50 text-rose-800 p-4 rounded-xl border border-rose-200">
+          <div className="text-sm font-medium">Total Leakage</div>
+          <div className="text-2xl font-bold">
+            {fmt(data.summary.leakage_total)}
+          </div>
+        </div>
+        <div className="bg-orange-50 text-orange-800 p-4 rounded-xl border border-orange-200">
+          <div className="text-sm font-medium">Total Voids</div>
+          <div className="text-2xl font-bold">{fmt(data.summary.voids)}</div>
+          <div className="text-xs">
+            {data.transactions.voided} voided transactions
+          </div>
+        </div>
+        <div className="bg-indigo-50 text-indigo-800 p-4 rounded-xl border border-indigo-200">
+          <div className="text-sm font-medium">Total Discounts</div>
+          <div className="text-2xl font-bold">
+            {fmt(data.summary.discounts)}
+          </div>
+          <div className="text-xs">
+            {data.transactions.discounted} discounted transactions
+          </div>
+        </div>
+      </div>
+      <CardShell title="Top Linkage by Employee">
+        <TableShell
+          cols={["Employee", "Total Leakage", "Voids", "Discounts"]}
+          empty={!data.top_leak_employees.length}
+        >
+          {data.top_leak_employees.map((e) => (
+            <tr key={e.employee_id} className="hover:bg-slate-50">
+              <td className="p-4 text-sm font-medium text-slate-800">
+                {e.employee_name}
+              </td>
+              <td className="p-4 text-sm font-bold text-rose-600">
+                {fmt(e.total_leakage)}
+              </td>
+              <td className="p-4 text-sm text-slate-600">
+                {fmt(e.void_value)}
+              </td>
+              <td className="p-4 text-sm text-slate-600">
+                {fmt(e.discount_value)}
+              </td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
+  );
+}
+
+// --- Tab: Product Mix ---------------------------------------------------------
+function ProductMixTab({ filters }) {
+  const [rows, setRows] = useState([]);
+
+  const load = useCallback(async () => {
+    try {
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+        category_id: filters.categoryId,
+        brand_id: filters.brandId,
+      });
+      const res = await fetch(`${API}/api/reports/product-mix?${p}`);
+      const d = await res.json();
+      setRows(d.product_mix || []);
+    } catch {
+      setRows([]);
+    }
+  }, [
+    filters.dateFrom,
+    filters.dateTo,
+    filters.outletId,
+    filters.categoryId,
+    filters.brandId,
+  ]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+  return (
+    <CardShell
+      title="Product Mix (Market Basket)"
+      subtitle="Items frequently bought together"
+    >
+      <TableShell
+        cols={["Item A", "Item B", "Co-occurrences"]}
+        empty={!rows.length}
+      >
+        {rows.map((r, i) => (
+          <tr key={i} className="hover:bg-slate-50">
+            <td className="p-4 font-medium text-slate-800">{r.pname1}</td>
+            <td className="p-4 font-medium text-slate-800">{r.pname2}</td>
+            <td className="p-4 text-center font-bold text-blue-600">
+              {r.co_occurrences}
+            </td>
+          </tr>
+        ))}
+      </TableShell>
+    </CardShell>
+  );
+}
+
+// --- Tab: Retail Matrix -------------------------------------------------------
+function RetailMatrixTab({ filters }) {
+  const [matrix, setMatrix] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+        category_id: filters.categoryId,
+        brand_id: filters.brandId,
+      });
+      const res = await fetch(`${API}/api/reports/retail-matrix?${p}`);
+      const d = await res.json();
+      setMatrix(d);
+    } catch {
+      setMatrix(null);
+    }
+  }, [
+    filters.dateFrom,
+    filters.dateTo,
+    filters.outletId,
+    filters.categoryId,
+    filters.brandId,
+  ]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+  if (!matrix) return <div className="p-4 text-slate-500">Loading...</div>;
+
+  return (
+    <CardShell
+      title="Retail Engineering Matrix"
+      subtitle="Stars, Plowhorses, Puzzles, and Dogs"
+    >
+      <TableShell
+        cols={["Product", "Category", "Sales Vol", "Margin", "Quadrant"]}
+        empty={!matrix.matrix.length}
+      >
+        {matrix.matrix.map((r, i) => (
+          <tr key={i} className="hover:bg-slate-50">
+            <td className="p-4 font-medium text-slate-800">{r.product_name}</td>
+            <td className="p-4 text-sm text-slate-500">{r.category}</td>
+            <td className="p-4 text-sm text-center">{r.volume_sold}</td>
+            <td className="p-4 text-sm text-right font-mono">
+              {fmt(r.avg_margin)}
+            </td>
+            <td className="p-4 text-center">
+              <span
+                className={
+                  "px-2 py-1 rounded-full text-xs font-bold " +
+                  (r.quadrant === "Star"
+                    ? "bg-amber-100 text-amber-700"
+                    : r.quadrant === "Plowhorse"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : r.quadrant === "Puzzle"
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-rose-100 text-rose-700")
+                }
+              >
+                {r.quadrant}
+              </span>
+            </td>
+          </tr>
+        ))}
+      </TableShell>
+    </CardShell>
+  );
+}
+
+// --- Tab: Customer Retention ----------------------------------------------------
+function CustomerRetentionTab({ filters }) {
+  const [data, setData] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+      });
+      const res = await fetch(`${API}/api/reports/customer-retention?${p}`);
+      const d = await res.json();
+      setData(d);
+    } catch {
+      setData(null);
+    }
+  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+  if (!data) return <div className="p-4 text-slate-500">Loading...</div>;
+
+  return (
+    <CardShell
+      title="New vs Returning Customers"
+      subtitle="Revenue split by customer lifecycle"
+    >
+      <TableShell
+        cols={[
+          "Date",
+          "Walk-in Sales",
+          "New Customer Sales",
+          "Returning Sales",
+          "Total",
+        ]}
+        empty={!data.retention.length}
+      >
+        {data.retention.map((r, i) => (
+          <tr key={i} className="hover:bg-slate-50">
+            <td className="p-4 text-sm font-medium text-slate-600">
+              {r.sale_date}
+            </td>
+            <td className="p-4 text-sm text-slate-600">
+              {fmt(r.walkin_sales)}
+            </td>
+            <td className="p-4 text-sm text-emerald-600 font-medium">
+              {fmt(r.new_customer_sales)} ({r.new_customers_count} ppl)
+            </td>
+            <td className="p-4 text-sm text-blue-600 font-medium">
+              {fmt(r.returning_customer_sales)} ({r.returning_customers_count}{" "}
+              ppl)
+            </td>
+            <td className="p-4 text-sm font-bold text-slate-900">
+              {fmt(
+                r.walkin_sales +
+                  r.new_customer_sales +
+                  r.returning_customer_sales,
+              )}
+            </td>
+          </tr>
+        ))}
+      </TableShell>
+    </CardShell>
+  );
+}
+
+// --- Tab: Customer Capture Rate -------------------------------------------------
+function CustomerCaptureRateTab({ filters }) {
+  const [data, setData] = useState([]);
+
+  const load = useCallback(async () => {
+    try {
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+      });
+      const res = await fetch(`${API}/api/reports/customer-capture-rate?${p}`);
+      const d = await res.json();
+      setData(d.staff_breakdown || []);
+    } catch {
+      setData([]);
+    }
+  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+  return (
+    <CardShell
+      title="Customer Profile Capture Rate"
+      subtitle="Which staff members are attaching profiles to transactions?"
+    >
+      <TableShell
+        cols={[
+          "Employee",
+          "Named Profiles",
+          "Walk-ins",
+          "Capture Rate",
+          "Named Revenue",
+          "Walk-in Revenue",
+        ]}
+        empty={!data.length}
+      >
+        {data.map((r, i) => (
+          <tr key={i} className="hover:bg-slate-50">
+            <td className="p-4 font-medium text-slate-800">
+              {r.employee_name}
+            </td>
+            <td className="p-4 text-sm text-center text-slate-600">
+              {r.named_transactions}
+            </td>
+            <td className="p-4 text-sm text-center text-slate-600">
+              {r.walkin_transactions}
+            </td>
+            <td className="p-4 text-sm text-center font-bold text-indigo-600">
+              {r.capture_rate_pct}%
+            </td>
+            <td className="p-4 text-sm text-right text-emerald-600">
+              {fmt(r.named_revenue)}
+            </td>
+            <td className="p-4 text-sm text-right text-slate-500">
+              {fmt(r.walkin_revenue)}
+            </td>
+          </tr>
+        ))}
+      </TableShell>
+    </CardShell>
+  );
+}
+
+// --- Tab: Labor Performance ---------------------------------------------------
+function LaborPerformanceTab({ filters }) {
+  const [data, setData] = useState([]);
+
+  const load = useCallback(async () => {
+    try {
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+      });
+      const res = await fetch(`${API}/api/reports/labor-performance?${p}`);
+      const d = await res.json();
+      setData(d.labor_performance || []);
+    } catch {
+      setData([]);
+    }
+  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+  return (
+    <CardShell
+      title="Labor Performance"
+      subtitle="Revenue generated per hour worked"
+    >
+      <TableShell
+        cols={["Employee", "Hours Worked", "Total Revenue", "Rev / Hour"]}
+        empty={!data.length}
+      >
+        {data.map((r, i) => (
+          <tr key={i} className="hover:bg-slate-50">
+            <td className="p-4 font-medium text-slate-800">
+              {r.employee_name}
+            </td>
+            <td className="p-4 text-sm text-center text-slate-600">
+              {r.total_hours}
+            </td>
+            <td className="p-4 text-sm text-right text-slate-700">
+              {fmt(r.total_revenue)}
+            </td>
+            <td className="p-4 text-sm text-right font-bold text-amber-600">
+              {fmt(r.revenue_per_hour)}/hr
+            </td>
+          </tr>
+        ))}
+      </TableShell>
+    </CardShell>
+  );
+}
+
+// --- Tab: Loss Prevention -----------------------------------------------------
+function LossPreventionTab({ filters }) {
+  const [data, setData] = useState([]);
+
+  const load = useCallback(async () => {
+    try {
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        outlet_id: filters.outletId,
+      });
+      const res = await fetch(`${API}/api/reports/loss-prevention?${p}`);
+      const d = await res.json();
+      setData(d.loss_prevention || []);
+    } catch {
+      setData([]);
+    }
+  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+  return (
+    <CardShell
+      title="Loss Prevention (Risk Ratio)"
+      subtitle="Staff ranked by Void + Refund value / Sales"
+    >
+      <TableShell
+        cols={[
+          "Employee",
+          "Valid Sales",
+          "Voids ($)",
+          "Refunds ($)",
+          "Risk Ratio",
+        ]}
+        empty={!data.length}
+      >
+        {data.map((r, i) => (
+          <tr key={i} className="hover:bg-slate-50">
+            <td className="p-4 font-medium text-slate-800">
+              {r.employee_name}
+            </td>
+            <td className="p-4 text-sm text-right text-slate-600">
+              {fmt(r.total_revenue)}
+            </td>
+            <td className="p-4 text-sm text-right text-rose-500">
+              {fmt(r.void_value)} ({r.void_count})
+            </td>
+            <td className="p-4 text-sm text-right text-orange-500">
+              {fmt(r.refund_value)} ({r.refund_count})
+            </td>
+            <td className="p-4 text-sm text-center font-bold text-rose-700">
+              {r.risk_ratio_pct}%
+            </td>
+          </tr>
+        ))}
+      </TableShell>
+    </CardShell>
+  );
+}
+
 const GROUPS = [
   {
     label: "Sales",
     tabs: [
       { id: "overview", label: "Overview", icon: BarChart3 },
+      {
+        id: "comparative-trends",
+        label: "Comparative Trends",
+        icon: TrendingUp,
+      },
+      { id: "heatmaps", label: "Sales Heatmap", icon: Clock },
+      { id: "revenue-leaks", label: "Revenue Leaks", icon: AlertTriangle },
+      { id: "product-mix", label: "Product Mix", icon: ShoppingBag },
       { id: "sales-summary", label: "Sales Summary", icon: BarChart2 },
       { id: "sales-detail", label: "Sales Detail", icon: FileText },
       { id: "order-wise", label: "Order Wise", icon: ClipboardList },
@@ -2789,12 +3713,15 @@ const GROUPS = [
       { id: "customer-details", label: "Customer Details", icon: Users },
       { id: "customer-wise", label: "Customer Wise", icon: TrendingUp },
       { id: "customer-rfm", label: "RFM Analysis", icon: GitBranch },
+      { id: "customer-retention", label: "Customer Retention", icon: Users },
+      { id: "customer-capture", label: "Capture Rate", icon: Target },
     ],
   },
   {
     label: "Inventory",
     tabs: [
       { id: "product-performance", label: "Product Performance", icon: Star },
+      { id: "retail-matrix", label: "Retail Matrix", icon: LayoutGrid },
       { id: "sales-stock", label: "Sales & Stock", icon: Package },
       { id: "inventory-dump", label: "Inventory Dump", icon: Archive },
       { id: "on-hand", label: "On Hand", icon: Layers },
@@ -2830,7 +3757,11 @@ const GROUPS = [
   },
   {
     label: "HR",
-    tabs: [{ id: "attendance", label: "Attendance", icon: Clock }],
+    tabs: [
+      { id: "attendance", label: "Attendance", icon: Clock },
+      { id: "labor-performance", label: "Labor Performance", icon: Activity },
+      { id: "loss-prevention", label: "Loss Prevention", icon: ShieldAlert },
+    ],
   },
 ];
 
@@ -2853,56 +3784,74 @@ function TabBreadcrumb({ activeTab }) {
   return null;
 }
 
-function TabContent({ activeTab }) {
+function TabContent({ activeTab, filters }) {
   switch (activeTab) {
+    case "comparative-trends":
+      return <ComparativeTrendsTab filters={filters} />;
+    case "heatmaps":
+      return <HeatmapsTab filters={filters} />;
+    case "revenue-leaks":
+      return <RevenueLeaksTab filters={filters} />;
+    case "product-mix":
+      return <ProductMixTab filters={filters} />;
+    case "retail-matrix":
+      return <RetailMatrixTab filters={filters} />;
+    case "customer-retention":
+      return <CustomerRetentionTab filters={filters} />;
+    case "customer-capture":
+      return <CustomerCaptureRateTab filters={filters} />;
+    case "labor-performance":
+      return <LaborPerformanceTab filters={filters} />;
+    case "loss-prevention":
+      return <LossPreventionTab filters={filters} />;
     case "overview":
-      return <OverviewTab />;
+      return <OverviewTab filters={filters} />;
     case "sales-summary":
-      return <SalesSummaryTab />;
+      return <SalesSummaryTab filters={filters} />;
     case "sales-detail":
-      return <SalesDetailTab />;
+      return <SalesDetailTab filters={filters} />;
     case "sales-stock":
-      return <SalesStockTab />;
+      return <SalesStockTab filters={filters} />;
     case "inventory-dump":
-      return <InventoryDumpTab />;
+      return <InventoryDumpTab filters={filters} />;
     case "category-wise":
-      return <CategoryWiseTab />;
+      return <CategoryWiseTab filters={filters} />;
     case "customer-details":
-      return <CustomerDetailsTab />;
+      return <CustomerDetailsTab filters={filters} />;
     case "customer-wise":
-      return <CustomerWiseTab />;
+      return <CustomerWiseTab filters={filters} />;
     case "customer-rfm":
-      return <CustomerRFMTab />;
+      return <CustomerRFMTab filters={filters} />;
     case "outlet-comparison":
-      return <OutletComparisonTab />;
+      return <OutletComparisonTab filters={filters} />;
     case "order-wise":
-      return <OrderWiseTab />;
+      return <OrderWiseTab filters={filters} />;
     case "item-wise":
-      return <ItemWiseTab />;
+      return <ItemWiseTab filters={filters} />;
     case "product-performance":
-      return <ProductPerformanceTab />;
+      return <ProductPerformanceTab filters={filters} />;
     case "product-spec":
-      return <ProductSpecTab />;
+      return <ProductSpecTab filters={filters} />;
     case "on-hand":
-      return <OnHandTab />;
+      return <OnHandTab filters={filters} />;
     case "inventory-loss":
-      return <InventoryLossTab />;
+      return <InventoryLossTab filters={filters} />;
     case "wastage":
-      return <WastageTab />;
+      return <WastageTab filters={filters} />;
     case "product-movement":
-      return <ProductMovementTab />;
+      return <ProductMovementTab filters={filters} />;
     case "str-report":
-      return <STRReportTab />;
+      return <STRReportTab filters={filters} />;
     case "replenishment":
-      return <ReplenishmentTab />;
+      return <ReplenishmentTab filters={filters} />;
     case "supplier-wise":
-      return <SupplierWiseTab />;
+      return <SupplierWiseTab filters={filters} />;
     case "purchase-orders-report":
-      return <PurchaseOrdersReportTab />;
+      return <PurchaseOrdersReportTab filters={filters} />;
     case "grn-report":
-      return <GRNReportTab />;
+      return <GRNReportTab filters={filters} />;
     case "attendance":
-      return <AttendanceTab />;
+      return <AttendanceTab filters={filters} />;
     default:
       return null;
   }
@@ -2920,26 +3869,72 @@ export function ReportTabStandalone({ tabId }) {
 
 export default function Reports() {
   const [activeTab, setActiveTab] = useState("overview");
+  const [filters, setFilters] = useState({
+    dateFrom: "",
+    dateTo: "",
+    outletId: "",
+    employeeId: "",
+    categoryId: "",
+    brandId: "",
+    search: "",
+  });
 
-  const activeGroup = GROUPS.find((g) => g.tabs.some((t) => t.id === activeTab));
+  const [meta, setMeta] = useState({
+    outlets: [],
+    categories: [],
+    brands: [],
+    employees: [],
+  });
+
+  useEffect(() => {
+    // Basic meta loader for dropdowns
+    const loadMeta = async () => {
+      try {
+        const [outlets, categories, brands, employees] = await Promise.all([
+          fetch(`${API}/api/outlets`).then((r) => r.json()),
+          fetch(`${API}/api/categories`).then((r) => r.json()),
+          fetch(`${API}/api/brands`).then((r) => r.json()),
+          fetch(`${API}/api/employees`).then((r) => r.json()),
+        ]);
+        setMeta({
+          outlets: outlets.outlets || outlets || [],
+          categories: categories.categories || categories || [],
+          brands: brands.brands || brands || [],
+          employees: employees.employees || employees || [],
+        });
+      } catch (err) {
+        console.error("Failed to load metadata", err);
+      }
+    };
+    loadMeta();
+  }, []);
+
+  const activeGroup = GROUPS.find((g) =>
+    g.tabs.some((t) => t.id === activeTab),
+  );
 
   return (
     <div className="flex flex-col h-full gap-4">
       {/* Header */}
-      <div className="shrink-0">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-1">
-          Reports
-        </h1>
-        <p className="text-slate-500">
-          {GROUPS.reduce((n, g) => n + g.tabs.length, 0)} reports across sales,
-          inventory, operations, and procurement.
-        </p>
+      <div className="shrink-0 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-1">
+            Reports
+          </h1>
+          <p className="text-slate-500">
+            {GROUPS.reduce((n, g) => n + g.tabs.length, 0)} reports across
+            sales, inventory, operations, and procurement.
+          </p>
+        </div>
       </div>
+
+      {/* Global Filter Bar */}
+      <GlobalFilterBar filters={filters} setFilters={setFilters} meta={meta} />
 
       {/* Two-panel layout: group sidebar + sub-tabs + content */}
       <div className="flex flex-1 min-h-0 gap-0">
         {/* Left: group icon sidebar */}
-        <div className="flex flex-col gap-1 shrink-0 w-[72px] py-1 pr-2 border-r border-slate-200">
+        <div className="flex flex-col gap-1 shrink-0 w-18 py-1 pr-2 border-r border-slate-200">
           {GROUPS.map((group) => {
             const isActive = group === activeGroup;
             const GroupIcon = group.tabs[0].icon;
@@ -2989,7 +3984,7 @@ export default function Reports() {
           <div className="flex-1 overflow-auto min-h-0 flex flex-col">
             <TabBreadcrumb activeTab={activeTab} />
             <div className="flex-1 min-h-0">
-              <TabContent activeTab={activeTab} />
+              <TabContent activeTab={activeTab} filters={filters} />
             </div>
           </div>
         </div>

@@ -213,6 +213,148 @@ module.exports = function registerReportsRoutes(app, deps) {
     }
   });
 
+  // --- REPORTS DASHBOARD ADVANCED (Trends & Heatmaps) ---
+
+  app.get("/api/reports/comparative-trends", async (req, res) => {
+    try {
+      const { outlet_id } = req.query;
+      const getQuery = (query, params = []) =>
+        new Promise((resolve, reject) => {
+          db.all(query, params, (err, rows) =>
+            err ? reject(err) : resolve(rows),
+          );
+        });
+
+      let outletFilter = "";
+      const params = [];
+      if (outlet_id) {
+        outletFilter = " AND s.outlet_id = ?";
+        params.push(outlet_id);
+      }
+
+      // We want to compare Today, Yesterday, Same Day Last Week
+      const periods = await getQuery(`
+        SELECT 
+            'today' as period, SUM(total_amount) as revenue, COUNT(id) as orders
+        FROM sales s WHERE voided = 0 AND date(timestamp, 'localtime') = date('now', 'localtime') ${outletFilter}
+        UNION ALL
+        SELECT 
+            'yesterday' as period, SUM(total_amount) as revenue, COUNT(id) as orders
+        FROM sales s WHERE voided = 0 AND date(timestamp, 'localtime') = date('now', '-1 day', 'localtime') ${outletFilter}
+        UNION ALL
+        SELECT 
+            'last_week_same_day' as period, SUM(total_amount) as revenue, COUNT(id) as orders
+        FROM sales s WHERE voided = 0 AND date(timestamp, 'localtime') = date('now', '-7 days', 'localtime') ${outletFilter}
+      `, [...params, ...params, ...params]);
+
+      const data = {
+        today: { revenue: 0, orders: 0 },
+        yesterday: { revenue: 0, orders: 0 },
+        last_week_same_day: { revenue: 0, orders: 0 }
+      };
+
+      periods.forEach(row => {
+        if(row.period && data[row.period]) {
+            data[row.period] = { revenue: row.revenue || 0, orders: row.orders || 0 };
+        }
+      });
+
+      // Calculate % changes safely
+      const safePct = (current, previous) => previous > 0 ? Number((((current - previous) / previous) * 100).toFixed(1)) : 0;
+
+      res.json({
+        data,
+        comparisons: {
+          day_over_day_revenue_pct: safePct(data.today.revenue, data.yesterday.revenue),
+          day_over_day_orders_pct: safePct(data.today.orders, data.yesterday.orders),
+          week_over_week_revenue_pct: safePct(data.today.revenue, data.last_week_same_day.revenue),
+          week_over_week_orders_pct: safePct(data.today.orders, data.last_week_same_day.orders),
+        }
+      });
+
+    } catch (err) {
+      console.error("Comparative Trends Error:", err);
+      res.status(500).json({ error: "Failed to load comparative trends" });
+    }
+  });
+
+  app.get("/api/reports/heatmaps", async (req, res) => {
+    try {
+      const { date_from, date_to, outlet_id } = req.query;
+      const getQuery = (query, params = []) =>
+        new Promise((resolve, reject) => {
+          db.all(query, params, (err, rows) =>
+            err ? reject(err) : resolve(rows),
+          );
+        });
+
+      let where = ["voided = 0"];
+      const params = [];
+
+      if (date_from) {
+        where.push("date(timestamp, 'localtime') >= ?");
+        params.push(date_from);
+      } else {
+        // default to last 30 days if no date provided
+        where.push("date(timestamp, 'localtime') >= date('now', '-30 days', 'localtime')")
+      }
+
+      if (date_to) {
+        where.push("date(timestamp, 'localtime') <= ?");
+        params.push(date_to);
+      }
+
+      if (outlet_id) {
+        where.push("outlet_id = ?");
+        params.push(outlet_id);
+      }
+
+      // SQLite strftime: %w = day of week (0-6, Sunday is 0), %H = hour (00-24)
+      const heatmapData = await getQuery(`
+        SELECT 
+            CAST(strftime('%w', timestamp, 'localtime') AS INTEGER) as day_of_week,
+            CAST(strftime('%H', timestamp, 'localtime') AS INTEGER) as hour_of_day,
+            COUNT(id) as transaction_count,
+            SUM(total_amount) as revenue
+        FROM sales
+        WHERE ${where.join(" AND ")}
+        GROUP BY day_of_week, hour_of_day
+        ORDER BY day_of_week ASC, hour_of_day ASC
+      `, params);
+
+      // Initialize full matrix (7 days x 24 hours) with 0s to guarantee shape for frontend
+      const matrix = [];
+      const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      for (let d = 0; d < 7; d++) {
+        for (let h = 0; h < 24; h++) {
+          matrix.push({
+            day_of_week: d,
+            day_name: days[d],
+            hour_of_day: h,
+            transaction_count: 0,
+            revenue: 0,
+            label: `${h === 0 ? 12 : (h > 12 ? h - 12 : h)} ${h >= 12 ? 'PM' : 'AM'}`
+          });
+        }
+      }
+
+      // Overlay real data
+      heatmapData.forEach(row => {
+          const index = matrix.findIndex(m => m.day_of_week === row.day_of_week && m.hour_of_day === row.hour_of_day);
+          if(index !== -1) {
+              matrix[index].transaction_count = row.transaction_count;
+              matrix[index].revenue = row.revenue;
+          }
+      });
+
+      res.json({ heatmap: matrix });
+
+    } catch (err) {
+      console.error("Heatmap Error:", err);
+      res.status(500).json({ error: "Failed to load heatmap data" });
+    }
+  });
+
   // Top Salespeople report
   app.get("/api/reports/top-salespeople", (req, res) => {
     const { date_from, date_to } = req.query;
@@ -243,6 +385,164 @@ module.exports = function registerReportsRoutes(app, deps) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ salespeople: rows });
     });
+  });
+
+  // Labor Performance: Hours Worked vs Sales Generated
+  app.get("/api/reports/labor-performance", async (req, res) => {
+    try {
+      const { date_from, date_to, outlet_id } = req.query;
+      const getQuery = (query, params = []) =>
+        new Promise((resolve, reject) => {
+          db.all(query, params, (err, rows) =>
+            err ? reject(err) : resolve(rows),
+          );
+        });
+
+      let saleWhere = ["s.voided = 0", "s.employee_id IS NOT NULL"];
+      let attendWhere = ["session_type = 'work'"];
+      const saleParams = [];
+      const attendParams = [];
+
+      if (date_from) {
+        saleWhere.push("date(s.timestamp, 'localtime') >= ?");
+        saleParams.push(date_from);
+        attendWhere.push("date(session_start, 'localtime') >= ?");
+        attendParams.push(date_from);
+      } else {
+        saleWhere.push("date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')");
+        attendWhere.push("date(session_start, 'localtime') >= date('now', '-30 days', 'localtime')");
+      }
+
+      if (date_to) {
+        saleWhere.push("date(s.timestamp, 'localtime') <= ?");
+        saleParams.push(date_to);
+        attendWhere.push("date(session_start, 'localtime') <= ?");
+        attendParams.push(date_to);
+      }
+
+      if (outlet_id) {
+        saleWhere.push("s.outlet_id = ?");
+        saleParams.push(outlet_id);
+        attendWhere.push("outlet_id = ?");
+        attendParams.push(outlet_id);
+      }
+
+      const sql = `
+        WITH EmployeeSales AS (
+          SELECT employee_id, SUM(total_amount) as total_revenue
+          FROM sales s
+          WHERE ${saleWhere.join(" AND ")}
+          GROUP BY employee_id
+        ),
+        EmployeeHours AS (
+          SELECT employee_id, SUM(duration_hours) as total_hours
+          FROM attendance_sessions
+          WHERE ${attendWhere.join(" AND ")}
+          GROUP BY employee_id
+        )
+        SELECT 
+          e.id as employee_id,
+          e.name as employee_name,
+          COALESCE(eh.total_hours, 0) as total_hours,
+          COALESCE(es.total_revenue, 0) as total_revenue,
+          CASE WHEN COALESCE(eh.total_hours, 0) > 0 
+               THEN ROUND(COALESCE(es.total_revenue, 0) / eh.total_hours, 2) 
+               ELSE 0 
+          END as revenue_per_hour
+        FROM employees e
+        LEFT JOIN EmployeeSales es ON e.id = es.employee_id
+        LEFT JOIN EmployeeHours eh ON e.id = eh.employee_id
+        WHERE es.total_revenue > 0 OR eh.total_hours > 0
+        ORDER BY revenue_per_hour DESC
+      `;
+
+      const rows = await getQuery(sql, [...saleParams, ...attendParams]);
+      res.json({ labor_performance: rows });
+
+    } catch (err) {
+      console.error("Labor Performance Error:", err);
+      res.status(500).json({ error: "Failed to load labor performance data" });
+    }
+  });
+
+  // Loss Prevention: Team Performance Metrics (Refunds/Voids)
+  app.get("/api/reports/loss-prevention", async (req, res) => {
+    try {
+      const { date_from, date_to, outlet_id } = req.query;
+      const getQuery = (query, params = []) =>
+        new Promise((resolve, reject) => {
+          db.all(query, params, (err, rows) =>
+            err ? reject(err) : resolve(rows),
+          );
+        });
+
+      let voidWhere = ["s.voided = 1", "s.employee_id IS NOT NULL"];
+      let refundWhere = ["r.employee_id IS NOT NULL"];
+      let saleWhere = ["s.voided = 0", "s.employee_id IS NOT NULL"];
+      const voidParams = [];
+      const refundParams = [];
+      const saleParams = [];
+
+      if (date_from) {
+        voidWhere.push("date(s.timestamp, 'localtime') >= ?"); voidParams.push(date_from);
+        refundWhere.push("date(r.timestamp, 'localtime') >= ?"); refundParams.push(date_from);
+        saleWhere.push("date(s.timestamp, 'localtime') >= ?"); saleParams.push(date_from);
+      } else {
+        voidWhere.push("date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')");
+        refundWhere.push("date(r.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')");
+        saleWhere.push("date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')");
+      }
+
+      if (date_to) {
+        voidWhere.push("date(s.timestamp, 'localtime') <= ?"); voidParams.push(date_to);
+        refundWhere.push("date(r.timestamp, 'localtime') <= ?"); refundParams.push(date_to);
+        saleWhere.push("date(s.timestamp, 'localtime') <= ?"); saleParams.push(date_to);
+      }
+
+      if (outlet_id) {
+        voidWhere.push("s.outlet_id = ?"); voidParams.push(outlet_id);
+        refundWhere.push("r.outlet_id = ?"); refundParams.push(outlet_id);
+        saleWhere.push("s.outlet_id = ?"); saleParams.push(outlet_id);
+      }
+
+      const sql = `
+        WITH Voids AS (
+          SELECT employee_id, COUNT(id) as void_count, SUM(total_amount) as void_value
+          FROM sales s WHERE ${voidWhere.join(" AND ")} GROUP BY employee_id
+        ),
+        Refunds AS (
+          SELECT employee_id, COUNT(id) as refund_count, SUM(total_refund) as refund_value
+          FROM returns r WHERE ${refundWhere.join(" AND ")} GROUP BY employee_id
+        ),
+        ValidSales AS (
+          SELECT employee_id, COUNT(id) as sale_count, SUM(total_amount) as total_revenue
+          FROM sales s WHERE ${saleWhere.join(" AND ")} GROUP BY employee_id
+        )
+        SELECT 
+          e.id as employee_id,
+          e.name as employee_name,
+          COALESCE(vs.total_revenue, 0) as total_revenue,
+          COALESCE(vs.sale_count, 0) as sale_count,
+          COALESCE(v.void_count, 0) as void_count,
+          COALESCE(v.void_value, 0) as void_value,
+          COALESCE(r.refund_count, 0) as refund_count,
+          COALESCE(r.refund_value, 0) as refund_value,
+          ROUND(CASE WHEN COALESCE(vs.total_revenue, 0) > 0 THEN (COALESCE(v.void_value, 0) + COALESCE(r.refund_value, 0)) / vs.total_revenue * 100 ELSE 0 END, 2) as risk_ratio_pct
+        FROM employees e
+        LEFT JOIN ValidSales vs ON e.id = vs.employee_id
+        LEFT JOIN Voids v ON e.id = v.employee_id
+        LEFT JOIN Refunds r ON e.id = r.employee_id
+        WHERE v.void_count > 0 OR r.refund_count > 0 OR vs.sale_count > 0
+        ORDER BY risk_ratio_pct DESC
+      `;
+
+      const rows = await getQuery(sql, [...voidParams, ...refundParams, ...saleParams]);
+      res.json({ loss_prevention: rows });
+
+    } catch (err) {
+      console.error("Loss Prevention Error:", err);
+      res.status(500).json({ error: "Failed to load loss prevention data" });
+    }
   });
 
   // --- CASH MANAGEMENT ---
@@ -648,6 +948,161 @@ module.exports = function registerReportsRoutes(app, deps) {
     });
   });
 
+  // Revenue Leaks: Deep Dive on Discounts, Comps, and Voids
+  app.get("/api/reports/revenue-leaks", async (req, res) => {
+    try {
+      const { date_from, date_to, outlet_id } = req.query;
+      const getQuery = (query, params = []) =>
+        new Promise((resolve, reject) => {
+          db.all(query, params, (err, rows) =>
+            err ? reject(err) : resolve(rows),
+          );
+        });
+
+      let where = [];
+      const params = [];
+
+      if (date_from) {
+        where.push("date(s.timestamp, 'localtime') >= ?");
+        params.push(date_from);
+      } else {
+        where.push("date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')")
+      }
+
+      if (date_to) {
+        where.push("date(s.timestamp, 'localtime') <= ?");
+        params.push(date_to);
+      }
+
+      if (outlet_id) {
+        where.push("s.outlet_id = ?");
+        params.push(outlet_id);
+      }
+      
+      const filterStr = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
+
+      const sql = `
+        SELECT 
+            SUM(total_amount) as total_gross_sales,
+            SUM(CASE WHEN voided = 1 THEN total_amount ELSE 0 END) as total_voided_value,
+            SUM(CASE WHEN voided = 0 AND COALESCE(discount_amount, 0) > 0 THEN discount_amount ELSE 0 END) as total_discounts,
+            COUNT(id) as total_transactions,
+            SUM(CASE WHEN voided = 1 THEN 1 ELSE 0 END) as voided_transactions,
+            SUM(CASE WHEN voided = 0 AND COALESCE(discount_amount, 0) > 0 THEN 1 ELSE 0 END) as discounted_transactions
+        FROM sales s
+        ${filterStr}
+      `;
+
+      const rows = await getQuery(sql, params);
+      const data = rows[0] || {};
+      
+      const summary = {
+          gross_sales: data.total_gross_sales || 0,
+          voids: data.total_voided_value || 0,
+          discounts: data.total_discounts || 0,
+          leakage_total: (data.total_voided_value || 0) + (data.total_discounts || 0)
+      };
+      
+      // Breakdown by Employee
+      let empWhere = ["COALESCE(s.discount_amount, 0) > 0 OR s.voided = 1", "s.employee_id IS NOT NULL"];
+      empWhere = empWhere.concat(where);
+      
+      const empSql = `
+        SELECT 
+            e.id as employee_id,
+            e.name as employee_name,
+            SUM(CASE WHEN s.voided = 1 THEN s.total_amount ELSE 0 END) as void_value,
+            SUM(CASE WHEN s.voided = 0 THEN COALESCE(s.discount_amount, 0) ELSE 0 END) as discount_value,
+            SUM(CASE WHEN s.voided = 1 THEN s.total_amount ELSE 0 END) + SUM(CASE WHEN s.voided = 0 THEN COALESCE(s.discount_amount, 0) ELSE 0 END) as total_leakage
+        FROM sales s
+        JOIN employees e ON s.employee_id = e.id
+        WHERE ${empWhere.join(" AND ")}
+        GROUP BY e.id
+        ORDER BY total_leakage DESC
+        LIMIT 10
+      `;
+      
+      const top_leak_employees = await getQuery(empSql, params.concat(params).slice(0, params.length)); // We just need params once, but the array is rebuilt securely by the sqlite engine, params array length matches `where` array length
+
+      res.json({ 
+          summary, 
+          transactions: {
+              total: data.total_transactions || 0,
+              voided: data.voided_transactions || 0,
+              discounted: data.discounted_transactions || 0
+          },
+          top_leak_employees 
+      });
+
+    } catch (err) {
+      console.error("Revenue Leaks Error:", err);
+      res.status(500).json({ error: "Failed to load revenue leaks data" });
+    }
+  });
+
+  // Product Mix Analysis (Market Basket) - What items sell together often
+  app.get("/api/reports/product-mix", async (req, res) => {
+    try {
+      const { date_from, date_to, outlet_id, limit = 20 } = req.query;
+      const getQuery = (query, params = []) =>
+        new Promise((resolve, reject) => {
+          db.all(query, params, (err, rows) =>
+            err ? reject(err) : resolve(rows),
+          );
+        });
+
+      let where = ["s.voided = 0"];
+      const params = [];
+
+      if (date_from) {
+        where.push("date(s.timestamp, 'localtime') >= ?");
+        params.push(date_from);
+      } else {
+        where.push("date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')")
+      }
+
+      if (date_to) {
+        where.push("date(s.timestamp, 'localtime') <= ?");
+        params.push(date_to);
+      }
+
+      if (outlet_id) {
+        where.push("s.outlet_id = ?");
+        params.push(outlet_id);
+      }
+
+      // We want to find pairs of items bought in the same transaction
+      // To do this efficiently without massive self-joins locking up SQLite, 
+      // we'll get the top co-occurring categories or products
+      
+      const sql = `
+        WITH SharedTransactions AS (
+          SELECT si1.sale_id, si1.product_id as pid1, p1.name as pname1, 
+                 si2.product_id as pid2, p2.name as pname2
+          FROM sale_items si1
+          JOIN sale_items si2 ON si1.sale_id = si2.sale_id AND si1.product_id < si2.product_id
+          JOIN sales s ON si1.sale_id = s.id
+          JOIN products p1 ON si1.product_id = p1.id
+          JOIN products p2 ON si2.product_id = p2.id
+          WHERE ${where.join(" AND ")}
+        )
+        SELECT 
+           pid1, pname1, pid2, pname2, COUNT(sale_id) as co_occurrences
+        FROM SharedTransactions
+        GROUP BY pid1, pid2
+        ORDER BY co_occurrences DESC
+        LIMIT ?
+      `;
+
+      const rows = await getQuery(sql, [...params, limit]);
+      res.json({ product_mix: rows });
+
+    } catch (err) {
+      console.error("Product Mix Error:", err);
+      res.status(500).json({ error: "Failed to load product mix data" });
+    }
+  });
+
   // Product Specification: full product table with all FK names
   app.get("/api/reports/product-spec", (req, res) => {
     const { search } = req.query;
@@ -767,6 +1222,109 @@ module.exports = function registerReportsRoutes(app, deps) {
     });
   });
 
+  // Retail Matrix / Menu Engineering (Stars, Plowhorses, Puzzles, Dogs)
+  app.get("/api/reports/retail-matrix", async (req, res) => {
+    try {
+      const { date_from, date_to, outlet_id } = req.query;
+      const getQuery = (query, params = []) =>
+        new Promise((resolve, reject) => {
+          db.all(query, params, (err, rows) =>
+            err ? reject(err) : resolve(rows),
+          );
+        });
+
+      let where = ["s.voided = 0"];
+      const params = [];
+
+      if (date_from) {
+        where.push("date(s.timestamp, 'localtime') >= ?");
+        params.push(date_from);
+      } else {
+        where.push("date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')")
+      }
+
+      if (date_to) {
+        where.push("date(s.timestamp, 'localtime') <= ?");
+        params.push(date_to);
+      }
+
+      if (outlet_id) {
+        where.push("s.outlet_id = ?");
+        params.push(outlet_id);
+      }
+
+      // 1. Get average volume and average margin across ALL items sold in this period
+      const averagesSql = `
+        WITH ProductStats AS (
+          SELECT 
+            p.id,
+            SUM(si.quantity) as volume,
+            ROUND(SUM(si.quantity * (si.price_at_sale - si.cost_price_at_sale)) / SUM(si.quantity), 2) as avg_unit_margin
+          FROM sale_items si
+          JOIN sales s ON si.sale_id = s.id
+          JOIN products p ON si.product_id = p.id
+          WHERE ${where.join(" AND ")}
+          GROUP BY p.id
+        )
+        SELECT 
+          AVG(volume) as threshold_volume,
+          AVG(avg_unit_margin) as threshold_margin
+        FROM ProductStats
+      `;
+
+      const averages = await getQuery(averagesSql, params);
+      const thresholdVolume = averages[0]?.threshold_volume || 0;
+      const thresholdMargin = averages[0]?.threshold_margin || 0;
+
+      // 2. Map every product to a quadrant based on the calculated averages
+      const matrixSql = `
+        WITH ProductStats AS (
+          SELECT 
+            p.id as product_id,
+            p.name as product_name,
+            p.barcode,
+            SUM(si.quantity) as volume,
+            SUM(si.quantity * si.price_at_sale) as total_revenue,
+            ROUND(SUM(si.quantity * (si.price_at_sale - si.cost_price_at_sale)) / SUM(si.quantity), 2) as avg_unit_margin
+          FROM sale_items si
+          JOIN sales s ON si.sale_id = s.id
+          JOIN products p ON si.product_id = p.id
+          WHERE ${where.join(" AND ")}
+          GROUP BY p.id
+        )
+        SELECT 
+          *,
+          CASE
+            WHEN volume >= ? AND avg_unit_margin >= ? THEN 'Star'
+            WHEN volume >= ? AND avg_unit_margin < ? THEN 'Plowhorse'
+            WHEN volume < ? AND avg_unit_margin >= ? THEN 'Puzzle'
+            ELSE 'Dog'
+          END as matrix_category
+        FROM ProductStats
+        ORDER BY total_revenue DESC
+      `;
+
+      const rows = await getQuery(matrixSql, [
+          ...params, 
+          thresholdVolume, thresholdMargin, // Star (High Vol, High Margin)
+          thresholdVolume, thresholdMargin, // Plowhorse (High Vol, Low Margin)
+          thresholdVolume, thresholdMargin  // Puzzle (Low Vol, High Margin), else Dog is implicit
+      ]);
+
+      res.json({ 
+          thresholds: {
+              volume: thresholdVolume,
+              margin: thresholdMargin
+          },
+          matrix: rows 
+      });
+
+    } catch (err) {
+      console.error("Retail Matrix Error:", err);
+      res.status(500).json({ error: "Failed to calculate retail matrix data" });
+    }
+  });
+
   // Inventory Loss: stock adjustments with negative quantity
   app.get("/api/reports/inventory-loss", (req, res) => {
     const { date_from, date_to } = req.query;
@@ -862,6 +1420,151 @@ module.exports = function registerReportsRoutes(app, deps) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ customers: rows });
     });
+  });
+
+  app.get("/api/reports/customer-retention", async (req, res) => {
+    try {
+      const { date_from, date_to, outlet_id } = req.query;
+      const getQuery = (query, params = []) =>
+        new Promise((resolve, reject) => {
+          db.all(query, params, (err, rows) =>
+            err ? reject(err) : resolve(rows),
+          );
+        });
+
+      let where = ["s.voided = 0"];
+      const params = [];
+
+      if (date_from) {
+        where.push("date(s.timestamp, 'localtime') >= ?");
+        params.push(date_from);
+      } else {
+        where.push("date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')")
+      }
+
+      if (date_to) {
+        where.push("date(s.timestamp, 'localtime') <= ?");
+        params.push(date_to);
+      }
+
+      if (outlet_id) {
+        where.push("s.outlet_id = ?");
+        params.push(outlet_id);
+      }
+
+      const sql = `
+        WITH CustomerFirstPurchase AS (
+          SELECT customer_id, MIN(date(timestamp, 'localtime')) as first_purchase_date
+          FROM sales
+          WHERE voided = 0 AND customer_id IS NOT NULL
+          GROUP BY customer_id
+        )
+        SELECT 
+          date(s.timestamp, 'localtime') as sale_date,
+          CASE 
+            WHEN s.customer_id IS NULL THEN 'walk_in'
+            WHEN date(s.timestamp, 'localtime') = cfp.first_purchase_date THEN 'new_customer'
+            ELSE 'returning_customer'
+          END as customer_type,
+          SUM(s.total_amount) as revenue,
+          COUNT(s.id) as orders
+        FROM sales s
+        LEFT JOIN CustomerFirstPurchase cfp ON s.customer_id = cfp.customer_id
+        WHERE ${where.join(" AND ")}
+        GROUP BY sale_date, customer_type
+        ORDER BY sale_date ASC
+      `;
+
+      const rows = await getQuery(sql, params);
+      
+      const summary = {
+        walk_in: { revenue: 0, orders: 0 },
+        new_customer: { revenue: 0, orders: 0 },
+        returning_customer: { revenue: 0, orders: 0 }
+      };
+
+      // Aggregate for pie charts/summary
+      rows.forEach(row => {
+          if (summary[row.customer_type]) {
+              summary[row.customer_type].revenue += row.revenue;
+              summary[row.customer_type].orders += row.orders;
+          }
+      });
+
+      res.json({ timeline: rows, summary });
+
+    } catch (err) {
+      console.error("Customer Retention Error:", err);
+      res.status(500).json({ error: "Failed to load customer retention data" });
+    }
+  });
+
+  app.get("/api/reports/customer-capture-rate", async (req, res) => {
+    try {
+      const { date_from, date_to, outlet_id } = req.query;
+      const getQuery = (query, params = []) =>
+        new Promise((resolve, reject) => {
+          db.all(query, params, (err, rows) =>
+            err ? reject(err) : resolve(rows),
+          );
+        });
+
+      let where = ["s.voided = 0"];
+      const params = [];
+
+      if (date_from) {
+        where.push("date(s.timestamp, 'localtime') >= ?");
+        params.push(date_from);
+      } else {
+        where.push("date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')")
+      }
+
+      if (date_to) {
+        where.push("date(s.timestamp, 'localtime') <= ?");
+        params.push(date_to);
+      }
+
+      if (outlet_id) {
+        where.push("s.outlet_id = ?");
+        params.push(outlet_id);
+      }
+
+      // Group by Staff to see which staff members have the highest capture rate
+      const sql = `
+        SELECT 
+            COALESCE(e.name, 'Unknown Staff') as employee_name,
+            e.id as employee_id,
+            COUNT(s.id) as total_transactions,
+            SUM(CASE WHEN s.customer_id IS NOT NULL THEN 1 ELSE 0 END) as profiled_transactions,
+            SUM(CASE WHEN s.customer_id IS NULL THEN 1 ELSE 0 END) as walk_in_transactions,
+            ROUND(CAST(SUM(CASE WHEN s.customer_id IS NOT NULL THEN 1 ELSE 0 END) AS FLOAT) / COUNT(s.id) * 100, 1) as capture_rate_pct,
+            SUM(s.total_amount) as total_revenue,
+            SUM(CASE WHEN s.customer_id IS NOT NULL THEN s.total_amount ELSE 0 END) as profiled_revenue
+        FROM sales s
+        LEFT JOIN employees e ON s.employee_id = e.id
+        WHERE ${where.join(" AND ")}
+        GROUP BY e.id
+        ORDER BY capture_rate_pct DESC
+      `;
+
+      const rows = await getQuery(sql, params);
+      
+      const totals = rows.reduce((acc, row) => {
+          acc.total_transactions += row.total_transactions;
+          acc.profiled_transactions += row.profiled_transactions;
+          return acc;
+      }, { total_transactions: 0, profiled_transactions: 0 });
+
+      const store_capture_rate = totals.total_transactions > 0 
+        ? Number(((totals.profiled_transactions / totals.total_transactions) * 100).toFixed(1)) 
+        : 0;
+
+      res.json({ staff_breakdown: rows, store_capture_rate, total_transactions: totals.total_transactions });
+
+    } catch (err) {
+      console.error("Capture Rate Error:", err);
+      res.status(500).json({ error: "Failed to load capture rate data" });
+    }
   });
 
   // Outlet comparison — revenue, orders, avg basket, unique customers per outlet
