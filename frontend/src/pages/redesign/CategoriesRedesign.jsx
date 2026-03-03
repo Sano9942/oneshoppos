@@ -64,7 +64,9 @@ export default function CategoriesRedesign() {
     const q = search.toLowerCase();
     return rows.filter((r) =>
       [r.name, r.description, r.path_label].some((v) =>
-        String(v || "").toLowerCase().includes(q),
+        String(v || "")
+          .toLowerCase()
+          .includes(q),
       ),
     );
   }, [rows, search]);
@@ -99,7 +101,9 @@ export default function CategoriesRedesign() {
     setSaving(true);
     setError("");
     try {
-      const url = form.id ? `${API}/api/categories/${form.id}` : `${API}/api/categories`;
+      const url = form.id
+        ? `${API}/api/categories/${form.id}`
+        : `${API}/api/categories`;
       const method = form.id ? "PUT" : "POST";
       const res = await fetch(url, {
         method,
@@ -152,7 +156,8 @@ export default function CategoriesRedesign() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create child category");
+      if (!res.ok)
+        throw new Error(data.error || "Failed to create child category");
       setConversionPrompt(null);
       setModalOpen(false);
       setForm(EMPTY);
@@ -174,11 +179,14 @@ export default function CategoriesRedesign() {
     setMoveSaving(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/categories/${moveModal.id}/move-products`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target_category_id: Number(moveTargetId) }),
-      });
+      const res = await fetch(
+        `${API}/api/categories/${moveModal.id}/move-products`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target_category_id: Number(moveTargetId) }),
+        },
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to move products");
       setMoveModal(null);
@@ -192,10 +200,13 @@ export default function CategoriesRedesign() {
   };
 
   const remove = async (row) => {
-    if (!window.confirm(`Delete category "${row.path_label || row.name}"?`)) return;
+    if (!window.confirm(`Delete category "${row.path_label || row.name}"?`))
+      return;
     setError("");
     try {
-      const res = await fetch(`${API}/api/categories/${row.id}`, { method: "DELETE" });
+      const res = await fetch(`${API}/api/categories/${row.id}`, {
+        method: "DELETE",
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to delete category");
       await load();
@@ -210,9 +221,13 @@ export default function CategoriesRedesign() {
   );
   const moveTargetOptions = useMemo(() => {
     if (!moveModal) return [];
-    const allLeaves = leafCategories(rows).filter((row) => Number(row.id) !== Number(moveModal.id));
-    const childLeaves = allLeaves.filter((row) =>
-      Array.isArray(row.path_ids) && row.path_ids.includes(Number(moveModal.id)),
+    const allLeaves = leafCategories(rows).filter(
+      (row) => Number(row.id) !== Number(moveModal.id),
+    );
+    const childLeaves = allLeaves.filter(
+      (row) =>
+        Array.isArray(row.path_ids) &&
+        row.path_ids.includes(Number(moveModal.id)),
     );
     return childLeaves.length ? childLeaves : allLeaves;
   }, [moveModal, rows]);
@@ -237,17 +252,36 @@ export default function CategoriesRedesign() {
       ) : null}
 
       <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-4">
-        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Total Categories</p><p className="text-2xl font-semibold text-(--ui-text)">{rows.length}</p></SectionCard>
-        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Top Level</p><p className="text-2xl font-semibold text-(--ui-text)">{rootCount}</p></SectionCard>
-        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Leaf Categories</p><p className="text-2xl font-semibold text-(--ui-text)">{leafCount}</p></SectionCard>
-        <SectionCard className="p-3"><p className="text-xs text-(--ui-text-muted)">Visible</p><p className="text-2xl font-semibold text-(--ui-text)">{visibleRows.length}</p></SectionCard>
+        <SectionCard className="p-3">
+          <p className="text-xs text-(--ui-text-muted)">Total Categories</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">
+            {rows.length}
+          </p>
+        </SectionCard>
+        <SectionCard className="p-3">
+          <p className="text-xs text-(--ui-text-muted)">Top Level</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">{rootCount}</p>
+        </SectionCard>
+        <SectionCard className="p-3">
+          <p className="text-xs text-(--ui-text-muted)">Leaf Categories</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">{leafCount}</p>
+        </SectionCard>
+        <SectionCard className="p-3">
+          <p className="text-xs text-(--ui-text-muted)">Visible</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">
+            {visibleRows.length}
+          </p>
+        </SectionCard>
       </div>
 
       <SectionCard>
         <TableToolbar
           left={
             <div className="relative min-w-60">
-              <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)" />
+              <Search
+                size={14}
+                className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)"
+              />
               <Input
                 className="pl-8"
                 placeholder="Search categories"
@@ -256,7 +290,11 @@ export default function CategoriesRedesign() {
               />
             </div>
           }
-          right={<span className="text-xs text-(--ui-text-muted)">Delete is blocked when children or products exist</span>}
+          right={
+            <span className="text-xs text-(--ui-text-muted)">
+              Delete is blocked when children or products exist
+            </span>
+          }
         />
         <div className="overflow-auto">
           <table className="min-w-full border-t border-(--ui-border) text-sm">
@@ -275,8 +313,24 @@ export default function CategoriesRedesign() {
                 visibleRows.map((row) => (
                   <tr key={row.id} className="border-t border-(--ui-border)">
                     <td className="px-3 py-2">
-                      <div className="font-medium text-(--ui-text)">{indentLabel(row)}</div>
-                      <div className="text-xs text-(--ui-text-muted)">{row.description || row.path_label}</div>
+                      <div
+                        className="font-medium text-(--ui-text)"
+                        style={{
+                          paddingLeft: `${Number(row.depth || 0) * 16}px`,
+                        }}
+                      >
+                        {row.name}
+                      </div>
+                      {row.depth > 0 && (
+                        <div className="text-xs text-(--ui-text-muted)">
+                          {row.path_label}
+                        </div>
+                      )}
+                      {row.description && (
+                        <div className="text-xs text-(--ui-text-muted) italic">
+                          {row.description}
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       <Badge tone={row.is_leaf ? "success" : "default"}>
@@ -284,12 +338,23 @@ export default function CategoriesRedesign() {
                       </Badge>
                     </td>
                     <td className="px-3 py-2 text-(--ui-text-muted)">
-                      Direct {row.product_count_direct || 0} / Rollup {row.product_count_rollup || 0}
+                      Direct {row.product_count_direct || 0} / Rollup{" "}
+                      {row.product_count_rollup || 0}
                     </td>
-                    <td className="px-3 py-2 text-(--ui-text-muted)">{row.child_count || 0}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">
+                      {row.child_count || 0}
+                    </td>
                     <td className="px-3 py-2">
-                      <Badge tone={Number(row.is_active || 0) === 1 ? "success" : "default"}>
-                        {Number(row.is_active || 0) === 1 ? "Active" : "Inactive"}
+                      <Badge
+                        tone={
+                          Number(row.is_active || 0) === 1
+                            ? "success"
+                            : "default"
+                        }
+                      >
+                        {Number(row.is_active || 0) === 1
+                          ? "Active"
+                          : "Inactive"}
                       </Badge>
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -299,13 +364,22 @@ export default function CategoriesRedesign() {
                           Add Child
                         </Button>
                         {Number(row.product_count_direct || 0) > 0 ? (
-                          <Button size="sm" onClick={() => openMoveProducts(row)}>
+                          <Button
+                            size="sm"
+                            onClick={() => openMoveProducts(row)}
+                          >
                             <ArrowRightLeft size={12} className="mr-1 inline" />
                             Move Products
                           </Button>
                         ) : null}
-                        <Button size="sm" onClick={() => openEdit(row)}>Edit</Button>
-                        <Button size="sm" tone="danger" onClick={() => remove(row)}>
+                        <Button size="sm" onClick={() => openEdit(row)}>
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          tone="danger"
+                          onClick={() => remove(row)}
+                        >
                           <Trash2 size={12} className="mr-1 inline" />
                           Delete
                         </Button>
@@ -315,9 +389,16 @@ export default function CategoriesRedesign() {
                 ))}
             </tbody>
           </table>
-          {loading ? <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading categories...</div> : null}
+          {loading ? (
+            <div className="p-8 text-center text-sm text-(--ui-text-muted)">
+              Loading categories...
+            </div>
+          ) : null}
           {!loading && visibleRows.length === 0 ? (
-            <EmptyState title="No categories" body="Create categories and nest them to organize inventory." />
+            <EmptyState
+              title="No categories"
+              body="Create categories and nest them to organize inventory."
+            />
           ) : null}
         </div>
       </SectionCard>
@@ -333,18 +414,26 @@ export default function CategoriesRedesign() {
                 required
                 placeholder="Category name"
                 value={form.name}
-                onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, name: e.target.value }))
+                }
               />
               <Input
                 placeholder="Description"
                 value={form.description}
-                onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, description: e.target.value }))
+                }
               />
               <div>
-                <label className="mb-1 block text-xs text-(--ui-text-muted)">Parent Category</label>
+                <label className="mb-1 block text-xs text-(--ui-text-muted)">
+                  Parent Category
+                </label>
                 <Select
                   value={form.parent_id}
-                  onChange={(e) => setForm((p) => ({ ...p, parent_id: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, parent_id: e.target.value }))
+                  }
                 >
                   <option value="">Top level</option>
                   {selectableParents.map((row) => (
@@ -355,32 +444,43 @@ export default function CategoriesRedesign() {
                 </Select>
                 {form.parent_id ? (
                   <p className="mt-1 text-xs text-(--ui-text-muted)">
-                    If the selected parent currently holds products, you will be prompted to move them into this new child.
+                    If the selected parent currently holds products, you will be
+                    prompted to move them into this new child.
                   </p>
                 ) : null}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Status</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">
+                    Status
+                  </label>
                   <Select
                     value={form.is_active}
-                    onChange={(e) => setForm((p) => ({ ...p, is_active: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, is_active: e.target.value }))
+                    }
                   >
                     <option value="1">Active</option>
                     <option value="0">Inactive</option>
                   </Select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Sort Order</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">
+                    Sort Order
+                  </label>
                   <Input
                     type="number"
                     value={form.sort_order}
-                    onChange={(e) => setForm((p) => ({ ...p, sort_order: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, sort_order: e.target.value }))
+                    }
                   />
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
-                <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
+                <Button type="button" onClick={() => setModalOpen(false)}>
+                  Cancel
+                </Button>
                 <Button tone="primary" type="submit" disabled={saving}>
                   {saving ? "Saving..." : "Save"}
                 </Button>
@@ -390,15 +490,18 @@ export default function CategoriesRedesign() {
         </div>
       ) : null}
       {conversionPrompt ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 p-3">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/55 p-3">
           <SectionCard className="w-full max-w-lg p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">Convert Parent to Tree</h3>
+            <h3 className="text-lg font-semibold text-(--ui-text)">
+              Convert Parent to Tree
+            </h3>
             <p className="mt-2 text-sm text-(--ui-text-muted)">
               The selected parent category currently has{" "}
               <span className="font-semibold text-(--ui-text)">
                 {conversionPrompt.directProductCount}
               </span>{" "}
-              directly assigned product(s). To keep products on leaf categories only, create this child and move those products into it.
+              directly assigned product(s). To keep products on leaf categories
+              only, create this child and move those products into it.
             </p>
             <div className="mt-3 rounded-lg border border-(--ui-border) bg-(--ui-muted-surface) p-3 text-sm">
               <div className="font-medium text-(--ui-text)">
@@ -409,10 +512,19 @@ export default function CategoriesRedesign() {
               </div>
             </div>
             <div className="mt-4 flex gap-2">
-              <Button type="button" onClick={() => setConversionPrompt(null)} disabled={saving}>
+              <Button
+                type="button"
+                onClick={() => setConversionPrompt(null)}
+                disabled={saving}
+              >
                 Cancel
               </Button>
-              <Button tone="primary" type="button" onClick={confirmCreateChildAndMove} disabled={saving}>
+              <Button
+                tone="primary"
+                type="button"
+                onClick={confirmCreateChildAndMove}
+                disabled={saving}
+              >
                 {saving ? "Creating..." : "Create Child and Move Products"}
               </Button>
             </div>
@@ -420,9 +532,11 @@ export default function CategoriesRedesign() {
         </div>
       ) : null}
       {moveModal ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 p-3">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/55 p-3">
           <SectionCard className="w-full max-w-lg p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">Move Category Products</h3>
+            <h3 className="text-lg font-semibold text-(--ui-text)">
+              Move Category Products
+            </h3>
             <p className="mt-2 text-sm text-(--ui-text-muted)">
               Move all directly assigned products from{" "}
               <span className="font-semibold text-(--ui-text)">
@@ -431,8 +545,13 @@ export default function CategoriesRedesign() {
               into another leaf category.
             </p>
             <div className="mt-3">
-              <label className="mb-1 block text-xs text-(--ui-text-muted)">Target Leaf Category</label>
-              <Select value={moveTargetId} onChange={(e) => setMoveTargetId(e.target.value)}>
+              <label className="mb-1 block text-xs text-(--ui-text-muted)">
+                Target Leaf Category
+              </label>
+              <Select
+                value={moveTargetId}
+                onChange={(e) => setMoveTargetId(e.target.value)}
+              >
                 <option value="">Select target category</option>
                 {moveTargetOptions.map((row) => (
                   <option key={row.id} value={row.id}>
@@ -442,7 +561,11 @@ export default function CategoriesRedesign() {
               </Select>
             </div>
             <div className="mt-4 flex gap-2">
-              <Button type="button" onClick={() => setMoveModal(null)} disabled={moveSaving}>
+              <Button
+                type="button"
+                onClick={() => setMoveModal(null)}
+                disabled={moveSaving}
+              >
                 Cancel
               </Button>
               <Button

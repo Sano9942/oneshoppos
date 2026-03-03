@@ -134,6 +134,15 @@ const db = new sqlite3.Database(dbPath, (err) => {
           }
         },
       );
+      db.run(
+        `ALTER TABLE shift_denominations
+         ADD COLUMN stage TEXT NOT NULL DEFAULT 'closing'`,
+        (err) => {
+          if (err && !String(err.message || "").includes("duplicate column name")) {
+            console.error("shift_denominations.stage:", err.message);
+          }
+        },
+      );
     });
   }
 });

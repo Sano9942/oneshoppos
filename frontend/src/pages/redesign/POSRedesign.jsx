@@ -11,6 +11,8 @@ import POSNoteModal from "./pos/POSNoteModal";
 import POSParkedModal from "./pos/POSParkedModal";
 import POSCheckoutModal from "./pos/POSCheckoutModal";
 import POSReceiptModal from "./pos/POSReceiptModal";
+import POSOpeningGateModal from "./pos/POSOpeningGateModal";
+import POSCloseShiftModal from "./pos/POSCloseShiftModal";
 
 function POSContent() {
   const { isLocked, notice, error } = usePOS();
@@ -53,6 +55,8 @@ function POSContent() {
       <POSDiscountModal />
       <POSNoteModal />
       <POSParkedModal />
+      <POSOpeningGateModal />
+      <POSCloseShiftModal />
       <POSCheckoutModal />
       <POSReceiptModal />
     </div>

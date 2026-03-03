@@ -19,6 +19,65 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // Helper: current datetime as "YYYY-MM-DD HH:MM:SS"
   const nowLocal = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 
+  function getEmployeeStatusForToday(employeeId, outletId = null) {
+    const today = todayLocal();
+    const outletClause = outletId ? " AND outlet_id = ?" : "";
+    const outletParams = outletId ? [Number(outletId)] : [];
+
+    return new Promise((resolve, reject) => {
+      db.get(
+        `SELECT * FROM attendance_sessions
+         WHERE employee_id = ? AND session_end IS NULL
+           AND date(session_start, 'localtime') = ?${outletClause}
+         ORDER BY session_start DESC
+         LIMIT 1`,
+        [Number(employeeId), today, ...outletParams],
+        (err, openSession) => {
+          if (err) return reject(err);
+
+          db.get(
+            `SELECT
+               COALESCE(SUM(CASE WHEN session_type = 'work' THEN duration_hours ELSE 0 END), 0) AS net_work_hours,
+               COALESCE(SUM(CASE WHEN session_type = 'break' THEN duration_hours ELSE 0 END), 0) AS break_hours
+             FROM attendance_sessions
+             WHERE employee_id = ? AND date(session_start, 'localtime') = ?${outletClause}
+               AND session_end IS NOT NULL`,
+            [Number(employeeId), today, ...outletParams],
+            (totalsErr, totals) => {
+              if (totalsErr) return reject(totalsErr);
+
+              if (openSession) {
+                return resolve({
+                  status:
+                    openSession.session_type === "work" ? "clocked_in" : "on_break",
+                  current_session: openSession,
+                  net_work_hours_today: totals?.net_work_hours || 0,
+                  total_break_hours_today: totals?.break_hours || 0,
+                });
+              }
+
+              db.get(
+                `SELECT COUNT(*) AS cnt
+                 FROM attendance_sessions
+                 WHERE employee_id = ? AND date(session_start, 'localtime') = ?${outletClause}`,
+                [Number(employeeId), today, ...outletParams],
+                (countErr, countRow) => {
+                  if (countErr) return reject(countErr);
+                  resolve({
+                    status: Number(countRow?.cnt || 0) > 0 ? "clocked_out" : "not_clocked_in",
+                    current_session: null,
+                    net_work_hours_today: totals?.net_work_hours || 0,
+                    total_break_hours_today: totals?.break_hours || 0,
+                  });
+                },
+              );
+            },
+          );
+        },
+      );
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // GET /api/attendance — manager list of day-level records (with session counts)
   // ---------------------------------------------------------------------------
@@ -164,6 +223,30 @@ module.exports = function registerAttendanceRoutes(app, deps) {
           }
         );
       }
+    );
+  });
+
+  app.get("/api/attendance/my-status", (req, res) => {
+    const employeeId = req.headers["x-employee-id"];
+    const outletId = req.query.outlet_id ? Number(req.query.outlet_id) : null;
+    if (!employeeId) return res.status(401).json({ error: "Unauthorized" });
+
+    db.get(
+      "SELECT id, name FROM employees WHERE id = ?",
+      [Number(employeeId)],
+      async (err, emp) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!emp) return res.status(401).json({ error: "Unauthorized" });
+        try {
+          const status = await getEmployeeStatusForToday(emp.id, outletId);
+          res.json({
+            employee: { id: emp.id, name: emp.name },
+            ...status,
+          });
+        } catch (statusErr) {
+          res.status(500).json({ error: statusErr.message });
+        }
+      },
     );
   });
 

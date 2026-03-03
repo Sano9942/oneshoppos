@@ -11,6 +11,7 @@ import { API_BASE as API } from "../../../config";
 import { useAuth } from "../../../auth/AuthProvider";
 
 const POSContext = createContext();
+const OPENING_DENOMS = [5000, 1000, 500, 100, 50, 20, 10];
 
 export const usePOS = () => {
   const context = useContext(POSContext);
@@ -20,7 +21,7 @@ export const usePOS = () => {
 
 export const POSProvider = ({ children }) => {
   const navigate = useNavigate();
-  const { employee, authHeaders, logout } = useAuth();
+  const { employee, authHeaders, logout, hasPerm } = useAuth();
 
   // ── Lock state ────────────────────────────────────────────────────────────
   const [isLocked, setIsLocked] = useState(
@@ -33,6 +34,14 @@ export const POSProvider = ({ children }) => {
   const [outlets, setOutlets] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [selectedOutletId, setSelectedOutletId] = useState("");
+  const [activeShift, setActiveShift] = useState(null);
+  const [attendanceStatus, setAttendanceStatus] = useState(null);
+  const [gateLoading, setGateLoading] = useState(false);
+  const [openingShiftBusy, setOpeningShiftBusy] = useState(false);
+  const [openingDenoms, setOpeningDenoms] = useState(
+    OPENING_DENOMS.map((value) => ({ denomination: value, count: 0 })),
+  );
+  const [closeShiftOpen, setCloseShiftOpen] = useState(false);
 
   // ── Product search ────────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
@@ -105,6 +114,20 @@ export const POSProvider = ({ children }) => {
       minimumFractionDigits: 0,
     }).format(v || 0);
 
+  const openingFloat = useMemo(
+    () =>
+      openingDenoms.reduce(
+        (sum, row) => sum + row.denomination * Number(row.count || 0),
+        0,
+      ),
+    [openingDenoms],
+  );
+  const canOpenShift = hasPerm("manage_employees");
+  const attendanceCode = attendanceStatus?.status || "not_clocked_in";
+  const isReadyForCheckout = Boolean(
+    selectedOutletId && activeShift && attendanceCode === "clocked_in",
+  );
+
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   useEffect(() => {
     Promise.all([
@@ -119,14 +142,59 @@ export const POSProvider = ({ children }) => {
         const outList = outData.outlets || [];
         setOutlets(outList);
         setCustomers(custData.customers || []);
-        if (outList.length > 0) setSelectedOutletId(String(outList[0].id));
       })
       .catch(() => setError("Failed to load POS setup data."));
   }, []);
 
   useEffect(() => {
-    if (selectedOutletId) loadParked(selectedOutletId);
+    if (selectedOutletId) {
+      loadParked(selectedOutletId);
+    } else {
+      setParkedSales([]);
+      setActiveShift(null);
+      setAttendanceStatus(null);
+    }
   }, [selectedOutletId]);
+
+  const refreshGateStatus = async (outletId = selectedOutletId) => {
+    if (!outletId || !employee?.id) {
+      setActiveShift(null);
+      setAttendanceStatus(null);
+      return;
+    }
+    setGateLoading(true);
+    try {
+      const [shiftRes, attendanceRes] = await Promise.all([
+        fetch(`${API}/api/shifts/active?outlet_id=${outletId}`, {
+          headers: authHeaders(),
+        }),
+        fetch(`${API}/api/attendance/my-status?outlet_id=${outletId}`, {
+          headers: authHeaders(),
+        }),
+      ]);
+      const [shiftData, attendanceData] = await Promise.all([
+        shiftRes.json(),
+        attendanceRes.json(),
+      ]);
+      if (!shiftRes.ok) throw new Error(shiftData.error || "Failed to load active shift");
+      if (!attendanceRes.ok) {
+        throw new Error(attendanceData.error || "Failed to load attendance status");
+      }
+      setActiveShift(shiftData.shift || null);
+      setAttendanceStatus(attendanceData || null);
+    } catch (err) {
+      setActiveShift(null);
+      setAttendanceStatus(null);
+      setError(err.message || "Failed to load POS opening status");
+    } finally {
+      setGateLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedOutletId || !employee?.id) return;
+    refreshGateStatus(selectedOutletId);
+  }, [selectedOutletId, employee?.id]);
 
   // ── Functions ─────────────────────────────────────────────────────────────
   const loadParked = async (outletId = selectedOutletId) => {
@@ -369,6 +437,22 @@ export const POSProvider = ({ children }) => {
 
   const openCheckout = () => {
     if (!cart.length) return;
+    if (!selectedOutletId) {
+      setError("Select a branch before using POS.");
+      return;
+    }
+    if (!activeShift) {
+      setError("Open the shift before completing sales.");
+      return;
+    }
+    if (attendanceCode !== "clocked_in") {
+      setError(
+        attendanceCode === "on_break"
+          ? "Clock back in before using POS."
+          : "Clock in at the kiosk before using POS.",
+      );
+      return;
+    }
     setPayments([]);
     setPaymentMethod("Cash");
     setPaymentAmount(total.toFixed(2));
@@ -418,6 +502,42 @@ export const POSProvider = ({ children }) => {
     } finally {
       setNewCustSaving(false);
     }
+  };
+
+  const openShiftFromPOS = async () => {
+    if (!selectedOutletId || !canOpenShift || openingFloat <= 0) return;
+    setOpeningShiftBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`${API}/api/shifts/open`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          outlet_id: Number(selectedOutletId),
+          employee_id: employee?.id || null,
+          opening_float: Number(openingFloat.toFixed(2)),
+          denominations: openingDenoms
+            .filter((row) => Number(row.count || 0) > 0)
+            .map((row) => ({
+              denomination: row.denomination,
+              count: Number(row.count || 0),
+            })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to open shift");
+      showNotice("Shift opened successfully.");
+      await refreshGateStatus(selectedOutletId);
+    } catch (err) {
+      setError(err.message || "Failed to open shift");
+    } finally {
+      setOpeningShiftBusy(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
   };
 
   const addPayment = (e) => {
@@ -488,12 +608,24 @@ export const POSProvider = ({ children }) => {
 
   const completeSale = async () => {
     if (!selectedOutletId || !cart.length || remaining > 0) return;
+    if (!activeShift) {
+      setError("Cannot checkout until a shift is open.");
+      return;
+    }
+    if (attendanceCode !== "clocked_in") {
+      setError(
+        attendanceCode === "on_break"
+          ? "Cannot checkout while on break."
+          : "Cannot checkout until you are clocked in.",
+      );
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
       const res = await fetch(`${API}/api/sales`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           cartItems: cart,
           payments,
@@ -582,7 +714,9 @@ export const POSProvider = ({ children }) => {
 
   const value = {
     employee,
+    authHeaders,
     logout,
+    handleLogout,
     isLocked,
     setIsLocked,
     lockPin,
@@ -593,6 +727,20 @@ export const POSProvider = ({ children }) => {
     customers,
     selectedOutletId,
     setSelectedOutletId,
+    activeShift,
+    attendanceStatus,
+    attendanceCode,
+    gateLoading,
+    canOpenShift,
+    isReadyForCheckout,
+    openingDenoms,
+    setOpeningDenoms,
+    openingFloat,
+    openingShiftBusy,
+    openShiftFromPOS,
+    closeShiftOpen,
+    setCloseShiftOpen,
+    refreshGateStatus,
     search,
     setSearch,
     barcodeSearch,

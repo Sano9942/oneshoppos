@@ -375,6 +375,7 @@ const TABLES = [
   `CREATE TABLE IF NOT EXISTS shift_denominations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     shift_id INTEGER NOT NULL REFERENCES cash_shifts(id) ON DELETE CASCADE,
+    stage TEXT NOT NULL DEFAULT 'closing',
     denomination REAL NOT NULL,
     count INTEGER NOT NULL DEFAULT 0,
     subtotal REAL GENERATED ALWAYS AS (denomination * count) STORED

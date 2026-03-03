@@ -267,6 +267,23 @@ The Shopify integration was limited to importing variants with barcodes. Product
 
 **Status:** Import logic hardened. Residual data gaps reduced.
 
+### Shopify Leading Zero Fix (March 2026)
+
+**Problem:**
+SKUs and barcodes with leading zeros (e.g., `002590`) were being truncated to numeric values (e.g., `2590`) during Shopify import.
+
+**Root Cause:**
+A silent numeric coercion bug caused by the `|| ""` falsy pattern. If the Shopify API or `JSON.parse()` returned a numeric-looking value, the `||` operator would either return a number (which loses zeros when stored) or return a fallback resulting in an empty string if the value was specifically numeric `0`.
+
+**Solution:**
+Implemented explicit, safe string coercion using `String()` in `client.js` and `import.js`.
+
+- `backend/shopify/client.js`: All identifier mappings now use `foo != null ? String(foo) : ""`
+- `backend/routes/shopify/import.js`: Extraction now uses `rawVal != null ? String(rawVal).trim() || null : null`
+
+**Verification:**
+Validater via `backend/verify_zeros_fix.js` across 9 edge cases (numeric, string, falsy, null). Added `SHOPIFY_IMPORT_DEBUG` logging for live verification.
+
 ---
 
 ### Problem

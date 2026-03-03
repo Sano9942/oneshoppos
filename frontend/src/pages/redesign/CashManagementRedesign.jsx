@@ -12,7 +12,7 @@ import {
 import { API_BASE as API } from "../../config";
 import { Calculator, Download, RefreshCw } from "lucide-react";
 
-const DENOMS = [5000, 1000, 500, 100, 50, 20, 10, 5, 2, 1];
+const DENOMS = [5000, 1000, 500, 100, 50, 20, 10];
 
 function money(v) {
   return `PKRs ${Number(v || 0).toFixed(2)}`;
@@ -71,7 +71,10 @@ export default function CashManagementRedesign() {
   const [error, setError] = useState("");
 
   const [openModal, setOpenModal] = useState(false);
-  const [openForm, setOpenForm] = useState({ opening_float: "", employee_id: "" });
+  const [openForm, setOpenForm] = useState({ employee_id: "" });
+  const [openingDenoms, setOpeningDenoms] = useState(
+    DENOMS.map((d) => ({ denomination: d, count: 0 })),
+  );
 
   const [closeModal, setCloseModal] = useState(false);
   const [closeNotes, setCloseNotes] = useState("");
@@ -128,6 +131,15 @@ export default function CashManagementRedesign() {
     [denoms],
   );
 
+  const openingCash = useMemo(
+    () =>
+      openingDenoms.reduce(
+        (sum, d) => sum + d.denomination * Number(d.count || 0),
+        0,
+      ),
+    [openingDenoms],
+  );
+
   const kpis = useMemo(() => {
     return {
       totalSaleCash: rows.reduce((s, r) => s + Number(r.total_cash_sales || 0), 0),
@@ -149,13 +161,15 @@ export default function CashManagementRedesign() {
         body: JSON.stringify({
           outlet_id: Number(selectedOutlet),
           employee_id: openForm.employee_id ? Number(openForm.employee_id) : null,
-          opening_float: Number(openForm.opening_float || 0),
+          opening_float: Number(openingCash.toFixed(2)),
+          denominations: openingDenoms.filter((d) => Number(d.count || 0) > 0),
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to open shift");
       setOpenModal(false);
-      setOpenForm({ opening_float: "", employee_id: "" });
+      setOpenForm({ employee_id: "" });
+      setOpeningDenoms(DENOMS.map((d) => ({ denomination: d, count: 0 })));
       await loadData();
     } catch (e2) {
       setError(e2.message || "Failed to open shift");
@@ -195,7 +209,7 @@ export default function CashManagementRedesign() {
   const loadDenominations = async (shift) => {
     if (shift.status !== "closed") return;
     try {
-      const res = await fetch(`${API}/api/shifts/${shift.id}/denominations`);
+      const res = await fetch(`${API}/api/shifts/${shift.id}/denominations?stage=closing`);
       const data = await res.json();
       if (res.ok) setDenomDetail({ shift, rows: data.denominations || [] });
     } catch {
@@ -317,15 +331,32 @@ export default function CashManagementRedesign() {
           <SectionCard className="w-full max-w-md p-4">
             <h3 className="text-lg font-semibold text-(--ui-text)">Open Shift</h3>
             <form className="mt-3 space-y-2" onSubmit={openShift}>
-              <Input
-                required
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Opening float"
-                value={openForm.opening_float}
-                onChange={(e) => setOpenForm((p) => ({ ...p, opening_float: e.target.value }))}
-              />
+              <SectionCard className="p-3">
+                <div className="mb-2 flex items-center gap-2 text-sm text-(--ui-text)">
+                  <Calculator size={14} />
+                  Opening Denominations
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {openingDenoms.map((d, idx) => (
+                    <div key={d.denomination}>
+                      <p className="text-xs text-(--ui-text-muted)">{d.denomination}</p>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={d.count}
+                        onChange={(e) =>
+                          setOpeningDenoms((prev) =>
+                            prev.map((row, i) =>
+                              i === idx ? { ...row, count: Math.max(0, Number(e.target.value || 0)) } : row,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-sm font-semibold text-(--ui-text)">Opening Float: {money(openingCash)}</p>
+              </SectionCard>
               <Select
                 value={openForm.employee_id}
                 onChange={(e) => setOpenForm((p) => ({ ...p, employee_id: e.target.value }))}
@@ -337,7 +368,7 @@ export default function CashManagementRedesign() {
               </Select>
               <div className="flex gap-2 pt-2">
                 <Button type="button" onClick={() => setOpenModal(false)}>Cancel</Button>
-                <Button tone="primary" type="submit" disabled={busy}>Open</Button>
+                <Button tone="primary" type="submit" disabled={busy || openingCash <= 0}>Open</Button>
               </div>
             </form>
           </SectionCard>

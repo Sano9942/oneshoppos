@@ -62,7 +62,7 @@ module.exports = function (app, deps, helpers) {
       const inventoryStatus = await getQuery(`
             SELECT 
                 COUNT(*) as total_products,
-                SUM(CASE WHEN stock_alert = 1 THEN 1 ELSE 0 END) as low_stock_items
+                SUM(CASE WHEN stock <= min_qty AND min_qty > 0 THEN 1 ELSE 0 END) as low_stock_items
             FROM products
         `);
 

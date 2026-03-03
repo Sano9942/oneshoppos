@@ -36,6 +36,8 @@ OneShopPOS has recently changed in ways that directly affect reporting:
   - `tags`
 - promotions are leaf-category aware
 - Shopify import has been made safer and more conservative
+- **Shopify SKU-based Import (Mar 2026):** Catalog sync now supports products with only SKUs (no barcodes), ensuring 100% data coverage for merchants with SKU-only catalogs.
+- **Shopify Data Integrity Fix (Mar 2026):** Leading zero preserved for SKUs and barcodes (e.g., "002590"), ensuring accurate reporting and stock matching.
 - reports already have a partial “power-up” system with feature flags
 
 Because of that, the current reports page is functionally behind the rest of the application.

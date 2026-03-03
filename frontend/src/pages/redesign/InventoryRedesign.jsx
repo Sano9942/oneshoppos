@@ -24,7 +24,6 @@ const BLANK_FORM = {
 };
 
 function ProductModal({ product, categories, brands, authHeaders, onClose, onSaved }) {
-  const assignableCategories = useMemo(() => leafCategories(categories), [categories]);
   const isEdit = Boolean(product);
   const [form, setForm] = useState(
     isEdit
@@ -143,7 +142,11 @@ function ProductModal({ product, categories, brands, authHeaders, onClose, onSav
               <label className="text-xs font-medium text-(--ui-text-muted)">Category</label>
               <Select value={form.category_id} onChange={(e) => upd("category_id", e.target.value)}>
                 <option value="">No category</option>
-                {assignableCategories.map((c) => <option key={c.id} value={c.id}>{indentLabel(c)}</option>)}
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id} disabled={!c.is_leaf}>
+                    {indentLabel(c)}{c.is_leaf ? "" : " (parent)"}
+                  </option>
+                ))}
               </Select>
             </div>
             <div className="flex flex-col gap-1">
@@ -502,9 +505,9 @@ export default function InventoryRedesign() {
                 onChange={(e) => setBulkCategoryTarget(e.target.value)}
               >
                 <option value="">Assign category...</option>
-                {leafCategories(categories).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {indentLabel(c)}
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id} disabled={!c.is_leaf}>
+                    {indentLabel(c)}{c.is_leaf ? "" : " (parent)"}
                   </option>
                 ))}
               </Select>

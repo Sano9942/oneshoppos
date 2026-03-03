@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Store, ArrowLeft, FileText, Lock } from "lucide-react";
+import { Store, ArrowLeft, FileText, Lock, LogOut } from "lucide-react";
 import { usePOS } from "./POSContext";
 
 export default function POSHeader() {
@@ -12,6 +12,10 @@ export default function POSHeader() {
     slip,
     setSlipOpen,
     handleLock,
+    handleLogout,
+    activeShift,
+    canOpenShift,
+    setCloseShiftOpen,
   } = usePOS();
 
   return (
@@ -32,6 +36,7 @@ export default function POSHeader() {
             onChange={(e) => setSelectedOutletId(e.target.value)}
             className="text-sm font-bold text-slate-700 bg-transparent focus:outline-none cursor-pointer border-none"
           >
+            <option value="">Select Branch</option>
             {outlets.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.name}
@@ -53,11 +58,25 @@ export default function POSHeader() {
             <FileText size={14} /> Last Receipt
           </button>
         )}
+        {activeShift && canOpenShift && (
+          <button
+            onClick={() => setCloseShiftOpen(true)}
+            className="flex items-center gap-1 text-rose-600 hover:text-rose-700 font-medium transition"
+          >
+            <Lock size={14} /> Close Shift
+          </button>
+        )}
         <button
           onClick={handleLock}
           className="flex items-center gap-1 text-slate-500 hover:text-red-600 font-medium transition"
         >
           <Lock size={14} /> Lock
+        </button>
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-1 text-slate-500 hover:text-slate-900 font-medium transition"
+        >
+          <LogOut size={14} /> Logout
         </button>
       </div>
     </div>

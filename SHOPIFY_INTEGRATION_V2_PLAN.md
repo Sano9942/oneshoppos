@@ -717,6 +717,11 @@ Success criteria:
 - operators can understand what imported
 - operators can understand what mapped and what did not
 
+**Completed in Mar 2026:**
+
+- **SKU-based Import:** `backend/routes/shopify/import.js` updated to support products with only SKUs via 3-stage lookup (Map -> Barcode -> SKU) and explicit UPDATE/INSERT strategy.
+- **Leading Zero Fix:** Corrected numeric coercion bug in `client.js` and `import.js` to preserve leading zeros in identifiers.
+
 ## Phase 5: Frontend Shopify Workspace Redesign
 
 Replace the legacy one-page panel with a modular workspace.

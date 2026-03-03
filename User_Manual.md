@@ -1,71 +1,211 @@
-# OneShopPOS User Manual
+# OneShopPOS Daily SOP
 
-Welcome to the OneShopPOS system. This simple guide will teach you how to start the system, ring up sales, and manage your inventory.
+This manual describes the exact daily operating flow for the current OneShopPOS setup.
 
----
+## 1. Roles Used in This System
 
-## 1. Starting the System
+The project currently uses these roles:
 
-To start the Point of Sale system for the day:
+- `Administrator`
+- `Manager`
+- `Cashier`
 
-1. Double-click the `start-pos.bat` file located in the `D:\newprojects\oneshoppos\` folder.
-2. Two black command windows will open (one for the backend, one for the frontend). **Do not close these.**
-3. Your web browser will automatically open to the Point of Sale terminal.
+There is no separate `Salesman` role right now. In daily store operations, the `Cashier` role is the selling role at the counter.
 
----
+## 2. Opening the Day
 
-## 2. Using the Point of Sale (Checkout)
+### Step 1: Start the software
 
-The Point of Sale screen is designed to be fast and work automatically with your barcode scanner.
+1. Start the system from the store computer.
+2. The login screen will appear.
 
-### Ringing up a Customer:
+### Step 2: Manager or Administrator logs in
 
-1. Ensure you are on the **Point of Sale** tab (click it on the left menu if you aren't).
-2. Grab the physical item and scan its barcode with your USB scanner.
-   - _Note:_ You do not need to click the search bar first. The system will automatically focus the cursor on the search box for you every second.
-3. The item will instantly appear in the Cart on the left side.
-4. If the customer buys two of the same item, simply scan it twice. The quantity will automatically increase.
-5. If you make a mistake, click the red **Trash Can** icon next to the item to remove it from the cart.
+1. A `Manager` or `Administrator` logs in using username and PIN.
+2. This person is responsible for opening the day and preparing the branch for sales.
 
-### Checking Out:
+### Step 3: Open the kiosk for staff attendance
 
-1. Once all items are scanned, tell the customer the "Total" shown in big green letters on the right side.
-2. Collect payment from the customer (Cash).
-3. Click the big green **Pay & Print Receipt** button.
-4. The system will automatically record the sale, deduct the items from your inventory, clear the cart for the next customer, and launch the print dialog for the receipt.
+1. Open the `Kiosk` screen.
+2. Each employee clocks in using their own PIN.
+3. This includes the cashier and any other staff starting work.
 
-> **Caution:** If an item says "Out of stock," the system will not let you add it to the cart to prevent negative inventory errors.
+If the manager also plans to sell, the manager should also clock in through the kiosk.
 
----
+### Step 4: Open POS
 
-## 3. Managing Inventory
+1. Open the `POS` screen.
+2. The POS will first require branch selection.
+3. Select the correct branch / outlet.
 
-When you receive new shipments of physical goods, you must add them to the system.
+### Step 5: Open shift directly from POS
 
-### Adding a New Item
+If no shift is open for the selected branch, POS will block selling until a shift is opened.
 
-1. Click on **Inventory** in the left menu.
-2. Click the blue **+ Add New Item** button in the top right.
-3. Fill out the details:
-   - **Barcode:** Scan the item here, or type a custom number.
-   - **Product Name:** What printing on the receipt should look like (e.g., "Coca Cola 500ml").
-   - **Price:** The selling price (e.g., `1.50`).
-   - **Stock Level:** The total number of this item you currently have in the store.
-4. Click **Save Product**.
+The `Manager` or `Administrator` must open the shift by counting the opening cash denominations:
 
-### Editing an Existing Item:
+- `Rs 5000`
+- `Rs 1000`
+- `Rs 500`
+- `Rs 100`
+- `Rs 50`
+- `Rs 20`
+- `Rs 10`
 
-1. In the Inventory screen, use the search bar to find the item you want to edit.
-2. Click the **Edit** button next to the item.
-3. Change the price, update the stock level, or fix the name.
-4. Click **Update Product**.
+The system totals these denominations and uses the result as the opening float.
 
----
+### Step 6: Start selling
 
-## 4. Shutting Down for the Day
+After shift opening:
 
-When the store closes:
+- the manager can sell directly in POS, or
+- the manager can log out of POS and the cashier can log in and begin selling
 
-1. Go to the open command terminal window (the black box that says "OneShopPOS is running!").
-2. Press any key on your keyboard inside that window.
-3. The system will safely shut down all servers. You can now close your browser.
+Because staff already clocked in through the kiosk, the cashier can proceed normally after login.
+
+## 3. Required Rules Enforced by the System
+
+The POS now follows these mandatory rules:
+
+### Rule 1: Cannot checkout unless shift is open
+
+A sale cannot be completed unless the selected branch has an active open shift.
+
+If no shift is open:
+
+- POS stays blocked
+- manager or administrator must open the shift first
+
+### Rule 2: Employee must be clocked in before checkout
+
+A sale cannot be completed unless the logged-in employee is currently clocked in for that branch.
+
+Checkout is blocked if the employee is:
+
+- `not clocked in`
+- `on break`
+- `clocked out`
+
+This means:
+
+- branch shift must be open
+- employee must be actively clocked in
+
+Both conditions are required for checkout.
+
+## 4. Daily Sales Operation
+
+Once the branch is open and the shift is active:
+
+1. Cashier logs in to POS.
+2. Select the branch if needed.
+3. Scan items and build the cart.
+4. Take payment.
+5. Complete the sale and print the receipt.
+
+If the cashier goes on break:
+
+1. Leave POS.
+2. Go to kiosk.
+3. Enter PIN.
+4. Start break with the correct reason.
+
+When returning:
+
+1. Go to kiosk.
+2. Enter PIN.
+3. Clock back in.
+
+## 5. Closing the Day
+
+### Step 1: Cashier stops selling
+
+1. Finish the last customer.
+2. Make sure no incomplete sale remains in the cart.
+3. Cashier logs out of POS.
+
+### Step 2: Manager closes shift
+
+1. Manager logs in if needed.
+2. Open the shift closing flow in POS.
+3. Count the closing cash using the same denominations:
+   - `Rs 5000`
+   - `Rs 1000`
+   - `Rs 500`
+   - `Rs 100`
+   - `Rs 50`
+   - `Rs 20`
+   - `Rs 10`
+4. Close the shift.
+5. Record variance notes if required.
+
+Shift closing remains a manager-controlled action.
+
+### Step 3: Employees clock out
+
+After shift closure:
+
+1. Each employee opens the kiosk.
+2. Each employee enters their own PIN.
+3. Each employee performs `End of Day Clock Out`.
+
+This includes the cashier and any other employee who worked that day.
+
+## 6. Full Daily Flow Summary
+
+### Opening
+
+1. Start software
+2. Manager / Administrator logs in
+3. Open kiosk
+4. Each employee clocks in
+5. Open POS
+6. Select branch
+7. Open shift from POS by entering opening denominations
+8. Manager sells, or logs out and cashier logs in
+
+### During the day
+
+1. Cashier records sales in POS
+2. Staff use kiosk for breaks and returns from break
+3. POS checkout works only when shift is open and employee is clocked in
+
+### Closing
+
+1. Cashier finishes last sale and logs out
+2. Manager closes shift
+3. Each employee performs end-of-day clock out in kiosk
+
+## 7. Responsibility Split
+
+### Manager / Administrator
+
+- opens the day
+- selects branch
+- opens shift
+- supervises selling
+- closes shift
+
+### Cashier
+
+- clocks in
+- logs into POS
+- records sales
+- uses kiosk correctly for breaks
+- logs out after selling
+- performs end-of-day clock out
+
+## 8. Important Operating Note
+
+The correct business order is now:
+
+1. login
+2. kiosk clock-in
+3. branch selection
+4. shift opening
+5. selling
+6. cashier logout
+7. manager shift closing
+8. employee end-of-day clock out
+
+This is the official recommended operating procedure for this project.

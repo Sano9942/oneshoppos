@@ -64,6 +64,52 @@ module.exports = function registerSalesRoutes(app, deps) {
     if (typeof cb === "function") cb(null, { queued: 0, skipped: changes.length });
   }
 
+  function getActiveShiftForOutlet(outletId) {
+    return new Promise((resolve, reject) => {
+      db.get(
+        "SELECT * FROM cash_shifts WHERE outlet_id = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
+        [Number(outletId)],
+        (err, row) => {
+          if (err) return reject(err);
+          resolve(row || null);
+        },
+      );
+    });
+  }
+
+  function getEmployeeCheckoutStatus(employeeId, outletId) {
+    const today = new Date().toLocaleDateString("sv-SE");
+    return new Promise((resolve, reject) => {
+      db.get(
+        `SELECT * FROM attendance_sessions
+         WHERE employee_id = ? AND outlet_id = ? AND session_end IS NULL
+           AND date(session_start, 'localtime') = ?
+         ORDER BY session_start DESC
+         LIMIT 1`,
+        [Number(employeeId), Number(outletId), today],
+        (err, openSession) => {
+          if (err) return reject(err);
+          if (openSession) {
+            return resolve(
+              openSession.session_type === "work" ? "clocked_in" : "on_break",
+            );
+          }
+          db.get(
+            `SELECT COUNT(*) AS cnt
+             FROM attendance_sessions
+             WHERE employee_id = ? AND outlet_id = ?
+               AND date(session_start, 'localtime') = ?`,
+            [Number(employeeId), Number(outletId), today],
+            (countErr, countRow) => {
+              if (countErr) return reject(countErr);
+              resolve(Number(countRow?.cnt || 0) > 0 ? "clocked_out" : "not_clocked_in");
+            },
+          );
+        },
+      );
+    });
+  }
+
 // --- SALES HISTORY ROUTES ---
 
   // GET all sales (paginated, filterable)
@@ -259,7 +305,7 @@ module.exports = function registerSalesRoutes(app, deps) {
   );
 
   // Process a Sale (Cart Checkout)
-  app.post("/api/sales", (req, res) => {
+  app.post("/api/sales", async (req, res) => {
     const {
       cartItems,
       paymentMethod,
@@ -274,6 +320,9 @@ module.exports = function registerSalesRoutes(app, deps) {
       notes = null,
     } = req.body;
 
+    const authenticatedEmployeeId =
+      Number(req.headers["x-employee-id"] || employee_id || 0) || null;
+
     // Validation
     if (!cartItems || cartItems.length === 0) {
       return res.status(400).json({ error: "Cart is empty" });
@@ -282,6 +331,37 @@ module.exports = function registerSalesRoutes(app, deps) {
       return res
         .status(400)
         .json({ error: "Outlet ID is required for checkout" });
+    }
+    if (!authenticatedEmployeeId) {
+      return res.status(401).json({ error: "Login is required for checkout" });
+    }
+
+    try {
+      const activeShift = await getActiveShiftForOutlet(outlet_id);
+      if (!activeShift) {
+        return res.status(400).json({
+          error: "Cannot checkout because no open shift exists for this outlet",
+          code: "shift_not_open",
+        });
+      }
+
+      const attendanceStatus = await getEmployeeCheckoutStatus(
+        authenticatedEmployeeId,
+        outlet_id,
+      );
+      if (attendanceStatus !== "clocked_in") {
+        const message =
+          attendanceStatus === "on_break"
+            ? "Cannot checkout while on break. Clock back in first."
+            : "Cannot checkout because the employee is not clocked in for this outlet";
+        return res.status(400).json({
+          error: message,
+          code: "employee_not_clocked_in",
+          attendance_status: attendanceStatus,
+        });
+      }
+    } catch (validationErr) {
+      return res.status(500).json({ error: validationErr.message });
     }
 
     // 1. Calculate Expected Total (subtotal minus discount)
@@ -319,7 +399,7 @@ module.exports = function registerSalesRoutes(app, deps) {
           totalAmount,
           mainPaymentMethod,
           outlet_id,
-          employee_id || null,
+          authenticatedEmployeeId,
           customer_id || null,
           discountValue,
           discount_type,

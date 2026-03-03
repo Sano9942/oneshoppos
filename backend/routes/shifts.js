@@ -1,6 +1,37 @@
 module.exports = function (app, deps) {
   const { db, createNotification } = deps;
 
+  function storeShiftDenominations(shiftId, stage, denominations = [], cb) {
+    const rows = Array.isArray(denominations)
+      ? denominations.filter((d) => Number(d?.count || 0) > 0)
+      : [];
+    if (!rows.length) return cb(null);
+
+    const stmt = db.prepare(
+      "INSERT INTO shift_denominations (shift_id, stage, denomination, count) VALUES (?, ?, ?, ?)",
+    );
+    let failed = false;
+    let pending = rows.length;
+
+    rows.forEach((row) => {
+      stmt.run(
+        [Number(shiftId), stage, Number(row.denomination), Number(row.count)],
+        (err) => {
+          if (failed) return;
+          if (err) {
+            failed = true;
+            stmt.finalize(() => cb(err));
+            return;
+          }
+          pending -= 1;
+          if (pending === 0) {
+            stmt.finalize((finalizeErr) => cb(finalizeErr || null));
+          }
+        },
+      );
+    });
+  }
+
   // GET all shifts (newest first, with outlet + employee names)
   app.get("/api/shifts", (req, res) => {
     const { outlet_id } = req.query;
@@ -46,7 +77,7 @@ module.exports = function (app, deps) {
 
   // POST open a new shift
   app.post("/api/shifts/open", (req, res) => {
-    const { outlet_id, employee_id, opening_float } = req.body;
+    const { outlet_id, employee_id, opening_float, denominations } = req.body;
 
     if (!outlet_id || opening_float === undefined) {
       return res
@@ -71,18 +102,29 @@ module.exports = function (app, deps) {
           [outlet_id, employee_id || null, opening_float],
           function (err) {
             if (err) return res.status(500).json({ error: err.message });
-            if (typeof createNotification === "function") {
-              createNotification(
-                "shift_open",
-                "Shift Opened",
-                `Shift opened at outlet #${outlet_id}`,
-                "/cash-management",
-              );
-            }
-            res.json({
-              message: "Shift opened successfully",
-              shift_id: this.lastID,
-            });
+            const shiftId = this.lastID;
+            storeShiftDenominations(
+              shiftId,
+              "opening",
+              denominations,
+              (denomErr) => {
+                if (denomErr) {
+                  return res.status(500).json({ error: denomErr.message });
+                }
+                if (typeof createNotification === "function") {
+                  createNotification(
+                    "shift_open",
+                    "Shift Opened",
+                    `Shift opened at outlet #${outlet_id}`,
+                    "/cash-management",
+                  );
+                }
+                res.json({
+                  message: "Shift opened successfully",
+                  shift_id: shiftId,
+                });
+              },
+            );
           },
         );
       },
@@ -166,36 +208,35 @@ module.exports = function (app, deps) {
                   function (err) {
                     if (err)
                       return res.status(500).json({ error: err.message });
-                    // Store denomination breakdown if provided
-                    if (denominations && denominations.length > 0) {
-                      const stmt = db.prepare(
-                        "INSERT INTO shift_denominations (shift_id, denomination, count) VALUES (?,?,?)",
-                      );
-                      denominations.forEach((d) => {
-                        if (d.count > 0)
-                          stmt.run([id, d.denomination, d.count]);
-                      });
-                      stmt.finalize();
-                    }
-                    if (typeof createNotification === "function") {
-                      createNotification(
-                        "shift_close",
-                        "Shift Closed",
-                        `Shift #${id} closed. Variance: ${Number(variance || 0).toFixed(2)}`,
-                        "/cash-management",
-                      );
-                    }
-                    res.json({
-                      message: "Shift closed successfully",
-                      opening_float: shift.opening_float,
-                      cash_sales: cashSales,
-                      cash_refunds: cashRefunds,
-                      net_cash_sales: netCashSales,
-                      expected_cash: expectedCash,
-                      closing_cash,
-                      variance,
-                      variance_reason: variance_reason || null,
-                    });
+                    storeShiftDenominations(
+                      id,
+                      "closing",
+                      denominations,
+                      (denomErr) => {
+                        if (denomErr) {
+                          return res.status(500).json({ error: denomErr.message });
+                        }
+                        if (typeof createNotification === "function") {
+                          createNotification(
+                            "shift_close",
+                            "Shift Closed",
+                            `Shift #${id} closed. Variance: ${Number(variance || 0).toFixed(2)}`,
+                            "/cash-management",
+                          );
+                        }
+                        res.json({
+                          message: "Shift closed successfully",
+                          opening_float: shift.opening_float,
+                          cash_sales: cashSales,
+                          cash_refunds: cashRefunds,
+                          net_cash_sales: netCashSales,
+                          expected_cash: expectedCash,
+                          closing_cash,
+                          variance,
+                          variance_reason: variance_reason || null,
+                        });
+                      },
+                    );
                   },
                 );
               },
@@ -208,9 +249,18 @@ module.exports = function (app, deps) {
 
   // GET denomination breakdown for a shift
   app.get("/api/shifts/:id/denominations", (req, res) => {
+    const { stage } = req.query;
+    const params = [req.params.id];
+    let sql =
+      "SELECT stage, denomination, count, subtotal FROM shift_denominations WHERE shift_id = ?";
+    if (stage === "opening" || stage === "closing") {
+      sql += " AND stage = ?";
+      params.push(stage);
+    }
+    sql += " ORDER BY stage ASC, denomination DESC";
     db.all(
-      "SELECT denomination, count, subtotal FROM shift_denominations WHERE shift_id = ? ORDER BY denomination DESC",
-      [req.params.id],
+      sql,
+      params,
       (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ denominations: rows });
