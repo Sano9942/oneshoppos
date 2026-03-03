@@ -225,6 +225,7 @@ module.exports = function registerAllRoutes(app, deps) {
   });
 
   // --- ROUTES: TIER 4 ---
+  const createTier4Router = require("./tier4/index");
   app.use(
     createTier4Router({
       db,
