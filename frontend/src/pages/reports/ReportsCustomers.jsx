@@ -117,44 +117,88 @@ export function CustomerDetailsTab({ filters }) {
     load();
   }, [load]);
 
+  const totalCustomers = rows.length;
+  const totalRevenue = rows.reduce(
+    (sum, row) => sum + Number(row.total_spent || 0),
+    0,
+  );
+  const repeatCustomers = rows.filter((row) => Number(row.order_count || 0) > 1).length;
+
   return (
-    <CardShell
-      title="Customer Profile Master"
-      subtitle="Detailed contact and loyalty data for registered shoppers"
-      action={
-        <ExportButton
-          onClick={() =>
-            exportCSV("customers.csv", ["Name", "Mobile", "Spent"], rows)
-          }
-        />
-      }
-    >
-      <TableShell
-        cols={["Customer", "Contact", "LTV (Spend)"]}
-        loading={loading}
-        empty={!rows.length}
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Customers in View
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{totalCustomers}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Lifetime Spend
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Repeat Buyers
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{repeatCustomers}</p>
+        </div>
+      </div>
+
+      <CardShell
+        title="Customer Profile Master"
+        subtitle="Detailed contact, tenure, and spend profile for registered shoppers"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "customers.csv",
+                [
+                  { header: "ID", key: "id" },
+                  { header: "Name", key: "name" },
+                  { header: "Mobile", key: "mobile" },
+                  { header: "Email", key: "email" },
+                  { header: "Orders", key: "order_count" },
+                  { header: "Total Spent", key: "total_spent" },
+                  { header: "Created At", key: "created_at" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
-        {rows.map((r, i) => (
-          <tr key={i} className="hover:bg-slate-50 text-sm">
-            <td className="p-4">
-              <div className="font-bold text-slate-800">{r.name}</div>
-              <div className="text-[10px] text-slate-400 font-medium">
-                ID: {r.id}
-              </div>
-            </td>
-            <td className="p-4">
-              <div className="text-slate-600 font-medium">
-                {r.mobile || "No Phone"}
-              </div>
-              <div className="text-[10px] text-slate-400">{r.email || ""}</div>
-            </td>
-            <td className="p-4 font-bold text-indigo-600">
-              {fmt(r.total_spent)}
-            </td>
-          </tr>
-        ))}
-      </TableShell>
-    </CardShell>
+        <TableShell
+          cols={["Customer", "Contact", "Orders", "Created", "LTV (Spend)"]}
+          loading={loading}
+          empty={!rows.length}
+        >
+          {rows.map((r, i) => (
+            <tr key={`${r.id}-${i}`} className="hover:bg-slate-50 text-sm">
+              <td className="px-4 py-3">
+                <div className="font-bold text-slate-800">{r.name}</div>
+                <div className="text-[10px] text-slate-400 font-medium">ID: {r.id}</div>
+              </td>
+              <td className="px-4 py-3">
+                <div className="text-slate-600 font-medium">{r.mobile || "No Phone"}</div>
+                <div className="text-[10px] text-slate-400">{r.email || "-"}</div>
+              </td>
+              <td className="px-4 py-3 text-sm font-semibold text-slate-700">
+                {r.order_count}
+              </td>
+              <td className="px-4 py-3 text-sm text-slate-500">
+                {fmtDate(r.created_at)}
+              </td>
+              <td className="px-4 py-3 font-bold text-indigo-600">
+                {fmt(r.total_spent)}
+              </td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
   );
 }
 
@@ -185,38 +229,93 @@ export function CustomerWiseTab({ filters }) {
     load();
   }, [load]);
 
+  const totalCustomers = rows.length;
+  const totalOrders = rows.reduce(
+    (sum, row) => sum + Number(row.order_count || 0),
+    0,
+  );
+  const totalRevenue = rows.reduce(
+    (sum, row) => sum + Number(row.total_amount || 0),
+    0,
+  );
+  const repeatCustomers = rows.filter((row) => Number(row.order_count || 0) > 1).length;
+
   return (
-    <CardShell
-      title="High Value Shoppers"
-      subtitle="Ranking customers by purchase frequency and total contribution"
-      action={
-        <ExportButton
-          onClick={() =>
-            exportCSV("customer_ranking.csv", ["Name", "Orders", "Spent"], rows)
-          }
-        />
-      }
-    >
-      <TableShell
-        cols={["Customer", "Orders", "Total Revenue"]}
-        loading={loading}
-        empty={!rows.length}
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Ranked Customers
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{totalCustomers}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Order Count
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{totalOrders}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Total Revenue
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Repeat Buyers
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{repeatCustomers}</p>
+        </div>
+      </div>
+
+      <CardShell
+        title="High Value Shoppers"
+        subtitle="Ranking customers by purchase frequency and total contribution"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "customer_ranking.csv",
+                [
+                  { header: "Customer", key: "customer" },
+                  { header: "Orders", key: "order_count" },
+                  { header: "Revenue", key: "total_amount" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
-        {rows.map((r, i) => (
-          <tr key={i} className="hover:bg-slate-50">
-            <td className="p-4 font-bold text-slate-800 text-sm">{r.name}</td>
-            <td className="p-4">
-              <span className="bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full text-xs font-bold">
-                {r.order_count} Visits
-              </span>
-            </td>
-            <td className="p-4 font-bold text-slate-900">
-              {fmt(r.total_spent)}
-            </td>
-          </tr>
-        ))}
-      </TableShell>
-    </CardShell>
+        <TableShell
+          cols={["Customer", "Visits", "Average Basket", "Total Revenue"]}
+          loading={loading}
+          empty={!rows.length}
+        >
+          {rows.map((r, i) => (
+            <tr key={`${r.customer}-${i}`} className="hover:bg-slate-50">
+              <td className="px-4 py-3 font-bold text-slate-800 text-sm">{r.customer}</td>
+              <td className="px-4 py-3">
+                <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">
+                  {r.order_count} Visits
+                </span>
+              </td>
+              <td className="px-4 py-3 text-sm font-semibold text-slate-700">
+                {fmt(
+                  Number(r.order_count || 0) > 0
+                    ? Number(r.total_amount || 0) / Number(r.order_count || 1)
+                    : 0,
+                )}
+              </td>
+              <td className="px-4 py-3 font-bold text-slate-900">
+                {fmt(r.total_amount)}
+              </td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
   );
 }
 
@@ -257,6 +356,16 @@ export function CustomerRFMTab({ filters }) {
     return map;
   }, [scored]);
 
+  const totalCustomers = scored.length;
+  const championCount = segmentCounts.Champions || 0;
+  const atRiskCount =
+    (segmentCounts["At Risk"] || 0) + (segmentCounts["Can't Lose Them"] || 0);
+  const avgSpend =
+    scored.length > 0
+      ? scored.reduce((sum, row) => sum + Number(row.total_spent || 0), 0) /
+        scored.length
+      : 0;
+
   const ScoreBox = ({ value }) => (
     <span
       className={`inline-flex items-center justify-center w-6 h-6 rounded text-xs font-bold ${value >= 4 ? "bg-emerald-100 text-emerald-800" : value === 3 ? "bg-yellow-100 text-yellow-800" : "bg-rose-100 text-rose-800"}`}
@@ -267,6 +376,33 @@ export function CustomerRFMTab({ filters }) {
 
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Customers Scored
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{totalCustomers}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Champions
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{championCount}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            At Risk
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{atRiskCount}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Avg Spend
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(avgSpend)}</p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
         {Object.entries(RFM_SEGMENTS).map(([seg, { color }]) => (
           <button
@@ -303,7 +439,14 @@ export function CustomerRFMTab({ filters }) {
               onClick={() =>
                 exportCSV(
                   "rfm_data.csv",
-                  ["Name", "Segment", "R", "F"],
+                  [
+                    { header: "Name", key: "name" },
+                    { header: "Segment", key: "segment" },
+                    { header: "R Score", key: "r_score" },
+                    { header: "F Score", key: "f_score" },
+                    { header: "Orders", key: "order_count" },
+                    { header: "Total Spent", key: "total_spent" },
+                  ],
                   filtered,
                 )
               }
@@ -312,7 +455,7 @@ export function CustomerRFMTab({ filters }) {
         }
       >
         <TableShell
-          cols={["Customer", "Last Visit", "Scores (R/F)", "Segment"]}
+          cols={["Customer", "Last Visit", "Scores (R/F)", "Orders / Spend", "Segment"]}
           loading={loading}
           empty={!filtered.length}
         >
@@ -328,6 +471,10 @@ export function CustomerRFMTab({ filters }) {
               <td className="p-4 space-x-1">
                 <ScoreBox value={c.r_score} />
                 <ScoreBox value={c.f_score} />
+              </td>
+              <td className="p-4">
+                <div className="font-semibold text-slate-700">{c.order_count} orders</div>
+                <div className="text-[11px] text-slate-400">{fmt(c.total_spent)}</div>
               </td>
               <td className="p-4">
                 <span
@@ -359,7 +506,7 @@ export function CustomerRetentionTab({ filters }) {
       });
       const res = await fetch(`${API}/api/reports/customer-retention?${p}`);
       const d = await res.json();
-      setRows(d.retention || []);
+      setRows(d.timeline || []);
     } catch {
       setRows([]);
     } finally {
@@ -371,41 +518,70 @@ export function CustomerRetentionTab({ filters }) {
     load();
   }, [load]);
 
+  const summary = rows.reduce(
+    (acc, row) => {
+      acc[row.customer_type] = {
+        revenue: (acc[row.customer_type]?.revenue || 0) + Number(row.revenue || 0),
+        orders: (acc[row.customer_type]?.orders || 0) + Number(row.orders || 0),
+      };
+      return acc;
+    },
+    {},
+  );
+
   return (
-    <CardShell
-      title="Retention Waterfall"
-      subtitle="Tracking shift from first-time shoppers to repeat advocates"
-      action={
-        <ExportButton
-          onClick={() =>
-            exportCSV("retention.csv", ["Date", "New", "Returning"], rows)
-          }
-        />
-      }
-    >
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Walk-in Revenue</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(summary.walk_in?.revenue || 0)}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">New Customer Revenue</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(summary.new_customer?.revenue || 0)}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Returning Revenue</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(summary.returning_customer?.revenue || 0)}</p>
+        </div>
+      </div>
+
+      <CardShell
+        title="Retention Waterfall"
+        subtitle="Tracking shift from first-time shoppers to repeat advocates"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "retention.csv",
+                [
+                  { header: "Date", key: "sale_date" },
+                  { header: "Customer Type", key: "customer_type" },
+                  { header: "Revenue", key: "revenue" },
+                  { header: "Orders", key: "orders" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
+      >
       <TableShell
-        cols={["Date", "Walk-in", "New Captures", "Returning Advocates"]}
+        cols={["Date", "Customer Type", "Revenue", "Orders"]}
         loading={loading}
         empty={!rows.length}
       >
         {rows.map((r, i) => (
           <tr key={i} className="hover:bg-slate-50 text-sm font-medium">
-            <td className="p-4 text-slate-500">{r.sale_date}</td>
-            <td className="p-4 text-slate-400">{fmt(r.walkin_sales)}</td>
-            <td className="p-4 text-emerald-600">
-              {fmt(r.new_customer_sales)}{" "}
-              <span className="text-[10px]">({r.new_customers_count})</span>
-            </td>
-            <td className="p-4 text-blue-600 font-bold">
-              {fmt(r.returning_customer_sales)}{" "}
-              <span className="text-[10px]">
-                ({r.returning_customers_count})
-              </span>
-            </td>
+            <td className="p-4 text-slate-500">{fmtDate(r.sale_date)}</td>
+            <td className="p-4 text-slate-700">{r.customer_type.replaceAll("_", " ")}</td>
+            <td className="p-4 font-semibold text-slate-800">{fmt(r.revenue)}</td>
+            <td className="p-4 text-blue-600 font-bold">{r.orders}</td>
           </tr>
         ))}
       </TableShell>
-    </CardShell>
+      </CardShell>
+    </div>
   );
 }
 
@@ -436,18 +612,56 @@ export function CustomerCaptureRateTab({ filters }) {
     load();
   }, [load]);
 
+  const totalProfiled = data.reduce(
+    (sum, row) => sum + Number(row.profiled_transactions || 0),
+    0,
+  );
+  const totalTransactions = data.reduce(
+    (sum, row) => sum + Number(row.total_transactions || 0),
+    0,
+  );
+  const avgCapture =
+    totalTransactions > 0 ? ((totalProfiled / totalTransactions) * 100).toFixed(1) : "0.0";
+
   return (
-    <CardShell
-      title="Profile Capture Analysis"
-      subtitle="Efficiency of front-line staff in registering customers"
-      action={
-        <ExportButton
-          onClick={() =>
-            exportCSV("capture_rate.csv", ["Staff", "Capture %"], data)
-          }
-        />
-      }
-    >
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Profiled Transactions</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{totalProfiled}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Transactions</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{totalTransactions}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Store Capture Rate</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{avgCapture}%</p>
+        </div>
+      </div>
+
+      <CardShell
+        title="Profile Capture Analysis"
+        subtitle="Efficiency of front-line staff in registering customers"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "capture_rate.csv",
+                [
+                  { header: "Staff", key: "employee_name" },
+                  { header: "Transactions", key: "total_transactions" },
+                  { header: "Profiled", key: "profiled_transactions" },
+                  { header: "Walk-in", key: "walk_in_transactions" },
+                  { header: "Capture %", key: "capture_rate_pct" },
+                  { header: "Profiled Revenue", key: "profiled_revenue" },
+                ],
+                data,
+              )
+            }
+          />
+        }
+      >
       <TableShell
         cols={["Staff Member", "Transactions", "Capture %", "Revenue Profile"]}
         loading={loading}
@@ -457,7 +671,7 @@ export function CustomerCaptureRateTab({ filters }) {
           <tr key={i} className="hover:bg-slate-50 text-sm">
             <td className="p-4 font-bold text-slate-800">{r.employee_name}</td>
             <td className="p-4 text-slate-500">
-              {r.named_transactions} Named / {r.walkin_transactions} Walk-in
+              {r.profiled_transactions} Profiled / {r.walk_in_transactions} Walk-in
             </td>
             <td className="p-4">
               <div className="font-bold text-indigo-600">
@@ -471,11 +685,12 @@ export function CustomerCaptureRateTab({ filters }) {
               </div>
             </td>
             <td className="p-4 font-bold text-emerald-600">
-              {fmt(r.named_revenue)}
+              {fmt(r.profiled_revenue)}
             </td>
           </tr>
         ))}
       </TableShell>
-    </CardShell>
+      </CardShell>
+    </div>
   );
 }

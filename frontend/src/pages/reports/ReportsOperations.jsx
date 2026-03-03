@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { TrendingDown, Recycle, ArrowLeftRight, Building2 } from "lucide-react";
+import { Building2 } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   fmt,
-  fmtDate,
   fmtDateTime,
   exportCSV,
   ExportButton,
@@ -12,7 +11,6 @@ import {
   MetricCard,
 } from "./ReportShared";
 
-// --- Tab: Inventory Loss ------------------------------------------------------
 export function InventoryLossTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,45 +37,72 @@ export function InventoryLossTab({ filters }) {
     load();
   }, [load]);
 
+  const totalQty = rows.reduce(
+    (sum, row) => sum + Math.abs(Number(row.quantity_change || 0)),
+    0,
+  );
+
   return (
-    <CardShell
-      title="Inventory Loss Analysis"
-      subtitle="Discrepancies identified during stock takes and audits"
-      action={
-        <ExportButton
-          onClick={() =>
-            exportCSV(
-              "inventory_loss.csv",
-              ["Date", "Product", "Qty Lost", "Value"],
-              rows,
-            )
-          }
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <MetricCard title="Loss Rows" value={rows.length} compPct={0} compLabel="Events" />
+        <MetricCard title="Qty Lost" value={totalQty} compPct={0} compLabel="Units" />
+        <MetricCard
+          title="Reasons Seen"
+          value={new Set(rows.map((row) => row.reason).filter(Boolean)).size}
+          compPct={0}
+          compLabel="Reasons"
         />
-      }
-    >
-      <TableShell
-        cols={["Date", "Product", "Quantity", "Loss Value"]}
-        loading={loading}
-        empty={!rows.length}
+      </div>
+
+      <CardShell
+        title="Inventory Loss Analysis"
+        subtitle="Negative stock adjustments identified during stock takes and audits"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "inventory_loss.csv",
+                [
+                  { header: "Timestamp", key: "timestamp" },
+                  { header: "Product", key: "product_name" },
+                  { header: "Barcode", key: "barcode" },
+                  { header: "Outlet", key: "outlet_name" },
+                  { header: "Employee", key: "employee_name" },
+                  { header: "Quantity Change", key: "quantity_change" },
+                  { header: "Reason", key: "reason" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
-        {rows.map((r, i) => (
-          <tr key={i} className="hover:bg-slate-50">
-            <td className="p-4 text-sm text-slate-500">{fmtDate(r.date)}</td>
-            <td className="p-4 font-bold text-slate-800 text-sm">
-              {r.product_name}
-            </td>
-            <td className="p-4 text-rose-600 font-bold">-{r.quantity}</td>
-            <td className="p-4 font-bold text-slate-900">
-              {fmt(r.loss_value)}
-            </td>
-          </tr>
-        ))}
-      </TableShell>
-    </CardShell>
+        <TableShell
+          cols={["Date", "Product", "Outlet", "Qty Lost", "Reason"]}
+          loading={loading}
+          empty={!rows.length}
+        >
+          {rows.map((r, i) => (
+            <tr key={i} className="hover:bg-slate-50">
+              <td className="p-4 text-sm text-slate-500">{fmtDateTime(r.timestamp)}</td>
+              <td className="p-4 text-sm">
+                <div className="font-bold text-slate-800">{r.product_name}</div>
+                <div className="font-mono text-[11px] text-slate-400">{r.barcode}</div>
+              </td>
+              <td className="p-4 text-sm text-slate-600">{r.outlet_name}</td>
+              <td className="p-4 text-rose-600 font-bold">
+                {Math.abs(Number(r.quantity_change || 0))}
+              </td>
+              <td className="p-4 text-sm text-slate-700">{r.reason || "-"}</td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
   );
 }
 
-// --- Tab: Wastage -------------------------------------------------------------
 export function WastageTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -104,45 +129,73 @@ export function WastageTab({ filters }) {
     load();
   }, [load]);
 
+  const totalQty = rows.reduce(
+    (sum, row) => sum + Math.abs(Number(row.quantity_change || 0)),
+    0,
+  );
+
   return (
-    <CardShell
-      title="Wastage & Expiry Report"
-      subtitle="Tracking products removed from stock due to damage or expiry"
-      action={
-        <ExportButton
-          onClick={() =>
-            exportCSV(
-              "wastage.csv",
-              ["Date", "Product", "Reason", "Value"],
-              rows,
-            )
-          }
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <MetricCard title="Wastage Rows" value={rows.length} compPct={0} compLabel="Events" />
+        <MetricCard title="Units Removed" value={totalQty} compPct={0} compLabel="Units" />
+        <MetricCard
+          title="Expired Rows"
+          value={rows.filter((row) => row.reason === "Expired").length}
+          compPct={0}
+          compLabel="Subset"
         />
-      }
-    >
-      <TableShell
-        cols={["Date", "Product", "Reason", "Value"]}
-        loading={loading}
-        empty={!rows.length}
+      </div>
+
+      <CardShell
+        title="Wastage & Expiry Report"
+        subtitle="Products removed from stock due to damage or expiry"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "wastage.csv",
+                [
+                  { header: "Timestamp", key: "timestamp" },
+                  { header: "Product", key: "product_name" },
+                  { header: "Barcode", key: "barcode" },
+                  { header: "Outlet", key: "outlet_name" },
+                  { header: "Employee", key: "employee_name" },
+                  { header: "Quantity Change", key: "quantity_change" },
+                  { header: "Reason", key: "reason" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
-        {rows.map((r, i) => (
-          <tr key={i} className="hover:bg-slate-50 text-sm">
-            <td className="p-4 text-slate-500">{fmtDate(r.date)}</td>
-            <td className="p-4 font-bold text-slate-800">{r.product_name}</td>
-            <td className="p-4">
-              <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] font-bold italic uppercase tracking-wider">
-                {r.reason || "Damage"}
-              </span>
-            </td>
-            <td className="p-4 font-bold text-rose-600">{fmt(r.value)}</td>
-          </tr>
-        ))}
-      </TableShell>
-    </CardShell>
+        <TableShell
+          cols={["Date", "Product", "Outlet", "Reason", "Qty Removed"]}
+          loading={loading}
+          empty={!rows.length}
+        >
+          {rows.map((r, i) => (
+            <tr key={i} className="hover:bg-slate-50 text-sm">
+              <td className="p-4 text-slate-500">{fmtDateTime(r.timestamp)}</td>
+              <td className="p-4 font-bold text-slate-800">{r.product_name}</td>
+              <td className="p-4 text-slate-600">{r.outlet_name}</td>
+              <td className="p-4">
+                <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] font-bold italic uppercase tracking-wider">
+                  {r.reason || "Damage"}
+                </span>
+              </td>
+              <td className="p-4 font-bold text-rose-600">
+                {Math.abs(Number(r.quantity_change || 0))}
+              </td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
   );
 }
 
-// --- Tab: Product Movement ----------------------------------------------------
 export function ProductMovementTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -169,44 +222,69 @@ export function ProductMovementTab({ filters }) {
     load();
   }, [load]);
 
+  const totalQty = rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+
   return (
-    <CardShell
-      title="Inter-Outlet Transfers"
-      subtitle="Inventory lifecycle across physical locations"
-      action={
-        <ExportButton
-          onClick={() =>
-            exportCSV(
-              "movement.csv",
-              ["Date", "Product", "From", "To", "Qty"],
-              rows,
-            )
-          }
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <MetricCard title="Transfers" value={rows.length} compPct={0} compLabel="Lines" />
+        <MetricCard title="Units Moved" value={totalQty} compPct={0} compLabel="Units" />
+        <MetricCard
+          title="Routes Used"
+          value={new Set(rows.map((row) => `${row.from_outlet_name}->${row.to_outlet_name}`)).size}
+          compPct={0}
+          compLabel="Pairs"
         />
-      }
-    >
-      <TableShell
-        cols={["Date", "Product", "Transfer", "Qty"]}
-        loading={loading}
-        empty={!rows.length}
+      </div>
+
+      <CardShell
+        title="Inter-Outlet Transfers"
+        subtitle="Inventory lifecycle across physical locations"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "movement.csv",
+                [
+                  { header: "Timestamp", key: "timestamp" },
+                  { header: "Product", key: "product_name" },
+                  { header: "Barcode", key: "barcode" },
+                  { header: "From Outlet", key: "from_outlet_name" },
+                  { header: "To Outlet", key: "to_outlet_name" },
+                  { header: "Quantity", key: "quantity" },
+                  { header: "Employee", key: "employee_name" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
-        {rows.map((r, i) => (
-          <tr key={i} className="hover:bg-slate-50 text-sm">
-            <td className="p-4 text-slate-500">{fmtDateTime(r.timestamp)}</td>
-            <td className="p-4 font-bold text-slate-800">{r.product_name}</td>
-            <td className="p-4 font-medium text-slate-600">
-              {r.from_outlet_name} <span className="text-blue-500 mx-1">→</span>{" "}
-              {r.to_outlet_name}
-            </td>
-            <td className="p-4 font-bold text-blue-700">{r.quantity}</td>
-          </tr>
-        ))}
-      </TableShell>
-    </CardShell>
+        <TableShell
+          cols={["Date", "Product", "Transfer", "Qty", "By"]}
+          loading={loading}
+          empty={!rows.length}
+        >
+          {rows.map((r, i) => (
+            <tr key={i} className="hover:bg-slate-50 text-sm">
+              <td className="p-4 text-slate-500">{fmtDateTime(r.timestamp)}</td>
+              <td className="p-4">
+                <div className="font-bold text-slate-800">{r.product_name}</div>
+                <div className="font-mono text-[11px] text-slate-400">{r.barcode}</div>
+              </td>
+              <td className="p-4 font-medium text-slate-600">
+                {r.from_outlet_name} <span className="text-blue-500 mx-1">-&gt;</span> {r.to_outlet_name}
+              </td>
+              <td className="p-4 font-bold text-blue-700">{r.quantity}</td>
+              <td className="p-4 text-sm text-slate-500">{r.employee_name}</td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
   );
 }
 
-// --- Tab: STR Report ----------------------------------------------------------
 export function STRReportTab({ filters }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -221,7 +299,7 @@ export function STRReportTab({ filters }) {
       });
       const res = await fetch(`${API}/api/reports/str-report?${p}`);
       const d = await res.json();
-      setRows(d.rows || d || []);
+      setRows(d.items || d.rows || d || []);
     } catch {
       setRows([]);
     } finally {
@@ -233,41 +311,65 @@ export function STRReportTab({ filters }) {
     load();
   }, [load]);
 
+  const totalQty = rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+
   return (
-    <CardShell
-      title="Stock Transfer Report (STR)"
-      subtitle="Formal register of inventory movement"
-      action={
-        <ExportButton
-          onClick={() =>
-            exportCSV("str.csv", ["Date", "From", "To", "Items"], rows)
-          }
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <MetricCard title="STR Rows" value={rows.length} compPct={0} compLabel="Transfers" />
+        <MetricCard title="Units in STR" value={totalQty} compPct={0} compLabel="Units" />
+        <MetricCard
+          title="Routes Used"
+          value={new Set(rows.map((row) => `${row.from_outlet_name}->${row.to_outlet_name}`)).size}
+          compPct={0}
+          compLabel="Pairs"
         />
-      }
-    >
-      <TableShell
-        cols={["Reference", "Date", "Domain", "Items"]}
-        loading={loading}
-        empty={!rows.length}
+      </div>
+
+      <CardShell
+        title="Stock Transfer Report (STR)"
+        subtitle="Formal register of grouped stock transfer movements"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "str.csv",
+                [
+                  { header: "Reference ID", key: "reference_id" },
+                  { header: "Timestamp", key: "timestamp" },
+                  { header: "From Outlet", key: "from_outlet_name" },
+                  { header: "To Outlet", key: "to_outlet_name" },
+                  { header: "Quantity", key: "quantity" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
-        {rows.map((r, i) => (
-          <tr key={i} className="hover:bg-slate-50 text-sm">
-            <td className="p-4 font-mono font-bold text-indigo-600 uppercase">
-              STR-{String(i + 1).padStart(4, "0")}
-            </td>
-            <td className="p-4 text-slate-500">{fmtDateTime(r.timestamp)}</td>
-            <td className="p-4 font-medium text-slate-600">
-              {r.from_outlet_name} → {r.to_outlet_name}
-            </td>
-            <td className="p-4 font-bold text-slate-900">{r.quantity}</td>
-          </tr>
-        ))}
-      </TableShell>
-    </CardShell>
+        <TableShell
+          cols={["Reference", "Date", "Route", "Items"]}
+          loading={loading}
+          empty={!rows.length}
+        >
+          {rows.map((r, i) => (
+            <tr key={i} className="hover:bg-slate-50 text-sm">
+              <td className="p-4 font-mono font-bold text-indigo-600 uppercase">
+                STR-{String(r.reference_id || i + 1).padStart(4, "0")}
+              </td>
+              <td className="p-4 text-slate-500">{fmtDateTime(r.timestamp)}</td>
+              <td className="p-4 font-medium text-slate-600">
+                {r.from_outlet_name} -&gt; {r.to_outlet_name}
+              </td>
+              <td className="p-4 font-bold text-slate-900">{r.quantity}</td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
   );
 }
 
-// --- Tab: Outlet Comparison ---------------------------------------------------
 export function OutletComparisonTab({ filters }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -293,19 +395,29 @@ export function OutletComparisonTab({ filters }) {
     load();
   }, [load]);
 
-  if (loading)
+  if (loading) {
     return (
       <div className="p-8 text-center text-slate-400 font-medium">
         Analyzing outlet performance...
       </div>
     );
+  }
+
+  const totalRevenue = data.reduce((sum, row) => sum + Number(row.revenue || 0), 0);
+  const totalOrders = data.reduce((sum, row) => sum + Number(row.order_count || 0), 0);
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <MetricCard title="Outlets Compared" value={data.length} compPct={0} compLabel="Outlets" />
+        <MetricCard title="Revenue" value={fmt(totalRevenue)} compPct={0} compLabel="Range" />
+        <MetricCard title="Orders" value={totalOrders} compPct={0} compLabel="Range" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {data.map((o) => (
           <div
-            key={o.outlet_id}
+            key={o.id}
             className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow"
           >
             <div className="flex items-center justify-between mb-4">
@@ -314,16 +426,12 @@ export function OutletComparisonTab({ filters }) {
                   <Building2 size={20} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900">{o.outlet_name}</h3>
-                  <p className="text-xs text-slate-500">
-                    {o.total_orders} Transactions
-                  </p>
+                  <h3 className="font-bold text-slate-900">{o.name}</h3>
+                  <p className="text-xs text-slate-500">{o.order_count} Transactions</p>
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-xl font-bold text-slate-900">
-                  {fmt(o.total_revenue)}
-                </div>
+                <div className="text-xl font-bold text-slate-900">{fmt(o.revenue)}</div>
                 <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">
                   Revenue
                 </div>
@@ -335,17 +443,13 @@ export function OutletComparisonTab({ filters }) {
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">
                   Avg Ticket
                 </p>
-                <p className="font-bold text-slate-800">
-                  {fmt(o.total_revenue / o.total_orders || 0)}
-                </p>
+                <p className="font-bold text-slate-800">{fmt(o.avg_basket || 0)}</p>
               </div>
               <div className="p-3 bg-slate-50 rounded-xl">
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">
-                  Item Velocity
+                  Unique Customers
                 </p>
-                <p className="font-bold text-slate-800">
-                  {(o.total_items / o.total_orders || 0).toFixed(1)} / tx
-                </p>
+                <p className="font-bold text-slate-800">{o.unique_customers}</p>
               </div>
             </div>
           </div>

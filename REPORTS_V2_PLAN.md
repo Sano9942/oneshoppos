@@ -830,7 +830,7 @@ Deliverable:
 
 - control and exception reporting layer
 
-### Phase 8: Governance and Scheduling Integration
+### Phase 8: Governance and Scheduling Integration [DONE]
 
 - move saved views / schedules / definitions / delivery log into the new structure
 
@@ -898,6 +898,24 @@ Reports V2 is considered complete when:
 9. Core user flows are covered by Playwright smoke tests
 10. The page looks modern, clear, and usable on both desktop and smaller screens
 11. Vertical-specific reporting remains optional and does not distort the universal reporting core
+
+---
+
+## Current Remaining Work
+
+As of March 4, 2026, the remaining Reports V2 work is Phase 9 only.
+
+### Still Open
+
+- backend accuracy tests for hierarchy-aware filters, merchandising aggregates, promotion math, and Shopify exception cases
+- Playwright smoke coverage for main report navigation, exports, and governance flows
+- UI polish on dense report tables and small-screen behavior
+- mobile cleanup for the tab strip, filter bar, and wide report content areas
+
+### Recently Completed
+
+- governance and scheduling tools are now part of the main reports workspace instead of living only in the legacy power-up block
+- saved views, schedules, definition versions, and delivery log are now under the `Governance / Audit` domain
 
 ---
 

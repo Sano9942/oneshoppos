@@ -103,30 +103,7 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
   const [exceptions, setExceptions] = useState([]);
   const [forecastRows, setForecastRows] = useState([]);
   const [replenishmentSmart, setReplenishmentSmart] = useState([]);
-  const [schedules, setSchedules] = useState([]);
-  const [savedViews, setSavedViews] = useState([]);
-  const [definitions, setDefinitions] = useState([]);
-  const [deliveryLog, setDeliveryLog] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [scheduleDraft, setScheduleDraft] = useState({
-    name: "",
-    report_key: "profit-by-product",
-    frequency: "daily",
-    run_hour: 6,
-    run_minute: 0,
-    recipient: "",
-  });
-  const [viewDraft, setViewDraft] = useState({
-    report_key: "overview",
-    name: "",
-    scope: "personal",
-  });
-  const [defDraft, setDefDraft] = useState({
-    report_key: "forecast-demand",
-    version: "",
-    query_signature: "",
-    notes: "",
-  });
 
   const load = async () => {
     setLoading(true);
@@ -190,28 +167,6 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
           ).then((r) => r.json()),
         );
       }
-      if (flags.reports_scheduled_exports) {
-        calls.push(
-          fetch(`${API}/api/reports/schedules`, {
-            headers: authHeaders(),
-          }).then((r) => r.json()),
-        );
-        calls.push(
-          fetch(`${API}/api/reports/saved-views?report_key=overview`, {
-            headers: authHeaders(),
-          }).then((r) => r.json()),
-        );
-        calls.push(
-          fetch(`${API}/api/reports/governance/definitions`, {
-            headers: authHeaders(),
-          }).then((r) => r.json()),
-        );
-        calls.push(
-          fetch(`${API}/api/reports/delivery-log`, {
-            headers: authHeaders(),
-          }).then((r) => r.json()),
-        );
-      }
 
       const results = await Promise.all(calls);
       let idx = 0;
@@ -231,71 +186,11 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
       if (flags.reports_exceptions) {
         setExceptions(results[idx++].rows || []);
       }
-      if (flags.reports_scheduled_exports) {
-        setSchedules(results[idx++].schedules || []);
-        setSavedViews(results[idx++].views || []);
-        setDefinitions(results[idx++].definitions || []);
-        setDeliveryLog(results[idx++].log || []);
-      }
     } catch (e) {
       setError(e.message || "Failed to load enhanced reports.");
     } finally {
       setLoading(false);
     }
-  };
-
-  const createSchedule = async () => {
-    const res = await fetch(`${API}/api/reports/schedules`, {
-      method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({
-        ...scheduleDraft,
-        run_hour: Number(scheduleDraft.run_hour || 6),
-        run_minute: Number(scheduleDraft.run_minute || 0),
-        filters,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Failed to create schedule");
-    setScheduleDraft((p) => ({ ...p, name: "", recipient: "" }));
-    await load();
-  };
-
-  const runScheduleNow = async (id) => {
-    const res = await fetch(`${API}/api/reports/schedules/${id}/run-now`, {
-      method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Failed to run schedule");
-    await load();
-  };
-
-  const createSavedView = async () => {
-    const res = await fetch(`${API}/api/reports/saved-views`, {
-      method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({
-        ...viewDraft,
-        filters,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Failed to save view");
-    setViewDraft((p) => ({ ...p, name: "" }));
-    await load();
-  };
-
-  const createDefinition = async () => {
-    const res = await fetch(`${API}/api/reports/governance/definitions`, {
-      method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(defDraft),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Failed to save definition");
-    setDefDraft((p) => ({ ...p, version: "", query_signature: "", notes: "" }));
-    await load();
   };
 
   useEffect(() => {
@@ -311,8 +206,9 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
       !flags.reports_profit_layer &&
       !flags.reports_inventory_health_plus &&
       !flags.reports_exceptions
-    )
+    ) {
       return;
+    }
     load();
   }, [query, exceptionType, isExpanded]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -334,11 +230,11 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
             Reports Power-Up
           </h2>
           <p className="text-xs text-slate-500">
-            Feature-flagged profitability and inventory control analytics.
+            Feature-gated profitability, inventory control, and exception analytics.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {isExpanded && (
+          {isExpanded ? (
             <button
               onClick={load}
               className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
@@ -346,9 +242,9 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
               <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
               Refresh
             </button>
-          )}
+          ) : null}
           <button
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={() => setIsExpanded((p) => !p)}
             className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
           >
             {isExpanded ? (
@@ -366,7 +262,7 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
         </div>
       </div>
 
-      {isExpanded && (
+      {isExpanded ? (
         <>
           <Filters
             filters={filters}
@@ -384,9 +280,7 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
           {flags.reports_profit_layer ? (
             <div className="mb-3 rounded-xl border border-slate-200 bg-white p-3">
               <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-800">
-                  Profit Layer
-                </h3>
+                <h3 className="text-sm font-semibold text-slate-800">Profit Layer</h3>
                 <button
                   onClick={() =>
                     toCsv(
@@ -423,9 +317,7 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
                 </div>
                 <div className="rounded-lg bg-slate-50 p-2">
                   Net Margin:{" "}
-                  <b>
-                    {Number(profitSummary?.net_margin_pct || 0).toFixed(2)}%
-                  </b>
+                  <b>{Number(profitSummary?.net_margin_pct || 0).toFixed(2)}%</b>
                 </div>
               </div>
               <div className="mt-2 text-xs text-slate-600">
@@ -433,17 +325,17 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
                 {(profitByProduct || [])
                   .slice(0, 5)
                   .map(
-                    (r) =>
-                      `${r.product_name} (${Number(r.margin_pct || 0).toFixed(1)}%)`,
+                    (row) =>
+                      `${row.product_name} (${Number(row.margin_pct || 0).toFixed(1)}%)`,
                   )
-                  .join(", ") || "—"}
+                  .join(", ") || "-"}
               </div>
               <div className="mt-1 text-xs text-slate-600">
                 Outlet leaders:{" "}
                 {(profitByOutlet || [])
                   .slice(0, 3)
-                  .map((r) => `${r.outlet_name} (${money(r.gross_profit)})`)
-                  .join(", ") || "—"}
+                  .map((row) => `${row.outlet_name} (${money(row.gross_profit)})`)
+                  .join(", ") || "-"}
               </div>
               <div className="mt-1 text-xs text-slate-600">
                 Discount leakage records: {discountLeakage.length}
@@ -469,7 +361,7 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
                     Value tied:{" "}
                     {money(
                       deadStock.reduce(
-                        (s, r) => s + Number(r.stock_cost_value || 0),
+                        (sum, row) => sum + Number(row.stock_cost_value || 0),
                         0,
                       ),
                     )}
@@ -481,16 +373,14 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
                     Oldest:{" "}
                     {Math.max(
                       0,
-                      ...stockAging.map((r) => Number(r.days_since_sale || 0)),
+                      ...stockAging.map((row) => Number(row.days_since_sale || 0)),
                     )}{" "}
                     days
                   </div>
                 </div>
                 <div className="rounded-lg bg-slate-50 p-2">
                   Stockout risk high:{" "}
-                  <b>
-                    {stockoutRisk.filter((r) => r.risk_level === "high").length}
-                  </b>
+                  <b>{stockoutRisk.filter((row) => row.risk_level === "high").length}</b>
                   <div className="text-slate-500">
                     <Link
                       to={`/reports/replenishment${query ? `?${query}` : ""}`}
@@ -507,9 +397,7 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
                   <div className="text-slate-500">
                     Avg 7d demand (top):{" "}
                     {forecastRows[0]
-                      ? Number(forecastRows[0].forecast_7d_units || 0).toFixed(
-                          2,
-                        )
+                      ? Number(forecastRows[0].forecast_7d_units || 0).toFixed(2)
                       : "0.00"}
                   </div>
                 </div>
@@ -529,20 +417,14 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
           {flags.reports_exceptions ? (
             <div className="rounded-xl border border-slate-200 bg-white p-3">
               <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-800">
-                  Exceptions
-                </h3>
+                <h3 className="text-sm font-semibold text-slate-800">Exceptions</h3>
                 <select
                   value={exceptionType}
                   onChange={(e) => setExceptionType(e.target.value)}
                   className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
                 >
-                  <option value="negative_margin_sales">
-                    Negative Margin Sales
-                  </option>
-                  <option value="high_discount_orders">
-                    High Discount Orders
-                  </option>
+                  <option value="negative_margin_sales">Negative Margin Sales</option>
+                  <option value="high_discount_orders">High Discount Orders</option>
                   <option value="frequent_voids_by_employee">
                     Frequent Voids by Employee
                   </option>
@@ -562,287 +444,8 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
               </p>
             </div>
           ) : null}
-
-          {flags.reports_scheduled_exports ? (
-            <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
-              <h3 className="mb-2 text-sm font-semibold text-slate-800">
-                Phase 2: Schedules, Saved Views, Governance
-              </h3>
-
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div className="rounded-lg border border-slate-200 p-2 text-xs">
-                  <p className="mb-2 font-semibold">Create Schedule</p>
-                  <input
-                    value={scheduleDraft.name}
-                    onChange={(e) =>
-                      setScheduleDraft((p) => ({ ...p, name: e.target.value }))
-                    }
-                    placeholder="Name"
-                    className="mb-1 w-full rounded border border-slate-200 px-2 py-1"
-                  />
-                  <select
-                    value={scheduleDraft.report_key}
-                    onChange={(e) =>
-                      setScheduleDraft((p) => ({
-                        ...p,
-                        report_key: e.target.value,
-                      }))
-                    }
-                    className="mb-1 w-full rounded border border-slate-200 px-2 py-1"
-                  >
-                    <option value="profit-by-product">profit-by-product</option>
-                    <option value="stock-aging">stock-aging</option>
-                    <option value="stockout-risk">stockout-risk</option>
-                    <option value="exceptions-high-discount">
-                      exceptions-high-discount
-                    </option>
-                  </select>
-                  <div className="mb-1 grid grid-cols-2 gap-1">
-                    <select
-                      value={scheduleDraft.frequency}
-                      onChange={(e) =>
-                        setScheduleDraft((p) => ({
-                          ...p,
-                          frequency: e.target.value,
-                        }))
-                      }
-                      className="rounded border border-slate-200 px-2 py-1"
-                    >
-                      <option value="daily">daily</option>
-                      <option value="weekly">weekly</option>
-                    </select>
-                    <input
-                      type="number"
-                      min="0"
-                      max="23"
-                      value={scheduleDraft.run_hour}
-                      onChange={(e) =>
-                        setScheduleDraft((p) => ({
-                          ...p,
-                          run_hour: e.target.value,
-                        }))
-                      }
-                      placeholder="hour"
-                      className="rounded border border-slate-200 px-2 py-1"
-                    />
-                  </div>
-                  <input
-                    value={scheduleDraft.recipient}
-                    onChange={(e) =>
-                      setScheduleDraft((p) => ({
-                        ...p,
-                        recipient: e.target.value,
-                      }))
-                    }
-                    placeholder="Recipient (optional)"
-                    className="mb-1 w-full rounded border border-slate-200 px-2 py-1"
-                  />
-                  <button
-                    onClick={async () => {
-                      try {
-                        await createSchedule();
-                      } catch (e) {
-                        setError(e.message || "Create schedule failed");
-                      }
-                    }}
-                    className="rounded bg-slate-900 px-2 py-1 font-medium text-white"
-                  >
-                    Save Schedule
-                  </button>
-                </div>
-
-                <div className="rounded-lg border border-slate-200 p-2 text-xs">
-                  <p className="mb-2 font-semibold">Create Saved View</p>
-                  <input
-                    value={viewDraft.name}
-                    onChange={(e) =>
-                      setViewDraft((p) => ({ ...p, name: e.target.value }))
-                    }
-                    placeholder="View name"
-                    className="mb-1 w-full rounded border border-slate-200 px-2 py-1"
-                  />
-                  <select
-                    value={viewDraft.report_key}
-                    onChange={(e) =>
-                      setViewDraft((p) => ({
-                        ...p,
-                        report_key: e.target.value,
-                      }))
-                    }
-                    className="mb-1 w-full rounded border border-slate-200 px-2 py-1"
-                  >
-                    <option value="overview">overview</option>
-                    <option value="profit-layer">profit-layer</option>
-                    <option value="inventory-health">inventory-health</option>
-                    <option value="exceptions">exceptions</option>
-                  </select>
-                  <select
-                    value={viewDraft.scope}
-                    onChange={(e) =>
-                      setViewDraft((p) => ({ ...p, scope: e.target.value }))
-                    }
-                    className="mb-1 w-full rounded border border-slate-200 px-2 py-1"
-                  >
-                    <option value="personal">personal</option>
-                    <option value="global">global</option>
-                  </select>
-                  <button
-                    onClick={async () => {
-                      try {
-                        await createSavedView();
-                      } catch (e) {
-                        setError(e.message || "Create saved view failed");
-                      }
-                    }}
-                    className="rounded bg-slate-900 px-2 py-1 font-medium text-white"
-                  >
-                    Save View
-                  </button>
-                </div>
-
-                <div className="rounded-lg border border-slate-200 p-2 text-xs">
-                  <p className="mb-2 font-semibold">
-                    Register Definition Version
-                  </p>
-                  <input
-                    value={defDraft.report_key}
-                    onChange={(e) =>
-                      setDefDraft((p) => ({ ...p, report_key: e.target.value }))
-                    }
-                    placeholder="Report key"
-                    className="mb-1 w-full rounded border border-slate-200 px-2 py-1"
-                  />
-                  <input
-                    value={defDraft.version}
-                    onChange={(e) =>
-                      setDefDraft((p) => ({ ...p, version: e.target.value }))
-                    }
-                    placeholder="Version (e.g. v1.0.0)"
-                    className="mb-1 w-full rounded border border-slate-200 px-2 py-1"
-                  />
-                  <input
-                    value={defDraft.query_signature}
-                    onChange={(e) =>
-                      setDefDraft((p) => ({
-                        ...p,
-                        query_signature: e.target.value,
-                      }))
-                    }
-                    placeholder="Query signature"
-                    className="mb-1 w-full rounded border border-slate-200 px-2 py-1"
-                  />
-                  <button
-                    onClick={async () => {
-                      try {
-                        await createDefinition();
-                      } catch (e) {
-                        setError(e.message || "Create definition failed");
-                      }
-                    }}
-                    className="rounded bg-slate-900 px-2 py-1 font-medium text-white"
-                  >
-                    Save Definition
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-3 grid grid-cols-1 gap-3 text-xs md:grid-cols-2">
-                <div className="rounded-lg bg-slate-50 p-2">
-                  <p className="mb-1 font-semibold">
-                    Schedules ({schedules.length})
-                  </p>
-                  <div className="max-h-36 space-y-1 overflow-auto">
-                    {schedules.slice(0, 20).map((s) => (
-                      <div
-                        key={s.id}
-                        className="rounded border border-slate-200 bg-white p-1.5"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{s.name}</span>
-                          <button
-                            onClick={async () => {
-                              try {
-                                await runScheduleNow(s.id);
-                              } catch (e) {
-                                setError(e.message || "Run now failed");
-                              }
-                            }}
-                            className="rounded border border-slate-200 px-2 py-0.5"
-                          >
-                            Run now
-                          </button>
-                        </div>
-                        <p className="text-slate-500">
-                          {s.report_key} | next: {s.next_run_at || "—"}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-lg bg-slate-50 p-2">
-                  <p className="mb-1 font-semibold">
-                    Saved Views ({savedViews.length})
-                  </p>
-                  <div className="max-h-36 space-y-1 overflow-auto">
-                    {savedViews.slice(0, 20).map((v) => (
-                      <div
-                        key={v.id}
-                        className="rounded border border-slate-200 bg-white p-1.5"
-                      >
-                        <p className="font-medium">{v.name}</p>
-                        <p className="text-slate-500">
-                          {v.report_key} | {v.scope}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 grid grid-cols-1 gap-3 text-xs md:grid-cols-2">
-                <div className="rounded-lg bg-slate-50 p-2">
-                  <p className="mb-1 font-semibold">
-                    Definition Versions ({definitions.length})
-                  </p>
-                  <div className="max-h-28 space-y-1 overflow-auto">
-                    {definitions.slice(0, 20).map((d) => (
-                      <div
-                        key={d.id}
-                        className="rounded border border-slate-200 bg-white p-1.5"
-                      >
-                        <p className="font-medium">
-                          {d.report_key} {d.version}
-                        </p>
-                        <p className="text-slate-500">
-                          {d.query_signature || "—"}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-lg bg-slate-50 p-2">
-                  <p className="mb-1 font-semibold">
-                    Delivery Log ({deliveryLog.length})
-                  </p>
-                  <div className="max-h-28 space-y-1 overflow-auto">
-                    {deliveryLog.slice(0, 20).map((d) => (
-                      <div
-                        key={d.id}
-                        className="rounded border border-slate-200 bg-white p-1.5"
-                      >
-                        <p className="font-medium">
-                          {d.status} | {d.channel}
-                        </p>
-                        <p className="text-slate-500">{d.message || "—"}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : null}
         </>
-      )}
+      ) : null}
     </div>
   );
 }

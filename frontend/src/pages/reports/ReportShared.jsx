@@ -52,7 +52,7 @@ export function ExportButton({ onClick }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors"
+      className="flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600"
     >
       <Download size={12} /> Export CSV
     </button>
@@ -68,30 +68,31 @@ export function TableShell({
   children,
 }) {
   return (
-    <div className="overflow-auto">
-      <table className="w-full text-left border-collapse">
+    <div className="overflow-hidden rounded-b-2xl">
+      <div className="max-h-[70vh] overflow-auto">
+        <table className="w-full min-w-[720px] border-collapse text-left">
         <thead>
-          <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 font-semibold sticky top-0 z-10">
+          <tr className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500 backdrop-blur">
             {cols.map((c) => (
-              <th key={c} className="p-4 whitespace-nowrap">
+              <th key={c} className="whitespace-nowrap border-b border-slate-200 px-4 py-3">
                 {c}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-slate-100 bg-white align-top">
           {loading ? (
             <tr>
               <td
                 colSpan={cols.length}
-                className="p-8 text-center text-slate-400"
+                className="p-10 text-center text-sm text-slate-400"
               >
                 Loading...
               </td>
             </tr>
           ) : empty ? (
             <tr>
-              <td colSpan={cols.length} className="p-10 text-center">
+              <td colSpan={cols.length} className="p-12 text-center">
                 <Icon size={40} className="mx-auto text-slate-300 mb-2" />
                 <p className="text-slate-500 font-medium">No data found</p>
               </td>
@@ -100,7 +101,8 @@ export function TableShell({
             children
           )}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 }
@@ -115,9 +117,9 @@ export function DateRangeFilter({
   searchPlaceholder,
 }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex flex-wrap gap-2 items-center">
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
       {setSearch && (
-        <div className="relative flex-1 min-w-40">
+        <div className="relative min-w-40 flex-1 basis-full lg:basis-auto">
           <Search
             size={13}
             className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
@@ -131,7 +133,7 @@ export function DateRangeFilter({
           />
         </div>
       )}
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1">
         <label className="text-xs font-medium text-slate-500">From</label>
         <input
           type="date"
@@ -140,7 +142,7 @@ export function DateRangeFilter({
           className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
         />
       </div>
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1">
         <label className="text-xs font-medium text-slate-500">To</label>
         <input
           type="date"
@@ -167,15 +169,15 @@ export function DateRangeFilter({
 
 export function CardShell({ title, subtitle, action, children }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-      <div className="p-4 border-b border-slate-200 bg-slate-50 shrink-0 flex items-start justify-between gap-2">
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex-1">
           <h2 className="font-bold text-slate-700">{title}</h2>
           {subtitle && (
             <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>
           )}
         </div>
-        {action && <div className="shrink-0">{action}</div>}
+        {action && <div className="shrink-0 self-start sm:self-auto">{action}</div>}
       </div>
       {children}
     </div>

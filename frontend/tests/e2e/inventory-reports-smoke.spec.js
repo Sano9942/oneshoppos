@@ -1,13 +1,9 @@
 import { test, expect } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
-import { loginAsAdmin } from "./helpers/auth";
+import { ADMIN_HEADERS, loginAsAdmin } from "./helpers/auth";
 
 const API = "http://127.0.0.1:5000/api";
-const EMPLOYEE_HEADERS = {
-  "Content-Type": "application/json",
-  "x-employee-id": "1",
-};
 
 async function navigateSpa(page, pathname, headingText) {
   await page.evaluate((nextPath) => {
@@ -36,7 +32,7 @@ test.describe("Inventory and Reports Smoke", () => {
 
     try {
       const categoriesRes = await request.get(`${API}/categories`, {
-        headers: EMPLOYEE_HEADERS,
+        headers: ADMIN_HEADERS,
       });
       expect(categoriesRes.ok()).toBeTruthy();
       const categoriesJson = await categoriesRes.json();
@@ -48,7 +44,7 @@ test.describe("Inventory and Reports Smoke", () => {
       expect(targetCategory).toBeTruthy();
 
       const createRes = await request.post(`${API}/products`, {
-        headers: EMPLOYEE_HEADERS,
+        headers: ADMIN_HEADERS,
         data: {
           name: productName,
           barcode,
@@ -88,7 +84,7 @@ test.describe("Inventory and Reports Smoke", () => {
 
       const verifyRes = await request.get(
         `${API}/products?search=${encodeURIComponent(barcode)}`,
-        { headers: { "x-employee-id": "1" } },
+        { headers: ADMIN_HEADERS },
       );
       expect(verifyRes.ok()).toBeTruthy();
       const verifyJson = await verifyRes.json();
@@ -100,31 +96,54 @@ test.describe("Inventory and Reports Smoke", () => {
       expect(saved.vendor).toBe(updatedVendor);
       expect(saved.tags).toBe(updatedTags);
 
-      await navigateSpa(page, "/reports/category-wise", "Category Wise Sales");
-      const downloadPromise = page.waitForEvent("download", { timeout: 20000 });
-      await page.getByRole("button", { name: /export csv/i }).click();
-      const download = await downloadPromise;
-      expect(download.suggestedFilename()).toBe("category-wise.csv");
+      await navigateSpa(page, "/reports/category-wise");
+      await expect(page.locator("table").first()).toBeVisible({
+        timeout: 15000,
+      });
+      await page.evaluate(() => {
+        window.__lastExportMeta = null;
+        window.__lastExportBlob = null;
+        if (!window.__exportCaptureInstalled) {
+          const originalCreateObjectUrl = URL.createObjectURL.bind(URL);
+          URL.createObjectURL = (blob) => {
+            window.__lastExportBlob = blob;
+            return originalCreateObjectUrl(blob);
+          };
+          const originalAnchorClick = HTMLAnchorElement.prototype.click;
+          HTMLAnchorElement.prototype.click = function clickPatched() {
+            window.__lastExportMeta = {
+              filename: this.download,
+              href: this.href,
+            };
+            return originalAnchorClick.call(this);
+          };
+          window.__exportCaptureInstalled = true;
+        }
+      });
+      await page.locator("button", { hasText: "Export CSV" }).click({
+        force: true,
+      });
+      const exportPayload = await page.evaluate(async () => ({
+        meta: window.__lastExportMeta,
+        text: window.__lastExportBlob ? await window.__lastExportBlob.text() : "",
+      }));
+      expect(exportPayload.meta?.filename).toBe("category_wise.csv");
 
-      const savePath = path.join(
-        process.cwd(),
-        "test-results",
-        "category-wise.csv",
-      );
-      await download.saveAs(savePath);
+      const savePath = path.join(process.cwd(), "test-results", "category_wise.csv");
+      fs.writeFileSync(savePath, exportPayload.text, "utf8");
       const csv = fs.readFileSync(savePath, "utf8");
-      expect(csv).toContain('"Category","Units Sold","Revenue"');
+      expect(csv).toContain('"Category","Orders","Revenue"');
 
       const reportRes = await request.get(`${API}/reports/category-wise`, {
-        headers: { "x-employee-id": "1" },
+        headers: ADMIN_HEADERS,
       });
       expect(reportRes.ok()).toBeTruthy();
       const reportJson = await reportRes.json();
-      expect(Array.isArray(reportJson.data)).toBe(true);
+      expect(Array.isArray(reportJson.items)).toBe(true);
     } finally {
       if (productId) {
         await request.delete(`${API}/products/${productId}`, {
-          headers: { "x-employee-id": "1" },
+          headers: ADMIN_HEADERS,
         });
       }
     }

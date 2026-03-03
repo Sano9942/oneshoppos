@@ -9,6 +9,7 @@ import {
 import { API_BASE as API } from "../../config";
 import {
   fmt,
+  exportCSV,
   ExportButton,
   TableShell,
   CardShell,
@@ -51,7 +52,7 @@ export function ComparativeTrendsTab({ filters }) {
       </div>
     );
 
-  const { today } = data.data;
+  const { today, yesterday } = data.data;
   const { comparisons = {} } = data;
 
   return (
@@ -67,28 +68,70 @@ export function ComparativeTrendsTab({ filters }) {
         <MetricCard
           title="Revenue (v Yesterday)"
           value={fmt(today.revenue)}
-          compPct={comparisons.day_over_day_revenue_pct}
+          compPct={comparisons.revenue_pct || 0}
           compLabel="Yesterday"
         />
         <MetricCard
           title="Orders (v Yesterday)"
           value={today.orders}
-          compPct={comparisons.day_over_day_orders_pct}
+          compPct={comparisons.orders_pct || 0}
           compLabel="Yesterday"
         />
         <MetricCard
-          title="Revenue (v Last Week)"
-          value={fmt(today.revenue)}
-          compPct={comparisons.week_over_week_revenue_pct}
-          compLabel="L. Week"
+          title="Revenue Delta"
+          value={fmt(comparisons.revenue_diff || 0)}
+          compPct={comparisons.revenue_pct || 0}
+          compLabel="Comparison"
         />
         <MetricCard
-          title="Orders (v Last Week)"
-          value={today.orders}
-          compPct={comparisons.week_over_week_orders_pct}
-          compLabel="L. Week"
+          title="Orders Delta"
+          value={comparisons.orders_diff || 0}
+          compPct={comparisons.orders_pct || 0}
+          compLabel="Comparison"
         />
       </div>
+
+      <CardShell
+        title="Comparison Snapshot"
+        subtitle="Current period against the comparison period used by the service"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "comparative_trends.csv",
+                [
+                  { header: "Period", key: "period" },
+                  { header: "Revenue", key: "revenue" },
+                  { header: "Orders", key: "orders" },
+                ],
+                [
+                  { period: "Current", revenue: today.revenue, orders: today.orders },
+                  {
+                    period: "Comparison",
+                    revenue: yesterday?.revenue || 0,
+                    orders: yesterday?.orders || 0,
+                  },
+                ],
+              )
+            }
+          />
+        }
+      >
+        <TableShell cols={["Period", "Revenue", "Orders"]}>
+          <tr>
+            <td className="px-4 py-3 text-sm font-semibold text-slate-800">Current</td>
+            <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(today.revenue)}</td>
+            <td className="px-4 py-3 text-sm text-slate-600">{today.orders}</td>
+          </tr>
+          <tr>
+            <td className="px-4 py-3 text-sm font-semibold text-slate-800">Comparison</td>
+            <td className="px-4 py-3 text-sm font-bold text-slate-900">
+              {fmt(yesterday?.revenue || 0)}
+            </td>
+            <td className="px-4 py-3 text-sm text-slate-600">{yesterday?.orders || 0}</td>
+          </tr>
+        </TableShell>
+      </CardShell>
     </div>
   );
 }
@@ -131,13 +174,43 @@ export function HeatmapsTab({ filters }) {
   const hours = Array.from({ length: 24 }).map((_, h) =>
     h === 0 ? "12a" : h < 12 ? h + "a" : h === 12 ? "12p" : h - 12 + "p",
   );
-  const maxRev = Math.max(...heatmap.map((h) => h.revenue), 1);
+  const totalRevenue = heatmap.reduce((sum, row) => sum + Number(row.revenue || 0), 0);
+  const totalOrders = heatmap.reduce((sum, row) => sum + Number(row.order_count || 0), 0);
+  const activeSlots = heatmap.filter((row) => Number(row.revenue || 0) > 0).length;
+  const maxRev = Math.max(...heatmap.map((h) => Number(h.revenue || 0)), 1);
 
   return (
-    <CardShell
-      title="Hourly Sales Intensity"
-      subtitle="Identifying peak traffic windows for staffing optimization"
-    >
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <MetricCard title="Heatmap Revenue" value={fmt(totalRevenue)} compPct={0} compLabel="Range" />
+        <MetricCard title="Orders Mapped" value={totalOrders} compPct={0} compLabel="Range" />
+        <MetricCard title="Active Slots" value={activeSlots} compPct={0} compLabel="Day/Hour" />
+      </div>
+
+      <CardShell
+        title="Hourly Sales Intensity"
+        subtitle="Identifying peak traffic windows for staffing optimization"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "sales_heatmap.csv",
+                [
+                  { header: "Day", key: "day_label" },
+                  { header: "Hour", key: "hour_label" },
+                  { header: "Revenue", key: "revenue" },
+                  { header: "Orders", key: "order_count" },
+                ],
+                heatmap.map((row) => ({
+                  ...row,
+                  day_label: days[Number(row.day_of_week)],
+                  hour_label: hours[Number(row.hour_of_day)],
+                })),
+              )
+            }
+          />
+        }
+      >
       <div className="overflow-x-auto pb-4">
         <div className="min-w-200">
           <div className="grid grid-cols-[80px_repeat(24,1fr)] gap-1 text-[10px]">
@@ -155,7 +228,7 @@ export function HeatmapsTab({ filters }) {
                 </div>
                 {Array.from({ length: 24 }).map((_, h) => {
                   const cell = heatmap.find(
-                    (x) => x.day_of_week === d && x.hour_of_day === h,
+                    (x) => Number(x.day_of_week) === d && Number(x.hour_of_day) === h,
                   );
                   const rev = cell ? cell.revenue : 0;
                   const intensity = Math.min(
@@ -181,7 +254,8 @@ export function HeatmapsTab({ filters }) {
           </div>
         </div>
       </div>
-    </CardShell>
+      </CardShell>
+    </div>
   );
 }
 
@@ -261,7 +335,25 @@ export function RevenueLeaksTab({ filters }) {
         </div>
       </div>
 
-      <CardShell title="Loss Attribution by Staff Member">
+      <CardShell
+        title="Loss Attribution by Staff Member"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "revenue_leaks.csv",
+                [
+                  { header: "Employee", key: "employee_name" },
+                  { header: "Total Leakage", key: "total_leakage" },
+                  { header: "Void Value", key: "void_value" },
+                  { header: "Discount Value", key: "discount_value" },
+                ],
+                data.top_leak_employees || [],
+              )
+            }
+          />
+        }
+      >
         <TableShell
           cols={["Employee", "Total Leakage", "Void Sum", "Disc Sum"]}
           empty={!data.top_leak_employees.length}
@@ -315,29 +407,69 @@ export function ProductMixTab({ filters }) {
     load();
   }, [load]);
 
+  const pairCount = rows.length;
+  const totalCoOccurrences = rows.reduce(
+    (sum, row) => sum + Number(row.co_occurrences || 0),
+    0,
+  );
+  const topPair = rows[0];
+
   return (
-    <CardShell
-      title="Market Basket Analysis (Product Mix)"
-      subtitle="Clusters of items frequently purchased in the same ticket"
-    >
-      <TableShell
-        cols={["Item A", "Item B", "Joint Sales"]}
-        loading={loading}
-        empty={!rows.length}
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <MetricCard title="Pairs Found" value={pairCount} compPct={0} compLabel="Top list" />
+        <MetricCard
+          title="Top Pair"
+          value={topPair ? `${topPair.pname1} + ${topPair.pname2}` : "None"}
+          compPct={0}
+          compLabel="Co-purchase"
+        />
+        <MetricCard
+          title="Total Co-occurrences"
+          value={totalCoOccurrences}
+          compPct={0}
+          compLabel="Observed"
+        />
+      </div>
+
+      <CardShell
+        title="Market Basket Analysis (Product Mix)"
+        subtitle="Clusters of items frequently purchased in the same ticket"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "product_mix.csv",
+                [
+                  { header: "Product A", key: "pname1" },
+                  { header: "Product B", key: "pname2" },
+                  { header: "Co-occurrences", key: "co_occurrences" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
-        {rows.map((r, i) => (
-          <tr key={i} className="hover:bg-slate-50 text-sm">
-            <td className="p-4 font-bold text-slate-800">{r.pname1}</td>
-            <td className="p-4 font-bold text-slate-800">{r.pname2}</td>
-            <td className="p-4">
-              <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-black">
-                {r.co_occurrences} times
-              </span>
-            </td>
-          </tr>
-        ))}
-      </TableShell>
-    </CardShell>
+        <TableShell
+          cols={["Item A", "Item B", "Joint Sales"]}
+          loading={loading}
+          empty={!rows.length}
+        >
+          {rows.map((r, i) => (
+            <tr key={i} className="hover:bg-slate-50 text-sm">
+              <td className="p-4 font-bold text-slate-800">{r.pname1}</td>
+              <td className="p-4 font-bold text-slate-800">{r.pname2}</td>
+              <td className="p-4">
+                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-black">
+                  {r.co_occurrences} times
+                </span>
+              </td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
   );
 }
 
@@ -374,14 +506,48 @@ export function RetailMatrixTab({ filters }) {
     Puzzle: "bg-blue-100 text-blue-700",
     Dog: "bg-rose-100 text-rose-700",
   };
+  const stars = matrix.filter((row) => row.matrix_category === "Star").length;
+  const plowhorses = matrix.filter((row) => row.matrix_category === "Plowhorse").length;
+  const avgVolume = matrix.length
+    ? (matrix.reduce((sum, row) => sum + Number(row.volume || 0), 0) / matrix.length).toFixed(2)
+    : "0.00";
+  const avgMargin = matrix.length
+    ? matrix.reduce((sum, row) => sum + Number(row.avg_unit_margin || 0), 0) / matrix.length
+    : 0;
 
   return (
-    <CardShell
-      title="Catalog Strategy Matrix"
-      subtitle="Categorizing performance using Menu Engineering logic (Volume vs Margin)"
-    >
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <MetricCard title="Stars" value={stars} compPct={0} compLabel="Matrix" />
+        <MetricCard title="Plowhorses" value={plowhorses} compPct={0} compLabel="Matrix" />
+        <MetricCard title="Avg Volume" value={avgVolume} compPct={0} compLabel="Threshold" />
+        <MetricCard title="Avg Unit Margin" value={fmt(avgMargin)} compPct={0} compLabel="Threshold" />
+      </div>
+
+      <CardShell
+        title="Catalog Strategy Matrix"
+        subtitle="Categorizing performance using menu-engineering logic"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "retail_matrix_strategy.csv",
+                [
+                  { header: "Product", key: "product_name" },
+                  { header: "Barcode", key: "barcode" },
+                  { header: "Volume", key: "volume" },
+                  { header: "Revenue", key: "total_revenue" },
+                  { header: "Avg Unit Margin", key: "avg_unit_margin" },
+                  { header: "Matrix Category", key: "matrix_category" },
+                ],
+                matrix,
+              )
+            }
+          />
+        }
+      >
       <TableShell
-        cols={["Product", "Velocity", "Avg Margin", "Quadrant"]}
+        cols={["Product", "Velocity", "Revenue", "Avg Margin", "Quadrant"]}
         loading={loading}
         empty={!matrix.length}
       >
@@ -389,21 +555,25 @@ export function RetailMatrixTab({ filters }) {
           <tr key={i} className="hover:bg-slate-50 text-sm">
             <td className="p-4 font-bold text-slate-800">{r.product_name}</td>
             <td className="p-4 font-medium text-slate-600">
-              {r.volume_sold} units
+              {r.volume} units
+            </td>
+            <td className="p-4 font-semibold text-slate-700">
+              {fmt(r.total_revenue)}
             </td>
             <td className="p-4 font-bold text-slate-900">
-              {fmt(r.avg_margin)}
+              {fmt(r.avg_unit_margin)}
             </td>
             <td className="p-4">
               <span
-                className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${Q_COLORS[r.quadrant] || "bg-slate-100"}`}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${Q_COLORS[r.matrix_category] || "bg-slate-100"}`}
               >
-                {r.quadrant}
+                {r.matrix_category}
               </span>
             </td>
           </tr>
         ))}
       </TableShell>
-    </CardShell>
+      </CardShell>
+    </div>
   );
 }

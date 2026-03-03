@@ -86,6 +86,7 @@ import {
   RetailMatrixTab,
 } from "./reports/ReportsAnalytics";
 import { CategoryWiseTab, ProductSpecTab } from "./reports/ReportsCatalog";
+import GovernanceTab from "./reports/ReportsGovernance";
 
 function GlobalFilterBar({ filters, setFilters, meta }) {
   const { outlets = [], categories = [], brands = [], employees = [] } = meta;
@@ -105,9 +106,9 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
   const hasActiveFilters = Object.values(filters).some((v) => !!v);
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 mb-4 flex flex-wrap gap-3 items-center sticky top-0 z-10">
+    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:sticky sm:top-0 sm:z-10">
       {/* Search */}
-      <div className="relative min-w-50 flex-1">
+      <div className="relative min-w-0 flex-1 basis-full md:basis-auto">
         <Search
           size={14}
           className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -122,7 +123,7 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
       </div>
 
       {/* Date Range */}
-      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
+      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:w-auto">
         <Clock size={14} className="text-slate-400" />
         <input
           type="date"
@@ -142,7 +143,7 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
       </div>
 
       {/* Outlet Selector */}
-      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 min-w-35">
+      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:min-w-35 sm:w-auto">
         <Building2 size={14} className="text-slate-400" />
         <select
           value={filters.outletId}
@@ -159,7 +160,7 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
       </div>
 
       {/* Category Selector */}
-      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 min-w-35">
+      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:min-w-35 sm:w-auto">
         <LayoutGrid size={14} className="text-slate-400" />
         <select
           value={filters.categoryId}
@@ -178,7 +179,7 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
       </div>
 
       {/* Brand Selector */}
-      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 min-w-30">
+      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:min-w-30 sm:w-auto">
         <Tag size={14} className="text-slate-400" />
         <select
           value={filters.brandId}
@@ -195,7 +196,7 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
       </div>
 
       {/* Employee Selector */}
-      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 min-w-30">
+      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:min-w-30 sm:w-auto">
         <Users size={14} className="text-slate-400" />
         <select
           value={filters.employeeId}
@@ -217,7 +218,7 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
       {hasActiveFilters && (
         <button
           onClick={handleReset}
-          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition-colors border border-red-100"
+          className="flex items-center gap-1.5 rounded-xl border border-red-100 px-3 py-1.5 text-xs font-bold text-red-600 transition-colors hover:bg-red-50 sm:ml-auto"
         >
           <RotateCcw size={12} /> Reset
         </button>
@@ -307,6 +308,12 @@ const GROUPS = [
       { id: "attendance", label: "Attendance", icon: Clock },
       { id: "labor-performance", label: "Labor Performance", icon: Activity },
       { id: "loss-prevention", label: "Loss Prevention", icon: ShieldAlert },
+    ],
+  },
+  {
+    label: "Governance",
+    tabs: [
+      { id: "governance", label: "Audit Controls", icon: ShieldAlert },
     ],
   },
 ];
@@ -400,16 +407,28 @@ function TabContent({ activeTab, filters }) {
       return <PricingMarginTab filters={filters} />;
     case "attendance":
       return <AttendanceTab filters={filters} />;
+    case "governance":
+      return <GovernanceTab filters={filters} />;
     default:
       return null;
   }
 }
 
 export function ReportTabStandalone({ tabId }) {
+  const standaloneFilters = {
+    dateFrom: "",
+    dateTo: "",
+    outletId: "",
+    employeeId: "",
+    categoryId: "",
+    brandId: "",
+    search: "",
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full bg-transparent">
       <div className="flex-1 overflow-auto min-h-0">
-        <TabContent activeTab={tabId} />
+        <TabContent activeTab={tabId} filters={standaloneFilters} />
       </div>
     </div>
   );
@@ -464,7 +483,7 @@ export default function Reports() {
   return (
     <div className="flex flex-col h-full gap-4">
       {/* Header */}
-      <div className="shrink-0 flex items-center justify-between">
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-1">
             Reports
@@ -480,9 +499,9 @@ export default function Reports() {
       <GlobalFilterBar filters={filters} setFilters={setFilters} meta={meta} />
 
       {/* Two-panel layout: group sidebar + sub-tabs + content */}
-      <div className="flex flex-1 min-h-0 gap-0">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-0">
         {/* Left: group icon sidebar */}
-        <div className="flex flex-col gap-1 shrink-0 w-18 py-1 pr-2 border-r border-slate-200">
+        <div className="flex shrink-0 gap-1 overflow-x-auto py-1 lg:w-18 lg:flex-col lg:overflow-visible lg:border-r lg:border-slate-200 lg:pr-2">
           {GROUPS.map((group) => {
             const isActive = group === activeGroup;
             const GroupIcon = group.tabs[0].icon;
@@ -491,7 +510,7 @@ export default function Reports() {
                 key={group.label}
                 onClick={() => setActiveTab(group.tabs[0].id)}
                 title={group.label}
-                className={`flex flex-col items-center gap-1 px-2 py-3 rounded-xl text-xs font-medium transition-all ${
+                className={`flex min-w-20 flex-col items-center gap-1 rounded-xl px-2 py-3 text-xs font-medium transition-all lg:min-w-0 ${
                   isActive
                     ? "bg-blue-50 text-blue-700"
                     : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
@@ -507,15 +526,15 @@ export default function Reports() {
         </div>
 
         {/* Right: sub-tab strip + content */}
-        <div className="flex flex-col flex-1 min-w-0 pl-4 gap-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-3 lg:pl-4">
           {/* Sub-tab pill strip for the active group */}
           {activeGroup && (
-            <div className="flex gap-1 shrink-0 bg-slate-100 rounded-xl p-1 w-fit">
+            <div className="flex w-full gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 lg:w-fit">
               {activeGroup.tabs.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
                   onClick={() => setActiveTab(id)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium transition-all ${
                     activeTab === id
                       ? "bg-white text-slate-900 shadow-sm"
                       : "text-slate-500 hover:text-slate-700"

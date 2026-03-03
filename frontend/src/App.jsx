@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { BrowserRouter as Router, Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth/AuthProvider";
 import RequireAuth from "./components/RequireAuth";
@@ -22,7 +23,6 @@ import PlaceholderPage from "./pages/PlaceholderPage";
 import PromotionsRoute from "./pages/PromotionsRoute";
 import PurchaseOrdersRoute from "./pages/PurchaseOrdersRoute";
 import ReceiptTemplatesRedesign from "./pages/redesign/ReceiptTemplatesRedesign";
-import ReportsRoute, { ReportTabStandaloneRoute } from "./pages/ReportsRoute";
 import ReturnedStockRoute from "./pages/ReturnedStockRoute";
 import ActionHistoryRoute from "./pages/ActionHistoryRoute";
 import AccountingRoute from "./pages/AccountingRoute";
@@ -43,6 +43,23 @@ import CustomersRoute from "./pages/CustomersRoute";
 import SalesHistoryRoute from "./pages/SalesHistoryRoute";
 import CashManagementRoute from "./pages/CashManagementRoute";
 import ReturnsRoute from "./pages/ReturnsRoute";
+
+const ReportsRoute = lazy(() => import("./pages/ReportsRoute"));
+const ReportTabStandaloneRoute = lazy(() =>
+  import("./pages/ReportsRoute").then((mod) => ({
+    default: mod.ReportTabStandaloneRoute,
+  })),
+);
+
+function RouteLoading() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center">
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-500 shadow-sm">
+        Loading...
+      </div>
+    </div>
+  );
+}
 
 function HomeRedirect() {
   const { isAuthenticated, isBootstrapping } = useAuth();
@@ -114,7 +131,14 @@ function App() {
           <Route path="/custom-fields" element={<PlaceholderPage />} />
           <Route path="/partners" element={<PlaceholderPage />} />
           <Route path="/shopcast" element={<PlaceholderPage />} />
-          <Route path="/reports" element={<ReportsRoute />} />
+          <Route
+            path="/reports"
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportsRoute />
+              </Suspense>
+            }
+          />
           <Route path="/returns" element={<ReturnsRoute />} />
 
           <Route
@@ -315,72 +339,140 @@ function App() {
           />
           <Route
             path="/reports/sales-summary"
-            element={<ReportTabStandaloneRoute tabId="sales-summary" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="sales-summary" />
+              </Suspense>
+            }
           />
           <Route
             path="/reports/sales-detail"
-            element={<ReportTabStandaloneRoute tabId="sales-detail" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="sales-detail" />
+              </Suspense>
+            }
           />
           <Route
             path="/reports/sales-and-stock"
-            element={<ReportTabStandaloneRoute tabId="sales-stock" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="sales-stock" />
+              </Suspense>
+            }
           />
           <Route
             path="/reports/inventory-dump"
-            element={<ReportTabStandaloneRoute tabId="inventory-dump" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="inventory-dump" />
+              </Suspense>
+            }
           />
           <Route
             path="/reports/category-wise"
-            element={<ReportTabStandaloneRoute tabId="category-wise" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="category-wise" />
+              </Suspense>
+            }
           />
           <Route
             path="/reports/product-specification"
-            element={<ReportTabStandaloneRoute tabId="product-spec" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="product-spec" />
+              </Suspense>
+            }
           />
           <Route
             path="/reports/order-wise"
-            element={<ReportTabStandaloneRoute tabId="order-wise" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="order-wise" />
+              </Suspense>
+            }
           />
           <Route
             path="/reports/replenishment"
-            element={<ReportTabStandaloneRoute tabId="replenishment" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="replenishment" />
+              </Suspense>
+            }
           />
           <Route
             path="/reports/on-hand-inventory"
-            element={<ReportTabStandaloneRoute tabId="on-hand" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="on-hand" />
+              </Suspense>
+            }
           />
           <Route
             path="/reports/customer-details"
-            element={<ReportTabStandaloneRoute tabId="customer-details" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="customer-details" />
+              </Suspense>
+            }
           />
           <Route
             path="/reports/customer-wise"
-            element={<ReportTabStandaloneRoute tabId="customer-wise" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="customer-wise" />
+              </Suspense>
+            }
           />
           <Route
             path="/reports/supplier-wise"
-            element={<ReportTabStandaloneRoute tabId="supplier-wise" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="supplier-wise" />
+              </Suspense>
+            }
           />
           <Route
             path="/reports/inventory-loss"
-            element={<ReportTabStandaloneRoute tabId="inventory-loss" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="inventory-loss" />
+              </Suspense>
+            }
           />
           <Route
             path="/reports/item-wise"
-            element={<ReportTabStandaloneRoute tabId="item-wise" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="item-wise" />
+              </Suspense>
+            }
           />
           <Route
             path="/reports/wastage"
-            element={<ReportTabStandaloneRoute tabId="wastage" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="wastage" />
+              </Suspense>
+            }
           />
           <Route
             path="/reports/product-movement"
-            element={<ReportTabStandaloneRoute tabId="product-movement" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="product-movement" />
+              </Suspense>
+            }
           />
           <Route path="/reports/parent-report" element={<PlaceholderPage />} />
           <Route
             path="/reports/product-performance"
-            element={<ReportTabStandaloneRoute tabId="product-performance" />}
+            element={
+              <Suspense fallback={<RouteLoading />}>
+                <ReportTabStandaloneRoute tabId="product-performance" />
+              </Suspense>
+            }
           />
           <Route path="/receipt-templates" element={<ReceiptTemplatesRedesign />} />
         </Route>

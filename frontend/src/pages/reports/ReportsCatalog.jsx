@@ -45,7 +45,11 @@ export function CategoryWiseTab({ filters }) {
           onClick={() =>
             exportCSV(
               "category_wise.csv",
-              ["Category", "Orders", "Revenue"],
+              [
+                { header: "Category", key: "category" },
+                { header: "Orders", key: "units_sold" },
+                { header: "Revenue", key: "revenue" },
+              ],
               rows,
             )
           }
@@ -60,15 +64,15 @@ export function CategoryWiseTab({ filters }) {
         {rows.map((r, i) => (
           <tr key={i} className="hover:bg-slate-50">
             <td className="p-4 font-bold text-slate-800 text-sm italic">
-              {r.category_name}
+              {r.category}
             </td>
             <td className="p-4">
               <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs font-bold">
-                {r.total_items} items
+                {r.units_sold} items
               </span>
             </td>
             <td className="p-4 font-bold text-indigo-600">
-              {fmt(r.total_revenue)}
+              {fmt(r.revenue)}
             </td>
           </tr>
         ))}
@@ -92,7 +96,7 @@ export function ProductSpecTab({ filters }) {
       });
       const res = await fetch(`${API}/api/reports/product-spec?${p}`);
       const d = await res.json();
-      setRows(d.rows || []);
+      setRows(d.items || []);
     } catch {
       setRows([]);
     } finally {
@@ -104,51 +108,107 @@ export function ProductSpecTab({ filters }) {
     load();
   }, [load]);
 
+  const categorizedRows = rows.filter((row) => row.category && row.category !== "-").length;
+  const brandedRows = rows.filter((row) => row.brand && row.brand !== "-").length;
+  const supplierRows = rows.filter((row) => row.supplier && row.supplier !== "-").length;
+
   return (
-    <CardShell
-      title="Product Specification"
-      subtitle="Full product catalogue with all fields"
-    >
-      <TableShell
-        cols={[
-          "ID",
-          "Barcode",
-          "Product",
-          "Category",
-          "Brand",
-          "Supplier",
-          "Price",
-          "Cost",
-          "Tax",
-          "Rate",
-        ]}
-        loading={loading}
-        empty={rows.length === 0}
-        emptyIcon={Package}
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Categorized
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {categorizedRows} / {rows.length}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Branded
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {brandedRows} / {rows.length}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            With Supplier
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {supplierRows} / {rows.length}
+          </p>
+        </div>
+      </div>
+
+      <CardShell
+        title="Product Specification"
+        subtitle="Full catalog detail with taxonomy, brand, supplier, and tax context"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "product_specification.csv",
+                [
+                  { header: "ID", key: "id" },
+                  { header: "Barcode", key: "barcode" },
+                  { header: "Product", key: "name" },
+                  { header: "Category", key: "category" },
+                  { header: "Brand", key: "brand" },
+                  { header: "Supplier", key: "supplier" },
+                  { header: "Price", key: "price" },
+                  { header: "Cost", key: "cost_price" },
+                  { header: "Tax", key: "tax_name" },
+                  { header: "Rate", key: "tax_rate" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
-        {rows.map((r) => (
-          <tr key={r.id} className="hover:bg-slate-50 transition-colors">
-            <td className="p-4 text-xs font-mono text-slate-400">{r.id}</td>
-            <td className="p-4 text-xs font-mono text-slate-500">
-              {r.barcode}
-            </td>
-            <td className="p-4 font-medium text-slate-800">{r.name}</td>
-            <td className="p-4 text-sm text-slate-600">{r.category}</td>
-            <td className="p-4 text-sm text-slate-600">{r.brand}</td>
-            <td className="p-4 text-sm text-slate-600">{r.supplier}</td>
-            <td className="p-4 text-right font-bold text-slate-900">
-              {fmt(r.price)}
-            </td>
-            <td className="p-4 text-right text-sm text-slate-500">
-              {fmt(r.cost_price)}
-            </td>
-            <td className="p-4 text-sm text-slate-600">{r.tax_name}</td>
-            <td className="p-4 text-center text-sm font-semibold text-slate-700">
-              {r.tax_rate}%
-            </td>
-          </tr>
-        ))}
-      </TableShell>
-    </CardShell>
+        <TableShell
+          cols={[
+            "Product",
+            "Category",
+            "Brand / Supplier",
+            "Price",
+            "Cost",
+            "Tax",
+          ]}
+          loading={loading}
+          empty={rows.length === 0}
+          emptyIcon={Package}
+        >
+          {rows.map((r) => (
+            <tr key={r.id} className="hover:bg-slate-50 transition-colors">
+              <td className="px-4 py-3">
+                <div className="text-sm font-semibold text-slate-800">{r.name}</div>
+                <div className="font-mono text-[11px] text-slate-400">
+                  #{r.id} | {r.barcode}
+                </div>
+              </td>
+              <td className="px-4 py-3 text-sm text-slate-600">{r.category}</td>
+              <td className="px-4 py-3">
+                <div className="text-sm text-slate-700">{r.brand}</div>
+                <div className="text-[11px] text-slate-400">{r.supplier}</div>
+              </td>
+              <td className="px-4 py-3 text-right text-sm font-bold text-slate-900">
+                {fmt(r.price)}
+              </td>
+              <td className="px-4 py-3 text-right text-sm text-slate-600">
+                {fmt(r.cost_price)}
+              </td>
+              <td className="px-4 py-3">
+                <div className="text-sm text-slate-700">{r.tax_name}</div>
+                <div className="text-[11px] font-semibold text-slate-500">
+                  {r.tax_rate}%
+                </div>
+              </td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
   );
 }

@@ -73,29 +73,44 @@ export function OverviewTab({ filters }) {
       </div>
     );
 
+  const todayRevenue = Number(data?.totalRevenueToday || 0);
+  const todayPayments = data?.zReport || [];
+  const hourlySales = data?.hourlySales || [];
+  const totalTransactions = hourlySales.reduce(
+    (sum, row) => sum + Number(row.orders || 0),
+    0,
+  );
+  const lowStockItems = Number(data?.inventory?.low_stock_items || 0);
+  const totalProducts = Number(data?.inventory?.total_products || 0);
+  const topCategories = data?.categoryPerformance || [];
+  const totalCategoryRevenue = topCategories.reduce(
+    (sum, row) => sum + Number(row.revenue || 0),
+    0,
+  );
+
   const stats = [
     {
       title: "Today's Sales",
-      value: fmt(data?.today_sales),
-      trend: "+12.5%",
+      value: fmt(todayRevenue),
+      trend: `${todayPayments.length} tenders`,
       positive: true,
     },
     {
-      title: "Active Orders",
-      value: data?.active_orders || 0,
-      trend: "+3",
+      title: "Today's Orders",
+      value: totalTransactions,
+      trend: `${hourlySales.length} active hours`,
       positive: true,
     },
     {
       title: "Low Stock Items",
-      value: data?.low_stock_count || 0,
-      trend: "-2",
+      value: lowStockItems,
+      trend: `${totalProducts} products tracked`,
       positive: false,
     },
     {
-      title: "Total Customers",
-      value: data?.total_customers || 0,
-      trend: "+24",
+      title: "Top Products",
+      value: (data?.topProducts || []).length,
+      trend: "7-day view",
       positive: true,
     },
   ];
@@ -135,7 +150,7 @@ export function OverviewTab({ filters }) {
             <div>
               <h3 className="font-bold text-slate-800">Revenue Forecast</h3>
               <p className="text-xs text-slate-500">
-                Sales trend for last 7 days
+                Store revenue trend for the last 6 months
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -145,7 +160,7 @@ export function OverviewTab({ filters }) {
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data?.daily_sales || []}>
+              <AreaChart data={data?.monthlyTrend || []}>
                 <defs>
                   <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
@@ -158,7 +173,7 @@ export function OverviewTab({ filters }) {
                   stroke="#f1f5f9"
                 />
                 <XAxis
-                  dataKey="date"
+                  dataKey="month"
                   axisLine={false}
                   tickLine={false}
                   tick={{ fontSize: 10, fill: "#94a3b8" }}
@@ -196,22 +211,25 @@ export function OverviewTab({ filters }) {
             Category Contribution
           </h3>
           <div className="space-y-4">
-            {(data?.category_distribution || []).map((c, i) => (
+            {topCategories.map((c, i) => {
+              const percentage =
+                totalCategoryRevenue > 0
+                  ? ((Number(c.revenue || 0) / totalCategoryRevenue) * 100).toFixed(1)
+                  : "0.0";
+              return (
               <div key={i} className="space-y-1.5">
                 <div className="flex justify-between text-xs font-medium">
-                  <span className="text-slate-600 truncate mr-2">{c.name}</span>
-                  <span className="text-slate-900 font-bold">
-                    {c.percentage}%
-                  </span>
+                  <span className="text-slate-600 truncate mr-2">{c.category}</span>
+                  <span className="text-slate-900 font-bold">{percentage}%</span>
                 </div>
                 <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                   <div
                     className="bg-blue-500 h-full rounded-full transition-all duration-1000"
-                    style={{ width: `${c.percentage}%` }}
+                    style={{ width: `${percentage}%` }}
                   ></div>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         </div>
       </div>
@@ -261,8 +279,31 @@ export function SalesSummaryTab({ filters }) {
       </div>
     );
 
+  const dailySales = data?.daily_sales || [];
+  const paymentMethods = data?.payment_methods || [];
+  const totalRevenue = Number(data?.total_revenue || 0);
+  const totalOrders = dailySales.reduce(
+    (sum, row) => sum + Number(row.orders || 0),
+    0,
+  );
+
   return (
     <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Revenue</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Orders</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{totalOrders}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Payment Types</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{paymentMethods.length}</p>
+        </div>
+      </div>
+
       {/* Visual Analytics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <CardShell
@@ -306,7 +347,7 @@ export function SalesSummaryTab({ filters }) {
           subtitle="Transaction volume by tender type"
         >
           <div className="p-4 space-y-4">
-            {(data?.payment_methods || []).map((pm, i) => (
+            {paymentMethods.map((pm, i) => (
               <div key={i} className="flex items-center gap-4">
                 <div className="text-xs font-bold text-slate-600 w-20">
                   {pm.method}
@@ -315,7 +356,7 @@ export function SalesSummaryTab({ filters }) {
                   <div
                     className="h-full bg-emerald-500 rounded-full"
                     style={{
-                      width: `${(pm.total / data.total_revenue) * 100}%`,
+                      width: `${totalRevenue > 0 ? (pm.total / totalRevenue) * 100 : 0}%`,
                     }}
                   />
                 </div>
@@ -336,8 +377,12 @@ export function SalesSummaryTab({ filters }) {
             onClick={() =>
               exportCSV(
                 "sales_summary.csv",
-                ["Date", "Orders", "Revenue"],
-                data.daily_sales,
+                [
+                  { header: "Date", key: "date" },
+                  { header: "Orders", key: "orders" },
+                  { header: "Revenue", key: "total" },
+                ],
+                dailySales,
               )
             }
           />
@@ -400,46 +445,104 @@ export function SalesDetailTab({ filters }) {
     load();
   }, [load]);
 
+  const totalRevenue = rows.reduce(
+    (sum, row) => sum + Number(row.line_total || 0),
+    0,
+  );
+  const uniqueSales = new Set(rows.map((row) => row.sale_id)).size;
+  const uniqueProducts = new Set(rows.map((row) => row.product_name)).size;
+
   return (
-    <CardShell
-      title="Transaction Journal"
-      subtitle="Complete list of all sales records"
-      action={
-        <ExportButton
-          onClick={() =>
-            exportCSV(
-              "sales_detail.csv",
-              ["Date", "Order #", "Outlet", "Employee", "Amount"],
-              rows,
-            )
-          }
-        />
-      }
-    >
-      <TableShell
-        cols={["Date", "Order #", "Outlet", "Employee", "Total"]}
-        loading={loading}
-        empty={!rows.length}
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Sales in View
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{uniqueSales}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Line Revenue
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {fmt(totalRevenue)}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Products Touched
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{uniqueProducts}</p>
+        </div>
+      </div>
+
+      <CardShell
+        title="Transaction Journal"
+        subtitle="Line-level sales ledger for audit, lookup, and exception tracing"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "sales_detail.csv",
+                [
+                  { header: "Sale ID", key: "sale_id" },
+                  { header: "Timestamp", key: "timestamp" },
+                  { header: "Customer", key: "customer_name" },
+                  { header: "Product", key: "product_name" },
+                  { header: "Barcode", key: "barcode" },
+                  { header: "Quantity", key: "quantity" },
+                  { header: "Price", key: "price_at_sale" },
+                  { header: "Line Total", key: "line_total" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
-        {rows.map((r, i) => (
-          <tr key={i} className="hover:bg-slate-50">
-            <td className="p-4 text-sm whitespace-nowrap text-slate-600 underline font-medium cursor-pointer decoration-slate-300">
-              {fmtDateTime(r.created_at)}
-            </td>
-            <td className="p-4 text-sm font-bold text-slate-800">
-              #{r.order_number}
-            </td>
-            <td className="p-4 text-sm text-slate-600">{r.outlet_name}</td>
-            <td className="p-4 text-sm text-slate-600 font-medium">
-              {r.employee_name}
-            </td>
-            <td className="p-4 text-sm font-bold text-slate-900">
-              {fmt(r.total_amount)}
-            </td>
-          </tr>
-        ))}
-      </TableShell>
-    </CardShell>
+        <TableShell
+          cols={["Timestamp", "Sale", "Customer", "Product", "Qty", "Price", "Line Total"]}
+          loading={loading}
+          empty={!rows.length}
+        >
+          {rows.map((r, i) => (
+            <tr key={`${r.sale_id}-${r.barcode}-${i}`} className="hover:bg-slate-50">
+              <td className="px-4 py-3 text-sm text-slate-600">
+                <div className="font-medium text-slate-700">
+                  {fmtDateTime(r.timestamp)}
+                </div>
+              </td>
+              <td className="px-4 py-3">
+                <div className="font-mono text-xs font-bold text-slate-800">
+                  #{r.sale_id}
+                </div>
+              </td>
+              <td className="px-4 py-3 text-sm text-slate-600">
+                {r.customer_name}
+              </td>
+              <td className="px-4 py-3">
+                <div className="text-sm font-semibold text-slate-800">
+                  {r.product_name}
+                </div>
+                <div className="font-mono text-[11px] text-slate-400">
+                  {r.barcode}
+                </div>
+              </td>
+              <td className="px-4 py-3 text-sm font-semibold text-slate-700">
+                {r.quantity}
+              </td>
+              <td className="px-4 py-3 text-sm text-slate-600">
+                {fmt(r.price_at_sale)}
+              </td>
+              <td className="px-4 py-3 text-sm font-bold text-slate-900">
+                {fmt(r.line_total)}
+              </td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
   );
 }
 
@@ -470,52 +573,94 @@ export function OrderWiseTab({ filters }) {
     load();
   }, [load]);
 
+  const totalOrders = rows.length;
+  const grossSales = rows.reduce(
+    (sum, row) => sum + Number(row.total_amount || 0),
+    0,
+  );
+  const discountedOrders = rows.filter(
+    (row) => Number(row.discount_amount || 0) > 0,
+  ).length;
+
   return (
-    <CardShell
-      title="Order Fulfillment"
-      subtitle="Operational view of order status and payment"
-      action={
-        <ExportButton
-          onClick={() =>
-            exportCSV(
-              "orders.csv",
-              ["ID", "Outlet", "Status", "Payment", "Total"],
-              rows,
-            )
-          }
-        />
-      }
-    >
-      <TableShell
-        cols={["ID", "Outlet", "Status", "Payment", "Total"]}
-        loading={loading}
-        empty={!rows.length}
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Orders in View
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{totalOrders}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Gross Sales
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(grossSales)}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Discounted Orders
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{discountedOrders}</p>
+        </div>
+      </div>
+
+      <CardShell
+        title="Order Fulfillment"
+        subtitle="Operational register of completed orders and payment mix"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "orders.csv",
+                [
+                  { header: "Order ID", key: "id" },
+                  { header: "Timestamp", key: "timestamp" },
+                  { header: "Customer", key: "customer_name" },
+                  { header: "Outlet", key: "outlet_name" },
+                  { header: "Payment", key: "payment_method" },
+                  { header: "Discount", key: "discount_amount" },
+                  { header: "Total", key: "total_amount" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
-        {rows.map((r, i) => (
-          <tr key={i} className="hover:bg-slate-50 transition-colors">
-            <td className="p-4 text-sm font-bold text-slate-900">#{r.id}</td>
-            <td className="p-4 text-sm text-slate-600">{r.outlet_name}</td>
-            <td className="p-4">
-              <span
-                className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-tighter ${
-                  r.status === "completed"
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-slate-100 text-slate-600"
-                }`}
-              >
-                {r.status}
-              </span>
-            </td>
-            <td className="p-4 text-sm text-slate-500 font-medium">
-              {r.payment_method || "N/A"}
-            </td>
-            <td className="p-4 text-sm font-bold text-slate-900">
-              {fmt(r.total_amount)}
-            </td>
-          </tr>
-        ))}
-      </TableShell>
-    </CardShell>
+        <TableShell
+          cols={["Timestamp", "Order", "Customer", "Outlet", "Payment", "Total"]}
+          loading={loading}
+          empty={!rows.length}
+        >
+          {rows.map((r, i) => (
+            <tr key={`${r.id}-${i}`} className="hover:bg-slate-50 transition-colors">
+              <td className="px-4 py-3 text-sm text-slate-600">
+                {fmtDateTime(r.timestamp)}
+              </td>
+              <td className="px-4 py-3">
+                <div className="font-mono text-xs font-bold text-slate-800">
+                  #{r.id}
+                </div>
+                {Number(r.discount_amount || 0) > 0 ? (
+                  <div className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">
+                    Discounted
+                  </div>
+                ) : null}
+              </td>
+              <td className="px-4 py-3 text-sm text-slate-600">{r.customer_name}</td>
+              <td className="px-4 py-3 text-sm text-slate-600">{r.outlet_name}</td>
+              <td className="px-4 py-3 text-sm font-medium text-slate-600">
+                {r.payment_method || "N/A"}
+              </td>
+              <td className="px-4 py-3 text-sm font-bold text-slate-900">
+                {fmt(r.total_amount)}
+              </td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
   );
 }
 
@@ -554,47 +699,92 @@ export function ItemWiseTab({ filters }) {
     load();
   }, [load]);
 
+  const totalUnits = rows.reduce(
+    (sum, row) => sum + Number(row.units_sold || 0),
+    0,
+  );
+  const totalRevenue = rows.reduce(
+    (sum, row) => sum + Number(row.revenue || 0),
+    0,
+  );
+  const totalGrossProfit = rows.reduce(
+    (sum, row) => sum + Number(row.gross_profit || 0),
+    0,
+  );
+
   return (
-    <CardShell
-      title="Merchandise Velocity"
-      subtitle="Unit sales and revenue per individual SKU"
-      action={
-        <ExportButton
-          onClick={() =>
-            exportCSV("items.csv", ["SKU", "Product", "Qty", "Revenue"], rows)
-          }
-        />
-      }
-    >
-      <TableShell
-        cols={["Product / SKU", "Units Sold", "Total Revenue"]}
-        loading={loading}
-        empty={!rows.length}
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Units Sold
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{totalUnits}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Revenue
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Gross Profit
+          </p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {fmt(totalGrossProfit)}
+          </p>
+        </div>
+      </div>
+
+      <CardShell
+        title="Merchandise Velocity"
+        subtitle="SKU-level sales volume, revenue, and gross profit performance"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "items.csv",
+                [
+                  { header: "Product", key: "product_name" },
+                  { header: "Barcode", key: "barcode" },
+                  { header: "Units Sold", key: "units_sold" },
+                  { header: "Revenue", key: "revenue" },
+                  { header: "Total Cost", key: "total_cost" },
+                  { header: "Gross Profit", key: "gross_profit" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
       >
-        {rows.map((r, i) => (
-          <tr key={i} className="hover:bg-slate-50">
-            <td className="p-4">
-              <div className="text-sm font-bold text-slate-800">
+        <TableShell
+          cols={["Product", "Barcode", "Units Sold", "Revenue", "Gross Profit"]}
+          loading={loading}
+          empty={!rows.length}
+        >
+          {rows.map((r, i) => (
+            <tr key={`${r.id}-${i}`} className="hover:bg-slate-50">
+              <td className="px-4 py-3 text-sm font-semibold text-slate-800">
                 {r.product_name}
-              </div>
-              <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest">
-                {r.sku}
-              </div>
-            </td>
-            <td className="p-4">
-              <div className="text-sm font-bold text-slate-900">
-                {r.total_qty}
-              </div>
-              <div className="text-[10px] text-slate-400 font-medium">
-                SKUs sold
-              </div>
-            </td>
-            <td className="p-4 text-sm font-bold text-slate-900">
-              {fmt(r.total_revenue)}
-            </td>
-          </tr>
-        ))}
-      </TableShell>
-    </CardShell>
+              </td>
+              <td className="px-4 py-3 font-mono text-[11px] text-slate-400">
+                {r.barcode}
+              </td>
+              <td className="px-4 py-3 text-sm font-semibold text-slate-700">
+                {r.units_sold}
+              </td>
+              <td className="px-4 py-3 text-sm font-bold text-slate-900">
+                {fmt(r.revenue)}
+              </td>
+              <td className="px-4 py-3 text-sm font-semibold text-emerald-700">
+                {fmt(r.gross_profit)}
+              </td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
   );
 }

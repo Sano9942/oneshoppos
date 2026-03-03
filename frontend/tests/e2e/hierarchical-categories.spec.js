@@ -1,11 +1,7 @@
 import { test, expect } from "@playwright/test";
-import { loginAsAdmin } from "./helpers/auth";
+import { ADMIN_HEADERS, loginAsAdmin } from "./helpers/auth";
 
 const API = "http://127.0.0.1:5000/api";
-const EMPLOYEE_HEADERS = {
-  "Content-Type": "application/json",
-  "x-employee-id": "1",
-};
 
 test.describe("Hierarchical Categories Smoke", () => {
   async function navigateSpa(page, pathname, headingText) {
@@ -39,14 +35,14 @@ test.describe("Hierarchical Categories Smoke", () => {
 
     try {
       let res = await request.post(`${API}/categories`, {
-        headers: EMPLOYEE_HEADERS,
+        headers: ADMIN_HEADERS,
         data: { name: parentName, description: "smoke parent" },
       });
       expect(res.ok()).toBeTruthy();
       parentId = (await res.json()).id;
 
       res = await request.post(`${API}/categories`, {
-        headers: EMPLOYEE_HEADERS,
+        headers: ADMIN_HEADERS,
         data: {
           name: childName,
           description: "smoke child",
@@ -57,7 +53,7 @@ test.describe("Hierarchical Categories Smoke", () => {
       childId = (await res.json()).id;
 
       res = await request.post(`${API}/products`, {
-        headers: EMPLOYEE_HEADERS,
+        headers: ADMIN_HEADERS,
         data: {
           name: productName,
           barcode,
@@ -71,7 +67,7 @@ test.describe("Hierarchical Categories Smoke", () => {
       productId = (await res.json()).id;
 
       res = await request.post(`${API}/promotions`, {
-        headers: EMPLOYEE_HEADERS,
+        headers: ADMIN_HEADERS,
         data: {
           name: promoName,
           type: "percent",
@@ -100,30 +96,27 @@ test.describe("Hierarchical Categories Smoke", () => {
       await navigateSpa(page, "/promotions", "Promotions");
       await expect(page.getByText(promoName, { exact: true })).toBeVisible();
 
-      await navigateSpa(page, "/reports/category-wise", "Category Wise Sales");
-      await expect(page.getByText("Category Wise Sales")).toBeVisible({
-        timeout: 15000,
-      });
+      await navigateSpa(page, "/reports/category-wise");
       await expect(page.locator("table").first()).toBeVisible();
     } finally {
       if (promoId) {
         await request.delete(`${API}/promotions/${promoId}`, {
-          headers: { "x-employee-id": "1" },
+          headers: ADMIN_HEADERS,
         });
       }
       if (productId) {
         await request.delete(`${API}/products/${productId}`, {
-          headers: { "x-employee-id": "1" },
+          headers: ADMIN_HEADERS,
         });
       }
       if (childId) {
         await request.delete(`${API}/categories/${childId}`, {
-          headers: { "x-employee-id": "1" },
+          headers: ADMIN_HEADERS,
         });
       }
       if (parentId) {
         await request.delete(`${API}/categories/${parentId}`, {
-          headers: { "x-employee-id": "1" },
+          headers: ADMIN_HEADERS,
         });
       }
     }

@@ -5,6 +5,7 @@ const inventory = require("./inventory");
 const analytics = require("./analytics");
 const shifts = require("./shifts");
 const governance = require("./governance");
+const staff = require("./staff");
 
 module.exports = function registerReportsRoutes(app, deps) {
   const { db } = deps;
@@ -17,6 +18,7 @@ module.exports = function registerReportsRoutes(app, deps) {
   sales(app, deps, helpers);
   const inventoryModule = inventory(app, deps, helpers);
   analytics(app, deps, helpers);
+  staff(app, deps, helpers);
   shifts(app, deps, helpers);
   const governanceModule = governance(app, deps, helpers);
 
