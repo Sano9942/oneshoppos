@@ -51,7 +51,7 @@ function ShopifyIntegrationContent() {
   };
 
   return (
-    <div className="p-6 max-w-[1600px] mx-auto space-y-6">
+    <div className="p-6 max-w-400 mx-auto space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -123,7 +123,7 @@ function ShopifyIntegrationContent() {
       </div>
 
       {/* Main Content */}
-      <div className="min-h-[500px] animate-in fade-in duration-500">
+      <div className="min-h-125 animate-in fade-in duration-500">
         {renderTabContent()}
       </div>
     </div>

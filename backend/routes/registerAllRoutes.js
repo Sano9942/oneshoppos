@@ -22,7 +22,6 @@ module.exports = function registerAllRoutes(app, deps) {
     UPLOADS_DIR,
     DB_PATH,
     SHOPIFY_MAX_RETRY_ATTEMPTS,
-    createTier4Router,
     verifyConnection,
     fetchShopifyLocations,
     adjustShopifyInventory,
@@ -236,6 +235,10 @@ module.exports = function registerAllRoutes(app, deps) {
       COMPANY_UPLOADS_DIR,
     }),
   );
+
+  // --- ROUTES: SHIFTS (Operational) ---
+  require("./shifts")(app, deps);
+
   // --- ROUTES: TAXES ---
   require("./taxes")(app, deps);
 

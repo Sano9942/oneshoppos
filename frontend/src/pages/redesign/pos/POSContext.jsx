@@ -1,0 +1,700 @@
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
+import { useNavigate } from "react-router-dom";
+import { API_BASE as API } from "../../../config";
+import { useAuth } from "../../../auth/AuthProvider";
+
+const POSContext = createContext();
+
+export const usePOS = () => {
+  const context = useContext(POSContext);
+  if (!context) throw new Error("usePOS must be used within a POSProvider");
+  return context;
+};
+
+export const POSProvider = ({ children }) => {
+  const navigate = useNavigate();
+  const { employee, authHeaders, logout } = useAuth();
+
+  // ── Lock state ────────────────────────────────────────────────────────────
+  const [isLocked, setIsLocked] = useState(
+    () => sessionStorage.getItem("posLocked") === "1",
+  );
+  const [lockPin, setLockPin] = useState("");
+  const [lockError, setLockError] = useState("");
+
+  // ── Bootstrap data ────────────────────────────────────────────────────────
+  const [outlets, setOutlets] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [selectedOutletId, setSelectedOutletId] = useState("");
+
+  // ── Product search ────────────────────────────────────────────────────────
+  const [search, setSearch] = useState("");
+  const [barcodeSearch, setBarcodeSearch] = useState("");
+  const [skuSearch, setSkuSearch] = useState("");
+  const [priceSearch, setPriceSearch] = useState("");
+  const [results, setResults] = useState([]);
+  const [showResults, setShowResults] = useState(false);
+  const searchRef = useRef(null);
+  const searchTimer = useRef(null);
+
+  // ── Cart ──────────────────────────────────────────────────────────────────
+  const [cart, setCart] = useState([]);
+  const [taxInclusive, setTaxInclusive] = useState(false);
+
+  // ── Order-level discount / note ───────────────────────────────────────────
+  const [discountType, setDiscountType] = useState("fixed");
+  const [discountInput, setDiscountInput] = useState("");
+  const [orderNote, setOrderNote] = useState("");
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+
+  // ── Customer (sidebar) ────────────────────────────────────────────────────
+  const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [showCustomerDD, setShowCustomerDD] = useState(false);
+
+  // ── Parked sales ──────────────────────────────────────────────────────────
+  const [parkedSales, setParkedSales] = useState([]);
+  const [showParked, setShowParked] = useState(false);
+
+  // ── Checkout ──────────────────────────────────────────────────────────────
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [payments, setPayments] = useState([]);
+  const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [checkoutCustomerId, setCheckoutCustomerId] = useState("");
+  const [checkoutCustSearch, setCheckoutCustSearch] = useState("");
+  const [showCheckoutCustDD, setShowCheckoutCustDD] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const payAmountRef = useRef(null);
+
+  // ── Quick-create customer inside checkout ─────────────────────────────────
+  const [custMode, setCustMode] = useState("search");
+  const [newCustName, setNewCustName] = useState("");
+  const [newCustMobile, setNewCustMobile] = useState("");
+  const [newCustSaving, setNewCustSaving] = useState(false);
+  const [newCustError, setNewCustError] = useState("");
+
+  // ── Receipt slip ──────────────────────────────────────────────────────────
+  const [slip, setSlip] = useState(null);
+  const [slipOpen, setSlipOpen] = useState(false);
+
+  // ── Notices ───────────────────────────────────────────────────────────────
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const noticeTimer = useRef(null);
+
+  const showNotice = (msg) => {
+    setNotice(msg);
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(""), 4000);
+  };
+
+  const money = (v) =>
+    new Intl.NumberFormat("en-PK", {
+      style: "currency",
+      currency: "PKR",
+      minimumFractionDigits: 0,
+    }).format(v || 0);
+
+  // ── Bootstrap ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API}/api/outlets`, { headers: authHeaders() }).then((r) =>
+        r.json(),
+      ),
+      fetch(`${API}/api/customers`, { headers: authHeaders() }).then((r) =>
+        r.json(),
+      ),
+    ])
+      .then(([outData, custData]) => {
+        const outList = outData.outlets || [];
+        setOutlets(outList);
+        setCustomers(custData.customers || []);
+        if (outList.length > 0) setSelectedOutletId(String(outList[0].id));
+      })
+      .catch(() => setError("Failed to load POS setup data."));
+  }, []);
+
+  useEffect(() => {
+    if (selectedOutletId) loadParked(selectedOutletId);
+  }, [selectedOutletId]);
+
+  // ── Functions ─────────────────────────────────────────────────────────────
+  const loadParked = async (outletId = selectedOutletId) => {
+    try {
+      const qs = outletId ? `?outlet_id=${outletId}` : "";
+      const res = await fetch(`${API}/api/parked-sales${qs}`, {
+        headers: authHeaders(),
+      });
+      const data = await res.json();
+      setParkedSales(data.parkedSales || []);
+    } catch {
+      setParkedSales([]);
+    }
+  };
+
+  const triggerSearch = (query, field = "all") => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (!query.trim()) {
+      setResults([]);
+      setShowResults(false);
+      return;
+    }
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const outletParam = selectedOutletId
+          ? `&outlet_id=${selectedOutletId}`
+          : "";
+        const fieldParam = field !== "all" ? `&field=${field}` : "";
+        const res = await fetch(
+          `${API}/api/products/search?query=${encodeURIComponent(query)}${outletParam}${fieldParam}`,
+        );
+        const data = await res.json();
+        setResults(data.products || []);
+        setShowResults(true);
+      } catch {
+        setResults([]);
+      }
+    }, 250);
+  };
+
+  const handleSearchChange = (e, field = "all") => {
+    const v = e.target.value;
+    if (field === "all") {
+      setSearch(v);
+      setBarcodeSearch("");
+      setSkuSearch("");
+      setPriceSearch("");
+    }
+    if (field === "barcode") {
+      setBarcodeSearch(v);
+      setSearch("");
+      setSkuSearch("");
+      setPriceSearch("");
+    }
+    if (field === "sku") {
+      setSkuSearch(v);
+      setSearch("");
+      setBarcodeSearch("");
+      setPriceSearch("");
+    }
+    if (field === "price") {
+      setPriceSearch(v);
+      setSearch("");
+      setBarcodeSearch("");
+      setSkuSearch("");
+    }
+    triggerSearch(v, field);
+  };
+
+  const addToCart = (product) => {
+    const stock = Number(product.local_stock ?? product.stock ?? 0);
+    setCart((prev) => {
+      const found = prev.find((x) => x.id === product.id);
+      if (found) {
+        if (stock > 0 && found.quantity >= stock)
+          showNotice(`Note: Selling past available stock (${stock} in stock).`);
+        return prev.map((x) =>
+          x.id === product.id ? { ...x, quantity: x.quantity + 1 } : x,
+        );
+      }
+      if (stock <= 0)
+        showNotice("Note: Item is out of stock — selling on override.");
+      return [{ ...product, quantity: 1, availableStock: stock }, ...prev];
+    });
+    setSearch("");
+    setBarcodeSearch("");
+    setSkuSearch("");
+    setPriceSearch("");
+    setResults([]);
+    setShowResults(false);
+    searchRef.current?.focus();
+  };
+
+  const updateQty = (id, delta) => {
+    setCart((prev) =>
+      prev.map((x) => {
+        if (x.id !== id) return x;
+        const next = x.quantity + delta;
+        if (next < 1) return x;
+        if (delta > 0 && x.availableStock > 0 && next > x.availableStock)
+          showNotice(
+            `Note: Selling past available stock (${x.availableStock} in stock).`,
+          );
+        return { ...x, quantity: next };
+      }),
+    );
+  };
+
+  const removeFromCart = (id) =>
+    setCart((prev) => prev.filter((x) => x.id !== id));
+
+  const grossTotal = useMemo(
+    () => cart.reduce((s, i) => s + Number(i.price || 0) * i.quantity, 0),
+    [cart],
+  );
+
+  const discountValue = useMemo(() => {
+    const raw = Number(discountInput || 0);
+    if (discountType === "percent") return (grossTotal * raw) / 100;
+    return raw;
+  }, [discountInput, discountType, grossTotal]);
+
+  const taxTotal = useMemo(() => {
+    if (!taxInclusive) return 0;
+    return cart.reduce((s, i) => {
+      const rate = i.effectiveTaxRate || 0;
+      const itemTotal = i.price * i.quantity;
+      return s + (itemTotal - itemTotal / (1 + rate / 100));
+    }, 0);
+  }, [cart, taxInclusive]);
+
+  const total = Math.max(
+    0,
+    grossTotal - discountValue + (taxInclusive ? 0 : taxTotal),
+  );
+  const totalPaid = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const remaining = Math.max(0, total - totalPaid);
+  const change = Math.max(0, totalPaid - total);
+
+  const effectiveCustomerId = checkoutOpen
+    ? checkoutCustomerId
+    : selectedCustomerId;
+  const selectedCustomer = useMemo(
+    () =>
+      customers.find((c) => String(c.id) === String(effectiveCustomerId)) ||
+      null,
+    [customers, effectiveCustomerId],
+  );
+
+  const filteredCustomers = useMemo(() => {
+    const q = customerSearch.trim().toLowerCase();
+    if (!q) return customers.slice(0, 15);
+    return customers
+      .filter(
+        (c) =>
+          String(c.name || "")
+            .toLowerCase()
+            .includes(q) || String(c.mobile || "").includes(q),
+      )
+      .slice(0, 15);
+  }, [customers, customerSearch]);
+
+  const filteredCheckoutCustomers = useMemo(() => {
+    const q = checkoutCustSearch.trim().toLowerCase();
+    if (!q) return customers.slice(0, 15);
+    return customers
+      .filter(
+        (c) =>
+          String(c.name || "")
+            .toLowerCase()
+            .includes(q) || String(c.mobile || "").includes(q),
+      )
+      .slice(0, 15);
+  }, [customers, checkoutCustSearch]);
+
+  const parkSale = async () => {
+    if (!cart.length || !selectedOutletId) return;
+    try {
+      const res = await fetch(`${API}/api/parked-sales`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          employee_id: employee?.id || null,
+          outlet_id: Number(selectedOutletId),
+          customer_id: selectedCustomerId ? Number(selectedCustomerId) : null,
+          notes: orderNote || null,
+          items: cart.map((i) => ({
+            product_id: i.id,
+            variant_id: i.variant_id || null,
+            product_name: i.name,
+            quantity: i.quantity,
+            price: i.price,
+            effective_tax_rate: i.effectiveTaxRate || 0,
+          })),
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      setCart([]);
+      setDiscountInput("");
+      setOrderNote("");
+      setSelectedCustomerId("");
+      await loadParked(selectedOutletId);
+      showNotice("Sale parked successfully.");
+    } catch (e) {
+      setError(e.message || "Failed to park sale");
+    }
+  };
+
+  const restoreParked = async (row) => {
+    try {
+      const res = await fetch(`${API}/api/parked-sales/${row.id}`, {
+        headers: authHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setCart(
+        (data.items || []).map((i) => ({
+          id: i.product_id,
+          variant_id: i.variant_id || null,
+          name: i.product_name,
+          quantity: Number(i.quantity),
+          price: Number(i.price),
+          availableStock: 99999,
+        })),
+      );
+      setOrderNote(data.parkedSale?.notes || "");
+      if (data.parkedSale?.customer_id)
+        setSelectedCustomerId(String(data.parkedSale.customer_id));
+      await fetch(`${API}/api/parked-sales/${row.id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      await loadParked(selectedOutletId);
+      setShowParked(false);
+      showNotice("Parked sale restored.");
+    } catch (e) {
+      setError(e.message || "Failed to restore parked sale");
+    }
+  };
+
+  const openCheckout = () => {
+    if (!cart.length) return;
+    setPayments([]);
+    setPaymentMethod("Cash");
+    setPaymentAmount(total.toFixed(2));
+    setCheckoutCustomerId(selectedCustomerId);
+    setCheckoutCustSearch(
+      selectedCustomerId
+        ? customers.find((c) => String(c.id) === String(selectedCustomerId))
+            ?.name || ""
+        : "",
+    );
+    setCustMode("search");
+    setNewCustName("");
+    setNewCustMobile("");
+    setNewCustError("");
+    setCheckoutOpen(true);
+  };
+
+  const handleQuickCreateCustomer = async () => {
+    if (!newCustName.trim()) {
+      setNewCustError("Name is required");
+      return;
+    }
+    setNewCustSaving(true);
+    setNewCustError("");
+    try {
+      const res = await fetch(`${API}/api/customers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newCustName.trim(),
+          mobile: newCustMobile.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNewCustError(data.error || "Failed to create customer");
+        return;
+      }
+      setCustomers((prev) => [...prev, data]);
+      setCheckoutCustomerId(String(data.id));
+      setCheckoutCustSearch(data.name);
+      setCustMode("search");
+      setNewCustName("");
+      setNewCustMobile("");
+    } catch {
+      setNewCustError("Network error");
+    } finally {
+      setNewCustSaving(false);
+    }
+  };
+
+  const addPayment = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const amount = Number(paymentAmount);
+    if (!amount || amount <= 0) return;
+    setPayments((prev) => [...prev, { method: paymentMethod, amount }]);
+    setPaymentAmount(
+      remaining - amount > 0 ? (remaining - amount).toFixed(2) : "",
+    );
+  };
+
+  const printSlip = (s) => {
+    const w = window.open("", "_blank", "width=360,height=620");
+    const d = w.document;
+    const style = d.createElement("style");
+    style.textContent =
+      "body{font-family:monospace;font-size:13px;width:300px;margin:0 auto;padding:12px} .row{display:flex;justify-content:space-between} .c{text-align:center} hr{border:none;border-top:1px dashed #999;margin:6px 0}";
+    d.head.appendChild(style);
+    d.title = `Receipt ${s.invoiceNumber}`;
+    const b = d.body;
+    const txt = (tag, text, cls = "") => {
+      const e = d.createElement(tag);
+      e.textContent = text;
+      if (cls) e.className = cls;
+      return e;
+    };
+    const row = (l, r) => {
+      const e = d.createElement("div");
+      e.className = "row";
+      e.appendChild(txt("span", l));
+      e.appendChild(txt("span", r));
+      return e;
+    };
+    b.appendChild(txt("div", s.outlet?.name || "OneShopPOS", "c"));
+    b.appendChild(txt("div", s.timestamp, "c"));
+    b.appendChild(txt("div", `Invoice: ${s.invoiceNumber}`, "c"));
+    if (s.employee) b.appendChild(txt("div", `Staff: ${s.employee.name}`, "c"));
+    if (s.customer)
+      b.appendChild(
+        txt(
+          "div",
+          `Customer: ${s.customer.name}${s.customer.mobile ? " · " + s.customer.mobile : ""}`,
+          "c",
+        ),
+      );
+    b.appendChild(d.createElement("hr"));
+    s.cart.forEach((item) =>
+      b.appendChild(
+        row(
+          `${item.name} x${item.quantity}`,
+          money(item.price * item.quantity),
+        ),
+      ),
+    );
+    b.appendChild(d.createElement("hr"));
+    if (s.discountAmount > 0)
+      b.appendChild(row("Discount", `-${money(s.discountAmount)}`));
+    const totalRow = row("TOTAL", money(s.total));
+    totalRow.style.fontWeight = "bold";
+    b.appendChild(totalRow);
+    s.payments.forEach((p) => b.appendChild(row(p.method, money(p.amount))));
+    if (s.change > 0) b.appendChild(row("Change", money(s.change)));
+    b.appendChild(d.createElement("hr"));
+    b.appendChild(txt("div", "Thank you for your purchase!", "c"));
+    w.print();
+  };
+
+  const completeSale = async () => {
+    if (!selectedOutletId || !cart.length || remaining > 0) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const res = await fetch(`${API}/api/sales`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cartItems: cart,
+          payments,
+          outlet_id: Number(selectedOutletId),
+          employee_id: employee?.id || null,
+          customer_id: checkoutCustomerId ? Number(checkoutCustomerId) : null,
+          discount_amount: Number(discountInput || 0),
+          discount_type: discountType,
+          notes: orderNote || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to complete sale");
+
+      const custObj = checkoutCustomerId
+        ? customers.find((c) => String(c.id) === String(checkoutCustomerId))
+        : null;
+      setSlip({
+        saleId: data.saleId,
+        invoiceNumber: data.invoiceNumber || "-",
+        cart: [...cart],
+        payments: [...payments],
+        total,
+        change,
+        customer: custObj || null,
+        outlet: outlets.find((o) => String(o.id) === String(selectedOutletId)),
+        employee: employee,
+        discountAmount: Number(discountInput || 0),
+        discountType,
+        timestamp: new Date().toLocaleString(),
+      });
+      setSlipOpen(true);
+
+      setCart([]);
+      setDiscountInput("");
+      setOrderNote("");
+      setSelectedCustomerId("");
+      setCheckoutOpen(false);
+      setPayments([]);
+      showNotice(
+        `Sale #${data.saleId} completed. Invoice: ${data.invoiceNumber || "-"}`,
+      );
+      await loadParked(selectedOutletId);
+    } catch (e) {
+      setError(e.message || "Failed to complete sale");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleLock = () => {
+    sessionStorage.setItem("posLocked", "1");
+    setIsLocked(true);
+    setLockPin("");
+    setLockError("");
+  };
+
+  const handleUnlock = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!lockPin) return;
+    try {
+      const res = await fetch(`${API}/api/employees/validate-pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin_code: lockPin }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.employee) {
+        setLockError("Invalid PIN");
+        setLockPin("");
+        return;
+      }
+      if (employee?.id && data.employee.id !== employee.id) {
+        setLockError("PIN does not match the logged-in user");
+        setLockPin("");
+        return;
+      }
+      sessionStorage.removeItem("posLocked");
+      setIsLocked(false);
+      setLockPin("");
+      setLockError("");
+    } catch {
+      setLockError("Failed to connect to server");
+    }
+  };
+
+  const value = {
+    employee,
+    logout,
+    isLocked,
+    setIsLocked,
+    lockPin,
+    setLockPin,
+    lockError,
+    setLockError,
+    outlets,
+    customers,
+    selectedOutletId,
+    setSelectedOutletId,
+    search,
+    setSearch,
+    barcodeSearch,
+    setBarcodeSearch,
+    skuSearch,
+    setSkuSearch,
+    priceSearch,
+    setPriceSearch,
+    results,
+    setResults,
+    showResults,
+    setShowResults,
+    searchRef,
+    cart,
+    setCart,
+    taxInclusive,
+    setTaxInclusive,
+    discountType,
+    setDiscountType,
+    discountInput,
+    setDiscountInput,
+    orderNote,
+    setOrderNote,
+    showDiscountModal,
+    setShowDiscountModal,
+    showNoteModal,
+    setShowNoteModal,
+    selectedCustomerId,
+    setSelectedCustomerId,
+    customerSearch,
+    setCustomerSearch,
+    showCustomerDD,
+    setShowCustomerDD,
+    parkedSales,
+    setParkedSales,
+    showParked,
+    setShowParked,
+    checkoutOpen,
+    setCheckoutOpen,
+    payments,
+    setPayments,
+    paymentMethod,
+    setPaymentMethod,
+    paymentAmount,
+    setPaymentAmount,
+    checkoutCustomerId,
+    setCheckoutCustomerId,
+    checkoutCustSearch,
+    setCheckoutCustSearch,
+    showCheckoutCustDD,
+    setShowCheckoutCustDD,
+    submitting,
+    setSubmitting,
+    payAmountRef,
+    custMode,
+    setCustMode,
+    newCustName,
+    setNewCustName,
+    newCustMobile,
+    setNewCustMobile,
+    newCustSaving,
+    setNewCustSaving,
+    newCustError,
+    setNewCustError,
+    slip,
+    setSlip,
+    slipOpen,
+    setSlipOpen,
+    notice,
+    setNotice,
+    error,
+    setError,
+    success,
+    setSuccess,
+    money,
+    showNotice,
+    loadParked,
+    triggerSearch,
+    handleSearchChange,
+    addToCart,
+    updateQty,
+    removeFromCart,
+    grossTotal,
+    discountValue,
+    taxTotal,
+    total,
+    totalPaid,
+    remaining,
+    change,
+    selectedCustomer,
+    filteredCustomers,
+    filteredCheckoutCustomers,
+    parkSale,
+    restoreParked,
+    openCheckout,
+    handleQuickCreateCustomer,
+    addPayment,
+    printSlip,
+    completeSale,
+    handleLock,
+    handleUnlock,
+  };
+
+  return <POSContext.Provider value={value}>{children}</POSContext.Provider>;
+};
