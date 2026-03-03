@@ -259,59 +259,69 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: PRODUCTS (INVENTORY) ---
   require("./products")(app, deps);
 
-    // --- ROUTES: SUPPLIERS ---
+  // --- ROUTES: SUPPLIERS ---
   require("./suppliers")(app, deps);
 
   // --- ROUTES: PURCHASE ORDERS ---
   require("./purchase-orders")(app, deps);
 
-    // --- GRN & SUPPLIER PAYABLES ---
+  // --- GRN & SUPPLIER PAYABLES ---
   require("./grn")(app, deps);
 
-    // --- PROMOTIONS ENGINE ---
+  // --- PROMOTIONS ENGINE ---
   require("./promotions")(app, deps);
 
-    // --- CUSTOMERS ---
+  // --- CUSTOMERS ---
   require("./customers")(app, deps);
 
   // --- SALES HISTORY ROUTES ---
   require("./sales")(app, deps);
 
-    // --- INVENTORY TRANSFERS & ADJUSTMENTS ---
+  // --- INVENTORY TRANSFERS & ADJUSTMENTS ---
   require("./inventory")(app, deps);
 
-    // --- REPORTS ---
-  const { processPendingReportSchedules } = require("./reports")(app, deps) || {};
+  // --- REPORTS ---
+  const { processPendingReportSchedules } =
+    require("./reports/index")(app, deps) || {};
 
-    // --- ROUTES: RETURNS ---
+  // --- ROUTES: RETURNS ---
   require("./returns")(app, deps);
 
-    // --- ROUTES: ATTRIBUTE SETS ---
+  // --- ROUTES: ATTRIBUTE SETS ---
   require("./attribute-sets")(app, deps);
 
-    // --- RECEIPT TEMPLATES & ACTION HISTORY ---
+  // --- RECEIPT TEMPLATES & ACTION HISTORY ---
   require("./receipt-templates")(app, deps);
 
-    // --- SUPPLIER RETURNS (RMA) ---
+  // --- SUPPLIER RETURNS (RMA) ---
   require("./supplier-returns")(app, deps);
 
-    // --- ROUTES: PARKED SALES ---
+  // --- ROUTES: PARKED SALES ---
   require("./parked-sales")(app, deps);
 
-    // --- ROUTES: ORDERS ---
-  const { processPendingShopifyInventoryEvents, enqueueInventorySyncEvents, upsertWebOrderFromShopifyPayload } = require("./orders")(app, deps) || {};
-  const shopifyDeps = { ...deps, processPendingShopifyInventoryEvents, enqueueInventorySyncEvents, upsertWebOrderFromShopifyPayload };
+  // --- ROUTES: ORDERS ---
+  const {
+    processPendingShopifyInventoryEvents,
+    enqueueInventorySyncEvents,
+    upsertWebOrderFromShopifyPayload,
+  } = require("./orders")(app, deps) || {};
+  const shopifyDeps = {
+    ...deps,
+    processPendingShopifyInventoryEvents,
+    enqueueInventorySyncEvents,
+    upsertWebOrderFromShopifyPayload,
+  };
 
-    // --- ROUTES: SHOPIFY ---
+  // --- ROUTES: SHOPIFY ---
   require("./shopify")(app, shopifyDeps);
 
-    // --- ROUTES: RECONCILIATION & APPROVALS ---
+  // --- ROUTES: RECONCILIATION & APPROVALS ---
   require("./reconciliation")(app, deps);
 
-    // --- BARCODE TEMPLATES & EXPENSES ---
+  // --- BARCODE TEMPLATES & EXPENSES ---
   require("./barcode-expenses")(app, deps);
 
-    // --- ATTENDANCE ---
+  // --- ATTENDANCE ---
   require("./attendance")(app, deps);
 
   return {
