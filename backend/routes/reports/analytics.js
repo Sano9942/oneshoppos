@@ -37,9 +37,25 @@ module.exports = function (app, deps, helpers) {
         ]),
       ]);
 
+      const data1 = p1[0] || { revenue: 0, orders: 0 };
+      const data2 = p2[0] || { revenue: 0, orders: 0 };
+
+      const calcDiff = (v1, v2) => {
+        if (!v2) return v1 > 0 ? 100 : 0;
+        return Number((((v1 - v2) / v2) * 100).toFixed(1));
+      };
+
       res.json({
-        period1: p1[0] || { revenue: 0, orders: 0 },
-        period2: p2[0] || { revenue: 0, orders: 0 },
+        data: {
+          today: data1, // Frontend calls it "today" even if it's period 1
+          yesterday: data2,
+        },
+        comparisons: {
+          revenue_diff: data1.revenue - data2.revenue,
+          revenue_pct: calcDiff(data1.revenue, data2.revenue),
+          orders_diff: data1.orders - data2.orders,
+          orders_pct: calcDiff(data1.orders, data2.orders),
+        },
       });
     } catch (err) {
       res.status(500).json({ error: "Failed to compare trends" });
@@ -362,7 +378,29 @@ module.exports = function (app, deps, helpers) {
     ORDER BY total_spent DESC`;
     db.all(sql, [], (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ customers: rows });
+      res.json({ items: rows });
+    });
+  });
+
+  // Customer Details report
+  app.get("/api/reports/customer-details", (req, res) => {
+    const { search = "" } = req.query;
+    let query = `
+    SELECT c.id, c.name, c.mobile, c.email, c.created_at,
+           COUNT(s.id) as order_count,
+           COALESCE(SUM(s.total_amount), 0) as total_spent
+    FROM customers c
+    LEFT JOIN sales s ON c.id = s.customer_id AND s.voided = 0
+  `;
+    const params = [];
+    if (search) {
+      query += " WHERE c.name LIKE ? OR c.mobile LIKE ?";
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    query += " GROUP BY c.id ORDER BY total_spent DESC";
+    db.all(query, params, (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ items: rows });
     });
   });
 
@@ -735,7 +773,7 @@ module.exports = function (app, deps, helpers) {
     ORDER BY revenue DESC`;
     db.all(sql, params, (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ outlets: rows });
+      res.json({ comparison: rows }); // Frontend `ReportsOperations.jsx` expects `comparison` here.
     });
   });
 
@@ -753,7 +791,7 @@ module.exports = function (app, deps, helpers) {
     ORDER BY total_cost DESC`;
     db.all(sql, [], (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ rows });
+      res.json({ items: rows }); // ReportsPurchasing.jsx expects items
     });
   });
 };

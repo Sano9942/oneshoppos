@@ -66,7 +66,50 @@ module.exports = function (app, deps, helpers) {
     ORDER BY s.timestamp DESC`;
     db.all(sql, params, (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ sales: rows });
+
+      // Aggregate for SalesSummaryTab
+      const daily_sales = [];
+      const payment_map = {};
+      let total_revenue = 0;
+      let total_tax = 0;
+
+      rows.forEach((r) => {
+        // Daily trend
+        const existingDay = daily_sales.find((d) => d.date === r.date);
+        if (existingDay) {
+          existingDay.total += r.revenue;
+          existingDay.orders += 1;
+        } else {
+          daily_sales.push({ date: r.date, total: r.revenue, orders: 1 });
+        }
+
+        // Payment methods
+        const methods = (r.payment_methods || "").split(",");
+        methods.forEach((m) => {
+          const method = m.trim();
+          if (method) {
+            payment_map[method] =
+              (payment_map[method] || 0) + r.revenue / methods.length;
+          }
+        });
+
+        total_revenue += r.revenue;
+      });
+
+      const payment_methods = Object.keys(payment_map)
+        .map((method) => ({
+          method,
+          total: payment_map[method],
+        }))
+        .sort((a, b) => b.total - a.total);
+
+      res.json({
+        daily_sales: daily_sales.reverse(),
+        payment_methods,
+        total_revenue,
+        total_tax, // Placeholder if tax calculation is needed per-row
+        sales: rows, // Keep raw rows for table if needed
+      });
     });
   });
 
@@ -100,8 +143,50 @@ module.exports = function (app, deps, helpers) {
     ORDER BY s.timestamp DESC, si.id ASC`;
     db.all(sql, params, (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ items: rows });
+      res.json({ sales: rows });
     });
+  });
+
+  // Order Wise report
+  app.get("/api/reports/order-wise", (req, res) => {
+    const { date_from = "", date_to = "", search = "" } = req.query;
+    let conditions = ["1=1"];
+    const params = [];
+
+    if (search) {
+      conditions.push("(CAST(s.id AS TEXT) LIKE ? OR c.name LIKE ?)");
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    if (date_from) {
+      conditions.push("date(s.timestamp, 'localtime') >= ?");
+      params.push(date_from);
+    }
+    if (date_to) {
+      conditions.push("date(s.timestamp, 'localtime') <= ?");
+      params.push(date_to);
+    }
+    conditions.push("s.voided = 0");
+
+    const where = conditions.join(" AND ");
+    db.all(
+      `SELECT s.id, s.timestamp, s.total_amount, s.payment_method,
+            COALESCE(s.discount_amount, 0) as discount_amount,
+            COALESCE(c.name, 'Walk-in Customer') as customer_name,
+            o.name as outlet_name,
+            COALESCE(SUM(si.price_at_sale * si.quantity), 0) as sale_excl_tax
+     FROM sales s
+     LEFT JOIN customers c ON s.customer_id = c.id
+     LEFT JOIN outlets o ON s.outlet_id = o.id
+     LEFT JOIN sale_items si ON s.id = si.sale_id
+     WHERE ${where}
+     GROUP BY s.id
+     ORDER BY s.timestamp DESC`,
+      params,
+      (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ orders: rows });
+      },
+    );
   });
 
   // Category Wise: sales grouped by product category
@@ -150,7 +235,7 @@ module.exports = function (app, deps, helpers) {
         ...r,
         pct: total > 0 ? ((r.revenue / total) * 100).toFixed(1) : "0.0",
       }));
-      res.json({ data });
+      res.json({ items: data });
     });
   });
 
@@ -181,8 +266,25 @@ module.exports = function (app, deps, helpers) {
     ORDER BY units_sold DESC`;
     db.all(sql, params, (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ rows });
+      res.json({ items: rows });
     });
+  });
+
+  // Customer Wise report (summary)
+  app.get("/api/reports/customer-wise", (req, res) => {
+    db.all(
+      `SELECT c.name as customer, COUNT(s.id) as order_count,
+            COALESCE(SUM(s.total_amount), 0) as total_amount
+     FROM customers c
+     LEFT JOIN sales s ON c.id = s.customer_id AND s.voided = 0
+     GROUP BY c.id
+     ORDER BY total_amount DESC`,
+      [],
+      (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ items: rows });
+      },
+    );
   });
 
   // Product Performance: same as item-wise but sorted by margin %
@@ -216,7 +318,7 @@ module.exports = function (app, deps, helpers) {
     ORDER BY margin_pct DESC`;
     db.all(sql, params, (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ rows });
+      res.json({ items: rows });
     });
   });
 
@@ -321,7 +423,7 @@ module.exports = function (app, deps, helpers) {
         if (err) return res.status(500).json({ error: err.message });
         const categoryMeta = await buildCategoryMetaMap();
         res.json({
-          rows: withCategoryPaths(rows, categoryMeta),
+          items: withCategoryPaths(rows, categoryMeta),
           paging: { limit, offset },
         });
       });
@@ -367,7 +469,7 @@ module.exports = function (app, deps, helpers) {
     `;
       db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ rows });
+        res.json({ items: rows });
       });
     },
   );

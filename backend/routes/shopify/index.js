@@ -1,9 +1,16 @@
-const { maskSecret: _maskSecret, getActiveShopifyConnection: _getActiveShopifyConnection } = require("../../shopify/utils");
+const {
+  maskSecret: _maskSecret,
+  getActiveShopifyConnection: _getActiveShopifyConnection,
+} = require("../../shopify/utils");
 
 module.exports = function registerShopifyRoutes(app, deps) {
   // Create convenience wrappers that close over injected deps
-  function maskSecret(secret) { return _maskSecret(secret, deps.decryptShopifySecret); }
-  function getActiveShopifyConnection(cb) { return _getActiveShopifyConnection(deps.db, deps.decryptShopifySecret, cb); }
+  function maskSecret(secret) {
+    return _maskSecret(secret, deps.decryptShopifySecret);
+  }
+  function getActiveShopifyConnection(cb) {
+    return _getActiveShopifyConnection(deps.db, deps.decryptShopifySecret, cb);
+  }
 
   function resolveImportCategoryId(productTypeName, cb) {
     const normalized = String(productTypeName || "").trim();
@@ -30,7 +37,12 @@ module.exports = function registerShopifyRoutes(app, deps) {
   }
 
   // Augmented deps shared by all sub-modules
-  const localDeps = { ...deps, maskSecret, getActiveShopifyConnection, resolveImportCategoryId };
+  const localDeps = {
+    ...deps,
+    maskSecret,
+    getActiveShopifyConnection,
+    resolveImportCategoryId,
+  };
 
   require("./config")(app, localDeps);
   require("./health")(app, localDeps);
@@ -39,4 +51,5 @@ module.exports = function registerShopifyRoutes(app, deps) {
   require("./import")(app, localDeps);
   require("./mappings")(app, localDeps);
   require("./webhooks")(app, localDeps);
+  require("./reconciliation")(app, localDeps);
 };

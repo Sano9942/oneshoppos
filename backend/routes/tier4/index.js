@@ -4,6 +4,7 @@ const createCompanyProfileRouter = require("./company-profile");
 const createAccountingRouter = require("./accounting");
 const createHRRouter = require("./hr");
 const createCRMRouter = require("./crm");
+const createApprovalsRouter = require("./approvals");
 
 module.exports = function createTier4Router(deps) {
   const router = express.Router();
@@ -14,6 +15,7 @@ module.exports = function createTier4Router(deps) {
   router.use(createAccountingRouter(deps));
   router.use(createHRRouter(deps));
   router.use(createCRMRouter(deps));
+  router.use(createApprovalsRouter(deps));
 
   return router;
 };

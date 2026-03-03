@@ -30,7 +30,15 @@ oneshoppos/
 │   │   ├── customers.js          # /api/customers + customer reports
 │   │   ├── sales.js              # /api/sales history
 │   │   ├── inventory.js          # /api/transfers + /api/adjustments
-│   │   ├── reports.js            # ALL /api/reports/* (~2193 lines - largest backend file)
+│   │   ├── reports/                  # /api/reports/* (modular — 8 files)
+│   │   │   ├── index.js              # Entry point — wires sub-modules, shared deps, exports scheduler
+│   │   │   ├── dashboard.js          # /api/reports/dashboard
+│   │   │   ├── sales.js              # /api/reports/sales-*
+│   │   │   ├── inventory.js          # /api/reports/inventory-*
+│   │   │   ├── analytics.js          # /api/reports/comparative-trends, /api/reports/heatmaps, etc.
+│   │   │   ├── governance.js         # /api/reports/schedules, /api/reports/saved-views
+│   │   │   ├── shifts.js             # /api/reports/shifts, /api/reports/cash-drawer
+│   │   │   └── helpers.js            # Shared SQL builders and formatters
 │   │   ├── returns.js            # /api/returns
 │   │   ├── attendance.js         # /api/attendance + /api/attendance/pin-* (kiosk) + /api/employees/:id/attendance-config
 │   │   ├── attribute-sets.js     # /api/attribute-sets
@@ -48,8 +56,16 @@ oneshoppos/
 │   │   │   ├── import.js         # POST/DELETE /import/products, POST /import/inventory
 │   │   │   └── mappings.js       # /mappings/products (CRUD + auto + live + apply), /locations, /customers
 │   │   ├── reconciliation.js     # /api/reconciliation + /api/approvals (~1101 lines)
+│   │   ├── reconciliation.js     # /api/reconciliation + /api/approvals (legacy — moved to shopify/reconciliation.js)
 │   │   ├── barcode-expenses.js   # Barcodes, expenses, backup/restore, e-invoicing
-│   │   └── tier4.js              # Tier 4 features router (~1248 lines)
+│   │   └── tier4/                # Tier 4 modularized
+│   │       ├── index.js          # Router entry
+│   │       ├── notifications.js
+│   │       ├── hr.js
+│   │       ├── crm.js
+│   │       ├── accounting.js
+│   │       ├── company-profile.js
+│   │       └── approvals.js
 │   ├── shopify/
 │   │   ├── client.js             # Shopify GraphQL API client (~525 lines)
 │   │   ├── utils.js              # Retry logic, webhook HMAC verification
@@ -96,8 +112,10 @@ oneshoppos/
 ## Key Architecture Facts
 
 - Most API routes are in `backend/routes/<domain>.js` — read only the relevant file
-- Shopify integration routes are **modular**: `backend/routes/shopify/` (8 files). Entry point is `index.js`; sub-modules are `config`, `health`, `sync`, `orders`, `webhooks`, `import`, `mappings`
-- `registerAllRoutes.js` is now just an orchestrator (324 lines) — no routes defined there
+- Shopify integration routes are **modular**: `backend/routes/shopify/` (8 files).
+- Reports routes are **modular**: `backend/routes/reports/` (8 files).
+- Tier 4 routes are **modular**: `backend/routes/tier4/` (7 files).
+- `registerAllRoutes.js` is now just an orchestrator (324 lines) — no routes defined there. Each domain is loaded via its modular directory.
 - Database schema: read only `backend/migrate59.js` (latest), never older migrations
 - Internal product categories are hierarchical; products and category promotions may target leaf categories only
 - `migrate58.js` changed categories from global name uniqueness to sibling-level uniqueness
@@ -114,7 +132,9 @@ oneshoppos/
 - Category tree logic → `backend/category-tree.js`
 - Server middleware/config → `backend/index.js`
 - Shopify API calls → `backend/shopify/client.js`, webhook/retry logic → `backend/shopify/utils.js`
-- Shopify routes → `backend/routes/shopify/<module>.js` (not a single file anymore)
+- Shopify routes → `backend/routes/shopify/`
+- Reports routes → `backend/routes/reports/`
+- Tier 4 routes → `backend/routes/tier4/`
 - Shopify order upsert service → `backend/shopify/order-service.js`
 
 ## When Working on Frontend
@@ -170,3 +190,5 @@ oneshoppos/
 - Mar 2026: Shopify Integration V2 Phase 3 — data model hardening. `migrate60.js` creates `shopify_product_metadata` (Shopify-native taxonomy: handle, status, product_type, vendor, tags, published_at, updated_at) with `ON DELETE CASCADE` + unique index. `client.js` now returns `shopify_handle` from product queries. `import.js` fire-and-forgets a metadata upsert after every product write. `run_migrations.js` updated.
 - Mar 2026: Advanced Reporting Dashboard Shipped. Implemented 11 new industry-standard reporting features across backend (`backend/routes/reports.js`) and frontend (`frontend/src/pages/Reports.jsx`). Includes: Comparative Trends (DoD/WoW), Hourly Heatmaps, Revenue Leaks (Voids/Discounts), Product Mix (Market Basket), Retail Matrix (Stars/Dogs), Customer Retention (New vs returning), Capture Rate, Labor Performance (Rev/Hr), and Loss Prevention (Risk Ratio).
 - Mar 2026: Reports V2 Modularization. `Reports.jsx` monolithic file (~4000 lines) split into domain-specific modules in `frontend/src/pages/reports/`. Reduced main orchestrator to ~540 lines and restored production build stability by resolving duplicate declarations.
+- Mar 2026: Phase 6.1: Reports restoration & data key unification. Backend Reports endpoints corrected to return keys expected by the frontend (`items`, `sales`, `orders`). Fixed critical aggregation logic for `sales-summary` and `comparative-trends`. Added missing `grn-report`.
+- Mar 2026: Phase 7: Final Global Verification. Completed modularization of Reports, Shopify, and Tier 4. Global syntax check and export audit confirmed. Cleanup of debug logs and final system stabilization. Project now fully modularized.

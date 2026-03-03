@@ -792,11 +792,26 @@ Deliverable:
 
 - universal merchandising intelligence layer
 
-### Phase 6: Vertical Pack Layer (Deferred)
+### Phase 6.1: Reports Restoration & Data Key Unification [DONE]
 
-- add optional vertical-specific packs
-- start with toy pack only if useful for the current business
-- keep vertical logic isolated from the universal core
+- standardize all response keys across 4 modules (`items`, `sales`, `orders`)
+- implement aggregation for `sales-summary` and `comparative-trends`
+- restore missing `grn-report`
+- cleanup legacy routes
+
+Deliverable:
+
+- stable, functional, and consistent Reports API
+
+### Phase 7: Final Migration Sign-off [DONE]
+
+- global syntax check
+- cleanup debug logs
+- project documentation update
+
+Deliverable:
+
+- project completion and stable codebase
 
 Deliverable:
 

@@ -20,7 +20,7 @@ module.exports = function (app, deps, helpers) {
     db.all(sql, [], async (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
       const categoryMeta = await buildCategoryMetaMap();
-      res.json({ rows: withCategoryPaths(rows, categoryMeta) });
+      res.json({ items: withCategoryPaths(rows, categoryMeta) });
     });
   });
 
@@ -49,7 +49,7 @@ module.exports = function (app, deps, helpers) {
     db.all(sql, params, async (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
       const categoryMeta = await buildCategoryMetaMap();
-      res.json({ rows: withCategoryPaths(rows, categoryMeta) });
+      res.json({ items: withCategoryPaths(rows, categoryMeta) });
     });
   });
 
@@ -77,7 +77,7 @@ module.exports = function (app, deps, helpers) {
     db.all(sql, params, async (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
       const categoryMeta = await buildCategoryMetaMap();
-      res.json({ rows: withCategoryPaths(rows, categoryMeta) });
+      res.json({ items: withCategoryPaths(rows, categoryMeta) });
     });
   });
 
@@ -102,7 +102,7 @@ module.exports = function (app, deps, helpers) {
     ORDER BY p.name, o.name`;
     db.all(sql, params, (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ rows });
+      res.json({ items: rows });
     });
   });
 
@@ -131,7 +131,7 @@ module.exports = function (app, deps, helpers) {
     ORDER BY sa.timestamp DESC`;
     db.all(sql, params, (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ rows });
+      res.json({ items: rows });
     });
   });
 
@@ -160,7 +160,7 @@ module.exports = function (app, deps, helpers) {
     ORDER BY sa.timestamp DESC`;
     db.all(sql, params, (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ rows });
+      res.json({ items: rows });
     });
   });
 
@@ -180,7 +180,7 @@ module.exports = function (app, deps, helpers) {
     ORDER BY supplier_name ASC, os.quantity ASC, p.name ASC`;
     db.all(sql, [threshold], (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ rows, threshold });
+      res.json({ items: rows, threshold });
     });
   });
 
@@ -222,7 +222,7 @@ module.exports = function (app, deps, helpers) {
         : [inactiveDays];
       db.all(sql, reorderedParams, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ rows, inactive_days: inactiveDays });
+        res.json({ items: rows, inactive_days: inactiveDays });
       });
     },
   );
@@ -257,7 +257,7 @@ module.exports = function (app, deps, helpers) {
       const params = req.query.outlet_id ? [req.query.outlet_id] : [];
       db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ rows });
+        res.json({ items: rows });
       });
     },
   );
@@ -454,6 +454,108 @@ module.exports = function (app, deps, helpers) {
       });
     },
   );
+
+  // Product Movement (Inter-Outlet Transfers)
+  app.get("/api/reports/product-movement", (req, res) => {
+    const { date_from, date_to, outlet_id } = req.query;
+    let where = [];
+    const params = [];
+    if (date_from) {
+      where.push("date(it.timestamp,'localtime') >= ?");
+      params.push(date_from);
+    }
+    if (date_to) {
+      where.push("date(it.timestamp,'localtime') <= ?");
+      params.push(date_to);
+    }
+    if (outlet_id) {
+      where.push("(it.from_outlet_id = ? OR it.to_outlet_id = ?)");
+      params.push(outlet_id, outlet_id);
+    }
+    const sql = `
+    SELECT it.timestamp, p.name AS product_name, p.barcode,
+           fo.name AS from_outlet_name, to_o.name AS to_outlet_name,
+           it.quantity, COALESCE(e.name, 'System') AS employee_name
+    FROM inventory_transfers it
+    JOIN products p ON it.product_id = p.id
+    JOIN outlets fo ON it.from_outlet_id = fo.id
+    JOIN outlets to_o ON it.to_outlet_id = to_o.id
+    LEFT JOIN employees e ON it.employee_id = e.id
+    ${where.length ? "WHERE " + where.join(" AND ") : ""}
+    ORDER BY it.timestamp DESC`;
+    db.all(sql, params, (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ items: rows });
+    });
+  });
+
+  // STR Report (Stock Transfer Register - functionally similar to product movement but used as a formal register)
+  app.get("/api/reports/str-report", (req, res) => {
+    const { date_from, date_to, outlet_id } = req.query;
+    let where = [];
+    const params = [];
+    if (date_from) {
+      where.push("date(it.timestamp,'localtime') >= ?");
+      params.push(date_from);
+    }
+    if (date_to) {
+      where.push("date(it.timestamp,'localtime') <= ?");
+      params.push(date_to);
+    }
+    if (outlet_id) {
+      where.push("(it.from_outlet_id = ? OR it.to_outlet_id = ?)");
+      params.push(outlet_id, outlet_id);
+    }
+    const sql = `
+    SELECT it.timestamp, it.id as reference_id,
+           fo.name AS from_outlet_name, to_o.name AS to_outlet_name,
+           SUM(it.quantity) as quantity
+    FROM inventory_transfers it
+    JOIN outlets fo ON it.from_outlet_id = fo.id
+    JOIN outlets to_o ON it.to_outlet_id = to_o.id
+    ${where.length ? "WHERE " + where.join(" AND ") : ""}
+    GROUP BY it.timestamp, fo.id, to_o.id
+    ORDER BY it.timestamp DESC`;
+    db.all(sql, params, (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ items: rows });
+    });
+  });
+
+  // GRN Report: Historical log of stock receipts from suppliers
+  app.get("/api/reports/grn-report", (req, res) => {
+    const { date_from, date_to, outlet_id } = req.query;
+    let where = ["po.status = 'Received'"];
+    const params = [];
+
+    if (date_from) {
+      where.push("date(po.created_at, 'localtime') >= ?");
+      params.push(date_from);
+    }
+    if (date_to) {
+      where.push("date(po.created_at, 'localtime') <= ?");
+      params.push(date_to);
+    }
+    if (outlet_id) {
+      where.push("po.outlet_id = ?");
+      params.push(outlet_id);
+    }
+
+    const sql = `
+      SELECT date(po.created_at, 'localtime') as date, p.name as product_name,
+             s.name as supplier_name, poi.quantity, poi.cost_price
+      FROM purchase_order_items poi
+      JOIN purchase_orders po ON poi.po_id = po.id
+      JOIN products p ON poi.product_id = p.id
+      JOIN suppliers s ON po.supplier_id = s.id
+      WHERE ${where.join(" AND ")}
+      ORDER BY po.created_at DESC`;
+
+    db.all(sql, params, (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ items: rows });
+    });
+  });
 
   return { buildForecastRows };
 };

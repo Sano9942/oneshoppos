@@ -214,6 +214,41 @@ OneShopPOS now features a comprehensive analytics suite that matches industry le
 
 ---
 
+### Reports Module Restoration & Unification (Phase 6.1 - March 2026)
+
+After backend modularization, several report endpoints had inconsistent data keys (`rows` vs `items`) and incomplete aggregation logic for the complex V2 reports.
+
+**Implemented Fixes:**
+
+1.  **Response Key Unification**:
+    - `inventory.js`: All endpoints (Inventory Dump, Product Spec, On-hand, etc.) standardized to return `{ items: rows }`.
+    - `sales.js`: Endpoints corrected to `{ sales: rows }` for `sales-detail` and `{ orders: rows }` for `order-wise` to match frontend component requirements.
+    - `analytics.js`: Customer RFM and Details standardized to `{ items: rows }`.
+2.  **Complex Report Aggregation**:
+    - `sales-summary`: Refactored to return aggregated `{ daily_sales, payment_methods, total_revenue, total_tax }` instead of raw rows.
+    - `comparative-trends`: Implemented on-the-fly variance calculations for revenue and order counts (`revenue_diff`, `revenue_pct`, etc.).
+3.  **Missing Route Restoration**:
+    - Implemented `/api/reports/grn-report` in `inventory.js` to provide historical GRN data to the Purchasing module.
+4.  **Legacy Cleanup**:
+    - Removed redundant legacy report routes from `backend/routes/customers.js` after verifying their successful migration to modular files.
+
+---
+
+### Phase 7: Final Global Verification & Documentation (March 2026)
+
+The final phase of the modularization project ensured the system's structural integrity.
+
+**Verification Highlights:**
+
+1.  **Global Syntax Audit**: Executed `node -c` on all newly modularized files in `Reports`, `Shopify`, and `Tier 4` directories. All files are syntactically valid.
+2.  **Export & Registration Check**: Verified that all modular `index.js` entry points correctly export the required middlewares and scheduler functions to `registerAllRoutes.js`.
+3.  **Code Cleanup**: Performed a global search for temporary `console.log` statements introduced during debugging and removed all non-instrumentational logs.
+4.  **Documentation Consolidation**: Finalized the project `walkthrough.md` and updated `task.md` to reflect full completion.
+
+**System Status: COMPLETELY MODULARIZED & VERIFIED**
+
+---
+
 ### Problem
 
 The user was hitting Claude Pro usage caps very quickly when working on this project.

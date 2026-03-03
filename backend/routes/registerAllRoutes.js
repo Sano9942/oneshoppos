@@ -319,9 +319,6 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: SHOPIFY ---
   require("./shopify")(app, shopifyDeps);
 
-  // --- ROUTES: RECONCILIATION & APPROVALS ---
-  require("./reconciliation")(app, deps);
-
   // --- BARCODE TEMPLATES & EXPENSES ---
   require("./barcode-expenses")(app, deps);
 
