@@ -822,7 +822,7 @@ Deliverable:
 - promotion effectiveness
 - discount leakage improvements
 - missing-category / metadata exception views
-- Shopify import exception views
+- Shopify import exception views (enhanced Mar 2026 for SKU-based tracking)
 
 Deliverable:
 

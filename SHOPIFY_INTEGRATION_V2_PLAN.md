@@ -835,7 +835,8 @@ Add or expand tests for:
 - connection save/load/verify
 - live validation
 - webhook signature verification and replay handling
-- product import success/failure/unmapped cases
+- product import success/failure/unmapped cases (including SKU-only and barcode mix)
+- multi-stage lookup accuracy (no duplicates created)
 - inventory import
 - queue processing
 - retry single event
@@ -893,9 +894,13 @@ Shopify Integration V2 implementation is complete when:
 
 ## Recommended Next Step
 
-**Phases 1–3 are complete (Mar 2026).** Remaining phases for full V2:
+**Phases 1–3 are complete (Mar 2026).**
 
-- **Phase 4** — Import and Mapping Modernization (import run summaries, unmapped tracking, better suggestion reasons)
-- **Phase 5** — Frontend Shopify Workspace Redesign (modular workspace replacing the monolithic `ShopifyIntegration.jsx`)
+- **Phase 4** — Import and Mapping Modernization
+  - ✅ Added SKU-based filtering (importable items = barcode OR SKU)
+  - ✅ Implemented 3-stage lookup (Map > Barcode > SKU)
+  - ✅ Explicit UPDATE/INSERT to bypass barcode-only constraints
+  - [ ] Import run summaries & conflict reasons (upcoming)
+- **Phase 5** — Frontend Shopify Workspace Redesign
 - **Phase 6** — Observability and Diagnostics Upgrade
-- **Phase 7** — Hardening and Regression Coverage (backend Shopify integration tests, Playwright smoke)
+- **Phase 7** — Hardening and Regression Coverage

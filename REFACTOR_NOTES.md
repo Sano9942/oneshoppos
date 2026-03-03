@@ -249,6 +249,26 @@ The final phase of the modularization project ensured the system's structural in
 
 ---
 
+### Shopify SKU-based Import & Multi-stage Lookup (March 2026)
+
+The Shopify integration was limited to importing variants with barcodes. Products with only an SKU were skipped, leading to data gaps. Additionally, the `ON CONFLICT(barcode)` logic failed for products without barcodes.
+
+**Implemented Fixes:**
+
+1.  **Updated Variant Filter**: The import process now accepts any Shopify variant that has either a `barcode` OR an `sku`. Variants with neither are still skipped as they lack a stable POS identifier.
+2.  **Multi-stage Lookup**: To prevent duplicates and correctly identify existing items, a 3-stage lookup chain was implemented:
+    - **Shopify Mapping**: Check `shopify_product_map` (most reliable).
+    - **Barcode**: Fallback to direct barcode match in the `products` table.
+    - **SKU**: Final fallback to direct SKU match in the `products` table.
+3.  **Explicit UPDATE vs INSERT**: Replaced the `INSERT ... ON CONFLICT(barcode) DO UPDATE` pattern with an explicit lookup → branch strategy.
+    - If an existing ID is found, an `UPDATE` is performed using `CASE` statements to safely update `barcode` and `sku` only if non-null in Shopify.
+    - If not found, an `INSERT` is performed, creating a new product with both fields populated.
+4.  **Respective Mapping**: Shopify `barcode` maps to POS `barcode`, and Shopify `sku` maps to POS `sku`. No cross-filling occurs, maintaining data cleanliness.
+
+**Status:** Import logic hardened. Residual data gaps reduced.
+
+---
+
 ### Problem
 
 The user was hitting Claude Pro usage caps very quickly when working on this project.

@@ -230,8 +230,10 @@ async function fetchShopifyVariantCatalog(connection, maxItems = 500) {
       const node = edge?.node || {};
       out.push({
         variant_id: node.id || "",
-        sku: node.sku || node.inventoryItem?.sku || "",
-        barcode: node.barcode || "",
+        // Use String() coercion — Shopify may return numeric barcodes/SKUs
+        // which would lose leading zeros with a simple `|| ""` fallback.
+        sku: String(node.sku ?? node.inventoryItem?.sku ?? ""),
+        barcode: String(node.barcode ?? ""),
         display_name: node.displayName || "",
         product_id: node.product?.id || "",
         product_title: node.product?.title || "",
@@ -478,11 +480,17 @@ async function fetchShopifyProductsFull(connection, maxItems = 10000) {
             };
           },
         );
+        // Use String() coercion to preserve leading zeros.
+        // If Shopify's API or JSON.parse interprets a purely numeric barcode
+        // (e.g., "002590") as the integer 2590, `|| ""` would either return
+        // an empty string (for 0) or lose the leading zeros. String() fixes both.
+        const rawBarcode = v.barcode;
+        const rawSku = v.sku;
         return {
           shopify_variant_id: v.id || "",
           shopify_inventory_item_id: v.inventoryItem?.id || "",
-          sku: v.sku || "",
-          barcode: v.barcode || "",
+          sku: rawSku != null ? String(rawSku) : "",
+          barcode: rawBarcode != null ? String(rawBarcode) : "",
           price: parseFloat(v.price || 0),
           compare_at_price: parseFloat(v.compareAtPrice || 0),
           inventory_levels: invLevels,
