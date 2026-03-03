@@ -702,27 +702,16 @@ For the first implementation wave, keep behavior changes incremental and safe.
 
 Suggested V2 component structure:
 
-- `ReportsRedesign.jsx`
-- `ReportsShell.jsx`
-- `ReportsSidebar.jsx`
-- `ReportsFilterBar.jsx`
-- `ReportsOverview.jsx`
-- `ReportTableCard.jsx`
-- `ReportStatCards.jsx`
-- `ReportExportButton.jsx`
-- `ReportEmptyState.jsx`
-
-Domain modules:
-
-- `SalesReportsPanel.jsx`
-- `InventoryReportsPanel.jsx`
-- `CatalogReportsPanel.jsx`
-- `PromotionReportsPanel.jsx`
-- `CustomerReportsPanel.jsx`
-- `StaffReportsPanel.jsx`
-- `FinanceReportsPanel.jsx`
-- `ExceptionsReportsPanel.jsx`
-- `GovernanceReportsPanel.jsx`
+- `Reports.jsx` (Orchestrator, ~500 lines)
+- `reports/ReportShared.jsx` (Shared UI primitives: TableShell, CardShell, MetricCard, Formatters)
+- `reports/ReportsSales.jsx` (Sales, Detail, Item-wise, Transitions)
+- `reports/ReportsInventory.jsx` (On-hand, Aging, Replenishment, Stock & Sales)
+- `reports/ReportsCatalog.jsx` (Product Spec, Category-wise, Brand performance)
+- `reports/ReportsOperations.jsx` (Wastage, Loss, Movement)
+- `reports/ReportsPurchasing.jsx` (Purchase vs Sales, PO analysis)
+- `reports/ReportsStaff.jsx` (Attendance, Performance)
+- `reports/ReportsCustomers.jsx` (RFM, Acquisition, Loyalty)
+- `reports/ReportsAnalytics.jsx` (Heatmaps, Matrix, Trends, Leaks)
 
 ---
 
@@ -803,7 +792,7 @@ Deliverable:
 
 - universal merchandising intelligence layer
 
-### Phase 6: Vertical Pack Layer
+### Phase 6: Vertical Pack Layer (Deferred)
 
 - add optional vertical-specific packs
 - start with toy pack only if useful for the current business

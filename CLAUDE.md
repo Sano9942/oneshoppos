@@ -62,7 +62,15 @@ oneshoppos/
         ├── ui/
         │   └── primitives.jsx    # Shared design-system components (PageShell, Button, Input, etc.)
         └── pages/                # Full page views
-            ├── Reports.jsx               # (~2999 lines) — wrapped by ReportsRedesign.jsx
+            ├── Reports.jsx               # (~540 lines) — Clean orchestrator for domain modules
+            ├── reports/                  # Domain-specific reporting modules
+            │   ├── ReportShared.jsx      # Shared UI primitives and export utilities
+            │   ├── ReportsSales.jsx
+            │   ├── ReportsInventory.jsx
+            │   ├── ReportsCatalog.jsx
+            │   ├── ReportsOperations.jsx
+            │   ├── ReportsAnalytics.jsx
+            │   ├── [Other Reports*.jsx files]
             ├── ShopifyIntegration.jsx    # (~2108 lines) — wrapped by ShopifyIntegrationRedesign.jsx
             ├── Accounting.jsx            # wrapped by AccountingRedesign.jsx
             ├── Attendance.jsx            # wrapped by AttendanceRedesign.jsx
@@ -113,7 +121,8 @@ oneshoppos/
 
 - **Active pages** are in `frontend/src/pages/redesign/` — always edit the `*Redesign.jsx` file
 - `*Route.jsx` files in `pages/` just render the redesign counterpart — no logic there
-- Legacy originals in `pages/` (`Reports.jsx`, `ShopifyIntegration.jsx`, `Accounting.jsx`, `Attendance.jsx`, `Approvals.jsx`, `BarcodeTemplates.jsx`, `ReceiptTemplates.jsx`) — do NOT delete; they are imported by their Redesign counterparts
+- Legacy originals in `pages/` (`ShopifyIntegration.jsx`, `Accounting.jsx`, `Attendance.jsx`, `Approvals.jsx`, `BarcodeTemplates.jsx`, `ReceiptTemplates.jsx`) — do NOT delete; they are imported by their Redesign counterparts
+- `Reports.jsx` is no longer a legacy monolith; it is now a clean orchestrator for modules in `pages/reports/`
 - All redesign wrappers use `PageShell` from `frontend/src/ui/primitives.jsx` and render the original as a child
 - Nav is driven by `frontend/src/ui/nav-config.js` — add entries here to make pages visible in the sidebar
 - Shared design-system primitives: `frontend/src/ui/primitives.jsx`
@@ -159,4 +168,5 @@ oneshoppos/
 - Mar 2026: Permanent inventory/reports smoke coverage added. `frontend/tests/e2e/inventory-reports-smoke.spec.js` verifies inventory editing of `product_type`/`vendor`/`tags` plus category-wise CSV export and report API validity.
 - Mar 2026: Shopify Integration V2 Phase 2 — backend modularization complete. `backend/routes/shopify.js` (1,929-line monolith) deleted and replaced with `backend/routes/shopify/` (8 focused modules: `index`, `config`, `health`, `sync`, `orders`, `webhooks`, `import`, `mappings`). Critical bug fixed: `upsertWebOrderFromShopifyPayload` extracted to `backend/shopify/order-service.js` and correctly threaded through `registerAllRoutes.js` → `shopifyDeps` → all Shopify route modules.
 - Mar 2026: Shopify Integration V2 Phase 3 — data model hardening. `migrate60.js` creates `shopify_product_metadata` (Shopify-native taxonomy: handle, status, product_type, vendor, tags, published_at, updated_at) with `ON DELETE CASCADE` + unique index. `client.js` now returns `shopify_handle` from product queries. `import.js` fire-and-forgets a metadata upsert after every product write. `run_migrations.js` updated.
-- Mar 2026: Advanced Reporting Dashboard Shipped. Implemented 11 new industry-standard reporting features across backend (`backend/routes/reports.js`) and frontend (`frontend/src/pages/Reports.jsx`). Includes: Comparative Trends (DoD/WoW), Hourly Heatmaps, Revenue Leaks (Voids/Discounts), Product Mix (Market Basket), Retail Matrix (Stars/Dogs), Customer Retention (New vs returning), Capture Rate, Labor Performance (Rev/Hr), and Loss Prevention (Risk Ratio). `Reports.jsx` now ~3,745 lines with modular tab architecture.
+- Mar 2026: Advanced Reporting Dashboard Shipped. Implemented 11 new industry-standard reporting features across backend (`backend/routes/reports.js`) and frontend (`frontend/src/pages/Reports.jsx`). Includes: Comparative Trends (DoD/WoW), Hourly Heatmaps, Revenue Leaks (Voids/Discounts), Product Mix (Market Basket), Retail Matrix (Stars/Dogs), Customer Retention (New vs returning), Capture Rate, Labor Performance (Rev/Hr), and Loss Prevention (Risk Ratio).
+- Mar 2026: Reports V2 Modularization. `Reports.jsx` monolithic file (~4000 lines) split into domain-specific modules in `frontend/src/pages/reports/`. Reduced main orchestrator to ~540 lines and restored production build stability by resolving duplicate declarations.

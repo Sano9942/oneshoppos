@@ -187,6 +187,33 @@ OneShopPOS now features a comprehensive analytics suite that matches industry le
 
 ---
 
+### Reports V2 Architecture: Modularization & Cleanup (March 2026)
+
+**Problem:** `Reports.jsx` had grown to ~3,745 lines after the Advanced Reporting rollout, creating a significant maintenance burden and causing "Fast Refresh" warnings/failures in Vite due to mixed exports and deep complexity.
+
+**Solution:** Modularized the monolithic file into domain-specific components.
+
+**Changes:**
+
+1.  **Created `frontend/src/pages/reports/` Directory**: Centralized all reporting modules.
+2.  **Extracted `ReportShared.jsx`**: Houses shared UI primitives (`TableShell`, `CardShell`, `MetricCard`), export utilities, and formatters (`fmt`, `fmtDate`).
+3.  **Domain-Specific Modules Created**:
+    - `ReportsSales.jsx`: Sales summary, detail, item-wise, and order-wise reports.
+    - `ReportsInventory.jsx`: On-hand, dump, sales & stock, replenishment, and pricing/margin.
+    - `ReportsCatalog.jsx`: Category-wise and product specification reports.
+    - `ReportsOperations.jsx`: Wastage, loss, and product movement.
+    - `ReportsAnalytics.jsx`: Heatmaps, retail matrix, trends, and revenue leaks.
+    - `ReportsPurchasing.jsx`, `ReportsStaff.jsx`, `ReportsCustomers.jsx`: Extracted relevant tabs into their own modules.
+4.  **Refactored `Reports.jsx`**:
+    - Reduced from **3,745 lines** to **~540 lines**.
+    - Now acts as a clean orchestrator using standard React imports for domain modules.
+    - Corrected duplicate component declarations that were blocking production builds.
+    - Cleaned up unused Lucide icons and Recharts imports.
+
+**Status:** Phase 2 of the Reports V2 plan complete. Architectural stability restored.
+
+---
+
 ### Problem
 
 The user was hitting Claude Pro usage caps very quickly when working on this project.
