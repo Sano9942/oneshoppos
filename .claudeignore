@@ -6,6 +6,9 @@ frontend/node_modules/
 # Built output - generated, not source
 frontend/dist/
 
+# Archived docs - completed plans, not active
+docs/archive/
+
 # Database files - binary, not readable
 backend/backups/
 *.db
