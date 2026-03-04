@@ -31,3 +31,23 @@ export function clearSession() {
   localStorage.removeItem(AUTH_KEY);
   localStorage.removeItem("currentEmployee");
 }
+
+// --- Context helpers (used by ContextSelect + RequireContext) ---
+
+export function readContext() {
+  const session = readSession();
+  return session?.context || null;
+}
+
+export function writeContext(context) {
+  const session = readSession();
+  if (!session) return;
+  writeSession({ ...session, context });
+}
+
+export function clearContext() {
+  const session = readSession();
+  if (!session) return;
+  const { context: _, ...rest } = session;
+  writeSession(rest);
+}

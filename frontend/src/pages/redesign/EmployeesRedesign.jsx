@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Lock, Plus, Search, Shield, Trash2, User } from "lucide-react";
+import { Lock, MapPin, Plus, Search, Shield, Star, Trash2, User } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   Badge,
@@ -27,19 +27,24 @@ export default function EmployeesRedesign() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [attConfig, setAttConfig] = useState(EMPTY_ATT);
   const [saving, setSaving] = useState(false);
+  const [allOutlets, setAllOutlets] = useState([]);
+  const [assignedOutletIds, setAssignedOutletIds] = useState([]);
+  const [primaryOutletId, setPrimaryOutletId] = useState(null);
 
   const load = async () => {
     setLoading(true);
     setError("");
     try {
-      const [empRes, rolesRes] = await Promise.all([
+      const [empRes, rolesRes, outletsRes] = await Promise.all([
         fetch(`${API}/api/employees`),
         fetch(`${API}/api/roles`),
+        fetch(`${API}/api/outlets`),
       ]);
-      const [empData, rolesData] = await Promise.all([empRes.json(), rolesRes.json()]);
+      const [empData, rolesData, outletsData] = await Promise.all([empRes.json(), rolesRes.json(), outletsRes.json()]);
       if (!empRes.ok) throw new Error(empData.error || "Failed to load employees");
       setEmployees(empData.employees || []);
       setRoles(rolesData.roles || []);
+      setAllOutlets((outletsData.outlets || []).filter((o) => o.is_active !== 0));
     } catch (e) {
       setError(e.message || "Failed to load employees");
     } finally {
@@ -63,6 +68,8 @@ export default function EmployeesRedesign() {
     setEditing(null);
     setForm(EMPTY_FORM);
     setAttConfig(EMPTY_ATT);
+    setAssignedOutletIds([]);
+    setPrimaryOutletId(null);
     setModalOpen(true);
   };
 
@@ -70,16 +77,26 @@ export default function EmployeesRedesign() {
     setEditing(emp);
     setForm({ name: emp.name, role_id: emp.role_id, pin_code: "", salary_type: emp.salary_type || "monthly", monthly_salary: emp.monthly_salary || "", hourly_rate: emp.hourly_rate || "", daily_rate: emp.daily_rate || "" });
     setAttConfig(EMPTY_ATT);
+    setAssignedOutletIds([]);
+    setPrimaryOutletId(null);
     setModalOpen(true);
-    // Fetch attendance config (non-blocking — populate when ready)
+    // Fetch attendance config + outlet assignments (non-blocking)
     try {
-      const res = await fetch(`${API}/api/employees/${emp.id}/attendance-config`);
-      const data = await res.json();
-      if (res.ok) {
+      const [attRes, outRes] = await Promise.all([
+        fetch(`${API}/api/employees/${emp.id}/attendance-config`),
+        fetch(`${API}/api/employees/${emp.id}/outlets`),
+      ]);
+      const [attData, outData] = await Promise.all([attRes.json(), outRes.json()]);
+      if (attRes.ok) {
         setAttConfig({
-          work_hours_per_day: data.work_hours_per_day ?? 8,
-          monthly_leave_allowance: data.monthly_leave_allowance ?? 2,
+          work_hours_per_day: attData.work_hours_per_day ?? 8,
+          monthly_leave_allowance: attData.monthly_leave_allowance ?? 2,
         });
+      }
+      if (outRes.ok && outData.outlets) {
+        setAssignedOutletIds(outData.outlets.map((o) => o.outlet_id));
+        const primary = outData.outlets.find((o) => o.is_primary);
+        setPrimaryOutletId(primary ? primary.outlet_id : null);
       }
     } catch {}
   };
@@ -109,7 +126,8 @@ export default function EmployeesRedesign() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save employee");
-      // Save attendance config when editing an existing employee
+      // Save attendance config + outlet assignments
+      const empId = editing ? editing.id : data.employee?.id;
       if (editing) {
         await fetch(`${API}/api/employees/${editing.id}/attendance-config`, {
           method: "PUT",
@@ -117,6 +135,16 @@ export default function EmployeesRedesign() {
           body: JSON.stringify({
             work_hours_per_day: Number(attConfig.work_hours_per_day),
             monthly_leave_allowance: Number(attConfig.monthly_leave_allowance),
+          }),
+        });
+      }
+      if (empId && assignedOutletIds.length > 0) {
+        await fetch(`${API}/api/employees/${empId}/outlets`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            outlet_ids: assignedOutletIds,
+            primary_outlet_id: primaryOutletId || assignedOutletIds[0],
           }),
         });
       }
@@ -251,7 +279,7 @@ export default function EmployeesRedesign() {
 
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-md p-5">
+          <SectionCard className="w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto">
             <h3 className="mb-3 text-lg font-semibold text-(--ui-text)">
               {editing ? "Edit Employee" : "Add Employee"}
             </h3>
@@ -361,6 +389,52 @@ export default function EmployeesRedesign() {
                       />
                     </div>
                   </div>
+                </div>
+              )}
+              {/* Outlet Assignments */}
+              {allOutlets.length > 0 && (
+                <div className="border-t border-(--ui-border) pt-3 mt-1 space-y-2">
+                  <p className="text-xs font-semibold text-(--ui-text-muted) uppercase tracking-wide">
+                    Outlet Assignments
+                  </p>
+                  <div className="max-h-40 overflow-y-auto space-y-1">
+                    {allOutlets.map((o) => {
+                      const checked = assignedOutletIds.includes(o.id);
+                      const isPrimary = primaryOutletId === o.id;
+                      return (
+                        <label key={o.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-(--ui-muted-surface) cursor-pointer text-sm">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              if (checked) {
+                                setAssignedOutletIds((prev) => prev.filter((id) => id !== o.id));
+                                if (isPrimary) setPrimaryOutletId(null);
+                              } else {
+                                setAssignedOutletIds((prev) => [...prev, o.id]);
+                              }
+                            }}
+                            className="accent-(--ui-accent)"
+                          />
+                          <MapPin size={12} className="text-(--ui-text-muted) shrink-0" />
+                          <span className="flex-1 text-(--ui-text)">{o.name}</span>
+                          {checked && (
+                            <button
+                              type="button"
+                              title={isPrimary ? "Primary outlet" : "Set as primary"}
+                              onClick={(e) => { e.preventDefault(); setPrimaryOutletId(o.id); }}
+                              className={`p-0.5 rounded ${isPrimary ? "text-amber-500" : "text-(--ui-text-muted) hover:text-amber-400"}`}
+                            >
+                              <Star size={13} fill={isPrimary ? "currentColor" : "none"} />
+                            </button>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {assignedOutletIds.length === 0 && (
+                    <p className="text-xs text-(--ui-text-muted)">No outlets assigned — employee will have no branch access.</p>
+                  )}
                 </div>
               )}
               <div className="flex gap-2 pt-2">

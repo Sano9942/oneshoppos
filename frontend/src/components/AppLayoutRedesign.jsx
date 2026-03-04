@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { SHOPIFY_NAV_GROUPS } from "../ui/nav-config";
 import { Input } from "../ui/primitives";
 import useFeatureFlags from "../hooks/useFeatureFlags";
+import ContextSwitcher from "./ContextSwitcher";
 
 export default function AppLayoutRedesign() {
   const location = useLocation();
@@ -106,6 +107,7 @@ export default function AppLayoutRedesign() {
             </div>
           </div>
           <div className="ml-4 flex items-center gap-4">
+            <ContextSwitcher />
             <button className="ui-focus-ring rounded-md p-1.5 text-(--ui-text-muted) hover:bg-(--ui-muted-surface)">
               <Bell size={16} />
             </button>

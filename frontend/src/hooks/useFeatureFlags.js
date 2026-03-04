@@ -17,6 +17,9 @@ const DEFAULT_FLAGS = {
   reports_inventory_health_plus: false,
   reports_exceptions: false,
   reports_scheduled_exports: false,
+  context_selection_required: false,
+  context_header_enforced: false,
+  kiosk_context_locked: false,
 };
 
 export default function useFeatureFlags(authHeaders) {

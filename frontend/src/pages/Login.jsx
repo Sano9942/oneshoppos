@@ -13,7 +13,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
 
   if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/context-select" replace />;
   }
 
   const onSubmit = async (e) => {
@@ -23,8 +23,7 @@ export default function Login() {
     setError("");
     try {
       await login(username.trim(), pin.trim());
-      const next = location.state?.from?.pathname || "/dashboard";
-      navigate(next, { replace: true });
+      navigate("/context-select", { replace: true });
     } catch (err) {
       setError(err.message || "Invalid username or PIN");
     } finally {

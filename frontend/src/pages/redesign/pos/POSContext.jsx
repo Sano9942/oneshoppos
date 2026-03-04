@@ -9,6 +9,7 @@ import React, {
 import { useNavigate } from "react-router-dom";
 import { API_BASE as API } from "../../../config";
 import { useAuth } from "../../../auth/AuthProvider";
+import { readContext } from "../../../auth/authStore";
 
 const POSContext = createContext();
 const OPENING_DENOMS = [5000, 1000, 500, 100, 50, 20, 10];
@@ -142,6 +143,12 @@ export const POSProvider = ({ children }) => {
         const outList = outData.outlets || [];
         setOutlets(outList);
         setCustomers(custData.customers || []);
+        // Auto-inherit outlet from global context if set
+        const ctx = readContext();
+        if (ctx?.active_outlet_id && !selectedOutletId) {
+          const match = outList.find((o) => o.id === ctx.active_outlet_id);
+          if (match) setSelectedOutletId(String(match.id));
+        }
       })
       .catch(() => setError("Failed to load POS setup data."));
   }, []);

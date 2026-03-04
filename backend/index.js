@@ -244,6 +244,81 @@ function requirePerm(permission) {
   };
 }
 
+// Context resolver — reads context headers, optionally enforces when flag is on.
+// Exempt paths: auth, context bootstrap, feature-flags, kiosk attendance PIN endpoints.
+const CONTEXT_EXEMPT_PATHS = [
+  /^\/api\/auth\//,
+  /^\/api\/context\//,
+  /^\/api\/feature-flags/,
+  /^\/api\/attendance\/pin-/,
+  /^\/api\/roles\/\d+\/permissions/,
+  /^\/api\/outlets$/,
+];
+let _contextEnforced = false;
+let _contextFlagLoaded = false;
+let _contextFlagLastCheck = 0;
+const CONTEXT_FLAG_CACHE_MS = 30000; // re-check every 30s
+
+// Eagerly load flag on startup
+db.get(
+  "SELECT enabled FROM feature_flags WHERE key = 'context_header_enforced'",
+  [],
+  (err, row) => {
+    if (!err && row) _contextEnforced = Number(row.enabled) === 1;
+    _contextFlagLoaded = true;
+    _contextFlagLastCheck = Date.now();
+  },
+);
+
+function resolveContext(req, res, next) {
+  req.context = { companyId: null, outletId: null, scopeMode: null };
+  const companyId = req.headers["x-company-id"];
+  const outletId = req.headers["x-outlet-id"];
+  const scopeMode = req.headers["x-scope-mode"];
+  if (companyId) req.context.companyId = Number(companyId);
+  if (outletId) req.context.outletId = Number(outletId);
+  if (scopeMode) req.context.scopeMode = scopeMode;
+
+  // Refresh cached flag value periodically
+  const now = Date.now();
+  if (now - _contextFlagLastCheck > CONTEXT_FLAG_CACHE_MS) {
+    _contextFlagLastCheck = now;
+    db.get(
+      "SELECT enabled FROM feature_flags WHERE key = 'context_header_enforced'",
+      [],
+      (err, row) => {
+        if (!err && row) _contextEnforced = Number(row.enabled) === 1;
+      },
+    );
+  }
+
+  // Enforce: reject API requests missing context headers (when flag is on)
+  if (_contextFlagLoaded && _contextEnforced && req.path.startsWith("/api/")) {
+    const exempt = CONTEXT_EXEMPT_PATHS.some((rx) => rx.test(req.path));
+    // Admins (all_access) in all_branches mode are exempt from outlet requirement
+    const perms = req.employeePerms || [];
+    const isAdmin = perms.includes("all_access");
+    const isAllBranches = scopeMode === "all_branches";
+    if (!exempt && !outletId && !(isAdmin && isAllBranches)) {
+      return res.status(428).json({
+        error: "Context required: select a branch before using this feature.",
+        code: "CONTEXT_REQUIRED",
+      });
+    }
+  }
+
+  next();
+}
+
+// Helper middleware: injects req.context.outletId into req.query.outlet_id
+// so existing route code that filters by outlet_id becomes context-aware.
+function requireContextOutlet(req, res, next) {
+  if (req.context?.outletId && !req.query.outlet_id) {
+    req.query.outlet_id = String(req.context.outletId);
+  }
+  next();
+}
+
 function requireAnyPerm(permissions) {
   return (req, res, next) => {
     const perms = req.employeePerms || [];
@@ -469,6 +544,9 @@ const DEFAULT_FEATURE_FLAGS = {
   reports_inventory_health_plus: false,
   reports_exceptions: false,
   reports_scheduled_exports: false,
+  context_selection_required: false,
+  context_header_enforced: false,
+  kiosk_context_locked: false,
 };
 
 function getFeatureFlagsMap(cb) {
@@ -564,6 +642,8 @@ const { processPendingShopifyInventoryEvents, processPendingReportSchedules } =
     createNotification,
     notifyLowStockForSale,
     loadEmployeePerms,
+    resolveContext,
+    requireContextOutlet,
     ensureDefaultRolePermissions,
     PERMISSION_RULES,
     DEFAULT_FEATURE_FLAGS,

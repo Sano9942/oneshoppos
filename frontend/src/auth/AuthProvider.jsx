@@ -7,7 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { clearSession, readSession, writeSession } from "./authStore";
+import { clearSession, readContext, readSession, writeSession } from "./authStore";
 
 import { API_BASE as API } from '../config';
 const AuthContext = createContext(null);
@@ -143,6 +143,20 @@ export function AuthProvider({ children }) {
       const headers = new Headers(init.headers || {});
       if (!headers.has("x-employee-id")) {
         headers.set("x-employee-id", String(employee.id));
+      }
+
+      // Inject context headers from session storage
+      const ctx = readContext();
+      if (ctx) {
+        if (ctx.active_company_id && !headers.has("x-company-id")) {
+          headers.set("x-company-id", String(ctx.active_company_id));
+        }
+        if (ctx.active_outlet_id && !headers.has("x-outlet-id")) {
+          headers.set("x-outlet-id", String(ctx.active_outlet_id));
+        }
+        if (ctx.scope_mode && !headers.has("x-scope-mode")) {
+          headers.set("x-scope-mode", ctx.scope_mode);
+        }
       }
 
       return nativeFetch(input, { ...init, headers });

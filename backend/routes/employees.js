@@ -75,6 +75,75 @@ module.exports = function registerEmployeeRoutes(app, deps) {
     });
   });
 
+  // --- Employee-outlet assignments ---
+
+  // Get assigned outlets for an employee
+  app.get(
+    "/api/employees/:id/outlets",
+    requirePerm("manage_employees"),
+    (req, res) => {
+      const { id } = req.params;
+      db.all(
+        `SELECT eo.outlet_id, o.name, o.branch_code, o.company_id, eo.is_primary
+         FROM employee_outlets eo
+         JOIN outlets o ON o.id = eo.outlet_id
+         WHERE eo.employee_id = ?
+         ORDER BY o.name`,
+        [id],
+        (err, rows) => {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json({ outlets: rows || [] });
+        },
+      );
+    },
+  );
+
+  // Bulk-replace outlet assignments for an employee
+  app.put(
+    "/api/employees/:id/outlets",
+    requirePerm("manage_employees"),
+    (req, res) => {
+      const { id } = req.params;
+      const { outlet_ids, primary_outlet_id } = req.body || {};
+
+      if (!Array.isArray(outlet_ids) || outlet_ids.length === 0) {
+        return res
+          .status(400)
+          .json({ error: "outlet_ids must be a non-empty array" });
+      }
+
+      const numericIds = outlet_ids.map(Number).filter((n) => n > 0);
+      if (numericIds.length === 0) {
+        return res.status(400).json({ error: "No valid outlet IDs provided" });
+      }
+
+      const primaryId = primary_outlet_id
+        ? Number(primary_outlet_id)
+        : numericIds[0];
+
+      db.serialize(() => {
+        // Remove existing assignments
+        db.run("DELETE FROM employee_outlets WHERE employee_id = ?", [id]);
+
+        // Insert new assignments
+        const stmt = db.prepare(
+          "INSERT INTO employee_outlets (employee_id, outlet_id, is_primary) VALUES (?, ?, ?)",
+        );
+        for (const outletId of numericIds) {
+          stmt.run(id, outletId, outletId === primaryId ? 1 : 0);
+        }
+        stmt.finalize((err) => {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json({
+            message: "Outlet assignments updated",
+            outlet_ids: numericIds,
+            primary_outlet_id: primaryId,
+          });
+        });
+      });
+    },
+  );
+
   // Delete an employee
   app.delete(
     "/api/employees/:id",

@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { API_BASE } from "../../config";
 
 const API = `${API_BASE}/api`;
@@ -33,8 +34,10 @@ const BREAK_REASONS = [
 ];
 
 export default function KioskRedesign() {
+  const [searchParams] = useSearchParams();
   const [outlets, setOutlets] = useState([]);
   const [outlet, setOutlet] = useState(null);
+  const [kioskLocked, setKioskLocked] = useState(false);
 
   const [view, setView] = useState("idle");
 
@@ -47,6 +50,11 @@ export default function KioskRedesign() {
 
   const [confirm, setConfirm] = useState({ title: "", body: "", color: "emerald" });
 
+  const urlOutletId = useMemo(() => {
+    const v = searchParams.get("outlet");
+    return v ? Number(v) : null;
+  }, [searchParams]);
+
   const [clock, setClock] = useState(new Date());
   useEffect(() => {
     const t = setInterval(() => setClock(new Date()), 1000);
@@ -54,11 +62,23 @@ export default function KioskRedesign() {
   }, []);
 
   useEffect(() => {
-    fetch(`${API}/outlets`)
-      .then((r) => r.json())
-      .then((d) => setOutlets(d.outlets || []))
-      .catch(() => {});
-  }, []);
+    Promise.all([
+      fetch(`${API}/outlets`).then((r) => r.json()),
+      fetch(`${API}/feature-flags`).then((r) => r.json()).catch(() => ({ flags: [] })),
+    ]).then(([outData, flagsData]) => {
+      const outList = outData.outlets || [];
+      setOutlets(outList);
+      const locked = (flagsData.flags || []).some(
+        (f) => f.key === "kiosk_context_locked" && Number(f.enabled) === 1,
+      );
+      setKioskLocked(locked);
+      // Auto-select outlet from URL param
+      if (urlOutletId) {
+        const match = outList.find((o) => o.id === urlOutletId);
+        if (match) setOutlet(match);
+      }
+    }).catch(() => {});
+  }, [urlOutletId]);
 
   useEffect(() => {
     if (view !== "confirmation") return;
@@ -264,23 +284,27 @@ export default function KioskRedesign() {
           <div className="flex items-center gap-3">
             <span className="text-slate-400 text-sm">Store:</span>
             {outlet ? <span className="font-semibold text-white">{outlet.name}</span> : null}
-            <select
-              value={outlet?.id || ""}
-              onChange={(e) => {
-                const found = outlets.find((o) => o.id === Number(e.target.value));
-                setOutlet(found || null);
-              }}
-              className={`bg-slate-800 border border-slate-600 text-white rounded-lg px-3 py-1.5 text-sm ${
-                outlet ? "text-slate-400" : "text-white"
-              }`}
-            >
-              <option value="">Select your store...</option>
-              {outlets.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
+            {kioskLocked && outlet ? (
+              <span className="text-xs text-slate-500 bg-slate-800 rounded px-2 py-1">Locked</span>
+            ) : (
+              <select
+                value={outlet?.id || ""}
+                onChange={(e) => {
+                  const found = outlets.find((o) => o.id === Number(e.target.value));
+                  setOutlet(found || null);
+                }}
+                className={`bg-slate-800 border border-slate-600 text-white rounded-lg px-3 py-1.5 text-sm ${
+                  outlet ? "text-slate-400" : "text-white"
+                }`}
+              >
+                <option value="">Select your store...</option>
+                {outlets.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <div className="text-right">
             <p className="text-2xl font-mono font-semibold text-white">

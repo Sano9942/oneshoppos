@@ -11,6 +11,8 @@ module.exports = function registerAllRoutes(app, deps) {
     createNotification,
     notifyLowStockForSale,
     loadEmployeePerms,
+    resolveContext,
+    requireContextOutlet,
     ensureDefaultRolePermissions,
     PERMISSION_RULES,
     DEFAULT_FEATURE_FLAGS,
@@ -42,6 +44,8 @@ module.exports = function registerAllRoutes(app, deps) {
   } = deps;
 
   app.use(loadEmployeePerms);
+  app.use(resolveContext);
+  app.use(requireContextOutlet);
   ensureDefaultRolePermissions();
 
   app.use((req, res, next) => {

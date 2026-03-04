@@ -2,8 +2,10 @@ import { Suspense, lazy } from "react";
 import { BrowserRouter as Router, Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth/AuthProvider";
 import RequireAuth from "./components/RequireAuth";
+import RequireContext from "./components/RequireContext";
 import RequirePerm from "./components/RequirePerm";
 import AppLayoutRedesign from "./components/AppLayoutRedesign";
+import ContextSelect from "./pages/ContextSelect";
 import AccessDenied from "./pages/AccessDenied";
 import AdministratorRoute from "./pages/AdministratorRoute";
 import ApprovalsRedesign from "./pages/redesign/ApprovalsRedesign";
@@ -64,7 +66,7 @@ function RouteLoading() {
 function HomeRedirect() {
   const { isAuthenticated, isBootstrapping } = useAuth();
   if (isBootstrapping) return null;
-  return <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />;
+  return <Navigate to={isAuthenticated ? "/context-select" : "/login"} replace />;
 }
 
 function App() {
@@ -74,6 +76,14 @@ function App() {
         <Route path="/" element={<HomeRedirect />} />
         <Route path="/login" element={<Login />} />
         <Route path="/access-denied" element={<AccessDenied />} />
+        <Route
+          path="/context-select"
+          element={
+            <RequireAuth>
+              <ContextSelect />
+            </RequireAuth>
+          }
+        />
         <Route
           path="/pos"
           element={
@@ -93,8 +103,10 @@ function App() {
 
         <Route
           element={
-              <RequireAuth>
-              <AppLayoutRedesign />
+            <RequireAuth>
+              <RequireContext>
+                <AppLayoutRedesign />
+              </RequireContext>
             </RequireAuth>
           }
         >
