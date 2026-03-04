@@ -972,3 +972,32 @@ Full detailed test cases for each phase are in the plan file at `.claude/plans/s
 - Verified all 6 tests pass consistently using `npx playwright test`.
 
 **Status:** All 6 tests pass with 100% success rate. The testing milestone is complete!
+
+---
+
+## Context Unification & Role Scope Governance (Session Mar 2026)
+
+### What Was Done
+
+Implemented mandatory post-login branch/outlet context across 6 batches (A-F):
+
+- **Batch A**: Schema foundations — `companies` table, `employee_outlets` junction, context bootstrap API, resolveContext middleware stub, 3 feature flags
+- **Batch B**: Login flow — ContextSelect page, RequireContext guard, authStore context helpers, employee-outlet assignment UI
+- **Batch C**: Header propagation — fetch interceptor injects x-company-id/x-outlet-id/x-scope-mode, ContextSwitcher dropdown in app header
+- **Batch D**: POS/Kiosk inheritance — POS auto-inherits outlet from global context, Kiosk supports ?outlet= URL param + kiosk_context_locked flag
+- **Batch E**: Backend enforcement — resolveContext validates headers when flag on (428 for missing context), requireContextOutlet auto-injects outlet_id into query params
+- **Batch F**: Rollout — all 3 flags enabled, eager flag loading fix, React hooks violation fix
+
+### Key Technical Decisions
+
+- Context headers read lazily from localStorage via `readContext()` at fetch time (not React state), so context switches take effect immediately
+- Kiosk is unauthenticated, so uses URL param `?outlet=<id>` instead of `readContext()`
+- `requireContextOutlet` middleware auto-injects outlet into `req.query.outlet_id`, making all existing route filters context-aware with zero per-route changes
+- 30-second flag cache avoids per-request DB queries for enforcement check
+- Exempt paths: auth, context bootstrap, feature-flags, kiosk PIN, outlets, role permissions
+
+### Files: 4 new, 14 modified
+
+New: `migrate61.js`, `ContextSelect.jsx`, `RequireContext.jsx`, `ContextSwitcher.jsx`
+
+**Status:** Complete. All 3 feature flags live. Backend enforcement verified with 6 test scenarios.

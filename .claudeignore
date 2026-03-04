@@ -19,7 +19,7 @@ backend/exports/
 backend/package-lock.json
 frontend/package-lock.json
 
-# All old migration files (only read migrate45.js - the latest)
+# All old migration files — only read migrate61.js (the latest)
 backend/migrate.js
 backend/migrate2.js
 backend/migrate3.js
@@ -64,6 +64,22 @@ backend/migrate41.js
 backend/migrate42.js
 backend/migrate43.js
 backend/migrate44.js
+backend/migrate45.js
+backend/migrate46.js
+backend/migrate47.js
+backend/migrate48.js
+backend/migrate49.js
+backend/migrate50.js
+backend/migrate51.js
+backend/migrate52.js
+backend/migrate53.js
+backend/migrate54.js
+backend/migrate55.js
+backend/migrate56.js
+backend/migrate57.js
+backend/migrate58.js
+backend/migrate59.js
+backend/migrate60.js
 
 # Test files - not needed for development tasks
 backend/e2e_full_test.js

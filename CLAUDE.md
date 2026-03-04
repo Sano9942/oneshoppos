@@ -9,7 +9,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 
 ## Current Status Snapshot (March 2026)
 
-- Latest migration is `backend/migrate60.js`
+- Latest migration is `backend/migrate61.js`
 - Reports V2 core implementation is complete:
   - governance is integrated into the main reports workspace
   - report tabs were aligned to live backend payloads
@@ -30,6 +30,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
   - `frontend/src/pages/ShopifyIntegration.jsx` is the active workspace orchestrator
   - `frontend/src/pages/shopify/*` contains the active tab modules
   - `ShopifyIntegrationRedesign.jsx` is still mainly a shell wrapper
+- Context Unification is live — mandatory post-login branch selection, backend enforcement via `x-outlet-id` header, kiosk context lock
 - Current live E2E batches passing include report smokes plus `pos.spec.js`, `kiosk.spec.js`, and `rbac.spec.js`
 
 ## Project Structure
@@ -96,7 +97,7 @@ oneshoppos/
 │   │   ├── utils.js              # Retry logic, webhook HMAC verification
 │   │   └── order-service.js      # upsertWebOrderFromShopifyPayload + stock policy helpers (factory)
 │   ├── category-tree.js          # Category tree enrichment, descendants, leaf validation
-│   └── migrate59.js              # Latest DB migration — READ THIS for schema questions
+│   └── migrate61.js              # Latest DB migration — READ THIS for schema questions
 └── frontend/
     └── src/
         ├── components/           # Reusable UI components (all small, < 200 lines)
@@ -141,25 +142,17 @@ oneshoppos/
 - Reports routes are **modular**: `backend/routes/reports/` (8 files).
 - Tier 4 routes are **modular**: `backend/routes/tier4/` (7 files).
 - `registerAllRoutes.js` is now just an orchestrator (324 lines) — no routes defined there. Each domain is loaded via its modular directory.
-- Database schema: read only `backend/migrate59.js` (latest), never older migrations
+- Database schema: read only `backend/migrate61.js` (latest), never older migrations
 - Internal product categories are hierarchical; products and category promotions may target leaf categories only
-- `migrate58.js` changed categories from global name uniqueness to sibling-level uniqueness
-- `migrate59.js` repairs category foreign keys after the category-table rebuild
 - Parent category filters expand to descendant leaves in products and reports
 - SQLite DB file: `backend/oneshop.db`
 - Frontend: port 5173 (Vite dev), Backend: port 5000
 
 ## When Working on Backend
 
-Current-state override:
-
-- Schema questions: start with `backend/migrate60.js`, not `migrate59.js`
-- Reports are modular under `backend/routes/reports/`, including `staff.js`
-- Shopify is modular under `backend/routes/shopify/`, including `reconciliation.js`
-
 - Find which file owns the route: check the table in this file above
 - Read ONLY that route file — do not read registerAllRoutes.js for route logic
-- Schema questions → `backend/migrate59.js` only
+- Schema questions → `backend/migrate61.js` (latest)
 - Category tree logic → `backend/category-tree.js`
 - Server middleware/config → `backend/index.js`
 - Shopify API calls → `backend/shopify/client.js`, webhook/retry logic → `backend/shopify/utils.js`
@@ -170,13 +163,9 @@ Current-state override:
 
 ## When Working on Frontend
 
-Current-state override:
-
+- **Active pages** are in `frontend/src/pages/redesign/` — always edit the `*Redesign.jsx` file
 - Reports logic lives in `frontend/src/pages/reports/`
 - Shopify logic lives in `frontend/src/pages/shopify/`
-- `ShopifyIntegration.jsx` is an active workspace orchestrator, not just a legacy page
-
-- **Active pages** are in `frontend/src/pages/redesign/` — always edit the `*Redesign.jsx` file
 - `*Route.jsx` files in `pages/` just render the redesign counterpart — no logic there
 - Legacy originals in `pages/` (`ShopifyIntegration.jsx`, `Accounting.jsx`, `Attendance.jsx`, `Approvals.jsx`, `BarcodeTemplates.jsx`, `ReceiptTemplates.jsx`) — do NOT delete; they are imported by their Redesign counterparts
 - `Reports.jsx` is no longer a legacy monolith; it is now a clean orchestrator for modules in `pages/reports/`
@@ -193,7 +182,7 @@ Current-state override:
 - `backend/exports/` (generated CSV reports)
 - `backend/backups/` (database backups)
 - `frontend/dist/` (build output)
-- Any migration file except `migrate60.js`
+- Any migration file except `migrate61.js`
 - Test files (`*_test.js`, `e2e_*.js`, etc.)
 - Diagnostic scripts (`check_*.js`, `diagnose_*.js`, `dumpDb*.js`, etc.)
 
@@ -207,29 +196,12 @@ Current-state override:
 
 ## Refactor History
 
-- Feb 2026: Split registerAllRoutes.js (was 11,630 lines) into 26 focused files
-- Mar 2026: Fixed 3 waves of post-refactor ReferenceErrors (enqueueInventorySyncEvents, getActiveShopifyConnection, maskSecret, logActionHistory, processPendingShopifyInventoryEvents)
-- Mar 2026: Completed redesign migration — Attendance, Approvals, BarcodeTemplates, ReceiptTemplates now all have \*Redesign.jsx wrappers; all routes in App.jsx point to redesign/
-- Mar 2026: Added Attendance, Barcode Templates, Receipt Templates to nav-config.js; removed requiredFlag gate from Approvals so it shows for any manage_orders user
-- Mar 2026: Full audit — all 36 nav entries, routes, redesign pages, and 26 backend modules confirmed wired. Remaining intentional gaps are the 5 placeholder routes (`/lookup`, `/custom-fields`, `/partners`, `/shopcast`, `/reports/parent-report`).
-- Mar 2026: Attendance module overhaul — PIN kiosk, session/break tracking, net hours, employee attendance config. `migrate56.js` introduced the attendance schema changes at that stage, and `attendance.js` was properly registered after previously being dead code. See `REFACTOR_NOTES.md` for full details.
-- Mar 2026: POS and Kiosk nav entries use `newTab: true` — clicking them opens a new browser tab. `AppLayoutRedesign.jsx` renders `<a target="_blank">` for items with this flag instead of `<NavLink>`
-- Mar 2026: SQLite `date()` in index fix — `idx_att_sessions_emp_date` was created with `date(session_start,'localtime')` which SQLite rejects as non-deterministic. Fixed to index on raw `session_start` column; `date()` in WHERE clauses is unaffected
-- Mar 2026: Hierarchical internal categories shipped. `migrate57.js` adds `categories.parent_id`, `sort_order`, `is_active`; `backend/category-tree.js` is the shared tree utility. Category CRUD is tree-aware, products and category promotions are leaf-only, and parent-category filters expand to descendant leaves in products and reports.
-- Mar 2026: Frontend category flows updated for hierarchy. `CategoriesRedesign.jsx` now manages a tree, inventory and promotions show path labels and leaf-only assignment, and reports use category selectors with descendant-aware filtering.
-- Mar 2026: Migration reliability and E2E coverage improved. `migrate54.js` is rerun-safe, a hierarchical-categories Playwright smoke spec was added, and shared admin login lives in `frontend/tests/e2e/helpers/auth.js`.
-- Mar 2026: Category schema hardening shipped. `migrate58.js` replaces global category-name uniqueness with sibling-level uniqueness, which is required for repeated leaf names like `Shoes` or `Jeans` under different parents.
-- Mar 2026: Post-migrate58 FK repair shipped. `migrate59.js` fixes `products.category_id` and `promotions.category_id` references back to `categories` after the category table rebuild. `run_migrations.js` now includes both migrations.
-- Mar 2026: Toy-store rollout completed on the live DB. Shopify-style internal categories were imported, `Toys & Games` was added as the primary top-level tree, sample products were reclassified into toy leaves, and recommended toy brands/tags were seeded.
-- Mar 2026: Shopify import path made hierarchy-safe. `shopify.js` no longer auto-creates categories from Shopify `product_type`; it only assigns `category_id` when there is exactly one matching existing leaf, otherwise it preserves product metadata and leaves category assignment unchanged/null.
-- Mar 2026: Permanent inventory/reports smoke coverage added. `frontend/tests/e2e/inventory-reports-smoke.spec.js` verifies inventory editing of `product_type`/`vendor`/`tags` plus category-wise CSV export and report API validity.
-- Mar 2026: Shopify Integration V2 Phase 2 — backend modularization complete. `backend/routes/shopify.js` (1,929-line monolith) deleted and replaced with `backend/routes/shopify/` (8 focused modules: `index`, `config`, `health`, `sync`, `orders`, `webhooks`, `import`, `mappings`). Critical bug fixed: `upsertWebOrderFromShopifyPayload` extracted to `backend/shopify/order-service.js` and correctly threaded through `registerAllRoutes.js` → `shopifyDeps` → all Shopify route modules.
-- Mar 2026: Shopify Integration V2 Phase 3 — data model hardening. `migrate60.js` creates `shopify_product_metadata` (Shopify-native taxonomy: handle, status, product_type, vendor, tags, published_at, updated_at) with `ON DELETE CASCADE` + unique index. `client.js` now returns `shopify_handle` from product queries. `import.js` fire-and-forgets a metadata upsert after every product write. `run_migrations.js` updated.
-- Mar 2026: Advanced Reporting Dashboard Shipped. Implemented 11 new industry-standard reporting features across backend (`backend/routes/reports.js`) and frontend (`frontend/src/pages/Reports.jsx`). Includes: Comparative Trends (DoD/WoW), Hourly Heatmaps, Revenue Leaks (Voids/Discounts), Product Mix (Market Basket), Retail Matrix (Stars/Dogs), Customer Retention (New vs returning), Capture Rate, Labor Performance (Rev/Hr), and Loss Prevention (Risk Ratio).
-- Mar 2026: Reports V2 Modularization. `Reports.jsx` monolithic file (~4000 lines) split into domain-specific modules in `frontend/src/pages/reports/`. Reduced main orchestrator to ~540 lines and restored production build stability by resolving duplicate declarations.
-- Mar 2026: Phase 6.1: Reports restoration & data key unification. Backend Reports endpoints corrected to return keys expected by the frontend (`items`, `sales`, `orders`). Fixed critical aggregation logic for `sales-summary` and `comparative-trends`. Added missing `grn-report`.
-- Mar 2026: Phase 7: Final Global Verification. Completed modularization of Reports, Shopify, and Tier 4. Global syntax check and export audit confirmed. Cleanup of debug logs and final system stabilization. Project now fully modularized.
-- Mar 2026: Shopify Import Enhancement. `backend/routes/shopify/import.js` updated to support SKU-only products. Implemented 3-stage lookup (Shopify Map -> Barcode -> SKU) and explicit UPDATE/INSERT strategy to bypass the barcode-only unique constraint. Variants with neither barcode nor SKU are skipped.
-- Mar 2026: Shopify Leading Zero Fix. Resolved data loss issue where barcodes/SKUs with leading zeros (e.g., "002590") were stripped to numbers. Replaced unsafe `|| ""` falsy coercion with explicit `String()` coercion in `client.js` and `import.js`. Added `SHOPIFY_IMPORT_DEBUG` logging.
-- Mar 2026: POS opening/closing workflow hardened. POS now forces branch selection, shift opening, and attendance gating before checkout. Opening and closing denominations are stored as auditable shift data, and Cash Management uses the same denomination-driven open-shift flow.
-- Mar 2026: Reports V2 completion pass shipped. Governance moved into the main reports workspace, report tabs were polished and remapped to live payloads, `backend/routes/reports/staff.js` added live labor/loss endpoints, reports were lazy-loaded and code-split, and live report/POS/Kiosk/RBAC Playwright batches passed.
+Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
+
+- Feb 2026: Backend modularized — 26 route files extracted from registerAllRoutes.js
+- Mar 2026: All frontend pages migrated to `redesign/` wrappers
+- Mar 2026: Hierarchical categories shipped (tree CRUD, leaf-only assignment)
+- Mar 2026: Shopify V2 — backend modularized (8 files), data model hardened (migrate60)
+- Mar 2026: Reports V2 — 8 backend + 6 frontend modules, 67 tabs, 74 endpoints
+- Mar 2026: POS opening/closing workflow hardened (branch + shift + attendance gating)
+- Mar 2026: Context Unification shipped — mandatory post-login branch context, role-scope enforcement, header propagation (migrate61, 3 flags live)
