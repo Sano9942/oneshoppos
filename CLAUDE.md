@@ -7,6 +7,31 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - Backend: Node.js + Express v5 + SQLite3
 - Frontend: React 19 + Vite 7 + Tailwind CSS v4
 
+## Current Status Snapshot (March 2026)
+
+- Latest migration is `backend/migrate60.js`
+- Reports V2 core implementation is complete:
+  - governance is integrated into the main reports workspace
+  - report tabs were aligned to live backend payloads
+  - report shell lazy-loading and chunk splitting are in place
+  - report smoke Playwright coverage is passing
+- POS operating flow is enforced:
+  - branch selection happens inside POS
+  - checkout is blocked unless a shift is open
+  - checkout is blocked unless the logged-in employee is clocked in
+  - opening and closing cash denominations are stored as auditable shift data
+- Cash Management now uses the same denomination-based opening flow as POS
+- Category selectors use breadcrumb paths, alphabetical ordering, and show all categories while disabling parent nodes for product assignment
+- Shopify backend is modularized and metadata-safe:
+  - `shopify_product_metadata` is live
+  - SKU-only imports are supported
+  - leading zeros in SKU/barcode are preserved
+- Shopify frontend is partially modularized:
+  - `frontend/src/pages/ShopifyIntegration.jsx` is the active workspace orchestrator
+  - `frontend/src/pages/shopify/*` contains the active tab modules
+  - `ShopifyIntegrationRedesign.jsx` is still mainly a shell wrapper
+- Current live E2E batches passing include report smokes plus `pos.spec.js`, `kiosk.spec.js`, and `rbac.spec.js`
+
 ## Project Structure
 
 ```
@@ -126,6 +151,12 @@ oneshoppos/
 
 ## When Working on Backend
 
+Current-state override:
+
+- Schema questions: start with `backend/migrate60.js`, not `migrate59.js`
+- Reports are modular under `backend/routes/reports/`, including `staff.js`
+- Shopify is modular under `backend/routes/shopify/`, including `reconciliation.js`
+
 - Find which file owns the route: check the table in this file above
 - Read ONLY that route file — do not read registerAllRoutes.js for route logic
 - Schema questions → `backend/migrate59.js` only
@@ -138,6 +169,12 @@ oneshoppos/
 - Shopify order upsert service → `backend/shopify/order-service.js`
 
 ## When Working on Frontend
+
+Current-state override:
+
+- Reports logic lives in `frontend/src/pages/reports/`
+- Shopify logic lives in `frontend/src/pages/shopify/`
+- `ShopifyIntegration.jsx` is an active workspace orchestrator, not just a legacy page
 
 - **Active pages** are in `frontend/src/pages/redesign/` — always edit the `*Redesign.jsx` file
 - `*Route.jsx` files in `pages/` just render the redesign counterpart — no logic there
@@ -194,3 +231,5 @@ oneshoppos/
 - Mar 2026: Phase 7: Final Global Verification. Completed modularization of Reports, Shopify, and Tier 4. Global syntax check and export audit confirmed. Cleanup of debug logs and final system stabilization. Project now fully modularized.
 - Mar 2026: Shopify Import Enhancement. `backend/routes/shopify/import.js` updated to support SKU-only products. Implemented 3-stage lookup (Shopify Map -> Barcode -> SKU) and explicit UPDATE/INSERT strategy to bypass the barcode-only unique constraint. Variants with neither barcode nor SKU are skipped.
 - Mar 2026: Shopify Leading Zero Fix. Resolved data loss issue where barcodes/SKUs with leading zeros (e.g., "002590") were stripped to numbers. Replaced unsafe `|| ""` falsy coercion with explicit `String()` coercion in `client.js` and `import.js`. Added `SHOPIFY_IMPORT_DEBUG` logging.
+- Mar 2026: POS opening/closing workflow hardened. POS now forces branch selection, shift opening, and attendance gating before checkout. Opening and closing denominations are stored as auditable shift data, and Cash Management uses the same denomination-driven open-shift flow.
+- Mar 2026: Reports V2 completion pass shipped. Governance moved into the main reports workspace, report tabs were polished and remapped to live payloads, `backend/routes/reports/staff.js` added live labor/loss endpoints, reports were lazy-loaded and code-split, and live report/POS/Kiosk/RBAC Playwright batches passed.

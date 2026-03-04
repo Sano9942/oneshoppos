@@ -97,6 +97,14 @@ Current shape:
 - `ReportsPowerUpPanel.jsx` adds feature-flagged advanced analytics above the legacy reports UI
 - March 2026 update: **Advanced Reporting Dashboard Shipped.** Implemented 11 new React-based analytics tabs including Heatmaps, Retail Matrix, and Comparative Trends. Backend endpoints now support core industry-standard metrics for SaaS/Retail.
 
+Current-state override (March 4, 2026):
+
+- `ReportsRedesign.jsx` wraps the active `Reports.jsx`
+- `Reports.jsx` now orchestrates domain modules under `frontend/src/pages/reports/`
+- governance now lives inside the main reports workspace instead of only in the old power-up panel
+- report routes are lazy-loaded from `App.jsx`, and the build is code-split so reports are no longer part of one oversized app chunk
+- dense-tab cleanup, export mapping cleanup, and live-schema alignment are complete across the report modules
+
 ### Backend
 
 Primary file:
@@ -109,6 +117,13 @@ Current shape:
 - route logic is centralized in one file
 - several endpoints now support hierarchical category filtering
 - some endpoints were recently patched to return path-aware category labels
+
+Current-state override (March 4, 2026):
+
+- route logic is modular under `backend/routes/reports/`
+- governance scheduling/export plumbing is wired through `backend/routes/reports/index.js`
+- labor performance and loss prevention now live in `backend/routes/reports/staff.js`
+- hierarchical category filters, path-aware labels, and response-key normalization are already implemented
 
 ---
 
@@ -838,7 +853,7 @@ Deliverable:
 
 - unified reporting admin experience
 
-### Phase 9: Testing and Polish
+### Phase 9: Testing and Polish [DONE]
 
 - backend accuracy tests
 - Playwright smoke tests
@@ -903,39 +918,41 @@ Reports V2 is considered complete when:
 
 ## Current Remaining Work
 
-As of March 4, 2026, the remaining Reports V2 work is Phase 9 only.
+As of March 4, 2026, the planned Reports V2 scope is complete.
 
-### Still Open
+### Completed in the final pass
 
-- backend accuracy tests for hierarchy-aware filters, merchandising aggregates, promotion math, and Shopify exception cases
-- Playwright smoke coverage for main report navigation, exports, and governance flows
-- UI polish on dense report tables and small-screen behavior
-- mobile cleanup for the tab strip, filter bar, and wide report content areas
+- governance and scheduling tools moved into the main reports workspace
+- backend accuracy coverage updated for current report payloads
+- governance integration tests added
+- dense report tabs polished and remapped to live backend fields
+- report shell/mobile cleanup completed
+- report routes lazy-loaded and code-split
+- live smoke coverage passed for:
+  - hierarchical categories
+  - inventory + reports
+  - reports governance
 
-### Recently Completed
+### Residual follow-up outside the core V2 plan
 
-- governance and scheduling tools are now part of the main reports workspace instead of living only in the legacy power-up block
-- saved views, schedules, definition versions, and delivery log are now under the `Governance / Audit` domain
+- broader non-report Playwright coverage can continue as standard product QA
+- optional future analytics expansions can still be added:
+  - tag insights
+  - vendor performance
+  - richer trend comparisons
+  - vertical-pack reports
 
 ---
 
-## Recommended First Implementation Slice
+## Recommended Next Step
 
-If work begins later and only one slice should be done first, do this:
+Reports V2 no longer needs another core implementation phase.
 
-1. redesign the reports shell
-2. add the shared filter bar
-3. modernize:
-   - category-wise
-   - inventory dump
-   - product spec
-   - sales & stock
-4. add:
-   - brand performance
-   - product type performance
-   - metadata completeness
+If work continues from here, treat it as follow-on product work:
 
-This gives the highest value with the least risk.
+1. broaden end-to-end coverage around adjacent flows that touch reports data
+2. add optional analytics or vertical packs only where there is business demand
+3. keep report payloads and exports aligned as backend domains evolve
 
 ---
 

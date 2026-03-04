@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Upgrade the current Shopify integration into a modular, modern, SaaS-ready integration layer without starting implementation yet.
+Upgrade the current Shopify integration into a modular, modern, SaaS-ready integration layer.
 
 This plan is based on the current code in:
 
@@ -14,7 +14,7 @@ This plan is based on the current code in:
 - [frontend/src/pages/ShopifyIntegration.jsx](/d:/newprojects/oneshoppos/frontend/src/pages/ShopifyIntegration.jsx)
 - [frontend/src/pages/redesign/ShopifyIntegrationRedesign.jsx](/d:/newprojects/oneshoppos/frontend/src/pages/redesign/ShopifyIntegrationRedesign.jsx)
 
-This file is planning-only. Do not start implementation without explicit approval.
+This file started as a planning document, but parts of the plan are now implemented. Status markers below reflect the current repo state.
 
 ## Executive Summary
 
@@ -45,6 +45,16 @@ Today the Shopify integration is concentrated in:
 V2 should keep the useful behavior, split the integration into clear modules, preserve Shopify-native classification cleanly, modernize the operator experience, and prepare the system for multi-tenant SaaS later.
 
 ## Current State Audit
+
+### Current Status Snapshot (March 4, 2026)
+
+- backend modularization is complete under `backend/routes/shopify/`
+- `shopify_product_metadata` is live via `migrate60.js`
+- SKU-only imports are supported through the Map -> Barcode -> SKU lookup chain
+- leading-zero preservation is fixed in Shopify barcode/SKU handling
+- import no longer auto-creates internal categories from Shopify `product_type`
+- the frontend is partially modularized into `frontend/src/pages/shopify/*`
+- the redesign layer is still mostly a shell wrapper around that workspace
 
 ## Backend Capabilities Already Present
 
@@ -105,7 +115,7 @@ This is a strong starting point. V2 should preserve these tables where possible 
 
 ## Frontend Capabilities Already Present
 
-[frontend/src/pages/ShopifyIntegration.jsx](/d:/newprojects/oneshoppos/frontend/src/pages/ShopifyIntegration.jsx) already provides:
+[frontend/src/pages/ShopifyIntegration.jsx](/d:/newprojects/oneshoppos/frontend/src/pages/ShopifyIntegration.jsx) already provides a tabbed workspace backed by `frontend/src/pages/shopify/*` modules:
 
 - connection settings
 - verification and live validation actions
@@ -118,7 +128,7 @@ This is a strong starting point. V2 should preserve these tables where possible 
 - reconciliation review and bulk actions
 - event filtering and retry
 
-[frontend/src/pages/redesign/ShopifyIntegrationRedesign.jsx](/d:/newprojects/oneshoppos/frontend/src/pages/redesign/ShopifyIntegrationRedesign.jsx) currently adds only shell chrome, not a true redesign.
+[frontend/src/pages/redesign/ShopifyIntegrationRedesign.jsx](/d:/newprojects/oneshoppos/frontend/src/pages/redesign/ShopifyIntegrationRedesign.jsx) still adds shell chrome around that workspace rather than replacing it with a fully standalone redesign implementation.
 
 ## Current Problems
 
@@ -701,7 +711,7 @@ Deliverables:
 - DELETE `/import/products` automatically cascades deletes to `shopify_product_metadata` via FK
 - Existing product fields (`product_type`, `vendor`, `tags`, `description_html`) remain on `products` table unchanged
 
-## Phase 4: Import and Mapping Modernization
+## Phase 4: Import and Mapping Modernization [PARTIAL]
 
 Upgrade product import and mapping workflows.
 
@@ -721,8 +731,16 @@ Success criteria:
 
 - **SKU-based Import:** `backend/routes/shopify/import.js` updated to support products with only SKUs via 3-stage lookup (Map -> Barcode -> SKU) and explicit UPDATE/INSERT strategy.
 - **Leading Zero Fix:** Corrected numeric coercion bug in `client.js` and `import.js` to preserve leading zeros in identifiers.
+- **Metadata persistence:** `shopify_product_metadata` now preserves Shopify-native handle/status/product_type/vendor/tags/publish/update timestamps on import.
+- **Hierarchy safety:** import no longer auto-creates internal categories from Shopify `product_type`; internal `category_id` is assigned only on safe exact leaf matches.
 
-## Phase 5: Frontend Shopify Workspace Redesign
+**Still open in Phase 4:**
+
+- import run summaries by run
+- explicit conflict reasons surfaced to operators
+- clearer unmapped/ambiguous import review workflow
+
+## Phase 5: Frontend Shopify Workspace Redesign [PARTIAL]
 
 Replace the legacy one-page panel with a modular workspace.
 
@@ -739,7 +757,19 @@ Success criteria:
 - better scanning of health and next actions
 - reduced page complexity
 
-## Phase 6: Observability and Diagnostics Upgrade
+**Current state:**
+
+- the old monolith has already been split into a tabbed workspace and shared context:
+  - `ShopifyOverview`
+  - `ShopifySettings`
+  - `ShopifyImport`
+  - `ShopifyMappings`
+  - `ShopifyReconciliation`
+  - `ShopifyEvents`
+- the redesign layer is still mostly a wrapper shell around that workspace
+- there is still room to push this further into a more overview-first operational shell
+
+## Phase 6: Observability and Diagnostics Upgrade [PARTIAL]
 
 Improve monitoring:
 
@@ -753,6 +783,12 @@ Success criteria:
 
 - faster operator troubleshooting
 - lower support burden
+
+**Current state:**
+
+- status, live validation, webhook setup guidance, UAT checklist, event monitoring, retry flow, and reconciliation already exist
+- the remaining gap is presentation coherence, not missing primitives
+- diagnostics are still spread across tabs rather than presented as one unified monitoring model
 
 ## Phase 7: Hardening and Regression Coverage
 
@@ -896,6 +932,42 @@ Shopify Integration V2 implementation is complete when:
 - frontend Shopify workspace is modern and easier to operate
 - queue, diagnostics, mapping, and import workflows are clearer
 - regression tests and smoke tests cover the critical paths
+
+## Current Remaining Work
+
+As of March 4, 2026, Shopify Integration V2 is partially complete.
+
+### Remaining implementation work
+
+- finish Phase 4 operator visibility:
+  - import run summaries
+  - ambiguous or unmapped conflict reasons
+  - clearer mapping review outcomes
+- finish Phase 5 frontend workspace redesign:
+  - move from the current tabbed workspace to a more overview-first operational shell
+  - separate diagnostics, mappings, and sync workflows more clearly
+- finish Phase 6 observability:
+  - unify health, queue, webhook, import, and reconciliation signals in one monitoring view
+- complete Phase 7:
+  - Shopify-specific backend integration coverage
+  - Playwright smoke coverage for the Shopify workspace
+
+## Recommended Next Step (Current State)
+
+Use this section instead of the older recommendation block below.
+
+1. finish Phase 4 operator visibility:
+   - import run summaries
+   - ambiguous or unmapped conflict reasons
+   - clearer mapping review outcomes
+2. finish Phase 5 frontend workspace redesign:
+   - evolve the current tabbed workspace into a more overview-first operational shell
+   - separate diagnostics, mappings, and sync workflows more clearly
+3. finish Phase 6 observability:
+   - unify health, queue, webhook, import, and reconciliation signals in one monitoring view
+4. complete Phase 7:
+   - Shopify-specific backend integration coverage
+   - Playwright smoke coverage for the Shopify workspace
 
 ## Recommended Next Step
 

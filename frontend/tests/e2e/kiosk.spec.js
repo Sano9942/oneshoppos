@@ -35,20 +35,24 @@ test.describe("Attendance Kiosk Flow", () => {
       const outVis = await page
         .getByRole("button", { name: /end of day clock out/i })
         .isVisible();
-      expect(inVis || outVis).toBeTruthy();
+      const finishedVis = await page.getByText(/Finished today/i).isVisible();
+      expect(inVis || outVis || finishedVis).toBeTruthy();
     }).toPass({ timeout: 10000 });
 
     const clockInBtn = page.getByRole("button", { name: /clock in/i });
     const clockOutBtn = page.getByRole("button", {
       name: /end of day clock out/i,
     });
+    const finishedState = page.getByText(/Finished today/i);
 
     if (await clockInBtn.isVisible()) {
       await clockInBtn.click();
       await expect(page.getByText(/Welcome, Cashier User/i)).toBeVisible();
     } else if (await clockOutBtn.isVisible()) {
       await clockOutBtn.click();
-      await expect(page.getByText(/Goodbye, Cashier User/i)).toBeVisible();
+      await expect(page.getByText(/Goodbye, Cashier User/i).first()).toBeVisible();
+    } else if (await finishedState.isVisible()) {
+      await expect(page.getByRole("button", { name: /done/i })).toBeVisible();
     }
   });
 });

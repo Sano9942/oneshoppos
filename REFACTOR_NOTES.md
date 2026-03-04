@@ -4,6 +4,43 @@
 
 ## Latest Status Update (March 2026)
 
+> Current-state note: older sections below capture the sequence of the refactor. The bullets in this top section are the authoritative current baseline.
+
+### Current Live Baseline (March 4, 2026)
+
+- `backend/migrate60.js` is the current latest migration
+- Reports V2 core scope is implemented and verified:
+  - governance is inside the main reports workspace
+  - backend reports are modular under `backend/routes/reports/`
+  - dense tabs were polished and remapped to live payloads
+  - report shell is lazy-loaded and code-split
+  - report smoke coverage is passing
+- POS day-open/day-close workflow is enforced:
+  - employees clock in via kiosk
+  - POS forces branch selection and shift opening
+  - checkout is blocked unless shift is open
+  - checkout is blocked unless the logged-in employee is clocked in
+  - manager can close shift from POS
+- Shift cash is now auditable:
+  - opening denominations are stored
+  - closing denominations are stored
+  - Cash Management uses the same denomination-based opening flow as POS
+- Category UX cleanup is complete:
+  - selectors use full breadcrumb paths
+  - category ordering is alphabetical by full path
+  - product assignment shows all categories and disables parent nodes
+- Shopify Integration V2 is partly implemented beyond the original plan baseline:
+  - backend modularization is complete
+  - `shopify_product_metadata` is live
+  - SKU-only imports are supported
+  - leading-zero preservation is fixed
+  - frontend is partially modularized into `pages/shopify/*`
+- Live E2E verification currently passing:
+  - reports smoke set
+  - `pos.spec.js`
+  - `kiosk.spec.js`
+  - `rbac.spec.js`
+
 ### Hierarchical Internal Categories Shipped
 
 The project now supports true hierarchical internal product categories.
