@@ -36,6 +36,8 @@ import {
   SearchCheck,
   BadgePercent,
   FileSpreadsheet,
+  PackageX,
+  Boxes,
 } from "lucide-react";
 
 import { API_BASE as API } from "../config";
@@ -53,9 +55,11 @@ import {
   SalesDetailTab,
   OrderWiseTab,
   ItemWiseTab,
+  SubcategoryWiseTab,
   RefundsVoidsTab,
   CashierWiseTab,
   DailyOperationsTab,
+  MonthlyMOPMatrixTab,
 } from "./reports/ReportsSales";
 import {
   SalesStockTab,
@@ -366,6 +370,8 @@ const GROUPS = [
       { id: "order-wise", label: "Order Wise", icon: ClipboardList },
       { id: "item-wise", label: "Item Wise", icon: ShoppingBag },
       { id: "category-wise", label: "Category Wise", icon: Tag },
+      { id: "subcategory-wise", label: "Sub-Category Wise", icon: Tag },
+      { id: "monthly-mop-matrix", label: "Monthly MOP Matrix", icon: Calculator },
       { id: "cashier-wise", label: "Cashier Wise", icon: Users },
       { id: "refunds-voids", label: "Refunds & Voids", icon: AlertTriangle },
       { id: "shift-summary", label: "Shift Summary", icon: Wallet },
@@ -550,6 +556,10 @@ function TabContent({ activeTab, filters, setFilters, setActiveTab }) {
       return <OrderWiseTab filters={filters} />;
     case "item-wise":
       return <ItemWiseTab filters={filters} />;
+    case "subcategory-wise":
+      return <SubcategoryWiseTab filters={filters} />;
+    case "monthly-mop-matrix":
+      return <MonthlyMOPMatrixTab filters={filters} />;
     case "cashier-wise":
       return <CashierWiseTab filters={filters} />;
     case "product-performance":
@@ -778,7 +788,7 @@ export default function Reports() {
         <div className="flex min-w-0 flex-1 flex-col gap-3 lg:pl-4">
           {/* Sub-tab pill strip for the active group */}
           {activeGroup && (
-            <div className="flex w-full gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 lg:w-fit">
+            <div className="flex w-full flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
               {activeGroup.tabs.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}

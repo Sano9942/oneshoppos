@@ -260,6 +260,88 @@ module.exports = function (app, deps, helpers) {
     );
   });
 
+  // Monthly MOP Matrix: month-wise sales by payment method
+  app.get("/api/reports/monthly-mop-matrix", (req, res) => {
+    let where = ["s.voided = 0"];
+    const params = [];
+    applySaleTimeFilters(where, params, req.query);
+    const whereSql = where.join(" AND ");
+
+    const matrixSql = `
+      SELECT
+        strftime('%Y-%m', s.timestamp, 'localtime') AS month_bucket,
+        COALESCE(sp.payment_method, s.payment_method, 'Unknown') AS payment_method,
+        ROUND(COALESCE(SUM(COALESCE(sp.amount, s.total_amount)), 0), 2) AS total_amount,
+        COUNT(DISTINCT s.id) AS order_count
+      FROM sales s
+      LEFT JOIN sale_payments sp ON sp.sale_id = s.id
+      WHERE ${whereSql}
+      GROUP BY month_bucket, COALESCE(sp.payment_method, s.payment_method, 'Unknown')
+      ORDER BY month_bucket DESC, total_amount DESC
+    `;
+
+    const totalsSql = `
+      SELECT
+        strftime('%Y-%m', s.timestamp, 'localtime') AS month_bucket,
+        ROUND(COALESCE(SUM(s.total_amount), 0), 2) AS total_amount,
+        COUNT(DISTINCT s.id) AS total_orders
+      FROM sales s
+      WHERE ${whereSql}
+      GROUP BY month_bucket
+    `;
+
+    db.all(matrixSql, params, (matrixErr, rows) => {
+      if (matrixErr) return res.status(500).json({ error: matrixErr.message });
+      db.all(totalsSql, params, (totalsErr, monthTotalsRows) => {
+        if (totalsErr) return res.status(500).json({ error: totalsErr.message });
+
+        const methods = Array.from(
+          new Set((rows || []).map((r) => r.payment_method)),
+        ).sort();
+        const totalsByMonth = new Map(
+          (monthTotalsRows || []).map((row) => [row.month_bucket, row]),
+        );
+        const monthMap = new Map();
+
+        (rows || []).forEach((row) => {
+          if (!monthMap.has(row.month_bucket)) {
+            monthMap.set(row.month_bucket, {
+              month_bucket: row.month_bucket,
+              payment_breakdown: {},
+            });
+          }
+          const month = monthMap.get(row.month_bucket);
+          month.payment_breakdown[row.payment_method] = Number(row.total_amount || 0);
+        });
+
+        const matrix = Array.from(monthMap.values())
+          .map((month) => {
+            const totals = totalsByMonth.get(month.month_bucket) || {};
+            return {
+              month_bucket: month.month_bucket,
+              total_amount: Number(Number(totals.total_amount || 0).toFixed(2)),
+              total_orders: Number(totals.total_orders || 0),
+              ...methods.reduce((acc, method) => {
+                acc[method] = Number(
+                  Number(month.payment_breakdown[method] || 0).toFixed(2),
+                );
+                return acc;
+              }, {}),
+            };
+          })
+          .sort((a, b) =>
+            String(b.month_bucket).localeCompare(String(a.month_bucket)),
+          );
+
+        res.json({
+          methods,
+          rows: rows || [],
+          matrix,
+        });
+      });
+    });
+  });
+
   // Category Wise: sales grouped by product category
   app.get("/api/reports/category-wise", async (req, res) => {
     let where = ["s.voided = 0"];
@@ -289,6 +371,53 @@ module.exports = function (app, deps, helpers) {
         pct: total > 0 ? ((r.revenue / total) * 100).toFixed(1) : "0.0",
       }));
       res.json({ items: data });
+    });
+  });
+
+  // Sub-Category Wise: sales grouped by leaf category with parent context
+  app.get("/api/reports/subcategory-wise", async (req, res) => {
+    let where = ["s.voided = 0"];
+    const params = [];
+    applySaleTimeFilters(where, params, req.query);
+    await applyProductDimensionFilters(where, params, req.query);
+    const sql = `
+    SELECT p.category_id,
+           COALESCE(cat.name,'Uncategorized') AS subcategory,
+           SUM(si.quantity) AS units_sold,
+           SUM(si.quantity * si.price_at_sale) AS revenue,
+           SUM(si.quantity * si.cost_price_at_sale) AS cost,
+           SUM(si.quantity * si.price_at_sale) - SUM(si.quantity * si.cost_price_at_sale) AS profit
+    FROM sale_items si
+    JOIN products p ON si.product_id = p.id
+    JOIN sales s ON si.sale_id = s.id
+    LEFT JOIN categories cat ON p.category_id = cat.id
+    WHERE ${where.join(" AND ")}
+    GROUP BY p.category_id
+    ORDER BY revenue DESC`;
+    db.all(sql, params, async (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      const categoryMeta = await buildCategoryMetaMap();
+      const withPaths = withCategoryPaths(rows, categoryMeta).map((row) => {
+        const meta =
+          row.category_id != null ? categoryMeta.get(Number(row.category_id)) : null;
+        const parent =
+          meta?.parent_id != null ? categoryMeta.get(Number(meta.parent_id)) : null;
+        return {
+          ...row,
+          category: parent?.path_label || "Top-Level",
+          subcategory: meta?.name || row.subcategory || "Uncategorized",
+        };
+      });
+      const total = withPaths.reduce((sum, row) => sum + Number(row.revenue || 0), 0);
+      res.json({
+        items: withPaths.map((row) => ({
+          ...row,
+          pct:
+            total > 0
+              ? Number(((Number(row.revenue || 0) / total) * 100).toFixed(1))
+              : 0,
+        })),
+      });
     });
   });
 

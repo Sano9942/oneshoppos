@@ -14,6 +14,7 @@ const {
 const { makeRequest, ADMIN_ID } = require("../helpers/request");
 
 let app, db;
+const ADMIN_PIN = "2580";
 
 beforeAll(async () => {
   const ctx = await createTestApp();
@@ -24,6 +25,26 @@ beforeAll(async () => {
 afterAll(async () => {
   await closeDb(db);
 });
+
+async function ensureClockedIn(outletId) {
+  // pin-checkin only allows one open session per employee/day (not per outlet),
+  // so close any existing open session before switching outlet contexts in tests.
+  await dbRun(
+    db,
+    `UPDATE attendance_sessions
+     SET session_end = datetime('now','localtime'),
+         duration_hours = COALESCE(duration_hours, 0)
+     WHERE employee_id = ? AND session_end IS NULL`,
+    [ADMIN_ID],
+  );
+
+  const res = await makeRequest(app)
+    .post("/api/attendance/pin-checkin")
+    .send({ pin_code: ADMIN_PIN, outlet_id: outletId });
+  if (![200, 400].includes(res.status)) {
+    throw new Error(`Unexpected attendance status ${res.status}`);
+  }
+}
 
 describe("POST /api/shifts/open — Open Shift", () => {
   it("opens a shift with status 'open'", async () => {
@@ -111,6 +132,7 @@ describe("POST /api/shifts/:id/close — Close Shift", () => {
       "SELECT id FROM cash_shifts WHERE outlet_id = 1 AND status = 'open'",
     );
     shiftId = shift.id;
+    await ensureClockedIn(1);
 
     // Create a cash sale during this shift
     await makeRequest(app, ADMIN_ID)
@@ -187,6 +209,7 @@ describe("POST /api/shifts/:id/close — Close Shift", () => {
       .post("/api/shifts/open")
       .send({ outlet_id: 2, employee_id: ADMIN_ID, opening_float: 100 });
 
+    await ensureClockedIn(2);
     await makeRequest(app, ADMIN_ID)
       .post("/api/sales")
       .send({
@@ -212,6 +235,7 @@ describe("POST /api/shifts/:id/close — Close Shift", () => {
       .post("/api/shifts/open")
       .send({ outlet_id: 2, employee_id: ADMIN_ID, opening_float: 200 });
 
+    await ensureClockedIn(2);
     // Make a cash sale then void it
     const saleRes = await makeRequest(app, ADMIN_ID)
       .post("/api/sales")

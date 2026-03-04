@@ -497,6 +497,211 @@ export function SalesSummaryTab({ filters }) {
   );
 }
 
+// --- Tab: Monthly MOP Matrix --------------------------------------------------
+export function MonthlyMOPMatrixTab({ filters }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        time_from: filters.timeFrom,
+        time_to: filters.timeTo,
+        outlet_id: filters.outletId,
+      });
+      const res = await fetch(`${API}/api/reports/monthly-mop-matrix?${p}`);
+      const d = await res.json();
+      setData(d);
+    } catch {
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    filters.dateFrom,
+    filters.dateTo,
+    filters.timeFrom,
+    filters.timeTo,
+    filters.outletId,
+  ]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const methods = data?.methods || [];
+  const matrix = data?.matrix || [];
+  const totalRevenue = matrix.reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
+  const totalOrders = matrix.reduce((sum, row) => sum + Number(row.total_orders || 0), 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Months In Scope</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{matrix.length}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Orders</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{totalOrders}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Revenue</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</p>
+        </div>
+      </div>
+
+      <CardShell
+        title="Monthly MOP Matrix"
+        subtitle="Month-wise sales against payment methods like cash/card in one matrix view"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "monthly_mop_matrix.csv",
+                [
+                  { header: "Month", key: "month_bucket" },
+                  { header: "Total Orders", key: "total_orders" },
+                  { header: "Total Revenue", key: "total_amount" },
+                  ...methods.map((m) => ({ header: m, key: m })),
+                ],
+                matrix,
+              )
+            }
+          />
+        }
+      >
+        <TableShell
+          cols={["Month", "Orders", "Total Revenue", ...methods]}
+          loading={loading}
+          empty={!matrix.length}
+        >
+          {matrix.map((row) => (
+            <tr key={row.month_bucket} className="hover:bg-slate-50">
+              <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.month_bucket}</td>
+              <td className="px-4 py-3 text-sm text-slate-600">{Number(row.total_orders || 0)}</td>
+              <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.total_amount)}</td>
+              {methods.map((method) => (
+                <td key={`${row.month_bucket}-${method}`} className="px-4 py-3 text-sm text-slate-600">
+                  {fmt(row[method])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
+  );
+}
+
+// --- Tab: Sub-Category Wise ---------------------------------------------------
+export function SubcategoryWiseTab({ filters }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams({
+        date_from: filters.dateFrom,
+        date_to: filters.dateTo,
+        time_from: filters.timeFrom,
+        time_to: filters.timeTo,
+        outlet_id: filters.outletId,
+        category_id: filters.categoryId,
+        brand_id: filters.brandId,
+        supplier_id: filters.supplierId,
+      });
+      const res = await fetch(`${API}/api/reports/subcategory-wise?${p}`);
+      const d = await res.json();
+      setRows(d.items || []);
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    filters.dateFrom,
+    filters.dateTo,
+    filters.timeFrom,
+    filters.timeTo,
+    filters.outletId,
+    filters.categoryId,
+    filters.brandId,
+    filters.supplierId,
+  ]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const totalRevenue = rows.reduce((sum, row) => sum + Number(row.revenue || 0), 0);
+  const totalUnits = rows.reduce((sum, row) => sum + Number(row.units_sold || 0), 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sub-Categories</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{rows.length}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Units Sold</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{totalUnits}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Revenue</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</p>
+        </div>
+      </div>
+
+      <CardShell
+        title="Sub-Category Wise Sale"
+        subtitle="Sales view by sub-category with parent category context"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "subcategory_wise.csv",
+                [
+                  { header: "Category", key: "category" },
+                  { header: "Sub-Category", key: "subcategory" },
+                  { header: "Units Sold", key: "units_sold" },
+                  { header: "Revenue", key: "revenue" },
+                  { header: "Cost", key: "cost" },
+                  { header: "Profit", key: "profit" },
+                  { header: "Contribution %", key: "pct" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
+      >
+        <TableShell
+          cols={["Category", "Sub-Category", "Units", "Revenue", "Profit", "Share"]}
+          loading={loading}
+          empty={!rows.length}
+        >
+          {rows.map((row, index) => (
+            <tr key={`${row.category_id}-${index}`} className="hover:bg-slate-50">
+              <td className="px-4 py-3 text-sm text-slate-600">{row.category}</td>
+              <td className="px-4 py-3 text-sm font-semibold text-slate-800">{row.subcategory}</td>
+              <td className="px-4 py-3 text-sm text-slate-600">{Number(row.units_sold || 0)}</td>
+              <td className="px-4 py-3 text-sm font-bold text-slate-900">{fmt(row.revenue)}</td>
+              <td className="px-4 py-3 text-sm font-semibold text-indigo-700">{fmt(row.profit)}</td>
+              <td className="px-4 py-3 text-sm text-slate-600">{Number(row.pct || 0).toFixed(1)}%</td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
+  );
+}
+
 // --- Tab: Sales Detail --------------------------------------------------------
 export function SalesDetailTab({ filters }) {
   const [rows, setRows] = useState([]);

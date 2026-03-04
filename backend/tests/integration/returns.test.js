@@ -8,6 +8,7 @@ const { createTestApp, closeDb, dbAll, dbGet, dbRun } = require("../helpers/crea
 const { makeRequest, ADMIN_ID, MANAGER_ID, CASHIER_ID } = require("../helpers/request");
 
 let app, db;
+const ADMIN_PIN = "2580";
 
 beforeAll(async () => {
   const ctx = await createTestApp();
@@ -19,8 +20,27 @@ afterAll(async () => {
   await closeDb(db);
 });
 
+async function ensureCheckoutContext(outletId = 1) {
+  const openShift = await dbGet(
+    db,
+    "SELECT id FROM cash_shifts WHERE outlet_id = ? AND status = 'open' LIMIT 1",
+    [outletId],
+  );
+  if (!openShift) {
+    const openRes = await makeRequest(app, ADMIN_ID)
+      .post("/api/shifts/open")
+      .send({ outlet_id: outletId, employee_id: ADMIN_ID, opening_float: 500 });
+    expect(openRes.status).toBe(200);
+  }
+  const attendanceRes = await makeRequest(app)
+    .post("/api/attendance/pin-checkin")
+    .send({ pin_code: ADMIN_PIN, outlet_id: outletId });
+  expect([200, 400]).toContain(attendanceRes.status);
+}
+
 // Helper: create a sale first, then return against it
 async function createSaleForReturn() {
+  await ensureCheckoutContext(1);
   const res = await makeRequest(app, ADMIN_ID)
     .post("/api/sales")
     .send({
@@ -32,6 +52,7 @@ async function createSaleForReturn() {
       outlet_id: 1,
       employee_id: ADMIN_ID,
     });
+  expect(res.status).toBe(200);
   return res.body.saleId;
 }
 

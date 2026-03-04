@@ -483,6 +483,40 @@ The items below are the main uncovered or underexposed areas after comparing the
   - widening filters to match the old operator workflows
 - Legacy screenshot parity should be treated as capability parity, not exact screen parity.
 
+## Feature Flag Note
+
+Some report areas in OneShopPOS are controlled by database-backed feature flags. This affects rollout state, not implementation completeness.
+
+Relevant reporting flags currently include:
+
+- `reports_profit_layer`
+- `reports_exceptions`
+- `reports_inventory_health_plus`
+- `reports_scheduled_exports`
+
+What this means:
+
+- if a flag is enabled, the related reporting surface is available in production
+- if a flag is disabled, the related report should show a controlled unavailable state or remain hidden
+- a disabled flag does not mean the rebuild is incomplete
+- it only means the feature is not currently being exposed for live operational use
+
+Current project interpretation:
+
+- `reports_inventory_health_plus`
+  - treated as part of the agreed rebuild scope and enabled during Phase 3 work
+- `reports_exceptions`
+  - implemented, but production may intentionally keep it disabled until managers are ready to use specialist exception reporting
+- `reports_profit_layer`
+  - implemented where needed for specialist discount leakage/profit-layer reporting, but may remain disabled unless that audit layer is formally launched
+- `reports_scheduled_exports`
+  - separate from report rebuild completeness; only needed if scheduled report generation is actively wanted in production
+
+Planning conclusion:
+
+- feature flags should be read as rollout controls, not delivery blockers
+- the rebuild can be complete even when some specialist report flags remain off by product decision
+
 ## Rebuild Principles
 
 - Rebuild by workflow, not by screenshot count.
@@ -1758,6 +1792,583 @@ Focused UAT was completed against live outlet/date scenarios on March 4, 2026.
 - the only remaining Phase 7 work is optional:
   - `Batch 7D` service-counter legacy views, but only if product later confirms a real schema-backed need
 
+## Cross-Module Readiness Audit (Beyond Reports)
+
+Audit date: `March 5, 2026`
+
+Audit basis:
+
+- left navigation registry: `frontend/src/ui/nav-config.js`
+- route surface and guards: `frontend/src/App.jsx`
+- nav filtering rules: `frontend/src/components/AppLayoutRedesign.jsx`
+
+Readiness legend:
+
+- `Ready`: complete enough for current scope; only normal maintenance
+- `Ready with follow-ups`: usable, but should get one focused hardening/UAT pass
+- `Partial`: meaningful gaps should be closed before final platform signoff
+
+| Module | Current coverage status | Access-control status | Key remaining gaps | Readiness |
+|---|---|---|---|---|
+| Overview (`Dashboard`) | Dashboard route and UI are in place | Auth-protected; visible in nav | keep KPI wording and overlap aligned with Reports surfaces | `Ready with follow-ups` |
+| Commerce (`POS`, `Orders`, `Customers`, `Returns`, `Sales History`, `Cash Management`) | Core day-to-day flows are implemented and routed | permission-gated where needed (`manage_orders`) | run role-based UAT for cashier vs manager and verify end-of-day handoff touchpoints | `Ready with follow-ups` |
+| Inventory (`Products`, `Categories`, `Brands`, `Taxes`, `Attribute Sets`, `Promotions`) | Full CRUD-style surface exists and is linked in nav | `manage_inventory` permission gates are present | final consistency pass on master-data validation and import/update edge cases | `Ready with follow-ups` |
+| Stock Control (`Purchase Orders`, `Adjustments`, `Transfers`, `Returned Stock`, `Supplier Payables`) | Core operational pages exist and are routed | mixed permission + feature-flag gating is active (`supplier_payables`) | continue live-data cleanup for orphan references and receiving/reconciliation edge cases | `Ready with follow-ups` |
+| Procurement (`Suppliers`, `Expenses`, `Approvals`) | Primary procurement admin surfaces are present | permission-gated (`manage_orders`/`manage_inventory`) | verify approval workflow edge states and expense categorization controls under real load | `Ready with follow-ups` |
+| Insights (`Reports`, `Accounting`) | Reports is complete for current scope; Accounting surface is available | accounting is both permission + flag controlled (`view_reports`, `accounting_core`) | accounting depth depends on ledger maturity; keep bank-balance work deferred until ledger source exists | `Ready with follow-ups` |
+| Operations (`Kiosk`, `CRM`, `Quotations`, `Attendance`, `HR Leave`, `HR Payroll`) | All listed pages are built and routed | permission + flags used correctly (`crm_quotations`, `advanced_hr`) | run explicit role UAT for non-admin users to confirm intended visibility and edit restrictions | `Ready with follow-ups` |
+| Setup (`Employees`, `Outlets`, `Company Profile`, `Shopify`, `Barcode Templates`, `Receipt Templates`, `Backup & Restore`) | Setup surface is broad and linked in nav | permission + flags enforced (`multi_company`, `backup_restore`) | verify backup/restore operational runbook and template print validation on target devices | `Ready with follow-ups` |
+| Admin (`Administrator`, `Action History`) | Admin governance pages are present and routed | strict `manage_employees` gating | confirm audit-log retention/export behavior against policy expectations | `Ready with follow-ups` |
+
+### Cross-Module Recommendation
+
+- No major greenfield rebuild is required outside Reports for the current scope.
+- The platform should now move through a focused hardening cycle rather than large feature expansion:
+  - role-matrix UAT (Admin, Manager, Cashier)
+  - live-data reconciliation for procurement/stock-control edge cases
+  - dashboard/accounting wording and metric alignment checks
+- After this hardening cycle, the non-Reports modules can be marked complete for current scope.
+
+### Module-by-Module Execution Tracker
+
+Status as of `March 5, 2026`:
+
+| Module | Execution status | Evidence | Signoff status |
+|---|---|---|---|
+| Overview (`Dashboard`) | Started | route and nav entry verified (`/dashboard`) | `Code-verified; live-UAT pending` |
+| Commerce (`POS`, `Orders`, `Customers`, `Returns`, `Sales History`, `Cash Management`) | Started | routes and nav entries verified for all six surfaces | `Code-verified; live-UAT pending` |
+| Inventory (`Products`, `Categories`, `Brands`, `Taxes`, `Attribute Sets`, `Promotions`) | Started | nav entries verified and routes/permission guards verified (`manage_inventory`) | `Code-verified; live-UAT pending` |
+| Stock Control (`Purchase Orders`, `Stock Adjustments`, `Transfers`, `Returned Stock`, `Supplier Payables`) | Started | nav entries, routes, and mixed guard model verified (`manage_orders`/`manage_inventory` + `supplier_payables` flag) | `Code-verified; live-UAT pending` |
+| Procurement (`Suppliers`, `Expenses`, `Approvals`) | Started | nav entries, routes, and mixed guard model verified (`manage_orders` for supplier/approvals, `manage_inventory` for expenses) | `Code-verified; live-UAT pending` |
+| Insights (`Reports`, `Accounting`) | Started | nav entries, routes, and guard/flag model verified (`view_reports` + `accounting_core` for accounting) | `Code-verified; live-UAT pending` |
+| Operations (`Kiosk`, `CRM`, `Quotations`, `Attendance`, `HR Leave`, `HR Payroll`) | Started | nav entries, routes, and mixed permission/flag model verified (`manage_orders`, `manage_employees`, `crm_quotations`, `advanced_hr`) | `Code-verified; live-UAT pending` |
+| Setup (`Employees`, `Outlets`, `Company Profile`, `Shopify`, `Barcode Templates`, `Receipt Templates`, `Backup & Restore`) | Started | nav entries, routes, and mixed permission/flag model verified (`manage_employees`/`manage_inventory`, `multi_company`, `backup_restore`) | `Code-verified; live-UAT pending` |
+| Admin (`Administrator`, `Action History`) | Started | nav entries, routes, and permission guards verified (`manage_employees`) | `Code-verified; live-UAT pending` |
+
+Current note:
+
+- this tracker now moves the roadmap from planning into execution
+- each module will be promoted to `Complete` only after role checks plus live-UAT evidence are recorded
+- route/nav verification alone is treated as a prerequisite, not final signoff
+
+### Inventory Module Execution Notes
+
+Execution date: `March 5, 2026`
+
+Code-level verification completed:
+
+- left-nav inventory entries are present and consistently permission-gated:
+  - `/inventory`
+  - `/categories`
+  - `/brands`
+  - `/taxes`
+  - `/attribute-sets`
+  - `/promotions`
+- app routing confirms all six inventory surfaces are wired in `App.jsx`
+- permission behavior is aligned for this module:
+  - inventory routes are protected via `RequirePerm perm="manage_inventory"`
+  - no inventory-group feature flag is currently required for visibility
+
+Existing test coverage references identified:
+
+- frontend e2e:
+  - `frontend/tests/e2e/inventory-reports-smoke.spec.js`
+  - `frontend/tests/e2e/hierarchical-categories.spec.js`
+  - `frontend/tests/e2e/rbac.spec.js`
+- backend integration:
+  - `backend/tests/integration/crud_inventory.test.js`
+  - `backend/tests/integration/inventory.test.js`
+  - `backend/tests/integration/rbac.test.js`
+  - `backend/tests/integration/health.test.js`
+
+Inventory UAT signoff notes (current state):
+
+- `Signoff state`: `Pending live UAT`
+- required live-UAT checks before `Complete`:
+  - create/update/deactivate product flow with category/brand/tax assignment
+  - hierarchical category behavior (leaf-only assignment and parent-level browsing)
+  - promotion behavior on real mixed carts and date windows
+  - cashier/manager/admin permission boundaries on inventory edit actions
+  - export/list integrity for inventory lists used by operations
+
+### Stock Control Module Execution Notes
+
+Execution date: `March 5, 2026`
+
+Code-level verification completed:
+
+- left-nav stock-control entries are present with intended access model:
+  - `/purchase-orders` (`manage_orders`)
+  - `/adjustments` (`manage_inventory`)
+  - `/transfers` (`manage_inventory`)
+  - `/returned-stock` (`manage_orders`)
+  - `/supplier-payables` (`manage_orders` + feature flag `supplier_payables`)
+- app routing confirms all five stock-control surfaces are wired in `App.jsx`
+- mixed guard behavior for this module is coherent:
+  - operational purchasing/return pages are order-management gated
+  - stock movement pages are inventory-management gated
+  - supplier payables visibility is additionally controlled by feature flag
+
+Existing test coverage references identified:
+
+- frontend e2e:
+  - `frontend/tests/e2e/rbac.spec.js`
+- backend integration:
+  - `backend/tests/integration/purchase-orders.test.js`
+  - `backend/tests/integration/inventory.test.js`
+  - `backend/tests/integration/supplier-payables.test.js`
+  - `backend/tests/integration/crud_operations.test.js`
+  - `backend/tests/integration/rbac.test.js`
+
+Stock Control UAT signoff notes (current state):
+
+- `Signoff state`: `Pending live UAT`
+- required live-UAT checks before `Complete`:
+  - PO lifecycle from create to receive, including partial receive and pending counts
+  - stock adjustment and transfer posting behavior with outlet-specific inventory effects
+  - returned-stock workflow from creation to stock impact confirmation
+  - supplier-payables visibility and payment behavior with `supplier_payables` flag on/off
+  - permission boundary checks for cashier vs manager/admin on all mutating actions
+
+### Procurement Module Execution Notes
+
+Execution date: `March 5, 2026`
+
+Code-level verification completed:
+
+- left-nav procurement entries are present with intended access model:
+  - `/suppliers` (`manage_orders`)
+  - `/expenses` (`manage_inventory`)
+  - `/approvals` (`manage_orders`)
+- app routing confirms all three procurement surfaces are wired in `App.jsx`
+- guard behavior for this module is coherent:
+  - supplier and approval workflows are order-management gated
+  - expense workflows are inventory-management gated
+  - no additional procurement-specific feature flag is currently required for visibility
+
+Existing test coverage references identified:
+
+- frontend e2e:
+  - `frontend/tests/e2e/rbac.spec.js`
+- backend integration:
+  - `backend/tests/integration/hr_approvals.test.js`
+  - `backend/tests/integration/crud_operations.test.js`
+  - `backend/tests/integration/rbac.test.js`
+
+Procurement UAT signoff notes (current state):
+
+- `Signoff state`: `Pending live UAT`
+- required live-UAT checks before `Complete`:
+  - supplier create/update/deactivate flow and downstream selection integrity
+  - expense creation/edit/posting across outlets and categories
+  - approvals queue transitions (pending, approved, rejected) with user/time attribution
+  - permission boundary checks for cashier vs manager/admin on all procurement mutations
+  - export/list consistency for supplier and expense views used in periodic review
+
+### Insights Module Execution Notes
+
+Execution date: `March 5, 2026`
+
+Code-level verification completed:
+
+- left-nav insights entries are present with intended access model:
+  - `/reports` (no extra flag required)
+  - `/accounting` (`view_reports` + feature flag `accounting_core`)
+- app routing confirms both insights surfaces are wired in `App.jsx`
+- guard behavior for this module is coherent:
+  - reports is available to authenticated users per current design
+  - accounting is permission-gated and additionally feature-flag controlled
+
+Existing test coverage references identified:
+
+- frontend e2e:
+  - `frontend/tests/e2e/reports-governance.spec.js`
+  - `frontend/tests/e2e/rbac.spec.js`
+- backend integration:
+  - `backend/tests/integration/reports_governance.test.js`
+  - `backend/tests/integration/feature-flags.test.js`
+  - `backend/tests/integration/rbac.test.js`
+
+Insights UAT signoff notes (current state):
+
+- `Signoff state`: `Pending live UAT`
+- required live-UAT checks before `Complete`:
+  - report loading and filter behavior on real date/outlet windows
+  - accounting visibility behavior when `accounting_core` is toggled
+  - permission boundary checks for users with and without `view_reports`
+  - KPI wording and metric alignment between standalone dashboard and reports overview
+
+### Operations Module Execution Notes
+
+Execution date: `March 5, 2026`
+
+Code-level verification completed:
+
+- left-nav operations entries are present with intended access model:
+  - `/kiosk` (new-tab operational surface)
+  - `/crm` and `/quotations` (`manage_orders` + feature flag `crm_quotations`)
+  - `/attendance` (`manage_employees`)
+  - `/hr/leave` and `/hr/payroll` (`manage_employees` + feature flag `advanced_hr`)
+- app routing confirms all operations surfaces are wired in `App.jsx`
+- guard behavior for this module is coherent:
+  - CRM/quotation flows are both permission and flag controlled
+  - HR leave/payroll are both permission and flag controlled
+  - attendance route exists and is visible through nav permissioning
+
+Existing test coverage references identified:
+
+- frontend e2e:
+  - `frontend/tests/e2e/rbac.spec.js`
+- backend integration:
+  - `backend/tests/integration/attendance.test.js`
+  - `backend/tests/integration/hr_approvals.test.js`
+  - `backend/tests/integration/feature-flags.test.js`
+  - `backend/tests/integration/rbac.test.js`
+
+Operations UAT signoff notes (current state):
+
+- `Signoff state`: `Pending live UAT`
+- required live-UAT checks before `Complete`:
+  - kiosk launch/access behavior in target environment
+  - CRM and quotation create/edit/list workflows with `crm_quotations` on/off
+  - attendance and HR leave/payroll role visibility across cashier/manager/admin
+  - approval and audit traceability for HR-related actions
+
+### Setup Module Execution Notes
+
+Execution date: `March 5, 2026`
+
+Code-level verification completed:
+
+- left-nav setup entries are present with intended access model:
+  - `/employees`, `/outlets` (`manage_employees`)
+  - `/company-settings` (`manage_employees` + feature flag `multi_company`)
+  - `/integrations/shopify`, `/barcode-templates`, `/receipt-templates` (`manage_inventory`)
+  - `/backup-restore` (`manage_employees` + feature flag `backup_restore`)
+- app routing confirms all setup surfaces are wired in `App.jsx`
+- guard behavior for this module is coherent:
+  - company profile and backup/restore are feature-flag controlled
+  - integration/template surfaces are inventory-permission controlled
+
+Existing test coverage references identified:
+
+- frontend e2e:
+  - `frontend/tests/e2e/rbac.spec.js`
+- backend integration:
+  - `backend/tests/integration/crud_employees.test.js`
+  - `backend/tests/integration/crud_settings.test.js`
+  - `backend/tests/integration/feature-flags.test.js`
+  - `backend/tests/integration/rbac.test.js`
+
+Setup UAT signoff notes (current state):
+
+- `Signoff state`: `Pending live UAT`
+- required live-UAT checks before `Complete`:
+  - employee and outlet CRUD with role/assignment integrity
+  - company profile visibility with `multi_company` on/off
+  - Shopify integration connectivity and safe failure behavior
+  - barcode/receipt template print previews on target printer paths
+  - backup/restore operational runbook validation with `backup_restore` on/off
+
+### Admin Module Execution Notes
+
+Execution date: `March 5, 2026`
+
+Code-level verification completed:
+
+- left-nav admin entries are present with intended access model:
+  - `/administrator` (`manage_employees`)
+  - `/action-history` (`manage_employees`)
+- app routing confirms both admin surfaces are wired in `App.jsx`
+- guard behavior for this module is coherent:
+  - both surfaces are strictly permission-gated for admin-capable users
+
+Existing test coverage references identified:
+
+- frontend e2e:
+  - `frontend/tests/e2e/rbac.spec.js`
+- backend integration:
+  - `backend/tests/integration/crud_employees.test.js`
+  - `backend/tests/integration/rbac.test.js`
+  - `backend/tests/integration/health.test.js`
+
+Admin UAT signoff notes (current state):
+
+- `Signoff state`: `Pending live UAT`
+- required live-UAT checks before `Complete`:
+  - role and permission editing flows in administrator screen
+  - action-history visibility, filtering, and event completeness
+  - strict denial behavior for non-admin roles on both surfaces
+
+### One-Shot Automated Validation Batch
+
+Run date: `March 5, 2026`
+
+Credentials note:
+
+- admin login in E2E is already standardized to `Hassan / 2580` via `frontend/tests/e2e/helpers/auth.js`
+- this was used for admin-authenticated E2E paths in this batch
+
+Backend integration batch (`npm run test:integration`):
+
+- result: `15` test files passed, `5` failed
+- result: `188` tests passed, `24` failed (`212` total)
+- main failing areas:
+  - `auth.test.js` (legacy credential expectation mismatch: `Admin User/1111` vs current seed posture)
+  - `sales.test.js` (many checkout/void expectations failing under current behavior)
+  - `customers.test.js` (wallet/points tests dependent on sales-path expectations)
+  - `shifts.test.js` (cash expected/variance assertions not matching current runtime behavior)
+  - `returns.test.js` (one linkage expectation mismatch on `original_sale_id`)
+
+Frontend E2E batch (`npx playwright test`):
+
+- result: `7` passed, `2` failed (`9` total)
+- failed specs:
+  - `tests/e2e/kiosk.spec.js` (expected `Cashier User` marker not visible)
+  - `tests/e2e/rbac.spec.js` cashier-login scenario (cashier stayed on `/login`, did not reach `/dashboard`)
+- passed coverage includes:
+  - admin auth flow
+  - inventory/report smoke
+  - reports governance
+  - POS checkout smoke
+  - admin-side RBAC access check
+
+Signoff impact:
+
+- all modules remain `Code-verified; live-UAT pending`
+- additional blocker state is now explicit:
+  - automated suite currently has known failing paths in auth/sales/customers/shifts/returns/kiosk/cashier-rbac
+  - module `Complete` signoff should wait for either:
+    - test-suite expectation updates that match current intended behavior, or
+    - functional fixes where behavior is genuinely incorrect
+
+## Context Unification + Role Scope Governance
+
+### Objective
+
+Introduce a mandatory post-login business context so users operate in an explicit `company/brand + outlet/branch` scope, with role-based visibility and control:
+
+- Administrator (owner): full business visibility, including consolidated all-branch view
+- Manager: assigned-branch-only visibility
+- Cashier: assigned-outlet-only visibility
+- Kiosk: auto-inherit active branch context from app session
+
+### Final Policy Decisions
+
+- `Brand` is implemented through company context (`outlets.company_id`)
+- context selection is mandatory after login for all users
+- kiosk opens with active context and stays branch-locked by default
+- administrator default scope: `All Branches`
+- manager scope: assigned branches only, no global consolidated mode
+- transfer control: admin creates/approves final cross-branch transfer actions
+
+### Scope Model
+
+- `scope_mode` values:
+  - `all_branches` (administrator only)
+  - `single_branch` (all roles)
+- default behavior:
+  - administrator lands on consolidated all-branch mode
+  - managers and cashiers land on assigned outlet scope
+
+### Role Visibility Matrix
+
+- Administrator:
+  - can view consolidated and branch-specific dashboards/reports
+  - can switch to any branch within allowed company context
+  - can perform cross-branch operational actions
+- Manager:
+  - can view and act only in explicitly assigned branch(es)
+  - cannot use consolidated all-branch mode
+- Cashier:
+  - remains branch/outlet locked for day-to-day operations
+
+### Transfers and Cross-Branch Operations
+
+- cross-branch inventory movement remains supported
+- manager-side behavior:
+  - may prepare/draft transfer request where permitted
+  - cannot finalize cross-branch transfer authority
+- administrator-side behavior:
+  - final create/approval control for cross-branch stock movement
+- all transfer lifecycle events must be audit logged (create/submit/approve/reject)
+
+### Required Technical Changes
+
+#### Frontend
+
+- add mandatory `ContextSelect` step after login success before dashboard
+- extend auth session payload in local storage:
+  - `active_company_id`
+  - `active_outlet_id`
+  - `scope_mode`
+  - `allowed_outlet_ids`
+- add `RequireContext` guard after `RequireAuth`
+- add context switcher in header:
+  - administrator: all branches + branch selector
+  - manager/cashier: assigned options only
+- initialize report and operations defaults from active outlet context
+- kiosk:
+  - prefill outlet from active context
+  - lock outlet picker by default
+
+#### Backend
+
+- add context bootstrap endpoint for selector hydration:
+  - e.g. `/api/context/bootstrap`
+- add reusable context resolver/middleware:
+  - validates `x-company-id`, `x-outlet-id`, and role scope
+  - enforces outlet-company relationship and employee outlet access
+- staged enforcement on routes:
+  - first reporting/read routes
+  - then mutating operational routes (`sales`, `returns`, `shifts`, `transfers`, purchasing)
+- maintain temporary compatibility fallback for existing `outlet_id` query usage during rollout window
+
+#### Data Layer
+
+- ensure durable company source table exists (seed id `1` baseline)
+- use/retain `outlets.company_id` as branch-to-company mapping
+- add/confirm employee-outlet assignment model for fine-grained branch access
+
+### Rollout Strategy
+
+Use staged feature flags:
+
+- `context_selection_required`
+- `context_header_enforced`
+- `kiosk_context_locked`
+
+Rollout order:
+
+1. deploy context selection UI and session propagation
+2. verify no regression in existing module flows
+3. enable backend enforcement gradually
+4. lock kiosk context after full validation
+
+### Test and Signoff Gates
+
+#### Backend
+
+- context resolver tests:
+  - valid company/outlet combination
+  - invalid outlet for company rejected
+  - manager out-of-scope outlet rejected
+- regression tests for:
+  - sales checkout with context headers
+  - returns and shift close with context headers
+  - transfer approval authority checks
+
+#### Frontend / E2E
+
+- login -> context select -> dashboard path
+- administrator consolidated view + branch drilldown
+- manager branch-only visibility
+- kiosk inherits active outlet and works without manual store selection
+- direct route access without context redirects to selector
+
+### Module Tracker Dependency Note
+
+Cross-module final signoff should be treated as dependent on this context-governance rollout:
+
+- modules can remain `Code-verified` while context rollout is pending
+- modules move to `Complete` only after:
+  - context selection and enforcement are active
+  - role-scope UAT passes for admin/manager/cashier
+  - kiosk context inheritance is validated in live operation
+
+### Non-Goal Clarification for This Section
+
+- this section defines governance architecture and rollout plan only
+- no immediate implementation is implied until explicitly started
+- no change to current agreed optional/deferred reporting scope by itself
+
+### Implementation Checklist
+
+Use this checklist when execution starts. Mark each item complete only with evidence (test output, screenshots, or route checks).
+
+#### Batch A: Context Foundations
+
+- [ ] add/confirm `companies` table and seed baseline company
+- [ ] confirm all outlets have valid `company_id`
+- [ ] add/confirm employee-outlet assignment model
+- [ ] add backend context bootstrap endpoint (`/api/context/bootstrap`)
+- [ ] add shared backend context resolver utility
+
+Batch A done criteria:
+
+- [ ] migration runs clean on existing DB
+- [ ] bootstrap endpoint returns expected companies/outlets per role
+- [ ] no existing route regressions
+
+#### Batch B: Login and Context Selection
+
+- [ ] add `ContextSelect` page
+- [ ] update login redirect flow: login -> context select -> dashboard
+- [ ] persist `active_company_id`, `active_outlet_id`, `scope_mode`, `allowed_outlet_ids`
+- [ ] add `RequireContext` guard after `RequireAuth`
+- [ ] block direct dashboard/app entry when context is missing
+
+Batch B done criteria:
+
+- [ ] E2E: user cannot bypass context step after login
+- [ ] E2E: admin defaults to `All Branches`
+- [ ] E2E: manager defaults to assigned outlet scope
+
+#### Batch C: Context Propagation
+
+- [ ] inject `x-company-id`, `x-outlet-id`, `x-scope-mode` headers from auth layer
+- [ ] add header context switcher in app shell
+- [ ] initialize report/ops page defaults from active outlet context
+- [ ] keep temporary query-param compatibility where still required
+
+Batch C done criteria:
+
+- [ ] network traces show context headers on authenticated requests
+- [ ] changing header context updates downstream data scope correctly
+- [ ] existing report pages still load with no breaking filter behavior
+
+#### Batch D: Kiosk Context Inheritance
+
+- [ ] read active context in kiosk
+- [ ] prefill outlet/store from active context
+- [ ] lock store selector by default under `kiosk_context_locked`
+- [ ] redirect to context select if kiosk context is missing
+
+Batch D done criteria:
+
+- [ ] kiosk opens in correct outlet without manual store selection
+- [ ] attendance actions still succeed with outlet-aware PIN flow
+- [ ] kiosk E2E suite passes under locked-context mode
+
+#### Batch E: Role Scope Enforcement
+
+- [ ] enforce manager/cashier outlet scope in context resolver
+- [ ] enforce admin-only consolidated scope
+- [ ] enforce admin authority on cross-branch transfer finalization
+- [ ] add audit logging for scope switches and transfer approvals
+
+Batch E done criteria:
+
+- [ ] negative tests prove manager cannot access unauthorized outlets
+- [ ] transfer authority tests prove admin-only final control
+- [ ] logs show scope-change and transfer decision trail
+
+#### Batch F: Rollout and Signoff
+
+- [ ] enable `context_selection_required` in staging
+- [ ] enable `context_header_enforced` after green regression pass
+- [ ] enable `kiosk_context_locked` after kiosk UAT pass
+- [ ] run full integration + E2E automation
+- [ ] run role-based live UAT (admin/manager/cashier)
+- [ ] update module tracker statuses from `Code-verified` to `Complete`
+
+Batch F done criteria:
+
+- [ ] backend integration suite green
+- [ ] frontend E2E suite green (or approved explicit skips with reason)
+- [ ] live UAT notes added with pass/fail evidence
+- [ ] final signoff note added for context-governance rollout
+
 ## Roadmap Closeout
 
 ### Overall Status
@@ -1773,6 +2384,8 @@ What remains deferred or optional:
 - customer receipts ledger until receipt-event tracking is needed
 - station-wise reporting until station/register attribution exists in the schema
 - barcode/label, FIFO, expiry, and rack/bin location support unless product direction or schema changes later
+- `Sale Report Slip` remains an optional dedicated print-layout feature, not part of current report parity
+- `Sale Type Contribution` remains limited by current schema strength as a first-class sales dimension
 
 ## Priority Summary
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import supertest from "supertest";
-import { createTestApp, closeDb, dbGet, dbAll } from "../helpers/createTestApp";
+import { createTestApp, closeDb, dbGet, dbAll, dbRun } from "../helpers/createTestApp";
+import { makeRequest } from "../helpers/request";
 
 describe("Customer Loyalty & Wallet Integration Tests", () => {
   let app, db, deps;
@@ -17,7 +18,27 @@ describe("Customer Loyalty & Wallet Integration Tests", () => {
   });
 
   const ADMIN_ID = "1";
+  const ADMIN_PIN = "2580";
   const CUSTOMER_ID = 1; // From seedData
+
+  async function ensureCheckoutContext(outletId = 1) {
+    const openShift = await dbGet(
+      db,
+      "SELECT id FROM cash_shifts WHERE outlet_id = ? AND status = 'open' LIMIT 1",
+      [outletId],
+    );
+    if (!openShift) {
+      await supertest(app)
+        .post("/api/shifts/open")
+        .set("x-employee-id", ADMIN_ID)
+        .send({ outlet_id: outletId, employee_id: Number(ADMIN_ID), opening_float: 500 });
+    }
+
+    const attendanceRes = await supertest(app)
+      .post("/api/attendance/pin-checkin")
+      .send({ pin_code: ADMIN_PIN, outlet_id: outletId });
+    expect([200, 400]).toContain(attendanceRes.status);
+  }
 
   describe("Customer CRUD", () => {
     it("should create a new customer", async () => {
@@ -88,13 +109,15 @@ describe("Customer Loyalty & Wallet Integration Tests", () => {
     });
 
     it("should debit wallet during sale and create ledger entry", async () => {
+      await ensureCheckoutContext(1);
+
       // 1. Ensure enough balance
-      await dbGet(db, "UPDATE customers SET balance = 1000 WHERE id = ?", [
+      await dbRun(db, "UPDATE customers SET balance = 1000 WHERE id = ?", [
         CUSTOMER_ID,
       ]);
 
       // 2. Perform a sale with Wallet payment
-      const res = await supertest(app)
+      const res = await makeRequest(app, ADMIN_ID)
         .post("/api/sales")
         .send({
           cartItems: [{ id: 1, price: 100, quantity: 2 }],
@@ -125,7 +148,9 @@ describe("Customer Loyalty & Wallet Integration Tests", () => {
 
   describe("Loyalty Points", () => {
     it("should earn points during sale", async () => {
-      const res = await supertest(app)
+      await ensureCheckoutContext(1);
+
+      const res = await makeRequest(app, ADMIN_ID)
         .post("/api/sales")
         .send({
           cartItems: [{ id: 1, price: 100, quantity: 1 }],
@@ -146,7 +171,9 @@ describe("Customer Loyalty & Wallet Integration Tests", () => {
     });
 
     it("should redeem points during sale", async () => {
-      const res = await supertest(app)
+      await ensureCheckoutContext(1);
+
+      const res = await makeRequest(app, ADMIN_ID)
         .post("/api/sales")
         .send({
           cartItems: [{ id: 1, price: 100, quantity: 1 }],
@@ -184,15 +211,17 @@ describe("Customer Loyalty & Wallet Integration Tests", () => {
 
   describe("Bug Verification", () => {
     it("Verify Bug B3: Wallet payment should block if insufficient balance (CURRENTLY FAILS - PROVING BUG)", async () => {
+      await ensureCheckoutContext(1);
+
       // Problem B3: Wallet payment doesn't check for sufficient balance.
 
       // 1. Ensure balance is low
-      await dbGet(db, "UPDATE customers SET balance = 50 WHERE id = ?", [
+      await dbRun(db, "UPDATE customers SET balance = 50 WHERE id = ?", [
         CUSTOMER_ID,
       ]);
 
       // 2. Perform a sale for 200
-      const res = await supertest(app)
+      const res = await makeRequest(app, ADMIN_ID)
         .post("/api/sales")
         .send({
           cartItems: [{ id: 1, price: 200, quantity: 1 }],

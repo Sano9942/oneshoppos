@@ -8,6 +8,7 @@ const { createTestApp, closeDb, dbAll, dbGet, dbRun } = require("../helpers/crea
 const { makeRequest, ADMIN_ID, MANAGER_ID, CASHIER_ID } = require("../helpers/request");
 
 let app, db;
+const ADMIN_PIN = "2580";
 
 beforeAll(async () => {
   const ctx = await createTestApp();
@@ -18,6 +19,27 @@ beforeAll(async () => {
 afterAll(async () => {
   await closeDb(db);
 });
+
+async function ensureCheckoutContext(outletId = 1) {
+  const openShift = await dbGet(
+    db,
+    "SELECT id FROM cash_shifts WHERE outlet_id = ? AND status = 'open' LIMIT 1",
+    [outletId],
+  );
+  if (!openShift) {
+    const openRes = await makeRequest(app, ADMIN_ID)
+      .post("/api/shifts/open")
+      .send({ outlet_id: outletId, employee_id: ADMIN_ID, opening_float: 500 });
+    expect(openRes.status).toBe(200);
+  }
+
+  const attendanceRes = await makeRequest(app)
+    .post("/api/attendance/pin-checkin")
+    .send({ pin_code: ADMIN_PIN, outlet_id: outletId });
+  if (![200, 400].includes(attendanceRes.status)) {
+    throw new Error(`Unexpected attendance status ${attendanceRes.status}`);
+  }
+}
 
 // Helper: make a basic cash sale
 function basicSale(overrides = {}) {
@@ -31,6 +53,10 @@ function basicSale(overrides = {}) {
 }
 
 describe("POST /api/sales — Checkout", () => {
+  beforeEach(async () => {
+    await ensureCheckoutContext(1);
+  });
+
   it("single cash checkout creates sale, items, payments, deducts stock", async () => {
     const stockBefore = await dbGet(db, "SELECT quantity FROM outlet_stock WHERE product_id = 1 AND outlet_id = 1");
 
@@ -234,6 +260,17 @@ describe("POST /api/sales — Checkout", () => {
 });
 
 describe("GET /api/sales — List & Detail", () => {
+  beforeAll(async () => {
+    await ensureCheckoutContext(1);
+    await makeRequest(app, ADMIN_ID)
+      .post("/api/sales")
+      .send(
+        basicSale({
+          cartItems: [{ id: 4, quantity: 1, price: 50, cost_price: 30 }],
+        }),
+      );
+  });
+
   it("returns paginated sales", async () => {
     const res = await makeRequest(app).get("/api/sales?page=1&limit=5");
     expect(res.status).toBe(200);
@@ -271,6 +308,7 @@ describe("PUT /api/sales/:id/void — Void Sale", () => {
   let saleToVoid;
 
   beforeAll(async () => {
+    await ensureCheckoutContext(1);
     // Create a fresh sale to void
     const res = await makeRequest(app, ADMIN_ID)
       .post("/api/sales")

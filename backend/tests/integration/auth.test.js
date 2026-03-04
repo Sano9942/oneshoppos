@@ -21,19 +21,19 @@ describe("POST /api/auth/login", () => {
   it("valid login returns employee + permissions", async () => {
     const res = await makeRequest(app)
       .post("/api/auth/login")
-      .send({ username: "Admin User", pin: "1111" });
+      .send({ username: "Hassan", pin: "2580" });
 
     expect(res.status).toBe(200);
     expect(res.body.employee).toBeDefined();
     expect(res.body.employee.id).toBe(ADMIN_ID);
-    expect(res.body.employee.name).toBe("Admin User");
+    expect(res.body.employee.name).toBe("Hassan");
     expect(res.body.permissions).toContain("all_access");
   });
 
   it("wrong PIN returns 401", async () => {
     const res = await makeRequest(app)
       .post("/api/auth/login")
-      .send({ username: "Admin User", pin: "9999" });
+      .send({ username: "Hassan", pin: "9999" });
 
     expect(res.status).toBe(401);
     expect(res.body.error).toMatch(/invalid/i);
@@ -42,7 +42,7 @@ describe("POST /api/auth/login", () => {
   it("missing username returns 400", async () => {
     const res = await makeRequest(app)
       .post("/api/auth/login")
-      .send({ pin: "1111" });
+      .send({ pin: "2580" });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/required/i);
@@ -51,7 +51,7 @@ describe("POST /api/auth/login", () => {
   it("missing PIN returns 400", async () => {
     const res = await makeRequest(app)
       .post("/api/auth/login")
-      .send({ username: "Admin User" });
+      .send({ username: "Hassan" });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/required/i);
@@ -60,7 +60,7 @@ describe("POST /api/auth/login", () => {
   it("login is case-insensitive for username", async () => {
     const res = await makeRequest(app)
       .post("/api/auth/login")
-      .send({ username: "admin user", pin: "1111" });
+      .send({ username: "hassan", pin: "2580" });
 
     expect(res.status).toBe(200);
     expect(res.body.employee.id).toBe(ADMIN_ID);
