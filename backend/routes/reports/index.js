@@ -3,6 +3,8 @@ const dashboard = require("./dashboard");
 const sales = require("./sales");
 const inventory = require("./inventory");
 const analytics = require("./analytics");
+const purchasing = require("./purchasing");
+const finance = require("./finance");
 const shifts = require("./shifts");
 const governance = require("./governance");
 const staff = require("./staff");
@@ -16,8 +18,10 @@ module.exports = function registerReportsRoutes(app, deps) {
   // Initialize all modular report domains
   dashboard(app, deps, helpers);
   sales(app, deps, helpers);
-  const inventoryModule = inventory(app, deps, helpers);
+  inventory(app, deps, helpers);
   analytics(app, deps, helpers);
+  purchasing(app, deps, helpers);
+  finance(app, deps, helpers);
   staff(app, deps, helpers);
   shifts(app, deps, helpers);
   const governanceModule = governance(app, deps, helpers);

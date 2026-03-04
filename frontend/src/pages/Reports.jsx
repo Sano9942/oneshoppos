@@ -23,11 +23,19 @@ import {
   FileText,
   Clock,
   Building2,
+  Wallet,
+  Receipt,
+  Calculator,
+  ListChecks,
+  Shield,
   GitBranch,
   LayoutGrid,
   Target,
   Activity,
   ShieldAlert,
+  SearchCheck,
+  BadgePercent,
+  FileSpreadsheet,
 } from "lucide-react";
 
 import { API_BASE as API } from "../config";
@@ -45,14 +53,24 @@ import {
   SalesDetailTab,
   OrderWiseTab,
   ItemWiseTab,
+  RefundsVoidsTab,
+  CashierWiseTab,
+  DailyOperationsTab,
 } from "./reports/ReportsSales";
 import {
   SalesStockTab,
   InventoryDumpTab,
   ProductPerformanceTab,
+  BrandWiseTab,
+  MerchandisingWorkspaceTab,
   OnHandTab,
   ReplenishmentTab,
   PricingMarginTab,
+  DeadStockTab,
+  StockAgingTab,
+  StockoutRiskTab,
+  ForecastDemandTab,
+  ReplenishmentSmartTab,
 } from "./reports/ReportsInventory";
 import {
   InventoryLossTab,
@@ -63,14 +81,35 @@ import {
 } from "./reports/ReportsOperations";
 import {
   SupplierWiseTab,
+  TotalPurchasesTab,
+  ItemwisePurchasesTab,
+  POWorkflowTab,
+  ProcurementParityTab,
   PurchaseOrdersReportTab,
   GRNReportTab,
 } from "./reports/ReportsPurchasing";
+import {
+  SettlementOverviewTab,
+  PayablesReceivablesTab,
+  SupplierPaymentsInvoicesTab,
+  FinancePaymentMixTab,
+  GSTOutputTab,
+  GSTTypeSummaryTab,
+} from "./reports/ReportsFinance";
 import {
   AttendanceTab,
   LaborPerformanceTab,
   LossPreventionTab,
 } from "./reports/ReportsStaff";
+import {
+  ShiftSummaryTab,
+  ShiftSalesTab,
+  PaymentSummaryTab,
+  CashFlowTab,
+  CurrentSessionZReportTab,
+  CashAuditTab,
+  DenominationsTab,
+} from "./reports/ReportsShifts";
 import {
   CustomerDetailsTab,
   CustomerWiseTab,
@@ -85,20 +124,41 @@ import {
   ProductMixTab,
   RetailMatrixTab,
 } from "./reports/ReportsAnalytics";
-import { CategoryWiseTab, ProductSpecTab } from "./reports/ReportsCatalog";
+import {
+  CategoryWiseTab,
+  ProductSpecTab,
+  HistoryCostTab,
+  HistorySaleTab,
+  ProductAuditTab,
+} from "./reports/ReportsCatalog";
 import GovernanceTab from "./reports/ReportsGovernance";
+import {
+  DiscountLeakageTab,
+  ExceptionsTab,
+} from "./reports/ReportsAudit";
 
 function GlobalFilterBar({ filters, setFilters, meta }) {
-  const { outlets = [], categories = [], brands = [], employees = [] } = meta;
+  const {
+    outlets = [],
+    categories = [],
+    brands = [],
+    suppliers = [],
+    employees = [],
+    shifts = [],
+  } = meta;
 
   const handleReset = () => {
     setFilters({
       dateFrom: "",
       dateTo: "",
+      timeFrom: "",
+      timeTo: "",
       outletId: "",
       employeeId: "",
+      shiftId: "",
       categoryId: "",
       brandId: "",
+      supplierId: "",
       search: "",
     });
   };
@@ -119,6 +179,25 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
           value={filters.search}
           onChange={(e) => setFilters({ ...filters, search: e.target.value })}
           className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-medium"
+        />
+      </div>
+
+      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:w-auto">
+        <Clock size={14} className="text-slate-400" />
+        <input
+          type="time"
+          value={filters.timeFrom}
+          onChange={(e) => setFilters({ ...filters, timeFrom: e.target.value })}
+          className="bg-transparent border-none text-xs font-semibold focus:ring-0 p-0 w-20"
+          title="Time From"
+        />
+        <span className="text-slate-300">|</span>
+        <input
+          type="time"
+          value={filters.timeTo}
+          onChange={(e) => setFilters({ ...filters, timeTo: e.target.value })}
+          className="bg-transparent border-none text-xs font-semibold focus:ring-0 p-0 w-20"
+          title="Time To"
         />
       </div>
 
@@ -195,6 +274,24 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
         </select>
       </div>
 
+      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:min-w-35 sm:w-auto">
+        <Truck size={14} className="text-slate-400" />
+        <select
+          value={filters.supplierId}
+          onChange={(e) =>
+            setFilters({ ...filters, supplierId: e.target.value })
+          }
+          className="bg-transparent border-none text-xs font-semibold focus:ring-0 p-0 flex-1 cursor-pointer"
+        >
+          <option value="">All Suppliers</option>
+          {suppliers.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Employee Selector */}
       <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:min-w-30 sm:w-auto">
         <Users size={14} className="text-slate-400" />
@@ -209,6 +306,23 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
           {employees.map((e) => (
             <option key={e.id} value={e.id}>
               {e.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Shift Selector */}
+      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:min-w-40 sm:w-auto">
+        <ClipboardList size={14} className="text-slate-400" />
+        <select
+          value={filters.shiftId}
+          onChange={(e) => setFilters({ ...filters, shiftId: e.target.value })}
+          className="bg-transparent border-none text-xs font-semibold focus:ring-0 p-0 flex-1 cursor-pointer"
+        >
+          <option value="">All Shifts</option>
+          {shifts.map((shift) => (
+            <option key={shift.id} value={shift.id}>
+              {`${shift.outlet_name || "Outlet"} | ${fmtDate(shift.start_time)} | #${shift.id}`}
             </option>
           ))}
         </select>
@@ -238,6 +352,7 @@ const GROUPS = [
     label: "Sales",
     tabs: [
       { id: "overview", label: "Overview", icon: BarChart3 },
+      { id: "daily-operations", label: "Daily Operations", icon: Activity },
       {
         id: "comparative-trends",
         label: "Comparative Trends",
@@ -251,6 +366,15 @@ const GROUPS = [
       { id: "order-wise", label: "Order Wise", icon: ClipboardList },
       { id: "item-wise", label: "Item Wise", icon: ShoppingBag },
       { id: "category-wise", label: "Category Wise", icon: Tag },
+      { id: "cashier-wise", label: "Cashier Wise", icon: Users },
+      { id: "refunds-voids", label: "Refunds & Voids", icon: AlertTriangle },
+      { id: "shift-summary", label: "Shift Summary", icon: Wallet },
+      { id: "shift-sales", label: "Shift Sales", icon: Receipt },
+      { id: "payment-summary", label: "Payment Summary", icon: Calculator },
+      { id: "cash-flow", label: "Cash Flow", icon: ListChecks },
+      { id: "cash-audit", label: "Cash Audit", icon: Shield },
+      { id: "denominations", label: "Denominations", icon: Layers },
+      { id: "current-session-zreport", label: "Session Z-Report", icon: Shield },
     ],
   },
   {
@@ -266,14 +390,24 @@ const GROUPS = [
   {
     label: "Inventory",
     tabs: [
+      { id: "performance-workspace", label: "Merchandising", icon: Target },
       { id: "product-performance", label: "Product Performance", icon: Star },
+      { id: "brand-wise", label: "Brand Wise", icon: Tag },
       { id: "retail-matrix", label: "Retail Matrix", icon: LayoutGrid },
       { id: "pricing-margin", label: "Pricing Matrix", icon: Layers },
       { id: "sales-stock", label: "Sales & Stock", icon: Package },
       { id: "inventory-dump", label: "Inventory Dump", icon: Archive },
       { id: "on-hand", label: "On Hand", icon: Layers },
       { id: "product-spec", label: "Product Spec", icon: Package },
+      { id: "history-cost", label: "History Cost", icon: Receipt },
+      { id: "history-sale", label: "History Sale", icon: FileText },
+      { id: "product-audit", label: "Product Audit", icon: SearchCheck },
       { id: "replenishment", label: "Replenishment", icon: RotateCcw },
+      { id: "dead-stock", label: "Dead Stock", icon: PackageX },
+      { id: "stock-aging", label: "Stock Aging", icon: AlertTriangle },
+      { id: "stockout-risk", label: "Stockout Risk", icon: TrendingDown },
+      { id: "forecast-demand", label: "Forecast Demand", icon: TrendingUp },
+      { id: "replenishment-smart", label: "Replenishment Smart", icon: ShoppingCart },
     ],
   },
   {
@@ -293,6 +427,10 @@ const GROUPS = [
   {
     label: "Procurement",
     tabs: [
+      { id: "total-purchases", label: "Total Purchases", icon: Boxes },
+      { id: "itemwise-purchases", label: "Itemwise Purchases", icon: ClipboardList },
+      { id: "po-workflow", label: "PO Workflow", icon: ListChecks },
+      { id: "procurement-parity", label: "Procurement Parity", icon: ArrowLeftRight },
       { id: "supplier-wise", label: "Supplier Wise", icon: Truck },
       {
         id: "purchase-orders-report",
@@ -300,6 +438,17 @@ const GROUPS = [
         icon: ShoppingCart,
       },
       { id: "grn-report", label: "GRN Report", icon: Archive },
+    ],
+  },
+  {
+    label: "Finance",
+    tabs: [
+      { id: "settlement-overview", label: "Settlement Overview", icon: Wallet },
+      { id: "payables-receivables", label: "Payables / Receivables", icon: Receipt },
+      { id: "supplier-payments-invoices", label: "Supplier Payments", icon: Truck },
+      { id: "finance-payment-mix", label: "Finance Payment Mix", icon: Calculator },
+      { id: "gst-output", label: "GST Output", icon: BadgePercent },
+      { id: "gst-type-summary", label: "GST Type", icon: FileSpreadsheet },
     ],
   },
   {
@@ -314,6 +463,8 @@ const GROUPS = [
     label: "Governance",
     tabs: [
       { id: "governance", label: "Audit Controls", icon: ShieldAlert },
+      { id: "discount-leakage", label: "Discount Leakage", icon: AlertTriangle },
+      { id: "exceptions", label: "Exceptions", icon: SearchCheck },
     ],
   },
 ];
@@ -337,7 +488,7 @@ function TabBreadcrumb({ activeTab }) {
   return null;
 }
 
-function TabContent({ activeTab, filters }) {
+function TabContent({ activeTab, filters, setFilters, setActiveTab }) {
   switch (activeTab) {
     case "comparative-trends":
       return <ComparativeTrendsTab filters={filters} />;
@@ -359,10 +510,28 @@ function TabContent({ activeTab, filters }) {
       return <LossPreventionTab filters={filters} />;
     case "overview":
       return <OverviewTab filters={filters} />;
+    case "daily-operations":
+      return <DailyOperationsTab filters={filters} />;
     case "sales-summary":
       return <SalesSummaryTab filters={filters} />;
     case "sales-detail":
       return <SalesDetailTab filters={filters} />;
+    case "refunds-voids":
+      return <RefundsVoidsTab filters={filters} />;
+    case "shift-summary":
+      return <ShiftSummaryTab filters={filters} />;
+    case "shift-sales":
+      return <ShiftSalesTab filters={filters} />;
+    case "payment-summary":
+      return <PaymentSummaryTab filters={filters} />;
+    case "cash-flow":
+      return <CashFlowTab filters={filters} />;
+    case "cash-audit":
+      return <CashAuditTab filters={filters} />;
+    case "denominations":
+      return <DenominationsTab filters={filters} />;
+    case "current-session-zreport":
+      return <CurrentSessionZReportTab filters={filters} />;
     case "sales-stock":
       return <SalesStockTab filters={filters} />;
     case "inventory-dump":
@@ -381,10 +550,28 @@ function TabContent({ activeTab, filters }) {
       return <OrderWiseTab filters={filters} />;
     case "item-wise":
       return <ItemWiseTab filters={filters} />;
+    case "cashier-wise":
+      return <CashierWiseTab filters={filters} />;
     case "product-performance":
       return <ProductPerformanceTab filters={filters} />;
+    case "performance-workspace":
+      return (
+        <MerchandisingWorkspaceTab
+          filters={filters}
+          setFilters={setFilters}
+          setActiveTab={setActiveTab}
+        />
+      );
+    case "brand-wise":
+      return <BrandWiseTab filters={filters} />;
     case "product-spec":
       return <ProductSpecTab filters={filters} />;
+    case "history-cost":
+      return <HistoryCostTab filters={filters} />;
+    case "history-sale":
+      return <HistorySaleTab filters={filters} />;
+    case "product-audit":
+      return <ProductAuditTab filters={filters} />;
     case "on-hand":
       return <OnHandTab filters={filters} />;
     case "inventory-loss":
@@ -397,18 +584,52 @@ function TabContent({ activeTab, filters }) {
       return <STRReportTab filters={filters} />;
     case "replenishment":
       return <ReplenishmentTab filters={filters} />;
+    case "dead-stock":
+      return <DeadStockTab filters={filters} />;
+    case "stock-aging":
+      return <StockAgingTab filters={filters} />;
+    case "stockout-risk":
+      return <StockoutRiskTab filters={filters} />;
+    case "forecast-demand":
+      return <ForecastDemandTab filters={filters} />;
+    case "replenishment-smart":
+      return <ReplenishmentSmartTab filters={filters} />;
     case "supplier-wise":
       return <SupplierWiseTab filters={filters} />;
+    case "total-purchases":
+      return <TotalPurchasesTab filters={filters} />;
+    case "itemwise-purchases":
+      return <ItemwisePurchasesTab filters={filters} />;
+    case "po-workflow":
+      return <POWorkflowTab filters={filters} />;
+    case "procurement-parity":
+      return <ProcurementParityTab filters={filters} />;
     case "purchase-orders-report":
       return <PurchaseOrdersReportTab filters={filters} />;
     case "grn-report":
       return <GRNReportTab filters={filters} />;
+    case "settlement-overview":
+      return <SettlementOverviewTab filters={filters} />;
+    case "payables-receivables":
+      return <PayablesReceivablesTab filters={filters} />;
+    case "supplier-payments-invoices":
+      return <SupplierPaymentsInvoicesTab filters={filters} />;
+    case "finance-payment-mix":
+      return <FinancePaymentMixTab filters={filters} />;
+    case "gst-output":
+      return <GSTOutputTab filters={filters} />;
+    case "gst-type-summary":
+      return <GSTTypeSummaryTab filters={filters} />;
     case "pricing-margin":
       return <PricingMarginTab filters={filters} />;
     case "attendance":
       return <AttendanceTab filters={filters} />;
     case "governance":
       return <GovernanceTab filters={filters} />;
+    case "discount-leakage":
+      return <DiscountLeakageTab filters={filters} />;
+    case "exceptions":
+      return <ExceptionsTab filters={filters} />;
     default:
       return null;
   }
@@ -418,17 +639,26 @@ export function ReportTabStandalone({ tabId }) {
   const standaloneFilters = {
     dateFrom: "",
     dateTo: "",
+    timeFrom: "",
+    timeTo: "",
     outletId: "",
     employeeId: "",
+    shiftId: "",
     categoryId: "",
     brandId: "",
+    supplierId: "",
     search: "",
   };
 
   return (
     <div className="flex-1 flex flex-col h-full bg-transparent">
       <div className="flex-1 overflow-auto min-h-0">
-        <TabContent activeTab={tabId} filters={standaloneFilters} />
+        <TabContent
+          activeTab={tabId}
+          filters={standaloneFilters}
+          setFilters={() => {}}
+          setActiveTab={() => {}}
+        />
       </div>
     </div>
   );
@@ -439,10 +669,14 @@ export default function Reports() {
   const [filters, setFilters] = useState({
     dateFrom: "",
     dateTo: "",
+    timeFrom: "",
+    timeTo: "",
     outletId: "",
     employeeId: "",
+    shiftId: "",
     categoryId: "",
     brandId: "",
+    supplierId: "",
     search: "",
   });
 
@@ -450,31 +684,46 @@ export default function Reports() {
     outlets: [],
     categories: [],
     brands: [],
+    suppliers: [],
     employees: [],
+    shifts: [],
   });
 
   useEffect(() => {
     // Basic meta loader for dropdowns
     const loadMeta = async () => {
       try {
-        const [outlets, categories, brands, employees] = await Promise.all([
+        const [outlets, categories, brands, suppliers, employees, cashFlow] = await Promise.all([
           fetch(`${API}/api/outlets`).then((r) => r.json()),
           fetch(`${API}/api/categories`).then((r) => r.json()),
           fetch(`${API}/api/brands`).then((r) => r.json()),
+          fetch(`${API}/api/suppliers`).then((r) => r.json()),
           fetch(`${API}/api/employees`).then((r) => r.json()),
+          fetch(
+            `${API}/api/reports/cash-flow?${
+              new URLSearchParams({
+                date_from: filters.dateFrom,
+                date_to: filters.dateTo,
+              }).toString()
+            }`,
+          ).then((r) => r.json()),
         ]);
         setMeta({
           outlets: outlets.outlets || outlets || [],
           categories: categories.categories || categories || [],
           brands: brands.brands || brands || [],
+          suppliers: suppliers.suppliers || suppliers || [],
           employees: employees.employees || employees || [],
+          shifts: (cashFlow.sessions || []).filter((session) =>
+            filters.outletId ? String(session.outlet_id) === String(filters.outletId) : true,
+          ),
         });
       } catch (err) {
         console.error("Failed to load metadata", err);
       }
     };
     loadMeta();
-  }, []);
+  }, [filters.outletId, filters.dateFrom, filters.dateTo]);
 
   const activeGroup = GROUPS.find((g) =>
     g.tabs.some((t) => t.id === activeTab),
@@ -551,7 +800,12 @@ export default function Reports() {
           <div className="flex-1 overflow-auto min-h-0 flex flex-col">
             <TabBreadcrumb activeTab={activeTab} />
             <div className="flex-1 min-h-0">
-              <TabContent activeTab={activeTab} filters={filters} />
+              <TabContent
+                activeTab={activeTab}
+                filters={filters}
+                setFilters={setFilters}
+                setActiveTab={setActiveTab}
+              />
             </div>
           </div>
         </div>
