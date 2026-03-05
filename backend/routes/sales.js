@@ -465,6 +465,9 @@ module.exports = function registerSalesRoutes(app, deps) {
               variantStockStmt.run(item.quantity, item.variant_id, (err) => {
                 if (err) hasError = true;
               });
+              stockStmt.run(item.quantity, item.original_product_id || item.id, outlet_id, (err) => {
+                if (err) hasError = true;
+              });
             } else {
               stockStmt.run(item.quantity, item.id, outlet_id, (err) => {
                 if (err) hasError = true;

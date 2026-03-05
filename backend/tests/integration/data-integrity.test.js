@@ -139,3 +139,102 @@ describe("DI8 — Manual return (no original_sale_id) still restocks", () => {
     expect(after).toBe(before + 3);
   });
 });
+
+// ─── DI3/DI4 — Variant stock ──────────────────────────────────────────────────
+
+async function seedVariant(variantDb) {
+  // Insert a variant for product 1 with 5 units of stock
+  await dbRun(variantDb,
+    "INSERT OR IGNORE INTO product_variants (id, product_id, sku, stock, price) VALUES (10, 1, 'PROD-001-M', 5, 100)"
+  );
+}
+
+describe("DI3 — Sale decrements both outlet_stock AND product_variants.stock", () => {
+  it("selling a variant decrements both outlet_stock and product_variants.stock", async () => {
+    const ctx = await createTestApp();
+    const varApp = ctx.app;
+    const varDb = ctx.db;
+    await seedVariant(varDb);
+
+    // Open shift + clock in for this isolated db
+    await makeRequest(varApp, MANAGER_ID).post("/api/shifts/open").send({
+      outlet_id: OUTLET_ID, employee_id: MANAGER_ID, opening_float: 500,
+    });
+    await makeRequest(varApp).post("/api/attendance/pin-checkin").send({
+      pin_code: ADMIN_PIN, outlet_id: OUTLET_ID,
+    });
+
+    const outletBefore = await dbGet(varDb,
+      "SELECT quantity FROM outlet_stock WHERE product_id = 1 AND outlet_id = ?", [OUTLET_ID]);
+    const variantBefore = await dbGet(varDb,
+      "SELECT stock FROM product_variants WHERE id = 10");
+
+    const saleRes = await makeRequest(varApp, ADMIN_ID).post("/api/sales").send({
+      cartItems: [{ id: 1, price: 100, quantity: 2, variant_id: 10 }],
+      paymentMethod: "Cash",
+      outlet_id: OUTLET_ID,
+    });
+    expect(saleRes.status).toBe(200);
+
+    const outletAfter = await dbGet(varDb,
+      "SELECT quantity FROM outlet_stock WHERE product_id = 1 AND outlet_id = ?", [OUTLET_ID]);
+    const variantAfter = await dbGet(varDb,
+      "SELECT stock FROM product_variants WHERE id = 10");
+
+    expect(outletAfter.quantity).toBe(outletBefore.quantity - 2);
+    expect(variantAfter.stock).toBe(variantBefore.stock - 2);
+
+    await closeDb(varDb);
+  });
+});
+
+describe("DI4 — Return restocks both outlet_stock AND product_variants.stock", () => {
+  it("returning a variant restocks both tables symmetrically", async () => {
+    const ctx = await createTestApp();
+    const varApp = ctx.app;
+    const varDb = ctx.db;
+    await seedVariant(varDb);
+
+    await makeRequest(varApp, MANAGER_ID).post("/api/shifts/open").send({
+      outlet_id: OUTLET_ID, employee_id: MANAGER_ID, opening_float: 500,
+    });
+    await makeRequest(varApp).post("/api/attendance/pin-checkin").send({
+      pin_code: ADMIN_PIN, outlet_id: OUTLET_ID,
+    });
+
+    // Sell 1 variant unit first
+    const saleRes = await makeRequest(varApp, ADMIN_ID).post("/api/sales").send({
+      cartItems: [{ id: 1, price: 100, quantity: 1, variant_id: 10 }],
+      paymentMethod: "Cash",
+      outlet_id: OUTLET_ID,
+    });
+    expect(saleRes.status).toBe(200);
+    const saleId = saleRes.body.saleId;
+
+    const outletMid = await dbGet(varDb,
+      "SELECT quantity FROM outlet_stock WHERE product_id = 1 AND outlet_id = ?", [OUTLET_ID]);
+    const variantMid = await dbGet(varDb,
+      "SELECT stock FROM product_variants WHERE id = 10");
+
+    // Return it
+    const returnRes = await makeRequest(varApp, MANAGER_ID).post("/api/returns").send({
+      original_sale_id: saleId,
+      outlet_id: OUTLET_ID,
+      employee_id: MANAGER_ID,
+      total_refund: 100,
+      refund_method: "Cash",
+      items: [{ product_id: 1, quantity: 1, refund_price: 100, variant_id: 10 }],
+    });
+    expect(returnRes.status).toBe(200);
+
+    const outletAfter = await dbGet(varDb,
+      "SELECT quantity FROM outlet_stock WHERE product_id = 1 AND outlet_id = ?", [OUTLET_ID]);
+    const variantAfter = await dbGet(varDb,
+      "SELECT stock FROM product_variants WHERE id = 10");
+
+    expect(outletAfter.quantity).toBe(outletMid.quantity + 1);
+    expect(variantAfter.stock).toBe(variantMid.stock + 1);
+
+    await closeDb(varDb);
+  });
+});
