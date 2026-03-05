@@ -353,7 +353,7 @@ export default function InventoryRedesign() {
     <>
     <PageShell
       title="Products"
-      subtitle="Shopify-style product listing with server filtering, sorting, and bulk operations."
+      subtitle="Manage products, pricing, stock levels, and variants."
       right={
         <div className="flex items-center gap-2">
           <Button

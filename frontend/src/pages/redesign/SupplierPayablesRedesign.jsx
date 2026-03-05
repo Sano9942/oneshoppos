@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, RefreshCw, X } from "lucide-react";
+import { ChevronDown, ChevronUp, RefreshCw, X, BookOpen } from "lucide-react";
 import { API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import {
@@ -48,11 +48,19 @@ export default function SupplierPayablesRedesign() {
   const [payNotes, setPayNotes] = useState("");
   const [paying, setPaying] = useState(false);
 
+  // Ledger state
+  const [suppliers, setSuppliers] = useState([]);
+  const [ledgerSupplierId, setLedgerSupplierId] = useState("");
+  const [ledgerFrom, setLedgerFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10));
+  const [ledgerTo, setLedgerTo] = useState(new Date().toISOString().slice(0, 10));
+  const [ledger, setLedger] = useState(null);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+
   const fetchAging = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API}/supplier-aging`, { headers: authHeaders() });
+      const res = await fetch(`${API}/api/supplier-aging`, { headers: authHeaders() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load supplier aging");
       setAging(data.aging || []);
@@ -70,7 +78,7 @@ export default function SupplierPayablesRedesign() {
     try {
       const params = new URLSearchParams();
       if (filterStatus) params.set("status", filterStatus);
-      const res = await fetch(`${API}/supplier-invoices?${params.toString()}`, {
+      const res = await fetch(`${API}/api/supplier-invoices?${params.toString()}`, {
         headers: authHeaders(),
       });
       const data = await res.json();
@@ -93,6 +101,25 @@ export default function SupplierPayablesRedesign() {
     refreshCurrent();
   }, [refreshCurrent]);
 
+  // Load supplier list for ledger dropdown
+  useEffect(() => {
+    fetch(`${API}/api/suppliers`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((d) => setSuppliers(d.suppliers || []))
+      .catch(() => {});
+  }, [authHeaders]);
+
+  const fetchLedger = useCallback(async () => {
+    if (!ledgerSupplierId) return;
+    setLedgerLoading(true);
+    try {
+      const q = new URLSearchParams({ from: ledgerFrom, to: ledgerTo });
+      const res = await fetch(`${API}/api/supplier-ledger/${ledgerSupplierId}?${q}`, { headers: authHeaders() });
+      const data = await res.json();
+      setLedger(res.ok ? data : null);
+    } catch { setLedger(null); } finally { setLedgerLoading(false); }
+  }, [ledgerSupplierId, ledgerFrom, ledgerTo, authHeaders]);
+
   const toggleSupplier = async (supplierId) => {
     if (expandedSupplierId === supplierId) {
       setExpandedSupplierId(null);
@@ -101,7 +128,7 @@ export default function SupplierPayablesRedesign() {
     setExpandedSupplierId(supplierId);
     if (supplierInvoices[supplierId]) return;
     try {
-      const res = await fetch(`${API}/supplier-invoices?supplier_id=${supplierId}`, {
+      const res = await fetch(`${API}/api/supplier-invoices?supplier_id=${supplierId}`, {
         headers: authHeaders(),
       });
       const data = await res.json();
@@ -141,7 +168,7 @@ export default function SupplierPayablesRedesign() {
     setError("");
     setNotice("");
     try {
-      const res = await fetch(`${API}/supplier-invoices/${payModal.id}/pay`, {
+      const res = await fetch(`${API}/api/supplier-invoices/${payModal.id}/pay`, {
         method: "POST",
         headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -214,6 +241,7 @@ export default function SupplierPayablesRedesign() {
               {[
                 { id: "aging", label: "Aging Summary" },
                 { id: "invoices", label: "All Invoices" },
+                { id: "ledger", label: "Supplier Ledger" },
               ].map((t) => (
                 <Button
                   key={t.id}
@@ -406,6 +434,112 @@ export default function SupplierPayablesRedesign() {
             />
           ) : null}
         </SectionCard>
+      ) : null}
+
+      {/* ── Supplier Ledger ── */}
+      {!loading && tab === "ledger" ? (
+        <div className="space-y-3">
+          <SectionCard className="p-4">
+            <div className="flex flex-wrap gap-3 items-end">
+              <div>
+                <label className="text-xs text-(--ui-text-muted) block mb-1">Supplier</label>
+                <select
+                  value={ledgerSupplierId}
+                  onChange={(e) => setLedgerSupplierId(e.target.value)}
+                  className="block border border-(--ui-border) rounded-(--ui-radius-sm) px-3 py-2 text-sm bg-white min-w-48"
+                >
+                  <option value="">Select supplier...</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-(--ui-text-muted) block mb-1">From</label>
+                <input type="date" value={ledgerFrom} onChange={(e) => setLedgerFrom(e.target.value)}
+                  className="block border border-(--ui-border) rounded-(--ui-radius-sm) px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-(--ui-text-muted) block mb-1">To</label>
+                <input type="date" value={ledgerTo} onChange={(e) => setLedgerTo(e.target.value)}
+                  className="block border border-(--ui-border) rounded-(--ui-radius-sm) px-3 py-2 text-sm" />
+              </div>
+              <Button tone="primary" onClick={fetchLedger} disabled={!ledgerSupplierId || ledgerLoading}>
+                <BookOpen size={13} className="mr-1 inline" />
+                {ledgerLoading ? "Loading..." : "View Ledger"}
+              </Button>
+            </div>
+          </SectionCard>
+
+          {ledger && (
+            <SectionCard>
+              <div className="px-4 py-3 border-b border-(--ui-border) flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-(--ui-text)">{ledger.supplier?.name}</p>
+                  <p className="text-xs text-(--ui-text-muted)">
+                    {ledger.supplier?.phone || ""}{ledger.supplier?.payment_terms === "credit" ? ` · ${ledger.supplier.credit_days}d credit` : " · Cash"}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-(--ui-text-muted)">Closing Balance</p>
+                  <p className={`text-lg font-bold ${ledger.closing_balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                    {money(ledger.closing_balance)}
+                  </p>
+                </div>
+              </div>
+              <div className="overflow-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted) sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Date</th>
+                      <th className="px-3 py-2 text-left">Type</th>
+                      <th className="px-3 py-2 text-left">Reference</th>
+                      <th className="px-3 py-2 text-left">Notes</th>
+                      <th className="px-3 py-2 text-right">Purchase</th>
+                      <th className="px-3 py-2 text-right">Payment</th>
+                      <th className="px-3 py-2 text-right">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(ledger.entries || []).map((row, i) => (
+                      <tr key={i} className="border-t border-(--ui-border) hover:bg-(--ui-muted-surface)">
+                        <td className="px-3 py-2 text-(--ui-text-muted)">{row.date?.slice(0, 10) || "-"}</td>
+                        <td className="px-3 py-2">
+                          <Badge tone={row.type === "purchase" ? "warning" : "success"}>
+                            {row.type === "purchase" ? "Purchase" : "Payment"}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs text-(--ui-text)">{row.reference || "-"}</td>
+                        <td className="px-3 py-2 text-(--ui-text-muted)">{row.notes || "-"}</td>
+                        <td className="px-3 py-2 text-right text-rose-700 font-medium">
+                          {row.amount > 0 ? money(row.amount) : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right text-emerald-700 font-medium">
+                          {row.payment > 0 ? money(row.payment) : "—"}
+                        </td>
+                        <td className={`px-3 py-2 text-right font-semibold ${row.running_balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                          {money(row.running_balance)}
+                        </td>
+                      </tr>
+                    ))}
+                    {(ledger.entries || []).length === 0 && (
+                      <tr><td colSpan={7} className="px-3 py-8 text-center text-(--ui-text-muted)">No transactions in this period</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </SectionCard>
+          )}
+
+          {!ledger && !ledgerLoading && ledgerSupplierId && (
+            <SectionCard className="p-8 text-center text-(--ui-text-muted) text-sm">
+              Click "View Ledger" to load the statement
+            </SectionCard>
+          )}
+
+          {!ledgerSupplierId && (
+            <EmptyState title="Select a supplier" body="Choose a supplier above to view their full account statement." />
+          )}
+        </div>
       ) : null}
 
       {payModal ? (

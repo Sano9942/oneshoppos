@@ -202,7 +202,7 @@ export default function SalesHistoryRedesign() {
   return (
     <PageShell
       title="Sales History"
-      subtitle="Shopify-style sales timeline with detail actions for void, return, and invoice."
+      subtitle="View all completed sales with void, return, and invoice actions."
       right={
         <div className="flex gap-2">
           <Button onClick={() => exportCsv(visibleRows)}>

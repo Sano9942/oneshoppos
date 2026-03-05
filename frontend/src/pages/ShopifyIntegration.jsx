@@ -54,7 +54,6 @@ function ShopifyIntegrationContent() {
     <div className="p-6 max-w-400 mx-auto space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => loadAll()}

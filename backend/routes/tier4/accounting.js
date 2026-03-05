@@ -289,5 +289,224 @@ module.exports = function createAccountingRouter({
     },
   );
 
+  router.get(
+    "/api/accounting/balance-sheet",
+    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireFeature("accounting_core"),
+    (req, res) => {
+      db.serialize(() => {
+        // Assets
+        const assetQueries = [
+          // 1. Inventory at cost (products with stock > 0)
+          new Promise((resolve, reject) =>
+            db.get(
+              `SELECT COALESCE(SUM(p.cost_price * COALESCE(pi.quantity, 0)), 0) AS inventory_value
+               FROM products p
+               LEFT JOIN product_inventory pi ON pi.product_id = p.id
+               WHERE COALESCE(pi.quantity, 0) > 0`,
+              [],
+              (err, row) => (err ? reject(err) : resolve(Number(row?.inventory_value || 0))),
+            ),
+          ),
+          // 2. Cash in open shifts
+          new Promise((resolve, reject) =>
+            db.get(
+              `SELECT COALESCE(SUM(opening_cash), 0) AS cash_on_hand
+               FROM cash_shifts WHERE status = 'open'`,
+              [],
+              (err, row) => (err ? reject(err) : resolve(Number(row?.cash_on_hand || 0))),
+            ),
+          ),
+        ];
+
+        // Liabilities
+        const liabilityQueries = [
+          // 3. Supplier AP outstanding
+          new Promise((resolve, reject) =>
+            db.get(
+              `SELECT COALESCE(SUM(si.amount - COALESCE(sp.paid_amount, 0)), 0) AS supplier_ap
+               FROM supplier_invoices si
+               LEFT JOIN (
+                 SELECT supplier_invoice_id, SUM(amount) AS paid_amount
+                 FROM supplier_payments GROUP BY supplier_invoice_id
+               ) sp ON sp.supplier_invoice_id = si.id
+               WHERE si.status != 'paid'`,
+              [],
+              (err, row) => (err ? reject(err) : resolve(Number(row?.supplier_ap || 0))),
+            ),
+          ),
+          // 4. Customer credit liabilities (negative balance = store owes customer)
+          new Promise((resolve, reject) =>
+            db.get(
+              `SELECT COALESCE(SUM(ABS(balance)), 0) AS customer_credit
+               FROM customers WHERE COALESCE(balance, 0) < 0`,
+              [],
+              (err, row) => (err ? reject(err) : resolve(Number(row?.customer_credit || 0))),
+            ),
+          ),
+        ];
+
+        Promise.all([...assetQueries, ...liabilityQueries])
+          .then(([inventoryValue, cashOnHand, supplierAp, customerCredit]) => {
+            const totalAssets = inventoryValue + cashOnHand;
+            const totalLiabilities = supplierAp + customerCredit;
+            const equity = totalAssets - totalLiabilities;
+            res.json({
+              assets: {
+                inventory_value: inventoryValue,
+                cash_on_hand: cashOnHand,
+                total: totalAssets,
+              },
+              liabilities: {
+                supplier_ap: supplierAp,
+                customer_credit: customerCredit,
+                total: totalLiabilities,
+              },
+              equity,
+            });
+          })
+          .catch((err) => res.status(500).json({ error: err.message }));
+      });
+    },
+  );
+
+  // ── Expense Ledger ─────────────────────────────────────────────────────────
+  router.get(
+    "/api/accounting/expenses",
+    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireFeature("accounting_core"),
+    (req, res) => {
+      const { from, to, category_id, outlet_id } = req.query || {};
+      const where = ["1=1"];
+      const params = [];
+      if (from) { where.push("date(e.expense_date) >= ?"); params.push(from); }
+      if (to) { where.push("date(e.expense_date) <= ?"); params.push(to); }
+      if (category_id) { where.push("e.category_id = ?"); params.push(category_id); }
+      if (outlet_id) { where.push("e.outlet_id = ?"); params.push(outlet_id); }
+      db.all(
+        `SELECT e.*, ec.name AS category_name, o.name AS outlet_name, em.name AS employee_name
+         FROM expenses e
+         LEFT JOIN expense_categories ec ON ec.id = e.category_id
+         LEFT JOIN outlets o ON o.id = e.outlet_id
+         LEFT JOIN employees em ON em.id = e.employee_id
+         WHERE ${where.join(" AND ")}
+         ORDER BY date(e.expense_date) DESC, e.id DESC`,
+        params,
+        (err, rows) => {
+          if (err) return res.status(500).json({ error: err.message });
+          db.all("SELECT * FROM expense_categories ORDER BY name ASC", [], (err2, cats) => {
+            if (err2) return res.status(500).json({ error: err2.message });
+            res.json({ expenses: rows || [], categories: cats || [] });
+          });
+        },
+      );
+    },
+  );
+
+  // ── AP Aging ───────────────────────────────────────────────────────────────
+  router.get(
+    "/api/accounting/ap-aging",
+    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireFeature("accounting_core"),
+    (req, res) => {
+      db.all(
+        `SELECT si.id, si.invoice_number, si.created_at AS invoice_date, si.due_date,
+                si.amount,
+                COALESCE(sp.paid_amount, 0) AS paid_amount,
+                (si.amount - COALESCE(sp.paid_amount, 0)) AS outstanding,
+                si.status,
+                s.name AS supplier_name,
+                CAST(julianday('now') - julianday(COALESCE(si.due_date, si.created_at)) AS INTEGER) AS days_overdue
+         FROM supplier_invoices si
+         LEFT JOIN suppliers s ON s.id = si.supplier_id
+         LEFT JOIN (
+           SELECT supplier_invoice_id, SUM(amount) AS paid_amount
+           FROM supplier_payments GROUP BY supplier_invoice_id
+         ) sp ON sp.supplier_invoice_id = si.id
+         WHERE si.status != 'paid'
+           AND (si.amount - COALESCE(sp.paid_amount, 0)) > 0
+         ORDER BY days_overdue DESC`,
+        [],
+        (err, rows) => {
+          if (err) return res.status(500).json({ error: err.message });
+          const buckets = { current: [], d30: [], d60: [], d90: [], over90: [] };
+          let totals = { current: 0, d30: 0, d60: 0, d90: 0, over90: 0 };
+          (rows || []).forEach((r) => {
+            const d = Number(r.days_overdue || 0);
+            const amt = Number(r.outstanding || 0);
+            let key;
+            if (d <= 0) key = "current";
+            else if (d <= 30) key = "d30";
+            else if (d <= 60) key = "d60";
+            else if (d <= 90) key = "d90";
+            else key = "over90";
+            buckets[key].push(r);
+            totals[key] += amt;
+          });
+          res.json({ buckets, totals });
+        },
+      );
+    },
+  );
+
+  // ── Tax Ledger ─────────────────────────────────────────────────────────────
+  router.get(
+    "/api/accounting/tax-ledger",
+    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireFeature("accounting_core"),
+    (req, res) => {
+      const { from, to } = req.query || {};
+      if (!from || !to) return res.status(400).json({ error: "from and to are required" });
+      db.all(
+        `SELECT t.name AS tax_name, t.rate,
+                COUNT(DISTINCT s.id) AS transaction_count,
+                COALESCE(SUM(si.quantity * si.price_at_sale), 0) AS taxable_amount,
+                COALESCE(SUM(si.quantity * si.price_at_sale * t.rate / 100.0), 0) AS tax_collected
+         FROM sale_items si
+         JOIN sales s ON s.id = si.sale_id AND s.voided = 0
+         JOIN products p ON p.id = si.product_id
+         JOIN taxes t ON t.id = p.tax_id
+         WHERE date(s.timestamp) BETWEEN ? AND ?
+         GROUP BY t.id, t.name, t.rate
+         ORDER BY tax_collected DESC`,
+        [from, to],
+        (err, rows) => {
+          if (err) return res.status(500).json({ error: err.message });
+          const total_tax = (rows || []).reduce((s, r) => s + Number(r.tax_collected || 0), 0);
+          res.json({ rows: rows || [], total_tax });
+        },
+      );
+    },
+  );
+
+  // ── Supplier Payment History ───────────────────────────────────────────────
+  router.get(
+    "/api/accounting/supplier-payments",
+    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireFeature("accounting_core"),
+    (req, res) => {
+      const { from, to } = req.query || {};
+      const where = ["1=1"];
+      const params = [];
+      if (from) { where.push("date(sp.paid_at) >= ?"); params.push(from); }
+      if (to) { where.push("date(sp.paid_at) <= ?"); params.push(to); }
+      db.all(
+        `SELECT sp.id, sp.amount, sp.payment_method, sp.paid_at, sp.notes,
+                si.invoice_number, s.name AS supplier_name
+         FROM supplier_payments sp
+         LEFT JOIN supplier_invoices si ON si.id = sp.supplier_invoice_id
+         LEFT JOIN suppliers s ON s.id = si.supplier_id
+         WHERE ${where.join(" AND ")}
+         ORDER BY date(sp.paid_at) DESC, sp.id DESC`,
+        params,
+        (err, rows) => {
+          if (err) return res.status(500).json({ error: err.message });
+          const total = (rows || []).reduce((s, r) => s + Number(r.amount || 0), 0);
+          res.json({ payments: rows || [], total });
+        },
+      );
+    },
+  );
+
   return router;
 };

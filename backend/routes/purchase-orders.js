@@ -233,17 +233,23 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
                     // Auto-create supplier invoice for this GRN
                     if (po.supplier_id && po.total_cost > 0) {
                       const invNumber = `INV-${grnNumber}`;
-                      db.run(
-                        "INSERT INTO supplier_invoices (supplier_id, po_id, grn_id, invoice_number, amount, due_date) VALUES (?, ?, ?, ?, ?, ?)",
-                        [
-                          po.supplier_id,
-                          po.id,
-                          grnId,
-                          invNumber,
-                          po.total_cost,
-                          po.due_date || null,
-                        ],
-                        () => {}, // best-effort, don't fail the response
+                      // Lookup supplier credit terms to set due_date accurately
+                      db.get(
+                        "SELECT payment_terms, credit_days FROM suppliers WHERE id = ?",
+                        [po.supplier_id],
+                        (sErr, supplier) => {
+                          let dueDate = po.due_date || null;
+                          if (supplier && supplier.payment_terms === "credit" && Number(supplier.credit_days || 0) > 0) {
+                            const d = new Date();
+                            d.setDate(d.getDate() + Number(supplier.credit_days));
+                            dueDate = d.toISOString().slice(0, 10);
+                          }
+                          db.run(
+                            "INSERT INTO supplier_invoices (supplier_id, po_id, grn_id, invoice_number, amount, due_date) VALUES (?, ?, ?, ?, ?, ?)",
+                            [po.supplier_id, po.id, grnId, invNumber, po.total_cost, dueDate],
+                            () => {}, // best-effort
+                          );
+                        },
                       );
                     }
                     createNotification(

@@ -275,7 +275,7 @@ export default function CustomersRedesign() {
   return (
     <PageShell
       title="Customers"
-      subtitle="Shopify-style customer lifecycle view with profile and value metrics."
+      subtitle="Manage customers, loyalty points, and wallet balances."
       right={
         <div className="flex gap-2">
           <Button onClick={() => exportCsv(rows)}>

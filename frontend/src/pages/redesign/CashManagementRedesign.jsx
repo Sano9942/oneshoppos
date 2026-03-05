@@ -220,7 +220,7 @@ export default function CashManagementRedesign() {
   return (
     <PageShell
       title="Cash Management"
-      subtitle="Shopify-style shift operations with opening, close reconciliation, and variance controls."
+      subtitle="Manage shift opening, close reconciliation, and cash variance."
       right={
         <div className="flex gap-2">
           <Button onClick={() => exportCsv(rows)}>

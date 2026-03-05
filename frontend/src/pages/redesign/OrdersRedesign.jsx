@@ -258,7 +258,7 @@ export default function OrdersRedesign() {
   return (
     <PageShell
       title="Orders"
-      subtitle="Shopify-style order operations, filtering, and lifecycle controls."
+      subtitle="View and manage customer orders and fulfilment status."
       right={
         <div className="flex gap-2">
           <Button onClick={() => exportCsv(rows)}>

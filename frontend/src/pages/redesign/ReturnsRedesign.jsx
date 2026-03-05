@@ -263,7 +263,7 @@ export default function ReturnsRedesign() {
   return (
     <PageShell
       title="Returns"
-      subtitle="Shopify-style returns workflow with scan-to-draft and audited restocking."
+      subtitle="Process customer returns and restock inventory."
       right={
         <Button tone="primary" onClick={() => setModalOpen(true)}>
           <Plus size={14} className="mr-1 inline" />

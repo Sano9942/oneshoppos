@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, Search, Trash2, Truck } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
+  Badge,
   Button,
   EmptyState,
   Input,
@@ -10,6 +11,8 @@ import {
   TableToolbar,
 } from "../../ui/primitives";
 
+const CREDIT_DAY_OPTIONS = [0, 7, 14, 30, 45, 60, 90];
+
 const EMPTY = {
   id: null,
   name: "",
@@ -17,7 +20,14 @@ const EMPTY = {
   phone: "",
   email: "",
   address: "",
+  payment_terms: "cash",
+  credit_days: 0,
+  credit_limit: 0,
 };
+
+function fmt(v) {
+  return `PKRs ${Number(v || 0).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 export default function SuppliersRedesign() {
   const [rows, setRows] = useState([]);
@@ -43,9 +53,7 @@ export default function SuppliersRedesign() {
     }
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   const visibleRows = useMemo(() => {
     if (!search.trim()) return rows;
@@ -59,10 +67,10 @@ export default function SuppliersRedesign() {
     );
   }, [rows, search]);
 
-  const openCreate = () => {
-    setForm(EMPTY);
-    setModalOpen(true);
-  };
+  const creditSuppliers = rows.filter((r) => r.payment_terms === "credit");
+  const totalOutstanding = rows.reduce((s, r) => s + Number(r.running_balance || 0), 0);
+
+  const openCreate = () => { setForm(EMPTY); setModalOpen(true); };
 
   const openEdit = (row) => {
     setForm({
@@ -72,6 +80,9 @@ export default function SuppliersRedesign() {
       phone: row.phone || "",
       email: row.email || "",
       address: row.address || "",
+      payment_terms: row.payment_terms || "cash",
+      credit_days: row.credit_days || 0,
+      credit_limit: row.credit_limit || 0,
     });
     setModalOpen(true);
   };
@@ -83,23 +94,22 @@ export default function SuppliersRedesign() {
     try {
       const isEdit = Boolean(form.id);
       const url = isEdit ? `${API}/api/suppliers/${form.id}` : `${API}/api/suppliers`;
-      const method = isEdit ? "PUT" : "POST";
-      const payload = {
-        name: form.name,
-        contact_person: form.contact_person,
-        phone: form.phone,
-        email: form.email,
-        address: form.address,
-      };
-
       const res = await fetch(url, {
-        method,
+        method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          name: form.name,
+          contact_person: form.contact_person,
+          phone: form.phone,
+          email: form.email,
+          address: form.address,
+          payment_terms: form.payment_terms,
+          credit_days: form.payment_terms === "credit" ? Number(form.credit_days) : 0,
+          credit_limit: form.payment_terms === "credit" ? Number(form.credit_limit) : 0,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save supplier");
-
       setModalOpen(false);
       setForm(EMPTY);
       await load();
@@ -126,7 +136,7 @@ export default function SuppliersRedesign() {
   return (
     <PageShell
       title="Suppliers"
-      subtitle="supplier master data with fast search and inline CRUD controls."
+      subtitle="Manage supplier accounts, credit terms, and outstanding balances."
       right={
         <Button tone="primary" onClick={openCreate}>
           <Plus size={14} className="mr-1 inline" />
@@ -140,19 +150,23 @@ export default function SuppliersRedesign() {
         </SectionCard>
       ) : null}
 
-      <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+      <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-4">
         <SectionCard className="p-3">
           <p className="text-xs text-(--ui-text-muted)">Total Suppliers</p>
           <p className="text-2xl font-semibold text-(--ui-text)">{rows.length}</p>
         </SectionCard>
         <SectionCard className="p-3">
-          <p className="text-xs text-(--ui-text-muted)">Visible</p>
-          <p className="text-2xl font-semibold text-(--ui-text)">{visibleRows.length}</p>
+          <p className="text-xs text-(--ui-text-muted)">Credit Suppliers</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">{creditSuppliers.length}</p>
         </SectionCard>
         <SectionCard className="p-3">
-          <p className="text-xs text-(--ui-text-muted)">With Contact Person</p>
-          <p className="text-2xl font-semibold text-(--ui-text)">
-            {rows.filter((r) => r.contact_person).length}
+          <p className="text-xs text-(--ui-text-muted)">Cash Suppliers</p>
+          <p className="text-2xl font-semibold text-(--ui-text)">{rows.length - creditSuppliers.length}</p>
+        </SectionCard>
+        <SectionCard className="p-3">
+          <p className="text-xs text-(--ui-text-muted)">Total Outstanding</p>
+          <p className={`text-xl font-semibold ${totalOutstanding > 0 ? "text-rose-600" : "text-(--ui-text)"}`}>
+            {fmt(totalOutstanding)}
           </p>
         </SectionCard>
       </div>
@@ -161,10 +175,7 @@ export default function SuppliersRedesign() {
         <TableToolbar
           left={
             <div className="relative min-w-65">
-              <Search
-                size={14}
-                className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)"
-              />
+              <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)" />
               <Input
                 className="pl-8"
                 placeholder="Search supplier, contact, phone, or email"
@@ -180,50 +191,78 @@ export default function SuppliersRedesign() {
             <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
               <tr>
                 <th className="px-3 py-2 text-left">Supplier</th>
-                <th className="px-3 py-2 text-left">Contact Person</th>
-                <th className="px-3 py-2 text-left">Phone</th>
-                <th className="px-3 py-2 text-left">Email</th>
+                <th className="px-3 py-2 text-left">Contact</th>
+                <th className="px-3 py-2 text-left">Terms</th>
+                <th className="px-3 py-2 text-right">Outstanding</th>
                 <th className="px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {!loading &&
-                visibleRows.map((row) => (
-                  <tr key={row.id} className="border-t border-(--ui-border)">
-                    <td className="px-3 py-2 font-medium text-(--ui-text)">
-                      <span className="inline-flex items-center gap-1">
-                        <Truck size={12} />
-                        {row.name}
-                      </span>
+              {!loading && visibleRows.map((row) => {
+                const isCredit = row.payment_terms === "credit";
+                const balance = Number(row.running_balance || 0);
+                const overLimit = isCredit && Number(row.credit_limit) > 0 && balance > Number(row.credit_limit);
+                return (
+                  <tr key={row.id} className="border-t border-(--ui-border) hover:bg-(--ui-muted-surface)">
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <Truck size={12} className="text-(--ui-text-muted)" />
+                        <span className="font-medium text-(--ui-text)">{row.name}</span>
+                      </div>
+                      {row.phone && <p className="mt-0.5 text-xs text-(--ui-text-muted)">{row.phone}</p>}
                     </td>
-                    <td className="px-3 py-2 text-(--ui-text-muted)">{row.contact_person || "-"}</td>
-                    <td className="px-3 py-2 text-(--ui-text-muted)">{row.phone || "-"}</td>
-                    <td className="px-3 py-2 text-(--ui-text-muted)">{row.email || "-"}</td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">
+                      {row.contact_person || "-"}
+                      {row.email && <p className="text-xs">{row.email}</p>}
+                    </td>
+                    <td className="px-3 py-2">
+                      {isCredit ? (
+                        <div className="space-y-0.5">
+                          <Badge tone="warning">Credit</Badge>
+                          <p className="text-xs text-(--ui-text-muted)">
+                            {row.credit_days}d terms
+                            {Number(row.credit_limit) > 0 ? ` · limit ${fmt(row.credit_limit)}` : " · no limit"}
+                          </p>
+                        </div>
+                      ) : (
+                        <Badge tone="default">Cash</Badge>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {balance > 0 ? (
+                        <div>
+                          <span className={`font-medium ${overLimit ? "text-rose-600" : "text-(--ui-text)"}`}>
+                            {fmt(balance)}
+                          </span>
+                          {overLimit && (
+                            <p className="text-xs text-rose-500">Over limit</p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-(--ui-text-muted)">Clear</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex gap-2">
-                        <Button size="sm" onClick={() => openEdit(row)}>
-                          Edit
-                        </Button>
+                        <Button size="sm" onClick={() => openEdit(row)}>Edit</Button>
                         <Button size="sm" tone="danger" onClick={() => remove(row)}>
-                          <Trash2 size={12} className="mr-1 inline" />
-                          Delete
+                          <Trash2 size={12} className="mr-1 inline" />Delete
                         </Button>
                       </div>
                     </td>
                   </tr>
-                ))}
+                );
+              })}
             </tbody>
           </table>
-          {loading ? (
-            <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading suppliers...</div>
-          ) : null}
-          {!loading && visibleRows.length === 0 ? (
+          {loading && <div className="p-8 text-center text-sm text-(--ui-text-muted)">Loading suppliers...</div>}
+          {!loading && visibleRows.length === 0 && (
             <EmptyState title="No suppliers" body="Add a supplier to manage procurement workflows." />
-          ) : null}
+          )}
         </div>
       </SectionCard>
 
-      {modalOpen ? (
+      {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
           <SectionCard className="w-full max-w-xl p-4">
             <h3 className="text-lg font-semibold text-(--ui-text)">
@@ -269,17 +308,75 @@ export default function SuppliersRedesign() {
               <div>
                 <label className="mb-1 block text-xs text-(--ui-text-muted)">Address</label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text) placeholder:text-(--ui-text-muted)"
                   placeholder="Address"
                   value={form.address}
                   onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
                 />
               </div>
+
+              {/* Credit Terms Section */}
+              <div className="rounded-lg border border-(--ui-border) p-3">
+                <p className="mb-2 text-xs font-semibold uppercase text-(--ui-text-muted)">Payment Terms</p>
+                <div className="flex gap-2 mb-3">
+                  {["cash", "credit"].map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, payment_terms: t }))}
+                      className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                        form.payment_terms === t
+                          ? "border-(--ui-accent) bg-(--ui-accent)/5 text-(--ui-accent)"
+                          : "border-(--ui-border) text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
+                      }`}
+                    >
+                      {t === "cash" ? "Cash on Delivery" : "Credit Account"}
+                    </button>
+                  ))}
+                </div>
+
+                {form.payment_terms === "credit" && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="mb-1 block text-xs text-(--ui-text-muted)">Credit Days</label>
+                      <select
+                        value={form.credit_days}
+                        onChange={(e) => setForm((p) => ({ ...p, credit_days: Number(e.target.value) }))}
+                        className="w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-white px-3 py-2 text-sm"
+                      >
+                        {CREDIT_DAY_OPTIONS.map((d) => (
+                          <option key={d} value={d}>{d === 0 ? "Custom" : `${d} days`}</option>
+                        ))}
+                      </select>
+                      {!CREDIT_DAY_OPTIONS.includes(Number(form.credit_days)) || form.credit_days === 0 ? (
+                        <Input
+                          type="number"
+                          min={1}
+                          className="mt-1"
+                          placeholder="Enter days"
+                          value={form.credit_days || ""}
+                          onChange={(e) => setForm((p) => ({ ...p, credit_days: Number(e.target.value) }))}
+                        />
+                      ) : null}
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-(--ui-text-muted)">Credit Limit (PKRs)</label>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="0 = no limit"
+                        value={form.credit_limit || ""}
+                        onChange={(e) => setForm((p) => ({ ...p, credit_limit: Number(e.target.value) }))}
+                      />
+                      <p className="mt-1 text-xs text-(--ui-text-muted)">0 means unlimited credit</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="flex gap-2 pt-1">
-                <Button type="button" onClick={() => setModalOpen(false)}>
-                  Cancel
-                </Button>
+                <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
                 <Button tone="primary" type="submit" disabled={saving}>
                   {saving ? "Saving..." : "Save"}
                 </Button>
@@ -287,7 +384,7 @@ export default function SuppliersRedesign() {
             </form>
           </SectionCard>
         </div>
-      ) : null}
+      )}
     </PageShell>
   );
 }

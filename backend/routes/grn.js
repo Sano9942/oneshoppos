@@ -284,4 +284,78 @@ module.exports = function registerGRNRoutes(app, deps) {
       );
     },
   );
+
+  // GET /api/supplier-ledger/:supplier_id — full chronological statement with running balance
+  app.get(
+    "/api/supplier-ledger/:supplier_id",
+    requireFeature("supplier_payables"),
+    (req, res) => {
+      const { supplier_id } = req.params;
+      const { from, to } = req.query || {};
+
+      const dateWhere = [];
+      const invParams = [supplier_id];
+      const payParams = [supplier_id];
+      if (from) {
+        dateWhere.push({ inv: "date(si.created_at) >= ?", pay: "date(sp.paid_at) >= ?" });
+        invParams.push(from); payParams.push(from);
+      }
+      if (to) {
+        dateWhere.push({ inv: "date(si.created_at) <= ?", pay: "date(sp.paid_at) <= ?" });
+        invParams.push(to); payParams.push(to);
+      }
+      const invDateSql = dateWhere.length ? " AND " + dateWhere.map((d) => d.inv).join(" AND ") : "";
+      const payDateSql = dateWhere.length ? " AND " + dateWhere.map((d) => d.pay).join(" AND ") : "";
+
+      db.get("SELECT * FROM suppliers WHERE id = ?", [supplier_id], (err, supplier) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!supplier) return res.status(404).json({ error: "Supplier not found" });
+
+        // Merge invoices (purchases = credit/you owe more) and payments (debit/you paid)
+        db.all(
+          `SELECT si.created_at AS date,
+                  'purchase' AS type,
+                  COALESCE(si.invoice_number, 'INV-' || si.id) AS reference,
+                  si.amount AS amount,
+                  0 AS payment,
+                  si.notes AS notes,
+                  si.status AS status
+           FROM supplier_invoices si
+           WHERE si.supplier_id = ?${invDateSql}
+
+           UNION ALL
+
+           SELECT sp.paid_at AS date,
+                  'payment' AS type,
+                  COALESCE(si2.invoice_number, 'INV-' || sp.supplier_invoice_id) AS reference,
+                  0 AS amount,
+                  sp.amount AS payment,
+                  COALESCE(sp.notes, sp.payment_method) AS notes,
+                  NULL AS status
+           FROM supplier_payments sp
+           LEFT JOIN supplier_invoices si2 ON si2.id = sp.supplier_invoice_id
+           WHERE sp.supplier_id = ?${payDateSql}
+
+           ORDER BY date ASC, type DESC`,
+          [...invParams, ...payParams],
+          (err2, rows) => {
+            if (err2) return res.status(500).json({ error: err2.message });
+
+            // Compute running balance
+            let balance = 0;
+            const entries = (rows || []).map((r) => {
+              balance += Number(r.amount || 0) - Number(r.payment || 0);
+              return { ...r, running_balance: Number(balance.toFixed(2)) };
+            });
+
+            res.json({
+              supplier,
+              entries,
+              closing_balance: Number(balance.toFixed(2)),
+            });
+          },
+        );
+      });
+    },
+  );
 };
