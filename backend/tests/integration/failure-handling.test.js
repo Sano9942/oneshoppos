@@ -136,21 +136,19 @@ describe("FH3 — Shift open with bad denomination count", () => {
 // ─── FH4 ─────────────────────────────────────────────────────────────────────
 
 describe("FH4 — Sale with nonexistent customer_id", () => {
-  // DOCUMENTED BEHAVIOR: The sales table has customer_id REFERENCES customers(id)
-  // and PRAGMA foreign_keys = ON is active in the test environment. Inserting a
-  // sale with a nonexistent customer_id causes a FK constraint violation, which
-  // the route catches and returns as a 500 ("Failed to create sale record").
-  // The customer_id field is logically optional (NULL is accepted) but a non-null
-  // ID that does not exist will be rejected by SQLite FK enforcement.
+  // DOCUMENTED BEHAVIOR: Both the test environment and production have
+  // PRAGMA foreign_keys = ON (db.js line 119, seedSchema.js). A non-null
+  // customer_id that does not exist triggers a FK constraint violation,
+  // which the route catches and returns as 500 ("Failed to create sale record").
+  // NULL customer_id (omitted) is always accepted — customer is optional.
   it("returns an error response when customer_id references a nonexistent customer", async () => {
     const res = await makeRequest(app, ADMIN_ID).post("/api/sales").send({
       cartItems: [{ id: 1, price: 100, quantity: 1 }],
       paymentMethod: "Cash", outlet_id: OUTLET_ID,
       customer_id: 99999,
     });
-    // FK enforcement rejects the INSERT → 500 in test env (FK ON).
-    // In production with FK OFF this would be 200; document both.
-    expect([200, 400, 500]).toContain(res.status);
+    // FK violation → 500; accept 400 in case a future validation layer catches it first.
+    expect([400, 500]).toContain(res.status);
   });
 });
 

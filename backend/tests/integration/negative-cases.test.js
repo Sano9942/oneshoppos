@@ -9,7 +9,7 @@
  * NC1  — POST /api/sales empty cart → 400
  * NC2  — POST /api/sales missing outlet_id → 400
  * NC3  — POST /api/sales negative quantity → 200 (permissive, documented)
- * NC4  — POST /api/sales price as string → 500 (NaN total fails DB insert, documented)
+ * NC4  — POST /api/sales price as string → 400 (input validation rejects non-numeric price)
  * NC5  — POST /api/sales discount exceeds subtotal → 200 (permissive, documented)
  * NC6  — POST /api/returns empty items → 400
  * NC7  — POST /api/returns missing outlet_id → 400
@@ -96,20 +96,16 @@ describe("NC3 — POST /api/sales with negative quantity → 200 (permissive)", 
   });
 });
 
-// ─── NC4 (permissive) ─────────────────────────────────────────────────────────
+// ─── NC4 ──────────────────────────────────────────────────────────────────────
 
-describe("NC4 — POST /api/sales with price as string → 500 (rejects with server error)", () => {
-  // DOCUMENTED CURRENT BEHAVIOR: The API does not validate that price is a number.
-  // A string price like "abc" causes NaN arithmetic for total_amount, which then
-  // fails the SQLite insert (NaN is not a valid numeric value), producing a 500.
-  // This pins the current behavior; a future fix should return 400 instead.
-  it("rejects string price with a server error (documents current behavior)", async () => {
+describe("NC4 — POST /api/sales with price as string → 400 (input validation)", () => {
+  it("rejects non-numeric price with 400", async () => {
     const res = await makeRequest(app, ADMIN_ID).post("/api/sales").send({
       cartItems: [{ id: 1, price: "abc", quantity: 1 }],
       paymentMethod: "Cash",
       outlet_id: OUTLET_ID,
     });
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(400);
   });
 });
 

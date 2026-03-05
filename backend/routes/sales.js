@@ -344,6 +344,11 @@ module.exports = function registerSalesRoutes(app, deps) {
         .status(400)
         .json({ error: "Outlet ID is required for checkout" });
     }
+    for (const item of cartItems) {
+      if (!isFinite(Number(item.price)) || !isFinite(Number(item.quantity))) {
+        return res.status(400).json({ error: "Cart items must have valid numeric price and quantity" });
+      }
+    }
     if (!authenticatedEmployeeId) {
       return res.status(401).json({ error: "Login is required for checkout" });
     }
