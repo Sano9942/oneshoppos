@@ -1,6 +1,6 @@
 # OneShopPOS Testing Strategy and Execution Plan
 
-Updated: 2026-03-06 (Revision 6 — Phases 0-5 complete + SaaS timezone fix)
+Updated: 2026-03-06 (Revision 7 — Phase 6 complete)
 Project: OneShopPOS (`D:\newprojects\oneshoppos`)
 Scope: Backend + Frontend + Role behavior + Workflow integrity
 
@@ -17,9 +17,12 @@ Scope: Backend + Frontend + Role behavior + Workflow integrity
 | Phase 4 | E2E smoke chain | **COMPLETE** | +8 E2E | 277 backend + 8 E2E |
 | Phase 5 | Known bug resolution | **COMPLETE** | 0 new (fixed 3 bugs) | 277 backend + 8 E2E |
 | Post-5 | SaaS timezone fix | **COMPLETE** | +19 unit tests | 277 backend + 19 unit + 8 E2E |
-| Phase 6 | Expansion | Deferred | — | — |
+| Phase 6A | Release blockers — data integrity, negative cases, security, auditability | **COMPLETE** | +39 | 316 backend + 19 unit + 8 E2E |
+| Phase 6B | Hardening — concurrency, failure handling, compliance math | **COMPLETE** | +17 | 333 backend + 19 unit + 8 E2E |
 
-**Current:** `npm run test:integration` → **277/277 passing** (23 test files). `npm run test:unit` → **19/19 passing** (`tz.test.js`). E2E: `smoke-gate.spec.js` (8 tests, S1-S8).
+**Current:** `npm run test:integration` → **333/333 passing** (30 test files). `npm run test:unit` → **19/19 passing** (`tz.test.js`). E2E: `smoke-gate.spec.js` (8 tests, S1-S8).
+
+**Phase 6 also fixed 1 production bug:** B-VARIANT sale path — when `variant_id` was present in a cart item, `outlet_stock` was not decremented (only `product_variants.stock` was). Fixed in `backend/routes/sales.js` by DI3 test.
 
 ---
 
