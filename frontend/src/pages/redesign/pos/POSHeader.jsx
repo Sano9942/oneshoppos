@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Store, ArrowLeft, FileText, Lock, LogOut } from "lucide-react";
+import { Store, ArrowLeft, FileText, Lock, LogOut, History, RotateCcw } from "lucide-react";
 import { usePOS } from "./POSContext";
 
 export default function POSHeader() {
@@ -16,6 +16,11 @@ export default function POSHeader() {
     activeShift,
     canOpenShift,
     setCloseShiftOpen,
+    recentSalesOpen,
+    setRecentSalesOpen,
+    loadRecentSales,
+    setReturnModalOpen,
+    setReturnSourceSale,
   } = usePOS();
 
   return (
@@ -56,6 +61,22 @@ export default function POSHeader() {
             className="flex items-center gap-1 text-violet-500 hover:text-violet-700 font-medium transition text-sm"
           >
             <FileText size={14} /> Last Receipt
+          </button>
+        )}
+        {selectedOutletId && (
+          <button
+            onClick={() => { loadRecentSales(); setRecentSalesOpen(true); }}
+            className="flex items-center gap-1 text-slate-500 hover:text-violet-700 font-medium transition text-sm"
+          >
+            <History size={14} /> Recent Sales
+          </button>
+        )}
+        {selectedOutletId && (
+          <button
+            onClick={() => { setReturnSourceSale(null); setReturnModalOpen(true); }}
+            className="flex items-center gap-1 text-slate-500 hover:text-rose-600 font-medium transition text-sm"
+          >
+            <RotateCcw size={14} /> Return
           </button>
         )}
         {activeShift && canOpenShift && (
