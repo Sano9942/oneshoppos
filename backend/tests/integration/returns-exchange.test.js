@@ -511,7 +511,7 @@ describe("RE6 — Exchange atomic ordering", () => {
 // RE7 — Variant stock handling: BUG — returns.js does NOT restock product_variants.stock
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("RE7 — Variant stock: returns.js does NOT update product_variants.stock (BUG)", () => {
+describe("RE7 — Variant stock: returns.js restocks product_variants.stock (fixed B-VARIANT)", () => {
   let variantId, saleId;
 
   beforeAll(async () => {
@@ -540,7 +540,7 @@ describe("RE7 — Variant stock: returns.js does NOT update product_variants.sto
     expect(variant.stock).toBe(8); // 10 - 2
   });
 
-  it("BUG: return restocks outlet_stock but NOT product_variants.stock", async () => {
+  it("return restocks both outlet_stock and product_variants.stock", async () => {
     const variantStockBefore = await dbGet(
       db,
       "SELECT stock FROM product_variants WHERE id = ?",
@@ -570,14 +570,12 @@ describe("RE7 — Variant stock: returns.js does NOT update product_variants.sto
     );
     expect(outletStockAfter.quantity).toBe(outletStockBefore.quantity + 1);
 
-    // BUG: product_variants.stock is NOT updated — variant stock stays the same
+    // product_variants.stock is also restocked (B-VARIANT fix)
     const variantStockAfter = await dbGet(
       db,
       "SELECT stock FROM product_variants WHERE id = ?",
       [variantId],
     );
-    // This SHOULD be variantStockBefore.stock + 1 after the fix
-    // Currently it stays at 8 — confirming the bug
-    expect(variantStockAfter.stock).toBe(variantStockBefore.stock); // BUG B-VARIANT: no restock
+    expect(variantStockAfter.stock).toBe(variantStockBefore.stock + 1);
   });
 });

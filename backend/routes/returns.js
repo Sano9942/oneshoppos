@@ -33,6 +33,48 @@ module.exports = function registerReturnsRoutes(app, deps) {
         .json({ error: "Outlet ID is required for restocking" });
     }
 
+    // B16 fix: when linked to an original sale, validate each returned item
+    // against what was actually sold (product must exist in sale, qty must not exceed sold qty).
+    function validateAndProceed(cb) {
+      if (!original_sale_id) return cb(null); // Manual return — no bill to validate against
+
+      db.all(
+        "SELECT product_id, SUM(quantity) as sold_qty FROM sale_items WHERE sale_id = ? GROUP BY product_id",
+        [original_sale_id],
+        (err, saleItems) => {
+          if (err) return cb(err);
+          if (!saleItems || saleItems.length === 0) {
+            return cb(new Error("Original sale not found or has no items"));
+          }
+
+          const soldMap = {};
+          saleItems.forEach((si) => { soldMap[si.product_id] = si.sold_qty; });
+
+          for (const item of items) {
+            if (!(item.product_id in soldMap)) {
+              return cb(new Error(`Product ${item.product_id} was not part of the original sale`));
+            }
+            if (item.quantity > soldMap[item.product_id]) {
+              return cb(new Error(
+                `Return quantity ${item.quantity} for product ${item.product_id} exceeds sold quantity ${soldMap[item.product_id]}`
+              ));
+            }
+          }
+
+          cb(null);
+        },
+      );
+    }
+
+    validateAndProceed((validationErr) => {
+      if (validationErr) {
+        return res.status(400).json({ error: validationErr.message });
+      }
+
+      processReturn();
+    });
+
+    function processReturn() {
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
 
@@ -64,6 +106,9 @@ module.exports = function registerReturnsRoutes(app, deps) {
           VALUES (?, ?, ?)
           ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = quantity + ?
         `);
+          const updateVariantStockStmt = db.prepare(
+            "UPDATE product_variants SET stock = stock + ? WHERE id = ?",
+          );
 
           let hasError = false;
 
@@ -77,7 +122,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
                 if (err) hasError = true;
               },
             );
-            // Restock the returned items
+            // Restock outlet_stock for all returned items
             updateStockStmt.run(
               item.product_id,
               outlet_id,
@@ -87,10 +132,17 @@ module.exports = function registerReturnsRoutes(app, deps) {
                 if (err) hasError = true;
               },
             );
+            // Restock variant stock if this item was a variant
+            if (item.variant_id) {
+              updateVariantStockStmt.run(item.quantity, item.variant_id, (err) => {
+                if (err) hasError = true;
+              });
+            }
           });
 
           insertItemStmt.finalize();
           updateStockStmt.finalize();
+          updateVariantStockStmt.finalize();
 
           if (hasError) {
             db.run("ROLLBACK");
@@ -121,6 +173,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
         },
       );
     });
+    } // end processReturn
   });
 
   // Get all returns (with details)

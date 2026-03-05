@@ -155,6 +155,13 @@ module.exports = function (app, deps) {
         if (!shift)
           return res.status(404).json({ error: "Open shift not found" });
 
+        // Capture close time as the upper bound for sales/refunds — prevents any
+        // sales that happen after this shift closes from leaking into the reconciliation.
+        const closedAt = new Date()
+          .toISOString()
+          .replace("T", " ")
+          .slice(0, 19);
+
         // Sum all cash payments for this outlet during this shift period
         db.get(
           `SELECT COALESCE(SUM(sp.amount), 0) as cash_sales
@@ -163,8 +170,9 @@ module.exports = function (app, deps) {
        WHERE s.outlet_id = ?
          AND s.voided = 0
          AND sp.payment_method = 'Cash'
-         AND s.timestamp >= ?`,
-          [shift.outlet_id, shift.opened_at],
+         AND s.timestamp >= ?
+         AND s.timestamp <= ?`,
+          [shift.outlet_id, shift.opened_at, closedAt],
           (err, row) => {
             if (err) return res.status(500).json({ error: err.message });
 
@@ -175,8 +183,9 @@ module.exports = function (app, deps) {
              FROM returns
              WHERE outlet_id = ?
                AND refund_method = 'Cash'
-               AND timestamp >= ?`,
-              [shift.outlet_id, shift.opened_at],
+               AND timestamp >= ?
+               AND timestamp <= ?`,
+              [shift.outlet_id, shift.opened_at, closedAt],
               (err, refundRow) => {
                 if (err) return res.status(500).json({ error: err.message });
 
@@ -185,10 +194,6 @@ module.exports = function (app, deps) {
                 const expectedCash =
                   parseFloat(shift.opening_float) + netCashSales;
                 const variance = parseFloat(closing_cash) - expectedCash;
-                const closedAt = new Date()
-                  .toISOString()
-                  .replace("T", " ")
-                  .slice(0, 19);
 
                 db.run(
                   `UPDATE cash_shifts

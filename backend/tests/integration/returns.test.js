@@ -140,7 +140,7 @@ describe("POST /api/returns — Create Return", () => {
     expect(res.body.error).toMatch(/items/i);
   });
 
-  it("BUG B16: return with product NOT in original sale succeeds — no validation", async () => {
+  it("return with product NOT in original sale is rejected — 400 (B16 fixed)", async () => {
     // Product 4 was never in the sale (only products 1 & 2 were)
     const res = await makeRequest(app, MANAGER_ID)
       .post("/api/returns")
@@ -154,11 +154,11 @@ describe("POST /api/returns — Create Return", () => {
         items: [{ product_id: 4, quantity: 1, refund_price: 50 }],
       });
 
-    // BUG: B16 — No validation that product_id=4 was part of original sale
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/not part of the original sale/i);
   });
 
-  it("BUG B16: return qty exceeding sold qty succeeds — no validation", async () => {
+  it("return qty exceeding sold qty is rejected — 400 (B16 fixed)", async () => {
     // Original sale had qty=3 of product 1, try to return 10
     const res = await makeRequest(app, MANAGER_ID)
       .post("/api/returns")
@@ -172,8 +172,8 @@ describe("POST /api/returns — Create Return", () => {
         items: [{ product_id: 1, quantity: 10, refund_price: 100 }],
       });
 
-    // BUG: B16 — No quantity validation against original sale
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/exceeds sold quantity/i);
   });
 
   it("cashier without manage_orders permission is blocked from returns (PERMISSION_RULES: manage_orders)", async () => {
