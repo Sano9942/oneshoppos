@@ -32,6 +32,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
   - `ShopifyIntegrationRedesign.jsx` is still mainly a shell wrapper
 - Context Unification is live — mandatory post-login branch selection, backend enforcement via `x-outlet-id` header, kiosk context lock
 - Current live E2E batches passing include report smokes plus `pos.spec.js`, `kiosk.spec.js`, and `rbac.spec.js`
+- POS Recent Sales panel and Return/Exchange modal shipped (Mar 2026)
 
 ## Project Structure
 
@@ -175,6 +176,23 @@ oneshoppos/
 - Category tree UI helpers: `frontend/src/utils/categoryTree.js`
 - Tailwind v4: use `(--css-var)` syntax not `[var(--css-var)]`
 
+## Common Gotchas
+
+### Global fetch interceptor (AuthProvider)
+- `AuthProvider.jsx` patches `window.fetch` to inject `x-outlet-id` + `x-scope-mode` headers
+- Headers are ONLY injected when the URL contains `/api/` — missing the prefix = no context headers = "Context required" error
+- Always use `${API}/api/<route>` not `${API}/<route>` in frontend fetch calls
+
+### Sales table schema
+- The sale timestamp column is named `timestamp`, NOT `created_at` — using `created_at` silently returns undefined
+
+### POS architecture (`redesign/pos/`)
+- All POS state lives in `POSContext.jsx` — 128+ exported values. Add new state/functions here, mount new modals in `POSRedesign.jsx`
+- New POS components must call all hooks (`useMemo`, `useCallback`, etc.) BEFORE any conditional early return
+- `POST /api/sales` requires: active shift + clocked-in employee — exchange sales from return flow will fail if shift is closed
+- `POST /api/sales` stock deduction: uses `item.variant_id` for variant stock (`product_variants` table), `item.id` for `outlet_stock` — always pass `variant_id` when known
+- POS Recent Sales + Return/Exchange flow: `POSRecentSalesPanel.jsx` + `POSReturnExchangeModal.jsx` (both new, Mar 2026)
+
 ## Refactor History
 
 Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
@@ -186,3 +204,4 @@ Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
 - Mar 2026: Reports V2 — 8 backend + 6 frontend modules, 67 tabs, 74 endpoints
 - Mar 2026: POS opening/closing workflow hardened (branch + shift + attendance gating)
 - Mar 2026: Context Unification shipped — mandatory post-login branch context, role-scope enforcement, header propagation (migrate61, 3 flags live)
+- Mar 2026: POS Recent Sales + Return/Exchange flow shipped — reprint bills, full refund, exchange with balance settlement

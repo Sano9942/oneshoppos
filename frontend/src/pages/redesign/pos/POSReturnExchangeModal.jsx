@@ -15,7 +15,6 @@ export default function POSReturnExchangeModal() {
     selectedOutletId,
     employee,
     authHeaders,
-    customers,
     printSlip,
     outlets,
     showNotice,
@@ -33,6 +32,7 @@ export default function POSReturnExchangeModal() {
   // Separate search state for no-bill return items vs exchange replacement items
   const [returnSearch, setReturnSearch] = useState("");
   const [returnSearchResults, setReturnSearchResults] = useState([]);
+  const [returnSearching, setReturnSearching] = useState(false);
   const [exSearch, setExSearch] = useState("");
   const [exResults, setExResults] = useState([]);
   const [exSearching, setExSearching] = useState(false);
@@ -105,7 +105,21 @@ export default function POSReturnExchangeModal() {
     }
   };
 
-  const searchProducts = useCallback(async (q, setResults) => {
+  // Separate product search functions with their own loading state
+  const searchReturnProducts = useCallback(async (q) => {
+    if (!q.trim() || !selectedOutletId) return;
+    setReturnSearching(true);
+    try {
+      const res = await fetch(
+        `${API}/api/products/search?query=${encodeURIComponent(q)}&outlet_id=${selectedOutletId}`,
+        { headers: authHeaders() },
+      );
+      const data = await res.json();
+      setReturnSearchResults(data.products || data.results || []);
+    } catch { setReturnSearchResults([]); } finally { setReturnSearching(false); }
+  }, [selectedOutletId, authHeaders]);
+
+  const searchExchangeProducts = useCallback(async (q) => {
     if (!q.trim() || !selectedOutletId) return;
     setExSearching(true);
     try {
@@ -114,27 +128,41 @@ export default function POSReturnExchangeModal() {
         { headers: authHeaders() },
       );
       const data = await res.json();
-      setResults(data.products || data.results || []);
-    } catch { setResults([]); } finally { setExSearching(false); }
+      setExResults(data.products || data.results || []);
+    } catch { setExResults([]); } finally { setExSearching(false); }
   }, [selectedOutletId, authHeaders]);
 
   // Debounce for no-bill return item search
   useEffect(() => {
-    const t = setTimeout(() => { if (returnSearch) searchProducts(returnSearch, setReturnSearchResults); else setReturnSearchResults([]); }, 350);
+    const t = setTimeout(() => {
+      if (returnSearch) searchReturnProducts(returnSearch);
+      else setReturnSearchResults([]);
+    }, 350);
     return () => clearTimeout(t);
-  }, [returnSearch, searchProducts]);
+  }, [returnSearch, searchReturnProducts]);
 
   // Debounce for exchange replacement product search
   useEffect(() => {
-    const t = setTimeout(() => { if (exSearch) searchProducts(exSearch, setExResults); else setExResults([]); }, 350);
+    const t = setTimeout(() => {
+      if (exSearch) searchExchangeProducts(exSearch);
+      else setExResults([]);
+    }, 350);
     return () => clearTimeout(t);
-  }, [exSearch, searchProducts]);
+  }, [exSearch, searchExchangeProducts]);
 
+  // Store variant_id on exchange items so backend can decrement variant stock correctly
   const addExchangeItem = (p) => {
     setExchangeItems((prev) => {
-      const existing = prev.find((i) => i.id === p.id);
-      if (existing) return prev.map((i) => i.id === p.id ? { ...i, qty: i.qty + 1 } : i);
-      return [...prev, { id: p.id, name: p.name, qty: 1, price: Number(p.price || 0) }];
+      const key = p.variant_id || p.id;
+      const existing = prev.find((i) => (i.variant_id || i.id) === key);
+      if (existing) return prev.map((i) => (i.variant_id || i.id) === key ? { ...i, qty: i.qty + 1 } : i);
+      return [...prev, {
+        id: p.id,
+        variant_id: p.variant_id || null,
+        name: p.name,
+        qty: 1,
+        price: Number(p.price || 0),
+      }];
     });
     setExSearch(""); setExResults([]);
   };
@@ -142,7 +170,7 @@ export default function POSReturnExchangeModal() {
   const addReturnItem = (p) => {
     setReturnItems((prev) => {
       if (prev.find((i) => i.product_id === p.id)) return prev;
-      return [...prev, { product_id: p.id, variant_id: null, name: p.name, price: Number(p.price || 0), maxQty: 99 }];
+      return [...prev, { product_id: p.id, variant_id: p.variant_id || null, name: p.name, price: Number(p.price || 0), maxQty: 99 }];
     });
     setReturnQtys((q) => ({ ...q, [p.id]: 1 }));
     setReturnSearch(""); setReturnSearchResults([]);
@@ -169,6 +197,10 @@ export default function POSReturnExchangeModal() {
       setError("Select at least one item to return.");
       return;
     }
+    if (mode === "exchange" && selectedItems.length === 0) {
+      setError("Select at least one item to return before exchanging.");
+      return;
+    }
     if (mode === "exchange" && exchangeItems.length === 0) {
       setError("Add at least one replacement item for the exchange.");
       return;
@@ -182,20 +214,34 @@ export default function POSReturnExchangeModal() {
       // For exchange: POST sale FIRST — if shift is closed this fails before return is posted,
       // preventing the inconsistent state of restocked inventory without a recorded sale.
       if (mode === "exchange" && exchangeItems.length > 0) {
-        salePayments = [];
-        if (refundTotal > 0) salePayments.push({ method: "Return Credit", amount: refundTotal });
-        if (balance > 0) salePayments.push({ method: settleMethod, amount: balance });
+        // Build payments: Return Credit covers the refund value; customer pays the remainder.
+        // For even exchange (balance === 0), total will be 0 so no payment needed.
+        if (balance < 0) {
+          // Customer is owed money back — Return Credit covers entire exchange total
+          salePayments = [{ method: "Return Credit", amount: exchangeTotal }];
+        } else if (balance > 0) {
+          // Customer pays the difference
+          if (refundTotal > 0) salePayments.push({ method: "Return Credit", amount: refundTotal });
+          salePayments.push({ method: settleMethod, amount: balance });
+        }
+        // balance === 0: even exchange — Return Credit covers exactly exchangeTotal
+        // Total = exchangeTotal - refundTotal = 0, so no payment entry needed at all
 
         const saleRes = await fetch(`${API}/api/sales`, {
           method: "POST",
           headers: { ...authHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({
-            cartItems: exchangeItems.map((i) => ({ id: i.id, quantity: i.qty, price: i.price })),
+            cartItems: exchangeItems.map((i) => ({
+              id: i.id,
+              variant_id: i.variant_id || null,
+              quantity: i.qty,
+              price: i.price,
+            })),
             payments: salePayments,
             outlet_id: Number(selectedOutletId),
             employee_id: employee?.id || null,
             customer_id: null,
-            discount_amount: 0,
+            discount_amount: refundTotal,
             discount_type: "fixed",
             notes: `Exchange for ${resolvedSale?.invoice_number || "return"}`,
           }),
@@ -215,7 +261,7 @@ export default function POSReturnExchangeModal() {
             employee_id: employee?.id || null,
             customer_id: null,
             total_refund: refundTotal,
-            refund_method: balance >= 0 ? "Return Credit" : settleMethod,
+            refund_method: mode === "exchange" ? "Return Credit" : settleMethod,
             reason: reason || null,
             items: selectedItems,
           }),
@@ -343,7 +389,7 @@ export default function POSReturnExchangeModal() {
                 <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400 pointer-events-none" />
                 <input
                   className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-300"
-                  placeholder="Search product to return"
+                  placeholder={returnSearching ? "Searching..." : "Search product to return"}
                   value={returnSearch}
                   onChange={(e) => setReturnSearch(e.target.value)}
                 />
@@ -419,7 +465,7 @@ export default function POSReturnExchangeModal() {
                 <ShoppingCart size={13} className="absolute left-2.5 top-2.5 text-slate-400 pointer-events-none" />
                 <input
                   className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-300"
-                  placeholder="Search product to exchange for"
+                  placeholder={exSearching ? "Searching..." : "Search product to exchange for"}
                   value={exSearch}
                   onChange={(e) => setExSearch(e.target.value)}
                 />
@@ -428,7 +474,7 @@ export default function POSReturnExchangeModal() {
                 <div className="border border-slate-200 rounded-lg overflow-hidden mb-2 max-h-40 overflow-y-auto">
                   {exResults.map((p) => (
                     <button
-                      key={p.id}
+                      key={p.variant_id || p.id}
                       onClick={() => addExchangeItem(p)}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
                     >
@@ -440,13 +486,13 @@ export default function POSReturnExchangeModal() {
               {exchangeItems.length > 0 && (
                 <div className="space-y-1 mt-2">
                   {exchangeItems.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between gap-3 p-2 border border-slate-100 rounded-lg">
+                    <div key={item.variant_id || item.id} className="flex items-center justify-between gap-3 p-2 border border-slate-100 rounded-lg">
                       <p className="text-sm flex-1 text-slate-800">{item.name}</p>
                       <div className="flex items-center gap-2">
-                        <button onClick={() => setExchangeItems((p) => p.map((i) => i.id === item.id ? { ...i, qty: Math.max(1, i.qty - 1) } : i))} className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-slate-500"><Minus size={12} /></button>
+                        <button onClick={() => setExchangeItems((p) => p.map((i) => (i.variant_id || i.id) === (item.variant_id || item.id) ? { ...i, qty: Math.max(1, i.qty - 1) } : i))} className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-slate-500"><Minus size={12} /></button>
                         <span className="w-6 text-center text-sm">{item.qty}</span>
-                        <button onClick={() => setExchangeItems((p) => p.map((i) => i.id === item.id ? { ...i, qty: i.qty + 1 } : i))} className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-slate-500"><Plus size={12} /></button>
-                        <button onClick={() => setExchangeItems((p) => p.filter((i) => i.id !== item.id))} className="text-rose-400 hover:text-rose-600 ml-1"><X size={13} /></button>
+                        <button onClick={() => setExchangeItems((p) => p.map((i) => (i.variant_id || i.id) === (item.variant_id || item.id) ? { ...i, qty: i.qty + 1 } : i))} className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-slate-500"><Plus size={12} /></button>
+                        <button onClick={() => setExchangeItems((p) => p.filter((i) => (i.variant_id || i.id) !== (item.variant_id || item.id)))} className="text-rose-400 hover:text-rose-600 ml-1"><X size={13} /></button>
                       </div>
                     </div>
                   ))}

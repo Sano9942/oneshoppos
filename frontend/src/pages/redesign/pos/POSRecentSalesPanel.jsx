@@ -59,7 +59,7 @@ export default function POSRecentSalesPanel() {
         employee: s.employee_name ? { name: s.employee_name } : (employee || null),
         discountAmount: s.discount_amount || 0,
         discountType: s.discount_type || "fixed",
-        timestamp: new Date(s.created_at || Date.now()).toLocaleString(),
+        timestamp: new Date(s.timestamp || Date.now()).toLocaleString(),
       };
       printSlip(slip);
     } catch {
@@ -113,7 +113,7 @@ export default function POSRecentSalesPanel() {
                   {sale.customer_name || "Walk-in"} · {money(sale.total_amount)}
                 </p>
                 <p className="text-xs text-slate-400">
-                  {new Date(sale.created_at || Date.now()).toLocaleTimeString()}
+                  {new Date(sale.timestamp || Date.now()).toLocaleTimeString()}
                 </p>
               </div>
               <div className="flex gap-1.5 shrink-0">

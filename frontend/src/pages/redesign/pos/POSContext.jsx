@@ -643,6 +643,12 @@ export const POSProvider = ({ children }) => {
     b.appendChild(totalRow);
     s.payments.forEach((p) => b.appendChild(row(p.method, money(p.amount))));
     if (s.change > 0) b.appendChild(row("Change", money(s.change)));
+    if (s.refundNote) {
+      const note = d.createElement("div");
+      note.textContent = s.refundNote;
+      note.style.marginTop = "4px";
+      b.appendChild(note);
+    }
     b.appendChild(d.createElement("hr"));
     b.appendChild(txt("div", "Thank you for your purchase!", "c"));
     w.print();
