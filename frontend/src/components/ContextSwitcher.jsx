@@ -6,7 +6,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { API_BASE as API } from "../config";
 
 export default function ContextSwitcher() {
-  const { employee } = useAuth();
+  const { employee, hasPerm } = useAuth();
   const navigate = useNavigate();
   const [ctx, setCtx] = useState(() => readContext());
   const [outlets, setOutlets] = useState([]);
@@ -35,22 +35,25 @@ export default function ContextSwitcher() {
 
   const switchOutlet = useCallback(
     (outletId) => {
+      const isAllowed = outlets.some((o) => Number(o.id) === Number(outletId));
+      if (!isAllowed) return;
       const current = readContext() || {};
       const next = { ...current, active_outlet_id: outletId, scope_mode: "single_branch" };
       writeContext(next);
       setCtx(next);
       setOpen(false);
     },
-    [],
+    [outlets],
   );
 
   const switchToAll = useCallback(() => {
+    if (!hasPerm("all_access")) return;
     const current = readContext() || {};
     const next = { ...current, active_outlet_id: null, scope_mode: "all_branches" };
     writeContext(next);
     setCtx(next);
     setOpen(false);
-  }, []);
+  }, [hasPerm]);
 
   const goToContextSelect = useCallback(() => {
     setOpen(false);
@@ -65,6 +68,7 @@ export default function ContextSwitcher() {
   const label = ctx.scope_mode === "all_branches"
     ? "All Branches"
     : currentOutlet?.name || `Outlet #${ctx.active_outlet_id}`;
+  const isAdmin = hasPerm("all_access");
 
   return (
     <div ref={ref} className="relative">
@@ -84,13 +88,15 @@ export default function ContextSwitcher() {
       {open && (
         <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-md border border-(--ui-border) bg-white shadow-lg">
           <div className="p-1.5">
-            <button
-              onClick={switchToAll}
-              className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-(--ui-muted-surface) ${ctx.scope_mode === "all_branches" ? "bg-emerald-50 text-emerald-700 font-medium" : "text-(--ui-text)"}`}
-            >
-              <Building2 size={12} />
-              All Branches
-            </button>
+            {isAdmin && (
+              <button
+                onClick={switchToAll}
+                className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-(--ui-muted-surface) ${ctx.scope_mode === "all_branches" ? "bg-emerald-50 text-emerald-700 font-medium" : "text-(--ui-text)"}`}
+              >
+                <Building2 size={12} />
+                All Branches
+              </button>
+            )}
             {outlets.map((o) => (
               <button
                 key={o.id}

@@ -209,3 +209,16 @@ The correct business order is now:
 8. employee end-of-day clock out
 
 This is the official recommended operating procedure for this project.
+
+Your system does not use a separate password for employee login.
+Login is:
+
+username = employee name
+pin = employee pin_code
+(see auth.js)
+Live credentials from DB:
+
+Hassan / 2580 (Administrator)
+mubashir / 2222 (Manager)
+ishtiaq / 3333 (Cashier)
+naeem shah / 1234 (Manager)

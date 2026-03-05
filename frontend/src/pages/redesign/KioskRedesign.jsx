@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { API_BASE } from "../../config";
+import { readContext } from "../../auth/authStore";
 
 const API = `${API_BASE}/api`;
 
@@ -72,9 +73,11 @@ export default function KioskRedesign() {
         (f) => f.key === "kiosk_context_locked" && Number(f.enabled) === 1,
       );
       setKioskLocked(locked);
-      // Auto-select outlet from URL param
-      if (urlOutletId) {
-        const match = outList.find((o) => o.id === urlOutletId);
+      // Prefer URL outlet, otherwise inherit current app context outlet.
+      const contextOutletId = Number(readContext()?.active_outlet_id || 0) || null;
+      const preferredOutletId = urlOutletId || contextOutletId;
+      if (preferredOutletId) {
+        const match = outList.find((o) => o.id === preferredOutletId);
         if (match) setOutlet(match);
       }
     }).catch(() => {});
@@ -114,7 +117,7 @@ export default function KioskRedesign() {
       const res = await fetch(`${API}/attendance/pin-status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin_code: pin }),
+        body: JSON.stringify({ pin_code: pin, outlet_id: outlet.id }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -176,7 +179,11 @@ export default function KioskRedesign() {
       const res = await fetch(`${API}/attendance/pin-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin_code: pin, break_reason: breakReason }),
+        body: JSON.stringify({
+          pin_code: pin,
+          break_reason: breakReason,
+          outlet_id: outlet?.id || null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -203,7 +210,11 @@ export default function KioskRedesign() {
       const res = await fetch(`${API}/attendance/pin-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin_code: pin, break_reason: null }),
+        body: JSON.stringify({
+          pin_code: pin,
+          break_reason: null,
+          outlet_id: outlet?.id || null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {

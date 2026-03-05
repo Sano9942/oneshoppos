@@ -4,21 +4,30 @@ import { readContext } from "../auth/authStore";
 import useFeatureFlags from "../hooks/useFeatureFlags";
 
 export default function RequireContext({ children }) {
-  const { authHeaders } = useAuth();
+  const { authHeaders, hasPerm } = useAuth();
   const { flags, loading } = useFeatureFlags(authHeaders);
   const location = useLocation();
 
-  // While loading flags, render children to avoid flash
-  if (loading) return children;
+  // Do not render protected pages until context policy flags are known.
+  // Rendering early can trigger API calls before context checks settle.
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100 text-slate-600 text-sm font-medium">
+        Loading context...
+      </div>
+    );
+  }
 
   // If feature flag is off, pass through — backward compatible
   if (!flags.context_selection_required) return children;
 
   // Check for valid context
   const context = readContext();
+  const allBranchesAllowed = hasPerm("all_access");
   const hasContext =
     context &&
-    (context.scope_mode === "all_branches" || context.active_outlet_id);
+    ((context.scope_mode === "all_branches" && allBranchesAllowed) ||
+      context.active_outlet_id);
 
   if (hasContext) return children;
 

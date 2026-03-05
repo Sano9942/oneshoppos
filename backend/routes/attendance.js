@@ -19,6 +19,22 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // Helper: current datetime as "YYYY-MM-DD HH:MM:SS" in local time
   const nowLocal = () => new Date().toLocaleString("sv-SE").replace("T", " ").slice(0, 19);
 
+  function isEmployeeAssignedToOutlet(employeeId, outletId) {
+    return new Promise((resolve, reject) => {
+      db.get(
+        `SELECT 1
+         FROM employee_outlets
+         WHERE employee_id = ? AND outlet_id = ?
+         LIMIT 1`,
+        [Number(employeeId), Number(outletId)],
+        (err, row) => {
+          if (err) return reject(err);
+          resolve(Boolean(row));
+        },
+      );
+    });
+  }
+
   function getEmployeeStatusForToday(employeeId, outletId = null) {
     const today = todayLocal();
     const outletClause = outletId ? " AND outlet_id = ?" : "";
@@ -156,24 +172,40 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // Intentionally unauthenticated — PIN is the authentication
   // ---------------------------------------------------------------------------
   app.post("/api/attendance/pin-status", (req, res) => {
-    const { pin_code } = req.body || {};
+    const { pin_code, outlet_id = null } = req.body || {};
     if (!pin_code) return res.status(400).json({ error: "pin_code is required" });
 
     db.get(
       "SELECT id, name FROM employees WHERE pin_code = ?",
       [pin_code],
-      (err, emp) => {
+      async (err, emp) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!emp) return res.status(401).json({ error: "Invalid PIN" });
 
+        const outletId = outlet_id ? Number(outlet_id) : null;
+        if (outletId) {
+          try {
+            const assigned = await isEmployeeAssignedToOutlet(emp.id, outletId);
+            if (!assigned) {
+              return res.status(403).json({
+                error: "You are not assigned to this store. Contact an administrator.",
+              });
+            }
+          } catch (assignErr) {
+            return res.status(500).json({ error: assignErr.message });
+          }
+        }
+
         const today = todayLocal();
+        const outletClause = outletId ? " AND outlet_id = ?" : "";
+        const outletParams = outletId ? [outletId] : [];
 
         // Find open session (if any)
         db.get(
           `SELECT * FROM attendance_sessions
            WHERE employee_id = ? AND session_end IS NULL
-             AND date(session_start, 'localtime') = ?`,
-          [emp.id, today],
+             AND date(session_start, 'localtime') = ?${outletClause}`,
+          [emp.id, today, ...outletParams],
           (err2, openSession) => {
             if (err2) return res.status(500).json({ error: err2.message });
 
@@ -183,9 +215,9 @@ module.exports = function registerAttendanceRoutes(app, deps) {
                  COALESCE(SUM(CASE WHEN session_type = 'work' THEN duration_hours ELSE 0 END), 0) AS net_work_hours,
                  COALESCE(SUM(CASE WHEN session_type = 'break' THEN duration_hours ELSE 0 END), 0) AS break_hours
                FROM attendance_sessions
-               WHERE employee_id = ? AND date(session_start, 'localtime') = ?
+               WHERE employee_id = ? AND date(session_start, 'localtime') = ?${outletClause}
                  AND session_end IS NOT NULL`,
-              [emp.id, today],
+              [emp.id, today, ...outletParams],
               (err3, totals) => {
                 if (err3) return res.status(500).json({ error: err3.message });
 
@@ -204,8 +236,8 @@ module.exports = function registerAttendanceRoutes(app, deps) {
                 // No open session — check if they had any sessions today
                 db.get(
                   `SELECT COUNT(*) AS cnt FROM attendance_sessions
-                   WHERE employee_id = ? AND date(session_start, 'localtime') = ?`,
-                  [emp.id, today],
+                   WHERE employee_id = ? AND date(session_start, 'localtime') = ?${outletClause}`,
+                  [emp.id, today, ...outletParams],
                   (err4, countRow) => {
                     if (err4) return res.status(500).json({ error: err4.message });
                     const status = countRow.cnt > 0 ? "clocked_out" : "not_clocked_in";
@@ -262,9 +294,20 @@ module.exports = function registerAttendanceRoutes(app, deps) {
     db.get(
       "SELECT id, name FROM employees WHERE pin_code = ?",
       [pin_code],
-      (err, emp) => {
+      async (err, emp) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!emp) return res.status(401).json({ error: "Invalid PIN" });
+
+        try {
+          const assigned = await isEmployeeAssignedToOutlet(emp.id, outlet_id);
+          if (!assigned) {
+            return res.status(403).json({
+              error: "You are not assigned to this store. Contact an administrator.",
+            });
+          }
+        } catch (assignErr) {
+          return res.status(500).json({ error: assignErr.message });
+        }
 
         const today = todayLocal();
         const now = nowLocal();
@@ -279,6 +322,15 @@ module.exports = function registerAttendanceRoutes(app, deps) {
 
             if (openSession && openSession.session_type === "work") {
               return res.status(400).json({ error: "Already clocked in", status: "clocked_in" });
+            }
+            if (
+              openSession &&
+              openSession.session_type === "break" &&
+              Number(openSession.outlet_id) !== Number(outlet_id)
+            ) {
+              return res.status(409).json({
+                error: "Return from break at the same store where the break started.",
+              });
             }
 
             // Insert a new work session, then return it
@@ -354,7 +406,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // break_reason: 'lunch'|'prayer'|'bathroom'|'personal'|'other'|null (null = end of day)
   // ---------------------------------------------------------------------------
   app.post("/api/attendance/pin-checkout", (req, res) => {
-    const { pin_code, break_reason = null } = req.body || {};
+    const { pin_code, break_reason = null, outlet_id = null } = req.body || {};
     if (!pin_code) return res.status(400).json({ error: "pin_code is required" });
 
     const VALID_REASONS = ["lunch", "prayer", "bathroom", "personal", "other"];
@@ -367,9 +419,22 @@ module.exports = function registerAttendanceRoutes(app, deps) {
     db.get(
       "SELECT id, name FROM employees WHERE pin_code = ?",
       [pin_code],
-      (err, emp) => {
+      async (err, emp) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!emp) return res.status(401).json({ error: "Invalid PIN" });
+
+        if (outlet_id) {
+          try {
+            const assigned = await isEmployeeAssignedToOutlet(emp.id, outlet_id);
+            if (!assigned) {
+              return res.status(403).json({
+                error: "You are not assigned to this store. Contact an administrator.",
+              });
+            }
+          } catch (assignErr) {
+            return res.status(500).json({ error: assignErr.message });
+          }
+        }
 
         const today = todayLocal();
         const now = nowLocal();
@@ -383,6 +448,11 @@ module.exports = function registerAttendanceRoutes(app, deps) {
             if (err2) return res.status(500).json({ error: err2.message });
             if (!openWork)
               return res.status(400).json({ error: "Not clocked in", status: "not_clocked_in" });
+            if (outlet_id && Number(openWork.outlet_id) !== Number(outlet_id)) {
+              return res.status(409).json({
+                error: "Selected store does not match your active work session.",
+              });
+            }
 
             const workDuration = calcHours(openWork.session_start, now);
 
@@ -457,7 +527,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   // PUT /api/attendance/:id — manager manually corrects a day-level record
   // ---------------------------------------------------------------------------
-  app.put("/api/attendance/:id", requirePerm("manage_employees"), (req, res) => {
+  app.put("/api/attendance/:id", requirePerm("all_access"), (req, res) => {
     const { id } = req.params;
     const { check_in, check_out, status, comment } = req.body || {};
 
@@ -489,7 +559,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.get(
     "/api/employees/:id/attendance-config",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     (req, res) => {
       db.get(
         "SELECT id, work_hours_per_day, monthly_leave_allowance FROM employees WHERE id = ?",
@@ -512,7 +582,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.put(
     "/api/employees/:id/attendance-config",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     (req, res) => {
       const { work_hours_per_day, monthly_leave_allowance } = req.body || {};
       db.run(

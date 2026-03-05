@@ -21,8 +21,9 @@ export function AuthProvider({ children }) {
   const permissions = session?.permissions || EMPTY_PERMISSIONS;
   const isAuthenticated = Boolean(employee?.id);
 
-  const refreshPermissions = async (roleId) => {
-    const res = await fetch(`${API}/api/roles/${roleId}/permissions`);
+  const refreshPermissions = async (roleId, employeeId = null) => {
+    const headers = employeeId ? { "x-employee-id": String(employeeId) } : {};
+    const res = await fetch(`${API}/api/roles/${roleId}/permissions`, { headers });
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.error || "Failed to load permissions");
@@ -87,7 +88,10 @@ export function AuthProvider({ children }) {
       }
 
       try {
-        const freshPerms = await refreshPermissions(existing.employee.role_id);
+        const freshPerms = await refreshPermissions(
+          existing.employee.role_id,
+          existing.employee.id,
+        );
         const refreshed = {
           employee: existing.employee,
           permissions: freshPerms,

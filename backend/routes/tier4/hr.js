@@ -10,7 +10,7 @@ module.exports = function createHRRouter({
 
   router.get(
     "/api/hr/leave",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     requireFeature("advanced_hr"),
     (req, res) => {
       db.all(
@@ -30,7 +30,7 @@ module.exports = function createHRRouter({
 
   router.post(
     "/api/hr/leave",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     requireFeature("advanced_hr"),
     (req, res) => {
       const {
@@ -73,7 +73,7 @@ module.exports = function createHRRouter({
 
   router.put(
     "/api/hr/leave/:id/status",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     requireFeature("advanced_hr"),
     (req, res) => {
       const { id } = req.params;
@@ -108,7 +108,7 @@ module.exports = function createHRRouter({
 
   router.get(
     "/api/hr/payroll/periods",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     requireFeature("advanced_hr"),
     (req, res) => {
       db.all(
@@ -124,7 +124,7 @@ module.exports = function createHRRouter({
 
   router.post(
     "/api/hr/payroll/periods",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     requireFeature("advanced_hr"),
     (req, res) => {
       const { period_name, start_date, end_date } = req.body || {};
@@ -147,7 +147,7 @@ module.exports = function createHRRouter({
 
   router.post(
     "/api/hr/payroll/periods/:id/generate",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     requireFeature("advanced_hr"),
     (req, res) => {
       const { id } = req.params;
@@ -364,7 +364,7 @@ module.exports = function createHRRouter({
 
   router.get(
     "/api/hr/payroll/periods/:id/lines",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     requireFeature("advanced_hr"),
     (req, res) => {
       const { id } = req.params;

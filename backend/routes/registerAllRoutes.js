@@ -48,6 +48,39 @@ module.exports = function registerAllRoutes(app, deps) {
   app.use(requireContextOutlet);
   ensureDefaultRolePermissions();
 
+  // Enforce outlet assignment for non-admin employees on branch-scoped requests.
+  app.use((req, res, next) => {
+    if (!req.path.startsWith("/api/")) return next();
+    const employeeId = Number(req.headers["x-employee-id"] || 0);
+    if (!employeeId) return next();
+    const perms = req.employeePerms || [];
+    if (perms.includes("all_access")) return next();
+
+    const headerOutletId = Number(req.headers["x-outlet-id"] || 0);
+    const contextOutletId = Number(req.context?.outletId || 0);
+    const queryOutletId = Number(req.query?.outlet_id || 0);
+    const bodyOutletId = Number(req.body?.outlet_id || 0);
+    const outletId =
+      contextOutletId || headerOutletId || queryOutletId || bodyOutletId;
+
+    if (!outletId) return next();
+
+    db.get(
+      "SELECT 1 FROM employee_outlets WHERE employee_id = ? AND outlet_id = ? LIMIT 1",
+      [employeeId, outletId],
+      (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) {
+          return res.status(403).json({
+            error:
+              "Forbidden: outlet is not assigned to this employee account.",
+          });
+        }
+        return next();
+      },
+    );
+  });
+
   app.use((req, res, next) => {
     if (!req.path.startsWith("/api/")) return next();
     const rule = PERMISSION_RULES.find(
@@ -129,7 +162,9 @@ module.exports = function registerAllRoutes(app, deps) {
 
   // --- ROUTES: FEATURE FLAGS / HEALTH ---
 
-  app.get("/api/feature-flags", requirePerm("manage_employees"), (req, res) => {
+  app.get("/api/feature-flags", (req, res) => {
+    const employeeId = Number(req.headers["x-employee-id"] || 0);
+    if (!employeeId) return res.status(401).json({ error: "Unauthorized" });
     db.all(
       "SELECT key, enabled, description, updated_by, updated_at FROM feature_flags ORDER BY key ASC",
       [],
@@ -170,7 +205,7 @@ module.exports = function registerAllRoutes(app, deps) {
 
   app.put(
     "/api/feature-flags/:key",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     (req, res) => {
       const { key } = req.params;
       const { enabled, description, updated_by } = req.body || {};

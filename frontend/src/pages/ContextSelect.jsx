@@ -7,7 +7,7 @@ import { API_BASE as API } from "../config";
 import useFeatureFlags from "../hooks/useFeatureFlags";
 
 export default function ContextSelect() {
-  const { employee, isAuthenticated, authHeaders } = useAuth();
+  const { employee, isAuthenticated, authHeaders, hasPerm } = useAuth();
   const { flags, loading: flagsLoading } = useFeatureFlags(authHeaders);
   const navigate = useNavigate();
 
@@ -19,9 +19,11 @@ export default function ContextSelect() {
 
   // Check for existing context and skip conditions
   const existingCtx = readContext();
+  const allBranchesAllowed = hasPerm("all_access");
   const hasExistingContext =
     existingCtx &&
-    (existingCtx.scope_mode === "all_branches" || existingCtx.active_outlet_id);
+    ((existingCtx.scope_mode === "all_branches" && allBranchesAllowed) ||
+      existingCtx.active_outlet_id);
   const flagOff = !flagsLoading && !flags.context_selection_required;
   const shouldSkip = !isAuthenticated || hasExistingContext || flagOff;
 

@@ -1,5 +1,5 @@
 module.exports = function (app, deps) {
-  const { db, createNotification } = deps;
+  const { db, createNotification, requirePerm } = deps;
 
   function storeShiftDenominations(shiftId, stage, denominations = [], cb) {
     const rows = Array.isArray(denominations)
@@ -76,7 +76,7 @@ module.exports = function (app, deps) {
   });
 
   // POST open a new shift
-  app.post("/api/shifts/open", (req, res) => {
+  app.post("/api/shifts/open", requirePerm("manage_orders"), (req, res) => {
     const { outlet_id, employee_id, opening_float, denominations } = req.body;
 
     if (!outlet_id || opening_float === undefined) {
@@ -132,7 +132,7 @@ module.exports = function (app, deps) {
   });
 
   // POST close a shift — auto-calculates expected cash from cash sales during shift period
-  app.post("/api/shifts/:id/close", (req, res) => {
+  app.post("/api/shifts/:id/close", requirePerm("manage_orders"), (req, res) => {
     const { id } = req.params;
     const {
       closing_cash,

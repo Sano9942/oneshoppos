@@ -278,7 +278,7 @@ function App() {
           <Route
             path="/employees"
             element={
-              <RequirePerm perm="manage_employees">
+              <RequirePerm perm="all_access">
                 <EmployeesRoute />
               </RequirePerm>
             }
@@ -286,7 +286,7 @@ function App() {
           <Route
             path="/outlets"
             element={
-              <RequirePerm perm="manage_employees">
+              <RequirePerm perm="all_access">
                 <OutletsRoute />
               </RequirePerm>
             }
@@ -294,7 +294,7 @@ function App() {
           <Route
             path="/administrator"
             element={
-              <RequirePerm perm="manage_employees">
+              <RequirePerm perm="all_access">
                 <AdministratorRoute />
               </RequirePerm>
             }
@@ -302,7 +302,7 @@ function App() {
           <Route
             path="/action-history"
             element={
-              <RequirePerm perm="manage_employees">
+              <RequirePerm perm="all_access">
                 <ActionHistoryRoute />
               </RequirePerm>
             }
@@ -310,7 +310,7 @@ function App() {
           <Route
             path="/backup-restore"
             element={
-              <RequirePerm perm="manage_employees">
+              <RequirePerm perm="all_access">
                 <BackupRestoreRoute />
               </RequirePerm>
             }
@@ -324,11 +324,18 @@ function App() {
             }
           />
 
-          <Route path="/attendance" element={<AttendanceRedesign />} />
+          <Route
+            path="/attendance"
+            element={
+              <RequirePerm perm="view_reports">
+                <AttendanceRedesign />
+              </RequirePerm>
+            }
+          />
           <Route
             path="/hr"
             element={
-              <RequirePerm perm="manage_employees">
+              <RequirePerm perm="all_access">
                 <HRManagementRoute />
               </RequirePerm>
             }
@@ -336,7 +343,7 @@ function App() {
           <Route
             path="/company-settings"
             element={
-              <RequirePerm perm="manage_employees">
+              <RequirePerm perm="all_access">
                 <CompanySettingsRoute />
               </RequirePerm>
             }

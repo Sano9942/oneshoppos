@@ -134,7 +134,8 @@ export const POSProvider = ({ children }) => {
       ),
     [openingDenoms],
   );
-  const canOpenShift = hasPerm("manage_employees");
+  const canOpenShift = hasPerm("manage_orders");
+  const canSwitchOutlet = hasPerm("all_access");
   const attendanceCode = attendanceStatus?.status || "not_clocked_in";
   const isReadyForCheckout = Boolean(
     selectedOutletId && activeShift && attendanceCode === "clocked_in",
@@ -159,6 +160,9 @@ export const POSProvider = ({ children }) => {
         if (ctx?.active_outlet_id && !selectedOutletId) {
           const match = outList.find((o) => o.id === ctx.active_outlet_id);
           if (match) setSelectedOutletId(String(match.id));
+        } else if (!selectedOutletId && outList.length === 1) {
+          // For non-admin outlet-restricted users, auto-select the assigned branch.
+          setSelectedOutletId(String(outList[0].id));
         }
       })
       .catch(() => setError("Failed to load POS setup data."));
@@ -780,6 +784,7 @@ export const POSProvider = ({ children }) => {
     attendanceCode,
     gateLoading,
     canOpenShift,
+    canSwitchOutlet,
     isReadyForCheckout,
     openingDenoms,
     setOpeningDenoms,

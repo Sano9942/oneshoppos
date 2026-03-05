@@ -10,7 +10,7 @@ module.exports = function registerRoleRoutes(app, deps) {
   });
 
   // Add a new role
-  app.post("/api/roles", requirePerm("manage_employees"), (req, res) => {
+  app.post("/api/roles", requirePerm("all_access"), (req, res) => {
     const { name, description } = req.body;
     if (!name) return res.status(400).json({ error: "Role name is required" });
 
@@ -30,7 +30,7 @@ module.exports = function registerRoleRoutes(app, deps) {
   });
 
   // Update a role
-  app.put("/api/roles/:id", requirePerm("manage_employees"), (req, res) => {
+  app.put("/api/roles/:id", requirePerm("all_access"), (req, res) => {
     const { id } = req.params;
     const { name, description } = req.body;
 
@@ -52,7 +52,7 @@ module.exports = function registerRoleRoutes(app, deps) {
   });
 
   // Delete a role
-  app.delete("/api/roles/:id", requirePerm("manage_employees"), (req, res) => {
+  app.delete("/api/roles/:id", requirePerm("all_access"), (req, res) => {
     const { id } = req.params;
 
     // Prevent deleting default roles (id 1, 2, 3)
@@ -109,7 +109,7 @@ module.exports = function registerRoleRoutes(app, deps) {
   // Update permissions for a specific role
   app.put(
     "/api/roles/:id/permissions",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     (req, res) => {
       const { id } = req.params;
       const { permissions } = req.body;

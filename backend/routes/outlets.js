@@ -3,6 +3,26 @@ module.exports = function registerOutletRoutes(app, deps) {
 
   // Get all outlets
   app.get("/api/outlets", (req, res) => {
+    const employeeId = Number(req.headers["x-employee-id"] || 0);
+    const perms = req.employeePerms || [];
+    const isAdmin = perms.includes("all_access");
+
+    // Non-admin users should only see branches assigned to their account.
+    if (employeeId && !isAdmin) {
+      return db.all(
+        `SELECT o.*
+         FROM outlets o
+         JOIN employee_outlets eo ON eo.outlet_id = o.id
+         WHERE eo.employee_id = ?
+         ORDER BY o.name ASC`,
+        [employeeId],
+        (err, rows) => {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json({ outlets: rows || [] });
+        },
+      );
+    }
+
     db.all("SELECT * FROM outlets ORDER BY name ASC", [], (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ outlets: rows });

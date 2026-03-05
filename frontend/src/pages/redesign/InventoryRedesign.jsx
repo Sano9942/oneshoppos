@@ -219,7 +219,8 @@ function exportCSV(rows, filename) {
 }
 
 export default function InventoryRedesign() {
-  const { authHeaders } = useAuth();
+  const { authHeaders, hasPerm } = useAuth();
+  const canViewAllLocations = hasPerm("all_access");
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
@@ -282,6 +283,13 @@ export default function InventoryRedesign() {
   useEffect(() => {
     fetchCategories();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (canViewAllLocations) return;
+    if (outletFilter) return;
+    if (!outlets.length) return;
+    setOutletFilter(String(outlets[0].id));
+  }, [canViewAllLocations, outletFilter, outlets]);
 
   useEffect(() => {
     const t = setTimeout(fetchProducts, search ? 250 : 0);
@@ -421,7 +429,7 @@ export default function InventoryRedesign() {
                 ))}
               </Select>
               <Select value={outletFilter} onChange={(e) => setOutletFilter(e.target.value)}>
-                <option value="">All locations</option>
+                {canViewAllLocations ? <option value="">All locations</option> : null}
                 {outlets.map((o) => (
                   <option key={o.id} value={o.id}>{o.name}</option>
                 ))}

@@ -372,7 +372,7 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
   // GET /api/backup/download — stream the SQLite file
   app.get(
     "/api/backup/download",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     requireFeature("backup_restore"),
     (req, res) => {
       const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
@@ -398,7 +398,7 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
   // POST /api/backup/restore — upload a .db file and replace the live DB
   app.post(
     "/api/backup/restore",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     requireFeature("backup_restore"),
     restoreUpload.single("backup_file"),
     (req, res) => {
@@ -531,7 +531,7 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
   // GET /api/backup/log — backup/restore history
   app.get(
     "/api/backup/log",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     requireFeature("backup_restore"),
     (req, res) => {
       db.all(

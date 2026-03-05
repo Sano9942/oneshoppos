@@ -127,7 +127,7 @@ export default function EmployeesRedesign() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save employee");
       // Save attendance config + outlet assignments
-      const empId = editing ? editing.id : data.employee?.id;
+      const empId = editing ? editing.id : (data.employee?.id || data.id || null);
       if (editing) {
         await fetch(`${API}/api/employees/${editing.id}/attendance-config`, {
           method: "PUT",

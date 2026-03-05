@@ -20,6 +20,7 @@ export default function POSOpeningGateModal() {
     outlets,
     selectedOutletId,
     setSelectedOutletId,
+    canSwitchOutlet,
     activeShift,
     attendanceCode,
     gateLoading,
@@ -67,18 +68,25 @@ export default function POSOpeningGateModal() {
             </label>
             <div className="flex items-center gap-3">
               <Building2 size={18} className="text-[#8066FF]" />
-              <select
-                value={selectedOutletId}
-                onChange={(e) => setSelectedOutletId(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 focus:border-[#8066FF] focus:outline-none"
-              >
-                <option value="">Select branch...</option>
-                {outlets.map((outlet) => (
-                  <option key={outlet.id} value={outlet.id}>
-                    {outlet.name}
-                  </option>
-                ))}
-              </select>
+              {canSwitchOutlet ? (
+                <select
+                  value={selectedOutletId}
+                  onChange={(e) => setSelectedOutletId(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 focus:border-[#8066FF] focus:outline-none"
+                >
+                  <option value="">Select branch...</option>
+                  {outlets.map((outlet) => (
+                    <option key={outlet.id} value={outlet.id}>
+                      {outlet.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800">
+                  {outlets.find((outlet) => String(outlet.id) === String(selectedOutletId))?.name ||
+                    "Assigned branch"}
+                </div>
+              )}
             </div>
           </div>
 

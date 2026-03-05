@@ -1,5 +1,50 @@
 module.exports = function registerEmployeeRoutes(app, deps) {
   const { db, requirePerm } = deps;
+  const EMPLOYEE_USAGE_CHECKS = [
+    ["sales", "employee_id"],
+    ["returns", "employee_id"],
+    ["cash_shifts", "employee_id"],
+    ["employee_attendance", "employee_id"],
+    ["attendance_sessions", "employee_id"],
+    ["inventory_transfers", "employee_id"],
+    ["stock_adjustments", "employee_id"],
+    ["supplier_returns", "employee_id"],
+    ["goods_received_notes", "received_by"],
+    ["quotations", "employee_id"],
+    ["crm_activities", "employee_id"],
+    ["crm_leads", "assigned_to"],
+    ["leave_requests", "employee_id"],
+    ["leave_requests", "approved_by"],
+    ["payroll_lines", "employee_id"],
+    ["payroll_periods", "created_by"],
+    ["accounting_periods", "closed_by"],
+  ];
+
+  const getEmployeeUsage = (employeeId, cb) => {
+    const refs = [];
+    let pending = EMPLOYEE_USAGE_CHECKS.length;
+    if (!pending) return cb(null, refs);
+
+    EMPLOYEE_USAGE_CHECKS.forEach(([table, column]) => {
+      db.get(
+        `SELECT COUNT(*) AS count FROM ${table} WHERE ${column} = ?`,
+        [employeeId],
+        (err, row) => {
+          if (err) {
+            if (pending > 0) {
+              pending = -1;
+              cb(err);
+            }
+            return;
+          }
+          const count = Number(row?.count || 0);
+          if (count > 0) refs.push({ table, column, count });
+          pending -= 1;
+          if (pending === 0) cb(null, refs);
+        },
+      );
+    });
+  };
 
   // Get all employees
   app.get("/api/employees", (req, res) => {
@@ -28,7 +73,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   });
 
   // Add a new employee
-  app.post("/api/employees", requirePerm("manage_employees"), (req, res) => {
+  app.post("/api/employees", requirePerm("all_access"), (req, res) => {
     const { name, role_id, pin_code, salary_type, monthly_salary, hourly_rate, daily_rate } = req.body;
     db.run(
       "INSERT INTO employees (name, role_id, pin_code, salary_type, monthly_salary, hourly_rate, daily_rate) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -46,7 +91,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   });
 
   // Update an employee
-  app.put("/api/employees/:id", requirePerm("manage_employees"), (req, res) => {
+  app.put("/api/employees/:id", requirePerm("all_access"), (req, res) => {
     const { id } = req.params;
     const { name, role_id, pin_code, salary_type, monthly_salary, hourly_rate, daily_rate } = req.body;
     const perms = req.employeePerms || [];
@@ -92,7 +137,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   // Get assigned outlets for an employee
   app.get(
     "/api/employees/:id/outlets",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     (req, res) => {
       const { id } = req.params;
       db.all(
@@ -113,7 +158,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   // Bulk-replace outlet assignments for an employee
   app.put(
     "/api/employees/:id/outlets",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     (req, res) => {
       const { id } = req.params;
       const { outlet_ids, primary_outlet_id } = req.body || {};
@@ -133,40 +178,91 @@ module.exports = function registerEmployeeRoutes(app, deps) {
         ? Number(primary_outlet_id)
         : numericIds[0];
 
-      db.serialize(() => {
-        // Remove existing assignments
-        db.run("DELETE FROM employee_outlets WHERE employee_id = ?", [id]);
+      db.get(
+        "SELECT role_id FROM employees WHERE id = ?",
+        [id],
+        (empErr, empRow) => {
+          if (empErr) return res.status(500).json({ error: empErr.message });
+          if (!empRow)
+            return res.status(404).json({ error: "Employee not found" });
 
-        // Insert new assignments
-        const stmt = db.prepare(
-          "INSERT INTO employee_outlets (employee_id, outlet_id, is_primary) VALUES (?, ?, ?)",
-        );
-        for (const outletId of numericIds) {
-          stmt.run(id, outletId, outletId === primaryId ? 1 : 0);
-        }
-        stmt.finalize((err) => {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({
-            message: "Outlet assignments updated",
-            outlet_ids: numericIds,
-            primary_outlet_id: primaryId,
+          // Manager/Cashier are branch-fixed by policy: exactly one outlet.
+          if (
+            [2, 3].includes(Number(empRow.role_id)) &&
+            numericIds.length !== 1
+          ) {
+            return res.status(400).json({
+              error:
+                "Manager/Cashier employees must be assigned to exactly one outlet.",
+            });
+          }
+
+          db.serialize(() => {
+            // Remove existing assignments
+            db.run("DELETE FROM employee_outlets WHERE employee_id = ?", [id]);
+
+            // Insert new assignments
+            const stmt = db.prepare(
+              "INSERT INTO employee_outlets (employee_id, outlet_id, is_primary) VALUES (?, ?, ?)",
+            );
+            for (const outletId of numericIds) {
+              stmt.run(id, outletId, outletId === primaryId ? 1 : 0);
+            }
+            stmt.finalize((err) => {
+              if (err) return res.status(500).json({ error: err.message });
+              res.json({
+                message: "Outlet assignments updated",
+                outlet_ids: numericIds,
+                primary_outlet_id: primaryId,
+              });
+            });
           });
-        });
-      });
+        },
+      );
     },
   );
 
   // Delete an employee
   app.delete(
     "/api/employees/:id",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     (req, res) => {
       const { id } = req.params;
-      db.run("DELETE FROM employees WHERE id = ?", [id], function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (this.changes === 0)
-          return res.status(404).json({ error: "Employee not found" });
-        res.json({ message: "Employee deleted" });
+      const actorId = Number(req.headers["x-employee-id"] || 0);
+      const targetId = Number(id);
+
+      if (targetId > 0 && actorId === targetId) {
+        return res.status(400).json({ error: "You cannot delete your own account." });
+      }
+
+      getEmployeeUsage(targetId, (usageErr, refs) => {
+        if (usageErr) return res.status(500).json({ error: usageErr.message });
+        if (refs.length > 0) {
+          const summary = refs
+            .map((ref) => `${ref.table}.${ref.column} (${ref.count})`)
+            .join(", ");
+          return res.status(409).json({
+            error:
+              "Cannot delete employee because historical records reference this account. Reassign activity or keep the account for audit history.",
+            references: refs,
+            summary,
+          });
+        }
+
+        db.run("DELETE FROM employees WHERE id = ?", [targetId], function (err) {
+          if (err) {
+            if (String(err.message || "").includes("FOREIGN KEY constraint failed")) {
+              return res.status(409).json({
+                error:
+                  "Cannot delete employee because related records still exist. This account is tied to historical transactions.",
+              });
+            }
+            return res.status(500).json({ error: err.message });
+          }
+          if (this.changes === 0)
+            return res.status(404).json({ error: "Employee not found" });
+          res.json({ message: "Employee deleted" });
+        });
       });
     },
   );

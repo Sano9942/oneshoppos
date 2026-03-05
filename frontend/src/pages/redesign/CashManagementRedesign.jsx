@@ -11,6 +11,7 @@ import {
 } from "../../ui/primitives";
 import { API_BASE as API } from "../../config";
 import { Calculator, Download, RefreshCw } from "lucide-react";
+import { useAuth } from "../../auth/AuthProvider";
 
 const DENOMS = [5000, 1000, 500, 100, 50, 20, 10];
 
@@ -62,6 +63,8 @@ function exportCsv(rows) {
 }
 
 export default function CashManagementRedesign() {
+  const { hasPerm } = useAuth();
+  const canViewAllOutlets = hasPerm("all_access");
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -107,7 +110,7 @@ export default function CashManagementRedesign() {
       setOutlets(outletList);
       setEmployees(empData.employees || []);
       setVarianceReasons(reasonData.reasons || []);
-      if (!selectedOutlet && outletList.length > 0) {
+      if (!selectedOutlet && outletList.length > 0 && !canViewAllOutlets) {
         setSelectedOutlet(String(outletList[0].id));
       }
     } catch (e) {
@@ -115,15 +118,15 @@ export default function CashManagementRedesign() {
     } finally {
       setLoading(false);
     }
-  }, [selectedOutlet]);
+  }, [selectedOutlet, canViewAllOutlets]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   const activeShift = useMemo(
-    () => rows.find((r) => r.status === "open") || null,
-    [rows],
+    () => (selectedOutlet ? rows.find((r) => r.status === "open") || null : null),
+    [rows, selectedOutlet],
   );
 
   const closingCash = useMemo(
@@ -256,18 +259,28 @@ export default function CashManagementRedesign() {
                 #{activeShift.id} | {activeShift.outlet_name} | Opened {fmtDate(activeShift.opened_at)}
               </p>
             ) : (
-              <p className="text-sm text-(--ui-text-muted)">No open shift in selected outlet.</p>
+              <p className="text-sm text-(--ui-text-muted)">
+                {canViewAllOutlets && !selectedOutlet
+                  ? "Viewing all outlets. Select one outlet to open or close shifts."
+                  : "No open shift in selected outlet."}
+              </p>
             )}
           </div>
           <div className="flex gap-2">
             <Select value={selectedOutlet} onChange={(e) => setSelectedOutlet(e.target.value)}>
-              <option value="">All outlets</option>
+              {canViewAllOutlets ? <option value="">All outlets</option> : null}
               {outlets.map((o) => (
                 <option key={o.id} value={o.id}>{o.name}</option>
               ))}
             </Select>
             {!activeShift ? (
-              <Button tone="primary" onClick={() => setOpenModal(true)}>Open Shift</Button>
+              <Button
+                tone="primary"
+                disabled={!selectedOutlet}
+                onClick={() => setOpenModal(true)}
+              >
+                Open Shift
+              </Button>
             ) : (
               <Button tone="danger" onClick={() => setCloseModal(true)}>Close Shift</Button>
             )}

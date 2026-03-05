@@ -9,6 +9,7 @@ export default function POSHeader() {
     outlets,
     selectedOutletId,
     setSelectedOutletId,
+    canSwitchOutlet,
     slip,
     setSlipOpen,
     handleLock,
@@ -35,7 +36,7 @@ export default function POSHeader() {
         <span className="font-medium text-slate-600 hidden sm:block">
           {employee?.name || "Employee"}
         </span>
-        {outlets.length > 0 && (
+        {outlets.length > 0 && canSwitchOutlet && (
           <select
             value={selectedOutletId}
             onChange={(e) => setSelectedOutletId(e.target.value)}
@@ -48,6 +49,11 @@ export default function POSHeader() {
               </option>
             ))}
           </select>
+        )}
+        {outlets.length > 0 && !canSwitchOutlet && (
+          <span className="text-sm font-bold text-slate-700">
+            {outlets.find((o) => String(o.id) === String(selectedOutletId))?.name || "Assigned Branch"}
+          </span>
         )}
         <Link
           to="/dashboard"

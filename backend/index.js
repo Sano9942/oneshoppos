@@ -295,11 +295,16 @@ function resolveContext(req, res, next) {
   // Enforce: reject API requests missing context headers (when flag is on)
   if (_contextFlagLoaded && _contextEnforced && req.path.startsWith("/api/")) {
     const exempt = CONTEXT_EXEMPT_PATHS.some((rx) => rx.test(req.path));
-    // Admins (all_access) in all_branches mode are exempt from outlet requirement
+    const employeeId = Number(req.headers["x-employee-id"] || 0);
+    // If no employee identity is attached yet, defer context enforcement to
+    // route-level auth/permission checks to avoid bootstrap races.
+    if (!exempt && !employeeId) return next();
+    // Admins (all_access) are exempt from outlet requirement.
+    // This avoids false "Context required" blocks if scope-mode headers are missing
+    // during refresh or partial client bootstraps.
     const perms = req.employeePerms || [];
     const isAdmin = perms.includes("all_access");
-    const isAllBranches = scopeMode === "all_branches";
-    if (!exempt && !outletId && !(isAdmin && isAllBranches)) {
+    if (!exempt && !outletId && !isAdmin) {
       return res.status(428).json({
         error: "Context required: select a branch before using this feature.",
         code: "CONTEXT_REQUIRED",

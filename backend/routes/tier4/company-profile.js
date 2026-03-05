@@ -23,7 +23,7 @@ module.exports = function createCompanyProfileRouter({
 
   router.put(
     "/api/company-profile",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     requireFeature("multi_company"),
     (req, res) => {
       const {
@@ -99,7 +99,7 @@ module.exports = function createCompanyProfileRouter({
 
   router.post(
     "/api/company-profile/logo",
-    requirePerm("manage_employees"),
+    requirePerm("all_access"),
     requireFeature("multi_company"),
     companyLogoUpload.single("logo"),
     (req, res) => {

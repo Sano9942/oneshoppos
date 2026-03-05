@@ -34,6 +34,33 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - Current live E2E batches passing include report smokes plus `pos.spec.js`, `kiosk.spec.js`, and `rbac.spec.js`
 - POS Recent Sales panel and Return/Exchange modal shipped (Mar 2026)
 
+## Completed Baseline Before Testing Plan (as of 2026-03-05)
+
+This is the confirmed state that existed before introducing `ONESHOPPOS_TESTING_STRATEGY.md`:
+
+- Backend is already modularized by domain, with centralized route registration in `backend/routes/registerAllRoutes.js`
+- Frontend routing and guard chain is active:
+  - `RequireAuth` for session protection
+  - `RequirePerm` for permission-gated pages
+  - `RequireContext` for branch-context enforcement (flag-controlled)
+- Backend permission enforcement is active via:
+  - `loadEmployeePerms`
+  - `requirePerm` / `requireAnyPerm`
+  - centralized `PERMISSION_RULES` request middleware
+- Context unification is active end-to-end:
+  - `/api/context/bootstrap` feeds context selection
+  - `AuthProvider` injects `x-company-id`, `x-outlet-id`, `x-scope-mode`
+  - backend can enforce outlet context via feature flags
+- Critical POS operational guardrails are implemented:
+  - checkout blocked without open shift
+  - checkout blocked when employee is not clocked in
+  - shift opening/closing supports denomination capture
+- Existing automated tests already cover major flows:
+  - backend integration suites in `backend/tests/integration/*.test.js` (auth, rbac, sales, shifts, attendance, returns, reports, etc.)
+  - frontend unit suites in `frontend/tests/unit/*.test.jsx`
+  - frontend Playwright suites in `frontend/tests/e2e/*.spec.js` (auth, rbac, pos, kiosk, reports/governance, inventory/report smoke)
+- Known bug-regression checks already exist in tests for historical issues (for example stock, wallet, and shift edge cases), providing a base to harden further
+
 ## Project Structure
 
 ```
