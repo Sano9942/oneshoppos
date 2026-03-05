@@ -120,17 +120,18 @@ module.exports = function registerSalesRoutes(app, deps) {
       search = "",
       date_from = "",
       date_to = "",
+      outlet_id = "",
     } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    let conditions = ["1=1"];
+    let conditions = ["s.voided IS NULL OR s.voided = 0"];
     let params = [];
 
     if (search) {
       conditions.push(
-        "(CAST(s.id AS TEXT) LIKE ? OR e.name LIKE ? OR o.name LIKE ?)",
+        "(CAST(s.id AS TEXT) LIKE ? OR e.name LIKE ? OR o.name LIKE ? OR s.invoice_number LIKE ?)",
       );
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
     if (date_from) {
       conditions.push("date(s.timestamp, 'localtime') >= ?");
@@ -140,12 +141,17 @@ module.exports = function registerSalesRoutes(app, deps) {
       conditions.push("date(s.timestamp, 'localtime') <= ?");
       params.push(date_to);
     }
+    if (outlet_id) {
+      conditions.push("s.outlet_id = ?");
+      params.push(Number(outlet_id));
+    }
 
     const where = conditions.join(" AND ");
 
     const countQuery = `SELECT COUNT(*) as total FROM sales s
     LEFT JOIN outlets o ON s.outlet_id = o.id
     LEFT JOIN employees e ON s.employee_id = e.id
+    LEFT JOIN customers c ON s.customer_id = c.id
     WHERE ${where}`;
 
     db.get(countQuery, params, (err, countRow) => {
@@ -156,12 +162,15 @@ module.exports = function registerSalesRoutes(app, deps) {
 
       const listQuery = `
       SELECT s.id, s.timestamp, s.total_amount, s.payment_method, s.voided, s.void_reason,
-             COALESCE(s.discount_amount, 0) as discount_amount,
+             COALESCE(s.discount_amount, 0) as discount_amount, s.discount_type,
+             s.invoice_number, s.outlet_id,
              o.name as outlet_name, e.name as employee_name,
+             c.name as customer_name,
              COUNT(si.id) as item_count
       FROM sales s
       LEFT JOIN outlets o ON s.outlet_id = o.id
       LEFT JOIN employees e ON s.employee_id = e.id
+      LEFT JOIN customers c ON s.customer_id = c.id
       LEFT JOIN sale_items si ON s.id = si.sale_id
       WHERE ${where}
       GROUP BY s.id

@@ -30,6 +30,9 @@ export default function POSReturnExchangeModal() {
   const [reason, setReason] = useState("");
   const [mode, setMode] = useState("refund");
 
+  // Separate search state for no-bill return items vs exchange replacement items
+  const [returnSearch, setReturnSearch] = useState("");
+  const [returnSearchResults, setReturnSearchResults] = useState([]);
   const [exSearch, setExSearch] = useState("");
   const [exResults, setExResults] = useState([]);
   const [exSearching, setExSearching] = useState(false);
@@ -46,6 +49,8 @@ export default function POSReturnExchangeModal() {
       setReturnQtys({});
       setReason("");
       setMode("refund");
+      setReturnSearch("");
+      setReturnSearchResults([]);
       setExSearch("");
       setExResults([]);
       setExchangeItems([]);
@@ -53,7 +58,7 @@ export default function POSReturnExchangeModal() {
     } else if (returnSourceSale) {
       loadSaleDetail(returnSourceSale.id);
     }
-  }, [returnModalOpen]);
+  }, [returnModalOpen, returnSourceSale]);
 
   const loadSaleDetail = async (saleId) => {
     setSaleLoading(true);
@@ -100,7 +105,7 @@ export default function POSReturnExchangeModal() {
     }
   };
 
-  const searchExProducts = useCallback(async (q) => {
+  const searchProducts = useCallback(async (q, setResults) => {
     if (!q.trim() || !selectedOutletId) return;
     setExSearching(true);
     try {
@@ -109,14 +114,21 @@ export default function POSReturnExchangeModal() {
         { headers: authHeaders() },
       );
       const data = await res.json();
-      setExResults(data.products || data.results || []);
-    } catch { setExResults([]); } finally { setExSearching(false); }
+      setResults(data.products || data.results || []);
+    } catch { setResults([]); } finally { setExSearching(false); }
   }, [selectedOutletId, authHeaders]);
 
+  // Debounce for no-bill return item search
   useEffect(() => {
-    const t = setTimeout(() => { if (exSearch) searchExProducts(exSearch); }, 350);
+    const t = setTimeout(() => { if (returnSearch) searchProducts(returnSearch, setReturnSearchResults); else setReturnSearchResults([]); }, 350);
     return () => clearTimeout(t);
-  }, [exSearch, searchExProducts]);
+  }, [returnSearch, searchProducts]);
+
+  // Debounce for exchange replacement product search
+  useEffect(() => {
+    const t = setTimeout(() => { if (exSearch) searchProducts(exSearch, setExResults); else setExResults([]); }, 350);
+    return () => clearTimeout(t);
+  }, [exSearch, searchProducts]);
 
   const addExchangeItem = (p) => {
     setExchangeItems((prev) => {
@@ -124,8 +136,16 @@ export default function POSReturnExchangeModal() {
       if (existing) return prev.map((i) => i.id === p.id ? { ...i, qty: i.qty + 1 } : i);
       return [...prev, { id: p.id, name: p.name, qty: 1, price: Number(p.price || 0) }];
     });
-    setExSearch("");
-    setExResults([]);
+    setExSearch(""); setExResults([]);
+  };
+
+  const addReturnItem = (p) => {
+    setReturnItems((prev) => {
+      if (prev.find((i) => i.product_id === p.id)) return prev;
+      return [...prev, { product_id: p.id, variant_id: null, name: p.name, price: Number(p.price || 0), maxQty: 99 }];
+    });
+    setReturnQtys((q) => ({ ...q, [p.id]: 1 }));
+    setReturnSearch(""); setReturnSearchResults([]);
   };
 
   const refundTotal = returnItems.reduce(
@@ -149,9 +169,42 @@ export default function POSReturnExchangeModal() {
       setError("Select at least one item to return.");
       return;
     }
+    if (mode === "exchange" && exchangeItems.length === 0) {
+      setError("Add at least one replacement item for the exchange.");
+      return;
+    }
 
     setSubmitting(true);
     try {
+      let salePayments = [];
+      let saleData = null;
+
+      // For exchange: POST sale FIRST — if shift is closed this fails before return is posted,
+      // preventing the inconsistent state of restocked inventory without a recorded sale.
+      if (mode === "exchange" && exchangeItems.length > 0) {
+        salePayments = [];
+        if (refundTotal > 0) salePayments.push({ method: "Return Credit", amount: refundTotal });
+        if (balance > 0) salePayments.push({ method: settleMethod, amount: balance });
+
+        const saleRes = await fetch(`${API}/api/sales`, {
+          method: "POST",
+          headers: { ...authHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            cartItems: exchangeItems.map((i) => ({ id: i.id, quantity: i.qty, price: i.price })),
+            payments: salePayments,
+            outlet_id: Number(selectedOutletId),
+            employee_id: employee?.id || null,
+            customer_id: null,
+            discount_amount: 0,
+            discount_type: "fixed",
+            notes: `Exchange for ${resolvedSale?.invoice_number || "return"}`,
+          }),
+        });
+        saleData = await saleRes.json();
+        if (!saleRes.ok) throw new Error(saleData.error || "Exchange sale failed");
+      }
+
+      // POST return only after exchange sale succeeds (or if refund-only mode)
       if (selectedItems.length > 0) {
         const retRes = await fetch(`${API}/api/returns`, {
           method: "POST",
@@ -171,43 +224,15 @@ export default function POSReturnExchangeModal() {
         if (!retRes.ok) throw new Error(retData.error || "Return failed");
       }
 
-      if (mode === "exchange" && exchangeItems.length > 0) {
-        const salePayments = [];
-        if (refundTotal > 0) {
-          salePayments.push({ method: "Return Credit", amount: refundTotal });
-        }
-        if (balance > 0) {
-          salePayments.push({ method: settleMethod, amount: balance });
-        }
-
-        const saleRes = await fetch(`${API}/api/sales`, {
-          method: "POST",
-          headers: { ...authHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({
-            cartItems: exchangeItems.map((i) => ({
-              id: i.id,
-              quantity: i.qty,
-              price: i.price,
-            })),
-            payments: salePayments,
-            outlet_id: Number(selectedOutletId),
-            employee_id: employee?.id || null,
-            customer_id: null,
-            discount_amount: 0,
-            discount_type: "fixed",
-            notes: `Exchange for ${resolvedSale?.invoice_number || "return"}`,
-          }),
-        });
-        const saleData = await saleRes.json();
-        if (!saleRes.ok) throw new Error(saleData.error || "Exchange sale failed");
-
+      if (saleData) {
         printSlip({
           saleId: saleData.saleId,
           invoiceNumber: saleData.invoiceNumber || "-",
           cart: exchangeItems.map((i) => ({ name: i.name, quantity: i.qty, price: i.price })),
           payments: salePayments,
           total: exchangeTotal,
-          change: balance < 0 ? Math.abs(balance) : 0,
+          refundNote: balance < 0 ? `Refund ${money(Math.abs(balance))} via ${settleMethod}` : null,
+          change: 0,
           customer: null,
           outlet: outlets.find((o) => String(o.id) === String(selectedOutletId)) || null,
           employee: employee || null,
@@ -319,24 +344,16 @@ export default function POSReturnExchangeModal() {
                 <input
                   className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-300"
                   placeholder="Search product to return"
-                  value={exSearch}
-                  onChange={(e) => setExSearch(e.target.value)}
+                  value={returnSearch}
+                  onChange={(e) => setReturnSearch(e.target.value)}
                 />
               </div>
-              {exResults.length > 0 && (
+              {returnSearchResults.length > 0 && (
                 <div className="border border-slate-200 rounded-lg overflow-hidden mb-2 max-h-40 overflow-y-auto">
-                  {exResults.map((p) => (
+                  {returnSearchResults.map((p) => (
                     <button
                       key={p.id}
-                      onClick={() => {
-                        setReturnItems((prev) => {
-                          if (prev.find((i) => i.product_id === p.id)) return prev;
-                          return [...prev, { product_id: p.id, variant_id: null, name: p.name, price: Number(p.price || 0), maxQty: 99 }];
-                        });
-                        setReturnQtys((q) => ({ ...q, [p.id]: 1 }));
-                        setExSearch("");
-                        setExResults([]);
-                      }}
+                      onClick={() => addReturnItem(p)}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
                     >
                       {p.name} — {money(p.price)}
