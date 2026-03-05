@@ -10,6 +10,10 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 ## Current Status Snapshot (March 2026)
 
 - Latest migration is `backend/migrate61.js`
+- **Test suite: 333/333 backend integration + 19/19 unit + 8/8 E2E — all passing (Phase 6 complete)**
+  - 7 new test files added in Phase 6: data-integrity, negative-cases, security, auditability, concurrency, failure-handling, compliance
+  - `POST /api/sales` validates numeric price/quantity — non-numeric input returns 400
+  - B-VARIANT production bug fixed: variant sales now decrement both `product_variants.stock` AND `outlet_stock`
 - Reports V2 core implementation is complete:
   - governance is integrated into the main reports workspace
   - report tabs were aligned to live backend payloads

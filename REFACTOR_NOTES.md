@@ -6,9 +6,13 @@
 
 > Current-state note: older sections below capture the sequence of the refactor. The bullets in this top section are the authoritative current baseline.
 
-### Current Live Baseline (March 4, 2026)
+### Current Live Baseline (March 6, 2026)
 
-- `backend/migrate60.js` is the current latest migration
+- `backend/migrate61.js` is the current latest migration
+- **Test suite: 333/333 backend integration + 19/19 unit + 8/8 E2E — all passing**
+  - See `ONESHOPPOS_TESTING_STRATEGY.md` for full breakdown
+- **B-VARIANT production bug fixed (Mar 6, 2026):** `POST /api/sales` now decrements both `product_variants.stock` AND `outlet_stock` when `variant_id` is present; previously only `product_variants.stock` was decremented
+- **`POST /api/sales` input hardening:** non-numeric `price` or `quantity` in cart items now returns 400 instead of crashing with 500 (NaN→SQLite)
 - Reports V2 core scope is implemented and verified:
   - governance is inside the main reports workspace
   - backend reports are modular under `backend/routes/reports/`
