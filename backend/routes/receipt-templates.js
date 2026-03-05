@@ -1,5 +1,5 @@
 module.exports = function registerReceiptTemplateRoutes(app, deps) {
-  const { db } = deps;
+  const { db, requirePerm } = deps;
 
 // --- RECEIPT TEMPLATES ---
 
@@ -25,7 +25,7 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
     );
   });
 
-  app.post("/api/receipt-templates", (req, res) => {
+  app.post("/api/receipt-templates", requirePerm("all_access"), (req, res) => {
     const {
       name,
       header_text,
@@ -55,7 +55,7 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
     });
   });
 
-  app.put("/api/receipt-templates/:id", (req, res) => {
+  app.put("/api/receipt-templates/:id", requirePerm("all_access"), (req, res) => {
     const { id } = req.params;
     const {
       name,
@@ -89,7 +89,7 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
     });
   });
 
-  app.delete("/api/receipt-templates/:id", (req, res) => {
+  app.delete("/api/receipt-templates/:id", requirePerm("all_access"), (req, res) => {
     db.run(
       "DELETE FROM receipt_templates WHERE id = ?",
       [req.params.id],

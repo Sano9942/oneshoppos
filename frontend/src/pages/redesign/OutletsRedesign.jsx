@@ -21,6 +21,8 @@ export default function OutletsRedesign() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null); // outlet being deleted
+  const [reassignTo, setReassignTo] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -79,13 +81,23 @@ export default function OutletsRedesign() {
     }
   };
 
-  const remove = async (o) => {
-    if (!window.confirm(`Delete outlet "${o.name}"?`)) return;
+  const openDelete = (o) => {
+    setDeleteTarget(o);
+    setReassignTo("");
+    setError("");
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     setError("");
     try {
-      const res = await fetch(`${API}/api/outlets/${o.id}`, { method: "DELETE" });
+      const url = reassignTo
+        ? `${API}/api/outlets/${deleteTarget.id}?reassign_to=${reassignTo}`
+        : `${API}/api/outlets/${deleteTarget.id}`;
+      const res = await fetch(url, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to delete outlet");
+      setDeleteTarget(null);
       await load();
     } catch (e) {
       setError(e.message || "Failed to delete outlet");
@@ -164,7 +176,7 @@ export default function OutletsRedesign() {
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex gap-2">
                         <Button size="sm" onClick={() => openEdit(o)}>Edit</Button>
-                        <Button size="sm" tone="danger" onClick={() => remove(o)}>
+                        <Button size="sm" tone="danger" onClick={() => openDelete(o)}>
                           <Trash2 size={12} className="mr-1 inline" />Delete
                         </Button>
                       </div>
@@ -208,6 +220,40 @@ export default function OutletsRedesign() {
                 <Button tone="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
               </div>
             </form>
+          </SectionCard>
+        </div>
+      )}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
+          <SectionCard className="w-full max-w-sm p-5">
+            <h3 className="mb-1 text-lg font-semibold text-(--ui-text)">Delete Outlet</h3>
+            <p className="mb-4 text-sm text-(--ui-text-muted)">
+              You are about to delete <strong>{deleteTarget.name}</strong>. Any records linked to this outlet must be reassigned first.
+            </p>
+            <div className="mb-4">
+              <label className="mb-1 block text-xs font-semibold text-(--ui-text-muted)">
+                Reassign linked records to
+              </label>
+              <select
+                className="w-full rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-sm text-(--ui-text)"
+                value={reassignTo}
+                onChange={(e) => setReassignTo(e.target.value)}
+              >
+                <option value="">— Delete without reassigning —</option>
+                {outlets
+                  .filter((o) => o.id !== deleteTarget.id)
+                  .map((o) => (
+                    <option key={o.id} value={o.id}>{o.name}</option>
+                  ))}
+              </select>
+            </div>
+            {error && <p className="mb-3 text-sm text-rose-600">{error}</p>}
+            <div className="flex gap-2">
+              <Button type="button" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+              <Button tone="danger" onClick={confirmDelete}>
+                {reassignTo ? "Reassign & Delete" : "Delete Anyway"}
+              </Button>
+            </div>
           </SectionCard>
         </div>
       )}

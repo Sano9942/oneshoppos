@@ -1,5 +1,5 @@
 module.exports = function registerSupplierRoutes(app, deps) {
-  const { db } = deps;
+  const { db, requirePerm } = deps;
 
   // Get all suppliers
   app.get("/api/suppliers", (req, res) => {
@@ -10,7 +10,7 @@ module.exports = function registerSupplierRoutes(app, deps) {
   });
 
   // Add a new supplier
-  app.post("/api/suppliers", (req, res) => {
+  app.post("/api/suppliers", requirePerm("manage_inventory"), (req, res) => {
     const { name, contact_person, phone, email, address } = req.body;
     db.run(
       "INSERT INTO suppliers (name, contact_person, phone, email, address) VALUES (?, ?, ?, ?, ?)",
@@ -30,7 +30,7 @@ module.exports = function registerSupplierRoutes(app, deps) {
   });
 
   // Update a supplier
-  app.put("/api/suppliers/:id", (req, res) => {
+  app.put("/api/suppliers/:id", requirePerm("manage_inventory"), (req, res) => {
     const { id } = req.params;
     const { name, contact_person, phone, email, address } = req.body;
 
@@ -47,7 +47,7 @@ module.exports = function registerSupplierRoutes(app, deps) {
   });
 
   // Delete a supplier
-  app.delete("/api/suppliers/:id", (req, res) => {
+  app.delete("/api/suppliers/:id", requirePerm("manage_inventory"), (req, res) => {
     const { id } = req.params;
     db.run("DELETE FROM suppliers WHERE id = ?", [id], function (err) {
       if (err) return res.status(500).json({ error: err.message });

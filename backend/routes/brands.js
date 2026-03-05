@@ -1,5 +1,5 @@
 module.exports = function registerBrandRoutes(app, deps) {
-  const { db } = deps;
+  const { db, requirePerm } = deps;
 
   // Get all brands
   app.get("/api/brands", (req, res) => {
@@ -10,7 +10,7 @@ module.exports = function registerBrandRoutes(app, deps) {
   });
 
   // Add a new brand
-  app.post("/api/brands", (req, res) => {
+  app.post("/api/brands", requirePerm("manage_inventory"), (req, res) => {
     const { name, description } = req.body;
     db.run(
       "INSERT INTO brands (name, description) VALUES (?, ?)",
@@ -28,7 +28,7 @@ module.exports = function registerBrandRoutes(app, deps) {
   });
 
   // Update a brand
-  app.put("/api/brands/:id", (req, res) => {
+  app.put("/api/brands/:id", requirePerm("manage_inventory"), (req, res) => {
     const { id } = req.params;
     const { name, description } = req.body;
     db.run(
@@ -49,7 +49,7 @@ module.exports = function registerBrandRoutes(app, deps) {
   });
 
   // Delete a brand
-  app.delete("/api/brands/:id", (req, res) => {
+  app.delete("/api/brands/:id", requirePerm("manage_inventory"), (req, res) => {
     const { id } = req.params;
     db.run("DELETE FROM brands WHERE id = ?", [id], function (err) {
       if (err) return res.status(500).json({ error: err.message });

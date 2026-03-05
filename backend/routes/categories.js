@@ -11,7 +11,7 @@ const {
 } = require("../category-tree");
 
 module.exports = function registerCategoryRoutes(app, deps) {
-  const { db } = deps;
+  const { db, requirePerm } = deps;
 
   async function sendCategories(res) {
     const categories = await fetchEnrichedCategories(db);
@@ -102,7 +102,7 @@ module.exports = function registerCategoryRoutes(app, deps) {
     }
   });
 
-  app.post("/api/categories", async (req, res) => {
+  app.post("/api/categories", requirePerm("manage_inventory"), async (req, res) => {
     try {
       const {
         name,
@@ -147,7 +147,7 @@ module.exports = function registerCategoryRoutes(app, deps) {
     }
   });
 
-  app.put("/api/categories/:id", async (req, res) => {
+  app.put("/api/categories/:id", requirePerm("manage_inventory"), async (req, res) => {
     try {
       const { id } = req.params;
       const existing = await dbGetAsync(
@@ -232,7 +232,7 @@ module.exports = function registerCategoryRoutes(app, deps) {
     }
   });
 
-  app.post("/api/categories/create-child-and-move", async (req, res) => {
+  app.post("/api/categories/create-child-and-move", requirePerm("manage_inventory"), async (req, res) => {
     try {
       const {
         name,
@@ -322,7 +322,7 @@ module.exports = function registerCategoryRoutes(app, deps) {
     }
   });
 
-  app.post("/api/categories/:id/move-products", async (req, res) => {
+  app.post("/api/categories/:id/move-products", requirePerm("manage_inventory"), async (req, res) => {
     try {
       const sourceId = Number(req.params.id);
       const targetId = Number(req.body?.target_category_id);
@@ -378,7 +378,7 @@ module.exports = function registerCategoryRoutes(app, deps) {
     }
   });
 
-  app.delete("/api/categories/:id", async (req, res) => {
+  app.delete("/api/categories/:id", requirePerm("manage_inventory"), async (req, res) => {
     try {
       const { id } = req.params;
       const childRow = await dbGetAsync(

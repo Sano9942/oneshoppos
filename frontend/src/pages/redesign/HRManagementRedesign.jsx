@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import {
@@ -22,7 +23,8 @@ const EMPTY_PERIOD = { period_name: "", start_date: "", end_date: "" };
 
 export default function HRManagementRedesign() {
   const { authHeaders } = useAuth();
-  const [tab, setTab] = useState("leave");
+  const { pathname } = useLocation();
+  const [tab, setTab] = useState(pathname.includes("payroll") ? "payroll" : "leave");
   const [employees, setEmployees] = useState([]);
   const [leaves, setLeaves] = useState([]);
   const [periods, setPeriods] = useState([]);

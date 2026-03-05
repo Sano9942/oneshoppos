@@ -1,5 +1,5 @@
 module.exports = function registerCustomerRoutes(app, deps) {
-  const { db } = deps;
+  const { db, requirePerm } = deps;
 
   // GET all customers (with total order count and spend)
   app.get("/api/customers", (req, res) => {
@@ -80,7 +80,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   });
 
   // PUT update customer
-  app.put("/api/customers/:id", (req, res) => {
+  app.put("/api/customers/:id", requirePerm("manage_customers"), (req, res) => {
     const { id } = req.params;
     const { name, mobile, email, address, cnic, occupation, balance } =
       req.body;
@@ -108,7 +108,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   });
 
   // PUT update customer points manually
-  app.put("/api/customers/:id/points", (req, res) => {
+  app.put("/api/customers/:id/points", requirePerm("manage_customers"), (req, res) => {
     const { id } = req.params;
     const { points } = req.body;
     if (points === undefined || isNaN(points))
@@ -149,7 +149,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   });
 
   // POST top-up customer wallet (credit)
-  app.post("/api/customers/:id/wallet/topup", (req, res) => {
+  app.post("/api/customers/:id/wallet/topup", requirePerm("manage_customers"), (req, res) => {
     const { id } = req.params;
     const { amount, note } = req.body;
     if (!amount || isNaN(amount) || parseFloat(amount) <= 0)
@@ -196,7 +196,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   });
 
   // DELETE customer (only if no linked sales)
-  app.delete("/api/customers/:id", (req, res) => {
+  app.delete("/api/customers/:id", requirePerm("manage_customers"), (req, res) => {
     const { id } = req.params;
     db.get(
       "SELECT COUNT(*) as count FROM sales WHERE customer_id = ?",

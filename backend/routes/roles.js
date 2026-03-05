@@ -113,6 +113,17 @@ module.exports = function registerRoleRoutes(app, deps) {
     (req, res) => {
       const { id } = req.params;
       const { permissions } = req.body;
+      const perms = req.employeePerms || [];
+      const isAdmin = perms.includes("all_access");
+
+      // Only Administrator can edit the Administrator role (id 1) permissions
+      if (String(id) === "1" && !isAdmin) {
+        return res.status(403).json({ error: "Only an Administrator can modify Administrator permissions." });
+      }
+      // Block non-admins from granting all_access to any role
+      if (!isAdmin && Array.isArray(permissions) && permissions.includes("all_access")) {
+        return res.status(403).json({ error: "Only an Administrator can grant all_access." });
+      }
 
       if (!Array.isArray(permissions)) {
         return res

@@ -348,7 +348,7 @@ module.exports = function registerProductRoutes(app, deps) {
   });
 
   // Add a new product (and optionally set initial stock for a specific outlet)
-  app.post("/api/products", async (req, res) => {
+  app.post("/api/products", requirePerm("manage_inventory"), async (req, res) => {
     const {
       barcode,
       sku,
@@ -535,7 +535,7 @@ module.exports = function registerProductRoutes(app, deps) {
   });
 
   // Bulk import products from CSV rows (upsert by barcode)
-  app.post("/api/products/bulk-import", (req, res) => {
+  app.post("/api/products/bulk-import", requirePerm("manage_inventory"), (req, res) => {
     const { rows } = req.body; // [{ barcode, name, price, ..., image_url, image_urls }]
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ error: "No rows provided" });
@@ -673,7 +673,7 @@ module.exports = function registerProductRoutes(app, deps) {
   });
 
   // Update a product (Prices, Names, Categories... NOT Stock. Stock is handled via Adjustments/Transfers)
-  app.put("/api/products/:id", async (req, res) => {
+  app.put("/api/products/:id", requirePerm("manage_inventory"), async (req, res) => {
     const { id } = req.params;
     const {
       name,
@@ -814,7 +814,7 @@ module.exports = function registerProductRoutes(app, deps) {
   });
 
   // Delete a product
-  app.delete("/api/products/:id", (req, res) => {
+  app.delete("/api/products/:id", requirePerm("manage_inventory"), (req, res) => {
     const { id } = req.params;
     db.run("DELETE FROM products WHERE id = ?", [id], function (err) {
       if (err) return res.status(500).json({ error: err.message });

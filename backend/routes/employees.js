@@ -49,6 +49,18 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   app.put("/api/employees/:id", requirePerm("manage_employees"), (req, res) => {
     const { id } = req.params;
     const { name, role_id, pin_code, salary_type, monthly_salary, hourly_rate, daily_rate } = req.body;
+    const perms = req.employeePerms || [];
+    const isAdmin = perms.includes("all_access");
+
+    // Block self-role changes
+    if (role_id !== undefined && String(id) === String(req.headers["x-employee-id"])) {
+      return res.status(403).json({ error: "You cannot change your own role." });
+    }
+
+    // Only admin can assign the Administrator role (role_id 1)
+    if (role_id !== undefined && Number(role_id) === 1 && !isAdmin) {
+      return res.status(403).json({ error: "Only an Administrator can assign the Administrator role." });
+    }
 
     let query =
       "UPDATE employees SET name = COALESCE(?, name), role_id = COALESCE(?, role_id), salary_type = COALESCE(?, salary_type), monthly_salary = COALESCE(?, monthly_salary), hourly_rate = COALESCE(?, hourly_rate), daily_rate = COALESCE(?, daily_rate)";

@@ -82,7 +82,6 @@ oneshoppos/
 │   │   │   ├── import.js         # POST/DELETE /import/products, POST /import/inventory
 │   │   │   └── mappings.js       # /mappings/products (CRUD + auto + live + apply), /locations, /customers
 │   │   ├── reconciliation.js     # /api/reconciliation + /api/approvals (~1101 lines)
-│   │   ├── reconciliation.js     # /api/reconciliation + /api/approvals (legacy — moved to shopify/reconciliation.js)
 │   │   ├── barcode-expenses.js   # Barcodes, expenses, backup/restore, e-invoicing
 │   │   └── tier4/                # Tier 4 modularized
 │   │       ├── index.js          # Router entry
@@ -175,24 +174,6 @@ oneshoppos/
 - Shared components: `frontend/src/components/`
 - Category tree UI helpers: `frontend/src/utils/categoryTree.js`
 - Tailwind v4: use `(--css-var)` syntax not `[var(--css-var)]`
-
-## Do NOT Read (already in .claudeignore)
-
-- `node_modules/` in either folder
-- `backend/exports/` (generated CSV reports)
-- `backend/backups/` (database backups)
-- `frontend/dist/` (build output)
-- Any migration file except `migrate61.js`
-- Test files (`*_test.js`, `e2e_*.js`, etc.)
-- Diagnostic scripts (`check_*.js`, `diagnose_*.js`, `dumpDb*.js`, etc.)
-
-## Backend: Key Dependency Injection Notes
-
-- `orders.js` exports `processPendingShopifyInventoryEvents` + `enqueueInventorySyncEvents` + `upsertWebOrderFromShopifyPayload` — all three captured by `registerAllRoutes.js` and passed to `routes/shopify/` via `shopifyDeps`
-- `backend/shopify/order-service.js` is the canonical home of `upsertWebOrderFromShopifyPayload` and its 5 helper functions (stock policy, outlet resolution, item mapping). Instantiated via factory: `require('./order-service')(db, getActiveShopifyConnection)`
-- `sales.js`, `returns.js`, `inventory.js`, `purchase-orders.js`, `supplier-returns.js` use a defensive wrapper for `enqueueInventorySyncEvents` — checks `deps.enqueueInventorySyncEvents`, no-ops gracefully if absent
-- `reconciliation.js` has its own inlined `logActionHistory` (same impl as `orders.js`)
-- `shopify/utils.js` exports `maskSecret` + `getActiveShopifyConnection` — used by `routes/shopify/index.js` and `reconciliation.js` via thin wrappers
 
 ## Refactor History
 

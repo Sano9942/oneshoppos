@@ -56,7 +56,7 @@ module.exports = function registerSupplierReturnsRoutes(app, deps) {
     );
   });
 
-  app.post("/api/supplier-returns", (req, res) => {
+  app.post("/api/supplier-returns", requirePerm("manage_inventory"), (req, res) => {
     const {
       supplier_id,
       employee_id,

@@ -92,6 +92,7 @@ export function AuthProvider({ children }) {
           employee: existing.employee,
           permissions: freshPerms,
           loadedAt: Date.now(),
+          ...(existing.context ? { context: existing.context } : {}),
         };
         writeSession(refreshed);
         if (isMounted) setSession(refreshed);

@@ -1,5 +1,5 @@
 module.exports = function registerParkedSalesRoutes(app, deps) {
-  const { db } = deps;
+  const { db, requirePerm } = deps;
 
 // --- ROUTES: PARKED SALES (Phase 3) ---
 
@@ -55,7 +55,7 @@ module.exports = function registerParkedSalesRoutes(app, deps) {
   });
 
   // Park a sale (create)
-  app.post("/api/parked-sales", (req, res) => {
+  app.post("/api/parked-sales", requirePerm("pos_park"), (req, res) => {
     const { employee_id, outlet_id, customer_id, label, notes, items } =
       req.body;
     if (!items || items.length === 0) {
@@ -104,7 +104,7 @@ module.exports = function registerParkedSalesRoutes(app, deps) {
   });
 
   // Delete (unpark/restore) a parked sale
-  app.delete("/api/parked-sales/:id", (req, res) => {
+  app.delete("/api/parked-sales/:id", requirePerm("pos_park"), (req, res) => {
     const { id } = req.params;
     db.run("DELETE FROM parked_sales WHERE id = ?", [id], function (err) {
       if (err) return res.status(500).json({ error: err.message });

@@ -16,8 +16,8 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // Helper: today's date as YYYY-MM-DD in local time
   const todayLocal = () => new Date().toLocaleDateString("sv-SE");
 
-  // Helper: current datetime as "YYYY-MM-DD HH:MM:SS"
-  const nowLocal = () => new Date().toISOString().replace("T", " ").slice(0, 19);
+  // Helper: current datetime as "YYYY-MM-DD HH:MM:SS" in local time
+  const nowLocal = () => new Date().toLocaleString("sv-SE").replace("T", " ").slice(0, 19);
 
   function getEmployeeStatusForToday(employeeId, outletId = null) {
     const today = todayLocal();
