@@ -96,6 +96,12 @@ export const POSProvider = ({ children }) => {
   const [slip, setSlip] = useState(null);
   const [slipOpen, setSlipOpen] = useState(false);
 
+  // ── Recent Sales Panel ────────────────────────────────────────────────────
+  const [recentSalesOpen, setRecentSalesOpen] = useState(false);
+  const [recentSales, setRecentSales] = useState([]);
+  const [recentSalesLoading, setRecentSalesLoading] = useState(false);
+  const [recentSalesSearch, setRecentSalesSearch] = useState("");
+
   // ── Notices ───────────────────────────────────────────────────────────────
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -214,6 +220,24 @@ export const POSProvider = ({ children }) => {
       setParkedSales(data.parkedSales || []);
     } catch {
       setParkedSales([]);
+    }
+  };
+
+  const loadRecentSales = async () => {
+    if (!selectedOutletId) return;
+    setRecentSalesLoading(true);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const res = await fetch(
+        `${API}/api/sales?date_from=${today}&outlet_id=${selectedOutletId}&limit=50`,
+        { headers: authHeaders() },
+      );
+      const data = await res.json();
+      setRecentSales(data.sales || []);
+    } catch {
+      setRecentSales([]);
+    } finally {
+      setRecentSalesLoading(false);
     }
   };
 
@@ -849,6 +873,13 @@ export const POSProvider = ({ children }) => {
     completeSale,
     handleLock,
     handleUnlock,
+    recentSalesOpen,
+    setRecentSalesOpen,
+    recentSales,
+    recentSalesLoading,
+    recentSalesSearch,
+    setRecentSalesSearch,
+    loadRecentSales,
   };
 
   return <POSContext.Provider value={value}>{children}</POSContext.Provider>;
