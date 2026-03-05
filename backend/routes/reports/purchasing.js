@@ -1,3 +1,5 @@
+const { toUtcStart, toUtcEnd } = require("../../utils/tz");
+
 module.exports = function registerPurchasingReports(app, deps, helpers) {
   const { db } = deps;
   const { buildCategoryMetaMap, withCategoryPaths, getDescendantLeafIds } =
@@ -60,16 +62,17 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
     const { date_from, date_to, outlet_id } = req.query;
     const taxMode = String(req.query.tax_mode || "all");
     const statusMode = String(req.query.status_mode || "all");
+    const tz = req.company?.timezone || "UTC";
     const where = [];
     const params = [];
 
     if (date_from) {
-      where.push("date(po.created_at, 'localtime') >= ?");
-      params.push(date_from);
+      where.push("po.created_at >= ?");
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      where.push("date(po.created_at, 'localtime') <= ?");
-      params.push(date_to);
+      where.push("po.created_at < ?");
+      params.push(toUtcEnd(date_to, tz));
     }
     if (outlet_id) {
       where.push("COALESCE(grn.outlet_id, 0) = ?");
@@ -147,16 +150,17 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
     const { date_from, date_to, outlet_id } = req.query;
     const taxMode = String(req.query.tax_mode || "all");
     const statusMode = String(req.query.status_mode || "all");
+    const tz = req.company?.timezone || "UTC";
     const where = [];
     const params = [];
 
     if (date_from) {
-      where.push("date(po.created_at, 'localtime') >= ?");
-      params.push(date_from);
+      where.push("po.created_at >= ?");
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      where.push("date(po.created_at, 'localtime') <= ?");
-      params.push(date_to);
+      where.push("po.created_at < ?");
+      params.push(toUtcEnd(date_to, tz));
     }
     if (outlet_id) {
       where.push("COALESCE(grn.outlet_id, 0) = ?");
@@ -228,16 +232,17 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
 
   app.get("/api/reports/po-workflow", (req, res) => {
     const { date_from, date_to, supplier_id } = req.query;
+    const tz = req.company?.timezone || "UTC";
     const where = [];
     const params = [];
 
     if (date_from) {
-      where.push("date(po.created_at, 'localtime') >= ?");
-      params.push(date_from);
+      where.push("po.created_at >= ?");
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      where.push("date(po.created_at, 'localtime') <= ?");
-      params.push(date_to);
+      where.push("po.created_at < ?");
+      params.push(toUtcEnd(date_to, tz));
     }
     if (supplier_id) {
       where.push("po.supplier_id = ?");
@@ -349,6 +354,7 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
 
   app.get("/api/reports/procurement-parity", (req, res) => {
     const { date_from, date_to, outlet_id } = req.query;
+    const tz = req.company?.timezone || "UTC";
     const receiptWhere = [];
     const receiptParams = [];
     const transferWhere = [];
@@ -357,20 +363,20 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
     const adjustmentParams = [];
 
     if (date_from) {
-      receiptWhere.push("date(grn.received_at, 'localtime') >= ?");
-      receiptParams.push(date_from);
-      transferWhere.push("date(it.timestamp, 'localtime') >= ?");
-      transferParams.push(date_from);
-      adjustmentWhere.push("date(sa.timestamp, 'localtime') >= ?");
-      adjustmentParams.push(date_from);
+      receiptWhere.push("grn.received_at >= ?");
+      receiptParams.push(toUtcStart(date_from, tz));
+      transferWhere.push("it.timestamp >= ?");
+      transferParams.push(toUtcStart(date_from, tz));
+      adjustmentWhere.push("sa.timestamp >= ?");
+      adjustmentParams.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      receiptWhere.push("date(grn.received_at, 'localtime') <= ?");
-      receiptParams.push(date_to);
-      transferWhere.push("date(it.timestamp, 'localtime') <= ?");
-      transferParams.push(date_to);
-      adjustmentWhere.push("date(sa.timestamp, 'localtime') <= ?");
-      adjustmentParams.push(date_to);
+      receiptWhere.push("grn.received_at < ?");
+      receiptParams.push(toUtcEnd(date_to, tz));
+      transferWhere.push("it.timestamp < ?");
+      transferParams.push(toUtcEnd(date_to, tz));
+      adjustmentWhere.push("sa.timestamp < ?");
+      adjustmentParams.push(toUtcEnd(date_to, tz));
     }
     if (outlet_id) {
       receiptWhere.push("grn.outlet_id = ?");

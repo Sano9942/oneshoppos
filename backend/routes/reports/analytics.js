@@ -1,3 +1,5 @@
+const { toUtcStart, toUtcEnd } = require("../../utils/tz");
+
 module.exports = function (app, deps, helpers) {
   const { db, requireFeature } = deps;
   const { buildCategoryMetaMap, withCategoryPaths, buildReportFilterParts } =
@@ -6,6 +8,7 @@ module.exports = function (app, deps, helpers) {
   // Comparative Trends: Revenue comparison across periods
   app.get("/api/reports/comparative-trends", async (req, res) => {
     try {
+      const tz = req.company?.timezone || "UTC";
       const { period1_from, period1_to, period2_from, period2_to, outlet_id } =
         req.query;
       const getQuery = (query, params = []) =>
@@ -16,24 +19,24 @@ module.exports = function (app, deps, helpers) {
         });
 
       const filter = outlet_id ? "AND outlet_id = ?" : "";
-      const params = outlet_id ? [outlet_id] : [];
+      const outletParams = outlet_id ? [outlet_id] : [];
 
-      const sql = (from, to) => `
+      const sql = () => `
             SELECT SUM(total_amount) as revenue, COUNT(id) as orders
             FROM sales
-            WHERE voided = 0 AND date(timestamp, 'localtime') >= ? AND date(timestamp, 'localtime') <= ? ${filter}
+            WHERE voided = 0 AND timestamp >= ? AND timestamp < ? ${filter}
         `;
 
       const [p1, p2] = await Promise.all([
-        getQuery(sql(period1_from, period1_to), [
-          period1_from,
-          period1_to,
-          ...params,
+        getQuery(sql(), [
+          toUtcStart(period1_from, tz),
+          toUtcEnd(period1_to, tz),
+          ...outletParams,
         ]),
-        getQuery(sql(period2_from, period2_to), [
-          period2_from,
-          period2_to,
-          ...params,
+        getQuery(sql(), [
+          toUtcStart(period2_from, tz),
+          toUtcEnd(period2_to, tz),
+          ...outletParams,
         ]),
       ]);
 
@@ -65,6 +68,7 @@ module.exports = function (app, deps, helpers) {
   // Heatmaps: Day/Hour sales density
   app.get("/api/reports/heatmaps", async (req, res) => {
     try {
+      const tz = req.company?.timezone || "UTC";
       const { date_from, date_to, outlet_id } = req.query;
       const getQuery = (query, params = []) =>
         new Promise((resolve, reject) => {
@@ -77,12 +81,12 @@ module.exports = function (app, deps, helpers) {
       const params = [];
 
       if (date_from) {
-        where.push("date(timestamp, 'localtime') >= ?");
-        params.push(date_from);
+        where.push("timestamp >= ?");
+        params.push(toUtcStart(date_from, tz));
       }
       if (date_to) {
-        where.push("date(timestamp, 'localtime') <= ?");
-        params.push(date_to);
+        where.push("timestamp < ?");
+        params.push(toUtcEnd(date_to, tz));
       }
       if (outlet_id) {
         where.push("outlet_id = ?");
@@ -111,6 +115,7 @@ module.exports = function (app, deps, helpers) {
   // Revenue Leaks: Deep Dive on Discounts, Comps, and Voids
   app.get("/api/reports/revenue-leaks", async (req, res) => {
     try {
+      const tz = req.company?.timezone || "UTC";
       const { date_from, date_to, outlet_id } = req.query;
       const getQuery = (query, params = []) =>
         new Promise((resolve, reject) => {
@@ -123,16 +128,17 @@ module.exports = function (app, deps, helpers) {
       const params = [];
 
       if (date_from) {
-        where.push("date(s.timestamp, 'localtime') >= ?");
-        params.push(date_from);
+        where.push("s.timestamp >= ?");
+        params.push(toUtcStart(date_from, tz));
       } else {
-        where.push(
-          "date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')",
-        );
+        const defaultFrom = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+        const defaultFromStr = defaultFrom.toISOString().slice(0, 10);
+        where.push("s.timestamp >= ?");
+        params.push(toUtcStart(defaultFromStr, tz));
       }
       if (date_to) {
-        where.push("date(s.timestamp, 'localtime') <= ?");
-        params.push(date_to);
+        where.push("s.timestamp < ?");
+        params.push(toUtcEnd(date_to, tz));
       }
       if (outlet_id) {
         where.push("s.outlet_id = ?");
@@ -208,6 +214,7 @@ module.exports = function (app, deps, helpers) {
   // Product Mix Analysis (Market Basket)
   app.get("/api/reports/product-mix", async (req, res) => {
     try {
+      const tz = req.company?.timezone || "UTC";
       const { date_from, date_to, outlet_id, limit = 20 } = req.query;
       const getQuery = (query, params = []) =>
         new Promise((resolve, reject) => {
@@ -220,16 +227,17 @@ module.exports = function (app, deps, helpers) {
       const params = [];
 
       if (date_from) {
-        where.push("date(s.timestamp, 'localtime') >= ?");
-        params.push(date_from);
+        where.push("s.timestamp >= ?");
+        params.push(toUtcStart(date_from, tz));
       } else {
-        where.push(
-          "date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')",
-        );
+        const defaultFrom = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+        const defaultFromStr = defaultFrom.toISOString().slice(0, 10);
+        where.push("s.timestamp >= ?");
+        params.push(toUtcStart(defaultFromStr, tz));
       }
       if (date_to) {
-        where.push("date(s.timestamp, 'localtime') <= ?");
-        params.push(date_to);
+        where.push("s.timestamp < ?");
+        params.push(toUtcEnd(date_to, tz));
       }
       if (outlet_id) {
         where.push("s.outlet_id = ?");
@@ -266,6 +274,7 @@ module.exports = function (app, deps, helpers) {
   // Retail Matrix / Menu Engineering
   app.get("/api/reports/retail-matrix", async (req, res) => {
     try {
+      const tz = req.company?.timezone || "UTC";
       const { date_from, date_to, outlet_id } = req.query;
       const getQuery = (query, params = []) =>
         new Promise((resolve, reject) => {
@@ -278,16 +287,17 @@ module.exports = function (app, deps, helpers) {
       const params = [];
 
       if (date_from) {
-        where.push("date(s.timestamp, 'localtime') >= ?");
-        params.push(date_from);
+        where.push("s.timestamp >= ?");
+        params.push(toUtcStart(date_from, tz));
       } else {
-        where.push(
-          "date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')",
-        );
+        const defaultFrom = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+        const defaultFromStr = defaultFrom.toISOString().slice(0, 10);
+        where.push("s.timestamp >= ?");
+        params.push(toUtcStart(defaultFromStr, tz));
       }
       if (date_to) {
-        where.push("date(s.timestamp, 'localtime') <= ?");
-        params.push(date_to);
+        where.push("s.timestamp < ?");
+        params.push(toUtcEnd(date_to, tz));
       }
       if (outlet_id) {
         where.push("s.outlet_id = ?");
@@ -407,6 +417,7 @@ module.exports = function (app, deps, helpers) {
   // Customer Retention
   app.get("/api/reports/customer-retention", async (req, res) => {
     try {
+      const tz = req.company?.timezone || "UTC";
       const { date_from, date_to, outlet_id } = req.query;
       const getQuery = (query, params = []) =>
         new Promise((resolve, reject) => {
@@ -419,16 +430,17 @@ module.exports = function (app, deps, helpers) {
       const params = [];
 
       if (date_from) {
-        where.push("date(s.timestamp, 'localtime') >= ?");
-        params.push(date_from);
+        where.push("s.timestamp >= ?");
+        params.push(toUtcStart(date_from, tz));
       } else {
-        where.push(
-          "date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')",
-        );
+        const defaultFrom = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+        const defaultFromStr = defaultFrom.toISOString().slice(0, 10);
+        where.push("s.timestamp >= ?");
+        params.push(toUtcStart(defaultFromStr, tz));
       }
       if (date_to) {
-        where.push("date(s.timestamp, 'localtime') <= ?");
-        params.push(date_to);
+        where.push("s.timestamp < ?");
+        params.push(toUtcEnd(date_to, tz));
       }
       if (outlet_id) {
         where.push("s.outlet_id = ?");
@@ -483,6 +495,7 @@ module.exports = function (app, deps, helpers) {
   // Customer Capture Rate
   app.get("/api/reports/customer-capture-rate", async (req, res) => {
     try {
+      const tz = req.company?.timezone || "UTC";
       const { date_from, date_to, outlet_id } = req.query;
       const getQuery = (query, params = []) =>
         new Promise((resolve, reject) => {
@@ -495,16 +508,17 @@ module.exports = function (app, deps, helpers) {
       const params = [];
 
       if (date_from) {
-        where.push("date(s.timestamp, 'localtime') >= ?");
-        params.push(date_from);
+        where.push("s.timestamp >= ?");
+        params.push(toUtcStart(date_from, tz));
       } else {
-        where.push(
-          "date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')",
-        );
+        const defaultFrom = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+        const defaultFromStr = defaultFrom.toISOString().slice(0, 10);
+        where.push("s.timestamp >= ?");
+        params.push(toUtcStart(defaultFromStr, tz));
       }
       if (date_to) {
-        where.push("date(s.timestamp, 'localtime') <= ?");
-        params.push(date_to);
+        where.push("s.timestamp < ?");
+        params.push(toUtcEnd(date_to, tz));
       }
       if (outlet_id) {
         where.push("s.outlet_id = ?");
@@ -741,16 +755,17 @@ module.exports = function (app, deps, helpers) {
 
   // Outlet comparison
   app.get("/api/reports/outlet-comparison", (req, res) => {
+    const tz = req.company?.timezone || "UTC";
     const { date_from, date_to } = req.query;
     const conditions = ["s.voided = 0"];
     const params = [];
     if (date_from) {
-      conditions.push("DATE(s.timestamp) >= ?");
-      params.push(date_from);
+      conditions.push("s.timestamp >= ?");
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      conditions.push("DATE(s.timestamp) <= ?");
-      params.push(date_to);
+      conditions.push("s.timestamp < ?");
+      params.push(toUtcEnd(date_to, tz));
     }
     const saleWhere = conditions.join(" AND ");
     const sql = `

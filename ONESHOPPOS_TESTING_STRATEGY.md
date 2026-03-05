@@ -1,6 +1,6 @@
 # OneShopPOS Testing Strategy and Execution Plan
 
-Updated: 2026-03-06 (Revision 5 — Phases 0-5 complete)
+Updated: 2026-03-06 (Revision 6 — Phases 0-5 complete + SaaS timezone fix)
 Project: OneShopPOS (`D:\newprojects\oneshoppos`)
 Scope: Backend + Frontend + Role behavior + Workflow integrity
 
@@ -16,9 +16,10 @@ Scope: Backend + Frontend + Role behavior + Workflow integrity
 | Phase 3 | Return/exchange flow coverage | **COMPLETE** | +11 | 277 |
 | Phase 4 | E2E smoke chain | **COMPLETE** | +8 E2E | 277 backend + 8 E2E |
 | Phase 5 | Known bug resolution | **COMPLETE** | 0 new (fixed 3 bugs) | 277 backend + 8 E2E |
+| Post-5 | SaaS timezone fix | **COMPLETE** | +19 unit tests | 277 backend + 19 unit + 8 E2E |
 | Phase 6 | Expansion | Deferred | — | — |
 
-**Current:** `npm run test:integration` → **277/277 passing** (23 test files). E2E: `smoke-gate.spec.js` added (8 tests, S1-S8).
+**Current:** `npm run test:integration` → **277/277 passing** (23 test files). `npm run test:unit` → **19/19 passing** (`tz.test.js`). E2E: `smoke-gate.spec.js` (8 tests, S1-S8).
 
 ---
 
@@ -267,6 +268,34 @@ Sequential suite sharing one DB. Covers the complete daily business cycle:
 - `backend/tests/integration/returns-exchange.test.js` — RE7 assertion flipped
 - `backend/tests/integration/returns.test.js` — B16 assertions flipped
 - `backend/tests/integration/shifts.test.js` — B12 assertion updated to range + 1.1s delay removed
+
+---
+
+### ✅ Post-Phase-5: SaaS Timezone Fix
+
+**Status: COMPLETE** — 277 integration tests still passing; 19 new unit tests added.
+
+**Problem:** The app was designed for a single-timezone deployment. All business-critical timestamps are stored as UTC in SQLite, but 214+ query filters used `date(col,'localtime')` — which applies the **server OS timezone**, not the customer's timezone. On a Linux production server (UTC), a customer in New York would get UTC-day boundaries instead of their local midnight.
+
+**What was done:**
+
+| Component | Change |
+|-----------|--------|
+| `backend/utils/tz.js` | New pure-JS timezone utility. `toUtcStart(dateStr, tz)` and `toUtcEnd(dateStr, tz)` convert a local `YYYY-MM-DD` string in any IANA timezone to UTC boundary strings. Uses `Intl.DateTimeFormat` + binary search — no npm dependencies. Handles DST (23h spring-forward, 25h fall-back), UTC+14, UTC-12. |
+| `backend/index.js` | New `loadCompanyProfile` middleware. Caches `company_profile` row (5-min TTL, same pattern as feature flags). Sets `req.company.timezone` on every request. |
+| `backend/routes/reports/helpers.js` | `buildReportFilterParts()` now uses `toUtcStart`/`toUtcEnd` with `req.company.timezone`. Central fix covering most report endpoints. |
+| All report routes (8 files) | All per-endpoint `date(col,'localtime')` WHERE filters replaced with UTC range expansion. |
+| Non-report routes (sales, returns, grn, orders, attendance, inventory) | Same UTC range expansion for list-endpoint date filters. |
+| `orders.js`, `registerAllRoutes.js` | `datetime('now','localtime')` in INSERT/UPDATE write paths changed to `datetime('now')` (UTC). |
+| `backend/tests/unit/tz.test.js` | 19 unit tests: UTC, PKT, NY (EST/EDT), LA (PST/PDT), London (GMT/BST), Auckland (NZDT), Kiritimati (UTC+14), Baker Island (UTC-12), DST spring-forward/fall-back, invalid timezone fallback. |
+
+**What was NOT changed:**
+- `attendance_sessions.session_start` and `employee_attendance.check_in` — stored as local time via `datetime('now','localtime')` and queried with `date(col,'localtime')`. Self-consistent. Not cross-joined with UTC tables. Left as-is.
+- DB schema — no migration needed. UTC data already stored correctly.
+
+**Rule for new code:** Never use `date(col,'localtime')` in WHERE clauses on UTC-stored columns. Always use `toUtcStart`/`toUtcEnd` from `backend/utils/tz.js` with `req.company?.timezone || 'UTC'`.
+
+**Run tests:** `cd backend && npm run test:unit` (19/19) + `npm run test:integration` (277/277)
 
 ---
 

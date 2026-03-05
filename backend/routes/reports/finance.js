@@ -1,3 +1,5 @@
+const { toUtcStart, toUtcEnd } = require("../../utils/tz");
+
 module.exports = function registerFinanceReports(app, deps, helpers) {
   const { db } = deps;
   const { getDescendantLeafIds } = helpers || {};
@@ -18,7 +20,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
       });
     });
 
-  function applyRangeFilters(where, params, query, opts = {}) {
+  function applyRangeFilters(where, params, query, opts = {}, tz = "UTC") {
     const {
       dateColumn,
       timeColumn,
@@ -46,12 +48,12 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         : null;
 
     if (date_from && dateColumn) {
-      where.push(`date(${dateColumn}, 'localtime') >= ?`);
-      params.push(date_from);
+      where.push(`${dateColumn} >= ?`);
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to && dateColumn) {
-      where.push(`date(${dateColumn}, 'localtime') <= ?`);
-      params.push(date_to);
+      where.push(`${dateColumn} < ?`);
+      params.push(toUtcEnd(date_to, tz));
     }
     if (time_from && timeColumn) {
       where.push(`time(${timeColumn}, 'localtime') >= time(?)`);
@@ -136,20 +138,21 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
 
   app.get("/api/reports/settlement-overview", async (req, res) => {
     try {
+      const tz = req.company?.timezone || "UTC";
       const salesWhere = ["s.voided = 0"];
       const salesParams = [];
       applyRangeFilters(salesWhere, salesParams, req.query, {
         dateColumn: "s.timestamp",
         timeColumn: "s.timestamp",
         outletColumn: "s.outlet_id",
-      });
+      }, tz);
 
       const expenseWhere = ["1 = 1"];
       const expenseParams = [];
       applyRangeFilters(expenseWhere, expenseParams, req.query, {
         dateColumn: "e.expense_date",
         outletColumn: "e.outlet_id",
-      });
+      }, tz);
 
       const supplierPaymentWhere = ["1 = 1"];
       const supplierPaymentParams = [];
@@ -161,7 +164,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         searchSql:
           "(s.name LIKE ? OR COALESCE(si.invoice_number, '') LIKE ? OR COALESCE(sp.reference, '') LIKE ?)",
         searchParams: [1, 1, 1],
-      });
+      }, tz);
 
       const invoiceWhere = ["1 = 1"];
       const invoiceParams = [];
@@ -172,7 +175,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         searchSql:
           "(s.name LIKE ? OR COALESCE(si.invoice_number, '') LIKE ?)",
         searchParams: [1, 1],
-      });
+      }, tz);
 
       const customerWhere = ["COALESCE(c.balance, 0) <> 0"];
       const customerParams = [];
@@ -387,6 +390,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
 
   app.get("/api/reports/payables-receivables", async (req, res) => {
     try {
+      const tz = req.company?.timezone || "UTC";
       const supplierWhere = ["1 = 1"];
       const supplierParams = [];
       applyRangeFilters(supplierWhere, supplierParams, req.query, {
@@ -396,7 +400,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         searchSql:
           "(s.name LIKE ? OR COALESCE(si.invoice_number, '') LIKE ?)",
         searchParams: [1, 1],
-      });
+      }, tz);
 
       const customerWhere = ["COALESCE(c.balance, 0) <> 0"];
       const customerParams = [];
@@ -414,12 +418,12 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
       const customerSalesJoin = [];
       const customerSalesParams = [];
       if (req.query.date_from) {
-        customerSalesJoin.push("date(s.timestamp, 'localtime') >= ?");
-        customerSalesParams.push(req.query.date_from);
+        customerSalesJoin.push("s.timestamp >= ?");
+        customerSalesParams.push(toUtcStart(req.query.date_from, tz));
       }
       if (req.query.date_to) {
-        customerSalesJoin.push("date(s.timestamp, 'localtime') <= ?");
-        customerSalesParams.push(req.query.date_to);
+        customerSalesJoin.push("s.timestamp < ?");
+        customerSalesParams.push(toUtcEnd(req.query.date_to, tz));
       }
       if (req.query.outlet_id) {
         customerSalesJoin.push("s.outlet_id = ?");
@@ -509,6 +513,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
 
   app.get("/api/reports/supplier-payments-invoices", async (req, res) => {
     try {
+      const tz = req.company?.timezone || "UTC";
       const invoiceWhere = ["1 = 1"];
       const invoiceParams = [];
       applyRangeFilters(invoiceWhere, invoiceParams, req.query, {
@@ -518,7 +523,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         searchSql:
           "(s.name LIKE ? OR COALESCE(si.invoice_number, '') LIKE ?)",
         searchParams: [1, 1],
-      });
+      }, tz);
 
       const paymentWhere = ["1 = 1"];
       const paymentParams = [];
@@ -530,7 +535,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         searchSql:
           "(s.name LIKE ? OR COALESCE(si.invoice_number, '') LIKE ? OR COALESCE(sp.reference, '') LIKE ?)",
         searchParams: [1, 1, 1],
-      });
+      }, tz);
 
       if (req.query.status === "open") {
         invoiceWhere.push("si.status <> 'paid'");
@@ -662,13 +667,14 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
 
   app.get("/api/reports/finance-payment-mix", async (req, res) => {
     try {
+      const tz = req.company?.timezone || "UTC";
       const salesWhere = ["s.voided = 0"];
       const salesParams = [];
       applyRangeFilters(salesWhere, salesParams, req.query, {
         dateColumn: "s.timestamp",
         timeColumn: "s.timestamp",
         outletColumn: "s.outlet_id",
-      });
+      }, tz);
 
       const supplierPaymentWhere = ["1 = 1"];
       const supplierPaymentParams = [];
@@ -677,7 +683,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         timeColumn: "sp.paid_at",
         outletColumn: "COALESCE(grn_direct.outlet_id, grn_po.outlet_id)",
         supplierColumn: "si.supplier_id",
-      });
+      }, tz);
 
       const saleMix = await allAsync(
         `
@@ -764,13 +770,14 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
 
   app.get("/api/reports/gst-output", async (req, res) => {
     try {
+      const tz = req.company?.timezone || "UTC";
       const where = ["s.voided = 0", "si.quantity > 0"];
       const params = [];
       applyRangeFilters(where, params, req.query, {
         dateColumn: "s.timestamp",
         timeColumn: "s.timestamp",
         outletColumn: "s.outlet_id",
-      });
+      }, tz);
       await applyProductFilters(where, params, req.query, {
         product: "p",
         sale: "s",
@@ -909,13 +916,14 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
 
   app.get("/api/reports/gst-type-summary", async (req, res) => {
     try {
+      const tz = req.company?.timezone || "UTC";
       const salesWhere = ["s.voided = 0", "si.quantity > 0"];
       const salesParams = [];
       applyRangeFilters(salesWhere, salesParams, req.query, {
         dateColumn: "s.timestamp",
         timeColumn: "s.timestamp",
         outletColumn: "s.outlet_id",
-      });
+      }, tz);
       await applyProductFilters(salesWhere, salesParams, req.query, {
         product: "p",
         sale: "s",
@@ -928,7 +936,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
       applyRangeFilters(purchaseWhere, purchaseParams, req.query, {
         dateColumn: "po.created_at",
         outletColumn: "grn_po.outlet_id",
-      });
+      }, tz);
       await applyProductFilters(purchaseWhere, purchaseParams, req.query, {
         product: "p",
         supplier: "po.supplier_id",
@@ -941,7 +949,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         dateColumn: "grn.received_at",
         timeColumn: "grn.received_at",
         outletColumn: "grn.outlet_id",
-      });
+      }, tz);
       await applyProductFilters(receivedWhere, receivedParams, req.query, {
         product: "p",
         supplier: "po.supplier_id",

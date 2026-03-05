@@ -1,3 +1,5 @@
+const { toUtcStart, toUtcEnd } = require("../utils/tz");
+
 module.exports = function registerSalesRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale, path, fs, UPLOADS_DIR } = deps;
 
@@ -133,13 +135,14 @@ module.exports = function registerSalesRoutes(app, deps) {
       );
       params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
+    const tz = req.company?.timezone || "UTC";
     if (date_from) {
-      conditions.push("date(s.timestamp, 'localtime') >= ?");
-      params.push(date_from);
+      conditions.push("s.timestamp >= ?");
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      conditions.push("date(s.timestamp, 'localtime') <= ?");
-      params.push(date_to);
+      conditions.push("s.timestamp < ?");
+      params.push(toUtcEnd(date_to, tz));
     }
     if (outlet_id) {
       conditions.push("s.outlet_id = ?");

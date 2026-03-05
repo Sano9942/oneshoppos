@@ -22,7 +22,9 @@
       "Skill(claude-md-management:revise-claude-md:*)",
       "Bash(npm run test:integration)",
       "Bash(npm run test:smoke)",
-      "Bash(npm run test:integration -- --reporter=verbose)"
+      "Bash(npm run test:integration -- --reporter=verbose)",
+      "Bash(npm run test:integration -- tests/integration/health.test.js)",
+      "Bash(npm run test:unit)"
     ]
   }
 }

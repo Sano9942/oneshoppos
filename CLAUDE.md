@@ -124,6 +124,8 @@ oneshoppos/
 │   │   ├── utils.js              # Retry logic, webhook HMAC verification
 │   │   └── order-service.js      # upsertWebOrderFromShopifyPayload + stock policy helpers (factory)
 │   ├── category-tree.js          # Category tree enrichment, descendants, leaf validation
+│   ├── utils/
+│   │   └── tz.js                 # Timezone utils — toUtcStart/toUtcEnd for SaaS date filters
 │   └── migrate61.js              # Latest DB migration — READ THIS for schema questions
 └── frontend/
     └── src/
@@ -182,6 +184,7 @@ oneshoppos/
 - Schema questions → `backend/migrate61.js` (latest)
 - Category tree logic → `backend/category-tree.js`
 - Server middleware/config → `backend/index.js`
+- Timezone utilities → `backend/utils/tz.js` (`toUtcStart`, `toUtcEnd`, `toLocalDateStr`, `isValidTz`)
 - Shopify API calls → `backend/shopify/client.js`, webhook/retry logic → `backend/shopify/utils.js`
 - Shopify routes → `backend/routes/shopify/`
 - Reports routes → `backend/routes/reports/`
@@ -213,6 +216,13 @@ oneshoppos/
 ### Sales table schema
 - The sale timestamp column is named `timestamp`, NOT `created_at` — using `created_at` silently returns undefined
 
+### Timezone architecture (SaaS-ready)
+- All business-critical timestamps (`sales`, `returns`, `cash_shifts`, `stock_adjustments`, `inventory_transfers`) are stored as **UTC** via `CURRENT_TIMESTAMP`
+- `attendance_sessions` and `employee_attendance` store **local time** (server OS) — this is intentional and self-consistent; do NOT change their write paths
+- `backend/utils/tz.js` provides `toUtcStart(dateStr, tz)` and `toUtcEnd(dateStr, tz)` — converts a local `YYYY-MM-DD` string in any IANA timezone to UTC boundary strings for direct `timestamp >= ?` / `timestamp < ?` SQL comparisons
+- `req.company.timezone` (IANA string, e.g. `'America/New_York'`) is set by the `loadCompanyProfile` middleware — use it in all date filter queries; **never use `date(col,'localtime')` for new queries on UTC-stored columns**
+- `company_profile.timezone` is the source of truth — set it per-tenant; defaults to `'UTC'` if unset or invalid
+
 ### POS architecture (`redesign/pos/`)
 - All POS state lives in `POSContext.jsx` — 128+ exported values. Add new state/functions here, mount new modals in `POSRedesign.jsx`
 - New POS components must call all hooks (`useMemo`, `useCallback`, etc.) BEFORE any conditional early return
@@ -232,3 +242,4 @@ Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
 - Mar 2026: POS opening/closing workflow hardened (branch + shift + attendance gating)
 - Mar 2026: Context Unification shipped — mandatory post-login branch context, role-scope enforcement, header propagation (migrate61, 3 flags live)
 - Mar 2026: POS Recent Sales + Return/Exchange flow shipped — reprint bills, full refund, exchange with balance settlement
+- Mar 2026: SaaS timezone fix — all date filters converted from `date(col,'localtime')` (server OS timezone) to UTC range expansion via `backend/utils/tz.js`; `loadCompanyProfile` middleware added; `company_profile.timezone` (IANA string) now drives all date boundaries

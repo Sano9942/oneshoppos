@@ -1,3 +1,5 @@
+const { toUtcStart, toUtcEnd } = require("../../utils/tz");
+
 module.exports = function (app, deps, helpers) {
   const { db, requirePerm, requireAnyPerm, requireFeature, path, fs } = deps;
   const { parseJsonObject, nextRunAtIso, toCsvLines } = helpers;
@@ -54,16 +56,17 @@ module.exports = function (app, deps, helpers) {
   }
 
   function getRowsForScheduleReport(reportKey, filters, cb) {
+    const tz = filters.timezone || "UTC";
     if (reportKey === "profit-by-product") {
       const where = ["s.voided = 0"];
       const params = [];
       if (filters.date_from) {
-        where.push("date(s.timestamp,'localtime') >= ?");
-        params.push(filters.date_from);
+        where.push("s.timestamp >= ?");
+        params.push(toUtcStart(filters.date_from, tz));
       }
       if (filters.date_to) {
-        where.push("date(s.timestamp,'localtime') <= ?");
-        params.push(filters.date_to);
+        where.push("s.timestamp < ?");
+        params.push(toUtcEnd(filters.date_to, tz));
       }
       if (filters.outlet_id) {
         where.push("s.outlet_id = ?");
@@ -125,7 +128,7 @@ module.exports = function (app, deps, helpers) {
           JOIN products p ON p.id = si.product_id
           JOIN outlets o ON o.id = s.outlet_id
           LEFT JOIN outlet_stock os ON os.product_id = p.id AND os.outlet_id = o.id
-          WHERE s.voided = 0 AND date(s.timestamp,'localtime') >= date('now', '-' || ? || ' days', 'localtime')
+          WHERE s.voided = 0 AND s.timestamp >= datetime('now', '-' || ? || ' days')
           GROUP BY p.id, o.id
           ORDER BY avg_daily_units DESC
           LIMIT 1000

@@ -1,9 +1,12 @@
+const { toUtcStart, toUtcEnd } = require("../../utils/tz");
+
 module.exports = function (app, deps) {
   const { db } = deps;
 
   app.get("/api/reports/labor-performance", async (req, res) => {
     try {
       const { date_from, date_to, outlet_id } = req.query;
+      const tz = req.company?.timezone || "UTC";
       const getQuery = (query, params = []) =>
         new Promise((resolve, reject) => {
           db.all(query, params, (err, rows) =>
@@ -17,24 +20,24 @@ module.exports = function (app, deps) {
       const attendParams = [];
 
       if (date_from) {
-        saleWhere.push("date(s.timestamp, 'localtime') >= ?");
-        saleParams.push(date_from);
-        attendWhere.push("date(session_start, 'localtime') >= ?");
-        attendParams.push(date_from);
+        saleWhere.push("s.timestamp >= ?");
+        saleParams.push(toUtcStart(date_from, tz));
+        attendWhere.push("session_start >= ?");
+        attendParams.push(toUtcStart(date_from, tz));
       } else {
-        saleWhere.push(
-          "date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')",
-        );
-        attendWhere.push(
-          "date(session_start, 'localtime') >= date('now', '-30 days', 'localtime')",
-        );
+        const thirtyDaysAgoStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 30 * 24 * 3600 * 1000));
+        const thirtyDaysAgoStart = toUtcStart(thirtyDaysAgoStr, tz);
+        saleWhere.push("s.timestamp >= ?");
+        saleParams.push(thirtyDaysAgoStart);
+        attendWhere.push("session_start >= ?");
+        attendParams.push(thirtyDaysAgoStart);
       }
 
       if (date_to) {
-        saleWhere.push("date(s.timestamp, 'localtime') <= ?");
-        saleParams.push(date_to);
-        attendWhere.push("date(session_start, 'localtime') <= ?");
-        attendParams.push(date_to);
+        saleWhere.push("s.timestamp < ?");
+        saleParams.push(toUtcEnd(date_to, tz));
+        attendWhere.push("session_start < ?");
+        attendParams.push(toUtcEnd(date_to, tz));
       }
 
       if (outlet_id) {
@@ -85,6 +88,7 @@ module.exports = function (app, deps) {
   app.get("/api/reports/loss-prevention", async (req, res) => {
     try {
       const { date_from, date_to, outlet_id } = req.query;
+      const tz = req.company?.timezone || "UTC";
       const getQuery = (query, params = []) =>
         new Promise((resolve, reject) => {
           db.all(query, params, (err, rows) =>
@@ -100,31 +104,30 @@ module.exports = function (app, deps) {
       const saleParams = [];
 
       if (date_from) {
-        voidWhere.push("date(s.timestamp, 'localtime') >= ?");
-        voidParams.push(date_from);
-        refundWhere.push("date(r.timestamp, 'localtime') >= ?");
-        refundParams.push(date_from);
-        saleWhere.push("date(s.timestamp, 'localtime') >= ?");
-        saleParams.push(date_from);
+        voidWhere.push("s.timestamp >= ?");
+        voidParams.push(toUtcStart(date_from, tz));
+        refundWhere.push("r.timestamp >= ?");
+        refundParams.push(toUtcStart(date_from, tz));
+        saleWhere.push("s.timestamp >= ?");
+        saleParams.push(toUtcStart(date_from, tz));
       } else {
-        voidWhere.push(
-          "date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')",
-        );
-        refundWhere.push(
-          "date(r.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')",
-        );
-        saleWhere.push(
-          "date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')",
-        );
+        const thirtyDaysAgoStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 30 * 24 * 3600 * 1000));
+        const thirtyDaysAgoStart = toUtcStart(thirtyDaysAgoStr, tz);
+        voidWhere.push("s.timestamp >= ?");
+        voidParams.push(thirtyDaysAgoStart);
+        refundWhere.push("r.timestamp >= ?");
+        refundParams.push(thirtyDaysAgoStart);
+        saleWhere.push("s.timestamp >= ?");
+        saleParams.push(thirtyDaysAgoStart);
       }
 
       if (date_to) {
-        voidWhere.push("date(s.timestamp, 'localtime') <= ?");
-        voidParams.push(date_to);
-        refundWhere.push("date(r.timestamp, 'localtime') <= ?");
-        refundParams.push(date_to);
-        saleWhere.push("date(s.timestamp, 'localtime') <= ?");
-        saleParams.push(date_to);
+        voidWhere.push("s.timestamp < ?");
+        voidParams.push(toUtcEnd(date_to, tz));
+        refundWhere.push("r.timestamp < ?");
+        refundParams.push(toUtcEnd(date_to, tz));
+        saleWhere.push("s.timestamp < ?");
+        saleParams.push(toUtcEnd(date_to, tz));
       }
 
       if (outlet_id) {

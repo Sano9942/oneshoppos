@@ -1,3 +1,5 @@
+const { toUtcStart, toUtcEnd } = require("../utils/tz");
+
 module.exports = function registerReturnsRoutes(app, deps) {
   const { db, requirePerm, createNotification, notifyLowStockForSale } = deps;
 
@@ -179,16 +181,17 @@ module.exports = function registerReturnsRoutes(app, deps) {
   // Get all returns (with details)
   app.get("/api/returns", (req, res) => {
     const { date_from, date_to } = req.query;
+    const tz = req.company?.timezone || "UTC";
     const where = [];
     const params = [];
 
     if (date_from) {
-      where.push("date(r.timestamp, 'localtime') >= ?");
-      params.push(date_from);
+      where.push("r.timestamp >= ?");
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      where.push("date(r.timestamp, 'localtime') <= ?");
-      params.push(date_to);
+      where.push("r.timestamp < ?");
+      params.push(toUtcEnd(date_to, tz));
     }
 
     const whereClause = where.length > 0 ? "WHERE " + where.join(" AND ") : "";

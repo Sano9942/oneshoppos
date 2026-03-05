@@ -244,6 +244,30 @@ function requirePerm(permission) {
   };
 }
 
+// Company profile cache — loaded once on startup and refreshed every 5 minutes.
+// Provides req.company.timezone (and other profile fields) to all route handlers.
+let _cachedCompany = { timezone: "UTC" };
+let _companyLastCheck = 0;
+const COMPANY_CACHE_MS = 5 * 60 * 1000; // 5 min
+
+// Eager startup load
+db.get("SELECT * FROM company_profile WHERE id = 1", [], (err, row) => {
+  if (!err && row) _cachedCompany = row;
+  _companyLastCheck = Date.now();
+});
+
+function loadCompanyProfile(req, res, next) {
+  const now = Date.now();
+  if (now - _companyLastCheck > COMPANY_CACHE_MS) {
+    _companyLastCheck = now; // prevent multiple concurrent refreshes
+    db.get("SELECT * FROM company_profile WHERE id = 1", [], (err, row) => {
+      if (!err && row) _cachedCompany = row;
+    });
+  }
+  req.company = _cachedCompany;
+  next();
+}
+
 // Context resolver — reads context headers, optionally enforces when flag is on.
 // Exempt paths: auth, context bootstrap, feature-flags, kiosk attendance PIN endpoints.
 const CONTEXT_EXEMPT_PATHS = [
@@ -647,6 +671,7 @@ const { processPendingShopifyInventoryEvents, processPendingReportSchedules } =
     createNotification,
     notifyLowStockForSale,
     loadEmployeePerms,
+    loadCompanyProfile,
     resolveContext,
     requireContextOutlet,
     ensureDefaultRolePermissions,

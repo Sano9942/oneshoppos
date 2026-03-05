@@ -1,3 +1,5 @@
+const { toUtcStart, toUtcEnd } = require("../../utils/tz");
+
 module.exports = function (app, deps) {
   const { db } = deps;
 
@@ -9,6 +11,15 @@ module.exports = function (app, deps) {
             err ? reject(err) : resolve(rows || []),
           );
         });
+
+      const tz = req.company?.timezone || "UTC";
+      // Compute today's local date string in the company timezone
+      const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
+      const todayStart = toUtcStart(todayStr, tz);
+      const todayEnd = toUtcEnd(todayStr, tz);
+      // First day of current local month
+      const monthStartStr = todayStr.slice(0, 7) + "-01";
+      const monthStart = toUtcStart(monthStartStr, tz);
 
       const outletId =
         req.query?.outlet_id !== undefined &&
@@ -28,27 +39,36 @@ module.exports = function (app, deps) {
           FROM sales s
           LEFT JOIN sale_payments sp ON s.id = sp.sale_id
           WHERE s.voided = 0
-            AND date(s.timestamp, 'localtime') = date('now', 'localtime')
+            AND s.timestamp >= ?
+            AND s.timestamp < ?
             ${outletFilter}
           GROUP BY COALESCE(sp.payment_method, s.payment_method, 'Unknown')
           ORDER BY total DESC
         `,
-        outletParams,
+        [todayStart, todayEnd, ...outletParams],
       );
       const totalRevenueToday = zReport.reduce(
         (sum, row) => sum + Number(row.total || 0),
         0,
       );
 
-      const salesByOutlet = await getQuery(`
+      const salesByOutlet = await getQuery(
+        `
         SELECT o.name, ROUND(SUM(s.total_amount), 2) AS total
         FROM sales s
         JOIN outlets o ON s.outlet_id = o.id
         WHERE s.voided = 0
-          AND date(s.timestamp, 'localtime') = date('now', 'localtime')
+          AND s.timestamp >= ?
+          AND s.timestamp < ?
         GROUP BY o.name
         ORDER BY total DESC
-      `);
+      `,
+        [todayStart, todayEnd],
+      );
+
+      // Compute UTC start for 7-days-ago local date
+      const sevenDaysAgoStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 7 * 24 * 3600 * 1000));
+      const sevenDaysAgoStart = toUtcStart(sevenDaysAgoStr, tz);
 
       const topProducts = await getQuery(
         `
@@ -57,14 +77,20 @@ module.exports = function (app, deps) {
           JOIN sales s ON si.sale_id = s.id
           JOIN products p ON si.product_id = p.id
           WHERE s.voided = 0
-            AND date(s.timestamp, 'localtime') >= date('now', '-7 days', 'localtime')
+            AND s.timestamp >= ?
             ${outletFilter}
           GROUP BY p.name
           ORDER BY units_sold DESC, p.name ASC
           LIMIT 5
         `,
-        outletParams,
+        [sevenDaysAgoStart, ...outletParams],
       );
+
+      // Compute UTC start for 6-months-ago local date
+      const sixMonthsAgoDate = new Date();
+      sixMonthsAgoDate.setMonth(sixMonthsAgoDate.getMonth() - 6);
+      const sixMonthsAgoStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(sixMonthsAgoDate);
+      const sixMonthsAgoStart = toUtcStart(sixMonthsAgoStr, tz);
 
       const monthlyTrend = await getQuery(
         `
@@ -73,12 +99,12 @@ module.exports = function (app, deps) {
             ROUND(SUM(s.total_amount), 2) AS total
           FROM sales s
           WHERE s.voided = 0
-            AND date(s.timestamp, 'localtime') >= date('now', '-6 months', 'localtime')
+            AND s.timestamp >= ?
             ${outletFilter}
           GROUP BY month
           ORDER BY month ASC
         `,
-        outletParams,
+        [sixMonthsAgoStart, ...outletParams],
       );
 
       const inventoryStatus = await getQuery(
@@ -90,6 +116,10 @@ module.exports = function (app, deps) {
         `,
       );
 
+      // Compute UTC start for 30-days-ago local date
+      const thirtyDaysAgoStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 30 * 24 * 3600 * 1000));
+      const thirtyDaysAgoStart = toUtcStart(thirtyDaysAgoStr, tz);
+
       const categoryMatrix = await getQuery(
         `
           SELECT c.name AS category, ROUND(SUM(si.quantity * si.price_at_sale), 2) AS revenue
@@ -98,13 +128,13 @@ module.exports = function (app, deps) {
           JOIN categories c ON p.category_id = c.id
           JOIN sales s ON si.sale_id = s.id
           WHERE s.voided = 0
-            AND date(s.timestamp, 'localtime') >= date('now', '-30 days', 'localtime')
+            AND s.timestamp >= ?
             ${outletFilter}
           GROUP BY c.name
           ORDER BY revenue DESC, c.name ASC
           LIMIT 5
         `,
-        outletParams,
+        [thirtyDaysAgoStart, ...outletParams],
       );
 
       const hourlySales = await getQuery(
@@ -115,12 +145,13 @@ module.exports = function (app, deps) {
             COUNT(s.id) AS orders
           FROM sales s
           WHERE s.voided = 0
-            AND date(s.timestamp, 'localtime') = date('now', 'localtime')
+            AND s.timestamp >= ?
+            AND s.timestamp < ?
             ${outletFilter}
           GROUP BY hour
           ORDER BY hour ASC
         `,
-        outletParams,
+        [todayStart, todayEnd, ...outletParams],
       );
 
       const revenueMetrics = await getQuery(
@@ -146,10 +177,11 @@ module.exports = function (app, deps) {
           JOIN products p ON si.product_id = p.id
           LEFT JOIN taxes t ON p.tax_id = t.id
           WHERE s.voided = 0
-            AND date(s.timestamp, 'localtime') = date('now', 'localtime')
+            AND s.timestamp >= ?
+            AND s.timestamp < ?
             ${outletFilter}
         `,
-        outletParams,
+        [todayStart, todayEnd, ...outletParams],
       );
 
       const metricRow = revenueMetrics[0] || {};
@@ -160,11 +192,11 @@ module.exports = function (app, deps) {
 
       const expenseWhere =
         outletId !== null
-          ? "expense_date = date('now', 'localtime') AND outlet_id = ?"
-          : "expense_date = date('now', 'localtime')";
+          ? "expense_date = ? AND outlet_id = ?"
+          : "expense_date = ?";
       const expenseRows = await getQuery(
         `SELECT ROUND(COALESCE(SUM(amount), 0), 2) AS total FROM expenses WHERE ${expenseWhere}`,
-        outletId !== null ? [outletId] : [],
+        outletId !== null ? [todayStr, outletId] : [todayStr],
       );
       const todayExpenses = Number(expenseRows[0]?.total || 0);
       const todayProfit = Number((todayGrossProfit - todayExpenses).toFixed(2));
@@ -191,10 +223,11 @@ module.exports = function (app, deps) {
           JOIN products p ON si.product_id = p.id
           LEFT JOIN taxes t ON p.tax_id = t.id
           WHERE s.voided = 0
-            AND strftime('%Y-%m', s.timestamp, 'localtime') = strftime('%Y-%m', 'now', 'localtime')
+            AND s.timestamp >= ?
+            AND s.timestamp < ?
             ${outletFilter}
         `,
-        outletParams,
+        [monthStart, todayEnd, ...outletParams],
       );
       const monthMarginRow = monthGrossMarginRows[0] || {};
       const monthTaxExclusive = Number(monthMarginRow.month_tax_exclusive || 0);
@@ -206,13 +239,18 @@ module.exports = function (app, deps) {
           SELECT COUNT(id) AS count
           FROM sales s
           WHERE s.voided = 0
-            AND date(s.timestamp, 'localtime') = date('now', 'localtime')
+            AND s.timestamp >= ?
+            AND s.timestamp < ?
             ${outletFilter}
         `,
-        outletParams,
+        [todayStart, todayEnd, ...outletParams],
       );
       const saleCount = Number(saleCountRow[0]?.count || 0);
       const averageBill = saleCount > 0 ? Number((totalRevenueToday / saleCount).toFixed(2)) : 0;
+
+      // Compute UTC start for 29-days-ago local date
+      const twentyNineDaysAgoStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 29 * 24 * 3600 * 1000));
+      const twentyNineDaysAgoStart = toUtcStart(twentyNineDaysAgoStr, tz);
 
       const topSelling = await getQuery(
         `
@@ -221,13 +259,13 @@ module.exports = function (app, deps) {
           JOIN products p ON si.product_id = p.id
           JOIN sales s ON si.sale_id = s.id
           WHERE s.voided = 0
-            AND date(s.timestamp, 'localtime') >= date('now', '-29 days', 'localtime')
+            AND s.timestamp >= ?
             ${outletFilter}
           GROUP BY p.name
           ORDER BY total_sold DESC, p.name ASC
           LIMIT 5
         `,
-        outletParams,
+        [twentyNineDaysAgoStart, ...outletParams],
       );
 
       const lowStock = await getQuery(
@@ -268,6 +306,10 @@ module.exports = function (app, deps) {
         total_units: 0,
       };
 
+      // Compute UTC start for 6-days-ago local date
+      const sixDaysAgoStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 6 * 24 * 3600 * 1000));
+      const sixDaysAgoStart = toUtcStart(sixDaysAgoStr, tz);
+
       const salesTrend = await getQuery(
         `
           SELECT
@@ -276,12 +318,12 @@ module.exports = function (app, deps) {
             COUNT(s.id) AS sale_count
           FROM sales s
           WHERE s.voided = 0
-            AND date(s.timestamp, 'localtime') >= date('now', '-6 days', 'localtime')
+            AND s.timestamp >= ?
             ${outletFilter}
           GROUP BY day
           ORDER BY day ASC
         `,
-        outletParams,
+        [sixDaysAgoStart, ...outletParams],
       );
 
       const attendanceToday = await getQuery(
@@ -297,7 +339,8 @@ module.exports = function (app, deps) {
             SELECT employee_id, session_type, break_reason
             FROM attendance_sessions
             WHERE session_end IS NULL
-              AND date(session_start, 'localtime') = date('now', 'localtime')
+              AND session_start >= ?
+              AND session_start < ?
               ${outletId !== null ? "AND outlet_id = ?" : ""}
           ) active ON active.employee_id = e.id
           LEFT JOIN (
@@ -305,13 +348,16 @@ module.exports = function (app, deps) {
             FROM attendance_sessions
             WHERE session_type = 'work'
               AND session_end IS NOT NULL
-              AND date(session_start, 'localtime') = date('now', 'localtime')
+              AND session_start >= ?
+              AND session_start < ?
               ${outletId !== null ? "AND outlet_id = ?" : ""}
             GROUP BY employee_id
           ) work_hours ON work_hours.employee_id = e.id
           ORDER BY e.name ASC
         `,
-        outletId !== null ? [outletId, outletId] : [],
+        outletId !== null
+          ? [todayStart, todayEnd, outletId, todayStart, todayEnd, outletId]
+          : [todayStart, todayEnd, todayStart, todayEnd],
       );
 
       const refundsTodayRows = await getQuery(
@@ -321,10 +367,11 @@ module.exports = function (app, deps) {
             ROUND(COALESCE(SUM(ri.quantity * ri.refund_price), 0), 2) AS refund_value
           FROM returns r
           LEFT JOIN return_items ri ON ri.return_id = r.id
-          WHERE date(r.timestamp, 'localtime') = date('now', 'localtime')
+          WHERE r.timestamp >= ?
+            AND r.timestamp < ?
           ${outletId !== null ? "AND r.outlet_id = ?" : ""}
         `,
-        outletParams,
+        outletId !== null ? [todayStart, todayEnd, outletId] : [todayStart, todayEnd],
       );
       const refundsToday = {
         count: Number(refundsTodayRows[0]?.refund_count || 0),
@@ -338,10 +385,11 @@ module.exports = function (app, deps) {
             ROUND(COALESCE(SUM(total_amount), 0), 2) AS void_value
           FROM sales s
           WHERE s.voided = 1
-            AND date(s.timestamp, 'localtime') = date('now', 'localtime')
+            AND s.timestamp >= ?
+            AND s.timestamp < ?
             ${outletFilter}
         `,
-        outletParams,
+        [todayStart, todayEnd, ...outletParams],
       );
       const voidsToday = {
         count: Number(voidsTodayRows[0]?.void_count || 0),
@@ -356,10 +404,11 @@ module.exports = function (app, deps) {
           FROM sales s
           WHERE s.voided = 0
             AND COALESCE(s.discount_amount, 0) > 0
-            AND date(s.timestamp, 'localtime') = date('now', 'localtime')
+            AND s.timestamp >= ?
+            AND s.timestamp < ?
             ${outletFilter}
         `,
-        outletParams,
+        [todayStart, todayEnd, ...outletParams],
       );
       const discountsToday = {
         count: Number(discountsTodayRows[0]?.discount_count || 0),
@@ -371,10 +420,11 @@ module.exports = function (app, deps) {
           SELECT ROUND(COALESCE(SUM(s.total_amount), 0), 2) AS total
           FROM sales s
           WHERE s.voided = 0
-            AND strftime('%Y-%m', s.timestamp, 'localtime') = strftime('%Y-%m', 'now', 'localtime')
+            AND s.timestamp >= ?
+            AND s.timestamp < ?
             ${outletFilter}
         `,
-        outletParams,
+        [monthStart, todayEnd, ...outletParams],
       );
       const monthSales = Number(monthSalesRows[0]?.total || 0);
 
@@ -383,10 +433,11 @@ module.exports = function (app, deps) {
           SELECT ROUND(COALESCE(SUM(gi.qty_received * gi.cost_price), 0), 2) AS total
           FROM goods_received_notes grn
           JOIN grn_items gi ON gi.grn_id = grn.id
-          WHERE strftime('%Y-%m', grn.received_at, 'localtime') = strftime('%Y-%m', 'now', 'localtime')
+          WHERE grn.received_at >= ?
+            AND grn.received_at < ?
           ${outletId !== null ? "AND grn.outlet_id = ?" : ""}
         `,
-        outletId !== null ? [outletId] : [],
+        outletId !== null ? [monthStart, todayEnd, outletId] : [monthStart, todayEnd],
       );
       const monthPurchases = Number(monthPurchasesRows[0]?.total || 0);
 
@@ -408,13 +459,13 @@ module.exports = function (app, deps) {
           JOIN products p ON p.id = si.product_id
           JOIN categories c ON c.id = p.category_id
           WHERE s.voided = 0
-            AND date(s.timestamp, 'localtime') >= date('now', '-29 days', 'localtime')
+            AND s.timestamp >= ?
             ${outletFilter}
           GROUP BY c.name
           ORDER BY revenue DESC, c.name ASC
           LIMIT 5
         `,
-        outletParams,
+        [twentyNineDaysAgoStart, ...outletParams],
       );
       const categoryContributionTotal = categoryContributionRows.reduce(
         (sum, row) => sum + Number(row.revenue || 0),
@@ -431,11 +482,11 @@ module.exports = function (app, deps) {
       const salePurchaseComparison = await getQuery(
         `
           WITH RECURSIVE dates(day) AS (
-            SELECT date('now', '-6 days', 'localtime')
+            SELECT ?
             UNION ALL
             SELECT date(day, '+1 day')
             FROM dates
-            WHERE day < date('now', 'localtime')
+            WHERE day < ?
           ),
           sales_daily AS (
             SELECT
@@ -443,7 +494,7 @@ module.exports = function (app, deps) {
               ROUND(COALESCE(SUM(s.total_amount), 0), 2) AS sales_total
             FROM sales s
             WHERE s.voided = 0
-              AND date(s.timestamp, 'localtime') >= date('now', '-6 days', 'localtime')
+              AND s.timestamp >= ?
               ${outletFilter}
             GROUP BY date(s.timestamp, 'localtime')
           ),
@@ -453,7 +504,7 @@ module.exports = function (app, deps) {
               ROUND(COALESCE(SUM(gi.qty_received * gi.cost_price), 0), 2) AS purchase_total
             FROM goods_received_notes grn
             JOIN grn_items gi ON gi.grn_id = grn.id
-            WHERE date(grn.received_at, 'localtime') >= date('now', '-6 days', 'localtime')
+            WHERE grn.received_at >= ?
               ${outletId !== null ? "AND grn.outlet_id = ?" : ""}
             GROUP BY date(grn.received_at, 'localtime')
           )
@@ -466,7 +517,9 @@ module.exports = function (app, deps) {
           LEFT JOIN purchase_daily ON purchase_daily.day = dates.day
           ORDER BY dates.day ASC
         `,
-        outletId !== null ? [...outletParams, outletId] : [],
+        outletId !== null
+          ? [sixDaysAgoStr, todayStr, sixDaysAgoStart, ...outletParams, sixDaysAgoStart, outletId]
+          : [sixDaysAgoStr, todayStr, sixDaysAgoStart, ...outletParams, sixDaysAgoStart],
       );
 
       const attendanceDetails = attendanceToday.map((row) => {

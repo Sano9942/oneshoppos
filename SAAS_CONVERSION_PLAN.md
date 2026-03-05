@@ -14,6 +14,19 @@ OneShopPOS is a full-featured POS system currently running as a single-tenant lo
 
 ---
 
+## ✅ SaaS Prerequisite Already Done: Timezone Fix (Mar 2026)
+
+The app previously used `date(col,'localtime')` in 214+ query filters, tied to the server OS timezone. On a UTC Linux production server, customers in New York or Auckland would see wrong date boundaries.
+
+**Fixed:**
+- `backend/utils/tz.js` — `toUtcStart(dateStr, tz)` / `toUtcEnd(dateStr, tz)` converts a local `YYYY-MM-DD` to UTC range strings for direct `timestamp >= ?` / `timestamp < ?` queries. Uses `Intl.DateTimeFormat` + binary search, handles DST, UTC+14 through UTC-12. No external deps.
+- `loadCompanyProfile` middleware in `backend/index.js` — caches `company_profile` (5-min TTL), sets `req.company.timezone` on every request.
+- All report and non-report routes now use `req.company?.timezone || 'UTC'` for date filtering.
+- `company_profile.timezone` is the per-tenant IANA timezone string — already in schema, defaults to `'UTC'`. **Set this correctly when provisioning each tenant in Phase 1.**
+- Rule for new code: never use `date(col,'localtime')` in WHERE clauses. Use `toUtcStart`/`toUtcEnd` from `backend/utils/tz.js`.
+
+---
+
 ## Phase 1: Master Database & Tenant Management Layer
 **No existing files modified — purely additive**
 

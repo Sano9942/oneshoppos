@@ -199,6 +199,11 @@ async function createTestApp(options = {}) {
     createNotification,
     notifyLowStockForSale,
     loadEmployeePerms: loadEmployeePerms(db),
+    // Stub: injects a UTC company profile so req.company.timezone is always available.
+    loadCompanyProfile: (req, res, next) => {
+      req.company = { timezone: "UTC" };
+      next();
+    },
     // Context Unification stubs: bypass enforcement in integration tests.
     // Tests that specifically need context enforcement should set req.context manually.
     resolveContext: (req, res, next) => {

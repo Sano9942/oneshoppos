@@ -2,6 +2,7 @@ const {
   fetchEnrichedCategories,
   getDescendantLeafIds,
 } = require("../../category-tree");
+const { toUtcStart, toUtcEnd } = require("../../utils/tz");
 
 /**
  * Shared helpers for report route modules
@@ -35,17 +36,18 @@ module.exports = function (db) {
     } = aliases;
     const { date_from, date_to, outlet_id, employee_id, category_id } =
       req.query || {};
+    const tz = req.company?.timezone || "UTC";
     const where = [];
     const params = [];
 
     if (sale) where.push(`${sale}.voided = 0`);
     if (date_from && sale) {
-      where.push(`date(${sale}.timestamp,'localtime') >= ?`);
-      params.push(date_from);
+      where.push(`${sale}.timestamp >= ?`);
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to && sale) {
-      where.push(`date(${sale}.timestamp,'localtime') <= ?`);
-      params.push(date_to);
+      where.push(`${sale}.timestamp < ?`);
+      params.push(toUtcEnd(date_to, tz));
     }
     if (outlet_id) {
       if (sale) {

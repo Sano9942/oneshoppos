@@ -1,3 +1,5 @@
+const { toUtcStart, toUtcEnd } = require("../utils/tz");
+
 module.exports = function registerGRNRoutes(app, deps) {
   const { db, requirePerm, requireFeature, createNotification } = deps;
 
@@ -5,15 +7,16 @@ module.exports = function registerGRNRoutes(app, deps) {
 
   app.get("/api/grn", (req, res) => {
     const { date_from, date_to } = req.query;
+    const tz = req.company?.timezone || "UTC";
     const where = [];
     const params = [];
     if (date_from) {
-      where.push("date(g.received_at,'localtime') >= ?");
-      params.push(date_from);
+      where.push("g.received_at >= ?");
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      where.push("date(g.received_at,'localtime') <= ?");
-      params.push(date_to);
+      where.push("g.received_at < ?");
+      params.push(toUtcEnd(date_to, tz));
     }
     const sql = `
     SELECT g.id, g.grn_number, g.received_at, g.notes,

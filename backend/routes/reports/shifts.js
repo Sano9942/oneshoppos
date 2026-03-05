@@ -1,3 +1,5 @@
+const { toUtcStart, toUtcEnd } = require("../../utils/tz");
+
 module.exports = function (app, deps) {
   const { db } = deps;
 
@@ -19,22 +21,23 @@ module.exports = function (app, deps) {
     return `
       ${alias}.outlet_id = ?
       AND ${alias}.timestamp >= ?
-      AND ${alias}.timestamp <= COALESCE(?, datetime('now','localtime'))
+      AND ${alias}.timestamp <= COALESCE(?, datetime('now'))
     `;
   }
 
   // Cash Flow: shift records with start/end cash
   app.get("/api/reports/cash-flow", (req, res) => {
     const { date_from, date_to } = req.query;
+    const tz = req.company?.timezone || "UTC";
     const where = [];
     const params = [];
     if (date_from) {
-      where.push("date(cs.opened_at,'localtime') >= ?");
-      params.push(date_from);
+      where.push("cs.opened_at >= ?");
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      where.push("date(cs.opened_at,'localtime') <= ?");
-      params.push(date_to);
+      where.push("cs.opened_at < ?");
+      params.push(toUtcEnd(date_to, tz));
     }
     const sql = `
       SELECT

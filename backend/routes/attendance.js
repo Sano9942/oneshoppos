@@ -1,3 +1,5 @@
+const { toUtcStart, toUtcEnd } = require("../utils/tz");
+
 module.exports = function registerAttendanceRoutes(app, deps) {
   const { db, requirePerm } = deps;
 
@@ -99,15 +101,16 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.get("/api/attendance", (req, res) => {
     const { date_from, date_to, employee_id } = req.query;
+    const tz = req.company?.timezone || "UTC";
     const where = [];
     const params = [];
     if (date_from) {
-      where.push("date(ea.check_in,'localtime') >= ?");
-      params.push(date_from);
+      where.push("ea.check_in >= ?");
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      where.push("date(ea.check_in,'localtime') <= ?");
-      params.push(date_to);
+      where.push("ea.check_in < ?");
+      params.push(toUtcEnd(date_to, tz));
     }
     if (employee_id) {
       where.push("ea.employee_id = ?");
@@ -136,15 +139,16 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.get("/api/attendance/sessions", (req, res) => {
     const { date_from, date_to, employee_id, session_type } = req.query;
+    const tz = req.company?.timezone || "UTC";
     const where = [];
     const params = [];
     if (date_from) {
-      where.push("date(s.session_start,'localtime') >= ?");
-      params.push(date_from);
+      where.push("s.session_start >= ?");
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      where.push("date(s.session_start,'localtime') <= ?");
-      params.push(date_to);
+      where.push("s.session_start < ?");
+      params.push(toUtcEnd(date_to, tz));
     }
     if (employee_id) {
       where.push("s.employee_id = ?");

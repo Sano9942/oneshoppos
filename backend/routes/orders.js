@@ -1,3 +1,5 @@
+const { toUtcStart, toUtcEnd } = require("../utils/tz");
+
 module.exports = function registerOrderRoutes(app, deps) {
   const {
     db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale,
@@ -43,13 +45,14 @@ module.exports = function registerOrderRoutes(app, deps) {
       where.push("wo.fulfillment_status = ?");
       params.push(fulfillment_status);
     }
+    const tz = req.company?.timezone || "UTC";
     if (date_from) {
-      where.push("date(wo.ordered_at,'localtime') >= ?");
-      params.push(date_from);
+      where.push("wo.ordered_at >= ?");
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      where.push("date(wo.ordered_at,'localtime') <= ?");
-      params.push(date_to);
+      where.push("wo.ordered_at < ?");
+      params.push(toUtcEnd(date_to, tz));
     }
     if (search) {
       where.push(
@@ -399,7 +402,7 @@ module.exports = function registerOrderRoutes(app, deps) {
      SET order_status = COALESCE(?, order_status),
          payment_status = COALESCE(?, payment_status),
          fulfillment_status = COALESCE(?, fulfillment_status),
-         updated_at = datetime('now','localtime')
+         updated_at = datetime('now')
      WHERE id = ?`,
         [
           order_status || null,
@@ -446,12 +449,12 @@ module.exports = function registerOrderRoutes(app, deps) {
        SET order_status = 'closed',
            fulfillment_status = 'fulfilled',
            payment_status = 'paid',
-           updated_at = datetime('now','localtime')
+           updated_at = datetime('now')
        WHERE id IN (${placeholders})`
         : `UPDATE web_orders
        SET order_status = 'closed',
            fulfillment_status = 'fulfilled',
-           updated_at = datetime('now','localtime')
+           updated_at = datetime('now')
        WHERE id IN (${placeholders})`;
 
       db.run(sql, normalizedIds, function (err) {
@@ -509,7 +512,7 @@ module.exports = function registerOrderRoutes(app, deps) {
           .json({ error: "At least one status field is required" });
       }
 
-      updates.push("updated_at = datetime('now','localtime')");
+      updates.push("updated_at = datetime('now')");
       const placeholders = normalizedIds.map(() => "?").join(",");
       const sql = `UPDATE web_orders SET ${updates.join(", ")} WHERE id IN (${placeholders})`;
 
@@ -718,7 +721,7 @@ module.exports = function registerOrderRoutes(app, deps) {
                   db.run(
                     `INSERT OR IGNORE INTO external_sync_events (
                     direction, entity_type, idempotency_key, status, error_message, payload, created_at, processed_at, attempt_count
-                  ) VALUES ('outbound', 'inventory', ?, 'failed_mapping', ?, ?, datetime('now','localtime'), datetime('now','localtime'), 0)`,
+                  ) VALUES ('outbound', 'inventory', ?, 'failed_mapping', ?, ?, datetime('now'), datetime('now'), 0)`,
                     [
                       idempotencyKey,
                       "Missing Shopify product/location mapping",
@@ -752,7 +755,7 @@ module.exports = function registerOrderRoutes(app, deps) {
                 db.run(
                   `INSERT OR IGNORE INTO external_sync_events (
                   direction, entity_type, idempotency_key, status, payload, created_at, attempt_count, next_retry_at
-                ) VALUES ('outbound', 'inventory', ?, 'pending', ?, datetime('now','localtime'), 0, datetime('now','localtime'))`,
+                ) VALUES ('outbound', 'inventory', ?, 'pending', ?, datetime('now'), 0, datetime('now'))`,
                   [idempotencyKey, payload],
                   function () {
                     if (this?.changes > 0) queued += 1;
@@ -826,7 +829,7 @@ module.exports = function registerOrderRoutes(app, deps) {
        WHERE direction = 'outbound'
          AND entity_type = 'inventory'
          AND status IN ('pending', 'retry')
-         AND (next_retry_at IS NULL OR datetime(next_retry_at) <= datetime('now','localtime'))
+         AND (next_retry_at IS NULL OR datetime(next_retry_at) <= datetime('now'))
        ORDER BY id ASC
        LIMIT ?`,
         [limit],
@@ -859,8 +862,8 @@ module.exports = function registerOrderRoutes(app, deps) {
                   `UPDATE external_sync_events
                  SET status = 'dead_letter',
                      error_message = ?,
-                     last_attempt_at = datetime('now','localtime'),
-                     processed_at = datetime('now','localtime')
+                     last_attempt_at = datetime('now'),
+                     processed_at = datetime('now')
                  WHERE id = ?`,
                   ["Invalid payload for Shopify inventory sync", row.id],
                   () => resolve(),
@@ -901,12 +904,12 @@ module.exports = function registerOrderRoutes(app, deps) {
                    SET status = ?,
                        error_message = ?,
                        attempt_count = ?,
-                       last_attempt_at = datetime('now','localtime'),
+                       last_attempt_at = datetime('now'),
                        next_retry_at = CASE
                          WHEN ? = 1 THEN NULL
                          ELSE datetime('now','localtime', '+' || ? || ' minutes')
                        END,
-                       processed_at = CASE WHEN ? = 1 THEN datetime('now','localtime') ELSE NULL END
+                       processed_at = CASE WHEN ? = 1 THEN datetime('now') ELSE NULL END
                    WHERE id = ?`,
                     [
                       terminal ? "dead_letter" : "retry",
@@ -928,9 +931,9 @@ module.exports = function registerOrderRoutes(app, deps) {
                    SET status = 'processed',
                        error_message = NULL,
                        attempt_count = COALESCE(attempt_count, 0) + 1,
-                       last_attempt_at = datetime('now','localtime'),
+                       last_attempt_at = datetime('now'),
                        next_retry_at = NULL,
-                       processed_at = datetime('now','localtime')
+                       processed_at = datetime('now')
                    WHERE id = ?`,
                     [row.id],
                     () => resolve(),
@@ -953,12 +956,12 @@ module.exports = function registerOrderRoutes(app, deps) {
                  SET status = ?,
                      error_message = ?,
                      attempt_count = ?,
-                     last_attempt_at = datetime('now','localtime'),
+                     last_attempt_at = datetime('now'),
                      next_retry_at = CASE
                        WHEN ? = 1 THEN NULL
                        ELSE datetime('now','localtime', '+' || ? || ' minutes')
                      END,
-                     processed_at = CASE WHEN ? = 1 THEN datetime('now','localtime') ELSE NULL END
+                     processed_at = CASE WHEN ? = 1 THEN datetime('now') ELSE NULL END
                  WHERE id = ?`,
                   [
                     terminal ? "dead_letter" : "retry",
@@ -977,9 +980,9 @@ module.exports = function registerOrderRoutes(app, deps) {
 
           db.run(
             `UPDATE shopify_connections
-           SET last_sync_at = datetime('now','localtime'),
+           SET last_sync_at = datetime('now'),
                last_error = ?,
-               updated_at = datetime('now','localtime')
+               updated_at = datetime('now')
            WHERE id = ?`,
             [failed > 0 ? `${failed} event(s) failed` : null, conn.id],
             () => cb(null, { processed, failed, skipped }),

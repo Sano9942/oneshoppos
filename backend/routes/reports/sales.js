@@ -1,3 +1,5 @@
+const { toUtcStart, toUtcEnd } = require("../../utils/tz");
+
 module.exports = function (app, deps, helpers) {
   const { db, requireFeature } = deps;
   const {
@@ -7,15 +9,15 @@ module.exports = function (app, deps, helpers) {
     parsePaging,
   } = helpers;
 
-  function applySaleTimeFilters(where, params, query, saleAlias = "s") {
+  function applySaleTimeFilters(where, params, query, saleAlias = "s", tz = "UTC") {
     const { date_from, date_to, time_from, time_to, outlet_id } = query;
     if (date_from) {
-      where.push(`date(${saleAlias}.timestamp,'localtime') >= ?`);
-      params.push(date_from);
+      where.push(`${saleAlias}.timestamp >= ?`);
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      where.push(`date(${saleAlias}.timestamp,'localtime') <= ?`);
-      params.push(date_to);
+      where.push(`${saleAlias}.timestamp < ?`);
+      params.push(toUtcEnd(date_to, tz));
     }
     if (time_from) {
       where.push(`time(${saleAlias}.timestamp,'localtime') >= time(?)`);
@@ -106,16 +108,17 @@ module.exports = function (app, deps, helpers) {
 
   // Top Salespeople: revenue per employee
   app.get("/api/reports/top-salespeople", (req, res) => {
+    const tz = req.company?.timezone || "UTC";
     const { date_from, date_to } = req.query;
     let where = ["s.voided = 0", "s.employee_id IS NOT NULL"];
     const params = [];
     if (date_from) {
-      where.push("date(s.timestamp,'localtime') >= ?");
-      params.push(date_from);
+      where.push("s.timestamp >= ?");
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      where.push("date(s.timestamp,'localtime') <= ?");
-      params.push(date_to);
+      where.push("s.timestamp < ?");
+      params.push(toUtcEnd(date_to, tz));
     }
     const sql = `
     SELECT e.name, SUM(s.total_amount) AS revenue, COUNT(s.id) AS order_count
@@ -132,9 +135,10 @@ module.exports = function (app, deps, helpers) {
 
   // Sales Summary: high-level totals by date/outlet
   app.get("/api/reports/sales-summary", (req, res) => {
+    const tz = req.company?.timezone || "UTC";
     let where = ["s.voided = 0"];
     const params = [];
-    applySaleTimeFilters(where, params, req.query);
+    applySaleTimeFilters(where, params, req.query, "s", tz);
     const sql = `
     SELECT date(s.timestamp,'localtime') AS date,
            COUNT(s.id) AS orders,
@@ -200,10 +204,11 @@ module.exports = function (app, deps, helpers) {
 
   // Sales Detail: flat line-item list with parent sale info
   app.get("/api/reports/sales-detail", (req, res) => {
+    const tz = req.company?.timezone || "UTC";
     const { date_from, date_to, search } = req.query;
     let where = ["s.voided = 0"];
     const params = [];
-    applySaleTimeFilters(where, params, req.query);
+    applySaleTimeFilters(where, params, req.query, "s", tz);
     if (search) {
       where.push("(p.name LIKE ? OR CAST(s.id AS TEXT) LIKE ?)");
       params.push(`%${search}%`, `%${search}%`);
@@ -227,6 +232,7 @@ module.exports = function (app, deps, helpers) {
 
   // Order Wise report
   app.get("/api/reports/order-wise", (req, res) => {
+    const tz = req.company?.timezone || "UTC";
     const { search = "" } = req.query;
     let conditions = ["1=1"];
     const params = [];
@@ -235,7 +241,7 @@ module.exports = function (app, deps, helpers) {
       conditions.push("(CAST(s.id AS TEXT) LIKE ? OR c.name LIKE ?)");
       params.push(`%${search}%`, `%${search}%`);
     }
-    applySaleTimeFilters(conditions, params, req.query);
+    applySaleTimeFilters(conditions, params, req.query, "s", tz);
     conditions.push("s.voided = 0");
 
     const where = conditions.join(" AND ");
@@ -262,9 +268,10 @@ module.exports = function (app, deps, helpers) {
 
   // Monthly MOP Matrix: month-wise sales by payment method
   app.get("/api/reports/monthly-mop-matrix", (req, res) => {
+    const tz = req.company?.timezone || "UTC";
     let where = ["s.voided = 0"];
     const params = [];
-    applySaleTimeFilters(where, params, req.query);
+    applySaleTimeFilters(where, params, req.query, "s", tz);
     const whereSql = where.join(" AND ");
 
     const matrixSql = `
@@ -344,9 +351,10 @@ module.exports = function (app, deps, helpers) {
 
   // Category Wise: sales grouped by product category
   app.get("/api/reports/category-wise", async (req, res) => {
+    const tz = req.company?.timezone || "UTC";
     let where = ["s.voided = 0"];
     const params = [];
-    applySaleTimeFilters(where, params, req.query);
+    applySaleTimeFilters(where, params, req.query, "s", tz);
     await applyProductDimensionFilters(where, params, req.query);
     const sql = `
     SELECT p.category_id,
@@ -376,9 +384,10 @@ module.exports = function (app, deps, helpers) {
 
   // Sub-Category Wise: sales grouped by leaf category with parent context
   app.get("/api/reports/subcategory-wise", async (req, res) => {
+    const tz = req.company?.timezone || "UTC";
     let where = ["s.voided = 0"];
     const params = [];
-    applySaleTimeFilters(where, params, req.query);
+    applySaleTimeFilters(where, params, req.query, "s", tz);
     await applyProductDimensionFilters(where, params, req.query);
     const sql = `
     SELECT p.category_id,
@@ -423,9 +432,10 @@ module.exports = function (app, deps, helpers) {
 
   // Item Wise: sales grouped by product
   app.get("/api/reports/item-wise", async (req, res) => {
+    const tz = req.company?.timezone || "UTC";
     let where = ["s.voided = 0"];
     const params = [];
-    applySaleTimeFilters(where, params, req.query);
+    applySaleTimeFilters(where, params, req.query, "s", tz);
     await applyProductDimensionFilters(where, params, req.query);
     const sql = `
     SELECT p.id, p.name AS product_name, p.barcode,
@@ -453,9 +463,10 @@ module.exports = function (app, deps, helpers) {
 
   // Brand Wise: sales grouped by brand
   app.get("/api/reports/brand-wise", async (req, res) => {
+    const tz = req.company?.timezone || "UTC";
     let where = ["s.voided = 0"];
     const params = [];
-    applySaleTimeFilters(where, params, req.query);
+    applySaleTimeFilters(where, params, req.query, "s", tz);
     await applyProductDimensionFilters(where, params, req.query);
     const sql = `
     SELECT
@@ -507,9 +518,10 @@ module.exports = function (app, deps, helpers) {
 
   // Product Performance: same as item-wise but sorted by margin %
   app.get("/api/reports/product-performance", async (req, res) => {
+    const tz = req.company?.timezone || "UTC";
     let where = ["s.voided = 0"];
     const params = [];
-    applySaleTimeFilters(where, params, req.query);
+    applySaleTimeFilters(where, params, req.query, "s", tz);
     await applyProductDimensionFilters(where, params, req.query);
     const sql = `
     SELECT p.id, p.name AS product_name, p.barcode,
@@ -544,9 +556,10 @@ module.exports = function (app, deps, helpers) {
 
   // Unified merchandising workspace: one payload for item/category/brand/supplier performance
   app.get("/api/reports/performance-workspace", async (req, res) => {
+    const tz = req.company?.timezone || "UTC";
     let where = ["s.voided = 0"];
     const params = [];
-    applySaleTimeFilters(where, params, req.query);
+    applySaleTimeFilters(where, params, req.query, "s", tz);
     await applyProductDimensionFilters(where, params, req.query);
     const whereSql = where.join(" AND ");
 
@@ -671,6 +684,7 @@ module.exports = function (app, deps, helpers) {
   });
 
   app.get("/api/reports/performance-comparison", async (req, res) => {
+    const tz = req.company?.timezone || "UTC";
     const ranges = parseComparisonRanges(req.query);
     const dimensions = {
       items: {
@@ -731,7 +745,7 @@ module.exports = function (app, deps, helpers) {
           ${dimension.idExpr} AS entity_id,
           ${dimension.labelExpr} AS entity_label,
           CASE
-            WHEN date(s.timestamp,'localtime') >= ? AND date(s.timestamp,'localtime') <= ? THEN 'current'
+            WHEN s.timestamp >= ? AND s.timestamp < ? THEN 'current'
             ELSE 'previous'
           END AS period_label,
           SUM(si.quantity) AS units_sold,
@@ -744,9 +758,9 @@ module.exports = function (app, deps, helpers) {
         LEFT JOIN suppliers sup ON p.supplier_id = sup.id
         WHERE (${sharedWhere})
           AND (
-            (date(s.timestamp,'localtime') >= ? AND date(s.timestamp,'localtime') <= ?)
+            (s.timestamp >= ? AND s.timestamp < ?)
             OR
-            (date(s.timestamp,'localtime') >= ? AND date(s.timestamp,'localtime') <= ?)
+            (s.timestamp >= ? AND s.timestamp < ?)
           )
         GROUP BY entity_id, entity_label, period_label
       )
@@ -774,8 +788,8 @@ module.exports = function (app, deps, helpers) {
         LEFT JOIN brands b ON p.brand_id = b.id
         LEFT JOIN suppliers sup ON p.supplier_id = sup.id
         WHERE (${sharedWhere})
-          AND date(s.timestamp,'localtime') >= ?
-          AND date(s.timestamp,'localtime') <= ?
+          AND s.timestamp >= ?
+          AND s.timestamp < ?
         GROUP BY month_bucket, entity_id, entity_label
       )
       SELECT month_bucket, entity_id, entity_label, units_sold, revenue
@@ -798,60 +812,60 @@ module.exports = function (app, deps, helpers) {
       ] =
         await Promise.all([
           runAll(comparisonSql(dimensions.items), [
-            ranges.current.from,
-            ranges.current.to,
+            toUtcStart(ranges.current.from, tz),
+            toUtcEnd(ranges.current.to, tz),
             ...params,
-            ranges.current.from,
-            ranges.current.to,
-            ranges.previous.from,
-            ranges.previous.to,
+            toUtcStart(ranges.current.from, tz),
+            toUtcEnd(ranges.current.to, tz),
+            toUtcStart(ranges.previous.from, tz),
+            toUtcEnd(ranges.previous.to, tz),
           ]),
           runAll(comparisonSql(dimensions.categories), [
-            ranges.current.from,
-            ranges.current.to,
+            toUtcStart(ranges.current.from, tz),
+            toUtcEnd(ranges.current.to, tz),
             ...params,
-            ranges.current.from,
-            ranges.current.to,
-            ranges.previous.from,
-            ranges.previous.to,
+            toUtcStart(ranges.current.from, tz),
+            toUtcEnd(ranges.current.to, tz),
+            toUtcStart(ranges.previous.from, tz),
+            toUtcEnd(ranges.previous.to, tz),
           ]),
           runAll(comparisonSql(dimensions.brands), [
-            ranges.current.from,
-            ranges.current.to,
+            toUtcStart(ranges.current.from, tz),
+            toUtcEnd(ranges.current.to, tz),
             ...params,
-            ranges.current.from,
-            ranges.current.to,
-            ranges.previous.from,
-            ranges.previous.to,
+            toUtcStart(ranges.current.from, tz),
+            toUtcEnd(ranges.current.to, tz),
+            toUtcStart(ranges.previous.from, tz),
+            toUtcEnd(ranges.previous.to, tz),
           ]),
           runAll(comparisonSql(dimensions.suppliers), [
-            ranges.current.from,
-            ranges.current.to,
+            toUtcStart(ranges.current.from, tz),
+            toUtcEnd(ranges.current.to, tz),
             ...params,
-            ranges.current.from,
-            ranges.current.to,
-            ranges.previous.from,
-            ranges.previous.to,
+            toUtcStart(ranges.current.from, tz),
+            toUtcEnd(ranges.current.to, tz),
+            toUtcStart(ranges.previous.from, tz),
+            toUtcEnd(ranges.previous.to, tz),
           ]),
           runAll(monthlySql(dimensions.items), [
             ...params,
-            ranges.current.from,
-            ranges.current.to,
+            toUtcStart(ranges.current.from, tz),
+            toUtcEnd(ranges.current.to, tz),
           ]),
           runAll(monthlySql(dimensions.categories), [
             ...params,
-            ranges.current.from,
-            ranges.current.to,
+            toUtcStart(ranges.current.from, tz),
+            toUtcEnd(ranges.current.to, tz),
           ]),
           runAll(monthlySql(dimensions.brands), [
             ...params,
-            ranges.current.from,
-            ranges.current.to,
+            toUtcStart(ranges.current.from, tz),
+            toUtcEnd(ranges.current.to, tz),
           ]),
           runAll(monthlySql(dimensions.suppliers), [
             ...params,
-            ranges.current.from,
-            ranges.current.to,
+            toUtcStart(ranges.current.from, tz),
+            toUtcEnd(ranges.current.to, tz),
           ]),
         ]);
 
@@ -973,6 +987,7 @@ module.exports = function (app, deps, helpers) {
 
   // Refunds and Voids: operational exception summary plus detailed lists
   app.get("/api/reports/refunds-voids", (req, res) => {
+    const tz = req.company?.timezone || "UTC";
     const saleWhere = ["s.voided = 1"];
     const refundWhere = ["1=1"];
     const saleParams = [];
@@ -987,16 +1002,16 @@ module.exports = function (app, deps, helpers) {
     } = req.query;
 
     if (date_from) {
-      saleWhere.push("date(s.timestamp,'localtime') >= ?");
-      refundWhere.push("date(r.timestamp,'localtime') >= ?");
-      saleParams.push(date_from);
-      refundParams.push(date_from);
+      saleWhere.push("s.timestamp >= ?");
+      refundWhere.push("r.timestamp >= ?");
+      saleParams.push(toUtcStart(date_from, tz));
+      refundParams.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      saleWhere.push("date(s.timestamp,'localtime') <= ?");
-      refundWhere.push("date(r.timestamp,'localtime') <= ?");
-      saleParams.push(date_to);
-      refundParams.push(date_to);
+      saleWhere.push("s.timestamp < ?");
+      refundWhere.push("r.timestamp < ?");
+      saleParams.push(toUtcEnd(date_to, tz));
+      refundParams.push(toUtcEnd(date_to, tz));
     }
     if (time_from) {
       saleWhere.push("time(s.timestamp,'localtime') >= time(?)");
@@ -1086,6 +1101,7 @@ module.exports = function (app, deps, helpers) {
 
   // Cashier Wise: sales, voids, refunds, and discounts by employee
   app.get("/api/reports/cashier-wise", (req, res) => {
+    const tz = req.company?.timezone || "UTC";
     const salesWhere = ["s.voided = 0", "s.employee_id IS NOT NULL"];
     const voidWhere = ["s.voided = 1", "s.employee_id IS NOT NULL"];
     const refundWhere = ["r.employee_id IS NOT NULL"];
@@ -1102,20 +1118,20 @@ module.exports = function (app, deps, helpers) {
     } = req.query;
 
     if (date_from) {
-      salesWhere.push("date(s.timestamp,'localtime') >= ?");
-      voidWhere.push("date(s.timestamp,'localtime') >= ?");
-      refundWhere.push("date(r.timestamp,'localtime') >= ?");
-      salesParams.push(date_from);
-      voidParams.push(date_from);
-      refundParams.push(date_from);
+      salesWhere.push("s.timestamp >= ?");
+      voidWhere.push("s.timestamp >= ?");
+      refundWhere.push("r.timestamp >= ?");
+      salesParams.push(toUtcStart(date_from, tz));
+      voidParams.push(toUtcStart(date_from, tz));
+      refundParams.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      salesWhere.push("date(s.timestamp,'localtime') <= ?");
-      voidWhere.push("date(s.timestamp,'localtime') <= ?");
-      refundWhere.push("date(r.timestamp,'localtime') <= ?");
-      salesParams.push(date_to);
-      voidParams.push(date_to);
-      refundParams.push(date_to);
+      salesWhere.push("s.timestamp < ?");
+      voidWhere.push("s.timestamp < ?");
+      refundWhere.push("r.timestamp < ?");
+      salesParams.push(toUtcEnd(date_to, tz));
+      voidParams.push(toUtcEnd(date_to, tz));
+      refundParams.push(toUtcEnd(date_to, tz));
     }
     if (time_from) {
       salesWhere.push("time(s.timestamp,'localtime') >= time(?)");

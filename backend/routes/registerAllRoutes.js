@@ -11,6 +11,7 @@ module.exports = function registerAllRoutes(app, deps) {
     createNotification,
     notifyLowStockForSale,
     loadEmployeePerms,
+    loadCompanyProfile,
     resolveContext,
     requireContextOutlet,
     ensureDefaultRolePermissions,
@@ -44,6 +45,7 @@ module.exports = function registerAllRoutes(app, deps) {
   } = deps;
 
   app.use(loadEmployeePerms);
+  app.use(loadCompanyProfile);
   app.use(resolveContext);
   app.use(requireContextOutlet);
   ensureDefaultRolePermissions();
@@ -212,12 +214,12 @@ module.exports = function registerAllRoutes(app, deps) {
       const enabledInt = enabled ? 1 : 0;
       db.run(
         `INSERT INTO feature_flags (key, enabled, description, updated_by, updated_at)
-     VALUES (?, ?, ?, ?, datetime('now','localtime'))
+     VALUES (?, ?, ?, ?, datetime('now'))
      ON CONFLICT(key) DO UPDATE SET
        enabled = excluded.enabled,
        description = COALESCE(excluded.description, feature_flags.description),
        updated_by = excluded.updated_by,
-       updated_at = datetime('now','localtime')`,
+       updated_at = datetime('now')`,
         [key, enabledInt, description || null, updated_by || null],
         function (err) {
           if (err) return res.status(500).json({ error: err.message });

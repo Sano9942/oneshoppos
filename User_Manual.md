@@ -1,6 +1,8 @@
 # OneShopPOS Daily SOP
 
-This manual describes the exact daily operating flow for the current OneShopPOS setup.
+This manual describes the exact daily operating flow for OneShopPOS.
+
+> **Note for SaaS deployments:** Currency denominations and employee PINs are configured per business. The cash denominations shown below are examples from the default Pakistan configuration. Your setup may differ.
 
 ## 1. Roles Used in This System
 
@@ -52,7 +54,7 @@ The `Manager` or `Administrator` must open the shift by counting the opening cas
 - `Rs 20`
 - `Rs 10`
 
-The system totals these denominations and uses the result as the opening float.
+The system totals these denominations and uses the result as the opening float. Available denominations are configured per business.
 
 ### Step 6: Start selling
 
@@ -210,15 +212,9 @@ The correct business order is now:
 
 This is the official recommended operating procedure for this project.
 
-Your system does not use a separate password for employee login.
-Login is:
+Login uses:
 
-username = employee name
-pin = employee pin_code
-(see auth.js)
-Live credentials from DB:
+- **Username:** employee name (as configured in the system)
+- **PIN:** employee PIN code
 
-Hassan / 2580 (Administrator)
-mubashir / 2222 (Manager)
-ishtiaq / 3333 (Cashier)
-naeem shah / 1234 (Manager)
+Employee accounts are managed in the Employees section by an Administrator. Each employee's PIN is set when their account is created.
