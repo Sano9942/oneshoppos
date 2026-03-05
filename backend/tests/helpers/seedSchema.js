@@ -543,6 +543,25 @@ const TABLES = [
     updated_at TEXT DEFAULT (datetime('now','localtime'))
   )`,
 
+  // ── Companies (Context Unification — migrate61) ───────────────────────
+  `CREATE TABLE IF NOT EXISTS companies (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    name      TEXT NOT NULL,
+    code      TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+  )`,
+
+  // ── Employee-Outlet Junction (Context Unification — migrate61) ───────
+  `CREATE TABLE IF NOT EXISTS employee_outlets (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    outlet_id   INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+    is_primary  INTEGER NOT NULL DEFAULT 0,
+    assigned_at TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE(employee_id, outlet_id)
+  )`,
+
   // ── CRM / Quotations ────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS crm_leads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -895,6 +914,8 @@ const INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_att_sessions_emp_date ON attendance_sessions(employee_id, session_start)`,
   `CREATE INDEX IF NOT EXISTS idx_categories_parent_id ON categories(parent_id)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_parent_name_unique ON categories(COALESCE(parent_id, -1), lower(name))`,
+  `CREATE INDEX IF NOT EXISTS idx_eo_employee ON employee_outlets(employee_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_eo_outlet ON employee_outlets(outlet_id)`,
 ];
 
 function seedSchema(db) {

@@ -20,6 +20,15 @@ export async function loginAsAdmin(page) {
   await usernameInput.fill(ADMIN_EMPLOYEE.name);
   await pinInput.fill(ADMIN_EMPLOYEE.pin);
   await page.getByRole("button", { name: /login/i }).click();
-  await expect(page).toHaveURL(/.*dashboard/, { timeout: 20000 });
+
+  // Context Unification (March 2026): after login, may redirect to /context-select
+  // if context_selection_required flag is on. Handle both paths.
+  await page.waitForURL(/\/(dashboard|context-select)/, { timeout: 20000 });
+  if (page.url().includes("context-select")) {
+    // For admin: "All branches" scope is shown. Click Continue.
+    await page.getByRole("button", { name: /continue/i }).click();
+    await expect(page).toHaveURL(/.*dashboard/, { timeout: 10000 });
+  }
+
   await expect(page.getByText(/ONESHOPPOS/i)).toBeVisible({ timeout: 15000 });
 }

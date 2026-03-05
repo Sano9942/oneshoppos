@@ -199,6 +199,13 @@ async function createTestApp(options = {}) {
     createNotification,
     notifyLowStockForSale,
     loadEmployeePerms: loadEmployeePerms(db),
+    // Context Unification stubs: bypass enforcement in integration tests.
+    // Tests that specifically need context enforcement should set req.context manually.
+    resolveContext: (req, res, next) => {
+      req.context = { companyId: null, outletId: null, scopeMode: null };
+      next();
+    },
+    requireContextOutlet: (req, res, next) => next(),
     ensureDefaultRolePermissions,
     PERMISSION_RULES,
     DEFAULT_FEATURE_FLAGS,

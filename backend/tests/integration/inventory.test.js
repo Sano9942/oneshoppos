@@ -177,12 +177,12 @@ describe("POST /api/adjustments — Stock Adjustments", () => {
     const before = await dbGet(db, "SELECT quantity FROM outlet_stock WHERE product_id = 4 AND outlet_id = 2");
     expect(before).toBeUndefined();
 
-    const res = await makeRequest(app, MANAGER_ID)
+    const res = await makeRequest(app, ADMIN_ID)
       .post("/api/adjustments")
       .send({
         product_id: 4,
         outlet_id: 2,
-        employee_id: MANAGER_ID,
+        employee_id: ADMIN_ID,
         quantity_change: 15,
         reason: "Initial stock setup",
       });

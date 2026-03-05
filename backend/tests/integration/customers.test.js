@@ -60,7 +60,7 @@ describe("Customer Loyalty & Wallet Integration Tests", () => {
     });
 
     it("should update a customer", async () => {
-      const res = await supertest(app)
+      const res = await makeRequest(app, ADMIN_ID)
         .put(`/api/customers/${CUSTOMER_ID}`)
         .send({ name: "Updated Name", mobile: "555-5555" });
 
@@ -82,7 +82,7 @@ describe("Customer Loyalty & Wallet Integration Tests", () => {
         [CUSTOMER_ID],
       );
 
-      const res = await supertest(app).delete(`/api/customers/${CUSTOMER_ID}`);
+      const res = await makeRequest(app, ADMIN_ID).delete(`/api/customers/${CUSTOMER_ID}`);
 
       expect(res.status).toBe(400);
       expect(res.body.error).toContain("linked sale");
@@ -91,7 +91,7 @@ describe("Customer Loyalty & Wallet Integration Tests", () => {
 
   describe("Wallet Transactions", () => {
     it("should top up wallet and create ledger entry", async () => {
-      const res = await supertest(app)
+      const res = await makeRequest(app, ADMIN_ID)
         .post(`/api/customers/${CUSTOMER_ID}/wallet/topup`)
         .send({ amount: 100, note: "Test top-up" });
 
@@ -194,7 +194,7 @@ describe("Customer Loyalty & Wallet Integration Tests", () => {
     });
 
     it("should allow manual points update", async () => {
-      const res = await supertest(app)
+      const res = await makeRequest(app, ADMIN_ID)
         .put(`/api/customers/${CUSTOMER_ID}/points`)
         .send({ points: 250 });
 

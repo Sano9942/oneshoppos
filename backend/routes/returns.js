@@ -12,7 +12,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
 // --- ROUTES: RETURNS ---
 
   // Create a new return
-  app.post("/api/returns", requirePerm("manage_customers"), (req, res) => {
+  app.post("/api/returns", requirePerm("manage_orders"), (req, res) => {
     const {
       original_sale_id,
       outlet_id,

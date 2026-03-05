@@ -26,6 +26,10 @@ const DEFAULT_FEATURE_FLAGS = {
   reports_inventory_health_plus: false,
   reports_exceptions: false,
   reports_scheduled_exports: false,
+  // Context Unification flags — disabled by default so existing tests are unaffected
+  context_selection_required: false,
+  context_header_enforced: false,
+  kiosk_context_locked: false,
 };
 
 function runSql(db, sql, params = []) {
@@ -38,6 +42,9 @@ function runSql(db, sql, params = []) {
 }
 
 async function seedData(db) {
+  // Company (required by context bootstrap endpoint)
+  await runSql(db, `INSERT INTO companies (id, name, code, is_active) VALUES (1, 'Test Company', 'TEST', 1)`);
+
   // Outlets
   await runSql(
     db,
@@ -104,6 +111,13 @@ async function seedData(db) {
     db,
     `INSERT INTO employees (id, name, role, pin_code, role_id, monthly_salary) VALUES (3, 'Cashier User', 'Cashier', '3333', 3, 25000)`,
   );
+
+  // Employee outlet assignments (required by outlet-assignment enforcement middleware)
+  // All 3 employees are assigned to outlet 1; admin is also assigned to outlet 2
+  for (const empId of [1, 2, 3]) {
+    await runSql(db, `INSERT INTO employee_outlets (employee_id, outlet_id) VALUES (?, 1)`, [empId]);
+  }
+  await runSql(db, `INSERT INTO employee_outlets (employee_id, outlet_id) VALUES (1, 2)`);
 
   // Category, Tax, Brand
   await runSql(

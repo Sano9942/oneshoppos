@@ -176,7 +176,7 @@ describe("POST /api/returns — Create Return", () => {
     expect(res.status).toBe(200);
   });
 
-  it("cashier without manage_orders permission is blocked from returns", async () => {
+  it("cashier without manage_orders permission is blocked from returns (PERMISSION_RULES: manage_orders)", async () => {
     const res = await makeRequest(app, CASHIER_ID)
       .post("/api/returns")
       .send({

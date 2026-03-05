@@ -20,7 +20,9 @@
       "Bash(timeout:*)",
       "Skill(claude-md-management:revise-claude-md)",
       "Skill(claude-md-management:revise-claude-md:*)",
-      "Bash(npm run test:integration)"
+      "Bash(npm run test:integration)",
+      "Bash(npm run test:smoke)",
+      "Bash(npm run test:integration -- --reporter=verbose)"
     ]
   }
 }
