@@ -23,8 +23,6 @@ export default function POSRecentSalesPanel() {
     authHeaders,
   } = usePOS();
 
-  if (!recentSalesOpen) return null;
-
   const filtered = useMemo(() => {
     const q = recentSalesSearch.trim().toLowerCase();
     if (!q) return recentSales;
@@ -34,6 +32,8 @@ export default function POSRecentSalesPanel() {
         String(s.customer_name || "").toLowerCase().includes(q),
     );
   }, [recentSales, recentSalesSearch]);
+
+  if (!recentSalesOpen) return null;
 
   const handleReprint = async (sale) => {
     try {
