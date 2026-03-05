@@ -118,7 +118,7 @@ export default function TransfersRedesign() {
   return (
     <PageShell
       title="Transfers"
-      subtitle="Wave B redesign: stock movement between outlets with full traceability."
+      subtitle="stock movement between outlets with full traceability."
       right={<Button tone="primary" onClick={openCreate}><Plus size={14} className="mr-1 inline" />New Transfer</Button>}
     >
       {error ? <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</SectionCard> : null}

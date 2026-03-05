@@ -123,7 +123,7 @@ export default function StockAdjustmentsRedesign() {
   return (
     <PageShell
       title="Stock Adjustments"
-      subtitle="Wave B redesign: auditable shrink/gain adjustments per outlet."
+      subtitle="auditable shrink/gain adjustments per outlet."
       right={
         <Button tone="primary" onClick={openCreate}>
           <Plus size={14} className="mr-1 inline" />

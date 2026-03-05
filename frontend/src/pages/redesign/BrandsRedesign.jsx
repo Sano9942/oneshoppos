@@ -104,7 +104,7 @@ export default function BrandsRedesign() {
   return (
     <PageShell
       title="Brands"
-      subtitle="Wave B redesign: brand taxonomy with consistent CRUD and search behavior."
+      subtitle="brand taxonomy with consistent CRUD and search behavior."
       right={
         <Button tone="primary" onClick={openCreate}>
           <Plus size={14} className="mr-1 inline" />

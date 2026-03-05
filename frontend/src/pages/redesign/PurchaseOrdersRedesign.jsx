@@ -649,7 +649,7 @@ export default function PurchaseOrdersRedesign() {
   return (
     <PageShell
       title="Purchase Orders"
-      subtitle="Wave B redesign: manage supplier ordering lifecycle from draft to GRN."
+      subtitle="manage supplier ordering lifecycle from draft to GRN."
       right={
         <div className="flex items-center gap-2">
           <Button onClick={() => exportCSV(visibleRows)}>

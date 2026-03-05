@@ -106,7 +106,7 @@ export default function TaxesRedesign() {
   return (
     <PageShell
       title="Taxes"
-      subtitle="Wave B redesign: tax profiles with default control and fast editing."
+      subtitle="tax profiles with default control and fast editing."
       right={
         <Button tone="primary" onClick={openCreate}>
           <Plus size={14} className="mr-1 inline" />

@@ -92,8 +92,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "CRM", path: "/crm", icon: UserPlus, requiredPerm: "manage_orders", requiredFlag: "crm_quotations" },
       { name: "Quotations", path: "/quotations", icon: FileText, requiredPerm: "manage_orders", requiredFlag: "crm_quotations" },
       { name: "Attendance", path: "/attendance", icon: Clock, requiredPerm: "manage_employees" },
-      { name: "HR Leave", path: "/hr/leave", icon: User, requiredPerm: "manage_employees", requiredFlag: "advanced_hr" },
-      { name: "HR Payroll", path: "/hr/payroll", icon: FileText, requiredPerm: "manage_employees", requiredFlag: "advanced_hr" },
+      { name: "HR", path: "/hr", icon: User, requiredPerm: "manage_employees", requiredFlag: "advanced_hr" },
     ],
   },
   {

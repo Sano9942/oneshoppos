@@ -65,11 +65,6 @@ export default function Accounting() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800">Accounting</h1>
-        <p className="text-sm text-slate-500 mt-1">P and L, cashflow and payable receivable views</p>
-      </div>
-
       <div className="bg-white border rounded-xl p-4 flex flex-wrap gap-3 items-end">
         <div>
           <label className="text-xs text-slate-500">From</label>

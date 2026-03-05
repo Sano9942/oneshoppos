@@ -171,7 +171,7 @@ export default function SupplierPayablesRedesign() {
   return (
     <PageShell
       title="Supplier Payables"
-      subtitle="Wave B redesign: monitor supplier outstanding balances and record invoice payments."
+      subtitle="monitor supplier outstanding balances and record invoice payments."
       right={
         <Button onClick={refreshCurrent}>
           <RefreshCw size={13} className="mr-1 inline" />

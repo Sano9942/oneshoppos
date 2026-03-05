@@ -185,7 +185,7 @@ export default function AttributeSetsRedesign() {
   return (
     <PageShell
       title="Attribute Sets"
-      subtitle="Wave B redesign: variant schema management with nested attributes and options."
+      subtitle="variant schema management with nested attributes and options."
       right={
         <Button tone="primary" onClick={openCreate}>
           <Plus size={14} className="mr-1 inline" />

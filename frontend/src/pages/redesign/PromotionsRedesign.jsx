@@ -332,7 +332,7 @@ export default function PromotionsRedesign() {
   return (
     <PageShell
       title="Promotions"
-      subtitle="Wave B redesign: manage discount rules and test promotion outcomes on sample carts."
+      subtitle="manage discount rules and test promotion outcomes on sample carts."
       right={
         <div className="flex items-center gap-2">
           <Button onClick={loadPromotions}>

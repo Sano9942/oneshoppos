@@ -326,15 +326,7 @@ function App() {
 
           <Route path="/attendance" element={<AttendanceRedesign />} />
           <Route
-            path="/hr/leave"
-            element={
-              <RequirePerm perm="manage_employees">
-                <HRManagementRoute />
-              </RequirePerm>
-            }
-          />
-          <Route
-            path="/hr/payroll"
+            path="/hr"
             element={
               <RequirePerm perm="manage_employees">
                 <HRManagementRoute />

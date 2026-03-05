@@ -256,7 +256,7 @@ export default function ExpensesRedesign() {
   return (
     <PageShell
       title="Expenses"
-      subtitle="Wave B redesign: operating expense tracking with filterable list, category summary, and maintenance tools."
+      subtitle="operating expense tracking with filterable list, category summary, and maintenance tools."
       right={
         <div className="flex items-center gap-2">
           <Button onClick={() => setCatPanelOpen(true)}>

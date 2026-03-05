@@ -55,13 +55,6 @@ function ShopifyIntegrationContent() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-            Shopify V2 Integration
-          </h1>
-          <p className="text-slate-500 mt-1">
-            Modular multi-location inventory & order synchronization.
-          </p>
-        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => loadAll()}

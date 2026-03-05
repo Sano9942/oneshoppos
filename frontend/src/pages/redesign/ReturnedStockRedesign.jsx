@@ -184,7 +184,7 @@ export default function ReturnedStockRedesign() {
   return (
     <PageShell
       title="Returned Stock"
-      subtitle="Wave B redesign: supplier return (RMA) workflow and stock-out tracking."
+      subtitle="supplier return (RMA) workflow and stock-out tracking."
       right={<Button tone="primary" onClick={openCreate}><Plus size={14} className="mr-1 inline" />New Supplier Return</Button>}
     >
       {error ? <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</SectionCard> : null}

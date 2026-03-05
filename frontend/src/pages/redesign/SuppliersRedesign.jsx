@@ -126,7 +126,7 @@ export default function SuppliersRedesign() {
   return (
     <PageShell
       title="Suppliers"
-      subtitle="Wave B redesign: supplier master data with fast search and inline CRUD controls."
+      subtitle="supplier master data with fast search and inline CRUD controls."
       right={
         <Button tone="primary" onClick={openCreate}>
           <Plus size={14} className="mr-1 inline" />
