@@ -102,6 +102,11 @@ export const POSProvider = ({ children }) => {
   const [recentSalesLoading, setRecentSalesLoading] = useState(false);
   const [recentSalesSearch, setRecentSalesSearch] = useState("");
 
+  // ── Return / Exchange Modal ───────────────────────────────────────────────
+  const [returnModalOpen, setReturnModalOpen] = useState(false);
+  // Pre-loaded sale when opened from Recent Sales panel (null = no-bill mode)
+  const [returnSourceSale, setReturnSourceSale] = useState(null);
+
   // ── Notices ───────────────────────────────────────────────────────────────
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -239,6 +244,12 @@ export const POSProvider = ({ children }) => {
     } finally {
       setRecentSalesLoading(false);
     }
+  };
+
+  const openReturnFromSale = (sale) => {
+    setReturnSourceSale(sale);
+    setReturnModalOpen(true);
+    setRecentSalesOpen(false); // close panel when opening return
   };
 
   const triggerSearch = (query, field = "all") => {
@@ -880,6 +891,11 @@ export const POSProvider = ({ children }) => {
     recentSalesSearch,
     setRecentSalesSearch,
     loadRecentSales,
+    returnModalOpen,
+    setReturnModalOpen,
+    returnSourceSale,
+    setReturnSourceSale,
+    openReturnFromSale,
   };
 
   return <POSContext.Provider value={value}>{children}</POSContext.Provider>;
