@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { API_BASE as API } from "../../../config";
 import { useAuth } from "../../../auth/AuthProvider";
 import { readContext } from "../../../auth/authStore";
+import { buildReceiptHtml } from "../../../utils/receipt";
 
 const POSContext = createContext();
 const OPENING_DENOMS = [5000, 1000, 500, 100, 50, 20, 10];
@@ -95,6 +96,7 @@ export const POSProvider = ({ children }) => {
   // ── Receipt slip ──────────────────────────────────────────────────────────
   const [slip, setSlip] = useState(null);
   const [slipOpen, setSlipOpen] = useState(false);
+  const [receiptTemplate, setReceiptTemplate] = useState(null);
 
   // ── Recent Sales Panel ────────────────────────────────────────────────────
   const [recentSalesOpen, setRecentSalesOpen] = useState(false);
@@ -166,6 +168,11 @@ export const POSProvider = ({ children }) => {
         }
       })
       .catch(() => setError("Failed to load POS setup data."));
+
+    fetch(`${API}/api/receipt-templates/active`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((d) => { if (d.template) setReceiptTemplate(d.template); })
+      .catch(() => {}); // silently fall back to defaults if no template
   }, []);
 
   useEffect(() => {
@@ -597,65 +604,7 @@ export const POSProvider = ({ children }) => {
   };
 
   const printSlip = (s) => {
-    const w = window.open("", "_blank", "width=360,height=620");
-    const d = w.document;
-    const style = d.createElement("style");
-    style.textContent =
-      "body{font-family:monospace;font-size:13px;width:300px;margin:0 auto;padding:12px} .row{display:flex;justify-content:space-between} .c{text-align:center} hr{border:none;border-top:1px dashed #999;margin:6px 0}";
-    d.head.appendChild(style);
-    d.title = `Receipt ${s.invoiceNumber}`;
-    const b = d.body;
-    const txt = (tag, text, cls = "") => {
-      const e = d.createElement(tag);
-      e.textContent = text;
-      if (cls) e.className = cls;
-      return e;
-    };
-    const row = (l, r) => {
-      const e = d.createElement("div");
-      e.className = "row";
-      e.appendChild(txt("span", l));
-      e.appendChild(txt("span", r));
-      return e;
-    };
-    b.appendChild(txt("div", s.outlet?.name || "OneShopPOS", "c"));
-    b.appendChild(txt("div", s.timestamp, "c"));
-    b.appendChild(txt("div", `Invoice: ${s.invoiceNumber}`, "c"));
-    if (s.employee) b.appendChild(txt("div", `Staff: ${s.employee.name}`, "c"));
-    if (s.customer)
-      b.appendChild(
-        txt(
-          "div",
-          `Customer: ${s.customer.name}${s.customer.mobile ? " · " + s.customer.mobile : ""}`,
-          "c",
-        ),
-      );
-    b.appendChild(d.createElement("hr"));
-    s.cart.forEach((item) =>
-      b.appendChild(
-        row(
-          `${item.name} x${item.quantity}`,
-          money(item.price * item.quantity),
-        ),
-      ),
-    );
-    b.appendChild(d.createElement("hr"));
-    if (s.discountAmount > 0)
-      b.appendChild(row("Discount", `-${money(s.discountAmount)}`));
-    const totalRow = row("TOTAL", money(s.total));
-    totalRow.style.fontWeight = "bold";
-    b.appendChild(totalRow);
-    s.payments.forEach((p) => b.appendChild(row(p.method, money(p.amount))));
-    if (s.change > 0) b.appendChild(row("Change", money(s.change)));
-    if (s.refundNote) {
-      const note = d.createElement("div");
-      note.textContent = s.refundNote;
-      note.style.marginTop = "4px";
-      b.appendChild(note);
-    }
-    b.appendChild(d.createElement("hr"));
-    b.appendChild(txt("div", "Thank you for your purchase!", "c"));
-    w.print();
+    buildReceiptHtml(s, receiptTemplate);
   };
 
   const completeSale = async () => {
@@ -707,6 +656,9 @@ export const POSProvider = ({ children }) => {
         employee: employee,
         discountAmount: Number(discountInput || 0),
         discountType,
+        taxAmount: taxInclusive && taxTotal > 0 ? taxTotal : 0,
+        taxInclusive,
+        orderNote: orderNote || null,
         timestamp: new Date().toLocaleString(),
       });
       setSlipOpen(true);
@@ -862,6 +814,7 @@ export const POSProvider = ({ children }) => {
     setSlip,
     slipOpen,
     setSlipOpen,
+    receiptTemplate,
     notice,
     setNotice,
     error,
