@@ -59,6 +59,7 @@ describe("POST /api/purchase-orders — credit limit warning", () => {
   });
 
   it("credit supplier with credit_limit=0 (unlimited): no warning", async () => {
+    // Each test file gets its own in-memory DB — no teardown needed between tests in this file
     await dbRun(db,
       "UPDATE suppliers SET credit_limit = 0 WHERE id = 2");
     await dbRun(db,

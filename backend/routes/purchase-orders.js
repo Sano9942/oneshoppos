@@ -72,6 +72,10 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
       return res.status(400).json({ error: "Purchase order must have items" });
     }
 
+    if (!supplier_id) {
+      return res.status(400).json({ error: "supplier_id is required" });
+    }
+
     db.get(
       `SELECT s.payment_terms, s.credit_limit,
               COALESCE(outstanding.balance, 0) AS running_balance
@@ -131,16 +135,16 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
                 );
               });
 
-              stmt.finalize();
+              stmt.finalize((finalizeErr) => {
+                if (finalizeErr || hasError) {
+                  db.run("ROLLBACK");
+                  return res.status(500).json({ error: "Transaction failed while adding items" });
+                }
 
-              if (hasError) {
-                db.run("ROLLBACK");
-                return res.status(500).json({ error: "Transaction failed while adding items" });
-              }
-
-              db.run("COMMIT", (err) => {
-                if (err) return res.status(500).json({ error: "Failed to commit PO" });
-                res.json({ message: "Purchase order created", id: poId, ...(warningMsg && { warning: warningMsg }) });
+                db.run("COMMIT", (err) => {
+                  if (err) return res.status(500).json({ error: "Failed to commit PO" });
+                  res.json({ message: "Purchase order created", id: poId, ...(warningMsg && { warning: warningMsg }) });
+                });
               });
             },
           );

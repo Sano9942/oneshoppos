@@ -117,6 +117,7 @@ export default function PurchaseOrdersRedesign() {
   const loadDetail = async (id) => {
     setLoading(true);
     setError("");
+    setWarn("");
     try {
       const res = await fetch(`${API}/api/purchase-orders/${id}`, { headers: authHeaders() });
       const data = await res.json();
@@ -336,7 +337,7 @@ export default function PurchaseOrdersRedesign() {
         title="Create Purchase Order"
         subtitle="Build a draft PO by selecting a supplier and adding line items."
         right={
-          <Button onClick={() => setView("list")}>
+          <Button onClick={() => { setView("list"); setWarn(""); }}>
             <ArrowLeft size={14} className="mr-1 inline" />
             Back to List
           </Button>
@@ -484,7 +485,7 @@ export default function PurchaseOrdersRedesign() {
         title={poNumber(po.id)}
         subtitle={`Supplier: ${po.supplier_name} | Created: ${new Date(po.created_at).toLocaleString()}`}
         right={
-          <Button onClick={() => setView("list")}>
+          <Button onClick={() => { setView("list"); setWarn(""); }}>
             <ArrowLeft size={14} className="mr-1 inline" />
             Back to List
           </Button>
