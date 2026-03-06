@@ -13,6 +13,7 @@ import AttendanceRedesign from "./pages/redesign/AttendanceRedesign";
 import AttributeSetsRoute from "./pages/AttributeSetsRoute";
 import BackupRestoreRoute from "./pages/BackupRestoreRoute";
 import BarcodeTemplatesRedesign from "./pages/redesign/BarcodeTemplatesRedesign";
+import PrinterSettingsRedesign from "./pages/redesign/PrinterSettingsRedesign";
 import BrandsRoute from "./pages/BrandsRoute";
 import CategoriesRoute from "./pages/CategoriesRoute";
 import DashboardRoute from "./pages/DashboardRoute";
@@ -486,6 +487,14 @@ function App() {
             }
           />
           <Route path="/receipt-templates" element={<ReceiptTemplatesRedesign />} />
+          <Route
+            path="/printer-settings"
+            element={
+              <RequirePerm perm="all_access">
+                <PrinterSettingsRedesign />
+              </RequirePerm>
+            }
+          />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

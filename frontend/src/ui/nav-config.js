@@ -104,6 +104,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Shopify Integration", path: "/integrations/shopify", icon: Plug, requiredPerm: "manage_inventory" },
       { name: "Barcode Templates", path: "/barcode-templates", icon: Printer, requiredPerm: "manage_inventory" },
       { name: "Receipt Templates", path: "/receipt-templates", icon: FileText, requiredPerm: "manage_inventory" },
+      { name: "Printer Settings", path: "/printer-settings", icon: Printer, requiredPerm: "all_access" },
       { name: "Backup & Restore", path: "/backup-restore", icon: DatabaseBackup, requiredPerm: "all_access", requiredFlag: "backup_restore" },
     ],
   },
