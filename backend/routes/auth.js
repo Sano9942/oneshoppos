@@ -58,7 +58,32 @@ module.exports = function registerAuthRoutes(app, deps) {
     }
   });
 
-  app.post("/api/auth/logout", (req, res) => {
+  app.post("/api/auth/logout", async (req, res) => {
+    // In multi-tenant mode: revoke refresh tokens and clear cookie
+    if (process.env.MULTI_TENANT === "1") {
+      try {
+        const { getMasterDb } = require("../master-db");
+        const { hashToken } = require("../jwt-auth");
+        const masterDb = getMasterDb();
+
+        // Revoke by cookie token hash if present
+        const refreshToken = req.cookies?.refreshToken;
+        if (refreshToken) {
+          const tokenHash = hashToken(refreshToken);
+          await new Promise((resolve) => {
+            masterDb.run(
+              "UPDATE tenant_refresh_tokens SET revoked_at = datetime('now') WHERE token_hash = ? AND revoked_at IS NULL",
+              [tokenHash],
+              resolve
+            );
+          });
+        }
+
+        res.clearCookie("refreshToken", { path: "/api/auth" });
+      } catch {
+        // Best-effort — still return success
+      }
+    }
     res.json({ success: true });
   });
 
@@ -136,6 +161,282 @@ module.exports = function registerAuthRoutes(app, deps) {
       },
     );
   });
+
+  // --- Multi-tenant JWT endpoints (only active when MULTI_TENANT=1) ---
+  if (process.env.MULTI_TENANT === "1") {
+    const { signAccessToken, signRefreshToken, verifyRefreshToken, verifyAccessToken, hashToken } = require("../jwt-auth");
+    const jwtLib = require("jsonwebtoken");
+    const { getMasterDb } = require("../master-db");
+
+    // POST /api/auth/mt-login — standard login with tenant slug + username + PIN
+    app.post("/api/auth/mt-login", authLimiter, async (req, res) => {
+      const { tenant_slug, username, pin } = req.body || {};
+      if (!tenant_slug || !username || !pin) {
+        return res.status(400).json({ error: "tenant_slug, username, and pin are required" });
+      }
+      const JWT_SECRET = process.env.JWT_SECRET;
+      const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
+      if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
+        return res.status(500).json({ error: "JWT secrets not configured" });
+      }
+
+      try {
+        const masterDb = getMasterDb();
+
+        // 1. Look up tenant by slug
+        const tenant = await new Promise((resolve, reject) => {
+          masterDb.get(
+            "SELECT id, slug, name, status FROM tenants WHERE slug = ? AND status = 'active'",
+            [String(tenant_slug).trim()],
+            (err, row) => (err ? reject(err) : resolve(row))
+          );
+        });
+        if (!tenant) {
+          return res.status(401).json({ error: "Invalid store code" });
+        }
+
+        // 2. Find employee in tenant DB by username
+        const employee = await new Promise((resolve, reject) => {
+          db.get(
+            `SELECT e.id, e.name, e.role_id, e.pin_hash
+             FROM employees e
+             WHERE LOWER(e.name) = LOWER(?)`,
+            [String(username).trim()],
+            (err, row) => (err ? reject(err) : resolve(row))
+          );
+        });
+        if (!employee) {
+          return res.status(401).json({ error: "Invalid username or PIN" });
+        }
+
+        // 3. Verify PIN via bcrypt
+        let pinValid = false;
+        if (employee.pin_hash) {
+          pinValid = await bcrypt.compare(String(pin).trim(), employee.pin_hash);
+        }
+        if (!pinValid) {
+          return res.status(401).json({ error: "Invalid username or PIN" });
+        }
+
+        // 4. Load permissions
+        const permissions = await new Promise((resolve, reject) => {
+          db.all(
+            "SELECT permission FROM role_permissions WHERE role_id = ?",
+            [employee.role_id || 3],
+            (err, rows) => (err ? reject(err) : resolve((rows || []).map(r => r.permission)))
+          );
+        });
+
+        // 5. Sign access token (oid null until context selection)
+        const accessToken = signAccessToken(
+          { tid: tenant.id, eid: employee.id, rid: employee.role_id, oid: null },
+          JWT_SECRET
+        );
+
+        // 6. Sign refresh token and store hash in master.db
+        const { token: refreshToken, hash: tokenHash, expiresAt } = signRefreshToken(
+          { tid: tenant.id, eid: employee.id },
+          JWT_REFRESH_SECRET
+        );
+        await new Promise((resolve, reject) => {
+          masterDb.run(
+            "INSERT INTO tenant_refresh_tokens (tenant_id, employee_id, token_hash, expires_at) VALUES (?, ?, ?, ?)",
+            [tenant.id, employee.id, tokenHash, expiresAt],
+            (err) => (err ? reject(err) : resolve())
+          );
+        });
+
+        // 7. Set refresh token as httpOnly cookie
+        res.cookie("refreshToken", refreshToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "Strict",
+          path: "/api/auth",
+          maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
+
+        return res.json({
+          token: accessToken,
+          employee: { id: employee.id, name: employee.name, role_id: employee.role_id },
+          permissions,
+          tenant: { slug: tenant.slug, name: tenant.name },
+        });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    });
+
+    // POST /api/auth/refresh — exchange refresh cookie for new access token
+    app.post("/api/auth/refresh", async (req, res) => {
+      const JWT_SECRET = process.env.JWT_SECRET;
+      const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
+      if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
+        return res.status(500).json({ error: "JWT secrets not configured" });
+      }
+
+      const refreshToken = req.cookies?.refreshToken;
+      if (!refreshToken) {
+        return res.status(401).json({ error: "Refresh token missing" });
+      }
+
+      try {
+        // 1. Verify signature
+        const decoded = verifyRefreshToken(refreshToken, JWT_REFRESH_SECRET);
+        if (decoded.type !== "refresh") {
+          return res.status(401).json({ error: "Invalid refresh token" });
+        }
+
+        // 2. Check token in master.db (not revoked)
+        const masterDb = getMasterDb();
+        const tokenHash = hashToken(refreshToken);
+        const storedToken = await new Promise((resolve, reject) => {
+          masterDb.get(
+            "SELECT * FROM tenant_refresh_tokens WHERE token_hash = ? AND revoked_at IS NULL",
+            [tokenHash],
+            (err, row) => (err ? reject(err) : resolve(row))
+          );
+        });
+        if (!storedToken) {
+          return res.status(401).json({ error: "Refresh token invalid or revoked" });
+        }
+
+        // 3. Check tenant is still active
+        const tenant = await new Promise((resolve, reject) => {
+          masterDb.get(
+            "SELECT status FROM tenants WHERE id = ?",
+            [decoded.tid],
+            (err, row) => (err ? reject(err) : resolve(row))
+          );
+        });
+        if (!tenant || tenant.status !== "active") {
+          return res.status(403).json({ error: "Account suspended. Contact support." });
+        }
+
+        // 4. Load employee role for new token
+        const employee = await new Promise((resolve, reject) => {
+          db.get(
+            "SELECT id, role_id FROM employees WHERE id = ?",
+            [decoded.eid],
+            (err, row) => (err ? reject(err) : resolve(row))
+          );
+        });
+        if (!employee) {
+          return res.status(401).json({ error: "Employee not found" });
+        }
+
+        // 5. Sign new access token
+        const accessToken = signAccessToken(
+          { tid: decoded.tid, eid: decoded.eid, rid: employee.role_id, oid: null },
+          JWT_SECRET
+        );
+
+        return res.json({ token: accessToken });
+      } catch (err) {
+        if (err.name === "TokenExpiredError") {
+          return res.status(401).json({ error: "Refresh token expired", code: "REFRESH_EXPIRED" });
+        }
+        return res.status(401).json({ error: "Invalid refresh token" });
+      }
+    });
+
+    // POST /api/auth/update-context — re-sign JWT with selected outlet_id
+    app.post("/api/auth/update-context", async (req, res) => {
+      const JWT_SECRET = process.env.JWT_SECRET;
+      if (!JWT_SECRET) {
+        return res.status(500).json({ error: "JWT secrets not configured" });
+      }
+
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Authorization header required" });
+      }
+
+      try {
+        const decoded = verifyAccessToken(authHeader.slice(7), JWT_SECRET);
+        const { outlet_id } = req.body || {};
+
+        const newToken = signAccessToken(
+          {
+            tid: decoded.tid,
+            eid: decoded.eid,
+            rid: decoded.rid,
+            oid: outlet_id ? Number(outlet_id) : null,
+            scope: decoded.scope || "full",
+          },
+          JWT_SECRET
+        );
+
+        return res.json({ token: newToken });
+      } catch (err) {
+        if (err.name === "TokenExpiredError") {
+          return res.status(401).json({ error: "Token expired", code: "TOKEN_EXPIRED" });
+        }
+        return res.status(401).json({ error: "Invalid token" });
+      }
+    });
+
+    // POST /api/auth/kiosk-login — PIN-only login with limited scope (8h, kiosk scope)
+    app.post("/api/auth/kiosk-login", authLimiter, async (req, res) => {
+      const { tenant_slug, pin } = req.body || {};
+      if (!tenant_slug || !pin) {
+        return res.status(400).json({ error: "tenant_slug and pin are required" });
+      }
+      const JWT_SECRET = process.env.JWT_SECRET;
+      if (!JWT_SECRET) {
+        return res.status(500).json({ error: "JWT secrets not configured" });
+      }
+
+      try {
+        const masterDb = getMasterDb();
+
+        // 1. Look up tenant
+        const tenant = await new Promise((resolve, reject) => {
+          masterDb.get(
+            "SELECT id, slug, name, status FROM tenants WHERE slug = ? AND status = 'active'",
+            [String(tenant_slug).trim()],
+            (err, row) => (err ? reject(err) : resolve(row))
+          );
+        });
+        if (!tenant) {
+          return res.status(401).json({ error: "Invalid store code" });
+        }
+
+        // 2. Scan all employees, compare PIN via bcrypt
+        const employees = await new Promise((resolve, reject) => {
+          db.all(
+            "SELECT id, name, role_id, pin_hash FROM employees",
+            [],
+            (err, rows) => (err ? reject(err) : resolve(rows || []))
+          );
+        });
+
+        let matched = null;
+        for (const emp of employees) {
+          if (emp.pin_hash && await bcrypt.compare(String(pin).trim(), emp.pin_hash)) {
+            matched = emp;
+            break;
+          }
+        }
+        if (!matched) {
+          return res.status(401).json({ error: "Invalid PIN" });
+        }
+
+        // 3. Sign kiosk-scoped token (8h, no refresh token)
+        const kioskToken = jwtLib.sign(
+          { tid: tenant.id, eid: matched.id, rid: matched.role_id, oid: null, scope: "kiosk" },
+          JWT_SECRET,
+          { expiresIn: "8h" }
+        );
+
+        return res.json({
+          token: kioskToken,
+          employee: { id: matched.id, name: matched.name },
+        });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    });
+  }
 
   app.get("/api/auth/me", (req, res) => {
     const employeeId = req.headers["x-employee-id"];

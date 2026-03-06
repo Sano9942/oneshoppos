@@ -18,4 +18,6 @@ Thumbs.db
 
 # SaaS multi-tenant
 backend/master.db
+backend/master.db-shm
+backend/master.db-wal
 backend/tenants/

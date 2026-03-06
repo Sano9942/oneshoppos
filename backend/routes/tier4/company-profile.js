@@ -86,7 +86,15 @@ module.exports = function createCompanyProfileRouter({
   );
 
   const companyLogoStorage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, COMPANY_UPLOADS_DIR),
+    destination: (req, file, cb) => {
+      // In multi-tenant mode, write to the tenant's uploads directory
+      const dir = req.tenantDir
+        ? path.join(req.tenantDir, "uploads", "company")
+        : COMPANY_UPLOADS_DIR;
+      const fs = require("fs");
+      fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
     filename: (req, file, cb) => {
       const ext = path.extname(file.originalname || "").toLowerCase() || ".png";
       cb(null, `company_logo_${Date.now()}${ext}`);

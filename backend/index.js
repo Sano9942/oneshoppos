@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 const db = require("./db");
 const fs = require("fs");
 const path = require("path");
@@ -9,6 +10,17 @@ const rateLimit = require("express-rate-limit");
 const sqlite3 = require("sqlite3").verbose();
 const createTier4Router = require("./routes/tier4");
 const registerAllRoutes = require("./routes/registerAllRoutes");
+
+// Multi-tenant imports (lazy-used when MULTI_TENANT=1)
+const IS_MULTI_TENANT = process.env.MULTI_TENANT === "1";
+let asyncStore, createDbProxy, dbProxy, tenantDbManager;
+if (IS_MULTI_TENANT) {
+  const proxy = require("./tenant-db-proxy");
+  asyncStore = proxy.asyncStore;
+  createDbProxy = proxy.createDbProxy;
+  dbProxy = createDbProxy();
+  tenantDbManager = require("./tenant-db-manager");
+}
 const {
   verifyConnection,
   fetchShopifyLocations,
@@ -198,7 +210,9 @@ app.use(
     },
   }),
 ); // Parse JSON bodies
+// Single-tenant static file serving (fallback for MT mode when no tenant context)
 app.use("/uploads", express.static(UPLOADS_DIR));
+app.use(cookieParser()); // Parse cookies (needed for JWT refresh token httpOnly cookie)
 app.use(globalLimiter);
 
 // --- PERMISSION MIDDLEWARE SCAFFOLD ---
@@ -230,6 +244,122 @@ function loadEmployeePerms(req, res, next) {
       );
     },
   );
+}
+
+// JWT auth middleware (Phase 2) — used when MULTI_TENANT=1.
+// Verifies Bearer token, sets req.tenantId / req.employee / req.tokenScope,
+// bridges x-employee-id for downstream compatibility, then loads permissions from DB.
+// Falls through to loadEmployeePerms when MULTI_TENANT is not "1".
+const KIOSK_ALLOWED_PATHS = [
+  /^\/api\/attendance\/pin-/,
+  /^\/api\/auth\//,
+];
+
+function loadTenantAndPerms(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    req.employeePerms = [];
+    return next();
+  }
+
+  try {
+    const { verifyAccessToken } = require("./jwt-auth");
+    const decoded = verifyAccessToken(authHeader.slice(7), process.env.JWT_SECRET);
+
+    req.tenantId = decoded.tid;
+    req.employee = { id: decoded.eid, role_id: decoded.rid };
+    req.tokenScope = decoded.scope || "full";
+
+    // Bridge: set x-employee-id header so downstream code that reads it still works
+    req.headers["x-employee-id"] = String(decoded.eid);
+
+    // Set outlet context from JWT claim
+    if (decoded.oid) {
+      req.context = req.context || {};
+      req.context.outletId = decoded.oid;
+      // Also bridge as header for resolveContext
+      if (!req.headers["x-outlet-id"]) {
+        req.headers["x-outlet-id"] = String(decoded.oid);
+      }
+    }
+
+    // Kiosk scope: restrict to attendance PIN endpoints only
+    if (req.tokenScope === "kiosk" && !KIOSK_ALLOWED_PATHS.some(rx => rx.test(req.path))) {
+      return res.status(403).json({ error: "Kiosk scope: access denied", code: "KIOSK_RESTRICTED" });
+    }
+
+    // Load permissions — in MT mode, query the tenant's DB directly
+    // (resolveTenant hasn't run yet, so the proxy/ALS context is not available)
+    const permDbPromise = IS_MULTI_TENANT
+      ? tenantDbManager.getDb(decoded.tid)
+      : Promise.resolve(db);
+
+    permDbPromise.then((permDb) => {
+      permDb.get("SELECT role_id FROM employees WHERE id = ?", [decoded.eid], (err, emp) => {
+        if (err || !emp) {
+          req.employeePerms = [];
+          return next();
+        }
+        permDb.all("SELECT permission FROM role_permissions WHERE role_id = ?", [emp.role_id], (err2, rows) => {
+          req.employeePerms = err2 ? [] : rows.map(r => r.permission);
+          next();
+        });
+      });
+    }).catch(() => {
+      req.employeePerms = [];
+      next();
+    });
+  } catch (err) {
+    if (err.name === "TokenExpiredError") {
+      return res.status(401).json({ error: "Token expired", code: "TOKEN_EXPIRED" });
+    }
+    // No token or invalid token — clear perms and continue (unauthenticated)
+    req.employeePerms = [];
+    next();
+  }
+}
+
+/**
+ * resolveTenant — middleware that wraps each request in an AsyncLocalStorage
+ * context pointing to the correct tenant's DB. Must run AFTER loadTenantAndPerms
+ * (which sets req.tenantId from the JWT). Only active when MULTI_TENANT=1.
+ *
+ * Also sets req.tenantDir and req.tenantSlug for upload-aware route handlers.
+ */
+function resolveTenant(req, res, next) {
+  if (!IS_MULTI_TENANT || !req.tenantId) return next();
+
+  tenantDbManager.getDb(req.tenantId)
+    .then((tenantDb) => {
+      // Look up tenant slug for file paths (cached in the DB manager lookup)
+      const { getMasterDb } = require("./master-db");
+      getMasterDb().get(
+        "SELECT slug, db_path FROM tenants WHERE id = ?",
+        [req.tenantId],
+        (err, tenant) => {
+          if (err || !tenant) {
+            return res.status(403).json({ error: "Tenant not found.", code: "TENANT_NOT_FOUND" });
+          }
+
+          req.tenantSlug = tenant.slug;
+          req.tenantDir = path.join(__dirname, "tenants", `t_${tenant.slug}`);
+
+          // Wrap the rest of the request chain in AsyncLocalStorage context
+          asyncStore.run({ db: tenantDb }, () => next());
+        }
+      );
+    })
+    .catch((err) => {
+      // Tenant suspended or DB missing
+      if (err.message && err.message.includes("is suspended")) {
+        return res.status(403).json({ error: "Account suspended. Contact support.", code: "TENANT_SUSPENDED" });
+      }
+      if (err.message && err.message.includes("is deleted")) {
+        return res.status(403).json({ error: "Account not found.", code: "TENANT_DELETED" });
+      }
+      console.error("[resolveTenant]", err.message);
+      return res.status(500).json({ error: "Failed to resolve tenant database" });
+    });
 }
 
 function requirePerm(permission) {
@@ -658,9 +788,15 @@ function notifyLowStockForSale(cartItems, outletId) {
 
 const runtimeState = { isRestoreInProgress: false };
 
+const { requirePlanLimit } = require("./middleware/plan-limits");
+
+// Mount admin routes BEFORE tenant middleware — admin endpoints use master.db directly
+const registerAdminRoutes = require("./routes/admin");
+registerAdminRoutes(app, { authLimiter });
+
 const { processPendingShopifyInventoryEvents, processPendingReportSchedules } =
   registerAllRoutes(app, {
-    db,
+    db: IS_MULTI_TENANT ? dbProxy : db,
     fs,
     path,
     multer,
@@ -668,9 +804,12 @@ const { processPendingShopifyInventoryEvents, processPendingReportSchedules } =
     requirePerm,
     requireAnyPerm,
     requireFeature,
+    requirePlanLimit,
     createNotification,
     notifyLowStockForSale,
     loadEmployeePerms,
+    loadTenantAndPerms,
+    resolveTenant,
     loadCompanyProfile,
     resolveContext,
     requireContextOutlet,

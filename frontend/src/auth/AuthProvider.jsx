@@ -5,13 +5,25 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import { clearSession, readContext, readSession, writeSession } from "./authStore";
+import {
+  clearSession,
+  readContext,
+  readSession,
+  readToken,
+  writeSession,
+  writeToken,
+} from "./authStore";
 
-import { API_BASE as API } from '../config';
+import { API_BASE as API, IS_MULTI_TENANT } from "../config";
 const AuthContext = createContext(null);
 const EMPTY_PERMISSIONS = [];
+
+// Refresh lock: prevents multiple simultaneous refresh calls when
+// several API requests fail with TOKEN_EXPIRED at the same time.
+let _refreshPromise = null;
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
@@ -20,9 +32,14 @@ export function AuthProvider({ children }) {
   const employee = session?.employee || null;
   const permissions = session?.permissions || EMPTY_PERMISSIONS;
   const isAuthenticated = Boolean(employee?.id);
+  const token = session?.token || null;
 
   const refreshPermissions = async (roleId, employeeId = null) => {
     const headers = employeeId ? { "x-employee-id": String(employeeId) } : {};
+    if (IS_MULTI_TENANT) {
+      const t = readToken();
+      if (t) headers["Authorization"] = `Bearer ${t}`;
+    }
     const res = await fetch(`${API}/api/roles/${roleId}/permissions`, { headers });
     const data = await res.json();
     if (!res.ok) {
@@ -31,7 +48,66 @@ export function AuthProvider({ children }) {
     return data.permissions || [];
   };
 
-  const login = async (username, pin) => {
+  /**
+   * Attempt to refresh the access token using the httpOnly refresh cookie.
+   * Returns the new token string, or null if refresh failed.
+   */
+  const refreshAccessToken = async () => {
+    if (_refreshPromise) return _refreshPromise;
+
+    _refreshPromise = (async () => {
+      try {
+        const nf = window._nativeFetch || window.fetch;
+        const res = await nf(`${API}/api/auth/refresh`, {
+          method: "POST",
+          credentials: "include",
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (data.token) {
+          writeToken(data.token);
+          setSession((prev) => (prev ? { ...prev, token: data.token } : prev));
+          return data.token;
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    })();
+
+    // Clear the lock only after all awaiting callers have received the result
+    const result = await _refreshPromise;
+    _refreshPromise = null;
+    return result;
+  };
+
+  const login = async (username, pin, tenantSlug) => {
+    if (IS_MULTI_TENANT && tenantSlug) {
+      // Multi-tenant login
+      const res = await fetch(`${API}/api/auth/mt-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include", // receive httpOnly refresh cookie
+        body: JSON.stringify({ tenant_slug: tenantSlug, username, pin }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Invalid store code, username, or PIN");
+      }
+      const next = {
+        employee: data.employee,
+        permissions: data.permissions || [],
+        token: data.token,
+        tenant_slug: tenantSlug,
+        tenant: data.tenant,
+        loadedAt: Date.now(),
+      };
+      writeSession(next);
+      setSession(next);
+      return next;
+    }
+
+    // Single-tenant login (existing flow)
     const res = await fetch(`${API}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -53,7 +129,15 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     try {
-      await fetch(`${API}/api/auth/logout`, { method: "POST" });
+      const headers = {};
+      if (IS_MULTI_TENANT && token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      await fetch(`${API}/api/auth/logout`, {
+        method: "POST",
+        headers,
+        credentials: "include",
+      });
     } catch {
       // frontend-only clear is enough
     }
@@ -70,10 +154,17 @@ export function AuthProvider({ children }) {
     [permissions],
   );
 
-  const authHeaders = useCallback((extra = {}) => {
-    if (!employee?.id) return { ...extra };
-    return { ...extra, "x-employee-id": String(employee.id) };
-  }, [employee]);
+  const authHeaders = useCallback(
+    (extra = {}) => {
+      if (!employee?.id) return { ...extra };
+      const h = { ...extra, "x-employee-id": String(employee.id) };
+      if (IS_MULTI_TENANT && token) {
+        h["Authorization"] = `Bearer ${token}`;
+      }
+      return h;
+    },
+    [employee, token],
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -97,6 +188,9 @@ export function AuthProvider({ children }) {
           permissions: freshPerms,
           loadedAt: Date.now(),
           ...(existing.context ? { context: existing.context } : {}),
+          ...(existing.token ? { token: existing.token } : {}),
+          ...(existing.tenant_slug ? { tenant_slug: existing.tenant_slug } : {}),
+          ...(existing.tenant ? { tenant: existing.tenant } : {}),
         };
         writeSession(refreshed);
         if (isMounted) setSession(refreshed);
@@ -116,28 +210,35 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const nativeFetch = window.fetch.bind(window);
-    window.fetch = (input, init = {}) => {
+    // Expose native fetch for the refresh function (avoids interceptor recursion)
+    window._nativeFetch = nativeFetch;
+
+    window.fetch = async (input, init = {}) => {
       const rawUrl = typeof input === "string" ? input : input?.url || "";
       const method =
-        String(init.method || (typeof input !== "string" && input?.method) || "GET").toUpperCase();
+        String(
+          init.method || (typeof input !== "string" && input?.method) || "GET",
+        ).toUpperCase();
       const isApiCall =
-        rawUrl.includes(`${API}/api/`) ||
-        rawUrl.startsWith("/api/");
+        rawUrl.includes(`${API}/api/`) || rawUrl.startsWith("/api/");
 
-      if (isApiCall && !navigator.onLine && !["GET", "HEAD", "OPTIONS"].includes(method)) {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              error: "Offline mode: write actions require an internet or local network connection.",
-            }),
-            {
-              status: 503,
-              headers: {
-                "Content-Type": "application/json",
-                "X-Offline-Mode": "1",
-              },
+      if (
+        isApiCall &&
+        !navigator.onLine &&
+        !["GET", "HEAD", "OPTIONS"].includes(method)
+      ) {
+        return new Response(
+          JSON.stringify({
+            error:
+              "Offline mode: write actions require an internet or local network connection.",
+          }),
+          {
+            status: 503,
+            headers: {
+              "Content-Type": "application/json",
+              "X-Offline-Mode": "1",
             },
-          ),
+          },
         );
       }
 
@@ -148,6 +249,14 @@ export function AuthProvider({ children }) {
       const headers = new Headers(init.headers || {});
       if (!headers.has("x-employee-id")) {
         headers.set("x-employee-id", String(employee.id));
+      }
+
+      // In multi-tenant mode, inject Bearer token
+      if (IS_MULTI_TENANT) {
+        const currentToken = readToken();
+        if (currentToken && !headers.has("Authorization")) {
+          headers.set("Authorization", `Bearer ${currentToken}`);
+        }
       }
 
       // Inject context headers from session storage
@@ -164,13 +273,43 @@ export function AuthProvider({ children }) {
         }
       }
 
-      return nativeFetch(input, { ...init, headers });
+      const fetchOpts = {
+        ...init,
+        headers,
+        ...(IS_MULTI_TENANT ? { credentials: "include" } : {}),
+      };
+
+      let response = await nativeFetch(input, fetchOpts);
+
+      // Silent token refresh on 401 TOKEN_EXPIRED in multi-tenant mode
+      if (IS_MULTI_TENANT && response.status === 401) {
+        const cloned = response.clone();
+        try {
+          const body = await cloned.json();
+          if (body.code === "TOKEN_EXPIRED") {
+            const newToken = await refreshAccessToken();
+            if (newToken) {
+              const retryHeaders = new Headers(headers);
+              retryHeaders.set("Authorization", `Bearer ${newToken}`);
+              response = await nativeFetch(input, {
+                ...fetchOpts,
+                headers: retryHeaders,
+              });
+            }
+          }
+        } catch {
+          // Can't parse body — return original response
+        }
+      }
+
+      return response;
     };
 
     return () => {
       window.fetch = nativeFetch;
+      delete window._nativeFetch;
     };
-  }, [employee?.id]);
+  }, [employee?.id]); // token read live via readToken() — no dep needed
 
   const value = useMemo(
     () => ({
@@ -182,8 +321,10 @@ export function AuthProvider({ children }) {
       login,
       logout,
       refreshPermissions,
+      refreshAccessToken,
       hasPerm,
       authHeaders,
+      token,
     }),
     [
       session,
@@ -193,6 +334,7 @@ export function AuthProvider({ children }) {
       isBootstrapping,
       hasPerm,
       authHeaders,
+      token,
     ],
   );
 

@@ -148,7 +148,11 @@ module.exports = function registerOrderRoutes(app, deps) {
               const url = String(row.url || "");
               if (url.startsWith("/uploads/products/")) {
                 const filename = path.basename(url);
-                const filePath = path.join(PRODUCT_UPLOADS_DIR, filename);
+                // In multi-tenant mode, resolve from tenant's uploads directory
+                const uploadsDir = req.tenantDir
+                  ? path.join(req.tenantDir, "uploads", "products")
+                  : PRODUCT_UPLOADS_DIR;
+                const filePath = path.join(uploadsDir, filename);
                 if (fs.existsSync(filePath)) {
                   try {
                     fs.unlinkSync(filePath);
@@ -167,7 +171,14 @@ module.exports = function registerOrderRoutes(app, deps) {
 
   // Upload a product image file and return a served URL
   const productImageStorage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, PRODUCT_UPLOADS_DIR),
+    destination: (req, file, cb) => {
+      // In multi-tenant mode, write to the tenant's uploads directory
+      const dir = req.tenantDir
+        ? path.join(req.tenantDir, "uploads", "products")
+        : PRODUCT_UPLOADS_DIR;
+      fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
     filename: (req, file, cb) => {
       const ext = path.extname(file.originalname || "").toLowerCase();
       const safeExt = [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(ext)

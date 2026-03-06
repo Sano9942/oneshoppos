@@ -51,3 +51,21 @@ export function clearContext() {
   const { context: _, ...rest } = session;
   writeSession(rest);
 }
+
+// --- Token helpers (used in multi-tenant JWT mode) ---
+
+export function readToken() {
+  const session = readSession();
+  return session?.token || null;
+}
+
+export function writeToken(token) {
+  const session = readSession();
+  if (!session) return;
+  writeSession({ ...session, token });
+}
+
+export function readTenantSlug() {
+  const session = readSession();
+  return session?.tenant_slug || null;
+}

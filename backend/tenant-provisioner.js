@@ -7,11 +7,13 @@
 const path = require('path');
 const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcryptjs');
 const { extractSchema } = require('./schema-full');
 const { getMasterDb, closeMasterDb, initMasterDb } = require('./master-db');
 
 const TENANTS_DIR = path.join(__dirname, 'tenants');
-const SCHEMA_VERSION = 65;
+const SCHEMA_VERSION = 66;
+const BCRYPT_ROUNDS = 10;
 
 // --- Arg parsing ---
 function parseArgs() {
@@ -131,11 +133,22 @@ async function seedTenantDb(db, { name, timezone, pin }) {
     );
   }
 
-  // 4. Admin employee
-  const employeeId = await dbRun(db,
-    `INSERT INTO employees (name, pin_code, role_id) VALUES ('Admin', ?, ?)`,
-    [pin, roleId]
-  );
+  // 4. Admin employee (with bcrypt-hashed PIN for mt-login)
+  // Check if pin_hash column exists (depends on whether oneshop.db has migrate66 applied)
+  const pinHash = await bcrypt.hash(String(pin), BCRYPT_ROUNDS);
+  const hasPinHash = await new Promise((resolve, reject) => {
+    db.all("PRAGMA table_info(employees)", (err, cols) => {
+      if (err) return reject(err);
+      resolve(cols.some((c) => c.name === "pin_hash"));
+    });
+  });
+  const employeeId = hasPinHash
+    ? await dbRun(db,
+        `INSERT INTO employees (name, pin_code, pin_hash, role_id) VALUES ('Admin', ?, ?, ?)`,
+        [pin, pinHash, roleId])
+    : await dbRun(db,
+        `INSERT INTO employees (name, pin_code, role_id) VALUES ('Admin', ?, ?)`,
+        [pin, roleId]);
 
   // 5. Employee-outlet link
   await dbRun(db,

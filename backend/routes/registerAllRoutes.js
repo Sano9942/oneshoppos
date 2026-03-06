@@ -8,9 +8,12 @@ module.exports = function registerAllRoutes(app, deps) {
     requirePerm,
     requireAnyPerm,
     requireFeature,
+    requirePlanLimit,
     createNotification,
     notifyLowStockForSale,
     loadEmployeePerms,
+    loadTenantAndPerms,
+    resolveTenant,
     loadCompanyProfile,
     resolveContext,
     requireContextOutlet,
@@ -44,7 +47,21 @@ module.exports = function registerAllRoutes(app, deps) {
     logShopifyEvent,
   } = deps;
 
-  app.use(loadEmployeePerms);
+  // Toggle auth middleware: JWT-based (MULTI_TENANT=1) vs header-based (default)
+  app.use(process.env.MULTI_TENANT === "1" ? loadTenantAndPerms : loadEmployeePerms);
+  // In multi-tenant mode, resolve the tenant DB via AsyncLocalStorage after JWT auth
+  if (process.env.MULTI_TENANT === "1") {
+    app.use(resolveTenant);
+    // Tenant-scoped upload serving (must run after resolveTenant sets req.tenantDir)
+    const express = require("express");
+    app.use("/uploads", (req, res, next) => {
+      if (req.tenantDir) {
+        const tenantUploads = path.join(req.tenantDir, "uploads");
+        return express.static(tenantUploads)(req, res, next);
+      }
+      next(); // Falls through to global /uploads static mount
+    });
+  }
   app.use(loadCompanyProfile);
   app.use(resolveContext);
   app.use(requireContextOutlet);

@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Building2, MapPin, ChevronRight } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
-import { readContext, writeContext } from "../auth/authStore";
-import { API_BASE as API } from "../config";
+import { readContext, writeContext, writeToken } from "../auth/authStore";
+import { API_BASE as API, IS_MULTI_TENANT } from "../config";
 import useFeatureFlags from "../hooks/useFeatureFlags";
 
 export default function ContextSelect() {
-  const { employee, isAuthenticated, authHeaders, hasPerm } = useAuth();
+  const { employee, isAuthenticated, isBootstrapping, authHeaders, hasPerm } = useAuth();
   const { flags, loading: flagsLoading } = useFeatureFlags(authHeaders);
   const navigate = useNavigate();
 
@@ -60,6 +60,17 @@ export default function ContextSelect() {
       });
   }, [shouldSkip]);
 
+  // Wait for session restore before deciding redirects
+  if (isBootstrapping) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-100">
+        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-4 text-sm font-medium text-slate-500 shadow-sm">
+          Loading...
+        </div>
+      </div>
+    );
+  }
+
   // Redirect conditions (after hooks)
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (hasExistingContext) return <Navigate to="/dashboard" replace />;
@@ -70,16 +81,37 @@ export default function ContextSelect() {
   const canContinue =
     scopeMode === "all_branches" || (scopeMode === "single_branch" && selectedOutletId);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!canContinue) return;
 
     const isAllBranches = scopeMode === "all_branches";
+    const outletId = isAllBranches ? null : Number(selectedOutletId);
     const context = {
       active_company_id: bootstrap?.companies?.[0]?.id || 1,
-      active_outlet_id: isAllBranches ? null : Number(selectedOutletId),
+      active_outlet_id: outletId,
       scope_mode: scopeMode,
       allowed_outlet_ids: bootstrap?.allowed_outlet_ids || [],
     };
+
+    // In MT mode, re-sign the JWT with the selected outlet_id
+    if (IS_MULTI_TENANT) {
+      try {
+        const res = await fetch(`${API}/api/auth/update-context`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(),
+          },
+          body: JSON.stringify({ outlet_id: outletId }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.token) writeToken(data.token);
+        }
+      } catch {
+        // Best-effort — context still works via headers
+      }
+    }
 
     writeContext(context);
     navigate("/dashboard", { replace: true });

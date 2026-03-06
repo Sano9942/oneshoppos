@@ -361,7 +361,12 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
   const backupUploadDir = UPLOADS_DIR;
 
   const restoreStorage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, backupUploadDir),
+    destination: (req, file, cb) => {
+      // In multi-tenant mode, write to the tenant's uploads directory
+      const dir = req.tenantDir ? path.join(req.tenantDir, "uploads") : backupUploadDir;
+      fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
     filename: (req, file, cb) => cb(null, `restore_${Date.now()}.db`),
   });
   const restoreUpload = multer({
@@ -376,18 +381,20 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
     requireFeature("backup_restore"),
     (req, res) => {
       const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      // In multi-tenant mode, back up the tenant's DB
+      const dbFilePath = req.tenantDir ? path.join(req.tenantDir, "data.db") : DB_PATH;
       const filename = `oneshop_backup_${ts}.db`;
       res.setHeader(
         "Content-Disposition",
         `attachment; filename="${filename}"`,
       );
       res.setHeader("Content-Type", "application/octet-stream");
-      const stream = fs.createReadStream(DB_PATH);
+      const stream = fs.createReadStream(dbFilePath);
       stream.on("error", (err) => res.status(500).json({ error: err.message }));
       stream.pipe(res);
       // Log the backup event after streaming begins
       const { performed_by } = req.query;
-      const size = fs.existsSync(DB_PATH) ? fs.statSync(DB_PATH).size : 0;
+      const size = fs.existsSync(dbFilePath) ? fs.statSync(dbFilePath).size : 0;
       db.run(
         "INSERT INTO backup_log (action, filename, size_bytes, performed_by) VALUES ('backup', ?, ?, ?)",
         [filename, size, performed_by || null],
@@ -469,12 +476,15 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
               .toISOString()
               .replace(/[:.]/g, "-")
               .slice(0, 19);
+            // In multi-tenant mode, resolve paths from tenant directory
+            const restoreUploadsDir = req.tenantDir ? path.join(req.tenantDir, "uploads") : backupUploadDir;
+            const restoreDbPath = req.tenantDir ? path.join(req.tenantDir, "data.db") : DB_PATH;
             const snapshotPath = path.join(
-              backupUploadDir,
+              restoreUploadsDir,
               `oneshop_pre_restore_${ts}.db`,
             );
             const stagedPath = path.join(
-              backupUploadDir,
+              restoreUploadsDir,
               `oneshop_restore_staged_${Date.now()}.db`,
             );
 
@@ -486,9 +496,9 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
                 );
 
               try {
-                fs.copyFileSync(DB_PATH, snapshotPath);
+                fs.copyFileSync(restoreDbPath, snapshotPath);
                 fs.copyFileSync(uploadedPath, stagedPath);
-                fs.copyFileSync(stagedPath, DB_PATH);
+                fs.copyFileSync(stagedPath, restoreDbPath);
                 fs.unlinkSync(uploadedPath);
                 fs.unlinkSync(stagedPath);
               } catch (swapErr) {
