@@ -30,6 +30,20 @@ export default function PrinterSettingsRedesign() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
+  const [emailCfg, setEmailCfg] = useState({
+    smtp_host: "smtp.gmail.com",
+    smtp_port: 587,
+    smtp_user: "",
+    smtp_pass: "",
+    from_name: "OneShopPOS",
+    enabled: false,
+  });
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailSaved, setEmailSaved] = useState(false);
+  const [emailSaveError, setEmailSaveError] = useState(null);
+  const [emailTesting, setEmailTesting] = useState(false);
+  const [emailTestResult, setEmailTestResult] = useState(null);
+
   useEffect(() => {
     fetch(`${API}/api/print/config`, {
       headers: { "x-employee-id": localStorage.getItem("employeeId") || "1" },
@@ -43,6 +57,26 @@ export default function PrinterSettingsRedesign() {
             setIsCustom(true);
             setCustomWidth(String(data.paper_width));
           }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch(`${API}/api/email/config`, {
+      headers: { "x-employee-id": localStorage.getItem("employeeId") || "1" },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && !data.error) {
+          setEmailCfg({
+            smtp_host: data.smtp_host || "smtp.gmail.com",
+            smtp_port: data.smtp_port || 587,
+            smtp_user: data.smtp_user || "",
+            smtp_pass: data.smtp_pass || "",
+            from_name: data.from_name || "OneShopPOS",
+            enabled: Boolean(data.enabled),
+          });
         }
       })
       .catch(() => {});
@@ -83,6 +117,54 @@ export default function PrinterSettingsRedesign() {
       setSaveError(err.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  function handleEmailChange(field, value) {
+    setEmailCfg((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function handleEmailSave() {
+    setEmailSaving(true);
+    setEmailSaved(false);
+    setEmailSaveError(null);
+    try {
+      const res = await fetch(`${API}/api/email/config`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-employee-id": localStorage.getItem("employeeId") || "1",
+        },
+        body: JSON.stringify(emailCfg),
+      });
+      const data = await res.json();
+      if (data.ok) setEmailSaved(true);
+      else setEmailSaveError(data.error || "Failed to save email settings.");
+    } catch (err) {
+      setEmailSaveError(err.message);
+    } finally {
+      setEmailSaving(false);
+    }
+  }
+
+  async function handleEmailTest() {
+    setEmailTesting(true);
+    setEmailTestResult(null);
+    try {
+      const res = await fetch(`${API}/api/email/test`, {
+        method: "POST",
+        headers: { "x-employee-id": localStorage.getItem("employeeId") || "1" },
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setEmailTestResult({ ok: true, message: data.message || "Test email sent!" });
+      } else {
+        setEmailTestResult({ ok: false, message: data.error || "Test failed." });
+      }
+    } catch (err) {
+      setEmailTestResult({ ok: false, message: err.message });
+    } finally {
+      setEmailTesting(false);
     }
   }
 
@@ -264,6 +346,104 @@ export default function PrinterSettingsRedesign() {
         {testResult && (
           <div className={`rounded px-4 py-3 text-sm ${testResult.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}>
             {testResult.message}
+          </div>
+        )}
+
+        <hr className="border-slate-200" />
+
+        <h2 className="text-lg font-semibold text-slate-800">Email Settings</h2>
+
+        <div className="flex items-center gap-3">
+          <label className="font-medium">Enable Email Receipts</label>
+          <input
+            type="checkbox"
+            checked={Boolean(emailCfg.enabled)}
+            onChange={(e) => handleEmailChange("enabled", e.target.checked)}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block font-medium mb-1">SMTP Host</label>
+            <input
+              className="border rounded px-3 py-2 w-full"
+              value={emailCfg.smtp_host}
+              onChange={(e) => handleEmailChange("smtp_host", e.target.value)}
+              placeholder="smtp.gmail.com"
+            />
+          </div>
+          <div>
+            <label className="block font-medium mb-1">SMTP Port</label>
+            <input
+              type="number"
+              className="border rounded px-3 py-2 w-full"
+              value={emailCfg.smtp_port}
+              onChange={(e) => handleEmailChange("smtp_port", Number(e.target.value))}
+              placeholder="587"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block font-medium mb-1">Gmail / Email Address</label>
+          <input
+            type="email"
+            className="border rounded px-3 py-2 w-full"
+            value={emailCfg.smtp_user}
+            onChange={(e) => handleEmailChange("smtp_user", e.target.value)}
+            placeholder="yourstore@gmail.com"
+          />
+        </div>
+
+        <div>
+          <label className="block font-medium mb-1">App Password</label>
+          <input
+            type="password"
+            className="border rounded px-3 py-2 w-full"
+            value={emailCfg.smtp_pass}
+            onChange={(e) => handleEmailChange("smtp_pass", e.target.value)}
+            placeholder={emailCfg.smtp_pass === "*****" ? "Password saved — enter new value to change" : "Gmail App Password"}
+          />
+          <p className="text-xs text-slate-500 mt-1">
+            For Gmail: Enable 2-Step Verification, then generate an App Password at{" "}
+            <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="underline">
+              myaccount.google.com/apppasswords
+            </a>
+          </p>
+        </div>
+
+        <div>
+          <label className="block font-medium mb-1">From Name</label>
+          <input
+            className="border rounded px-3 py-2 w-full"
+            value={emailCfg.from_name}
+            onChange={(e) => handleEmailChange("from_name", e.target.value)}
+            placeholder="OneShopPOS"
+          />
+        </div>
+
+        <div className="flex gap-3 items-center">
+          <button
+            onClick={handleEmailSave}
+            disabled={emailSaving}
+            className="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            {emailSaving ? "Saving…" : "Save Email Settings"}
+          </button>
+          <button
+            onClick={handleEmailTest}
+            disabled={emailTesting}
+            className="border px-5 py-2 rounded hover:bg-gray-50 disabled:opacity-50"
+          >
+            {emailTesting ? "Sending…" : "Send Test Email"}
+          </button>
+          {emailSaved && <span className="text-green-600 text-sm">Email settings saved.</span>}
+          {emailSaveError && <span className="text-red-600 text-sm">{emailSaveError}</span>}
+        </div>
+
+        {emailTestResult && (
+          <div className={`rounded px-4 py-3 text-sm ${emailTestResult.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}>
+            {emailTestResult.message}
           </div>
         )}
       </div>
