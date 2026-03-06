@@ -1,6 +1,6 @@
 const http = require("http");
 const sqlite3 = require("sqlite3").verbose();
-const db = new sqlite3.Database("./oneshop.db");
+const db = new sqlite3.Database("./sanopos.db");
 
 db.get(
   "SELECT id FROM employees WHERE LOWER(name) = LOWER(?)",

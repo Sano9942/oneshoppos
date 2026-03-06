@@ -122,7 +122,7 @@ async function getCategoryIdByPath(db, pathLabel) {
 }
 
 async function main() {
-  const db = new sqlite3.Database("oneshop.db");
+  const db = new sqlite3.Database("sanopos.db");
   try {
     await dbRun(db, "BEGIN TRANSACTION");
 

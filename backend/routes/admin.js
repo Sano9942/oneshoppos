@@ -204,7 +204,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
         );
       }
 
-      // Check if pin_hash column exists (depends on whether oneshop.db has migrate66 applied)
+      // Check if pin_hash column exists (depends on whether sanopos.db has migrate66 applied)
       const empCols = await new Promise((resolve, reject) => {
         tenantDb.all("PRAGMA table_info(employees)", (err, cols) => (err ? reject(err) : resolve(cols)));
       });

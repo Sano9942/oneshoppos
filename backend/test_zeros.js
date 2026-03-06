@@ -1,7 +1,7 @@
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
 
-const db = new sqlite3.Database(path.resolve(__dirname, "oneshop.db"));
+const db = new sqlite3.Database(path.resolve(__dirname, "sanopos.db"));
 
 db.all("SELECT id, barcode, sku, name FROM products", [], (err, rows) => {
   if (err) {

@@ -48,7 +48,7 @@ const SHOPIFY_MAX_RETRY_ATTEMPTS = Math.max(
   1,
   parseInt(process.env.SHOPIFY_MAX_RETRY_ATTEMPTS || "5", 10),
 );
-const DB_PATH = path.resolve(__dirname, "oneshop.db");
+const DB_PATH = path.resolve(__dirname, "sanopos.db");
 const UPLOADS_DIR = path.resolve(__dirname, "uploads");
 const PRODUCT_UPLOADS_DIR = path.resolve(UPLOADS_DIR, "products");
 const COMPANY_UPLOADS_DIR = path.resolve(UPLOADS_DIR, "company");
@@ -883,12 +883,12 @@ if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
 function runAutoBackup() {
   const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const dest = path.join(BACKUP_DIR, `oneshop_backup_${ts}.db`);
+  const dest = path.join(BACKUP_DIR, `sanopos_backup_${ts}.db`);
   try {
     fs.copyFileSync(DB_PATH, dest);
     const files = fs
       .readdirSync(BACKUP_DIR)
-      .filter((f) => f.startsWith("oneshop_backup_"))
+      .filter((f) => f.startsWith("sanopos_backup_"))
       .sort();
     if (files.length > 7) {
       files

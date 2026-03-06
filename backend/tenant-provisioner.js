@@ -134,7 +134,7 @@ async function seedTenantDb(db, { name, timezone, pin }) {
   }
 
   // 4. Admin employee (with bcrypt-hashed PIN for mt-login)
-  // Check if pin_hash column exists (depends on whether oneshop.db has migrate66 applied)
+  // Check if pin_hash column exists (depends on whether sanopos.db has migrate66 applied)
   const pinHash = await bcrypt.hash(String(pin), BCRYPT_ROUNDS);
   const hasPinHash = await new Promise((resolve, reject) => {
     db.all("PRAGMA table_info(employees)", (err, cols) => {

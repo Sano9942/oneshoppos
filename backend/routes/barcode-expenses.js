@@ -383,7 +383,7 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
       const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
       // In multi-tenant mode, back up the tenant's DB
       const dbFilePath = req.tenantDir ? path.join(req.tenantDir, "data.db") : DB_PATH;
-      const filename = `oneshop_backup_${ts}.db`;
+      const filename = `sanopos_backup_${ts}.db`;
       res.setHeader(
         "Content-Disposition",
         `attachment; filename="${filename}"`,
@@ -481,11 +481,11 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
             const restoreDbPath = req.tenantDir ? path.join(req.tenantDir, "data.db") : DB_PATH;
             const snapshotPath = path.join(
               restoreUploadsDir,
-              `oneshop_pre_restore_${ts}.db`,
+              `sanopos_pre_restore_${ts}.db`,
             );
             const stagedPath = path.join(
               restoreUploadsDir,
-              `oneshop_restore_staged_${Date.now()}.db`,
+              `sanopos_restore_staged_${Date.now()}.db`,
             );
 
             db.run("BEGIN IMMEDIATE", (lockErr) => {

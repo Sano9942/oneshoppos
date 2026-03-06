@@ -2,7 +2,7 @@ const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
 const { seedData } = require("./tests/helpers/seedData");
 
-const dbPath = path.resolve(__dirname, "oneshop.db");
+const dbPath = path.resolve(__dirname, "sanopos.db");
 const db = new sqlite3.Database(dbPath, async (err) => {
   if (err) {
     console.error("Error opening database", err.message);

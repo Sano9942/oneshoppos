@@ -7,10 +7,10 @@ node_modules/
 !.env.shopify.example
 
 # Database files
-oneshop.db
-oneshop.db-journal
-oneshop.db-wal
-oneshop.db-shm
+sanopos.db
+sanopos.db-journal
+sanopos.db-wal
+sanopos.db-shm
 *.db
 
 # App Data and Generated Content

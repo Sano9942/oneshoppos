@@ -17,9 +17,9 @@ Thumbs.db
 .claude/settings.local.json
 
 # Database files
-backend/oneshop.db
-backend/oneshop.db-shm
-backend/oneshop.db-wal
+backend/sanopos.db
+backend/sanopos.db-shm
+backend/sanopos.db-wal
 backend/backups/
 backend/archive/legacy/database.sqlite
 

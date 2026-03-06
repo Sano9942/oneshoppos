@@ -147,7 +147,7 @@ oneshoppos/
 │   │   ├── client.js             # Shopify GraphQL API client (~525 lines)
 │   │   ├── utils.js              # Retry logic, webhook HMAC verification
 │   │   └── order-service.js      # upsertWebOrderFromShopifyPayload + stock policy helpers (factory)
-│   ├── schema-full.js            # Extracts live oneshop.db schema via sqlite_master (for new tenant DBs)
+│   ├── schema-full.js            # Extracts live sanopos.db schema via sqlite_master (for new tenant DBs)
 │   ├── master-db.js              # Lazy-init master.db — tenant registry (getMasterDb, closeMasterDb, initMasterDb)
 │   ├── tenant-db-manager.js      # In-memory connection pool for tenant SQLite DBs (getDb, closeDb, closeAll, healthCheck)
 │   ├── tenant-provisioner.js     # CLI: provisions new tenant (directory, schema, seed data, master.db registration)
@@ -222,7 +222,7 @@ oneshoppos/
 - Database schema: read only `backend/migrate65.js` (latest), never older migrations
 - Internal product categories are hierarchical; products and category promotions may target leaf categories only
 - Parent category filters expand to descendant leaves in products and reports
-- SQLite DB file: `backend/oneshop.db`
+- SQLite DB file: `backend/sanopos.db`
 - Frontend: port 5173 (Vite dev), Backend: port 5000
 
 ## When Working on Backend
