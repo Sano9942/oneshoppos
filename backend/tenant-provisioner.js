@@ -206,19 +206,23 @@ async function main() {
       timezone: args.timezone,
       pin: args.pin,
     });
+
+    // Record schema version (inside Step 3 guard — failure triggers same cleanup)
+    await dbRun(tenantDb,
+      `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL PRIMARY KEY, applied_at TEXT DEFAULT (datetime('now')))`
+    );
+    await dbRun(tenantDb,
+      `INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)`, [SCHEMA_VERSION]
+    );
   } catch (err) {
-    tenantDb.close((e) => { if (e) console.error('[provisioner] close error:', e.message); });
+    await new Promise((resolve) => tenantDb.close((e) => {
+      if (e) console.error('[provisioner] tenantDb close error:', e.message);
+      resolve();
+    }));
     fs.rmSync(tenantDir, { recursive: true, force: true });
     throw new Error(`Seed failed: ${err.message}`);
   }
 
-  // Record schema version in tenant DB
-  await dbRun(tenantDb,
-    `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL PRIMARY KEY, applied_at TEXT DEFAULT (datetime('now')))`
-  );
-  await dbRun(tenantDb,
-    `INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)`, [SCHEMA_VERSION]
-  );
   await new Promise((resolve) => tenantDb.close((e) => {
     if (e) console.error('[provisioner] tenantDb close error:', e.message);
     resolve();
@@ -237,12 +241,24 @@ async function main() {
     });
   } catch (err) {
     fs.rmSync(tenantDir, { recursive: true, force: true });
+    await new Promise((resolve) => masterDb.close((e) => {
+      if (e) console.error('[provisioner] masterDb close error:', e.message);
+      resolve();
+    }));
     throw new Error(`master.db registration failed: ${err.message}`);
   }
 
   // Step 5: Audit log
   console.log('[5/5] Writing audit log...');
-  await insertAuditLog(tenantId, args.slug, args.timezone);
+  try {
+    await insertAuditLog(tenantId, args.slug, args.timezone);
+  } catch (err) {
+    await new Promise((resolve) => masterDb.close((e) => {
+      if (e) console.error('[provisioner] masterDb close error:', e.message);
+      resolve();
+    }));
+    throw new Error(`Audit log failed: ${err.message}`);
+  }
 
   await new Promise((resolve) => masterDb.close((e) => {
     if (e) console.error('[provisioner] masterDb close error:', e.message);
