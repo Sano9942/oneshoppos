@@ -11,7 +11,8 @@ const bcrypt = require('bcryptjs');
 const { extractSchema } = require('./schema-full');
 const { getMasterDb, closeMasterDb, initMasterDb } = require('./master-db');
 
-const TENANTS_DIR = path.join(__dirname, 'tenants');
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+const TENANTS_DIR = path.join(DATA_DIR, 'tenants');
 const SCHEMA_VERSION = 66;
 const BCRYPT_ROUNDS = 10;
 

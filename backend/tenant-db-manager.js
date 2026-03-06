@@ -25,7 +25,8 @@ function getDb(tenantId) {
       if (!tenant) return reject(new Error(`Tenant ${tenantId} not found in master.db`));
       if (tenant.status !== 'active') return reject(new Error(`Tenant ${tenantId} is ${tenant.status}`));
 
-      const dbPath = path.join(__dirname, tenant.db_path);
+      const DATA_DIR = process.env.DATA_DIR || __dirname;
+      const dbPath = path.join(DATA_DIR, tenant.db_path);
       if (!fs.existsSync(dbPath)) {
         return reject(new Error(`Tenant DB file not found: ${dbPath}`));
       }

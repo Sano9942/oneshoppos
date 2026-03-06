@@ -51,8 +51,9 @@ const SHOPIFY_MAX_RETRY_ATTEMPTS = Math.max(
   1,
   parseInt(process.env.SHOPIFY_MAX_RETRY_ATTEMPTS || "5", 10),
 );
-const DB_PATH = path.resolve(__dirname, "sanopos.db");
-const UPLOADS_DIR = path.resolve(__dirname, "uploads");
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+const DB_PATH = path.resolve(DATA_DIR, "sanopos.db");
+const UPLOADS_DIR = path.resolve(DATA_DIR, "uploads");
 const PRODUCT_UPLOADS_DIR = path.resolve(UPLOADS_DIR, "products");
 const COMPANY_UPLOADS_DIR = path.resolve(UPLOADS_DIR, "company");
 const RATE_LIMIT_WINDOW_MS = Math.max(
@@ -884,7 +885,7 @@ function ensureCriticalRoutesRegistered(appInstance) {
 ensureCriticalRoutesRegistered(app);
 
 // --- 3.6 Auto DB Backup (daily, 7-copy retention) ---
-const BACKUP_DIR = path.resolve(__dirname, "backups");
+const BACKUP_DIR = path.resolve(DATA_DIR, "backups");
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
 function runAutoBackup() {

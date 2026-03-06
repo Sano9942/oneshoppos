@@ -5,7 +5,8 @@
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 
-const MASTER_DB_PATH = path.join(__dirname, 'master.db');
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+const MASTER_DB_PATH = path.join(DATA_DIR, 'master.db');
 
 let _db = null;
 
