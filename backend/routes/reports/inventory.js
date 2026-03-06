@@ -3,6 +3,18 @@ module.exports = function (app, deps, helpers) {
   const { buildCategoryMetaMap, withCategoryPaths, getDescendantLeafIds } =
     helpers;
 
+  function applyOutletFilter(where, params, rawId, col = "os.outlet_id") {
+    if (!rawId) return;
+    const ids = String(rawId).split(",").map(Number).filter(Boolean);
+    if (ids.length === 1) {
+      where.push(`${col} = ?`);
+      params.push(ids[0]);
+    } else if (ids.length > 1) {
+      where.push(`${col} IN (${ids.map(() => "?").join(",")})`);
+      params.push(...ids);
+    }
+  }
+
   async function applyInventoryProductFilters(where, params, query, alias = "p") {
     const { category_id, brand_id, supplier_id, search } = query || {};
     if (category_id) {
@@ -65,10 +77,7 @@ module.exports = function (app, deps, helpers) {
     let where = [];
     const params = [];
     await applyInventoryProductFilters(where, params, req.query);
-    if (outlet_id) {
-      where.push("os.outlet_id = ?");
-      params.push(outlet_id);
-    }
+    applyOutletFilter(where, params, outlet_id);
 
     if (aggregateMode) {
       const having = [];
@@ -204,10 +213,7 @@ module.exports = function (app, deps, helpers) {
     let where = [];
     const params = [];
     await applyInventoryProductFilters(where, params, req.query);
-    if (outlet_id) {
-      where.push("os.outlet_id = ?");
-      params.push(outlet_id);
-    }
+    applyOutletFilter(where, params, outlet_id);
 
     if (aggregateMode) {
       const having = [];
@@ -391,10 +397,7 @@ module.exports = function (app, deps, helpers) {
     let where = [];
     const params = [];
     await applyInventoryProductFilters(where, params, req.query);
-    if (req.query.outlet_id) {
-      where.push("os.outlet_id = ?");
-      params.push(req.query.outlet_id);
-    }
+    applyOutletFilter(where, params, req.query.outlet_id);
 
     const buildConditions = () => {
       const conditions = [];
@@ -502,10 +505,7 @@ module.exports = function (app, deps, helpers) {
       );
       const where = ["os.quantity > 0"];
       const params = [];
-      if (req.query.outlet_id) {
-        where.push("os.outlet_id = ?");
-        params.push(req.query.outlet_id);
-      }
+      applyOutletFilter(where, params, req.query.outlet_id);
       await applyInventoryProductFilters(where, params, req.query);
       const sql = `
       SELECT
@@ -553,10 +553,7 @@ module.exports = function (app, deps, helpers) {
     async (req, res) => {
       const where = ["os.quantity > 0"];
       const params = [];
-      if (req.query.outlet_id) {
-        where.push("os.outlet_id = ?");
-        params.push(req.query.outlet_id);
-      }
+      applyOutletFilter(where, params, req.query.outlet_id);
       await applyInventoryProductFilters(where, params, req.query);
       const sql = `
       SELECT
@@ -608,10 +605,7 @@ module.exports = function (app, deps, helpers) {
       "date(s.timestamp,'localtime') >= date('now', '-' || ? || ' days', 'localtime')",
     ];
     const whereParams = [lookbackDays];
-    if (filters.outlet_id) {
-      where.push("s.outlet_id = ?");
-      whereParams.push(filters.outlet_id);
-    }
+    applyOutletFilter(where, whereParams, filters.outlet_id, "s.outlet_id");
     if (filters.brand_id) {
       where.push("p.brand_id = ?");
       whereParams.push(filters.brand_id);
@@ -691,10 +685,7 @@ module.exports = function (app, deps, helpers) {
       );
       const where = ["os.quantity > 0"];
       const params = [lookbackDays, lookbackDays, lookbackDays, lookbackDays, lookbackDays];
-      if (req.query.outlet_id) {
-        where.push("os.outlet_id = ?");
-        params.push(req.query.outlet_id);
-      }
+      applyOutletFilter(where, params, req.query.outlet_id);
       await applyInventoryProductFilters(where, params, req.query);
       const sql = `
       WITH sales_velocity AS (
@@ -892,10 +883,7 @@ module.exports = function (app, deps, helpers) {
       where.push("date(grn.received_at, 'localtime') <= ?");
       params.push(date_to);
     }
-    if (outlet_id) {
-      where.push("grn.outlet_id = ?");
-      params.push(outlet_id);
-    }
+    applyOutletFilter(where, params, outlet_id, "grn.outlet_id");
 
     const sql = `
       SELECT date(grn.received_at, 'localtime') as date, p.name as product_name,
@@ -936,10 +924,7 @@ module.exports = function (app, deps, helpers) {
       where.push("strftime('%H:%M', grn.received_at, 'localtime') <= ?");
       params.push(req.query.time_to);
     }
-    if (req.query.outlet_id) {
-      where.push("grn.outlet_id = ?");
-      params.push(req.query.outlet_id);
-    }
+    applyOutletFilter(where, params, req.query.outlet_id, "grn.outlet_id");
 
     const sql = `
       SELECT
@@ -1003,10 +988,7 @@ module.exports = function (app, deps, helpers) {
       where.push("strftime('%H:%M', s.timestamp, 'localtime') <= ?");
       params.push(req.query.time_to);
     }
-    if (req.query.outlet_id) {
-      where.push("s.outlet_id = ?");
-      params.push(req.query.outlet_id);
-    }
+    applyOutletFilter(where, params, req.query.outlet_id, "s.outlet_id");
     if (req.query.employee_id) {
       where.push("s.employee_id = ?");
       params.push(req.query.employee_id);
@@ -1073,12 +1055,8 @@ module.exports = function (app, deps, helpers) {
     const saleWhere = ["s.voided = 0"];
     const saleParams = [];
 
-    if (req.query.outlet_id) {
-      stockWhere.push("os.outlet_id = ?");
-      stockParams.push(req.query.outlet_id);
-      saleWhere.push("s.outlet_id = ?");
-      saleParams.push(req.query.outlet_id);
-    }
+    applyOutletFilter(stockWhere, stockParams, req.query.outlet_id);
+    applyOutletFilter(saleWhere, saleParams, req.query.outlet_id, "s.outlet_id");
 
     const sql = `
       WITH stock_by_product AS (
