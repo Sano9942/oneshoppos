@@ -28,6 +28,7 @@ export default function PrinterSettingsRedesign() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   useEffect(() => {
     fetch(`${API}/api/print/config`, {
@@ -63,6 +64,7 @@ export default function PrinterSettingsRedesign() {
   async function handleSave() {
     setSaving(true);
     setSaved(false);
+    setSaveError(null);
     const body = { ...cfg };
     if (isCustom) body.paper_width = Number(customWidth) || 48;
     try {
@@ -76,6 +78,9 @@ export default function PrinterSettingsRedesign() {
       });
       const data = await res.json();
       if (data.ok) setSaved(true);
+      else setSaveError(data.error || "Failed to save settings.");
+    } catch (err) {
+      setSaveError(err.message);
     } finally {
       setSaving(false);
     }
@@ -253,6 +258,7 @@ export default function PrinterSettingsRedesign() {
             {testing ? "Testing…" : "Test Print"}
           </button>
           {saved && <span className="text-green-600 text-sm">Settings saved.</span>}
+          {saveError && <span className="text-red-600 text-sm">{saveError}</span>}
         </div>
 
         {testResult && (
