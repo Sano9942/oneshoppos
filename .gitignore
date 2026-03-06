@@ -15,3 +15,7 @@ Thumbs.db
 
 # Claude Code IDE settings (local only)
 .claude/settings.local.json
+
+# SaaS multi-tenant
+backend/master.db
+backend/tenants/
