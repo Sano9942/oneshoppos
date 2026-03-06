@@ -11,6 +11,7 @@
 
 const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } =
   require("node-thermal-printer");
+const net = require("net");
 
 module.exports = function makePrinterService(db) {
 
@@ -58,13 +59,6 @@ module.exports = function makePrinterService(db) {
     const gap = width - left.length - right.length;
     if (gap <= 0) return `${left} ${right}`;
     return `${left}${" ".repeat(gap)}${right}`;
-  }
-
-  /** Center a string within `width` chars */
-  function center(str, width) {
-    if (str.length >= width) return str;
-    const pad = Math.floor((width - str.length) / 2);
-    return " ".repeat(pad) + str;
   }
 
   /** Divider line scaled to paper width */
@@ -245,7 +239,6 @@ module.exports = function makePrinterService(db) {
     }
 
     // TCP ping
-    const net = require("net");
     return new Promise((resolve) => {
       const socket = net.createConnection({ host: cfg.host, port: cfg.port, timeout: 2000 });
       socket.once("connect", () => {
