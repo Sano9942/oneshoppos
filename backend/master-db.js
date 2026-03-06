@@ -86,6 +86,16 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   version    INTEGER NOT NULL PRIMARY KEY,
   applied_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS tenant_refresh_tokens (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id   INTEGER NOT NULL REFERENCES tenants(id),
+  employee_id INTEGER NOT NULL,
+  token_hash  TEXT NOT NULL UNIQUE,
+  expires_at  TEXT NOT NULL,
+  revoked_at  TEXT,
+  created_at  TEXT DEFAULT (datetime('now'))
+);
 `;
 
 // Initialize schema — runs once on first open, idempotent thereafter.
