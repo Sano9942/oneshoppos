@@ -1,0 +1,12 @@
+node_modules
+*.db
+*.db-shm
+*.db-wal
+tenants/
+backups/
+uploads/
+.env
+.env.*
+!.env.example
+!.env.shopify.example
+tests/
