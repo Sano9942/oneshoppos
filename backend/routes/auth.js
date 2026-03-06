@@ -1,43 +1,61 @@
 module.exports = function registerAuthRoutes(app, deps) {
   const { db, authLimiter } = deps;
+  const bcrypt = require("bcryptjs");
 
-  app.post("/api/auth/login", authLimiter, (req, res) => {
+  app.post("/api/auth/login", authLimiter, async (req, res) => {
     const { username, pin } = req.body || {};
     if (!username || !pin) {
       return res.status(400).json({ error: "username and pin are required" });
     }
 
-    db.get(
-      `SELECT e.id, e.name, e.role_id, r.name as role, NULL as outlet_id
-     FROM employees e
-     LEFT JOIN roles r ON e.role_id = r.id
-     WHERE LOWER(e.name) = LOWER(?) AND e.pin_code = ?`,
-      [String(username).trim(), String(pin).trim()],
-      (err, employee) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!employee) {
-          return res.status(401).json({ error: "Invalid username or PIN" });
-        }
+    try {
+      const employee = await new Promise((resolve, reject) => {
+        db.get(
+          `SELECT e.id, e.name, e.role_id, e.pin_code, e.pin_hash, r.name as role, NULL as outlet_id
+           FROM employees e
+           LEFT JOIN roles r ON e.role_id = r.id
+           WHERE LOWER(e.name) = LOWER(?)`,
+          [String(username).trim()],
+          (err, row) => (err ? reject(err) : resolve(row))
+        );
+      });
 
+      if (!employee) {
+        return res.status(401).json({ error: "Invalid username or PIN" });
+      }
+
+      // Verify PIN: prefer pin_hash (bcrypt), fall back to plaintext pin_code
+      let pinValid = false;
+      if (employee.pin_hash) {
+        pinValid = await bcrypt.compare(String(pin).trim(), employee.pin_hash);
+      } else if (employee.pin_code) {
+        pinValid = String(pin).trim() === String(employee.pin_code).trim();
+      }
+
+      if (!pinValid) {
+        return res.status(401).json({ error: "Invalid username or PIN" });
+      }
+
+      const permissions = await new Promise((resolve, reject) => {
         db.all(
           "SELECT permission FROM role_permissions WHERE role_id = ?",
           [employee.role_id || 3],
-          (permErr, rows) => {
-            if (permErr)
-              return res.status(500).json({ error: permErr.message });
-            return res.json({
-              employee: {
-                id: employee.id,
-                name: employee.name,
-                role_id: employee.role_id,
-                outlet_id: employee.outlet_id || null,
-              },
-              permissions: (rows || []).map((r) => r.permission),
-            });
-          },
+          (err, rows) => (err ? reject(err) : resolve((rows || []).map(r => r.permission)))
         );
-      },
-    );
+      });
+
+      return res.json({
+        employee: {
+          id: employee.id,
+          name: employee.name,
+          role_id: employee.role_id,
+          outlet_id: employee.outlet_id || null,
+        },
+        permissions,
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
   });
 
   app.post("/api/auth/logout", (req, res) => {
