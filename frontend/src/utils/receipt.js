@@ -29,6 +29,8 @@ export function buildReceiptSections(slip, template) {
     showBarcode: Boolean(template?.show_barcode),
 
     // Header info
+    // slip.timestamp must already be a display string (e.g. new Date().toLocaleString())
+    // Do NOT pass a raw SQLite UTC string — use fmtDateTime() from utils/dates.js first
     timestamp: slip.timestamp || "",
     invoiceNumber: slip.invoiceNumber || "-",
     returnedFrom: slip.returnedFrom || null,
@@ -78,6 +80,10 @@ export function buildReceiptHtml(slip, template) {
   const s = buildReceiptSections(slip, template);
 
   const w = window.open("", "_blank", "width=360,height=620");
+  if (!w) {
+    alert("Pop-up blocked. Please allow pop-ups for this site to print receipts.");
+    return;
+  }
   const d = w.document;
 
   const style = d.createElement("style");
@@ -146,9 +152,7 @@ export function buildReceiptHtml(slip, template) {
   if (s.exchangeCredit > 0) {
     b.appendChild(row("Return Credit", `- ${fmt(s.exchangeCredit)}`, "ret"));
   } else if (s.discountAmount > 0) {
-    const label = s.discountType === "percentage"
-      ? `Discount (${s.discountAmount}%)`
-      : "Discount";
+    const label = s.discountType === "percentage" ? "Discount (%)" : "Discount";
     b.appendChild(row(label, `- ${fmt(s.discountAmount)}`));
   }
 
