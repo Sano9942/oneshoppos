@@ -6,7 +6,7 @@ import { API_BASE as API } from '../config';
 
 const EMPTY = {
   name: "",
-  header_text: "OneShopPOS",
+  header_text: "SanoPOS",
   footer_text: "Thank you for your purchase!",
   show_barcode: false,
   show_logo: false,

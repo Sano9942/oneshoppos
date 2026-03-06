@@ -30,5 +30,5 @@ export async function loginAsAdmin(page) {
     await expect(page).toHaveURL(/.*dashboard/, { timeout: 10000 });
   }
 
-  await expect(page.getByText(/ONESHOPPOS/i)).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText(/SANOPOS/i)).toBeVisible({ timeout: 15000 });
 }

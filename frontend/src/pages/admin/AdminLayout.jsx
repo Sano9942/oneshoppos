@@ -22,7 +22,7 @@ export default function AdminLayout() {
           <div className="flex items-center gap-2">
             <Shield size={18} className="text-violet-400" />
             <span className="text-sm font-bold tracking-wide text-slate-300">
-              ONESHOPPOS
+              SANOPOS
             </span>
           </div>
           <p className="mt-0.5 text-xs text-slate-500">Super Admin</p>

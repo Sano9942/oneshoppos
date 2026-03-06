@@ -11,7 +11,7 @@
  * @returns {string} Complete HTML document string
  */
 function buildReceiptEmailHtml(sale, items, payments, template) {
-  const storeName = template?.header_text || sale.outlet_name || "OneShopPOS";
+  const storeName = template?.header_text || sale.outlet_name || "SanoPOS";
   const footerText = template?.footer_text || "Thank you for your purchase!";
 
   const subtotal = items.reduce(

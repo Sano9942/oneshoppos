@@ -25,7 +25,7 @@ beforeAll(async () => {
       smtp_port   INTEGER DEFAULT 587,
       smtp_user   TEXT,
       smtp_pass   TEXT,
-      from_name   TEXT    DEFAULT 'OneShopPOS',
+      from_name   TEXT    DEFAULT 'SanoPOS',
       enabled     INTEGER DEFAULT 0
     )
   `);

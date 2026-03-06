@@ -105,7 +105,7 @@ async function loginAsManager(page) {
     await expect(page).toHaveURL(/.*dashboard/, { timeout: 10000 });
   }
 
-  await expect(page.getByText(/ONESHOPPOS/i)).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText(/SANOPOS/i)).toBeVisible({ timeout: 15000 });
 }
 
 // ─── Smoke gate suite ────────────────────────────────────────────────────────
@@ -136,7 +136,7 @@ test.describe("Smoke Gate — Daily Business Cycle", () => {
 
     // Should land on dashboard with nav visible
     await expect(page).toHaveURL(/dashboard/, { timeout: 10000 });
-    await expect(page.getByText(/ONESHOPPOS/i)).toBeVisible();
+    await expect(page.getByText(/SANOPOS/i)).toBeVisible();
   });
 
   // ── S2: Kiosk clock-in ──────────────────────────────────────────────────

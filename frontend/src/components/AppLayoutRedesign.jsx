@@ -40,7 +40,7 @@ export default function AppLayoutRedesign() {
         </button>
         <div className="border-b border-(--ui-border) px-4 py-4">
           <div className="text-sm font-semibold tracking-wide text-(--ui-text-muted)">
-            ONESHOPPOS
+            SANOPOS
           </div>
           {!collapsed ? (
             <div className="mt-1 text-lg font-semibold text-(--ui-text)">

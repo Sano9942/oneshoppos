@@ -253,7 +253,7 @@ module.exports = function registerShopifyHealthRoutes(app, deps) {
           ],
           notes: [
             "Set webhook format to JSON.",
-            "Use the same webhook secret configured in OneShopPOS.",
+            "Use the same webhook secret configured in SanoPOS.",
             "Use HTTPS callback URL reachable by Shopify.",
           ],
         });

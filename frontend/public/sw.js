@@ -1,5 +1,5 @@
-const STATIC_CACHE = "oneshop-static-v1";
-const API_CACHE = "oneshop-api-v1";
+const STATIC_CACHE = "sanopos-static-v1";
+const API_CACHE = "sanopos-api-v1";
 const STATIC_ASSETS = ["/", "/manifest.webmanifest", "/vite.svg"];
 
 function shouldCacheApiPath(pathname) {

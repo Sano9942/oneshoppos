@@ -1,6 +1,6 @@
 {
-  "name": "OneShopPOS",
-  "short_name": "OneShopPOS",
+  "name": "SanoPOS",
+  "short_name": "SanoPOS",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

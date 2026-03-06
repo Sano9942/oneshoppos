@@ -63,7 +63,7 @@ module.exports = function emailRoutes(app, deps) {
       smtp_host || "smtp.gmail.com",
       Number(smtp_port || 587),
       smtp_user || null,
-      from_name || "OneShopPOS",
+      from_name || "SanoPOS",
       enabled != null ? (enabled ? 1 : 0) : 0,
     ];
     if (passClause) params.splice(3, 0, smtp_pass); // insert before from_name
@@ -93,9 +93,9 @@ module.exports = function emailRoutes(app, deps) {
       try {
         const transport = makeTransport(cfg);
         await transport.sendMail({
-          from: `"${cfg.from_name || "OneShopPOS"}" <${cfg.smtp_user}>`,
+          from: `"${cfg.from_name || "SanoPOS"}" <${cfg.smtp_user}>`,
           to: cfg.smtp_user,
-          subject: "OneShopPOS — Email Test",
+          subject: "SanoPOS — Email Test",
           html: "<p>Email is configured correctly!</p>",
         });
         res.json({ ok: true, message: "Test email sent to " + cfg.smtp_user });
@@ -163,9 +163,9 @@ module.exports = function emailRoutes(app, deps) {
                       try {
                         const transport = makeTransport(cfg);
                         await transport.sendMail({
-                          from: `"${cfg.from_name || "OneShopPOS"}" <${cfg.smtp_user}>`,
+                          from: `"${cfg.from_name || "SanoPOS"}" <${cfg.smtp_user}>`,
                           to: toEmail,
-                          subject: `Receipt #${sale.invoice_number || sale.id} from ${cfg.from_name || "OneShopPOS"}`,
+                          subject: `Receipt #${sale.invoice_number || sale.id} from ${cfg.from_name || "SanoPOS"}`,
                           html,
                         });
                         res.json({ ok: true });

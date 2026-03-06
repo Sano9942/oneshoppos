@@ -34,7 +34,7 @@ export default function PrinterSettingsRedesign() {
     smtp_port: 587,
     smtp_user: "",
     smtp_pass: "",
-    from_name: "OneShopPOS",
+    from_name: "SanoPOS",
     enabled: false,
   });
   // True when backend has a password saved — used for placeholder only
@@ -77,7 +77,7 @@ export default function PrinterSettingsRedesign() {
             smtp_port: data.smtp_port || 587,
             smtp_user: data.smtp_user || "",
             smtp_pass: "",  // never pre-fill password field
-            from_name: data.from_name || "OneShopPOS",
+            from_name: data.from_name || "SanoPOS",
             enabled: Boolean(data.enabled),
           });
         }
@@ -429,7 +429,7 @@ export default function PrinterSettingsRedesign() {
             className="border rounded px-3 py-2 w-full"
             value={emailCfg.from_name}
             onChange={(e) => handleEmailChange("from_name", e.target.value)}
-            placeholder="OneShopPOS"
+            placeholder="SanoPOS"
           />
         </div>
 

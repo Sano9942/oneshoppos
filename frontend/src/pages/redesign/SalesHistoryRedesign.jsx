@@ -179,7 +179,7 @@ export default function SalesHistoryRedesign() {
     printWindow.document.write(`
       <html><head><title>Receipt #${s.id}</title></head>
       <body style="font-family:monospace;max-width:320px;margin:0 auto;padding:8px;">
-      <h3 style="margin:0">OneShopPOS</h3>
+      <h3 style="margin:0">SanoPOS</h3>
       <p style="margin:4px 0">Receipt #${s.id} (Reprint)</p>
       <p style="margin:4px 0">${formatDate(s.timestamp)}</p>
       <hr/>

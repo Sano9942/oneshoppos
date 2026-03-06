@@ -15,7 +15,7 @@ test.describe("RBAC Access Control", () => {
     }
 
     await expect(page).toHaveURL(/.*dashboard/);
-    await expect(page.getByText(/ONESHOPPOS/i)).toBeVisible();
+    await expect(page.getByText(/SANOPOS/i)).toBeVisible();
 
     // 2. Attempt to go to Inventory (Restricted for Cashier)
     await page.goto("/inventory");

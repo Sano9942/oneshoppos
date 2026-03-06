@@ -29,7 +29,7 @@ export default function PlaceholderPage() {
 
         <p className="text-slate-500 mb-8 max-w-xs leading-relaxed">
           This feature is scheduled for a future development phase according to
-          the OneShopPOS roadmap.
+          the SanoPOS roadmap.
         </p>
 
         <button

@@ -73,7 +73,7 @@ module.exports = function makePrinterService(db) {
   async function formatReceipt(printer, slip, template, cfg) {
     const W = cfg.paper_width || 48;
 
-    const storeName  = template?.header_text || slip.outlet?.name || "OneShopPOS";
+    const storeName  = template?.header_text || slip.outlet?.name || "SanoPOS";
     const footerText = template?.footer_text  || "Thank you for your purchase!";
     const showBarcode = Boolean(template?.show_barcode);
 

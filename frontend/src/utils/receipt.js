@@ -24,7 +24,7 @@ export function buildReceiptSections(slip, template) {
 
   return {
     // Branding — from template with fallbacks
-    storeName: template?.header_text || slip.outlet?.name || "OneShopPOS",
+    storeName: template?.header_text || slip.outlet?.name || "SanoPOS",
     footerText: template?.footer_text || "Thank you for your purchase!",
     showBarcode: Boolean(template?.show_barcode),
 

@@ -1,5 +1,5 @@
 /**
- * seedSchema.js — Replays the full OneShopPOS schema into an in-memory SQLite DB.
+ * seedSchema.js — Replays the full SanoPOS schema into an in-memory SQLite DB.
  * Extracted from the live database's sqlite_master dump (all 56 migrations applied).
  *
  * Usage:  await seedSchema(db);

@@ -30,7 +30,7 @@ export default function ShopifyIntegrationRedesign() {
           <div>
             <h1 className="text-xl font-semibold text-(--ui-text)">Shopify Integration</h1>
             <p className="mt-0.5 text-sm text-(--ui-text-muted)">
-              Sync products, inventory, and customers between OneShop POS and Shopify.
+              Sync products, inventory, and customers between SanoPOS and Shopify.
             </p>
           </div>
         </div>
