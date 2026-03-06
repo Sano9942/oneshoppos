@@ -42,6 +42,9 @@ const {
 require("dotenv").config();
 
 const app = express();
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
 const PORT = process.env.PORT || 5000;
 const SHOPIFY_SECRET_ENC_PREFIX = "enc:v1";
 const SHOPIFY_MAX_RETRY_ATTEMPTS = Math.max(
@@ -196,7 +199,10 @@ const webhookLimiter = rateLimit({
 });
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+  credentials: true,
+}));
 app.use(
   express.json({
     limit: "10mb",
@@ -990,6 +996,11 @@ cleanupReportScheduleArtifacts();
 setInterval(runAutoBackup, 24 * 60 * 60 * 1000);
 setInterval(cleanupSyncEvents, 24 * 60 * 60 * 1000);
 setInterval(cleanupReportScheduleArtifacts, 24 * 60 * 60 * 1000);
+
+// Health check (used by Railway healthcheckPath)
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
 
 // Start server
 app.listen(PORT, () => {

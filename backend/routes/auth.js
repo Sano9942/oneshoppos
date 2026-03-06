@@ -79,7 +79,11 @@ module.exports = function registerAuthRoutes(app, deps) {
           });
         }
 
-        res.clearCookie("refreshToken", { path: "/api/auth" });
+        res.clearCookie("refreshToken", {
+          path: "/api/auth",
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+        });
       } catch {
         // Best-effort — still return success
       }
@@ -250,7 +254,7 @@ module.exports = function registerAuthRoutes(app, deps) {
         res.cookie("refreshToken", refreshToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
-          sameSite: "Strict",
+          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
           path: "/api/auth",
           maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
