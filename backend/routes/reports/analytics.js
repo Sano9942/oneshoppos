@@ -5,6 +5,18 @@ module.exports = function (app, deps, helpers) {
   const { buildCategoryMetaMap, withCategoryPaths, buildReportFilterParts } =
     helpers;
 
+  function applyOutletFilter(where, params, rawId, col = "s.outlet_id") {
+    if (!rawId) return;
+    const ids = String(rawId).split(",").map(Number).filter(Boolean);
+    if (ids.length === 1) {
+      where.push(`${col} = ?`);
+      params.push(ids[0]);
+    } else if (ids.length > 1) {
+      where.push(`${col} IN (${ids.map(() => "?").join(",")})`);
+      params.push(...ids);
+    }
+  }
+
   // Comparative Trends: Revenue comparison across periods
   app.get("/api/reports/comparative-trends", async (req, res) => {
     try {
@@ -18,8 +30,16 @@ module.exports = function (app, deps, helpers) {
           );
         });
 
-      const filter = outlet_id ? "AND outlet_id = ?" : "";
-      const outletParams = outlet_id ? [outlet_id] : [];
+      const outletIds = outlet_id
+        ? String(outlet_id).split(",").map(Number).filter(Boolean)
+        : [];
+      const filter =
+        outletIds.length === 1
+          ? "AND outlet_id = ?"
+          : outletIds.length > 1
+            ? `AND outlet_id IN (${outletIds.map(() => "?").join(",")})`
+            : "";
+      const outletParams = outletIds.length ? outletIds : [];
 
       const sql = () => `
             SELECT SUM(total_amount) as revenue, COUNT(id) as orders
@@ -88,13 +108,10 @@ module.exports = function (app, deps, helpers) {
         where.push("timestamp < ?");
         params.push(toUtcEnd(date_to, tz));
       }
-      if (outlet_id) {
-        where.push("outlet_id = ?");
-        params.push(outlet_id);
-      }
+      applyOutletFilter(where, params, outlet_id, "outlet_id");
 
       const sql = `
-            SELECT 
+            SELECT
                 strftime('%w', timestamp, 'localtime') as day_of_week,
                 strftime('%H', timestamp, 'localtime') as hour_of_day,
                 SUM(total_amount) as revenue,
@@ -140,10 +157,7 @@ module.exports = function (app, deps, helpers) {
         where.push("s.timestamp < ?");
         params.push(toUtcEnd(date_to, tz));
       }
-      if (outlet_id) {
-        where.push("s.outlet_id = ?");
-        params.push(outlet_id);
-      }
+      applyOutletFilter(where, params, outlet_id);
 
       const filterStr = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
 
@@ -239,10 +253,7 @@ module.exports = function (app, deps, helpers) {
         where.push("s.timestamp < ?");
         params.push(toUtcEnd(date_to, tz));
       }
-      if (outlet_id) {
-        where.push("s.outlet_id = ?");
-        params.push(outlet_id);
-      }
+      applyOutletFilter(where, params, outlet_id);
 
       const sql = `
         WITH SharedTransactions AS (
@@ -299,10 +310,7 @@ module.exports = function (app, deps, helpers) {
         where.push("s.timestamp < ?");
         params.push(toUtcEnd(date_to, tz));
       }
-      if (outlet_id) {
-        where.push("s.outlet_id = ?");
-        params.push(outlet_id);
-      }
+      applyOutletFilter(where, params, outlet_id);
 
       const averagesSql = `
         WITH ProductStats AS (
@@ -442,10 +450,7 @@ module.exports = function (app, deps, helpers) {
         where.push("s.timestamp < ?");
         params.push(toUtcEnd(date_to, tz));
       }
-      if (outlet_id) {
-        where.push("s.outlet_id = ?");
-        params.push(outlet_id);
-      }
+      applyOutletFilter(where, params, outlet_id);
 
       const sql = `
         WITH CustomerFirstPurchase AS (
@@ -520,10 +525,7 @@ module.exports = function (app, deps, helpers) {
         where.push("s.timestamp < ?");
         params.push(toUtcEnd(date_to, tz));
       }
-      if (outlet_id) {
-        where.push("s.outlet_id = ?");
-        params.push(outlet_id);
-      }
+      applyOutletFilter(where, params, outlet_id);
 
       const sql = `
         SELECT 

@@ -38,10 +38,10 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
       supplier_id,
       search,
     } = query || {};
-    const parsedOutletId =
+    const outletIds =
       outlet_id !== undefined && outlet_id !== null && outlet_id !== ""
-        ? Number(outlet_id)
-        : null;
+        ? String(outlet_id).split(",").map(Number).filter(Boolean)
+        : [];
     const parsedSupplierId =
       supplier_id !== undefined && supplier_id !== null && supplier_id !== ""
         ? Number(supplier_id)
@@ -63,9 +63,14 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
       where.push(`time(${timeColumn}, 'localtime') <= time(?)`);
       params.push(time_to);
     }
-    if (parsedOutletId !== null && outletColumn) {
-      where.push(`${outletColumn} = ?`);
-      params.push(parsedOutletId);
+    if (outletIds.length && outletColumn) {
+      if (outletIds.length === 1) {
+        where.push(`${outletColumn} = ?`);
+        params.push(outletIds[0]);
+      } else {
+        where.push(`${outletColumn} IN (${outletIds.map(() => "?").join(",")})`);
+        params.push(...outletIds);
+      }
     }
     if (parsedSupplierId !== null && supplierColumn) {
       where.push(`${supplierColumn} = ?`);
@@ -426,8 +431,14 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         customerSalesParams.push(toUtcEnd(req.query.date_to, tz));
       }
       if (req.query.outlet_id) {
-        customerSalesJoin.push("s.outlet_id = ?");
-        customerSalesParams.push(req.query.outlet_id);
+        const ids = String(req.query.outlet_id).split(",").map(Number).filter(Boolean);
+        if (ids.length === 1) {
+          customerSalesJoin.push("s.outlet_id = ?");
+          customerSalesParams.push(ids[0]);
+        } else if (ids.length > 1) {
+          customerSalesJoin.push(`s.outlet_id IN (${ids.map(() => "?").join(",")})`);
+          customerSalesParams.push(...ids);
+        }
       }
 
       const supplierAp = await allAsync(
