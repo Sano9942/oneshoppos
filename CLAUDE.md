@@ -10,12 +10,12 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 ## Current Status Snapshot (March 2026)
 
 - Latest migration is `backend/migrate63.js`
-- **Test suite: 336/336 backend integration + 19/19 unit + 8/8 E2E — all passing**
+- **Test suite: 248/250 Jest integration tests passing (2 pre-existing vitest-format failures in concurrency.test.js)**
   - 7 new test files added in Phase 6: data-integrity, negative-cases, security, auditability, concurrency, failure-handling, compliance
   - `shift-linkage.test.js` added: 3 tests verifying `shift_id` written to sales and returns at creation
   - `POST /api/sales` validates numeric price/quantity — non-numeric input returns 400
   - B-VARIANT production bug fixed: variant sales now decrement both `product_variants.stock` AND `outlet_stock`
-  - `sales.shift_id` and `returns.shift_id` added (migrate63) — exact shift attribution, no time-window matching needed
+  - `sales.shift_id` and `returns.shift_id` added (migrate63) and **written at sale/return creation** — shift reports use direct FK, not time-window matching
 - Reports V2 core implementation is complete:
   - governance is integrated into the main reports workspace
   - report tabs were aligned to live backend payloads
@@ -212,6 +212,13 @@ oneshoppos/
 - Category tree UI helpers: `frontend/src/utils/categoryTree.js`
 - Tailwind v4: use `(--css-var)` syntax not `[var(--css-var)]`
 
+## Running Tests
+
+- Use `npx jest <path>` for integration tests in `backend/tests/integration/` — these use Jest
+- `npm test` in `backend/` runs vitest — only works for files using vitest import syntax
+- 10+ test files use vitest `import` syntax (attendance, customers, promotions, etc.) — these FAIL under Jest; pre-existing and expected
+- Confirmed passing baseline: 248 Jest integration tests, 2 pre-existing failures (concurrency.test.js vitest format)
+
 ## Common Gotchas
 
 ### Global fetch interceptor (AuthProvider)
@@ -236,6 +243,17 @@ oneshoppos/
 - `POST /api/sales` stock deduction: uses `item.variant_id` for variant stock (`product_variants` table), `item.id` for `outlet_stock` — always pass `variant_id` when known
 - POS Recent Sales + Return/Exchange flow: `POSRecentSalesPanel.jsx` + `POSReturnExchangeModal.jsx` (both new, Mar 2026)
 
+### SQLite prepared statement finalize
+- Always use `stmt.finalize((err) => { ... })` with a callback — without callback, post-insert rollback logic is unreachable because `hasError` is checked synchronously before async run callbacks fire
+
+### sales.js / returns.js shift_id scope
+- `POST /api/sales`: `activeShift` is fetched inside a `try {}` block — declare `let activeShift` BEFORE the try so it's in scope for the `db.serialize()` callback that follows
+- `POST /api/returns`: shift lookup uses `db.get()` BEFORE `db.serialize()` — never call `db.get()` inside an active transaction
+
+### Purchase order credit limit
+- `POST /api/purchase-orders` warns (but allows) when a credit supplier's running balance + new PO total exceeds `credit_limit` — response includes `{ warning: "..." }` field
+- `running_balance` counts only invoiced/received POs (via `supplier_invoices`), not draft POs — acceptable for advisory model
+
 ## Refactor History
 
 Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
@@ -250,3 +268,4 @@ Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
 - Mar 2026: POS Recent Sales + Return/Exchange flow shipped — reprint bills, full refund, exchange with balance settlement
 - Mar 2026: SaaS timezone fix — all date filters converted from `date(col,'localtime')` (server OS timezone) to UTC range expansion via `backend/utils/tz.js`; `loadCompanyProfile` middleware added; `company_profile.timezone` (IANA string) now drives all date boundaries
 - Mar 2026: Shift linkage — `shift_id` added to `sales` and `returns` (migrate63); written at creation time; historical rows backfilled; replaces fragile time-window matching for shift reports
+- Mar 2026: PO credit limit enforcement — `POST /api/purchase-orders` warns when credit supplier exceeds limit; shift reports rewritten to use `shift_id` FK directly
