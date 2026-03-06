@@ -28,8 +28,14 @@ module.exports = function (app, deps, helpers) {
       params.push(time_to);
     }
     if (outlet_id) {
-      where.push(`${saleAlias}.outlet_id = ?`);
-      params.push(outlet_id);
+      const ids = String(outlet_id).split(",").map(Number).filter(Boolean);
+      if (ids.length === 1) {
+        where.push(`${saleAlias}.outlet_id = ?`);
+        params.push(ids[0]);
+      } else if (ids.length > 1) {
+        where.push(`${saleAlias}.outlet_id IN (${ids.map(() => "?").join(",")})`);
+        params.push(...ids);
+      }
     }
   }
 

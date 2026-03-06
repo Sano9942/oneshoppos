@@ -227,6 +227,13 @@ describe("Reports Accuracy Integration Tests", () => {
     expect(totalSold).toBe(0); // If this was the only sale of product 1
   });
 
+  it("GET /api/reports/sales-summary with outlet_id=1,2 returns 200 with rows", async () => {
+    const res = await makeRequest(app, ADMIN_ID)
+      .get("/api/reports/sales-summary?outlet_id=1,2&date_from=2020-01-01&date_to=2030-01-01");
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("sales");
+  });
+
   describe("buildReportFilterParts outlet multi-select", () => {
     it("emits IN clause for comma-separated outlet_id", async () => {
       const helpers = require("../../routes/reports/helpers")(db);
