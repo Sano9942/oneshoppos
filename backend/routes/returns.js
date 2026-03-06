@@ -77,11 +77,21 @@ module.exports = function registerReturnsRoutes(app, deps) {
     });
 
     function processReturn() {
+    // Look up the open shift for this outlet to write shift_id on the return
+    db.get(
+      "SELECT id FROM cash_shifts WHERE outlet_id = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
+      [outlet_id],
+      (shiftErr, openShift) => {
+        doInsertReturn(openShift ? openShift.id : null);
+      },
+    );
+
+    function doInsertReturn(shiftId) {
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
 
       db.run(
-        "INSERT INTO returns (original_sale_id, outlet_id, employee_id, customer_id, total_refund, refund_method, reason) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO returns (original_sale_id, outlet_id, employee_id, customer_id, total_refund, refund_method, reason, shift_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         [
           original_sale_id || null,
           outlet_id,
@@ -90,6 +100,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
           total_refund,
           refund_method,
           reason || null,
+          shiftId,
         ],
         function (err) {
           if (err) {
@@ -175,6 +186,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
         },
       );
     });
+    } // end doInsertReturn
     } // end processReturn
   });
 

@@ -353,8 +353,9 @@ module.exports = function registerSalesRoutes(app, deps) {
       return res.status(401).json({ error: "Login is required for checkout" });
     }
 
+    let activeShift;
     try {
-      const activeShift = await getActiveShiftForOutlet(outlet_id);
+      activeShift = await getActiveShiftForOutlet(outlet_id);
       if (!activeShift) {
         return res.status(400).json({
           error: "Cannot checkout because no open shift exists for this outlet",
@@ -409,9 +410,9 @@ module.exports = function registerSalesRoutes(app, deps) {
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
 
-      // 2. Insert into Sales Table (outlet_id + employee_id + customer_id + discount + points)
+      // 2. Insert into Sales Table (outlet_id + employee_id + customer_id + discount + points + shift_id)
       db.run(
-        "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           totalAmount,
           mainPaymentMethod,
@@ -423,6 +424,7 @@ module.exports = function registerSalesRoutes(app, deps) {
           points_earned,
           points_redeemed,
           notes || null,
+          activeShift.id,
         ],
         function (err) {
           if (err) {
