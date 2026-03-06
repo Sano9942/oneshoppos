@@ -85,15 +85,25 @@ describe('tenant-provisioner.js', () => {
   });
 
   afterAll(() => {
-    // Clean up test tenant directory
     if (fs.existsSync(tenantDir)) {
       fs.rmSync(tenantDir, { recursive: true, force: true });
     }
-    // Clean up test tenant from master.db
-    const db = new sqlite3.Database(MASTER_DB_PATH);
-    db.run('DELETE FROM tenant_audit_log WHERE tenant_id IN (SELECT id FROM tenants WHERE slug = ?)', [testSlug]);
-    db.run('DELETE FROM tenants WHERE slug = ?', [testSlug], () => {
-      db.close((e) => { if (e) console.error('afterAll close error:', e.message); });
+    return new Promise((resolve, reject) => {
+      const db = new sqlite3.Database(MASTER_DB_PATH);
+      db.run(
+        'DELETE FROM tenant_audit_log WHERE tenant_id IN (SELECT id FROM tenants WHERE slug = ?)',
+        [testSlug],
+        (err) => {
+          if (err) return reject(err);
+          db.run('DELETE FROM tenants WHERE slug = ?', [testSlug], (err2) => {
+            if (err2) return reject(err2);
+            db.close((e) => {
+              if (e) console.error('afterAll close error:', e.message);
+              resolve();
+            });
+          });
+        }
+      );
     });
   });
 
@@ -178,12 +188,12 @@ describe('tenant-db-manager.js', () => {
   });
 
   afterEach(async () => {
-    // Reset module cache to get a fresh manager between tests (avoids pool state pollution)
-    jest.resetModules();
+    const { closeAll } = require('../../tenant-db-manager');
+    await closeAll();
   });
 
   test('getDb returns a live db handle for provisioned tenant', async () => {
-    if (!firstTenantId) { console.warn('No tenants in master.db — skipping'); return; }
+    if (!firstTenantId) throw new Error('No active tenants in master.db — cannot test getDb');
     const { getDb, closeAll } = require('../../tenant-db-manager');
     const db = await getDb(firstTenantId);
     expect(db).toBeTruthy();
@@ -191,7 +201,7 @@ describe('tenant-db-manager.js', () => {
   });
 
   test('healthCheck returns ok for provisioned tenant', async () => {
-    if (!firstTenantId) { console.warn('No tenants in master.db — skipping'); return; }
+    if (!firstTenantId) throw new Error('No active tenants in master.db — cannot test healthCheck');
     const { healthCheck, closeAll } = require('../../tenant-db-manager');
     const result = await healthCheck(firstTenantId);
     expect(result.ok).toBe(true);
