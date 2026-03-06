@@ -11,6 +11,7 @@ RUN apk add --no-cache sqlite
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY . .
+RUN chmod +x start.sh
 ENV NODE_ENV=production PORT=5000
 EXPOSE 5000
-CMD ["node", "index.js"]
+CMD ["sh", "start.sh"]

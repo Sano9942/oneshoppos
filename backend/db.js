@@ -1,8 +1,10 @@
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
+require("dotenv").config({ path: path.resolve(__dirname, ".env") });
 
 // Connect to SQLite database (this creates the file if it doesn't exist)
-const dbPath = path.resolve(__dirname, "sanopos.db");
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+const dbPath = path.resolve(DATA_DIR, "sanopos.db");
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error("Error opening database", err.message);
