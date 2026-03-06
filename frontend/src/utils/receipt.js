@@ -189,3 +189,28 @@ export function buildReceiptHtml(slip, template) {
 
   w.print();
 }
+
+/**
+ * Send a slip to the backend hardware printer.
+ * Returns { ok: true } on success, { error, fallback: true } if printer
+ * is offline or not configured — caller should then fire buildReceiptHtml().
+ *
+ * Uses relative URL /api/print/receipt so AuthProvider injects auth headers.
+ *
+ * @param {object} slip      - The sale slip object
+ * @param {object|null} template - Active receipt template
+ * @returns {Promise<{ok?: boolean, error?: string, fallback?: boolean}>}
+ */
+export async function printToHardware(slip, template) {
+  try {
+    const res = await fetch("/api/print/receipt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slip, template: template || null }),
+    });
+    if (!res.ok) return { error: `HTTP ${res.status}`, fallback: true };
+    return await res.json();
+  } catch (err) {
+    return { error: err.message, fallback: true };
+  }
+}
