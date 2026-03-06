@@ -38,4 +38,7 @@ db.serialize(() => {
   );
 });
 
-db.close();
+db.close((err) => {
+  if (err) console.error("migrate64: close error:", err.message);
+  else console.log("migrate64: complete.");
+});
