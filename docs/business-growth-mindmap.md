@@ -1,8 +1,8 @@
-# OneShopPOS SaaS Growth Mindmap
+# SanoPOS SaaS Growth Mindmap
 
 ```mermaid
 mindmap
-  root((OneShopPOS SaaS Final Objective))
+  root((SanoPOS SaaS Final Objective))
     Build a reliable, profitable, multi-tenant SaaS POS company
       Product Foundation
         Stable POS core

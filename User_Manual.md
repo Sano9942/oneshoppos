@@ -1,6 +1,6 @@
-# OneShopPOS Daily SOP
+# SanoPOS Daily SOP
 
-This manual describes the exact daily operating flow for OneShopPOS.
+This manual describes the exact daily operating flow for SanoPOS.
 
 > **Note for SaaS deployments:** Currency denominations and employee PINs are configured per business. The cash denominations shown below are examples from the default Pakistan configuration. Your setup may differ.
 
@@ -242,7 +242,7 @@ Here's the full picture of what "feature development" means for this project rig
 
 Two Tracks of Feature Development
 Track A — SaaS Conversion (the big next thing)
-The SAAS_CONVERSION_PLAN.md lays out a full roadmap to convert OneShopPOS from a single-tenant local app to a cloud-hosted multi-tenant SaaS product:
+The SAAS_CONVERSION_PLAN.md lays out a full roadmap to convert SanoPOS from a single-tenant local app to a cloud-hosted multi-tenant SaaS product:
 
 Phase What Status
 Pre-req Timezone fix ✅ Done (Post-5)

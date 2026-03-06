@@ -1,4 +1,4 @@
-# OneShopPOS - Project Guide for Claude
+# SanoPOS - Project Guide for Claude
 
 ## What This Is
 

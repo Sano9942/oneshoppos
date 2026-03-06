@@ -1,7 +1,7 @@
-# OneShopPOS Complete Production Blueprint (Retail POS Hardening + Card Terminal + Pilot Rollout)
+# SanoPOS Complete Production Blueprint (Retail POS Hardening + Card Terminal + Pilot Rollout)
 
 ## Summary
-This plan hardens your existing OneShopPOS into a production-grade retail POS for real stores, using your current architecture (React + Express + SQLite), while staying SaaS-ready for later migration.  
+This plan hardens your existing SanoPOS into a production-grade retail POS for real stores, using your current architecture (React + Express + SQLite), while staying SaaS-ready for later migration.  
 It is decision-complete for: scope, data model, APIs, edge cases, security/compliance, testing, rollout, and go-live gates.
 
 Primary outcome: one pilot-ready outlet deployment with stable sales/returns/shifts, integrated core hardware, card terminal flow, controlled offline queue-and-sync, and measurable operational reliability.
@@ -41,7 +41,7 @@ Out of scope for this roadmap:
 
 ## Target Architecture Additions
 1. Checkout Orchestration Layer
-- Introduce a server-side “transaction orchestration” flow that owns checkout state transitions and idempotency.
+- Introduce a server-side ï¿½transaction orchestrationï¿½ flow that owns checkout state transitions and idempotency.
 - Move critical ordering logic from UI assumptions into backend-validated flow contracts.
 
 2. Payment Abstraction Layer
@@ -158,7 +158,7 @@ Compatibility:
 - Integrate printer + cash drawer trigger + scanner compatibility checks.
 - Add printable payload standard and PDF generator path.
 - Add optional SMS/Email receipt dispatch with retry and status.
-- Add “hardware degraded mode” prompts and fallback actions.
+- Add ï¿½hardware degraded modeï¿½ prompts and fallback actions.
 - Exit gate: end-to-end sale can print reliably and recover from print failure.
 
 ## Phase 5: Security and Compliance Hardening

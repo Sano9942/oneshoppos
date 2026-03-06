@@ -1,6 +1,6 @@
 # POS External Resources & Blueprints
 
-Curated resource map for OneShopPOS — organized by gap area.
+Curated resource map for SanoPOS — organized by gap area.
 
 ---
 

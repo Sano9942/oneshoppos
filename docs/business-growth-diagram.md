@@ -1,8 +1,8 @@
-# OneShopPOS SaaS Growth Diagram
+# SanoPOS SaaS Growth Diagram
 
 ```mermaid
 flowchart TD
-    A["Final Objective<br/>Build OneShopPOS into a reliable, profitable, multi-tenant SaaS POS company"]
+    A["Final Objective<br/>Build SanoPOS into a reliable, profitable, multi-tenant SaaS POS company"]
 
     A --> B["1) Product Foundation"]
     A --> C["2) Customer Value Engine"]
