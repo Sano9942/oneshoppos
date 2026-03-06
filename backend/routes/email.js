@@ -9,10 +9,11 @@
  * All endpoints require x-employee-id header (authenticated employee).
  */
 
+const nodemailer = require("nodemailer");
+const { buildReceiptEmailHtml } = require("../utils/receiptEmail");
+
 module.exports = function emailRoutes(app, deps) {
   const { db } = deps;
-  const nodemailer = require("nodemailer");
-  const { buildReceiptEmailHtml } = require("../utils/receiptEmail");
 
   function authGuard(req, res) {
     const employeeId = Number(req.headers["x-employee-id"] || 0);
@@ -63,7 +64,7 @@ module.exports = function emailRoutes(app, deps) {
       Number(smtp_port || 587),
       smtp_user || null,
       from_name || "OneShopPOS",
-      enabled ? 1 : 0,
+      enabled != null ? (enabled ? 1 : 0) : 0,
     ];
     if (passClause) params.splice(3, 0, smtp_pass); // insert before from_name
 
@@ -73,8 +74,9 @@ module.exports = function emailRoutes(app, deps) {
          from_name = ?, enabled = ?
        WHERE id = 1`,
       params,
-      (err) => {
+      function(err) {
         if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(500).json({ error: "Config row missing. Run migrate65.js." });
         res.json({ ok: true });
       }
     );
