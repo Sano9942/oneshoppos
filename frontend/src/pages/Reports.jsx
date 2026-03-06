@@ -151,13 +151,24 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
     shifts = [],
   } = meta;
 
+  const [outletOpen, setOutletOpen] = useState(false);
+
+  useEffect(() => {
+    if (!outletOpen) return;
+    const handler = (e) => {
+      if (!e.target.closest("[data-outlet-popover]")) setOutletOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [outletOpen]);
+
   const handleReset = () => {
     setFilters({
       dateFrom: "",
       dateTo: "",
       timeFrom: "",
       timeTo: "",
-      outletId: "",
+      outletIds: [],
       employeeId: "",
       shiftId: "",
       categoryId: "",
@@ -167,7 +178,9 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
     });
   };
 
-  const hasActiveFilters = Object.values(filters).some((v) => !!v);
+  const hasActiveFilters = Object.entries(filters).some(([k, v]) =>
+    Array.isArray(v) ? v.length > 0 : !!v,
+  );
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:sticky sm:top-0 sm:z-10">
@@ -225,21 +238,57 @@ function GlobalFilterBar({ filters, setFilters, meta }) {
         />
       </div>
 
-      {/* Outlet Selector */}
-      <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 sm:min-w-35 sm:w-auto">
-        <Building2 size={14} className="text-slate-400" />
-        <select
-          value={filters.outletId}
-          onChange={(e) => setFilters({ ...filters, outletId: e.target.value })}
-          className="bg-transparent border-none text-xs font-semibold focus:ring-0 p-0 flex-1 cursor-pointer"
+      {/* Outlet Multi-Select */}
+      <div className="relative" data-outlet-popover>
+        <button
+          onClick={() => setOutletOpen((v) => !v)}
+          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 sm:min-w-35"
         >
-          <option value="">All Outlets</option>
-          {outlets.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.name}
-            </option>
-          ))}
-        </select>
+          <Building2 size={14} className="text-slate-400 shrink-0" />
+          <span className="truncate">
+            {filters.outletIds.length === 0
+              ? "All Outlets"
+              : filters.outletIds.length === 1
+                ? outlets.find((o) => o.id === filters.outletIds[0])?.name ?? "1 outlet"
+                : `${filters.outletIds.length} outlets`}
+          </span>
+        </button>
+        {outletOpen && (
+          <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-xl border border-slate-200 bg-white shadow-lg">
+            <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+              <button
+                className="text-xs text-blue-600 hover:underline"
+                onClick={() => setFilters({ ...filters, outletIds: outlets.map((o) => o.id) })}
+              >
+                Select All
+              </button>
+              <button
+                className="text-xs text-slate-500 hover:underline"
+                onClick={() => setFilters({ ...filters, outletIds: [] })}
+              >
+                Clear
+              </button>
+            </div>
+            <div className="max-h-56 overflow-y-auto py-1">
+              {outlets.map((o) => (
+                <label key={o.id} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-slate-50">
+                  <input
+                    type="checkbox"
+                    checked={filters.outletIds.includes(o.id)}
+                    onChange={(e) => {
+                      const next = e.target.checked
+                        ? [...filters.outletIds, o.id]
+                        : filters.outletIds.filter((id) => id !== o.id);
+                      setFilters({ ...filters, outletIds: next });
+                    }}
+                    className="accent-blue-600"
+                  />
+                  <span className="text-xs font-medium text-slate-700">{o.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Category Selector */}
@@ -651,7 +700,7 @@ export function ReportTabStandalone({ tabId }) {
     dateTo: "",
     timeFrom: "",
     timeTo: "",
-    outletId: "",
+    outletIds: [],
     employeeId: "",
     shiftId: "",
     categoryId: "",
@@ -681,7 +730,7 @@ export default function Reports() {
     dateTo: "",
     timeFrom: "",
     timeTo: "",
-    outletId: "",
+    outletIds: [],
     employeeId: "",
     shiftId: "",
     categoryId: "",
@@ -725,7 +774,9 @@ export default function Reports() {
           suppliers: suppliers.suppliers || suppliers || [],
           employees: employees.employees || employees || [],
           shifts: (cashFlow.sessions || []).filter((session) =>
-            filters.outletId ? String(session.outlet_id) === String(filters.outletId) : true,
+            filters.outletIds.length
+              ? filters.outletIds.includes(Number(session.outlet_id))
+              : true,
           ),
         });
       } catch (err) {
@@ -733,7 +784,7 @@ export default function Reports() {
       }
     };
     loadMeta();
-  }, [filters.outletId, filters.dateFrom, filters.dateTo]);
+  }, [filters.outletIds, filters.dateFrom, filters.dateTo]);
 
   const activeGroup = GROUPS.find((g) =>
     g.tabs.some((t) => t.id === activeTab),

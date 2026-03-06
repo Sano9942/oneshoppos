@@ -21,10 +21,11 @@ export function AttendanceTab({ filters }) {
         date_to: filters.dateTo,
         employee_id: filters.employeeId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/attendance?${p}`);
       const d = await res.json();
       const filtered = (d.records || []).filter((row) =>
-        filters.outletId ? String(row.outlet_id) === String(filters.outletId) : true,
+        filters.outletIds && filters.outletIds.length ? filters.outletIds.includes(Number(row.outlet_id)) : true,
       );
       setRows(filtered);
     } catch {
@@ -32,7 +33,7 @@ export function AttendanceTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.employeeId, filters.outletId]);
+  }, [filters.dateFrom, filters.dateTo, filters.employeeId, filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -124,8 +125,8 @@ export function LaborPerformanceTab({ filters }) {
       const p = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
-        outlet_id: filters.outletId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/labor-performance?${p}`);
       const d = await res.json();
       setData(d.labor_performance || []);
@@ -134,7 +135,7 @@ export function LaborPerformanceTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -220,8 +221,8 @@ export function LossPreventionTab({ filters }) {
       const p = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
-        outlet_id: filters.outletId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/loss-prevention?${p}`);
       const d = await res.json();
       setData(d.loss_prevention || []);
@@ -230,7 +231,7 @@ export function LossPreventionTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds]);
 
   useEffect(() => {
     load();

@@ -100,9 +100,9 @@ export function CustomerDetailsTab({ filters }) {
     setLoading(true);
     try {
       const p = new URLSearchParams({
-        outlet_id: filters.outletId,
         search: filters.search,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/customer-details?${p}`);
       const d = await res.json();
       setRows(d.items || []);
@@ -111,7 +111,7 @@ export function CustomerDetailsTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.outletId, filters.search]);
+  }, [filters.outletIds, filters.search]);
 
   useEffect(() => {
     load();
@@ -213,8 +213,8 @@ export function CustomerWiseTab({ filters }) {
       const p = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
-        outlet_id: filters.outletId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/customer-wise?${p}`);
       const d = await res.json();
       setRows(d.items || []);
@@ -223,7 +223,7 @@ export function CustomerWiseTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -328,7 +328,8 @@ export function CustomerRFMTab({ filters }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams({ outlet_id: filters.outletId });
+      const p = new URLSearchParams();
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/customer-rfm?${p}`);
       const d = await res.json();
       setRaw(d.items || []);
@@ -337,7 +338,7 @@ export function CustomerRFMTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.outletId]);
+  }, [filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -502,8 +503,8 @@ export function CustomerRetentionTab({ filters }) {
       const p = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
-        outlet_id: filters.outletId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/customer-retention?${p}`);
       const d = await res.json();
       setRows(d.timeline || []);
@@ -512,7 +513,7 @@ export function CustomerRetentionTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -596,8 +597,8 @@ export function CustomerCaptureRateTab({ filters }) {
       const p = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
-        outlet_id: filters.outletId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/customer-capture-rate?${p}`);
       const d = await res.json();
       setData(d.staff_breakdown || []);
@@ -606,7 +607,7 @@ export function CustomerCaptureRateTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds]);
 
   useEffect(() => {
     load();

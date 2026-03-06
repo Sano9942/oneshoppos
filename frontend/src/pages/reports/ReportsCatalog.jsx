@@ -12,12 +12,11 @@ import {
 } from "./ReportShared";
 
 function buildCatalogParams(filters, extra = {}) {
-  return new URLSearchParams({
+  const p = new URLSearchParams({
     date_from: filters.dateFrom || "",
     date_to: filters.dateTo || "",
     time_from: filters.timeFrom || "",
     time_to: filters.timeTo || "",
-    outlet_id: filters.outletId || "",
     employee_id: filters.employeeId || "",
     search: filters.search || "",
     category_id: filters.categoryId || "",
@@ -25,6 +24,8 @@ function buildCatalogParams(filters, extra = {}) {
     supplier_id: filters.supplierId || "",
     ...extra,
   });
+  if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
+  return p;
 }
 
 // --- Tab: Category Wise -------------------------------------------------------
@@ -40,8 +41,8 @@ export function CategoryWiseTab({ filters }) {
         date_to: filters.dateTo,
         time_from: filters.timeFrom,
         time_to: filters.timeTo,
-        outlet_id: filters.outletId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/category-wise?${p}`);
       const d = await res.json();
       setRows(d.items || []);
@@ -50,7 +51,7 @@ export function CategoryWiseTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.timeFrom, filters.timeTo, filters.outletId]);
+  }, [filters.dateFrom, filters.dateTo, filters.timeFrom, filters.timeTo, filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -305,7 +306,7 @@ export function HistoryCostTab({ filters }) {
     filters.dateTo,
     filters.timeFrom,
     filters.timeTo,
-    filters.outletId,
+    filters.outletIds,
     filters.employeeId,
     filters.search,
     filters.categoryId,
@@ -441,7 +442,7 @@ export function HistorySaleTab({ filters }) {
     filters.dateTo,
     filters.timeFrom,
     filters.timeTo,
-    filters.outletId,
+    filters.outletIds,
     filters.employeeId,
     filters.search,
     filters.categoryId,
@@ -581,7 +582,7 @@ export function ProductAuditTab({ filters }) {
     filters.dateTo,
     filters.timeFrom,
     filters.timeTo,
-    filters.outletId,
+    filters.outletIds,
     filters.employeeId,
     filters.search,
     filters.categoryId,

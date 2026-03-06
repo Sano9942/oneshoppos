@@ -20,9 +20,8 @@ export function SupplierWiseTab({ filters }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams({
-        outlet_id: filters.outletId,
-      });
+      const p = new URLSearchParams();
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/supplier-wise?${p}`);
       const d = await res.json();
       setRows(d.items || d.rows || []);
@@ -31,7 +30,7 @@ export function SupplierWiseTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.outletId]);
+  }, [filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -129,11 +128,10 @@ export function PurchaseOrdersReportTab({ filters }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams({
-        outlet_id: filters.outletId,
-        date_from: filters.dateFrom,
+      const p = new URLSearchParams({        date_from: filters.dateFrom,
         date_to: filters.dateTo,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/purchase-orders?${p}`);
       const d = await res.json();
       setRows(d.purchaseOrders || d.purchase_orders || []);
@@ -142,7 +140,7 @@ export function PurchaseOrdersReportTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.outletId, filters.dateFrom, filters.dateTo]);
+  }, [filters.outletIds, filters.dateFrom, filters.dateTo]);
 
   useEffect(() => {
     load();
@@ -260,7 +258,6 @@ export function TotalPurchasesTab({ filters }) {
       const p = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
-        outlet_id: filters.outletId,
         supplier_id: filters.supplierId,
         category_id: filters.categoryId,
         brand_id: filters.brandId,
@@ -268,6 +265,7 @@ export function TotalPurchasesTab({ filters }) {
         status_mode: statusMode,
         tax_mode: taxMode,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/total-purchases?${p}`);
       const d = await res.json();
       setRows(d.items || []);
@@ -281,7 +279,7 @@ export function TotalPurchasesTab({ filters }) {
   }, [
     filters.dateFrom,
     filters.dateTo,
-    filters.outletId,
+    filters.outletIds,
     filters.supplierId,
     filters.categoryId,
     filters.brandId,
@@ -437,7 +435,6 @@ export function ItemwisePurchasesTab({ filters }) {
       const p = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
-        outlet_id: filters.outletId,
         supplier_id: filters.supplierId,
         category_id: filters.categoryId,
         brand_id: filters.brandId,
@@ -445,6 +442,7 @@ export function ItemwisePurchasesTab({ filters }) {
         status_mode: statusMode,
         tax_mode: taxMode,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/itemwise-purchases?${p}`);
       const d = await res.json();
       setRows(d.items || []);
@@ -458,7 +456,7 @@ export function ItemwisePurchasesTab({ filters }) {
   }, [
     filters.dateFrom,
     filters.dateTo,
-    filters.outletId,
+    filters.outletIds,
     filters.supplierId,
     filters.categoryId,
     filters.brandId,
@@ -608,6 +606,7 @@ export function POWorkflowTab({ filters }) {
         date_to: filters.dateTo,
         supplier_id: filters.supplierId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/po-workflow?${p}`);
       const d = await res.json();
       setRows(d.items || []);
@@ -718,8 +717,8 @@ export function ProcurementParityTab({ filters }) {
       const p = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
-        outlet_id: filters.outletId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/procurement-parity?${p}`);
       const d = await res.json();
       setRows(d.items || []);
@@ -730,7 +729,7 @@ export function ProcurementParityTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -816,8 +815,8 @@ export function GRNReportTab({ filters }) {
       const p = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
-        outlet_id: filters.outletId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/grn-report?${p}`);
       const d = await res.json();
       setRows(d.items || d.rows || []);
@@ -826,7 +825,7 @@ export function GRNReportTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds]);
 
   useEffect(() => {
     load();

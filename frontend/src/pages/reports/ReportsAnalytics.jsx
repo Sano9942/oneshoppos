@@ -24,7 +24,8 @@ export function ComparativeTrendsTab({ filters }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams({ outlet_id: filters.outletId });
+      const p = new URLSearchParams();
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/comparative-trends?${p}`);
       const d = await res.json();
       setData(d);
@@ -33,7 +34,7 @@ export function ComparativeTrendsTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.outletId]);
+  }, [filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -147,8 +148,8 @@ export function HeatmapsTab({ filters }) {
       const p = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
-        outlet_id: filters.outletId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/heatmaps?${p}`);
       const d = await res.json();
       setHeatmap(d.heatmap || []);
@@ -157,7 +158,7 @@ export function HeatmapsTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -270,9 +271,9 @@ export function RevenueLeaksTab({ filters }) {
       const p = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
-        outlet_id: filters.outletId,
         employee_id: filters.employeeId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/revenue-leaks?${p}`);
       const d = await res.json();
       setData(d);
@@ -281,7 +282,7 @@ export function RevenueLeaksTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.outletId, filters.employeeId]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds, filters.employeeId]);
 
   useEffect(() => {
     load();
@@ -391,8 +392,8 @@ export function ProductMixTab({ filters }) {
       const p = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
-        outlet_id: filters.outletId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/product-mix?${p}`);
       const d = await res.json();
       setRows(d.product_mix || []);
@@ -401,7 +402,7 @@ export function ProductMixTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -482,10 +483,10 @@ export function RetailMatrixTab({ filters }) {
     setLoading(true);
     try {
       const p = new URLSearchParams({
-        outlet_id: filters.outletId,
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/retail-matrix?${p}`);
       const d = await res.json();
       setMatrix(d.matrix || []);
@@ -494,7 +495,7 @@ export function RetailMatrixTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.outletId, filters.dateFrom, filters.dateTo]);
+  }, [filters.outletIds, filters.dateFrom, filters.dateTo]);
 
   useEffect(() => {
     load();

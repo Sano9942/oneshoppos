@@ -40,9 +40,8 @@ export function OverviewTab({ filters }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams({
-        outlet_id: filters.outletId,
-      });
+      const p = new URLSearchParams();
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/dashboard?${p}`);
       if (!res.ok) throw new Error("Failed to fetch");
       const d = await res.json();
@@ -52,7 +51,7 @@ export function OverviewTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.outletId]);
+  }, [filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -100,27 +99,27 @@ export function OverviewTab({ filters }) {
   const stats = [
     {
       title: "Today's Sales",
-      value: fmt(todayRevenue),
-      trend: `${todayPayments.length} tenders`,
-      positive: true,
+        value: fmt(todayRevenue),
+        trend: `${todayPayments.length} tenders`,
+        positive: true,
     },
     {
       title: "Average Bill",
-      value: fmt(data?.averageBill),
-      trend: `${hourlySales.length} active hours`,
-      positive: true,
+        value: fmt(data?.averageBill),
+        trend: `${hourlySales.length} active hours`,
+        positive: true,
     },
     {
       title: "Current Stock",
-      value: Number(data?.currentStockUnits || 0),
-      trend: `${totalProducts} products tracked`,
-      positive: true,
+        value: Number(data?.currentStockUnits || 0),
+        trend: `${totalProducts} products tracked`,
+        positive: true,
     },
     {
       title: "Month Gross Margin",
-      value: fmt(data?.monthGrossMargin),
-      trend: `Sales ${fmt(data?.monthSales)}`,
-      positive: true,
+        value: fmt(data?.monthGrossMargin),
+        trend: `Sales ${fmt(data?.monthSales)}`,
+        positive: true,
     },
   ];
 
@@ -197,8 +196,8 @@ export function OverviewTab({ filters }) {
                 <Tooltip
                   contentStyle={{
                     borderRadius: "12px",
-                    border: "none",
-                    boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
+        border: "none",
+        boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
                   }}
                 />
                 <Area
@@ -221,24 +220,24 @@ export function OverviewTab({ filters }) {
             {[
               {
                 icon: Package,
-                label: "Low Stock Items",
-                value: lowStockItems,
-                note: `${Number(data?.currentStockUnits || 0)} stock units live`,
-                tone: "text-violet-600",
+        label: "Low Stock Items",
+        value: lowStockItems,
+        note: `${Number(data?.currentStockUnits || 0)} stock units live`,
+        tone: "text-violet-600",
               },
               {
                 icon: TrendingUp,
-                label: "Month Purchases",
-                value: fmt(data?.monthPurchases),
-                note: `Month sales ${fmt(data?.monthSales)}`,
-                tone: "text-indigo-600",
+        label: "Month Purchases",
+        value: fmt(data?.monthPurchases),
+        note: `Month sales ${fmt(data?.monthSales)}`,
+        tone: "text-indigo-600",
               },
               {
                 icon: AlertTriangle,
-                label: "Leakage Today",
-                value: fmt(leakageTotal),
-                note: `Disc ${fmt(data?.discountsToday?.value)} | Void ${fmt(data?.voidsToday?.value)} | Refund ${fmt(data?.refundsToday?.value)}`,
-                tone: "text-rose-600",
+        label: "Leakage Today",
+        value: fmt(leakageTotal),
+        note: `Disc ${fmt(data?.discountsToday?.value)} | Void ${fmt(data?.voidsToday?.value)} | Refund ${fmt(data?.refundsToday?.value)}`,
+        tone: "text-rose-600",
               },
             ].map((item) => {
               const Icon = item.icon;
@@ -326,10 +325,10 @@ export function SalesSummaryTab({ filters }) {
         date_to: filters.dateTo,
         time_from: filters.timeFrom,
         time_to: filters.timeTo,
-        outlet_id: filters.outletId,
         category_id: filters.categoryId,
         brand_id: filters.brandId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/sales-summary?${p}`);
       const d = await res.json();
       setData(d);
@@ -343,7 +342,7 @@ export function SalesSummaryTab({ filters }) {
     filters.dateTo,
     filters.timeFrom,
     filters.timeTo,
-    filters.outletId,
+    filters.outletIds,
     filters.categoryId,
     filters.brandId,
   ]);
@@ -462,7 +461,7 @@ export function SalesSummaryTab({ filters }) {
                   { header: "Orders", key: "orders" },
                   { header: "Revenue", key: "total" },
                 ],
-                dailySales,
+        dailySales,
               )
             }
           />
@@ -510,8 +509,8 @@ export function MonthlyMOPMatrixTab({ filters }) {
         date_to: filters.dateTo,
         time_from: filters.timeFrom,
         time_to: filters.timeTo,
-        outlet_id: filters.outletId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/monthly-mop-matrix?${p}`);
       const d = await res.json();
       setData(d);
@@ -525,7 +524,7 @@ export function MonthlyMOPMatrixTab({ filters }) {
     filters.dateTo,
     filters.timeFrom,
     filters.timeTo,
-    filters.outletId,
+    filters.outletIds,
   ]);
 
   useEffect(() => {
@@ -568,7 +567,7 @@ export function MonthlyMOPMatrixTab({ filters }) {
                   { header: "Total Revenue", key: "total_amount" },
                   ...methods.map((m) => ({ header: m, key: m })),
                 ],
-                matrix,
+        matrix,
               )
             }
           />
@@ -610,11 +609,11 @@ export function SubcategoryWiseTab({ filters }) {
         date_to: filters.dateTo,
         time_from: filters.timeFrom,
         time_to: filters.timeTo,
-        outlet_id: filters.outletId,
         category_id: filters.categoryId,
         brand_id: filters.brandId,
         supplier_id: filters.supplierId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/subcategory-wise?${p}`);
       const d = await res.json();
       setRows(d.items || []);
@@ -628,7 +627,7 @@ export function SubcategoryWiseTab({ filters }) {
     filters.dateTo,
     filters.timeFrom,
     filters.timeTo,
-    filters.outletId,
+    filters.outletIds,
     filters.categoryId,
     filters.brandId,
     filters.supplierId,
@@ -675,7 +674,7 @@ export function SubcategoryWiseTab({ filters }) {
                   { header: "Profit", key: "profit" },
                   { header: "Contribution %", key: "pct" },
                 ],
-                rows,
+        rows,
               )
             }
           />
@@ -715,9 +714,9 @@ export function SalesDetailTab({ filters }) {
         date_to: filters.dateTo,
         time_from: filters.timeFrom,
         time_to: filters.timeTo,
-        outlet_id: filters.outletId,
         employee_id: filters.employeeId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/sales-detail?${p}`);
       const d = await res.json();
       setRows(d.sales || []);
@@ -726,7 +725,7 @@ export function SalesDetailTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.timeFrom, filters.timeTo, filters.outletId, filters.employeeId]);
+  }, [filters.dateFrom, filters.dateTo, filters.timeFrom, filters.timeTo, filters.outletIds, filters.employeeId]);
 
   useEffect(() => {
     load();
@@ -782,7 +781,7 @@ export function SalesDetailTab({ filters }) {
                   { header: "Price", key: "price_at_sale" },
                   { header: "Line Total", key: "line_total" },
                 ],
-                rows,
+        rows,
               )
             }
           />
@@ -846,8 +845,8 @@ export function OrderWiseTab({ filters }) {
         date_to: filters.dateTo,
         time_from: filters.timeFrom,
         time_to: filters.timeTo,
-        outlet_id: filters.outletId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/order-wise?${p}`);
       const d = await res.json();
       setRows(d.orders || []);
@@ -856,7 +855,7 @@ export function OrderWiseTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.timeFrom, filters.timeTo, filters.outletId]);
+  }, [filters.dateFrom, filters.dateTo, filters.timeFrom, filters.timeTo, filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -911,7 +910,7 @@ export function OrderWiseTab({ filters }) {
                   { header: "Discount", key: "discount_amount" },
                   { header: "Total", key: "total_amount" },
                 ],
-                rows,
+        rows,
               )
             }
           />
@@ -966,10 +965,10 @@ export function ItemWiseTab({ filters }) {
         date_to: filters.dateTo,
         time_from: filters.timeFrom,
         time_to: filters.timeTo,
-        outlet_id: filters.outletId,
         category_id: filters.categoryId,
         brand_id: filters.brandId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/item-wise?${p}`);
       const d = await res.json();
       setRows(d.items || []);
@@ -983,7 +982,7 @@ export function ItemWiseTab({ filters }) {
     filters.dateTo,
     filters.timeFrom,
     filters.timeTo,
-    filters.outletId,
+    filters.outletIds,
     filters.categoryId,
     filters.brandId,
   ]);
@@ -1046,7 +1045,7 @@ export function ItemWiseTab({ filters }) {
                   { header: "Total Cost", key: "total_cost" },
                   { header: "Gross Profit", key: "gross_profit" },
                 ],
-                rows,
+        rows,
               )
             }
           />
@@ -1095,9 +1094,9 @@ export function RefundsVoidsTab({ filters }) {
         date_to: filters.dateTo,
         time_from: filters.timeFrom,
         time_to: filters.timeTo,
-        outlet_id: filters.outletId,
         employee_id: filters.employeeId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/refunds-voids?${p}`);
       const d = await res.json();
       setData(d);
@@ -1111,7 +1110,7 @@ export function RefundsVoidsTab({ filters }) {
     filters.dateTo,
     filters.timeFrom,
     filters.timeTo,
-    filters.outletId,
+    filters.outletIds,
     filters.employeeId,
   ]);
 
@@ -1170,7 +1169,7 @@ export function RefundsVoidsTab({ filters }) {
                   { header: "Customer", key: "customer_name" },
                   { header: "Total", key: "total_amount" },
                 ],
-                voids,
+        voids,
               )
             }
           />
@@ -1211,7 +1210,7 @@ export function RefundsVoidsTab({ filters }) {
                   { header: "Method", key: "refund_method" },
                   { header: "Total Refund", key: "total_refund" },
                 ],
-                refunds,
+        refunds,
               )
             }
           />
@@ -1252,9 +1251,9 @@ export function CashierWiseTab({ filters }) {
         date_to: filters.dateTo,
         time_from: filters.timeFrom,
         time_to: filters.timeTo,
-        outlet_id: filters.outletId,
         employee_id: filters.employeeId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/cashier-wise?${p}`);
       const d = await res.json();
       setRows(d.items || []);
@@ -1268,7 +1267,7 @@ export function CashierWiseTab({ filters }) {
     filters.dateTo,
     filters.timeFrom,
     filters.timeTo,
-    filters.outletId,
+    filters.outletIds,
     filters.employeeId,
   ]);
 
@@ -1328,7 +1327,7 @@ export function CashierWiseTab({ filters }) {
                   { header: "Void Value", key: "void_value" },
                   { header: "Net Sales", key: "net_sales" },
                 ],
-                rows,
+        rows,
               )
             }
           />
@@ -1374,14 +1373,15 @@ export function DailyOperationsTab({ filters }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const common = new URLSearchParams({
+      const commonParams = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
         time_from: filters.timeFrom,
         time_to: filters.timeTo,
-        outlet_id: filters.outletId,
         employee_id: filters.employeeId,
-      }).toString();
+      });
+      if (filters.outletIds && filters.outletIds.length) commonParams.set("outlet_id", filters.outletIds.join(","));
+      const common = commonParams.toString();
 
       const [salesRes, refundRes, cashierRes] = await Promise.all([
         fetch(`${API}/api/reports/sales-summary?${common}`).then((r) => r.json()),
@@ -1396,7 +1396,7 @@ export function DailyOperationsTab({ filters }) {
       if (filters.shiftId) {
         const [shiftSummaryRes, shiftPaymentRes] = await Promise.all([
           fetch(`${API}/api/reports/shift-summary?session_id=${filters.shiftId}`).then((r) => r.json()),
-          fetch(`${API}/api/reports/payment-summary?session_id=${filters.shiftId}`).then((r) => r.json()),
+        fetch(`${API}/api/reports/payment-summary?session_id=${filters.shiftId}`).then((r) => r.json()),
         ]);
         setSelectedShiftSummary(shiftSummaryRes);
         setSelectedShiftPayments(shiftPaymentRes.payments || []);
@@ -1418,7 +1418,7 @@ export function DailyOperationsTab({ filters }) {
     filters.dateTo,
     filters.timeFrom,
     filters.timeTo,
-    filters.outletId,
+    filters.outletIds,
     filters.employeeId,
     filters.shiftId,
   ]);
@@ -1463,7 +1463,7 @@ export function DailyOperationsTab({ filters }) {
   const scopeBadges = [
     `Window: ${selectedWindow}`,
     `Time: ${selectedTime}`,
-    filters.outletId ? `Outlet filtered` : "All outlets",
+    filters.outletIds && filters.outletIds.length ? `Outlet filtered` : "All outlets",
     filters.employeeId ? "Single cashier filter" : "All cashiers",
   ];
 

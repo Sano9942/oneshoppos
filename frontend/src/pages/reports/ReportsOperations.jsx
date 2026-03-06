@@ -21,8 +21,8 @@ export function InventoryLossTab({ filters }) {
       const p = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
-        outlet_id: filters.outletId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/inventory-loss?${p}`);
       const d = await res.json();
       setRows(d.items || []);
@@ -31,7 +31,7 @@ export function InventoryLossTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -113,8 +113,8 @@ export function WastageTab({ filters }) {
       const p = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
-        outlet_id: filters.outletId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/wastage?${p}`);
       const d = await res.json();
       setRows(d.items || []);
@@ -123,7 +123,7 @@ export function WastageTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -206,8 +206,8 @@ export function ProductMovementTab({ filters }) {
       const p = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
-        outlet_id: filters.outletId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/product-movement?${p}`);
       const d = await res.json();
       setRows(d.items || []);
@@ -216,7 +216,7 @@ export function ProductMovementTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -295,8 +295,8 @@ export function STRReportTab({ filters }) {
       const p = new URLSearchParams({
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
-        outlet_id: filters.outletId,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/str-report?${p}`);
       const d = await res.json();
       setRows(d.items || d.rows || d || []);
@@ -305,7 +305,7 @@ export function STRReportTab({ filters }) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dateFrom, filters.dateTo, filters.outletId]);
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds]);
 
   useEffect(() => {
     load();
@@ -381,6 +381,7 @@ export function OutletComparisonTab({ filters }) {
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
       });
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const res = await fetch(`${API}/api/reports/outlet-comparison?${p}`);
       const d = await res.json();
       setData(d.comparison || []);

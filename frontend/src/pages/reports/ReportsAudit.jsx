@@ -20,18 +20,19 @@ function FeatureState({ title, body }) {
 }
 
 function buildParams(filters) {
-  return new URLSearchParams({
+  const p = new URLSearchParams({
     date_from: filters.dateFrom || "",
     date_to: filters.dateTo || "",
     time_from: filters.timeFrom || "",
     time_to: filters.timeTo || "",
-    outlet_id: filters.outletId || "",
     employee_id: filters.employeeId || "",
     category_id: filters.categoryId || "",
     brand_id: filters.brandId || "",
     supplier_id: filters.supplierId || "",
     search: filters.search || "",
   });
+  if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
+  return p;
 }
 
 export function DiscountLeakageTab({ filters }) {
