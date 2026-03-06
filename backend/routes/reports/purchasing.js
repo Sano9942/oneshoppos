@@ -5,6 +5,18 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
   const { buildCategoryMetaMap, withCategoryPaths, getDescendantLeafIds } =
     helpers;
 
+  function applyOutletFilter(where, params, rawId, col = "grn.outlet_id") {
+    if (!rawId) return;
+    const ids = String(rawId).split(",").map(Number).filter(Boolean);
+    if (ids.length === 1) {
+      where.push(`${col} = ?`);
+      params.push(ids[0]);
+    } else if (ids.length > 1) {
+      where.push(`${col} IN (${ids.map(() => "?").join(",")})`);
+      params.push(...ids);
+    }
+  }
+
   async function applyPurchaseProductFilters(where, params, query, alias = "p") {
     const { category_id, brand_id, supplier_id, search } = query || {};
     if (supplier_id) {
@@ -74,10 +86,7 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
       where.push("po.created_at < ?");
       params.push(toUtcEnd(date_to, tz));
     }
-    if (outlet_id) {
-      where.push("COALESCE(grn.outlet_id, 0) = ?");
-      params.push(outlet_id);
-    }
+    applyOutletFilter(where, params, outlet_id, "COALESCE(grn.outlet_id, 0)");
 
     buildStatusFilter(where, params, statusMode);
     await applyPurchaseProductFilters(where, params, req.query);
@@ -162,10 +171,7 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
       where.push("po.created_at < ?");
       params.push(toUtcEnd(date_to, tz));
     }
-    if (outlet_id) {
-      where.push("COALESCE(grn.outlet_id, 0) = ?");
-      params.push(outlet_id);
-    }
+    applyOutletFilter(where, params, outlet_id, "COALESCE(grn.outlet_id, 0)");
 
     buildStatusFilter(where, params, statusMode);
     await applyPurchaseProductFilters(where, params, req.query);
@@ -379,12 +385,23 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
       adjustmentParams.push(toUtcEnd(date_to, tz));
     }
     if (outlet_id) {
-      receiptWhere.push("grn.outlet_id = ?");
-      receiptParams.push(outlet_id);
-      transferWhere.push("(it.from_outlet_id = ? OR it.to_outlet_id = ?)");
-      transferParams.push(outlet_id, outlet_id);
-      adjustmentWhere.push("sa.outlet_id = ?");
-      adjustmentParams.push(outlet_id);
+      const ids = String(outlet_id).split(",").map(Number).filter(Boolean);
+      if (ids.length === 1) {
+        receiptWhere.push("grn.outlet_id = ?");
+        receiptParams.push(ids[0]);
+        transferWhere.push("(it.from_outlet_id = ? OR it.to_outlet_id = ?)");
+        transferParams.push(ids[0], ids[0]);
+        adjustmentWhere.push("sa.outlet_id = ?");
+        adjustmentParams.push(ids[0]);
+      } else if (ids.length > 1) {
+        const ph = ids.map(() => "?").join(",");
+        receiptWhere.push(`grn.outlet_id IN (${ph})`);
+        receiptParams.push(...ids);
+        transferWhere.push(`(it.from_outlet_id IN (${ph}) OR it.to_outlet_id IN (${ph}))`);
+        transferParams.push(...ids, ...ids);
+        adjustmentWhere.push(`sa.outlet_id IN (${ph})`);
+        adjustmentParams.push(...ids);
+      }
     }
 
     const receiptSql = `

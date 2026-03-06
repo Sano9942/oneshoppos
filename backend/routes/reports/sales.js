@@ -9,6 +9,18 @@ module.exports = function (app, deps, helpers) {
     parsePaging,
   } = helpers;
 
+  function applyOutletFilter(where, params, rawId, col = "s.outlet_id") {
+    if (!rawId) return;
+    const ids = String(rawId).split(",").map(Number).filter(Boolean);
+    if (ids.length === 1) {
+      where.push(`${col} = ?`);
+      params.push(ids[0]);
+    } else if (ids.length > 1) {
+      where.push(`${col} IN (${ids.map(() => "?").join(",")})`);
+      params.push(...ids);
+    }
+  }
+
   function applySaleTimeFilters(where, params, query, saleAlias = "s", tz = "UTC") {
     const { date_from, date_to, time_from, time_to, outlet_id } = query;
     if (date_from) {
@@ -722,10 +734,7 @@ module.exports = function (app, deps, helpers) {
         where.push("time(s.timestamp,'localtime') <= time(?)");
         params.push(req.query.time_to);
       }
-      if (req.query.outlet_id) {
-        where.push("s.outlet_id = ?");
-        params.push(req.query.outlet_id);
-      }
+      applyOutletFilter(where, params, req.query.outlet_id);
       await applyProductDimensionFilters(where, params, req.query);
       return { where, params };
     };
@@ -1032,10 +1041,19 @@ module.exports = function (app, deps, helpers) {
       refundParams.push(time_to);
     }
     if (outlet_id) {
-      saleWhere.push("s.outlet_id = ?");
-      refundWhere.push("r.outlet_id = ?");
-      saleParams.push(outlet_id);
-      refundParams.push(outlet_id);
+      const ids = String(outlet_id).split(",").map(Number).filter(Boolean);
+      if (ids.length === 1) {
+        saleWhere.push("s.outlet_id = ?");
+        refundWhere.push("r.outlet_id = ?");
+        saleParams.push(ids[0]);
+        refundParams.push(ids[0]);
+      } else if (ids.length > 1) {
+        const ph = ids.map(() => "?").join(",");
+        saleWhere.push(`s.outlet_id IN (${ph})`);
+        refundWhere.push(`r.outlet_id IN (${ph})`);
+        saleParams.push(...ids);
+        refundParams.push(...ids);
+      }
     }
     if (employee_id) {
       saleWhere.push("s.employee_id = ?");
@@ -1156,12 +1174,23 @@ module.exports = function (app, deps, helpers) {
       refundParams.push(time_to);
     }
     if (outlet_id) {
-      salesWhere.push("s.outlet_id = ?");
-      voidWhere.push("s.outlet_id = ?");
-      refundWhere.push("r.outlet_id = ?");
-      salesParams.push(outlet_id);
-      voidParams.push(outlet_id);
-      refundParams.push(outlet_id);
+      const ids = String(outlet_id).split(",").map(Number).filter(Boolean);
+      if (ids.length === 1) {
+        salesWhere.push("s.outlet_id = ?");
+        voidWhere.push("s.outlet_id = ?");
+        refundWhere.push("r.outlet_id = ?");
+        salesParams.push(ids[0]);
+        voidParams.push(ids[0]);
+        refundParams.push(ids[0]);
+      } else if (ids.length > 1) {
+        const ph = ids.map(() => "?").join(",");
+        salesWhere.push(`s.outlet_id IN (${ph})`);
+        voidWhere.push(`s.outlet_id IN (${ph})`);
+        refundWhere.push(`r.outlet_id IN (${ph})`);
+        salesParams.push(...ids);
+        voidParams.push(...ids);
+        refundParams.push(...ids);
+      }
     }
     if (employee_id) {
       salesWhere.push("s.employee_id = ?");

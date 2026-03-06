@@ -4,6 +4,18 @@ module.exports = function (app, deps, helpers) {
   const { db, requirePerm, requireAnyPerm, requireFeature, path, fs } = deps;
   const { parseJsonObject, nextRunAtIso, toCsvLines } = helpers;
 
+  function applyOutletFilter(where, params, rawId, col = "s.outlet_id") {
+    if (!rawId) return;
+    const ids = String(rawId).split(",").map(Number).filter(Boolean);
+    if (ids.length === 1) {
+      where.push(`${col} = ?`);
+      params.push(ids[0]);
+    } else if (ids.length > 1) {
+      where.push(`${col} IN (${ids.map(() => "?").join(",")})`);
+      params.push(...ids);
+    }
+  }
+
   const REPORT_EXPORT_DIR = path.resolve(
     __dirname,
     "..",
@@ -68,10 +80,7 @@ module.exports = function (app, deps, helpers) {
         where.push("s.timestamp < ?");
         params.push(toUtcEnd(filters.date_to, tz));
       }
-      if (filters.outlet_id) {
-        where.push("s.outlet_id = ?");
-        params.push(filters.outlet_id);
-      }
+      applyOutletFilter(where, params, filters.outlet_id);
       const sql = `
       SELECT p.name AS product_name, p.barcode,
              ROUND(SUM(si.quantity * si.price_at_sale),2) AS revenue,

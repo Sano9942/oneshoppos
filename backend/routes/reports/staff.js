@@ -3,6 +3,18 @@ const { toUtcStart, toUtcEnd } = require("../../utils/tz");
 module.exports = function (app, deps) {
   const { db } = deps;
 
+  function applyOutletFilter(where, params, rawId, col = "s.outlet_id") {
+    if (!rawId) return;
+    const ids = String(rawId).split(",").map(Number).filter(Boolean);
+    if (ids.length === 1) {
+      where.push(`${col} = ?`);
+      params.push(ids[0]);
+    } else if (ids.length > 1) {
+      where.push(`${col} IN (${ids.map(() => "?").join(",")})`);
+      params.push(...ids);
+    }
+  }
+
   app.get("/api/reports/labor-performance", async (req, res) => {
     try {
       const { date_from, date_to, outlet_id } = req.query;
@@ -41,10 +53,19 @@ module.exports = function (app, deps) {
       }
 
       if (outlet_id) {
-        saleWhere.push("s.outlet_id = ?");
-        saleParams.push(outlet_id);
-        attendWhere.push("outlet_id = ?");
-        attendParams.push(outlet_id);
+        const ids = String(outlet_id).split(",").map(Number).filter(Boolean);
+        if (ids.length === 1) {
+          saleWhere.push("s.outlet_id = ?");
+          saleParams.push(ids[0]);
+          attendWhere.push("outlet_id = ?");
+          attendParams.push(ids[0]);
+        } else if (ids.length > 1) {
+          const ph = ids.map(() => "?").join(",");
+          saleWhere.push(`s.outlet_id IN (${ph})`);
+          saleParams.push(...ids);
+          attendWhere.push(`outlet_id IN (${ph})`);
+          attendParams.push(...ids);
+        }
       }
 
       const sql = `
@@ -131,12 +152,23 @@ module.exports = function (app, deps) {
       }
 
       if (outlet_id) {
-        voidWhere.push("s.outlet_id = ?");
-        voidParams.push(outlet_id);
-        refundWhere.push("r.outlet_id = ?");
-        refundParams.push(outlet_id);
-        saleWhere.push("s.outlet_id = ?");
-        saleParams.push(outlet_id);
+        const ids = String(outlet_id).split(",").map(Number).filter(Boolean);
+        if (ids.length === 1) {
+          voidWhere.push("s.outlet_id = ?");
+          voidParams.push(ids[0]);
+          refundWhere.push("r.outlet_id = ?");
+          refundParams.push(ids[0]);
+          saleWhere.push("s.outlet_id = ?");
+          saleParams.push(ids[0]);
+        } else if (ids.length > 1) {
+          const ph = ids.map(() => "?").join(",");
+          voidWhere.push(`s.outlet_id IN (${ph})`);
+          voidParams.push(...ids);
+          refundWhere.push(`r.outlet_id IN (${ph})`);
+          refundParams.push(...ids);
+          saleWhere.push(`s.outlet_id IN (${ph})`);
+          saleParams.push(...ids);
+        }
       }
 
       const sql = `
