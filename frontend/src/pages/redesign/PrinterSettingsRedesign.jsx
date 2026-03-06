@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { PageShell } from "../../ui/primitives";
-
-const API = "http://localhost:5000";
+import { API_BASE as API } from "../../config";
 
 const PAPER_SIZES = [
   { label: "80mm — 48 chars (standard)", value: 48 },
@@ -38,6 +37,8 @@ export default function PrinterSettingsRedesign() {
     from_name: "OneShopPOS",
     enabled: false,
   });
+  // True when backend has a password saved — used for placeholder only
+  const [emailPassSet, setEmailPassSet] = useState(false);
   const [emailSaving, setEmailSaving] = useState(false);
   const [emailSaved, setEmailSaved] = useState(false);
   const [emailSaveError, setEmailSaveError] = useState(null);
@@ -69,11 +70,13 @@ export default function PrinterSettingsRedesign() {
       .then((r) => r.json())
       .then((data) => {
         if (data && !data.error) {
+          // smtp_pass always arrives as "*****" or "" — never store it in state
+          setEmailPassSet(data.smtp_pass === "*****");
           setEmailCfg({
             smtp_host: data.smtp_host || "smtp.gmail.com",
             smtp_port: data.smtp_port || 587,
             smtp_user: data.smtp_user || "",
-            smtp_pass: data.smtp_pass || "",
+            smtp_pass: "",  // never pre-fill password field
             from_name: data.from_name || "OneShopPOS",
             enabled: Boolean(data.enabled),
           });
@@ -135,7 +138,11 @@ export default function PrinterSettingsRedesign() {
           "Content-Type": "application/json",
           "x-employee-id": localStorage.getItem("employeeId") || "1",
         },
-        body: JSON.stringify(emailCfg),
+        body: JSON.stringify({
+          ...emailCfg,
+          // Only send smtp_pass if the user typed a new one
+          ...(emailCfg.smtp_pass ? {} : { smtp_pass: "*****" }),
+        }),
       });
       const data = await res.json();
       if (data.ok) setEmailSaved(true);
@@ -153,7 +160,11 @@ export default function PrinterSettingsRedesign() {
     try {
       const res = await fetch(`${API}/api/email/test`, {
         method: "POST",
-        headers: { "x-employee-id": localStorage.getItem("employeeId") || "1" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-employee-id": localStorage.getItem("employeeId") || "1",
+        },
+        body: JSON.stringify({}),
       });
       const data = await res.json();
       if (data.ok) {
@@ -402,7 +413,7 @@ export default function PrinterSettingsRedesign() {
             className="border rounded px-3 py-2 w-full"
             value={emailCfg.smtp_pass}
             onChange={(e) => handleEmailChange("smtp_pass", e.target.value)}
-            placeholder={emailCfg.smtp_pass === "*****" ? "Password saved — enter new value to change" : "Gmail App Password"}
+            placeholder={emailPassSet && !emailCfg.smtp_pass ? "Password saved — enter new value to change" : "Gmail App Password"}
           />
           <p className="text-xs text-slate-500 mt-1">
             For Gmail: Enable 2-Step Verification, then generate an App Password at{" "}
