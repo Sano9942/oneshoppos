@@ -33,9 +33,10 @@ function getDb(tenantId) {
       const db = new sqlite3.Database(dbPath, (err) => {
         if (err) return reject(new Error(`Cannot open tenant DB: ${err.message}`));
 
-        db.serialize(() => {
-          db.run('PRAGMA foreign_keys = ON');
-          db.run('PRAGMA journal_mode = WAL', () => {
+        db.run('PRAGMA foreign_keys = ON', (err) => {
+          if (err) return reject(new Error(`Cannot set foreign_keys pragma: ${err.message}`));
+          db.run('PRAGMA journal_mode = WAL', (err) => {
+            if (err) return reject(new Error(`Cannot set WAL mode: ${err.message}`));
             pool.set(tenantId, db);
             resolve(db);
           });
@@ -84,7 +85,19 @@ function healthCheck(tenantId) {
   });
 }
 
-// Graceful shutdown
-process.on('exit', () => closeAll());
+// Synchronous best-effort close on hard exit
+process.on('exit', () => {
+  for (const [, db] of pool) {
+    try { db.close(); } catch (_) {}
+  }
+});
+
+// Graceful async shutdown on signals
+async function shutdown() {
+  await closeAll();
+  process.exit(0);
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 module.exports = { getDb, closeDb, closeAll, healthCheck };
