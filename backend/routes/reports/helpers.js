@@ -50,12 +50,15 @@ module.exports = function (db) {
       params.push(toUtcEnd(date_to, tz));
     }
     if (outlet_id) {
-      if (sale) {
-        where.push(`${sale}.outlet_id = ?`);
-      } else if (outlet) {
-        where.push(`${outlet}.id = ?`);
+      const ids = String(outlet_id).split(",").map(Number).filter(Boolean);
+      const col = sale ? `${sale}.outlet_id` : `${outlet}.id`;
+      if (ids.length === 1) {
+        where.push(`${col} = ?`);
+        params.push(ids[0]);
+      } else if (ids.length > 1) {
+        where.push(`${col} IN (${ids.map(() => "?").join(",")})`);
+        params.push(...ids);
       }
-      params.push(outlet_id);
     }
     if (employee_id && sale && employee) {
       where.push(`${sale}.employee_id = ?`);

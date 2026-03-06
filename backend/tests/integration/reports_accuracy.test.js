@@ -226,4 +226,30 @@ describe("Reports Accuracy Integration Tests", () => {
     const totalSold = itemRows.reduce((sum, r) => sum + r.units_sold, 0);
     expect(totalSold).toBe(0); // If this was the only sale of product 1
   });
+
+  describe("buildReportFilterParts outlet multi-select", () => {
+    it("emits IN clause for comma-separated outlet_id", async () => {
+      const helpers = require("../../routes/reports/helpers")(db);
+      const fakeReq = { query: { outlet_id: "1,2" }, company: { timezone: "UTC" } };
+      const { where, params } = await helpers.buildReportFilterParts(fakeReq);
+      expect(where.some(w => w.includes("IN (?,?)"))).toBe(true);
+      expect(params).toContain(1);
+      expect(params).toContain(2);
+    });
+
+    it("emits = clause for single outlet_id", async () => {
+      const helpers = require("../../routes/reports/helpers")(db);
+      const fakeReq = { query: { outlet_id: "3" }, company: { timezone: "UTC" } };
+      const { where, params } = await helpers.buildReportFilterParts(fakeReq);
+      expect(where.some(w => w.includes("outlet_id = ?"))).toBe(true);
+      expect(params).toContain(3);
+    });
+
+    it("emits no outlet clause when outlet_id is empty", async () => {
+      const helpers = require("../../routes/reports/helpers")(db);
+      const fakeReq = { query: {}, company: { timezone: "UTC" } };
+      const { where, params } = await helpers.buildReportFilterParts(fakeReq);
+      expect(where.every(w => !w.includes("outlet_id"))).toBe(true);
+    });
+  });
 });
