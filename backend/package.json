@@ -5,6 +5,10 @@
   "scripts": {
     "start": "node index.js",
     "preflight": "node preflight.js",
+    "parity:audit": "node ../tools/api-parity-audit.js --format both",
+    "parity:check:frontend-only": "node ../tools/api-parity-audit.js --format both --fail-on frontend-only",
+    "parity:check:unclassified": "node ../tools/api-parity-audit.js --format both --fail-on unclassified",
+    "parity:sync-registry": "node ../tools/api-parity-audit.js --format both --sync-registry",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run tests/unit",
@@ -22,6 +26,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^7.5.1",
     "multer": "^2.0.2",
+    "node-thermal-printer": "^4.6.0",
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
