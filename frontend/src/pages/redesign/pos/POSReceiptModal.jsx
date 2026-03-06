@@ -1,10 +1,13 @@
-import React from "react";
-import { CheckCircle2, X } from "lucide-react";
+import React, { useState } from "react";
+import { CheckCircle2, Mail, X } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { buildReceiptSections } from "../../../utils/receipt";
+import POSEmailReceiptModal from "./POSEmailReceiptModal";
 
 export default function POSReceiptModal() {
   const { slipOpen, setSlipOpen, slip, money, printSlip, receiptTemplate } = usePOS();
+
+  const [showEmailModal, setShowEmailModal] = useState(false);
 
   const sections = slip ? buildReceiptSections(slip, receiptTemplate) : null;
 
@@ -173,6 +176,12 @@ export default function POSReceiptModal() {
             Close
           </button>
           <button
+            onClick={() => setShowEmailModal(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-300 text-blue-700 hover:bg-blue-50 text-sm font-medium"
+          >
+            <Mail size={14} /> Email Receipt
+          </button>
+          <button
             onClick={() => printSlip(slip)}
             className="flex-1 py-2.5 bg-[#8066FF] hover:bg-[#7055E6] text-white rounded-xl text-sm font-bold shadow transition"
           >
@@ -180,6 +189,13 @@ export default function POSReceiptModal() {
           </button>
         </div>
       </div>
+      {showEmailModal && slip?.saleId && (
+        <POSEmailReceiptModal
+          saleId={slip.saleId}
+          customerEmail={slip.customer?.email || ""}
+          onClose={() => setShowEmailModal(false)}
+        />
+      )}
     </div>
   );
 }
