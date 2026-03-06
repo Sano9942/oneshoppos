@@ -112,6 +112,16 @@ async function seedData(db) {
     `INSERT INTO employees (id, name, role, pin_code, role_id, monthly_salary) VALUES (3, 'Cashier User', 'Cashier', '3333', 3, 25000)`,
   );
 
+  // Hash all employee PINs (simulates migrate66)
+  const bcrypt = require("bcryptjs");
+  const empRows = await new Promise((resolve, reject) => {
+    db.all("SELECT id, pin_code FROM employees WHERE pin_code IS NOT NULL", [], (err, rows) => err ? reject(err) : resolve(rows || []));
+  });
+  for (const row of empRows) {
+    const hash = await bcrypt.hash(String(row.pin_code), 4); // low rounds for test speed
+    await runSql(db, "UPDATE employees SET pin_hash = ? WHERE id = ?", [hash, row.id]);
+  }
+
   // Employee outlet assignments (required by outlet-assignment enforcement middleware)
   // All 3 employees are assigned to outlet 1; admin is also assigned to outlet 2
   for (const empId of [1, 2, 3]) {

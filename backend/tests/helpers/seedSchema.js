@@ -66,6 +66,7 @@ const TABLES = [
     name TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'Cashier',
     pin_code TEXT UNIQUE NOT NULL,
+    pin_hash TEXT,
     role_id INTEGER REFERENCES roles(id) DEFAULT 3,
     salary_type TEXT DEFAULT 'monthly',
     hourly_rate REAL DEFAULT 0,
