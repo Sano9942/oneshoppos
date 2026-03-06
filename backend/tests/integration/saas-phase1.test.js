@@ -141,10 +141,10 @@ describe('tenant-provisioner.js', () => {
     expect(rows[0].timezone).toBe('UTC');
   });
 
-  test('seed: schema_migrations version = 64', async () => {
+  test('seed: schema_migrations version = 65', async () => {
     const rows = await dbQuery(tenantDbPath, 'SELECT version FROM schema_migrations');
     expect(rows.length).toBe(1);
-    expect(rows[0].version).toBe(64);
+    expect(rows[0].version).toBe(65);
   });
 
   test('master.db: tenant row has correct slug, timezone, and status', async () => {

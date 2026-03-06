@@ -11,7 +11,7 @@ const { extractSchema } = require('./schema-full');
 const { masterDb, initMasterDb } = require('./master-db');
 
 const TENANTS_DIR = path.join(__dirname, 'tenants');
-const SCHEMA_VERSION = 64;
+const SCHEMA_VERSION = 65;
 
 // --- Arg parsing ---
 function parseArgs() {
