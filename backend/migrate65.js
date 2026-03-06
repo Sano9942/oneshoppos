@@ -5,10 +5,10 @@
  * Single row (id=1) seeded so Settings UI always has a row to read/update.
  */
 const path = require("path");
-const Database = require("sqlite3").Database;
+const sqlite3 = require("sqlite3").verbose();
 
 const DB_PATH = path.join(__dirname, "oneshop.db");
-const db = new Database(DB_PATH);
+const db = new sqlite3.Database(DB_PATH);
 
 db.serialize(() => {
   db.run(`
