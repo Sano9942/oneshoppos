@@ -338,6 +338,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- RECEIPT TEMPLATES & ACTION HISTORY ---
   require("./receipt-templates")(app, deps);
 
+  // --- ROUTES: PRINTER (ESC/POS hardware) ---
+  require("./printer")(app, deps);
+
   // --- SUPPLIER RETURNS (RMA) ---
   require("./supplier-returns")(app, deps);
 
