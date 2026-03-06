@@ -9,11 +9,12 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 
 ## Current Status Snapshot (March 2026)
 
-- Latest migration is `backend/migrate64.js`
-- **Test suite: 257/259 Jest integration tests passing (2 pre-existing vitest-format failures in concurrency.test.js)**
+- Latest migration is `backend/migrate65.js`
+- **Test suite: 269/271 Jest integration tests passing (2 pre-existing vitest-format failures in concurrency.test.js)**
   - 7 new test files added in Phase 6: data-integrity, negative-cases, security, auditability, concurrency, failure-handling, compliance
   - `shift-linkage.test.js` added: 3 tests verifying `shift_id` written to sales and returns at creation
   - `printer.test.js` added: 9 tests for `/api/print/*` routes
+  - `email.test.js` added: 12 tests for `/api/email/*` routes
   - `POST /api/sales` validates numeric price/quantity — non-numeric input returns 400
   - B-VARIANT production bug fixed: variant sales now decrement both `product_variants.stock` AND `outlet_stock`
   - `sales.shift_id` and `returns.shift_id` added (migrate63) and **written at sale/return creation** — shift reports use direct FK, not time-window matching
@@ -43,6 +44,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - Receipt system unified (Mar 2026): `frontend/src/utils/receipt.js` is the single source of truth for all receipt rendering — `buildReceiptSections(slip, template)` + `buildReceiptHtml(slip, template)` + `printToHardware(slip, template)`; POSContext fetches the active template on mount; Receipt Templates `header_text`, `footer_text`, `show_barcode` are now live in both print popup and modal
 - ESC/POS thermal printer integration (Mar 2026): `backend/services/printer.js` (PrinterService, USB+TCP, paper-width-aware), `backend/routes/printer.js` (`/api/print/receipt`, `/api/print/status`, `/api/print/config`), `printer_config` table (migrate64); `POSContext.printSlip` tries hardware first, falls back to browser popup; Printer Settings page at `/printer-settings` (all_access only)
 - Barcode scanner in POS (Mar 2026): `POSContext.jsx` global keydown listener — rapid keystroke detection (100ms debounce), calls `GET /api/products?barcode=<code>`, auto-adds first match to cart
+- Email receipts (Mar 2026): `backend/routes/email.js` (`/api/email/config`, `/api/email/test`, `/api/email/send-receipt`), `email_config` table (migrate65), `backend/utils/receiptEmail.js` (server-side HTML builder); `POSEmailReceiptModal.jsx` — on-demand send from Recent Sales panel + Receipt Modal; Email Settings section in Printer Settings page; nodemailer SMTP (Gmail/Outlook compatible); password never stored in frontend state
 
 ## Completed Baseline Before Testing Plan (as of 2026-03-05)
 
@@ -108,6 +110,7 @@ oneshoppos/
 │   │   ├── attribute-sets.js     # /api/attribute-sets
 │   │   ├── receipt-templates.js  # /api/receipt-templates + action history
 │   │   ├── printer.js            # /api/print/* (receipt, status, config)
+│   │   ├── email.js              # /api/email/* (config, test, send-receipt)
 │   │   ├── supplier-returns.js   # /api/supplier-returns
 │   │   ├── parked-sales.js       # /api/parked-sales
 │   │   ├── orders.js             # /api/orders
@@ -138,8 +141,9 @@ oneshoppos/
 │   ├── services/
 │   │   └── printer.js            # PrinterService — ESC/POS USB+TCP, paper-width-aware formatting, cash drawer
 │   ├── utils/
-│   │   └── tz.js                 # Timezone utils — toUtcStart/toUtcEnd for SaaS date filters
-│   └── migrate64.js              # Latest DB migration — READ THIS for schema questions
+│   │   ├── tz.js                 # Timezone utils — toUtcStart/toUtcEnd for SaaS date filters
+│   │   └── receiptEmail.js       # Server-side HTML receipt builder for email (inline CSS, no scripts)
+│   └── migrate65.js              # Latest DB migration — READ THIS for schema questions
 └── frontend/
     └── src/
         ├── components/           # Reusable UI components (all small, < 200 lines)
@@ -186,7 +190,7 @@ oneshoppos/
 - Reports routes are **modular**: `backend/routes/reports/` (8 files).
 - Tier 4 routes are **modular**: `backend/routes/tier4/` (7 files).
 - `registerAllRoutes.js` is now just an orchestrator (324 lines) — no routes defined there. Each domain is loaded via its modular directory.
-- Database schema: read only `backend/migrate63.js` (latest), never older migrations
+- Database schema: read only `backend/migrate65.js` (latest), never older migrations
 - Internal product categories are hierarchical; products and category promotions may target leaf categories only
 - Parent category filters expand to descendant leaves in products and reports
 - SQLite DB file: `backend/oneshop.db`
@@ -196,7 +200,8 @@ oneshoppos/
 
 - Find which file owns the route: check the table in this file above
 - Read ONLY that route file — do not read registerAllRoutes.js for route logic
-- Schema questions → `backend/migrate64.js` (latest)
+- Schema questions → `backend/migrate65.js` (latest)
+- Email receipt HTML builder (server-side) → `backend/utils/receiptEmail.js`
 - Category tree logic → `backend/category-tree.js`
 - Server middleware/config → `backend/index.js`
 - Timezone utilities → `backend/utils/tz.js` (`toUtcStart`, `toUtcEnd`, `toLocalDateStr`, `isValidTz`)
@@ -293,3 +298,4 @@ Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
 - Mar 2026: Receipt system unified — `frontend/src/utils/receipt.js` created as single source of truth; POSContext fetches active template; Receipt Templates `header_text`/`footer_text`/`show_barcode` now live in print popup and modal
 - Mar 2026: ESC/POS printer integration — `backend/services/printer.js` + `backend/routes/printer.js` + `printer_config` table (migrate64); `printToHardware()` in receipt.js; hardware-first print with browser fallback; Printer Settings at `/printer-settings`
 - Mar 2026: Barcode scanner — `POSContext.jsx` global keydown listener with 100ms debounce; calls existing products barcode endpoint; adds matched product to cart
+- Mar 2026: Email receipts — on-demand HTML email via SMTP (nodemailer); `email_config` table (migrate65); `backend/routes/email.js` (config CRUD + test + send-receipt); `backend/utils/receiptEmail.js` (server-side HTML builder); `POSEmailReceiptModal.jsx`; Email button in Recent Sales panel + Receipt Modal; Email Settings section in Printer Settings page
