@@ -66,6 +66,7 @@ export default function PurchaseOrdersRedesign() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [warn, setWarn] = useState("");
   const [search, setSearch] = useState("");
 
   const [selectedPo, setSelectedPo] = useState(null); // { purchaseOrder, items }
@@ -212,6 +213,7 @@ export default function PurchaseOrdersRedesign() {
   const createPO = async () => {
     setError("");
     setNotice("");
+    setWarn("");
     if (!form.supplier_id) {
       setError("Select a supplier first.");
       return;
@@ -240,7 +242,11 @@ export default function PurchaseOrdersRedesign() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create purchase order");
       await loadRows();
-      setNotice(`Purchase order ${poNumber(data.id)} created.`);
+      if (data.warning) {
+        setWarn(`PO ${poNumber(data.id)} created. Warning: ${data.warning}`);
+      } else {
+        setNotice(`Purchase order ${poNumber(data.id)} created.`);
+      }
       setView("list");
     } catch (e) {
       setError(e.message || "Failed to create purchase order");
@@ -673,6 +679,7 @@ export default function PurchaseOrdersRedesign() {
           {notice}
         </SectionCard>
       ) : null}
+      {warn && <SectionCard className="mb-3 border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">{warn}</SectionCard>}
 
       <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
         <SectionCard className="p-3">

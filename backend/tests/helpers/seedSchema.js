@@ -35,7 +35,10 @@ const TABLES = [
     contact_person TEXT,
     phone TEXT,
     email TEXT,
-    address TEXT
+    address TEXT,
+    payment_terms TEXT NOT NULL DEFAULT 'cash',
+    credit_days INTEGER NOT NULL DEFAULT 0,
+    credit_limit REAL NOT NULL DEFAULT 0
   )`,
   `CREATE TABLE IF NOT EXISTS roles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -211,7 +214,8 @@ const TABLES = [
     points_earned INTEGER DEFAULT 0,
     points_redeemed INTEGER DEFAULT 0,
     notes TEXT,
-    invoice_number TEXT
+    invoice_number TEXT,
+    shift_id INTEGER REFERENCES cash_shifts(id)
   )`,
   `CREATE TABLE IF NOT EXISTS sale_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -246,7 +250,8 @@ const TABLES = [
     total_refund REAL NOT NULL,
     refund_method TEXT NOT NULL,
     reason TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    shift_id INTEGER REFERENCES cash_shifts(id)
   )`,
   `CREATE TABLE IF NOT EXISTS return_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

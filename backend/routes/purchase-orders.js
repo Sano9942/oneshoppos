@@ -72,53 +72,81 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
       return res.status(400).json({ error: "Purchase order must have items" });
     }
 
-    db.serialize(() => {
-      db.run("BEGIN TRANSACTION");
+    db.get(
+      `SELECT s.payment_terms, s.credit_limit,
+              COALESCE(outstanding.balance, 0) AS running_balance
+       FROM suppliers s
+       LEFT JOIN (
+         SELECT si.supplier_id,
+                SUM(si.amount - COALESCE(sp.paid_amount, 0)) AS balance
+         FROM supplier_invoices si
+         LEFT JOIN (
+           SELECT supplier_invoice_id, SUM(amount) AS paid_amount
+           FROM supplier_payments GROUP BY supplier_invoice_id
+         ) sp ON sp.supplier_invoice_id = si.id
+         WHERE si.status != 'paid'
+         GROUP BY si.supplier_id
+       ) outstanding ON outstanding.supplier_id = s.id
+       WHERE s.id = ?`,
+      [supplier_id],
+      (sErr, supplier) => {
+        if (sErr) return res.status(500).json({ error: sErr.message });
+        let warningMsg = null;
+        if (
+          supplier &&
+          supplier.payment_terms === "credit" &&
+          Number(supplier.credit_limit) > 0 &&
+          Number(supplier.running_balance) + Number(total_cost) > Number(supplier.credit_limit)
+        ) {
+          warningMsg = `Credit limit exceeded. Outstanding: ${Number(supplier.running_balance).toFixed(2)}, Limit: ${Number(supplier.credit_limit).toFixed(2)}`;
+        }
 
-      db.run(
-        "INSERT INTO purchase_orders (supplier_id, total_cost, status, due_date) VALUES (?, ?, 'Draft', ?)",
-        [supplier_id, total_cost, due_date || null],
-        function (err) {
-          if (err) {
-            db.run("ROLLBACK");
-            return res.status(500).json({ error: "Failed to create PO" });
-          }
+        db.serialize(() => {
+          db.run("BEGIN TRANSACTION");
 
-          const poId = this.lastID;
-          const stmt = db.prepare(
-            "INSERT INTO purchase_order_items (po_id, product_id, quantity, cost_price) VALUES (?, ?, ?, ?)",
+          db.run(
+            "INSERT INTO purchase_orders (supplier_id, total_cost, status, due_date) VALUES (?, ?, 'Draft', ?)",
+            [supplier_id, total_cost, due_date || null],
+            function (err) {
+              if (err) {
+                db.run("ROLLBACK");
+                return res.status(500).json({ error: "Failed to create PO" });
+              }
+
+              const poId = this.lastID;
+              const stmt = db.prepare(
+                "INSERT INTO purchase_order_items (po_id, product_id, quantity, cost_price) VALUES (?, ?, ?, ?)",
+              );
+              let hasError = false;
+
+              items.forEach((item) => {
+                stmt.run(
+                  poId,
+                  item.product_id,
+                  item.quantity,
+                  item.cost_price,
+                  (err) => {
+                    if (err) hasError = true;
+                  },
+                );
+              });
+
+              stmt.finalize();
+
+              if (hasError) {
+                db.run("ROLLBACK");
+                return res.status(500).json({ error: "Transaction failed while adding items" });
+              }
+
+              db.run("COMMIT", (err) => {
+                if (err) return res.status(500).json({ error: "Failed to commit PO" });
+                res.json({ message: "Purchase order created", id: poId, ...(warningMsg && { warning: warningMsg }) });
+              });
+            },
           );
-          let hasError = false;
-
-          items.forEach((item) => {
-            stmt.run(
-              poId,
-              item.product_id,
-              item.quantity,
-              item.cost_price,
-              (err) => {
-                if (err) hasError = true;
-              },
-            );
-          });
-
-          stmt.finalize();
-
-          if (hasError) {
-            db.run("ROLLBACK");
-            return res
-              .status(500)
-              .json({ error: "Transaction failed while adding items" });
-          }
-
-          db.run("COMMIT", (err) => {
-            if (err)
-              return res.status(500).json({ error: "Failed to commit PO" });
-            res.json({ message: "Purchase order created", id: poId });
-          });
-        },
-      );
-    });
+        });
+      },
+    );
   });
 
   // Receive a purchase order (Updates Inventory Stock & Cost Price)
