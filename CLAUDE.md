@@ -9,8 +9,8 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 
 ## Current Status Snapshot (March 2026)
 
-- Latest migration is `backend/migrate65.js`
-- **Test suite: 283/285 Jest integration tests passing (2 pre-existing vitest-format failures in concurrency.test.js)**
+- Latest migration is `backend/migrate66.js`
+- **Test suite: 296/298 Jest integration tests passing (2 pre-existing vitest-format failures in concurrency.test.js)**
   - 7 new test files added in Phase 6: data-integrity, negative-cases, security, auditability, concurrency, failure-handling, compliance
   - `shift-linkage.test.js` added: 3 tests verifying `shift_id` written to sales and returns at creation
   - `printer.test.js` added: 9 tests for `/api/print/*` routes
@@ -48,6 +48,9 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - Cross-outlet reports (Mar 2026): all report endpoints now accept `outlet_id=1,2,3` (comma-separated); `buildReportFilterParts()` in `helpers.js` emits `IN(?,?)` for multi, `= ?` for single; `applyOutletFilter()` local helper in inventory, analytics, governance, sales, purchasing, staff; dashboard and finance use inline array expansion; frontend `Reports.jsx` uses `filters.outletIds[]` (array) with checkbox popover replacing single `<select>`
 - Email receipts (Mar 2026): `backend/routes/email.js` (`/api/email/config`, `/api/email/test`, `/api/email/send-receipt`), `email_config` table (migrate65), `backend/utils/receiptEmail.js` (server-side HTML builder); `POSEmailReceiptModal.jsx` — on-demand send from Recent Sales panel + Receipt Modal; Email Settings section in Printer Settings page; nodemailer SMTP (Gmail/Outlook compatible); password never stored in frontend state
 - SaaS Phase 1 complete (Mar 2026): `backend/schema-full.js` (live schema extractor via sqlite_master), `backend/master-db.js` (lazy-init master.db — tenant registry, 4 tables), `backend/tenant-db-manager.js` (in-memory connection pool, WAL+FK pragmas, graceful shutdown), `backend/tenant-provisioner.js` (CLI provisioner — directory, schema, seed data, transactional master.db registration); SCHEMA_VERSION=65; zero existing files modified; design at `docs/plans/2026-03-06-saas-phase1-design.md`
+- SaaS Phase 2 complete (Mar 2026): JWT auth infrastructure — `backend/jwt-auth.js` (sign/verify access+refresh tokens, SHA-256 hash); `migrate66.js` (bcrypt `pin_hash` column on `employees`); `master-db.js` gets `tenant_refresh_tokens` table; `routes/auth.js` — bcrypt PIN verification with plaintext fallback, plus multi-tenant routes (`mt-login`, `refresh`, `update-context`, `kiosk-login`) gated behind `MULTI_TENANT=1`; `index.js` — `loadTenantAndPerms` JWT middleware (toggled by env flag), `cookie-parser` for httpOnly refresh cookie; `backend/.env.example` documents all new env vars; design at `docs/plans/2026-03-06-saas-phase2-jwt-auth-design.md`
+- SaaS Phase 5 complete (Mar 2026): Super-Admin Dashboard — `backend/routes/admin.js` (13 endpoints: login, tenant CRUD, suspend/activate, migration runner, stats, PIN reset); `backend/tenant-migrate.js` (CLI + programmatic multi-tenant migration runner); `backend/seed-admin.js` (CLI super-admin seeder); frontend admin panel at `/admin/*` (5 pages: login, layout, dashboard, tenant list, tenant detail); admin JWT uses `jwt.sign()` directly with `role: "super_admin"` claim; routes mounted before tenant middleware in `index.js`; provisioner detects `pin_hash` column via PRAGMA for backward compat; `adminFetch` shared helper exported from `AdminLogin.jsx`; 296/298 tests passing
+- SaaS Phase 3+4 complete (Mar 2026): Multi-tenant DB proxy + frontend JWT integration — `backend/tenant-db-proxy.js` (AsyncLocalStorage + Proxy pattern, routes all DB calls to tenant DB transparently); `backend/tenant-multer.js` (tenant-aware upload storage factories); `backend/middleware/plan-limits.js` (enforces max_employees/products/outlets from master.db plan); `resolveTenant` middleware in `index.js` wraps each request in ALS context; `registerAllRoutes.js` wires tenant-scoped `/uploads` serving; upload destinations in `orders.js`, `barcode-expenses.js`, `tier4/company-profile.js` made tenant-aware; frontend: `AuthProvider.jsx` rewritten for JWT Bearer auth + silent refresh (401 retry with httpOnly cookie) + `window._nativeFetch` anti-recursion; `Login.jsx` gains Store Code field (VITE_MULTI_TENANT env var); `ContextSelect.jsx` calls `/api/auth/update-context` to re-sign JWT with outlet; `config.js` exports `IS_MULTI_TENANT`; `authStore.js` gains `readToken`/`writeToken`/`readTenantSlug` helpers; `.env.development` + `.env.production` files added; 296/298 tests passing (zero regressions)
 
 ## Completed Baseline Before Testing Plan (as of 2026-03-05)
 
@@ -87,6 +90,7 @@ oneshoppos/
 │   │   ├── taxes.js              # /api/taxes
 │   │   ├── categories.js         # /api/categories (hierarchical internal categories)
 │   │   ├── outlets.js            # /api/outlets
+│   │   ├── admin.js              # /api/admin/* (13 endpoints — super-admin auth, tenant CRUD, migrations)
 │   │   ├── auth.js               # /api/auth/*
 │   │   ├── employees.js          # /api/employees
 │   │   ├── roles.js              # /api/roles
@@ -147,6 +151,13 @@ oneshoppos/
 │   ├── master-db.js              # Lazy-init master.db — tenant registry (getMasterDb, closeMasterDb, initMasterDb)
 │   ├── tenant-db-manager.js      # In-memory connection pool for tenant SQLite DBs (getDb, closeDb, closeAll, healthCheck)
 │   ├── tenant-provisioner.js     # CLI: provisions new tenant (directory, schema, seed data, master.db registration)
+│   ├── tenant-migrate.js        # CLI + programmatic multi-tenant migration runner (reads backend/migrations/)
+│   ├── seed-admin.js            # CLI: seeds first super-admin in master.db
+│   ├── tenant-db-proxy.js        # AsyncLocalStorage + Proxy — routes all DB calls to per-request tenant DB
+│   ├── tenant-multer.js          # Tenant-aware multer storage factories (product images, logos, restore)
+│   ├── jwt-auth.js               # JWT utilities — signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken, hashToken
+│   ├── middleware/
+│   │   └── plan-limits.js        # Enforces tenant plan caps (max_employees, max_products, max_outlets)
 │   ├── category-tree.js          # Category tree enrichment, descendants, leaf validation
 │   ├── services/
 │   │   └── printer.js            # PrinterService — ESC/POS USB+TCP, paper-width-aware formatting, cash drawer
@@ -176,6 +187,12 @@ oneshoppos/
             ├── BarcodeTemplates.jsx      # wrapped by BarcodeTemplatesRedesign.jsx
             ├── ReceiptTemplates.jsx      # wrapped by ReceiptTemplatesRedesign.jsx
             ├── [*Route.jsx]              # Route files — each renders its redesign/ counterpart
+            ├── admin/                    # Super-admin dashboard (separate auth, separate layout)
+            │   ├── AdminLogin.jsx        # Login + shared adminFetch/getAdminSession/getAdminToken exports
+            │   ├── AdminLayout.jsx       # Sidebar layout with auth guard + <Outlet />
+            │   ├── AdminDashboard.jsx    # Stats cards, plan distribution, recent activity
+            │   ├── AdminTenantList.jsx   # Searchable table + provision modal
+            │   └── AdminTenantDetail.jsx # Details, edit, actions, usage stats, audit log
             └── redesign/                 # Active UI — ALL pages now rendered here
                 ├── POSRedesign.jsx
                 ├── KioskRedesign.jsx         # PIN clock-in terminal (standalone, no sidebar)
@@ -199,7 +216,9 @@ oneshoppos/
 - Shopify integration routes are **modular**: `backend/routes/shopify/` (8 files).
 - Reports routes are **modular**: `backend/routes/reports/` (11 files).
 - Tier 4 routes are **modular**: `backend/routes/tier4/` (7 files).
-- `registerAllRoutes.js` is now just an orchestrator (324 lines) — no routes defined there. Each domain is loaded via its modular directory.
+- `registerAllRoutes.js` is now just an orchestrator (~340 lines) — no routes defined there. Each domain is loaded via its modular directory. In MT mode, also wires `resolveTenant` + tenant-scoped `/uploads` serving.
+- **Super-admin routes**: `backend/routes/admin.js` is mounted in `index.js` BEFORE `registerAllRoutes` — this ensures admin endpoints bypass `loadTenantAndPerms`/`resolveTenant` middleware. Admin JWT uses `jwt.sign()` directly (not `signAccessToken`) because the shared utility strips custom claims like `role`/`aid`/`email`.
+- **Multi-tenant DB routing**: When `MULTI_TENANT=1`, `deps.db` is a Proxy (`tenant-db-proxy.js`) that delegates all calls to the tenant DB resolved from AsyncLocalStorage. Route closures that captured `db` at boot time transparently hit the correct tenant DB. Middleware order: `loadTenantAndPerms` (JWT verify) → `resolveTenant` (ALS context + `req.tenantDir`) → tenant-scoped `/uploads` → `loadCompanyProfile` → `resolveContext`.
 - Database schema: read only `backend/migrate65.js` (latest), never older migrations
 - Internal product categories are hierarchical; products and category promotions may target leaf categories only
 - Parent category filters expand to descendant leaves in products and reports
@@ -214,6 +233,12 @@ oneshoppos/
 - Email receipt HTML builder (server-side) → `backend/utils/receiptEmail.js`
 - Category tree logic → `backend/category-tree.js`
 - Server middleware/config → `backend/index.js`
+- Super-admin API → `backend/routes/admin.js` (13 endpoints, uses master.db directly)
+- Tenant migration runner → `backend/tenant-migrate.js` (CLI + programmatic)
+- Super-admin seeder → `backend/seed-admin.js`
+- Multi-tenant DB proxy → `backend/tenant-db-proxy.js` (AsyncLocalStorage + Proxy)
+- Tenant-aware uploads → `backend/tenant-multer.js` (storage factories)
+- Plan limit enforcement → `backend/middleware/plan-limits.js`
 - Timezone utilities → `backend/utils/tz.js` (`toUtcStart`, `toUtcEnd`, `toLocalDateStr`, `isValidTz`)
 - Shopify API calls → `backend/shopify/client.js`, webhook/retry logic → `backend/shopify/utils.js`
 - Shopify routes → `backend/routes/shopify/`
@@ -236,6 +261,7 @@ oneshoppos/
 - Category tree UI helpers: `frontend/src/utils/categoryTree.js`
 - UTC timestamp display helpers: `frontend/src/utils/dates.js` — use `fmtDate`/`fmtTime`/`fmtDateTime` (never `new Date(x.timestamp)` directly)
 - Tailwind v4: use `(--css-var)` syntax not `[var(--css-var)]`
+- **Super-admin pages**: `frontend/src/pages/admin/` — completely separate from POS auth and layout. Use `adminFetch` from `AdminLogin.jsx` for API calls. Admin session stored in `localStorage["adminSession"]` (not POS `"authSession"`). Routes at `/admin/*` in `App.jsx` bypass `RequireAuth`/`RequireContext`.
 
 ## Running Tests
 
@@ -248,8 +274,11 @@ oneshoppos/
 
 ### Global fetch interceptor (AuthProvider)
 - `AuthProvider.jsx` patches `window.fetch` to inject `x-outlet-id` + `x-scope-mode` headers
+- In MT mode (`IS_MULTI_TENANT`), also injects `Authorization: Bearer <token>` and `credentials: "include"` (for httpOnly refresh cookie)
 - Headers are ONLY injected when the URL contains `/api/` — missing the prefix = no context headers = "Context required" error
 - Always use `${API}/api/<route>` not `${API}/<route>` in frontend fetch calls
+- **Silent refresh**: On 401 with `TOKEN_EXPIRED` code, interceptor calls `POST /api/auth/refresh` via `window._nativeFetch` (bypasses interceptor), stores new access token, retries original request. Uses module-level `_refreshPromise` lock to prevent concurrent refreshes.
+- **Do NOT add `token` to the `useEffect` deps array** — the interceptor reads it live via `readToken()`. Adding it causes re-wrapping on every refresh.
 
 ### Sales table schema
 - The sale timestamp column is named `timestamp`, NOT `created_at` — using `created_at` silently returns undefined
@@ -314,3 +343,6 @@ Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
 - Mar 2026: Barcode scanner — `POSContext.jsx` global keydown listener with 100ms debounce; calls existing products barcode endpoint; adds matched product to cart
 - Mar 2026: Email receipts — on-demand HTML email via SMTP (nodemailer); `email_config` table (migrate65); `backend/routes/email.js` (config CRUD + test + send-receipt); `backend/utils/receiptEmail.js` (server-side HTML builder); `POSEmailReceiptModal.jsx`; Email button in Recent Sales panel + Receipt Modal; Email Settings section in Printer Settings page
 - Mar 2026: SaaS Phase 1 — master.db tenant registry (4 tables), lazy-init connection pool, CLI provisioner with transactional registration, schema-full extractor; 14 integration tests; SCHEMA_VERSION=65; zero existing files modified
+- Mar 2026: SaaS Phase 2 — JWT auth overhaul; bcrypt PIN hashing (migrate66); `jwt-auth.js` utility module; multi-tenant routes (`mt-login`, `refresh`, `kiosk-login`, `update-context`) gated behind `MULTI_TENANT=1`; `loadTenantAndPerms` middleware toggles with env flag; `cookie-parser` for httpOnly refresh cookies; `.env.example` added; 13 new tests; 296/298 passing
+- Mar 2026: SaaS Phase 3+4 — Multi-tenant DB proxy (`tenant-db-proxy.js`, AsyncLocalStorage + Proxy pattern); `resolveTenant` middleware wraps requests in ALS; `tenant-multer.js` tenant-aware upload factories; `plan-limits.js` enforces plan caps; tenant-scoped `/uploads` serving; upload destinations in `orders.js`, `barcode-expenses.js`, `company-profile.js` made tenant-aware; frontend JWT integration — `AuthProvider.jsx` silent refresh + Bearer auth; `Login.jsx` Store Code field (VITE_MULTI_TENANT); `ContextSelect.jsx` JWT re-sign on outlet select; `.env.development` + `.env.production`; 296/298 passing (zero regressions)
+- Mar 2026: SaaS Phase 5 — Super-Admin Dashboard; `routes/admin.js` (13 endpoints: login, tenant CRUD, suspend/activate/delete, migration runner, stats, PIN reset); `tenant-migrate.js` (CLI + programmatic migration runner, reads `backend/migrations/`); `seed-admin.js` (super-admin seeder); admin JWT uses `jwt.sign()` directly with `role: "super_admin"` claim; routes mounted before tenant middleware; frontend: 5 admin pages at `/admin/*` (Login, Layout, Dashboard, TenantList, TenantDetail); `adminFetch` shared helper; separate auth session in localStorage; provisioner now detects `pin_hash` column via PRAGMA; SCHEMA_VERSION=66; 296/298 passing

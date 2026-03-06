@@ -41,6 +41,11 @@ import HRManagementRoute from "./pages/HRManagementRoute";
 import CompanySettingsRoute from "./pages/CompanySettingsRoute";
 import POSRoute from "./pages/POSRoute";
 import KioskRedesign from "./pages/redesign/KioskRedesign";
+import AdminLogin from "./pages/admin/AdminLogin";
+import AdminLayout from "./pages/admin/AdminLayout";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminTenantList from "./pages/admin/AdminTenantList";
+import AdminTenantDetail from "./pages/admin/AdminTenantDetail";
 import OrdersRoute from "./pages/OrdersRoute";
 import CustomersRoute from "./pages/CustomersRoute";
 import SalesHistoryRoute from "./pages/SalesHistoryRoute";
@@ -101,6 +106,14 @@ function App() {
             </RequireAuth>
           }
         />
+
+        {/* Super-Admin Dashboard — separate auth, no POS guards */}
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin" element={<AdminLayout />}>
+          <Route index element={<AdminDashboard />} />
+          <Route path="tenants" element={<AdminTenantList />} />
+          <Route path="tenants/:id" element={<AdminTenantDetail />} />
+        </Route>
 
         <Route
           element={

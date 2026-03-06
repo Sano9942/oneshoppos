@@ -46,7 +46,18 @@
       "Bash(npx jest --testPathPattern=\"tests/integration\" --no-coverage)",
       "Bash(npx jest --testPathPatterns=\"tests/integration\" --no-coverage)",
       "Bash(npx jest backend/tests/integration/saas-phase1.test.js --no-coverage)",
-      "Bash(npx jest tests/integration/saas-phase1.test.js --no-coverage)"
+      "Bash(npx jest tests/integration/saas-phase1.test.js --no-coverage)",
+      "Read(//c/Users/HP/.claude/plugins/cache/claude-plugins-official/superpowers/4.3.1/skills/subagent-driven-development/**)",
+      "Bash(npx jest tests/integration/auth.test.js --no-coverage)",
+      "Bash(npx jest tests/integration/auth-jwt.test.js --no-coverage)",
+      "Bash(npx jest tests/integration/employees.test.js --no-coverage)",
+      "Bash(npx jest tests/integration/crud_employees.test.js --no-coverage)",
+      "Bash(npx jest tests/integration/auth-jwt.test.js tests/integration/auth.test.js --no-coverage)",
+      "Bash(npx jest tests/integration/ --no-coverage --forceExit)",
+      "Bash(npx jest --forceExit --no-verbose)",
+      "Bash(npx jest tests/integration/saas-phase1.test.js --forceExit --no-verbose)",
+      "Bash(npx jest tests/integration/saas-phase1.test.js --forceExit --verbose)",
+      "Bash(cmd.exe /c start-pos.bat)"
     ],
     "additionalDirectories": [
       "\\tmp"

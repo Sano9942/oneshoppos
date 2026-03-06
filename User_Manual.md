@@ -267,3 +267,11 @@ Payment gateway ✅ Yes (but better after JWT) Better after SaaS Phase 2
 2FA/MFA ✅ Yes (but better with JWT) Better after SaaS Phase 2
 SaaS Phase 1 ✅ Yes All other SaaS phases
 SaaS Phase 2+ ❌ Needs Phase 1 first Sequential
+
+# Seed the first super-admin
+
+node backend/seed-admin.js --email admin@example.com --password secret123
+
+# Access the admin panel
+
+# Navigate to http://localhost:5173/admin/logins
