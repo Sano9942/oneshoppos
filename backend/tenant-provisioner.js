@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
 const { extractSchema } = require('./schema-full');
-const { masterDb, initMasterDb } = require('./master-db');
+const { getMasterDb, closeMasterDb, initMasterDb } = require('./master-db');
 
 const TENANTS_DIR = path.join(__dirname, 'tenants');
 const SCHEMA_VERSION = 65;
@@ -39,38 +39,52 @@ function validateSlug(slug) {
 // --- Master DB helpers ---
 function slugExists(slug) {
   return new Promise((resolve, reject) => {
-    masterDb.get('SELECT id FROM tenants WHERE slug = ?', [slug], (err, row) => {
+    getMasterDb().get('SELECT id FROM tenants WHERE slug = ?', [slug], (err, row) => {
       if (err) return reject(err);
       resolve(!!row);
     });
   });
 }
 
-function insertTenant({ slug, name, ownerEmail, timezone, dbPath }) {
+/**
+ * Inserts tenant row + audit log inside a single transaction.
+ * If either fails, the transaction is rolled back — no orphaned rows.
+ */
+function registerTenantWithAudit({ slug, name, ownerEmail, timezone, dbPath }) {
+  const db = getMasterDb();
   return new Promise((resolve, reject) => {
-    masterDb.run(
-      `INSERT INTO tenants (slug, name, owner_email, status, plan, db_path, timezone)
-       VALUES (?, ?, ?, 'active', 'free', ?, ?)`,
-      [slug, name, ownerEmail, dbPath, timezone],
-      function (err) {
-        if (err) return reject(err);
-        resolve(this.lastID);
-      }
-    );
-  });
-}
+    db.run('BEGIN TRANSACTION', (err) => {
+      if (err) return reject(new Error(`BEGIN failed: ${err.message}`));
 
-function insertAuditLog(tenantId, slug, timezone) {
-  return new Promise((resolve, reject) => {
-    masterDb.run(
-      `INSERT INTO tenant_audit_log (tenant_id, action, details, actor)
-       VALUES (?, 'created', ?, 'system')`,
-      [tenantId, JSON.stringify({ slug, timezone, provisioned_at: new Date().toISOString() })],
-      (err) => {
-        if (err) return reject(err);
-        resolve();
-      }
-    );
+      db.run(
+        `INSERT INTO tenants (slug, name, owner_email, status, plan, db_path, timezone)
+         VALUES (?, ?, ?, 'active', 'free', ?, ?)`,
+        [slug, name, ownerEmail, dbPath, timezone],
+        function (err) {
+          if (err) {
+            return db.run('ROLLBACK', () => reject(new Error(`Tenant insert failed: ${err.message}`)));
+          }
+          const tenantId = this.lastID;
+
+          db.run(
+            `INSERT INTO tenant_audit_log (tenant_id, action, details, actor)
+             VALUES (?, 'created', ?, 'system')`,
+            [tenantId, JSON.stringify({ slug, timezone, provisioned_at: new Date().toISOString() })],
+            (err) => {
+              if (err) {
+                return db.run('ROLLBACK', () => reject(new Error(`Audit log failed: ${err.message}`)));
+              }
+              db.run('COMMIT', (err) => {
+                if (err) {
+                  return db.run('ROLLBACK', () => reject(new Error(`COMMIT failed: ${err.message}`)));
+                }
+                resolve(tenantId);
+              });
+            }
+          );
+        }
+      );
+    });
   });
 }
 
@@ -228,11 +242,11 @@ async function main() {
     resolve();
   }));
 
-  // Step 4: Register in master.db
+  // Step 4: Register in master.db + audit log (single transaction)
   console.log('[4/5] Registering tenant in master.db...');
   let tenantId;
   try {
-    tenantId = await insertTenant({
+    tenantId = await registerTenantWithAudit({
       slug: args.slug,
       name: args.name,
       ownerEmail: args.ownerEmail,
@@ -241,29 +255,12 @@ async function main() {
     });
   } catch (err) {
     fs.rmSync(tenantDir, { recursive: true, force: true });
-    await new Promise((resolve) => masterDb.close((e) => {
-      if (e) console.error('[provisioner] masterDb close error:', e.message);
-      resolve();
-    }));
+    await closeMasterDb();
     throw new Error(`master.db registration failed: ${err.message}`);
   }
 
-  // Step 5: Audit log
-  console.log('[5/5] Writing audit log...');
-  try {
-    await insertAuditLog(tenantId, args.slug, args.timezone);
-  } catch (err) {
-    await new Promise((resolve) => masterDb.close((e) => {
-      if (e) console.error('[provisioner] masterDb close error:', e.message);
-      resolve();
-    }));
-    throw new Error(`Audit log failed: ${err.message}`);
-  }
-
-  await new Promise((resolve) => masterDb.close((e) => {
-    if (e) console.error('[provisioner] masterDb close error:', e.message);
-    resolve();
-  }));
+  console.log('[5/5] Audit log written.');
+  await closeMasterDb();
 
   console.log('\n\u2705 Tenant provisioned successfully!');
   console.log(`   tenant_id:   ${tenantId}`);

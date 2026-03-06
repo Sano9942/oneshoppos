@@ -1,19 +1,44 @@
 // backend/master-db.js
-// Opens master.db (the tenant registry) and initializes its schema.
-// Exports: masterDb — the open sqlite3.Database handle.
+// Opens master.db (the tenant registry) lazily on first use and initializes its schema.
+// Exports: getMasterDb() — returns the open sqlite3.Database handle (opens on first call).
 
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 
 const MASTER_DB_PATH = path.join(__dirname, 'master.db');
 
-const masterDb = new sqlite3.Database(MASTER_DB_PATH, (err) => {
-  if (err) {
-    console.error('[master-db] Failed to open master.db:', err.message);
-    process.exit(1);
-  }
-  console.log('[master-db] Opened master.db at', MASTER_DB_PATH);
-});
+let _db = null;
+
+/**
+ * Returns the master.db handle, opening it lazily on first call.
+ * Subsequent calls return the same cached handle.
+ */
+function getMasterDb() {
+  if (_db) return _db;
+  _db = new sqlite3.Database(MASTER_DB_PATH, (err) => {
+    if (err) {
+      _db = null;
+      console.error('[master-db] Failed to open master.db:', err.message);
+      process.exit(1);
+    }
+    console.log('[master-db] Opened master.db at', MASTER_DB_PATH);
+  });
+  return _db;
+}
+
+/**
+ * Closes the master.db handle if open. Returns a Promise.
+ */
+function closeMasterDb() {
+  return new Promise((resolve) => {
+    if (!_db) return resolve();
+    _db.close((err) => {
+      if (err) console.error('[master-db] close error:', err.message);
+      _db = null;
+      resolve();
+    });
+  });
+}
 
 const MASTER_SCHEMA = `
 PRAGMA foreign_keys = ON;
@@ -65,8 +90,9 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 
 // Initialize schema — runs once on first open, idempotent thereafter.
 function initMasterDb() {
+  const db = getMasterDb();
   return new Promise((resolve, reject) => {
-    masterDb.exec(MASTER_SCHEMA, (err) => {
+    db.exec(MASTER_SCHEMA, (err) => {
       if (err) return reject(new Error(`[master-db] Schema init failed: ${err.message}`));
       console.log('[master-db] Schema initialized.');
       resolve();
@@ -74,4 +100,4 @@ function initMasterDb() {
   });
 }
 
-module.exports = { masterDb, initMasterDb, MASTER_DB_PATH };
+module.exports = { getMasterDb, closeMasterDb, initMasterDb, MASTER_DB_PATH };

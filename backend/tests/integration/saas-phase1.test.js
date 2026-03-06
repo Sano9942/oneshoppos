@@ -47,11 +47,11 @@ describe('schema-full.js', () => {
 
 describe('master-db.js', () => {
   test('initMasterDb creates all 4 master tables', async () => {
-    const { masterDb, initMasterDb } = require('../../master-db');
+    const { getMasterDb, initMasterDb } = require('../../master-db');
     await initMasterDb();
 
     const rows = await new Promise((resolve, reject) => {
-      masterDb.all(
+      getMasterDb().all(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
         [],
         (err, rows) => (err ? reject(err) : resolve(rows))

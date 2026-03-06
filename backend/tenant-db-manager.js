@@ -6,7 +6,7 @@
 const path = require('path');
 const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
-const { masterDb } = require('./master-db');
+const { getMasterDb } = require('./master-db');
 
 // Map<tenantId (number), sqlite3.Database>
 const pool = new Map();
@@ -20,7 +20,7 @@ function getDb(tenantId) {
   return new Promise((resolve, reject) => {
     if (pool.has(tenantId)) return resolve(pool.get(tenantId));
 
-    masterDb.get('SELECT * FROM tenants WHERE id = ?', [tenantId], (err, tenant) => {
+    getMasterDb().get('SELECT * FROM tenants WHERE id = ?', [tenantId], (err, tenant) => {
       if (err) return reject(err);
       if (!tenant) return reject(new Error(`Tenant ${tenantId} not found in master.db`));
       if (tenant.status !== 'active') return reject(new Error(`Tenant ${tenantId} is ${tenant.status}`));
