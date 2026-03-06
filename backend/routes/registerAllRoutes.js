@@ -341,6 +341,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: PRINTER (ESC/POS hardware) ---
   require("./printer")(app, deps);
 
+  // --- ROUTES: EMAIL (SMTP receipt delivery) ---
+  require("./email")(app, deps);
+
   // --- SUPPLIER RETURNS (RMA) ---
   require("./supplier-returns")(app, deps);
 
