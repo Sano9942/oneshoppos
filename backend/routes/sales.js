@@ -168,7 +168,7 @@ module.exports = function registerSalesRoutes(app, deps) {
              COALESCE(s.discount_amount, 0) as discount_amount, s.discount_type,
              s.invoice_number, s.outlet_id,
              o.name as outlet_name, e.name as employee_name,
-             c.name as customer_name,
+             c.name as customer_name, c.email as customer_email,
              COUNT(si.id) as item_count
       FROM sales s
       LEFT JOIN outlets o ON s.outlet_id = o.id

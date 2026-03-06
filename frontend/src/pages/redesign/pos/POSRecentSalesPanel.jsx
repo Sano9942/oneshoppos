@@ -1,5 +1,6 @@
-import React, { useMemo } from "react";
-import { X, Printer, RotateCcw, Search } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { X, Printer, RotateCcw, Search, Mail } from "lucide-react";
+import POSEmailReceiptModal from "./POSEmailReceiptModal";
 import { API_BASE as API } from "../../../config";
 import { usePOS } from "./POSContext";
 import { fmtDateTime, fmtTime } from "../../../utils/dates";
@@ -33,6 +34,8 @@ export default function POSRecentSalesPanel() {
         String(s.customer_name || "").toLowerCase().includes(q),
     );
   }, [recentSales, recentSalesSearch]);
+
+  const [emailTarget, setEmailTarget] = useState(null);
 
   if (!recentSalesOpen) return null;
 
@@ -125,6 +128,14 @@ export default function POSRecentSalesPanel() {
                   <Printer size={12} /> Reprint
                 </button>
                 <button
+                  onClick={() =>
+                    setEmailTarget({ saleId: sale.id, customerEmail: sale.customer_email || "" })
+                  }
+                  className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium"
+                >
+                  <Mail size={12} /> Email
+                </button>
+                <button
                   onClick={() => openReturnFromSale(sale)}
                   className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-rose-200 text-rose-600 hover:bg-rose-50"
                 >
@@ -135,6 +146,13 @@ export default function POSRecentSalesPanel() {
           ))}
         </div>
       </div>
+      {emailTarget && (
+        <POSEmailReceiptModal
+          saleId={emailTarget.saleId}
+          customerEmail={emailTarget.customerEmail}
+          onClose={() => setEmailTarget(null)}
+        />
+      )}
     </div>
   );
 }
