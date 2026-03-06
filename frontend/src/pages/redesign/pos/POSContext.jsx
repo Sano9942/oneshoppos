@@ -10,7 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { API_BASE as API } from "../../../config";
 import { useAuth } from "../../../auth/AuthProvider";
 import { readContext } from "../../../auth/authStore";
-import { buildReceiptHtml } from "../../../utils/receipt";
+import { buildReceiptHtml, buildReceiptSections, printToHardware } from "../../../utils/receipt";
 
 const POSContext = createContext();
 const OPENING_DENOMS = [5000, 1000, 500, 100, 50, 20, 10];
@@ -603,8 +603,13 @@ export const POSProvider = ({ children }) => {
     );
   };
 
-  const printSlip = (s) => {
-    buildReceiptHtml(s, receiptTemplate);
+  const printSlip = async (s) => {
+    const result = await printToHardware(s, receiptTemplate);
+    if (result.fallback) {
+      // Printer offline or not configured — fall back to browser popup
+      buildReceiptHtml(s, receiptTemplate);
+    }
+    // If result.ok: silent hardware print succeeded, no browser popup needed
   };
 
   const completeSale = async () => {
