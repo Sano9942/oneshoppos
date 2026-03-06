@@ -218,3 +218,39 @@ Login uses:
 - **PIN:** employee PIN code
 
 Employee accounts are managed in the Employees section by an Administrator. Each employee's PIN is set when their account is created.
+
+Phase 6C is 5 deferred tracks — all blocked on pre-conditions that don't exist yet:
+
+Track What it is Blocked on
+Performance Load tests with 10k+ sales Need a large seed dataset + load tooling. Deferred until SaaS multi-tenant mode.
+Migration testing Schema diff before/after each migration Only matters when migrate62.js is written. Add tests alongside that migration.
+Backup/restore Test the backup/restore feature end-to-end Feature is flag-gated. Needs a snapshot fixture. Deferred to post-launch.
+Cross-browser Run E2E suite in Firefox/WebKit Zero new code needed — just add --project=firefox to the Playwright command when wanted.
+Observability Test that errors are logged correctly Pre-condition: structured log transport. Currently only console.error exists.
+Short version: Phase 6C has no work to do right now. Each track unlocks when something else ships first — a new migration, a log transport, SaaS mode, or post-launch. Nothing here should be worked on proactively.
+
+what is feature development
+Looking at the SAAS conversion plan and overall project state to understand what feature development means in this context:
+
+Read d:\newprojects\oneshoppos\SAAS_CONVERSION_PLAN.md (lines 2-81)
+Read d:\newprojects\oneshoppos\SAAS_CONVERSION_PLAN.md (lines 81-180)
+Here's the full picture of what "feature development" means for this project right now:
+
+Two Tracks of Feature Development
+Track A — SaaS Conversion (the big next thing)
+The SAAS_CONVERSION_PLAN.md lays out a full roadmap to convert OneShopPOS from a single-tenant local app to a cloud-hosted multi-tenant SaaS product:
+
+Phase What Status
+Pre-req Timezone fix ✅ Done (Post-5)
+Phase 1 Master DB + tenant management layer ❌ Not started
+Phase 2 JWT authentication overhaul ❌ Not started
+Phase 3 Multi-tenancy middleware (AsyncLocalStorage + DB proxy) ❌ Not started
+Phase 4+ Billing, admin dashboard, deployment ❌ Not started
+The key insight in the plan: because all 26 route files already use deps.db via dependency injection, the multi-tenant DB swap can be done at the middleware layer with zero changes to most routes.
+
+Track B — POS Feature Backlog
+New POS features (e.g. loyalty program improvements, new report types, new Shopify sync capabilities, etc.) — nothing currently queued.
+
+The natural next step is SaaS Phase 1 — it's purely additive (no existing files modified), creates the foundation everything else builds on, and the test infrastructure is now solid enough to support it properly.
+
+Want to start brainstorming/planning SaaS Phase 1?

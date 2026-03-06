@@ -81,7 +81,7 @@ export default function ContextSwitcher() {
         ) : (
           <MapPin size={13} className="text-(--ui-text-muted)" />
         )}
-        <span className="max-w-[120px] truncate">{label}</span>
+        <span className="max-w-30 truncate">{label}</span>
         <ChevronDown size={12} className="text-(--ui-text-muted)" />
       </button>
 

@@ -24,7 +24,21 @@
       "Bash(npm run test:smoke)",
       "Bash(npm run test:integration -- --reporter=verbose)",
       "Bash(npm run test:integration -- tests/integration/health.test.js)",
-      "Bash(npm run test:unit)"
+      "Bash(npm run test:unit)",
+      "Bash(npx jest tests/integration/shift-linkage.test.js --no-coverage)",
+      "Bash(npx jest --no-coverage)",
+      "Bash(npx jest tests/integration/concurrency.test.js tests/unit/tz.test.js --no-coverage)",
+      "Bash(npx jest tests/integration/shift-report-attribution.test.js --forceExit)",
+      "Bash(npx jest --forceExit)",
+      "Bash(npx jest tests/integration/ --forceExit)",
+      "Bash(npx jest --forceExit --testPathPattern=\"tests/integration/\\(shift|sales|returns|rbac|auth|shifts|inventory|context|smoke|supplier|purchase|reports_gov|failure|audit|data|negative|security|compliance|feature|health|shift-report\\)\")",
+      "Bash(npx jest tests/integration/po-credit-limit.test.js --forceExit)",
+      "Bash(npx jest tests/integration/promotions.test.js tests/integration/reports_accuracy.test.js tests/integration/hr_approvals.test.js --forceExit)",
+      "Bash(npx jest tests/integration/promotions.test.js --forceExit)",
+      "Bash(npx jest tests/integration/concurrency.test.js tests/unit/tz.test.js --forceExit)",
+      "Bash(npx jest --forceExit --testPathIgnorePatterns=\"promotions|reports_accuracy|hr_approvals|customers|crud_inventory|crud_settings|crud_operations|crud_employees|attendance\")",
+      "Bash(d:/newprojects/oneshoppos/REFACTOR_NOTES.md:*)",
+      "Bash(npx jest tests/integration/customers.test.js --forceExit)"
     ]
   }
 }

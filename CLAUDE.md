@@ -9,11 +9,13 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 
 ## Current Status Snapshot (March 2026)
 
-- Latest migration is `backend/migrate61.js`
-- **Test suite: 333/333 backend integration + 19/19 unit + 8/8 E2E — all passing (Phase 6 complete)**
+- Latest migration is `backend/migrate63.js`
+- **Test suite: 336/336 backend integration + 19/19 unit + 8/8 E2E — all passing**
   - 7 new test files added in Phase 6: data-integrity, negative-cases, security, auditability, concurrency, failure-handling, compliance
+  - `shift-linkage.test.js` added: 3 tests verifying `shift_id` written to sales and returns at creation
   - `POST /api/sales` validates numeric price/quantity — non-numeric input returns 400
   - B-VARIANT production bug fixed: variant sales now decrement both `product_variants.stock` AND `outlet_stock`
+  - `sales.shift_id` and `returns.shift_id` added (migrate63) — exact shift attribution, no time-window matching needed
 - Reports V2 core implementation is complete:
   - governance is integrated into the main reports workspace
   - report tabs were aligned to live backend payloads
@@ -130,7 +132,7 @@ oneshoppos/
 │   ├── category-tree.js          # Category tree enrichment, descendants, leaf validation
 │   ├── utils/
 │   │   └── tz.js                 # Timezone utils — toUtcStart/toUtcEnd for SaaS date filters
-│   └── migrate61.js              # Latest DB migration — READ THIS for schema questions
+│   └── migrate63.js              # Latest DB migration — READ THIS for schema questions
 └── frontend/
     └── src/
         ├── components/           # Reusable UI components (all small, < 200 lines)
@@ -175,7 +177,7 @@ oneshoppos/
 - Reports routes are **modular**: `backend/routes/reports/` (8 files).
 - Tier 4 routes are **modular**: `backend/routes/tier4/` (7 files).
 - `registerAllRoutes.js` is now just an orchestrator (324 lines) — no routes defined there. Each domain is loaded via its modular directory.
-- Database schema: read only `backend/migrate61.js` (latest), never older migrations
+- Database schema: read only `backend/migrate63.js` (latest), never older migrations
 - Internal product categories are hierarchical; products and category promotions may target leaf categories only
 - Parent category filters expand to descendant leaves in products and reports
 - SQLite DB file: `backend/oneshop.db`
@@ -185,7 +187,7 @@ oneshoppos/
 
 - Find which file owns the route: check the table in this file above
 - Read ONLY that route file — do not read registerAllRoutes.js for route logic
-- Schema questions → `backend/migrate61.js` (latest)
+- Schema questions → `backend/migrate63.js` (latest)
 - Category tree logic → `backend/category-tree.js`
 - Server middleware/config → `backend/index.js`
 - Timezone utilities → `backend/utils/tz.js` (`toUtcStart`, `toUtcEnd`, `toLocalDateStr`, `isValidTz`)
@@ -247,3 +249,4 @@ Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
 - Mar 2026: Context Unification shipped — mandatory post-login branch context, role-scope enforcement, header propagation (migrate61, 3 flags live)
 - Mar 2026: POS Recent Sales + Return/Exchange flow shipped — reprint bills, full refund, exchange with balance settlement
 - Mar 2026: SaaS timezone fix — all date filters converted from `date(col,'localtime')` (server OS timezone) to UTC range expansion via `backend/utils/tz.js`; `loadCompanyProfile` middleware added; `company_profile.timezone` (IANA string) now drives all date boundaries
+- Mar 2026: Shift linkage — `shift_id` added to `sales` and `returns` (migrate63); written at creation time; historical rows backfilled; replaces fragile time-window matching for shift reports
