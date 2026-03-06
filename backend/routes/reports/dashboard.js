@@ -21,15 +21,18 @@ module.exports = function (app, deps) {
       const monthStartStr = todayStr.slice(0, 7) + "-01";
       const monthStart = toUtcStart(monthStartStr, tz);
 
-      const outletId =
-        req.query?.outlet_id !== undefined &&
-        req.query?.outlet_id !== null &&
-        req.query?.outlet_id !== ""
-          ? Number(req.query.outlet_id)
-          : null;
+      const rawOutletId = req.query?.outlet_id;
+      const outletIds = rawOutletId
+        ? String(rawOutletId).split(",").map(Number).filter(Boolean)
+        : [];
 
-      const outletFilter = outletId !== null ? " AND s.outlet_id = ?" : "";
-      const outletParams = outletId !== null ? [outletId] : [];
+      const outletFilter =
+        outletIds.length === 1
+          ? " AND s.outlet_id = ?"
+          : outletIds.length > 1
+            ? ` AND s.outlet_id IN (${outletIds.map(() => "?").join(",")})`
+            : "";
+      const outletParams = outletIds.length ? outletIds : [];
 
       const zReport = await getQuery(
         `
@@ -190,13 +193,15 @@ module.exports = function (app, deps) {
       const totalCost = Number(metricRow.total_cost || 0);
       const todayGrossProfit = taxExclusive - totalCost;
 
-      const expenseWhere =
-        outletId !== null
-          ? "expense_date = ? AND outlet_id = ?"
-          : "expense_date = ?";
+      const expenseOutletFilter =
+        outletIds.length === 1
+          ? " AND outlet_id = ?"
+          : outletIds.length > 1
+            ? ` AND outlet_id IN (${outletIds.map(() => "?").join(",")})`
+            : "";
       const expenseRows = await getQuery(
-        `SELECT ROUND(COALESCE(SUM(amount), 0), 2) AS total FROM expenses WHERE ${expenseWhere}`,
-        outletId !== null ? [todayStr, outletId] : [todayStr],
+        `SELECT ROUND(COALESCE(SUM(amount), 0), 2) AS total FROM expenses WHERE expense_date = ?${expenseOutletFilter}`,
+        [todayStr, ...outletIds],
       );
       const todayExpenses = Number(expenseRows[0]?.total || 0);
       const todayProfit = Number((todayGrossProfit - todayExpenses).toFixed(2));
@@ -278,13 +283,13 @@ module.exports = function (app, deps) {
             COALESCE(SUM(os.quantity), 0) AS stock
           FROM products p
           LEFT JOIN outlet_stock os ON p.id = os.product_id
-          ${outletId !== null ? "AND os.outlet_id = ?" : ""}
+          ${outletIds.length === 1 ? "AND os.outlet_id = ?" : outletIds.length > 1 ? `AND os.outlet_id IN (${outletIds.map(() => "?").join(",")})` : ""}
           GROUP BY p.id
           HAVING stock <= CASE WHEN COALESCE(MAX(p.min_qty), 0) > 0 THEN MAX(p.min_qty) ELSE 10 END
           ORDER BY stock ASC, p.name ASC
           LIMIT 8
         `,
-        outletId !== null ? [outletId] : [],
+        outletIds.length ? [...outletIds] : [],
       );
 
       const inventoryValueRow = await getQuery(
@@ -296,9 +301,9 @@ module.exports = function (app, deps) {
           FROM outlet_stock os
           JOIN products p ON os.product_id = p.id
           WHERE os.quantity > 0
-          ${outletId !== null ? "AND os.outlet_id = ?" : ""}
+          ${outletIds.length === 1 ? "AND os.outlet_id = ?" : outletIds.length > 1 ? `AND os.outlet_id IN (${outletIds.map(() => "?").join(",")})` : ""}
         `,
-        outletId !== null ? [outletId] : [],
+        outletIds.length ? [...outletIds] : [],
       );
       const inventoryValue = inventoryValueRow[0] || {
         retail_value: 0,
@@ -341,7 +346,7 @@ module.exports = function (app, deps) {
             WHERE session_end IS NULL
               AND session_start >= ?
               AND session_start < ?
-              ${outletId !== null ? "AND outlet_id = ?" : ""}
+              ${outletIds.length === 1 ? "AND outlet_id = ?" : outletIds.length > 1 ? `AND outlet_id IN (${outletIds.map(() => "?").join(",")})` : ""}
           ) active ON active.employee_id = e.id
           LEFT JOIN (
             SELECT employee_id, COALESCE(SUM(duration_hours), 0) AS net_work_hours
@@ -350,13 +355,13 @@ module.exports = function (app, deps) {
               AND session_end IS NOT NULL
               AND session_start >= ?
               AND session_start < ?
-              ${outletId !== null ? "AND outlet_id = ?" : ""}
+              ${outletIds.length === 1 ? "AND outlet_id = ?" : outletIds.length > 1 ? `AND outlet_id IN (${outletIds.map(() => "?").join(",")})` : ""}
             GROUP BY employee_id
           ) work_hours ON work_hours.employee_id = e.id
           ORDER BY e.name ASC
         `,
-        outletId !== null
-          ? [todayStart, todayEnd, outletId, todayStart, todayEnd, outletId]
+        outletIds.length
+          ? [todayStart, todayEnd, ...outletIds, todayStart, todayEnd, ...outletIds]
           : [todayStart, todayEnd, todayStart, todayEnd],
       );
 
@@ -369,9 +374,9 @@ module.exports = function (app, deps) {
           LEFT JOIN return_items ri ON ri.return_id = r.id
           WHERE r.timestamp >= ?
             AND r.timestamp < ?
-          ${outletId !== null ? "AND r.outlet_id = ?" : ""}
+          ${outletIds.length === 1 ? "AND r.outlet_id = ?" : outletIds.length > 1 ? `AND r.outlet_id IN (${outletIds.map(() => "?").join(",")})` : ""}
         `,
-        outletId !== null ? [todayStart, todayEnd, outletId] : [todayStart, todayEnd],
+        [todayStart, todayEnd, ...outletIds],
       );
       const refundsToday = {
         count: Number(refundsTodayRows[0]?.refund_count || 0),
@@ -435,9 +440,9 @@ module.exports = function (app, deps) {
           JOIN grn_items gi ON gi.grn_id = grn.id
           WHERE grn.received_at >= ?
             AND grn.received_at < ?
-          ${outletId !== null ? "AND grn.outlet_id = ?" : ""}
+          ${outletIds.length === 1 ? "AND grn.outlet_id = ?" : outletIds.length > 1 ? `AND grn.outlet_id IN (${outletIds.map(() => "?").join(",")})` : ""}
         `,
-        outletId !== null ? [monthStart, todayEnd, outletId] : [monthStart, todayEnd],
+        [monthStart, todayEnd, ...outletIds],
       );
       const monthPurchases = Number(monthPurchasesRows[0]?.total || 0);
 
@@ -505,7 +510,7 @@ module.exports = function (app, deps) {
             FROM goods_received_notes grn
             JOIN grn_items gi ON gi.grn_id = grn.id
             WHERE grn.received_at >= ?
-              ${outletId !== null ? "AND grn.outlet_id = ?" : ""}
+              ${outletIds.length === 1 ? "AND grn.outlet_id = ?" : outletIds.length > 1 ? `AND grn.outlet_id IN (${outletIds.map(() => "?").join(",")})` : ""}
             GROUP BY date(grn.received_at, 'localtime')
           )
           SELECT
@@ -517,9 +522,7 @@ module.exports = function (app, deps) {
           LEFT JOIN purchase_daily ON purchase_daily.day = dates.day
           ORDER BY dates.day ASC
         `,
-        outletId !== null
-          ? [sixDaysAgoStr, todayStr, sixDaysAgoStart, ...outletParams, sixDaysAgoStart, outletId]
-          : [sixDaysAgoStr, todayStr, sixDaysAgoStart, ...outletParams, sixDaysAgoStart],
+        [sixDaysAgoStr, todayStr, sixDaysAgoStart, ...outletParams, sixDaysAgoStart, ...outletIds],
       );
 
       const attendanceDetails = attendanceToday.map((row) => {
