@@ -16,8 +16,18 @@ Thumbs.db
 # Claude Code IDE settings (local only)
 .claude/settings.local.json
 
+# Database files
+backend/oneshop.db
+backend/oneshop.db-shm
+backend/oneshop.db-wal
+backend/backups/
+backend/archive/legacy/database.sqlite
+
 # SaaS multi-tenant
 backend/master.db
 backend/master.db-shm
 backend/master.db-wal
 backend/tenants/
+
+# Local dev scripts with credentials
+START-ADMIN.bat
