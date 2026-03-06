@@ -18,11 +18,17 @@
 - Modify: `backend/index.js:51` — DB_PATH
 - Modify: `backend/index.js:886,891` — backup filename prefix
 - Modify: `backend/db.js:5` — dbPath
-- Modify: `backend/schema-full.js:10,12` — dbPath and error message
+- Modify: `backend/schema-full.js:2,10,12` — comment + dbPath + error message
+- Modify: `backend/preflight.js:4` — dbPath
+- Modify: `backend/seed_e2e.js:5` — dbPath
+- Modify: `backend/setup_toy_store_defaults.js:125` — db path
+- Modify: `backend/test_reports.js:3` — db path
+- Modify: `backend/test_zeros.js:4` — db path
 - Modify: `backend/routes/admin.js:207` — comment reference
 - Modify: `backend/tenant-provisioner.js:137` — comment reference
 - Modify: `backend/routes/barcode-expenses.js:386,484,488` — backup/restore filenames
-- Modify: `.gitignore` — update DB filename patterns
+- Modify: `.gitignore:20-22` — root gitignore DB patterns
+- Modify: `backend/.gitignore:10-13` — backend gitignore DB patterns
 
 **Step 1: Apply DB filename renames**
 
@@ -62,6 +68,36 @@ In `backend/schema-full.js:12`:
 Cannot open sanopos.db
 ```
 
+In `backend/preflight.js:4`:
+```js
+// OLD: const dbPath = path.resolve(__dirname, "oneshop.db");
+const dbPath = path.resolve(__dirname, "sanopos.db");
+```
+
+In `backend/seed_e2e.js:5`:
+```js
+// OLD: const dbPath = path.resolve(__dirname, "oneshop.db");
+const dbPath = path.resolve(__dirname, "sanopos.db");
+```
+
+In `backend/setup_toy_store_defaults.js:125`:
+```js
+// OLD: const db = new sqlite3.Database("oneshop.db");
+const db = new sqlite3.Database("sanopos.db");
+```
+
+In `backend/test_reports.js:3`:
+```js
+// OLD: const db = new sqlite3.Database("./oneshop.db");
+const db = new sqlite3.Database("./sanopos.db");
+```
+
+In `backend/test_zeros.js:4`:
+```js
+// OLD: const db = new sqlite3.Database(path.resolve(__dirname, "oneshop.db"));
+const db = new sqlite3.Database(path.resolve(__dirname, "sanopos.db"));
+```
+
 In `backend/routes/admin.js:207` and `backend/tenant-provisioner.js:137` — update comment text from "oneshop.db" to "sanopos.db".
 
 In `backend/routes/barcode-expenses.js:386`:
@@ -82,9 +118,11 @@ In `backend/routes/barcode-expenses.js:488`:
 `sanopos_restore_staged_${Date.now()}.db`
 ```
 
-**Step 2: Update .gitignore**
+**Step 2: Update both .gitignore files**
 
-Replace `backend/oneshop.db` patterns with `backend/sanopos.db` patterns.
+In root `.gitignore:20-22` — replace `backend/oneshop.db*` patterns with `backend/sanopos.db*`.
+
+In `backend/.gitignore:10-13` — replace `oneshop.db*` patterns with `sanopos.db*`.
 
 **Step 3: Rename the actual local DB file**
 
@@ -104,8 +142,10 @@ Expected: All tests pass.
 **Step 6: Commit**
 
 ```bash
-git add backend/index.js backend/db.js backend/schema-full.js backend/routes/admin.js \
-  backend/tenant-provisioner.js backend/routes/barcode-expenses.js .gitignore
+git add backend/index.js backend/db.js backend/schema-full.js backend/preflight.js \
+  backend/seed_e2e.js backend/setup_toy_store_defaults.js backend/test_reports.js \
+  backend/test_zeros.js backend/routes/admin.js backend/tenant-provisioner.js \
+  backend/routes/barcode-expenses.js .gitignore backend/.gitignore
 git commit -m "refactor: rename oneshop.db → sanopos.db (OneShopPOS → SanoPOS)"
 ```
 
@@ -115,10 +155,15 @@ git commit -m "refactor: rename oneshop.db → sanopos.db (OneShopPOS → SanoPO
 
 **Files:**
 - Modify: `frontend/index.html:9` — page title
+- Modify: `frontend/public/manifest.webmanifest:2-3` — PWA app name + short_name
 - Modify: `frontend/public/sw.js:1-2` — cache names
+- Modify: `frontend/src/components/AppLayoutRedesign.jsx:43` — sidebar brand text
+- Modify: `frontend/src/pages/admin/AdminLayout.jsx:25` — admin sidebar brand text
 - Modify: `frontend/src/utils/receipt.js:27` — fallback store name
 - Modify: `backend/utils/receiptEmail.js:14` — fallback store name
 - Modify: `backend/services/printer.js:76` — fallback store name
+- Modify: `backend/routes/email.js:66,96,98,166,168` — email from/subject defaults (5 refs)
+- Modify: `backend/routes/shopify/health.js:256` — UAT checklist text
 - Modify: `frontend/src/pages/PlaceholderPage.jsx:32` — text
 - Modify: `frontend/src/pages/ReceiptTemplates.jsx:9` — default header
 - Modify: `frontend/src/pages/redesign/PrinterSettingsRedesign.jsx:37,80,432` — from_name defaults
@@ -126,33 +171,62 @@ git commit -m "refactor: rename oneshop.db → sanopos.db (OneShopPOS → SanoPO
 - Modify: `frontend/src/pages/redesign/ShopifyIntegrationRedesign.jsx:33` — description text
 - Modify: `backend/package.json:2` — name field
 - Modify: `frontend/package.json:2` — name field
+- Modify: `backend/.env.example:1,9` — comment header + description
 - Modify: `backend/tests/helpers/seedSchema.js:2` — comment
+- Modify: `backend/tests/integration/email.test.js:28` — schema DEFAULT value
+- Modify: `frontend/tests/e2e/helpers/auth.js:33` — E2E assertion regex
+- Modify: `frontend/tests/e2e/rbac.spec.js:18` — E2E assertion regex
+- Modify: `frontend/tests/e2e/smoke-gate.spec.js:108,139` — E2E assertion regex
+- Modify: `START-ADMIN.bat:2,4,17,21` — window titles + echo text
+- Modify: `START-FRESH.bat:2,4,21,25` — window titles + echo text
 
 **Step 1: Apply all branding renames**
 
-All instances of `"OneShopPOS"` or `"OneShop POS"` become `"SanoPOS"`.
+All instances of `"OneShopPOS"` / `"OneShop POS"` / `"ONESHOPPOS"` become `"SanoPOS"` / `"SanoPOS"` / `"SANOPOS"`.
 All instances of `"oneshop-"` cache prefix become `"sanopos-"`.
 
-`frontend/index.html:9` → `<title>SanoPOS</title>`
+**Frontend HTML/PWA:**
+- `frontend/index.html:9` → `<title>SanoPOS</title>`
+- `frontend/public/manifest.webmanifest:2` → `"name": "SanoPOS"`
+- `frontend/public/manifest.webmanifest:3` → `"short_name": "SanoPOS"`
+- `frontend/public/sw.js:1-2` → `sanopos-static-v1`, `sanopos-api-v1`
 
-`frontend/public/sw.js:1-2`:
-```js
-const STATIC_CACHE = "sanopos-static-v1";
-const API_CACHE = "sanopos-api-v1";
-```
+**Frontend sidebar branding:**
+- `frontend/src/components/AppLayoutRedesign.jsx:43` → `SANOPOS`
+- `frontend/src/pages/admin/AdminLayout.jsx:25` → `SANOPOS`
 
-`frontend/src/utils/receipt.js:27` → fallback `"SanoPOS"`
-`backend/utils/receiptEmail.js:14` → fallback `"SanoPOS"`
-`backend/services/printer.js:76` → fallback `"SanoPOS"`
-`frontend/src/pages/ReceiptTemplates.jsx:9` → `header_text: "SanoPOS"`
-`frontend/src/pages/redesign/PrinterSettingsRedesign.jsx:37,80,432` → `"SanoPOS"`
-`frontend/src/pages/redesign/SalesHistoryRedesign.jsx:182` → `SanoPOS`
-`frontend/src/pages/redesign/ShopifyIntegrationRedesign.jsx:33` → `SanoPOS`
-`frontend/src/pages/PlaceholderPage.jsx:32` → `SanoPOS`
+**Frontend receipt/UI defaults:**
+- `frontend/src/utils/receipt.js:27` → fallback `"SanoPOS"`
+- `frontend/src/pages/ReceiptTemplates.jsx:9` → `header_text: "SanoPOS"`
+- `frontend/src/pages/redesign/PrinterSettingsRedesign.jsx:37,80,432` → `"SanoPOS"`
+- `frontend/src/pages/redesign/SalesHistoryRedesign.jsx:182` → `SanoPOS`
+- `frontend/src/pages/redesign/ShopifyIntegrationRedesign.jsx:33` → `SanoPOS`
+- `frontend/src/pages/PlaceholderPage.jsx:32` → `SanoPOS`
 
-`backend/package.json:2` → `"name": "sanopos-backend"`
-`frontend/package.json:2` → `"name": "sanopos-frontend"`
-`backend/tests/helpers/seedSchema.js:2` → "SanoPOS" in comment
+**Backend branding defaults:**
+- `backend/utils/receiptEmail.js:14` → fallback `"SanoPOS"`
+- `backend/services/printer.js:76` → fallback `"SanoPOS"`
+- `backend/routes/email.js:66,96,98,166,168` → all 5 `"OneShopPOS"` → `"SanoPOS"`
+- `backend/routes/shopify/health.js:256` → `"SanoPOS"` in UAT checklist
+
+**Package names:**
+- `backend/package.json:2` → `"name": "sanopos-backend"`
+- `frontend/package.json:2` → `"name": "sanopos-frontend"`
+
+**Env example:**
+- `backend/.env.example:1` → `# SanoPOS Backend Environment Variables`
+- `backend/.env.example:9` → update comment from `oneshop.db` to `sanopos.db`
+
+**Test files:**
+- `backend/tests/helpers/seedSchema.js:2` → `SanoPOS` in comment
+- `backend/tests/integration/email.test.js:28` → `DEFAULT 'SanoPOS'`
+- `frontend/tests/e2e/helpers/auth.js:33` → `/SANOPOS/i`
+- `frontend/tests/e2e/rbac.spec.js:18` → `/SANOPOS/i`
+- `frontend/tests/e2e/smoke-gate.spec.js:108,139` → `/SANOPOS/i`
+
+**BAT files (gitignored but on disk):**
+- `START-ADMIN.bat:2,4,17,21` → `SanoPOS`
+- `START-FRESH.bat:2,4,21,25` → `SanoPOS`
 
 **Step 2: Verify frontend builds**
 
@@ -163,9 +237,13 @@ Expected: Build succeeds.
 
 ```bash
 git add frontend/ backend/utils/receiptEmail.js backend/services/printer.js \
-  backend/package.json backend/tests/helpers/seedSchema.js
+  backend/routes/email.js backend/routes/shopify/health.js \
+  backend/package.json backend/.env.example \
+  backend/tests/helpers/seedSchema.js backend/tests/integration/email.test.js
 git commit -m "refactor: rename UI branding OneShopPOS → SanoPOS"
 ```
+
+Note: START-ADMIN.bat and START-FRESH.bat are gitignored — update on disk but don't commit.
 
 ---
 
@@ -452,11 +530,15 @@ git commit -m "feat: daily R2 backup script for master.db + tenant DBs"
 
 ---
 
-## Task 9: Update CLAUDE.md and docs
+## Task 9: Update CLAUDE.md, docs, and memory
 
 **Files:**
-- Modify: `CLAUDE.md`
-- Modify: `User_Manual.md`
+- Modify: `CLAUDE.md` — all branding + DB refs
+- Modify: `User_Manual.md` — all branding refs
+- Modify: `docs/POS_MASTER_BLUEPRINT.md` — branding
+- Modify: `docs/POS_EXTERNAL_RESOURCES.md` — branding
+- Modify: `docs/business-growth-mindmap.md` — branding
+- Modify: `docs/business-growth-diagram.md` — branding
 
 **Step 1: Update CLAUDE.md**
 
@@ -464,18 +546,32 @@ Replace all instances of:
 - `OneShopPOS` → `SanoPOS`
 - `oneshop.db` → `sanopos.db`
 - `oneshop_backup_` → `sanopos_backup_`
-
-Do NOT change: `SAAS_CONVERSION_PLAN.md`, `REFACTOR_NOTES.md`, `ONESHOPPOS_TESTING_STRATEGY.md`, `docs/archive/` — these are historical.
+- Keep reference to `ONESHOPPOS_TESTING_STRATEGY.md` filename (it's a link to the actual file)
 
 **Step 2: Update User_Manual.md**
 
 Same branding replacements.
 
-**Step 3: Commit**
+**Step 3: Update active docs/**
+
+- `docs/POS_MASTER_BLUEPRINT.md` — `OneShopPOS` → `SanoPOS`
+- `docs/POS_EXTERNAL_RESOURCES.md` — `OneShopPOS` → `SanoPOS`
+- `docs/business-growth-mindmap.md` — `OneShopPOS` → `SanoPOS`
+- `docs/business-growth-diagram.md` — `OneShopPOS` → `SanoPOS`
+
+Do NOT change: `SAAS_CONVERSION_PLAN.md`, `REFACTOR_NOTES.md`, `ONESHOPPOS_TESTING_STRATEGY.md`, `docs/archive/`, `docs/plans/` (except the Phase 6 docs themselves) — these are historical.
+
+**Step 4: Update memory file**
+
+Update `MEMORY.md` references from OneShopPOS → SanoPOS.
+
+**Step 5: Commit**
 
 ```bash
-git add CLAUDE.md User_Manual.md
-git commit -m "docs: rename OneShopPOS → SanoPOS in project docs"
+git add CLAUDE.md User_Manual.md docs/POS_MASTER_BLUEPRINT.md \
+  docs/POS_EXTERNAL_RESOURCES.md docs/business-growth-mindmap.md \
+  docs/business-growth-diagram.md
+git commit -m "docs: rename OneShopPOS → SanoPOS in active project docs"
 ```
 
 ---
