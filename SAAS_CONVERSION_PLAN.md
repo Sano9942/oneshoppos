@@ -16,7 +16,7 @@ OneShopPOS is a full-featured POS system currently running as a single-tenant lo
 
 ## Business Readiness Score (as of Mar 2026)
 
-**Overall: 81 / 100 — BETA quality. Suitable for early paying customers, not broad market launch.**
+**Overall: 83 / 100 — BETA quality. Suitable for early paying customers, not broad market launch.**
 
 | Dimension | Score | Status |
 |---|---|---|
@@ -29,15 +29,15 @@ OneShopPOS is a full-featured POS system currently running as a single-tenant lo
 | Shopify integration | 81 | 9 modules, bi-directional sync |
 | Security | 80 | Good app-layer, weak infra |
 | Data integrity | 87 | Transactions, shift linkage fixed |
-| Missing critical features | 65 | Gaps: payments, email, hardware |
-| Code quality / tests | 82 | 248 tests passing, modular |
+| Missing critical features | 72 | Gaps: payments, email; printer ✅ done |
+| Code quality / tests | 85 | 283/285 tests passing, modular |
 
 ### Top 5 product gaps to fix before broad launch
 1. **Payment gateway** (Stripe/Razorpay) — cash-only is a deal-breaker for most retail
-2. **Email receipts** (SMTP) — customers expect digital receipts
-3. **ESC/POS printer + cash drawer driver** — physical POS cashiers need this day one
+2. **Email receipts** (SMTP) — customers expect digital receipts *(in progress)*
+3. ~~**ESC/POS printer + cash drawer driver**~~ — ✅ **Done** (Mar 2026) — `backend/services/printer.js`, USB+TCP, hardware-first print with browser fallback, Printer Settings at `/printer-settings`
 4. **2FA / MFA** — security compliance requirement for B2B SaaS
-5. **All-outlets aggregate reports** — multi-location operators will demand this
+5. **All-outlets aggregate reports** — multi-location operators will demand this *(in progress)*
 
 ---
 
@@ -61,16 +61,17 @@ All 26 route files receive `db` via `deps` parameter — the AsyncLocalStorage p
 
 ---
 
-## Phase 1: Master Database & Tenant Management Layer
-**No existing files modified — purely additive**
+## Phase 1: Master Database & Tenant Management Layer — ✅ DONE (Mar 2026)
+**No existing files modified — purely additive. 14 integration tests passing.**
 
 ### New Files
 | File | Purpose |
 |------|---------|
-| `backend/master-db.js` | Master SQLite DB (`master.db`) — stores tenant registry |
-| `backend/tenant-db-manager.js` | Connection pool — given a `tenant_id`, returns correct `db` handle |
-| `backend/tenant-provisioner.js` | Creates new tenant: directory, DB file, schema, seed data |
-| `backend/schema-full.js` | Complete current schema as a single runnable script (extracted from migrate63.js + all prior migrations) — used to initialize new tenant DBs |
+| `backend/master-db.js` | Master SQLite DB (`master.db`) — lazy-init tenant registry (`getMasterDb()`, `closeMasterDb()`, `initMasterDb()`) |
+| `backend/tenant-db-manager.js` | Connection pool — `getDb(tenantId)` looks up master.db, opens + caches connection with WAL+FK pragmas; graceful SIGTERM/SIGINT shutdown |
+| `backend/tenant-provisioner.js` | CLI provisioner — directory, schema, seed data, transactional master.db registration (tenant row + audit log in single BEGIN/COMMIT) |
+| `backend/schema-full.js` | Extracts live `oneshop.db` schema via `sqlite_master` (read-only) — used to stamp out new tenant DBs |
+| `backend/tests/integration/saas-phase1.test.js` | 14 integration tests — schema extraction, master DB init, provisioner workflow, db manager pool |
 
 ### Master DB Schema (`master.db`)
 ```sql
@@ -143,13 +144,16 @@ backend/
 - Methods: `getDb(tenantId)` / `closeDb(tenantId)` / `closeAll()`
 - **Add:** `healthCheck(tenantId)` — verify DB file is readable + WAL not corrupted (run on startup)
 
-### Provisioner Seed Data
-When creating a new tenant, seed the following so they can log in immediately:
-- 1 default outlet (name from provisioning form)
-- 1 admin employee (PIN: `0000`, force-change on first login)
-- 1 admin role with all permissions
-- `company_profile` row with name + timezone from provisioning
-- Default tax entries (0% if unknown)
+### Provisioner Seed Data (implemented)
+CLI: `node backend/tenant-provisioner.js --slug <slug> --name <name> --timezone <tz> --pin <pin>`
+- 1 default outlet (name from `--name`)
+- 1 admin employee (PIN from `--pin`, column: `pin_code`)
+- 1 admin role with all 10 permissions (`all_access`, `manage_customers`, etc.)
+- Employee-outlet link
+- `company_profile` row (column: `company_name`) + timezone from `--timezone`
+- Default tax (0%)
+- `schema_migrations` version = 65 (matches live schema)
+- Transactional master.db registration: tenant row + audit log in single BEGIN/COMMIT
 
 ---
 
@@ -377,21 +381,23 @@ These are product improvements, independent of the SaaS infrastructure work:
 - Razorpay recommended for South Asian markets; Stripe for international
 - **This is the single biggest deal-breaker for paying customers**
 
-### 5b-2: Email Receipts — MEDIUM PRIORITY
+### 5b-2: Email Receipts — MEDIUM PRIORITY *(in progress)*
 - Add `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` env vars
 - New `backend/utils/mailer.js` — nodemailer wrapper
 - On `POST /api/sales` success: if `customer.email` exists + receipt_email opt-in, send HTML receipt
 - Use existing receipt template data to generate HTML email body
 - **Low effort, high customer satisfaction impact**
 
-### 5b-3: ESC/POS Printer + Cash Drawer — MEDIUM PRIORITY
-- Add `backend/utils/escpos.js` — wrapper around `escpos` npm package
-- `POST /api/receipt/print` — accepts sale_id, renders receipt, sends to printer
-- Cash drawer trigger on sale completion (GPIO or USB signal)
-- Browser-based: use `qz-tray` (QZ Tray bridge for web printing to local USB printers)
-- **Required for physical retail POS deployments**
+### 5b-3: ESC/POS Printer + Cash Drawer — ✅ DONE (Mar 2026)
+- `backend/services/printer.js` — `PrinterService` class, USB + TCP connections, paper-width-aware formatting, cash drawer trigger
+- `backend/routes/printer.js` — `POST /api/print/receipt`, `GET /api/print/status`, `GET|PUT /api/print/config`
+- `printer_config` table added in `migrate64.js`
+- `printToHardware(slip, template)` in `frontend/src/utils/receipt.js` — sends to `/api/print/receipt`
+- `POSContext.printSlip` tries hardware first, falls back to browser popup if `result.fallback`
+- Printer Settings UI at `/printer-settings` (all_access only) — connection type, paper size, cash drawer, test print
+- **No QZ Tray needed — direct USB/TCP from the Express backend**
 
-### 5b-4: All-Outlets Aggregate Reports — MEDIUM PRIORITY
+### 5b-4: All-Outlets Aggregate Reports — MEDIUM PRIORITY *(in progress)*
 - Modify report endpoints to accept `outlet_id=all` in addition to specific IDs
 - When `outlet_id=all`, remove outlet filter from SQL and aggregate across all outlets
 - Frontend: add "All Outlets" option to outlet selector in Reports header
@@ -550,11 +556,12 @@ Phase 7 (Billing)                            <-- whenever you're ready
 
 ## Verification Plan
 
-### After Phase 1
-- Run `node backend/tenant-provisioner.js --slug test-store --name "Test Store" --timezone "Asia/Karachi"`
-- Verify `backend/tenants/t_test-store/data.db` exists with full schema
-- Open in SQLite browser — confirm all 40+ tables exist, seed data present (outlet, employee, role)
-- Verify `schema_migrations` table has the latest version number
+### After Phase 1 — ✅ VERIFIED
+- `npx jest tests/integration/saas-phase1.test.js` — 14/14 passing
+- Provisioner creates tenant directory with all subdirs, DB with 80+ tables, all seed data
+- `schema_migrations` version = 65, master.db tenant row + audit log verified
+- Duplicate slug rejection tested, db-manager pool + healthCheck tested
+- Design: `docs/plans/2026-03-06-saas-phase1-design.md`
 
 ### After Phases 2-4
 - Start backend with `MULTI_TENANT=1`
@@ -602,7 +609,7 @@ Phase 7 (Billing)                            <-- whenever you're ready
 | 5 | `frontend/src/pages/admin/*.jsx` | Admin dashboard (5 pages) |
 | 5b | `backend/routes/payments.js` | Payment gateway integration |
 | 5b | `backend/utils/mailer.js` | Email receipt delivery |
-| 5b | `backend/utils/escpos.js` | ESC/POS printer + cash drawer |
+| 5b | ~~`backend/utils/escpos.js`~~ | ✅ Done — replaced by `backend/services/printer.js` (PrinterService, USB+TCP) |
 | 5b | `backend/scripts/backup-all-tenants.js` | Automated backup to R2 |
 | 6 | `backend/Dockerfile` | Container for deployment |
 | 6 | `backend/railway.toml` or `fly.toml` | Platform config |
@@ -626,6 +633,6 @@ Phase 7 (Billing)                            <-- whenever you're ready
 | 4 | `frontend/src/auth/AuthProvider.jsx` | JWT + silent refresh + suspension handling |
 | 4 | `frontend/src/pages/Login.jsx` | Store Code field + optional branding fetch |
 | 5 | `frontend/src/App.jsx` | Admin routes |
-| 5b | `backend/routes/sales.js` | Trigger email receipt + ESC/POS print on completion |
+| 5b | `backend/routes/sales.js` | Trigger email receipt on completion (ESC/POS print is client-side via POSContext.printSlip — not in sales.js) |
 | 5b | `backend/routes/reports/` | Accept `outlet_id=all` for aggregate reporting |
 | 5b | `frontend/src/pages/redesign/POSRedesign.jsx` | Card payment UI in checkout |

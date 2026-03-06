@@ -34,7 +34,22 @@
       "Bash(sed 's/.*CREATE TABLE //')",
       "Bash(sed 's/ .*//')",
       "Bash(sed 's/ \\(.*//')",
-      "Read(//d/newprojects/oneshoppos/frontend/**)"
+      "Read(//d/newprojects/oneshoppos/frontend/**)",
+      "Bash(python3 -c \":*)",
+      "Bash(npx jest tests/integration/crud_settings.test.js --no-coverage)",
+      "Bash(python3:*)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(printf \"test line\\\\n\")",
+      "Bash(printf \"const x = require\\(''path''\\);\\\\n\")",
+      "Bash(npx jest tests/integration/ --passWithNoTests)",
+      "Bash(npx jest tests/integration/saas-phase1.test.js --no-coverage --runInBand)",
+      "Bash(npx jest --testPathPattern=\"tests/integration\" --no-coverage)",
+      "Bash(npx jest --testPathPatterns=\"tests/integration\" --no-coverage)",
+      "Bash(npx jest backend/tests/integration/saas-phase1.test.js --no-coverage)",
+      "Bash(npx jest tests/integration/saas-phase1.test.js --no-coverage)"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
     ]
   }
 }

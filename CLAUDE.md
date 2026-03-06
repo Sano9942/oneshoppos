@@ -10,11 +10,12 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 ## Current Status Snapshot (March 2026)
 
 - Latest migration is `backend/migrate65.js`
-- **Test suite: 269/271 Jest integration tests passing (2 pre-existing vitest-format failures in concurrency.test.js)**
+- **Test suite: 283/285 Jest integration tests passing (2 pre-existing vitest-format failures in concurrency.test.js)**
   - 7 new test files added in Phase 6: data-integrity, negative-cases, security, auditability, concurrency, failure-handling, compliance
   - `shift-linkage.test.js` added: 3 tests verifying `shift_id` written to sales and returns at creation
   - `printer.test.js` added: 9 tests for `/api/print/*` routes
   - `email.test.js` added: 12 tests for `/api/email/*` routes
+  - `saas-phase1.test.js` added: 14 tests for schema extraction, master DB, provisioner, db manager
   - `POST /api/sales` validates numeric price/quantity — non-numeric input returns 400
   - B-VARIANT production bug fixed: variant sales now decrement both `product_variants.stock` AND `outlet_stock`
   - `sales.shift_id` and `returns.shift_id` added (migrate63) and **written at sale/return creation** — shift reports use direct FK, not time-window matching
@@ -44,7 +45,9 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - Receipt system unified (Mar 2026): `frontend/src/utils/receipt.js` is the single source of truth for all receipt rendering — `buildReceiptSections(slip, template)` + `buildReceiptHtml(slip, template)` + `printToHardware(slip, template)`; POSContext fetches the active template on mount; Receipt Templates `header_text`, `footer_text`, `show_barcode` are now live in both print popup and modal
 - ESC/POS thermal printer integration (Mar 2026): `backend/services/printer.js` (PrinterService, USB+TCP, paper-width-aware), `backend/routes/printer.js` (`/api/print/receipt`, `/api/print/status`, `/api/print/config`), `printer_config` table (migrate64); `POSContext.printSlip` tries hardware first, falls back to browser popup; Printer Settings page at `/printer-settings` (all_access only)
 - Barcode scanner in POS (Mar 2026): `POSContext.jsx` global keydown listener — rapid keystroke detection (100ms debounce), calls `GET /api/products?barcode=<code>`, auto-adds first match to cart
+- Cross-outlet reports (Mar 2026): all report endpoints now accept `outlet_id=1,2,3` (comma-separated); `buildReportFilterParts()` in `helpers.js` emits `IN(?,?)` for multi, `= ?` for single; `applyOutletFilter()` local helper in inventory, analytics, governance, sales, purchasing, staff; dashboard and finance use inline array expansion; frontend `Reports.jsx` uses `filters.outletIds[]` (array) with checkbox popover replacing single `<select>`
 - Email receipts (Mar 2026): `backend/routes/email.js` (`/api/email/config`, `/api/email/test`, `/api/email/send-receipt`), `email_config` table (migrate65), `backend/utils/receiptEmail.js` (server-side HTML builder); `POSEmailReceiptModal.jsx` — on-demand send from Recent Sales panel + Receipt Modal; Email Settings section in Printer Settings page; nodemailer SMTP (Gmail/Outlook compatible); password never stored in frontend state
+- SaaS Phase 1 complete (Mar 2026): `backend/schema-full.js` (live schema extractor via sqlite_master), `backend/master-db.js` (lazy-init master.db — tenant registry, 4 tables), `backend/tenant-db-manager.js` (in-memory connection pool, WAL+FK pragmas, graceful shutdown), `backend/tenant-provisioner.js` (CLI provisioner — directory, schema, seed data, transactional master.db registration); SCHEMA_VERSION=65; zero existing files modified; design at `docs/plans/2026-03-06-saas-phase1-design.md`
 
 ## Completed Baseline Before Testing Plan (as of 2026-03-05)
 
@@ -96,12 +99,15 @@ oneshoppos/
 │   │   ├── customers.js          # /api/customers + customer reports
 │   │   ├── sales.js              # /api/sales history
 │   │   ├── inventory.js          # /api/transfers + /api/adjustments
-│   │   ├── reports/                  # /api/reports/* (modular — 8 files)
+│   │   ├── reports/                  # /api/reports/* (modular — 11 files)
 │   │   │   ├── index.js              # Entry point — wires sub-modules, shared deps, exports scheduler
 │   │   │   ├── dashboard.js          # /api/reports/dashboard
 │   │   │   ├── sales.js              # /api/reports/sales-*
 │   │   │   ├── inventory.js          # /api/reports/inventory-*
 │   │   │   ├── analytics.js          # /api/reports/comparative-trends, /api/reports/heatmaps, etc.
+│   │   │   ├── finance.js            # /api/reports/profit-loss, /api/reports/tax-*, etc.
+│   │   │   ├── purchasing.js         # /api/reports/total-purchases, /api/reports/procurement-*
+│   │   │   ├── staff.js              # /api/reports/labor-performance, /api/reports/loss-prevention
 │   │   │   ├── governance.js         # /api/reports/schedules, /api/reports/saved-views
 │   │   │   ├── shifts.js             # /api/reports/shifts, /api/reports/cash-drawer
 │   │   │   └── helpers.js            # Shared SQL builders and formatters
@@ -137,6 +143,10 @@ oneshoppos/
 │   │   ├── client.js             # Shopify GraphQL API client (~525 lines)
 │   │   ├── utils.js              # Retry logic, webhook HMAC verification
 │   │   └── order-service.js      # upsertWebOrderFromShopifyPayload + stock policy helpers (factory)
+│   ├── schema-full.js            # Extracts live oneshop.db schema via sqlite_master (for new tenant DBs)
+│   ├── master-db.js              # Lazy-init master.db — tenant registry (getMasterDb, closeMasterDb, initMasterDb)
+│   ├── tenant-db-manager.js      # In-memory connection pool for tenant SQLite DBs (getDb, closeDb, closeAll, healthCheck)
+│   ├── tenant-provisioner.js     # CLI: provisions new tenant (directory, schema, seed data, master.db registration)
 │   ├── category-tree.js          # Category tree enrichment, descendants, leaf validation
 │   ├── services/
 │   │   └── printer.js            # PrinterService — ESC/POS USB+TCP, paper-width-aware formatting, cash drawer
@@ -187,7 +197,7 @@ oneshoppos/
 
 - Most API routes are in `backend/routes/<domain>.js` — read only the relevant file
 - Shopify integration routes are **modular**: `backend/routes/shopify/` (8 files).
-- Reports routes are **modular**: `backend/routes/reports/` (8 files).
+- Reports routes are **modular**: `backend/routes/reports/` (11 files).
 - Tier 4 routes are **modular**: `backend/routes/tier4/` (7 files).
 - `registerAllRoutes.js` is now just an orchestrator (324 lines) — no routes defined there. Each domain is loaded via its modular directory.
 - Database schema: read only `backend/migrate65.js` (latest), never older migrations
@@ -232,7 +242,7 @@ oneshoppos/
 - Use `npx jest <path>` for integration tests in `backend/tests/integration/` — these use Jest
 - `npm test` in `backend/` runs vitest — only works for files using vitest import syntax
 - 10+ test files use vitest `import` syntax (attendance, customers, promotions, etc.) — these FAIL under Jest; pre-existing and expected
-- Confirmed passing baseline: 248 Jest integration tests, 2 pre-existing failures (concurrency.test.js vitest format)
+- Confirmed passing baseline: 283 Jest integration tests, 2 pre-existing failures (concurrency.test.js vitest format)
 
 ## Common Gotchas
 
@@ -266,6 +276,10 @@ oneshoppos/
 - POS Recent Sales + Return/Exchange flow: `POSRecentSalesPanel.jsx` + `POSReturnExchangeModal.jsx` (both new, Mar 2026)
 - Receipt rendering: **all receipt logic lives in `frontend/src/utils/receipt.js`** — `buildReceiptSections(slip, template)` returns data, `buildReceiptHtml(slip, template)` opens the browser popup, `printToHardware(slip, template)` sends to hardware via `/api/print/receipt`; `POSContext.printSlip` tries hardware first (fallback to browser popup if `result.fallback`); `POSReceiptModal` calls `buildReceiptSections` for `storeName`/`footerText`/`showBarcode`; never duplicate receipt logic elsewhere
 
+### reports_accuracy.test.js uses vitest syntax
+- This file uses `import { describe, it, expect } from "vitest"` — it **always fails under `npx jest`** with `SyntaxError: Cannot use import statement outside a module`; this is pre-existing and expected
+- To run its tests, use `npm test` from `backend/` (vitest runner), not `npx jest`
+
 ### Migration db.close pattern
 - Always use `db.close((err) => { ... })` with a callback — without callback, close errors are silently swallowed and no completion log appears; see `migrate63.js` for the correct pattern
 
@@ -288,7 +302,7 @@ Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
 - Mar 2026: All frontend pages migrated to `redesign/` wrappers
 - Mar 2026: Hierarchical categories shipped (tree CRUD, leaf-only assignment)
 - Mar 2026: Shopify V2 — backend modularized (8 files), data model hardened (migrate60)
-- Mar 2026: Reports V2 — 8 backend + 6 frontend modules, 67 tabs, 74 endpoints
+- Mar 2026: Reports V2 — 11 backend + 10 frontend modules, 67 tabs, 74 endpoints
 - Mar 2026: POS opening/closing workflow hardened (branch + shift + attendance gating)
 - Mar 2026: Context Unification shipped — mandatory post-login branch context, role-scope enforcement, header propagation (migrate61, 3 flags live)
 - Mar 2026: POS Recent Sales + Return/Exchange flow shipped — reprint bills, full refund, exchange with balance settlement
@@ -299,3 +313,4 @@ Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
 - Mar 2026: ESC/POS printer integration — `backend/services/printer.js` + `backend/routes/printer.js` + `printer_config` table (migrate64); `printToHardware()` in receipt.js; hardware-first print with browser fallback; Printer Settings at `/printer-settings`
 - Mar 2026: Barcode scanner — `POSContext.jsx` global keydown listener with 100ms debounce; calls existing products barcode endpoint; adds matched product to cart
 - Mar 2026: Email receipts — on-demand HTML email via SMTP (nodemailer); `email_config` table (migrate65); `backend/routes/email.js` (config CRUD + test + send-receipt); `backend/utils/receiptEmail.js` (server-side HTML builder); `POSEmailReceiptModal.jsx`; Email button in Recent Sales panel + Receipt Modal; Email Settings section in Printer Settings page
+- Mar 2026: SaaS Phase 1 — master.db tenant registry (4 tables), lazy-init connection pool, CLI provisioner with transactional registration, schema-full extractor; 14 integration tests; SCHEMA_VERSION=65; zero existing files modified
