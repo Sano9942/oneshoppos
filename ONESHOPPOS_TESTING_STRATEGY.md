@@ -463,6 +463,24 @@ Before any release:
 
 ---
 
+## Manual Functional Parity Validation (High-Risk) - Problems Log
+
+Validation date: 2026-03-06  
+Validation mode: desk-check parity audit (frontend calls vs backend contracts).  
+Scope: RBAC/feature-flags, Shopify sync/reconciliation, reports wiring, attendance kiosk states.
+
+| ID | Flow | Problem (documented only) | Evidence | Impact | Status |
+|---|---|---|---|---|---|
+| MP-01 | Shopify reconciliation | Frontend expects `pos_qty` and `shopify_qty`, but backend returns `local_qty` and `external_qty`. | `frontend/src/pages/shopify/ShopifyReconciliation.jsx` uses `r.pos_qty`/`r.shopify_qty`; `backend/routes/shopify/reconciliation.js` returns `local_qty`/`external_qty`. | Reconciliation grid, diff math, and CSV export can show incorrect values/NaN. | Open |
+| MP-02 | Approvals (reconciliation fix) | Approvals UI posts reconciliation decisions to legacy endpoint `/api/reconciliation/inventory/:id/approve-fix` that is not implemented in current backend routes. | `frontend/src/pages/Approvals.jsx` `getApprovalEndpoint()` reconciliation branch; no matching route under `backend/routes/**`; active reconciliation routes are under `/api/integrations/shopify/reconciliation/**`. | Reconciliation approval actions fail from approvals screen. | Open |
+| MP-03 | Kiosk + feature flag | Kiosk reads `/api/feature-flags` without auth header; backend requires `x-employee-id`. On 401 fallback, kiosk lock flag is treated as disabled. | `frontend/src/pages/redesign/KioskRedesign.jsx` initial flags fetch; `backend/routes/registerAllRoutes.js` `/api/feature-flags` returns 401 without employee header. | `kiosk_context_locked` behavior is not reliably enforced in kiosk UI. | Open |
+| MP-04 | Feature-flag route gating | `Approvals` route is permission-gated but not feature-flag-gated in routing; users can navigate directly even if flag is off. | `frontend/src/App.jsx` route `/approvals` has `RequirePerm` only; backend route `/api/approvals` also requires feature flag. | UI route can load while API is feature-disabled, causing runtime failure states. | Open |
+| MP-05 | Shopify reconciliation bulk action UX | Frontend offers bulk `fix`, but backend returns `501` (`coming soon`); UI does not surface non-OK response in `runBulkAction`. | `backend/routes/shopify/reconciliation.js` bulk `fix` branch returns 501; `frontend/src/pages/shopify/ShopifyReconciliation.jsx` only handles `res.ok` success path. | User sees action available but gets no actionable error feedback. | Open |
+
+Notes:
+- These are documented parity/behavior gaps only. No fixes were applied in this pass.
+- Keep this section as the manual validation backlog for upcoming implementation sprints.
+
 ## Ownership and Maintenance
 
 - This file is the single source of truth for test priorities.

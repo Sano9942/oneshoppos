@@ -28,6 +28,7 @@ import {
   TableShell,
   CardShell,
 } from "./ReportShared";
+import { useAuth } from "../../auth/AuthProvider";
 
 // --- Tab: Sales & Stock -------------------------------------------------------
 export function SalesStockTab({ filters }) {
@@ -1468,6 +1469,7 @@ export function OnHandTab({ filters }) {
 
 // --- Tab: Replenishment -------------------------------------------------------
 export function ReplenishmentTab({ filters }) {
+  const { authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [drafting, setDrafting] = useState(false);
@@ -1504,17 +1506,53 @@ export function ReplenishmentTab({ filters }) {
     setDrafting(true);
     setDraftResult(null);
     try {
-      const res = await fetch(
-        `${API}/api/reports/replenishment/create-draft-pos`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items: rowsWithSuggestion, outlet_id: filters.outletId }),
-        },
+      const candidates = rowsWithSuggestion.filter(
+        (row) => Number(row.suggested_order || 0) > 0 && Number(row.supplier_id || 0) > 0,
       );
-      const d = await res.json();
-      setDraftResult(d);
-      if (d.success) load();
+      const grouped = new Map();
+      candidates.forEach((row) => {
+        const sid = Number(row.supplier_id || 0);
+        if (!grouped.has(sid)) grouped.set(sid, []);
+        grouped.get(sid).push(row);
+      });
+
+      let createdCount = 0;
+      const failed = [];
+      for (const [supplierId, supplierRows] of grouped.entries()) {
+        const items = supplierRows.map((row) => ({
+          product_id: Number(row.product_id),
+          quantity: Number(row.suggested_order || 0),
+          cost_price: Number(row.cost_price || 0),
+        }));
+        const total_cost = items.reduce(
+          (sum, item) => sum + Number(item.quantity || 0) * Number(item.cost_price || 0),
+          0,
+        );
+
+        const res = await fetch(`${API}/api/purchase-orders`, {
+          method: "POST",
+          headers: authHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({
+            supplier_id: supplierId,
+            total_cost,
+            items,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          createdCount += 1;
+        } else {
+          failed.push(`Supplier ${supplierId}: ${data.error || "Request failed"}`);
+        }
+      }
+
+      const result = {
+        success: failed.length === 0,
+        created_count: createdCount,
+        failed,
+      };
+      setDraftResult(result);
+      if (result.success) load();
     } catch (e) {
       alert("Error creating drafts: " + e.message);
     } finally {

@@ -9,10 +9,11 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 
 ## Current Status Snapshot (March 2026)
 
-- Latest migration is `backend/migrate63.js`
-- **Test suite: 248/250 Jest integration tests passing (2 pre-existing vitest-format failures in concurrency.test.js)**
+- Latest migration is `backend/migrate64.js`
+- **Test suite: 257/259 Jest integration tests passing (2 pre-existing vitest-format failures in concurrency.test.js)**
   - 7 new test files added in Phase 6: data-integrity, negative-cases, security, auditability, concurrency, failure-handling, compliance
   - `shift-linkage.test.js` added: 3 tests verifying `shift_id` written to sales and returns at creation
+  - `printer.test.js` added: 9 tests for `/api/print/*` routes
   - `POST /api/sales` validates numeric price/quantity — non-numeric input returns 400
   - B-VARIANT production bug fixed: variant sales now decrement both `product_variants.stock` AND `outlet_stock`
   - `sales.shift_id` and `returns.shift_id` added (migrate63) and **written at sale/return creation** — shift reports use direct FK, not time-window matching
@@ -39,6 +40,9 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - Context Unification is live — mandatory post-login branch selection, backend enforcement via `x-outlet-id` header, kiosk context lock
 - Current live E2E batches passing include report smokes plus `pos.spec.js`, `kiosk.spec.js`, and `rbac.spec.js`
 - POS Recent Sales panel and Return/Exchange modal shipped (Mar 2026)
+- Receipt system unified (Mar 2026): `frontend/src/utils/receipt.js` is the single source of truth for all receipt rendering — `buildReceiptSections(slip, template)` + `buildReceiptHtml(slip, template)` + `printToHardware(slip, template)`; POSContext fetches the active template on mount; Receipt Templates `header_text`, `footer_text`, `show_barcode` are now live in both print popup and modal
+- ESC/POS thermal printer integration (Mar 2026): `backend/services/printer.js` (PrinterService, USB+TCP, paper-width-aware), `backend/routes/printer.js` (`/api/print/receipt`, `/api/print/status`, `/api/print/config`), `printer_config` table (migrate64); `POSContext.printSlip` tries hardware first, falls back to browser popup; Printer Settings page at `/printer-settings` (all_access only)
+- Barcode scanner in POS (Mar 2026): `POSContext.jsx` global keydown listener — rapid keystroke detection (100ms debounce), calls `GET /api/products?barcode=<code>`, auto-adds first match to cart
 
 ## Completed Baseline Before Testing Plan (as of 2026-03-05)
 
@@ -103,6 +107,7 @@ oneshoppos/
 │   │   ├── attendance.js         # /api/attendance + /api/attendance/pin-* (kiosk) + /api/employees/:id/attendance-config
 │   │   ├── attribute-sets.js     # /api/attribute-sets
 │   │   ├── receipt-templates.js  # /api/receipt-templates + action history
+│   │   ├── printer.js            # /api/print/* (receipt, status, config)
 │   │   ├── supplier-returns.js   # /api/supplier-returns
 │   │   ├── parked-sales.js       # /api/parked-sales
 │   │   ├── orders.js             # /api/orders
@@ -130,9 +135,11 @@ oneshoppos/
 │   │   ├── utils.js              # Retry logic, webhook HMAC verification
 │   │   └── order-service.js      # upsertWebOrderFromShopifyPayload + stock policy helpers (factory)
 │   ├── category-tree.js          # Category tree enrichment, descendants, leaf validation
+│   ├── services/
+│   │   └── printer.js            # PrinterService — ESC/POS USB+TCP, paper-width-aware formatting, cash drawer
 │   ├── utils/
 │   │   └── tz.js                 # Timezone utils — toUtcStart/toUtcEnd for SaaS date filters
-│   └── migrate63.js              # Latest DB migration — READ THIS for schema questions
+│   └── migrate64.js              # Latest DB migration — READ THIS for schema questions
 └── frontend/
     └── src/
         ├── components/           # Reusable UI components (all small, < 200 lines)
@@ -167,7 +174,9 @@ oneshoppos/
                 ├── ReceiptTemplatesRedesign.jsx
                 └── [all other *Redesign.jsx files]
         └── utils/
-            └── categoryTree.js    # Frontend helpers for flattening/rendering category trees
+            ├── categoryTree.js    # Frontend helpers for flattening/rendering category trees
+            ├── dates.js           # UTC timestamp display helpers — fmtDate, fmtTime, fmtDateTime
+            └── receipt.js         # Single source of truth for receipt rendering — buildReceiptSections, buildReceiptHtml
 ```
 
 ## Key Architecture Facts
@@ -187,7 +196,7 @@ oneshoppos/
 
 - Find which file owns the route: check the table in this file above
 - Read ONLY that route file — do not read registerAllRoutes.js for route logic
-- Schema questions → `backend/migrate63.js` (latest)
+- Schema questions → `backend/migrate64.js` (latest)
 - Category tree logic → `backend/category-tree.js`
 - Server middleware/config → `backend/index.js`
 - Timezone utilities → `backend/utils/tz.js` (`toUtcStart`, `toUtcEnd`, `toLocalDateStr`, `isValidTz`)
@@ -210,6 +219,7 @@ oneshoppos/
 - Shared design-system primitives: `frontend/src/ui/primitives.jsx`
 - Shared components: `frontend/src/components/`
 - Category tree UI helpers: `frontend/src/utils/categoryTree.js`
+- UTC timestamp display helpers: `frontend/src/utils/dates.js` — use `fmtDate`/`fmtTime`/`fmtDateTime` (never `new Date(x.timestamp)` directly)
 - Tailwind v4: use `(--css-var)` syntax not `[var(--css-var)]`
 
 ## Running Tests
@@ -234,7 +244,14 @@ oneshoppos/
 - `attendance_sessions` and `employee_attendance` store **local time** (server OS) — this is intentional and self-consistent; do NOT change their write paths
 - `backend/utils/tz.js` provides `toUtcStart(dateStr, tz)` and `toUtcEnd(dateStr, tz)` — converts a local `YYYY-MM-DD` string in any IANA timezone to UTC boundary strings for direct `timestamp >= ?` / `timestamp < ?` SQL comparisons
 - `req.company.timezone` (IANA string, e.g. `'America/New_York'`) is set by the `loadCompanyProfile` middleware — use it in all date filter queries; **never use `date(col,'localtime')` for new queries on UTC-stored columns**
-- `company_profile.timezone` is the source of truth — set it per-tenant; defaults to `'UTC'` if unset or invalid
+
+### Displaying UTC timestamps in the frontend (CRITICAL — recurring bug)
+- **NEVER** use `new Date(x.timestamp)` or `new Date(x.created_at)` directly on values from the API — SQLite UTC strings like `"2026-03-06 08:56:04"` have no `Z` suffix, so browsers parse them as local time and `.toLocaleString()` shows the wrong (UTC) hour
+- **ALWAYS** use the shared utility at `frontend/src/utils/dates.js`:
+  - `fmtDateTime(str)` — date + time
+  - `fmtDate(str)` — date only
+  - `fmtTime(str, opts?)` — time only
+- Exception: `attendance_sessions` / `employee_attendance` fields are stored in local time — `new Date(dt)` is correct there
 
 ### POS architecture (`redesign/pos/`)
 - All POS state lives in `POSContext.jsx` — 128+ exported values. Add new state/functions here, mount new modals in `POSRedesign.jsx`
@@ -242,6 +259,10 @@ oneshoppos/
 - `POST /api/sales` requires: active shift + clocked-in employee — exchange sales from return flow will fail if shift is closed
 - `POST /api/sales` stock deduction: uses `item.variant_id` for variant stock (`product_variants` table), `item.id` for `outlet_stock` — always pass `variant_id` when known
 - POS Recent Sales + Return/Exchange flow: `POSRecentSalesPanel.jsx` + `POSReturnExchangeModal.jsx` (both new, Mar 2026)
+- Receipt rendering: **all receipt logic lives in `frontend/src/utils/receipt.js`** — `buildReceiptSections(slip, template)` returns data, `buildReceiptHtml(slip, template)` opens the browser popup, `printToHardware(slip, template)` sends to hardware via `/api/print/receipt`; `POSContext.printSlip` tries hardware first (fallback to browser popup if `result.fallback`); `POSReceiptModal` calls `buildReceiptSections` for `storeName`/`footerText`/`showBarcode`; never duplicate receipt logic elsewhere
+
+### Migration db.close pattern
+- Always use `db.close((err) => { ... })` with a callback — without callback, close errors are silently swallowed and no completion log appears; see `migrate63.js` for the correct pattern
 
 ### SQLite prepared statement finalize
 - Always use `stmt.finalize((err) => { ... })` with a callback — without callback, post-insert rollback logic is unreachable because `hasError` is checked synchronously before async run callbacks fire
@@ -269,3 +290,6 @@ Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
 - Mar 2026: SaaS timezone fix — all date filters converted from `date(col,'localtime')` (server OS timezone) to UTC range expansion via `backend/utils/tz.js`; `loadCompanyProfile` middleware added; `company_profile.timezone` (IANA string) now drives all date boundaries
 - Mar 2026: Shift linkage — `shift_id` added to `sales` and `returns` (migrate63); written at creation time; historical rows backfilled; replaces fragile time-window matching for shift reports
 - Mar 2026: PO credit limit enforcement — `POST /api/purchase-orders` warns when credit supplier exceeds limit; shift reports rewritten to use `shift_id` FK directly
+- Mar 2026: Receipt system unified — `frontend/src/utils/receipt.js` created as single source of truth; POSContext fetches active template; Receipt Templates `header_text`/`footer_text`/`show_barcode` now live in print popup and modal
+- Mar 2026: ESC/POS printer integration — `backend/services/printer.js` + `backend/routes/printer.js` + `printer_config` table (migrate64); `printToHardware()` in receipt.js; hardware-first print with browser fallback; Printer Settings at `/printer-settings`
+- Mar 2026: Barcode scanner — `POSContext.jsx` global keydown listener with 100ms debounce; calls existing products barcode endpoint; adds matched product to cart

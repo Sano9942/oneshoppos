@@ -50,9 +50,9 @@ function ProductModal({ product, categories, brands, authHeaders, onClose, onSav
 
   useEffect(() => {
     if (!isEdit || !product?.id) return;
-    fetch(`${API}/api/products/${product.id}/outlet-stock`, { headers: authHeaders() })
+    fetch(`${API}/api/products/${product.id}/stock`, { headers: authHeaders() })
       .then((r) => r.json())
-      .then((d) => setOutletStock(d.outletStock || []))
+      .then((d) => setOutletStock(d.stock || []))
       .catch(() => setOutletStock([]));
   }, [isEdit, product?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 

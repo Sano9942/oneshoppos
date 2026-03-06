@@ -31,12 +31,14 @@ const today = new Date().toISOString().slice(0, 10);
 const statusBadge = (status) => {
   const map = {
     present: "bg-emerald-100 text-emerald-800",
+    checked_out: "bg-blue-100 text-blue-800",
     absent: "bg-rose-100 text-rose-800",
     late: "bg-amber-100 text-amber-800",
   };
+  const label = status === "checked_out" ? "Checked Out" : status;
   return (
     <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold capitalize ${map[status] || "bg-slate-100 text-slate-700"}`}>
-      {status}
+      {label}
     </span>
   );
 };

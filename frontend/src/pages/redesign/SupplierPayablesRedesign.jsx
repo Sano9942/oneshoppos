@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, RefreshCw, X, BookOpen } from "lucide-react";
 import { API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
+import { fmtDate } from "../../utils/dates";
 import {
   Badge,
   Button,
@@ -345,7 +346,7 @@ export default function SupplierPayablesRedesign() {
                                       <Badge tone={STATUS_TONE[inv.status] || "default"}>{inv.status}</Badge>
                                     </td>
                                     <td className="py-1.5 text-(--ui-text-muted)">
-                                      {new Date(inv.created_at).toLocaleDateString()}
+                                      {fmtDate(inv.created_at)}
                                     </td>
                                     <td className="py-1.5 text-right">
                                       {inv.status !== "paid" ? (
@@ -413,7 +414,7 @@ export default function SupplierPayablesRedesign() {
                       <Badge tone={STATUS_TONE[inv.status] || "default"}>{inv.status}</Badge>
                     </td>
                     <td className="px-3 py-2 text-(--ui-text-muted)">
-                      {new Date(inv.created_at).toLocaleDateString()}
+                      {fmtDate(inv.created_at)}
                     </td>
                     <td className="px-3 py-2 text-right">
                       {inv.status !== "paid" ? (

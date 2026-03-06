@@ -275,8 +275,14 @@ export default function POSReturnExchangeModal() {
           saleId: saleData.saleId,
           invoiceNumber: saleData.invoiceNumber || "-",
           cart: exchangeItems.map((i) => ({ name: i.name, quantity: i.qty, price: i.price })),
+          returnedItems: returnItems
+            .filter((i) => Number(returnQtys[i.product_id] || 0) > 0)
+            .map((i) => ({ name: i.name, quantity: Number(returnQtys[i.product_id]), price: i.price })),
+          returnedFrom: resolvedSale?.invoice_number || null,
           payments: salePayments,
           total: exchangeTotal,
+          exchangeCredit: refundTotal,
+          balanceDue: balance,
           refundNote: balance < 0 ? `Refund ${money(Math.abs(balance))} via ${settleMethod}` : null,
           change: 0,
           customer: null,

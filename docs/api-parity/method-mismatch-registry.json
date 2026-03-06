@@ -1,0 +1,172 @@
+{
+  "version": 1,
+  "generated_at": "2026-03-06T00:00:00.000Z",
+  "entries": [
+    {
+      "path": "/api/accounting/periods",
+      "backend_methods": [
+        "GET",
+        "POST"
+      ],
+      "observed_frontend_methods": [
+        "GET",
+        "POST",
+        "PUT"
+      ],
+      "classification": "scanner_ambiguous",
+      "reason": "Frontend PUT maps to /api/accounting/periods/:id; static scan collapses to parent path.",
+      "owner": "tier4_accounting_maintainer",
+      "review_date": "2026-04-06"
+    },
+    {
+      "path": "/api/attribute-sets/:param",
+      "backend_methods": [
+        "DELETE",
+        "PUT"
+      ],
+      "observed_frontend_methods": [
+        "DELETE",
+        "GET"
+      ],
+      "classification": "scanner_ambiguous",
+      "reason": "No functional GET on this endpoint; inferred GET is from dynamic URL/method parsing ambiguity.",
+      "owner": "attribute-sets_maintainer",
+      "review_date": "2026-04-06"
+    },
+    {
+      "path": "/api/brands/:param",
+      "backend_methods": [
+        "DELETE",
+        "PUT"
+      ],
+      "observed_frontend_methods": [
+        "DELETE",
+        "GET"
+      ],
+      "classification": "scanner_ambiguous",
+      "reason": "No functional GET on this endpoint; inferred GET is from dynamic URL/method parsing ambiguity.",
+      "owner": "brands_maintainer",
+      "review_date": "2026-04-06"
+    },
+    {
+      "path": "/api/categories/:param",
+      "backend_methods": [
+        "DELETE",
+        "PUT"
+      ],
+      "observed_frontend_methods": [
+        "DELETE",
+        "GET"
+      ],
+      "classification": "scanner_ambiguous",
+      "reason": "No functional GET on this endpoint; inferred GET is from dynamic URL/method parsing ambiguity.",
+      "owner": "categories_maintainer",
+      "review_date": "2026-04-06"
+    },
+    {
+      "path": "/api/employees/:param",
+      "backend_methods": [
+        "DELETE",
+        "PUT"
+      ],
+      "observed_frontend_methods": [
+        "DELETE",
+        "GET"
+      ],
+      "classification": "scanner_ambiguous",
+      "reason": "Observed GET calls are for subpaths (attendance-config/outlets), not this endpoint.",
+      "owner": "employees_maintainer",
+      "review_date": "2026-04-06"
+    },
+    {
+      "path": "/api/outlets/:param",
+      "backend_methods": [
+        "DELETE",
+        "PUT"
+      ],
+      "observed_frontend_methods": [
+        "DELETE",
+        "GET"
+      ],
+      "classification": "scanner_ambiguous",
+      "reason": "No functional GET on this endpoint; inferred GET is from dynamic URL/method parsing ambiguity.",
+      "owner": "outlets_maintainer",
+      "review_date": "2026-04-06"
+    },
+    {
+      "path": "/api/products/:param",
+      "backend_methods": [
+        "DELETE",
+        "PUT"
+      ],
+      "observed_frontend_methods": [
+        "GET",
+        "POST"
+      ],
+      "classification": "scanner_ambiguous",
+      "reason": "Observed methods correspond to product subpaths (stock/media/variants/bulk), collapsed by static scan.",
+      "owner": "products_maintainer",
+      "review_date": "2026-04-06"
+    },
+    {
+      "path": "/api/receipt-templates/:param",
+      "backend_methods": [
+        "DELETE",
+        "PUT"
+      ],
+      "observed_frontend_methods": [
+        "DELETE",
+        "GET",
+        "PUT"
+      ],
+      "classification": "scanner_ambiguous",
+      "reason": "Observed GET maps to /api/receipt-templates/active, not /:id.",
+      "owner": "receipt-templates_maintainer",
+      "review_date": "2026-04-06"
+    },
+    {
+      "path": "/api/roles/:param/permissions",
+      "backend_methods": [
+        "GET",
+        "PUT"
+      ],
+      "observed_frontend_methods": [
+        "POST"
+      ],
+      "classification": "scanner_ambiguous",
+      "reason": "No functional POST on this endpoint; static parser inferred method from nearby call context.",
+      "owner": "roles_maintainer",
+      "review_date": "2026-04-06"
+    },
+    {
+      "path": "/api/suppliers/:param",
+      "backend_methods": [
+        "DELETE",
+        "PUT"
+      ],
+      "observed_frontend_methods": [
+        "DELETE",
+        "GET"
+      ],
+      "classification": "scanner_ambiguous",
+      "reason": "No functional GET on this endpoint; inferred GET is from dynamic URL/method parsing ambiguity.",
+      "owner": "suppliers_maintainer",
+      "review_date": "2026-04-06"
+    },
+    {
+      "path": "/api/taxes/:param",
+      "backend_methods": [
+        "DELETE",
+        "PUT"
+      ],
+      "observed_frontend_methods": [
+        "DELETE",
+        "GET"
+      ],
+      "classification": "scanner_ambiguous",
+      "reason": "No functional GET on this endpoint; inferred GET is from dynamic URL/method parsing ambiguity.",
+      "owner": "taxes_maintainer",
+      "review_date": "2026-04-06"
+    }
+  ]
+}

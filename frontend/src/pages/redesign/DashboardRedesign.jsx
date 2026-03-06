@@ -25,6 +25,7 @@ import {
 } from "recharts";
 import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
+import { fmtTime } from "../../utils/dates";
 import { Badge, Button, PageShell, SectionCard, Skeleton } from "../../ui/primitives";
 
 const fmt = (n) => "PKRs " + (Number(n) || 0).toFixed(2);
@@ -684,10 +685,7 @@ export default function DashboardRedesign() {
             ) : (
               recentSales.slice(0, 8).map((sale) => {
                 const method = (sale.payment_method || "cash").toLowerCase();
-                const time = new Date(sale.timestamp).toLocaleTimeString(undefined, {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                });
+                const time = fmtTime(sale.timestamp, { hour: "2-digit", minute: "2-digit" });
                 return (
                   <div key={sale.id} className="flex items-center justify-between px-5 py-3">
                     <div className="min-w-0">

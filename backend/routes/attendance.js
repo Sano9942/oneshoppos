@@ -385,7 +385,15 @@ module.exports = function registerAttendanceRoutes(app, deps) {
               (err3, dayRecord) => {
                 if (err3) return res.status(500).json({ error: err3.message });
                 if (dayRecord) {
-                  maybeCloseBreak(dayRecord.id);
+                  // If the day record was already checked out, reopen it for the new session
+                  db.run(
+                    `UPDATE employee_attendance SET check_out = NULL, hours = NULL, status = 'present' WHERE id = ? AND check_out IS NOT NULL`,
+                    [dayRecord.id],
+                    (err4) => {
+                      if (err4) return res.status(500).json({ error: err4.message });
+                      maybeCloseBreak(dayRecord.id);
+                    }
+                  );
                 } else {
                   db.run(
                     `INSERT INTO employee_attendance (employee_id, outlet_id, status) VALUES (?, ?, 'present')`,
@@ -493,10 +501,10 @@ module.exports = function registerAttendanceRoutes(app, deps) {
                     };
 
                     if (isEndOfDay) {
-                      // Stamp the day-level record with check_out and net hours
+                      // Stamp the day-level record with check_out, net hours, and status
                       db.run(
                         `UPDATE employee_attendance
-                         SET check_out = ?, hours = ?
+                         SET check_out = ?, hours = ?, status = 'checked_out'
                          WHERE employee_id = ? AND outlet_id = ?
                            AND date(check_in, 'localtime') = ?`,
                         [now, netHours, emp.id, openWork.outlet_id, today],
@@ -645,7 +653,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
       const now = nowLocal();
       const hours = calcHours(record.check_in, now);
       db.run(
-        "UPDATE employee_attendance SET check_out = ?, hours = ? WHERE id = ?",
+        "UPDATE employee_attendance SET check_out = ?, hours = ?, status = 'checked_out' WHERE id = ?",
         [now, hours, id],
         function (err2) {
           if (err2) return res.status(500).json({ error: err2.message });

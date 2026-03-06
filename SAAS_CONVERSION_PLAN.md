@@ -14,16 +14,50 @@ OneShopPOS is a full-featured POS system currently running as a single-tenant lo
 
 ---
 
-## ✅ SaaS Prerequisite Already Done: Timezone Fix (Mar 2026)
+## Business Readiness Score (as of Mar 2026)
 
-The app previously used `date(col,'localtime')` in 214+ query filters, tied to the server OS timezone. On a UTC Linux production server, customers in New York or Auckland would see wrong date boundaries.
+**Overall: 81 / 100 — BETA quality. Suitable for early paying customers, not broad market launch.**
+
+| Dimension | Score | Status |
+|---|---|---|
+| Core POS (sales, returns, shifts) | 82 | Strong, cash/wallet only |
+| Inventory management | 85 | Multi-outlet, variants, transfers |
+| Reporting | 88 | 74 endpoints, 67 tabs, V2 live |
+| User management + RBAC | 84 | Solid, no 2FA |
+| Multi-outlet support | 86 | Context unification live |
+| Customer management | 79 | Profiles + wallet, no segmentation |
+| Shopify integration | 81 | 9 modules, bi-directional sync |
+| Security | 80 | Good app-layer, weak infra |
+| Data integrity | 87 | Transactions, shift linkage fixed |
+| Missing critical features | 65 | Gaps: payments, email, hardware |
+| Code quality / tests | 82 | 248 tests passing, modular |
+
+### Top 5 product gaps to fix before broad launch
+1. **Payment gateway** (Stripe/Razorpay) — cash-only is a deal-breaker for most retail
+2. **Email receipts** (SMTP) — customers expect digital receipts
+3. **ESC/POS printer + cash drawer driver** — physical POS cashiers need this day one
+4. **2FA / MFA** — security compliance requirement for B2B SaaS
+5. **All-outlets aggregate reports** — multi-location operators will demand this
+
+---
+
+## ✅ SaaS Prerequisites Already Done
+
+### Timezone Fix (Mar 2026)
+The app previously used `date(col,'localtime')` in 214+ query filters, tied to the server OS timezone. On a UTC Linux production server, customers in different timezones would see wrong date boundaries.
 
 **Fixed:**
-- `backend/utils/tz.js` — `toUtcStart(dateStr, tz)` / `toUtcEnd(dateStr, tz)` converts a local `YYYY-MM-DD` to UTC range strings for direct `timestamp >= ?` / `timestamp < ?` queries. Uses `Intl.DateTimeFormat` + binary search, handles DST, UTC+14 through UTC-12. No external deps.
+- `backend/utils/tz.js` — `toUtcStart(dateStr, tz)` / `toUtcEnd(dateStr, tz)` converts a local `YYYY-MM-DD` to UTC range strings for direct `timestamp >= ?` / `timestamp < ?` queries. No external deps.
 - `loadCompanyProfile` middleware in `backend/index.js` — caches `company_profile` (5-min TTL), sets `req.company.timezone` on every request.
 - All report and non-report routes now use `req.company?.timezone || 'UTC'` for date filtering.
 - `company_profile.timezone` is the per-tenant IANA timezone string — already in schema, defaults to `'UTC'`. **Set this correctly when provisioning each tenant in Phase 1.**
 - Rule for new code: never use `date(col,'localtime')` in WHERE clauses. Use `toUtcStart`/`toUtcEnd` from `backend/utils/tz.js`.
+
+### DB Dependency Injection (already done)
+All 26 route files receive `db` via `deps` parameter — the AsyncLocalStorage proxy in Phase 3 works because of this pattern. Do not change this pattern.
+
+### Shift Linkage (Mar 2026)
+`shift_id` FK on `sales` and `returns` — direct FK lookup eliminates time-window race conditions. Shift reports fully migrated.
 
 ---
 
@@ -36,7 +70,7 @@ The app previously used `date(col,'localtime')` in 214+ query filters, tied to t
 | `backend/master-db.js` | Master SQLite DB (`master.db`) — stores tenant registry |
 | `backend/tenant-db-manager.js` | Connection pool — given a `tenant_id`, returns correct `db` handle |
 | `backend/tenant-provisioner.js` | Creates new tenant: directory, DB file, schema, seed data |
-| `backend/schema-full.js` | Complete current schema as a single runnable script (extracted from `db.js` + all 56 migrations) — used to initialize new tenant DBs |
+| `backend/schema-full.js` | Complete current schema as a single runnable script (extracted from migrate63.js + all prior migrations) — used to initialize new tenant DBs |
 
 ### Master DB Schema (`master.db`)
 ```sql
@@ -48,9 +82,13 @@ CREATE TABLE tenants (
   status          TEXT NOT NULL DEFAULT 'active', -- active | suspended | deleted
   plan            TEXT NOT NULL DEFAULT 'free',   -- free | starter | pro
   db_path         TEXT NOT NULL,                 -- relative path: tenants/t_aces-hardware/data.db
+  timezone        TEXT NOT NULL DEFAULT 'UTC',   -- IANA timezone string — set at provisioning
   max_employees   INTEGER DEFAULT 3,
   max_outlets     INTEGER DEFAULT 1,
   max_products    INTEGER DEFAULT 500,
+  stripe_customer_id TEXT,                       -- Stripe customer ID for billing (Phase 7)
+  stripe_subscription_id TEXT,                   -- Active Stripe subscription ID (Phase 7)
+  trial_ends_at   TEXT,                          -- Optional trial period end (Phase 7)
   created_at      TEXT DEFAULT (datetime('now')),
   updated_at      TEXT DEFAULT (datetime('now')),
   suspended_at    TEXT,
@@ -74,10 +112,13 @@ CREATE TABLE tenant_audit_log (
   created_at      TEXT DEFAULT (datetime('now'))
 );
 
-CREATE TABLE schema_version (
-  version         INTEGER NOT NULL               -- Tracks migration version for tenant DBs
+CREATE TABLE schema_migrations (
+  version         INTEGER NOT NULL PRIMARY KEY,  -- Tracks migration version applied to ALL tenant DBs
+  applied_at      TEXT DEFAULT (datetime('now'))
 );
 ```
+
+> **Note:** `schema_version` renamed to `schema_migrations` (clearer semantics, supports multiple version rows as migrations accumulate).
 
 ### Tenant Directory Structure
 ```
@@ -100,6 +141,15 @@ backend/
 - For 1-20 tenants, keep all connections open (~50KB each)
 - Each connection gets `PRAGMA foreign_keys = ON` and WAL mode
 - Methods: `getDb(tenantId)` / `closeDb(tenantId)` / `closeAll()`
+- **Add:** `healthCheck(tenantId)` — verify DB file is readable + WAL not corrupted (run on startup)
+
+### Provisioner Seed Data
+When creating a new tenant, seed the following so they can log in immediately:
+- 1 default outlet (name from provisioning form)
+- 1 admin employee (PIN: `0000`, force-change on first login)
+- 1 admin role with all permissions
+- `company_profile` row with name + timezone from provisioning
+- Default tax entries (0% if unknown)
 
 ---
 
@@ -109,9 +159,11 @@ backend/
 ### Tenant Identification Strategy: Login-Based
 - Login page gets a **"Store Code"** field (the tenant slug, e.g., `aces-hardware`)
 - Backend looks up tenant by slug -> opens tenant's DB -> authenticates employee
-- JWT token embeds `{ tid, eid, rid }` (tenant_id, employee_id, role_id)
+- JWT token embeds `{ tid, eid, rid, oid }` (tenant_id, employee_id, role_id, outlet_id)
 - No subdomains needed (avoids wildcard SSL, DNS complexity) — can add later as a cosmetic feature
 - Support pre-filling from URL: `https://yourpos.com/login?store=aces-hardware`
+
+> **Added `oid` (outlet_id) to JWT** — needed because AuthProvider already injects `x-outlet-id`. Including it in the token removes the need for separate context selection state on fresh page loads.
 
 ### Files to Modify
 | File | Change |
@@ -135,14 +187,27 @@ backend/
   "tid": 7,           // tenant_id
   "eid": 42,          // employee_id
   "rid": 1,           // role_id
+  "oid": 3,           // outlet_id (active branch context)
   "iat": 1709337600,
   "exp": 1709424000   // 24h expiry
 }
 ```
 
+### Token Refresh Strategy
+- Issue a **refresh token** (7-day expiry, stored in `httpOnly` cookie) alongside the 24h access token
+- `POST /api/auth/refresh` — validates refresh token, issues new access token
+- Prevents users from being logged out mid-shift when access token expires
+- Refresh tokens stored in `tenant_refresh_tokens` table in master.db (revocable)
+
 ### New Env Vars
-- `JWT_SECRET` — strong random string for signing tokens
+- `JWT_SECRET` — strong random string (min 64 chars) for signing tokens
+- `JWT_REFRESH_SECRET` — separate secret for refresh tokens
 - `MULTI_TENANT` — `0` (default, single-tenant) or `1` (multi-tenant SaaS mode)
+
+### Suspended Tenant Handling
+- On every JWT verification, check `tenants.status` in master DB
+- If `suspended`, return `403` with message: `"Account suspended. Contact support."`
+- Frontend catches 403 + shows suspension notice, not generic error
 
 ---
 
@@ -153,7 +218,7 @@ backend/
 
 Since routes capture `db` from `deps` at registration time (via closure), we can't swap `db` per-request directly. Solution:
 
-1. **Create `backend/tenant-db-proxy.js`** — a `Proxy` object that looks like a sqlite3.Database but delegates every call (`db.all()`, `db.get()`, `db.run()`) to the current request's tenant DB using Node.js `AsyncLocalStorage`
+1. **Create `backend/tenant-db-proxy.js`** — a `Proxy` object that looks like a sqlite3.Database but delegates every call (`db.all()`, `db.get()`, `db.run()`, `db.serialize()`, `db.parallelize()`) to the current request's tenant DB using Node.js `AsyncLocalStorage`
 2. **In `backend/index.js`** — when `MULTI_TENANT=1`, pass the proxy as `deps.db` instead of the singleton. Add middleware that wraps each request in an `asyncStore.run()` context with the tenant's real DB.
 
 **Result:** All 26 route files call `db.all(...)` as usual, but it transparently hits the correct tenant's database. Zero changes to route files for DB access.
@@ -162,6 +227,7 @@ Since routes capture `db` from `deps` at registration time (via closure), we can
 ```
 Request comes in with JWT containing tenant_id=7
   -> Middleware extracts tenant_id from JWT
+  -> Middleware checks tenant status in master.db (active/suspended/deleted)
   -> Middleware gets tenant's db via TenantDbManager.getDb(7)
   -> Middleware wraps the rest of the request in asyncStore.run({ db: tenantDb })
   -> Route handler calls db.all("SELECT * FROM products ...")
@@ -169,27 +235,51 @@ Request comes in with JWT containing tenant_id=7
   -> Query runs against tenant 7's database
 ```
 
+### Proxy Must Cover All sqlite3 Methods
+The proxy must intercept: `all`, `get`, `run`, `each`, `exec`, `prepare`, `serialize`, `parallelize`, `close`. Missing any will cause silent failures on routes that use less common methods (e.g., `db.prepare()` in sales.js for stmt.finalize).
+
 ### Files That Need Minor Modifications (File Uploads Only)
 These files use hardcoded upload paths captured at registration time — need to read tenant path from `req` context instead:
 
 | File | Change |
 |------|--------|
-| `backend/routes/products.js` | Multer destination reads from tenant-aware path |
-| `backend/routes/barcode-expenses.js` | Backup/restore uses tenant-specific DB_PATH |
-| `backend/routes/tier4.js` | Company logo upload path |
-| `backend/routes/reports.js` | Export directory becomes tenant-aware |
+| `backend/routes/products.js` | Multer destination reads from `req.tenantDir` |
+| `backend/routes/barcode-expenses.js` | Backup/restore uses `req.tenantDir` for DB_PATH |
+| `backend/routes/tier4/company-profile.js` | Company logo upload uses `req.tenantDir` |
+| `backend/routes/reports/` (export routes) | Export directory becomes `req.tenantDir/exports/` |
+
+> **Note:** The plan listed `tier4.js` and `reports.js` as monoliths — these are now modular directories. The actual files to change are `tier4/company-profile.js` and whichever report file handles CSV/PDF export.
 
 ### Static File Serving
-Replace `app.use("/uploads", express.static(UPLOADS_DIR))` with tenant-scoped middleware that serves from `tenants/t_{slug}/uploads/`.
+Replace `app.use("/uploads", express.static(UPLOADS_DIR))` with tenant-scoped middleware:
+```javascript
+app.use("/uploads/:tenantSlug", (req, res, next) => {
+  const slug = req.params.tenantSlug;
+  express.static(path.join(TENANTS_DIR, `t_${slug}`, 'uploads'))(req, res, next);
+});
+```
+Frontend must update all upload URL references to include tenant slug prefix.
 
 ### Background Workers (Shopify sync, report schedules)
-These run in `setInterval` outside request context. In multi-tenant mode, they iterate over all active tenants and run inside an `asyncStore.run()` context for each.
+These run in `setInterval` outside request context. In multi-tenant mode:
+- Fetch all active tenants from master.db at each tick
+- For each tenant, wrap execution in `asyncStore.run({ db: tenantDb })`
+- Add per-tenant error isolation — one tenant's Shopify failure must not stop other tenants' sync
+- Log per-tenant worker errors to `tenant_audit_log`
+
+### Plan Limit Enforcement (add here, not Phase 7)
+Add `requirePlanLimit(resource)` middleware in `backend/middleware/plan-limits.js`:
+- Called on `POST /api/employees`, `POST /api/outlets`, `POST /api/products`
+- Reads `req.tenant.max_employees` etc. from JWT/master.db
+- Returns `403 { error: "Plan limit reached", limit: 3, current: 3, upgrade_url: "..." }`
+- Enforce limits here rather than waiting for Phase 7 — billing can come later but limits protect infrastructure
 
 ### New Files
 | File | Purpose |
 |------|---------|
 | `backend/tenant-db-proxy.js` | AsyncLocalStorage-based DB proxy |
 | `backend/tenant-multer.js` | Tenant-aware multer storage factory |
+| `backend/middleware/plan-limits.js` | Plan limit enforcement (moved from Phase 7) |
 
 ---
 
@@ -199,14 +289,15 @@ These run in `setInterval` outside request context. In multi-tenant mode, they i
 |------|--------|
 | `frontend/src/config.js` | `API_BASE = import.meta.env.VITE_API_BASE \|\| 'http://localhost:5000'` |
 | `frontend/src/pages/Login.jsx` | "Store Code" field + prefill from `?store=` query param |
-| `frontend/src/auth/AuthProvider.jsx` | JWT Bearer token in all requests, tenant_slug in session |
+| `frontend/src/auth/AuthProvider.jsx` | JWT Bearer token in all requests, tenant_slug in session, silent token refresh |
 | `frontend/.env.development` | `VITE_API_BASE=http://localhost:5000` |
 | `frontend/.env.production` | `VITE_API_BASE=https://your-api.railway.app`, `VITE_MULTI_TENANT=1` |
 
 ### Frontend Session Structure (Updated)
 ```javascript
 {
-  token: "eyJhbG...",           // JWT token
+  token: "eyJhbG...",           // JWT access token (24h)
+  refreshToken: "...",          // Stored in httpOnly cookie (7d) — not in JS state
   tenant_slug: "aces-hardware", // Store code
   employee: { id, name, role_id, outlet_id },
   permissions: [...],
@@ -214,8 +305,24 @@ These run in `setInterval` outside request context. In multi-tenant mode, they i
 }
 ```
 
+### Silent Token Refresh
+- AuthProvider intercepts `401 Unauthorized` responses
+- Calls `POST /api/auth/refresh` with the httpOnly cookie
+- On success, retries the original request with new access token
+- On failure (refresh expired), redirects to login
+- This prevents mid-shift logouts when the 24h access token expires
+
+### Suspension Handling
+- On `403` from any API call, check response body for `"Account suspended"` message
+- Show full-screen suspension notice with support contact info
+- Do not show generic error toast
+
+### Upload URL Migration
+- All `img src` and upload preview URLs must be updated from `/uploads/filename` to `/uploads/{tenant_slug}/filename`
+- Audit: search for `${API}/uploads` across all frontend files
+
 ### Optional: Tenant Branding
-Add a `GET /api/tenant/branding?slug=aces-hardware` public endpoint that returns business name, logo URL, and primary color. The login page shows the tenant's branding after typing the store code.
+Add a `GET /api/tenant/branding?slug=aces-hardware` public endpoint (no auth required) that returns business name, logo URL, and primary color. The login page shows the tenant's branding after typing the store code.
 
 ---
 
@@ -223,30 +330,84 @@ Add a `GET /api/tenant/branding?slug=aces-hardware` public endpoint that returns
 
 ### New Backend: `backend/routes/admin.js`
 ```
-POST   /api/admin/auth/login        — super-admin login (email + password, bcrypt)
-GET    /api/admin/tenants            — list all tenants with status/plan
-POST   /api/admin/tenants            — provision new tenant (calls provisioner)
-GET    /api/admin/tenants/:id        — tenant details + usage stats
-PUT    /api/admin/tenants/:id        — update tenant (name, plan, limits)
+POST   /api/admin/auth/login             — super-admin login (email + password, bcrypt)
+POST   /api/admin/auth/logout            — invalidate super-admin session
+GET    /api/admin/tenants                — list all tenants with status/plan/usage
+POST   /api/admin/tenants                — provision new tenant (calls provisioner)
+GET    /api/admin/tenants/:id            — tenant details + usage stats
+PUT    /api/admin/tenants/:id            — update tenant (name, plan, limits, timezone)
 POST   /api/admin/tenants/:id/suspend    — suspend a tenant
 POST   /api/admin/tenants/:id/activate   — reactivate a tenant
 DELETE /api/admin/tenants/:id            — soft-delete a tenant
 POST   /api/admin/tenants/:id/migrate    — run pending migrations on one tenant
 POST   /api/admin/migrate-all            — run pending migrations on ALL tenants
+GET    /api/admin/tenants/:id/stats      — per-tenant usage: sales count, product count, employees
 GET    /api/admin/stats                  — aggregate stats across all tenants
+POST   /api/admin/tenants/:id/reset-pin  — reset a tenant's admin employee PIN to 0000
 ```
 
 ### New Frontend Pages: `frontend/src/pages/admin/`
 - `AdminLogin.jsx` — email + password login (separate from tenant PIN login)
-- `AdminDashboard.jsx` — overview stats across all tenants
-- `AdminTenantList.jsx` — create, view, suspend tenants
-- `AdminTenantDetail.jsx` — single tenant management
+- `AdminDashboard.jsx` — overview stats across all tenants (total tenants, active, MRR estimate)
+- `AdminTenantList.jsx` — create, view, suspend tenants with search/filter
+- `AdminTenantDetail.jsx` — single tenant management (usage, plan change, migration, PIN reset)
 - `AdminLayout.jsx` — separate layout (no POS sidebar)
 
 ### Migration Runner: `backend/tenant-migrate.js`
-For applying future migrations (migrate57+) to existing tenant DBs. New migrations written as SQL files in `backend/migrations/` that can target any DB path.
+For applying future migrations (migrate64+) to existing tenant DBs.
+- New migrations written as JS files in `backend/migrations/` that export `up(db)` async function
+- Runner: `node backend/tenant-migrate.js --all` or `--tenant=aces-hardware`
+- Tracks applied version in `schema_migrations` table of each tenant DB
+- Idempotent — won't re-apply already-applied migrations
+- Admin API endpoint calls this runner
 
 **Can be built in parallel with Phase 3/4.**
+
+---
+
+## Phase 5b: Product Feature Gaps (run in parallel with Phase 5)
+**These close the 81→90 gap before broad market launch**
+
+These are product improvements, independent of the SaaS infrastructure work:
+
+### 5b-1: Payment Gateway (Stripe/Razorpay) — HIGH PRIORITY
+- Add `payment_gateway` field to `sale_payments` table
+- New `backend/routes/payments.js` — create payment intent, capture, refund
+- Frontend POS checkout: show card payment option, poll for status
+- Razorpay recommended for South Asian markets; Stripe for international
+- **This is the single biggest deal-breaker for paying customers**
+
+### 5b-2: Email Receipts — MEDIUM PRIORITY
+- Add `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` env vars
+- New `backend/utils/mailer.js` — nodemailer wrapper
+- On `POST /api/sales` success: if `customer.email` exists + receipt_email opt-in, send HTML receipt
+- Use existing receipt template data to generate HTML email body
+- **Low effort, high customer satisfaction impact**
+
+### 5b-3: ESC/POS Printer + Cash Drawer — MEDIUM PRIORITY
+- Add `backend/utils/escpos.js` — wrapper around `escpos` npm package
+- `POST /api/receipt/print` — accepts sale_id, renders receipt, sends to printer
+- Cash drawer trigger on sale completion (GPIO or USB signal)
+- Browser-based: use `qz-tray` (QZ Tray bridge for web printing to local USB printers)
+- **Required for physical retail POS deployments**
+
+### 5b-4: All-Outlets Aggregate Reports — MEDIUM PRIORITY
+- Modify report endpoints to accept `outlet_id=all` in addition to specific IDs
+- When `outlet_id=all`, remove outlet filter from SQL and aggregate across all outlets
+- Frontend: add "All Outlets" option to outlet selector in Reports header
+- **Multi-location business owners will ask for this in week 1**
+
+### 5b-5: 2FA / MFA — MEDIUM PRIORITY
+- TOTP-based (Google Authenticator) for admin employees
+- `POST /api/auth/2fa/setup` — returns QR code
+- `POST /api/auth/2fa/verify` — validates TOTP code during login
+- Store `totp_secret` encrypted in `employees` table
+- Make optional per-role (require for admin/manager roles)
+- **Required for enterprise/B2B customers and GDPR compliance**
+
+### 5b-6: Audit Log Export — LOW PRIORITY
+- `GET /api/audit-log/export?from=&to=&format=csv` — exports `action_history` table
+- Required for regulated industries (food, finance) and enterprise security reviews
 
 ---
 
@@ -266,13 +427,19 @@ For applying future migrations (migrate57+) to existing tenant DBs. New migratio
 | File | Purpose |
 |------|---------|
 | `backend/Dockerfile` | Container image for Railway/Fly.io |
-| `backend/.dockerignore` | Exclude node_modules, local .db files |
+| `backend/.dockerignore` | Exclude node_modules, local .db files, tenants/ dir |
 | `backend/railway.toml` or `fly.toml` | Platform config (single replica — SQLite requires it) |
 | `frontend/vercel.json` | SPA rewrite rules |
 | `backend/.env.example` | Full documented env var reference |
 
 ### Critical Constraint
 SQLite requires **single-instance deployment** (1 replica). This is fine for 1-20 tenants. Scaling beyond ~50 concurrent tenants would need a PostgreSQL migration (future, not now).
+
+### Backup Strategy (add before launch)
+- Daily automated backup of all tenant DB files to object storage (Railway volume snapshots, or S3/Cloudflare R2)
+- `backend/scripts/backup-all-tenants.js` — tar + gzip all tenant dirs, upload to R2
+- Retention: 30 days
+- **Without backups, a disk failure loses all customer data — this is non-negotiable**
 
 ### Production Environment Variables
 ```env
@@ -287,7 +454,9 @@ TENANTS_DIR=./tenants
 
 # JWT
 JWT_SECRET=replace_with_64_char_random_string
+JWT_REFRESH_SECRET=replace_with_different_64_char_random_string
 JWT_EXPIRES_IN=24h
+JWT_REFRESH_EXPIRES_IN=7d
 
 # Shopify (per-tenant, stored in tenant DB)
 SHOPIFY_SECRET_KEY=replace_with_a_strong_secret_key
@@ -296,10 +465,27 @@ SHOPIFY_SECRET_KEY=replace_with_a_strong_secret_key
 RATE_LIMIT_WINDOW_MS=60000
 RATE_LIMIT_GLOBAL_MAX=600
 
+# Email (Phase 5b-2)
+# SMTP_HOST=smtp.sendgrid.net
+# SMTP_PORT=587
+# SMTP_USER=apikey
+# SMTP_PASS=SG.xxx
+
+# Backup (Phase 6)
+# R2_ACCOUNT_ID=...
+# R2_ACCESS_KEY_ID=...
+# R2_SECRET_ACCESS_KEY=...
+# R2_BUCKET=oneshoppos-backups
+
 # Billing (Phase 7)
 # STRIPE_SECRET_KEY=sk_...
 # STRIPE_WEBHOOK_SECRET=whsec_...
 ```
+
+### HTTPS Enforcement
+- Railway/Fly.io provide HTTPS automatically via their proxy layer
+- Add `app.set('trust proxy', 1)` in `backend/index.js` (required for correct IP detection behind Railway proxy)
+- Redirect HTTP → HTTPS at the platform level (not in Express — let the proxy handle it)
 
 ---
 
@@ -309,8 +495,9 @@ RATE_LIMIT_GLOBAL_MAX=600
 | File | Purpose |
 |------|---------|
 | `backend/routes/billing.js` | Stripe checkout sessions, webhooks, customer portal |
-| `backend/middleware/plan-limits.js` | Enforce max_employees, max_products, max_outlets per plan |
 | `frontend/src/pages/admin/AdminBilling.jsx` | Billing management UI |
+
+> **Note:** `plan-limits.js` moved to Phase 3 — limits should be enforced from day one, even before Stripe billing is wired up.
 
 ### Plan Tiers
 | Plan | Price | Employees | Products | Outlets |
@@ -321,11 +508,17 @@ RATE_LIMIT_GLOBAL_MAX=600
 
 ### Stripe Flow
 1. Customer selects plan on admin dashboard or self-service page
-2. Backend creates Stripe Checkout Session
+2. Backend creates Stripe Checkout Session with `tenant_id` in metadata
 3. Customer pays on Stripe-hosted page
-4. Stripe sends `checkout.session.completed` webhook
-5. Backend updates `tenants.plan` and limit columns in master.db
-6. Plan limits enforced via middleware on relevant POST endpoints
+4. Stripe sends `checkout.session.completed` webhook → verified with `STRIPE_WEBHOOK_SECRET`
+5. Backend updates `tenants.plan`, `tenants.stripe_customer_id`, `tenants.stripe_subscription_id` in master.db
+6. Limits already enforced by `plan-limits.js` middleware (from Phase 3)
+
+### Trial Period
+- New tenants get 14-day free trial of Pro plan
+- `trial_ends_at` column in master.db tracks expiry
+- After trial: downgrade to Free limits unless payment on file
+- Show trial banner in POS UI with days remaining
 
 **Can be deferred until you have early adopters.**
 
@@ -334,48 +527,62 @@ RATE_LIMIT_GLOBAL_MAX=600
 ## Implementation Order & Dependencies
 
 ```
-Phase 1 (Master DB + Tenant Manager)     <-- START HERE, purely additive
+Phase 1 (Master DB + Tenant Manager)         <-- START HERE, purely additive
     |
-Phase 2 (JWT Auth)                        <-- depends on Phase 1
+Phase 2 (JWT Auth)                            <-- depends on Phase 1
     |
-Phase 3 (DB Proxy + Middleware)           <-- depends on Phase 2
-  + Phase 5 (Admin Dashboard)             <-- can run in parallel with Phase 3
+Phase 3 (DB Proxy + Middleware)               <-- depends on Phase 2
+  + Phase 5 (Admin Dashboard)                 <-- can run in parallel with Phase 3
+  + Phase 5b (Product Feature Gaps)           <-- can run in parallel, independent of SaaS infra
     |
-Phase 4 (Frontend Changes)               <-- depends on Phase 2+3
+Phase 4 (Frontend Changes)                   <-- depends on Phase 2+3
     |
-Phase 6 (Deployment)                      <-- depends on Phases 1-4
+Phase 6 (Deployment + Backups)               <-- depends on Phases 1-4
     |
-Phase 7 (Billing)                         <-- whenever you're ready
+Phase 7 (Billing)                            <-- whenever you're ready
 ```
 
 **Phases 2+3+4 must deploy together** (auth change is atomic).
-**Phase 1 and Phase 5 are safe to build independently.**
+**Phase 1, Phase 5, and Phase 5b are safe to build independently.**
+**Phase 5b (product gaps) can be done before or after SaaS infra — they are independent.**
 
 ---
 
 ## Verification Plan
 
 ### After Phase 1
-- Run `node backend/tenant-provisioner.js --slug test-store --name "Test Store"`
+- Run `node backend/tenant-provisioner.js --slug test-store --name "Test Store" --timezone "Asia/Karachi"`
 - Verify `backend/tenants/t_test-store/data.db` exists with full schema
-- Open it in a SQLite browser and confirm all tables exist
+- Open in SQLite browser — confirm all 40+ tables exist, seed data present (outlet, employee, role)
+- Verify `schema_migrations` table has the latest version number
 
 ### After Phases 2-4
 - Start backend with `MULTI_TENANT=1`
-- Open frontend, enter store code `test-store`, login with default admin PIN
+- Open frontend, enter store code `test-store`, login with default admin PIN `0000`
 - Verify all POS features work (sales, inventory, reports)
-- Create a second tenant, log in separately, verify data isolation
+- Create a second tenant `test-store-2`, log in separately, verify complete data isolation
+- Verify token refresh works: wait 24h or manually expire the token and confirm silent refresh
+- Verify suspended tenant gets 403 on all API calls
+
+### After Phase 5b
+- Complete a sale and verify email receipt arrives at customer email
+- Complete a sale and verify receipt prints on thermal printer
+- Complete a card payment via Stripe/Razorpay
+- Run an all-outlets aggregate sales report
 
 ### After Phase 6
 - Deploy backend to Railway/Fly.io
 - Deploy frontend to Vercel
 - Set `VITE_API_BASE` to the Railway/Fly.io URL
 - Provision a tenant via admin API, login from the public URL
+- Verify HTTPS is enforced (HTTP redirects to HTTPS)
+- Verify daily backup runs and uploads to R2
 
 ### After Phase 7
 - Create a Stripe test-mode checkout for a tenant
-- Complete payment, verify plan limits update in master.db
-- Try exceeding limits (e.g., add employees beyond max), verify enforcement
+- Complete payment, verify plan + Stripe IDs update in master.db
+- Try exceeding limits (e.g., add employees beyond max), verify 403 enforcement
+- Test trial expiry flow: set `trial_ends_at` to past, verify Free limits kick in
 
 ---
 
@@ -385,30 +592,40 @@ Phase 7 (Billing)                         <-- whenever you're ready
 |-------|------|---------|
 | 1 | `backend/master-db.js` | Master tenant registry database |
 | 1 | `backend/tenant-db-manager.js` | Connection pool for tenant DBs |
-| 1 | `backend/tenant-provisioner.js` | New tenant creation |
+| 1 | `backend/tenant-provisioner.js` | New tenant creation with seed data |
 | 1 | `backend/schema-full.js` | Full schema for fresh tenant DBs |
 | 3 | `backend/tenant-db-proxy.js` | AsyncLocalStorage DB proxy |
 | 3 | `backend/tenant-multer.js` | Tenant-aware file uploads |
+| 3 | `backend/middleware/plan-limits.js` | Plan limit enforcement |
 | 5 | `backend/routes/admin.js` | Super-admin API |
 | 5 | `backend/tenant-migrate.js` | Multi-tenant migration runner |
-| 5 | `frontend/src/pages/admin/*.jsx` | Admin dashboard (4-5 pages) |
+| 5 | `frontend/src/pages/admin/*.jsx` | Admin dashboard (5 pages) |
+| 5b | `backend/routes/payments.js` | Payment gateway integration |
+| 5b | `backend/utils/mailer.js` | Email receipt delivery |
+| 5b | `backend/utils/escpos.js` | ESC/POS printer + cash drawer |
+| 5b | `backend/scripts/backup-all-tenants.js` | Automated backup to R2 |
 | 6 | `backend/Dockerfile` | Container for deployment |
+| 6 | `backend/railway.toml` or `fly.toml` | Platform config |
 | 6 | `frontend/vercel.json` | Vercel SPA config |
+| 6 | `backend/.env.example` | Full env var reference |
 | 7 | `backend/routes/billing.js` | Stripe billing integration |
-| 7 | `backend/middleware/plan-limits.js` | Plan enforcement |
+| 7 | `frontend/src/pages/admin/AdminBilling.jsx` | Billing management UI |
 
 ## Summary of Modified Existing Files
 
 | Phase | File | Change |
 |-------|------|--------|
-| 2 | `backend/routes/auth.js` | JWT + tenant_slug login |
-| 2 | `backend/index.js` | JWT middleware, AsyncLocalStorage, conditional deps |
-| 2 | `backend/package.json` | New dependencies |
-| 3 | `backend/routes/products.js` | Tenant-aware upload paths |
-| 3 | `backend/routes/barcode-expenses.js` | Tenant-aware backup/restore |
-| 3 | `backend/routes/tier4.js` | Tenant-aware logo uploads |
-| 3 | `backend/routes/reports.js` | Tenant-aware export dir |
+| 2 | `backend/routes/auth.js` | JWT + tenant_slug login + refresh token endpoint |
+| 2 | `backend/index.js` | JWT middleware, AsyncLocalStorage, conditional deps, trust proxy |
+| 2 | `backend/package.json` | Add: jsonwebtoken, bcryptjs, nodemailer, escpos |
+| 3 | `backend/routes/products.js` | Tenant-aware upload paths via `req.tenantDir` |
+| 3 | `backend/routes/barcode-expenses.js` | Tenant-aware backup/restore via `req.tenantDir` |
+| 3 | `backend/routes/tier4/company-profile.js` | Tenant-aware logo uploads via `req.tenantDir` |
+| 3 | `backend/routes/reports/` (export routes) | Tenant-aware export dir via `req.tenantDir` |
 | 4 | `frontend/src/config.js` | Env-based API URL |
-| 4 | `frontend/src/auth/AuthProvider.jsx` | JWT + tenant context |
-| 4 | `frontend/src/pages/Login.jsx` | Store Code field |
+| 4 | `frontend/src/auth/AuthProvider.jsx` | JWT + silent refresh + suspension handling |
+| 4 | `frontend/src/pages/Login.jsx` | Store Code field + optional branding fetch |
 | 5 | `frontend/src/App.jsx` | Admin routes |
+| 5b | `backend/routes/sales.js` | Trigger email receipt + ESC/POS print on completion |
+| 5b | `backend/routes/reports/` | Accept `outlet_id=all` for aggregate reporting |
+| 5b | `frontend/src/pages/redesign/POSRedesign.jsx` | Card payment UI in checkout |

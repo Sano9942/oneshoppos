@@ -1,0 +1,1572 @@
+{
+  "version": 1,
+  "generated_at": "2026-03-06T08:27:09.225Z",
+  "entries": [
+    {
+      "endpoint": "DELETE /api/barcode-templates/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "DELETE /api/categories/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "categories_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/categories.js"
+    },
+    {
+      "endpoint": "DELETE /api/crm/leads/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_crm_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/crm.js"
+    },
+    {
+      "endpoint": "DELETE /api/customers/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "customers_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/customers.js"
+    },
+    {
+      "endpoint": "DELETE /api/employees/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "employees_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/employees.js"
+    },
+    {
+      "endpoint": "DELETE /api/expense-categories/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "DELETE /api/expenses/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "DELETE /api/integrations/shopify/import/products",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_import_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/import.js"
+    },
+    {
+      "endpoint": "DELETE /api/outlets/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "outlets_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/outlets.js"
+    },
+    {
+      "endpoint": "DELETE /api/products/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "products_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/products.js"
+    },
+    {
+      "endpoint": "DELETE /api/products/:param/media/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "orders_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/orders.js"
+    },
+    {
+      "endpoint": "DELETE /api/promotions/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "promotions_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/promotions.js"
+    },
+    {
+      "endpoint": "DELETE /api/purchase-orders/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "grn_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/grn.js"
+    },
+    {
+      "endpoint": "DELETE /api/quotations/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_crm_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/crm.js"
+    },
+    {
+      "endpoint": "DELETE /api/reports/saved-views/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "reports_governance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/reports/governance.js"
+    },
+    {
+      "endpoint": "DELETE /api/reports/schedules/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "reports_governance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/reports/governance.js"
+    },
+    {
+      "endpoint": "DELETE /api/roles/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "roles_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/roles.js"
+    },
+    {
+      "endpoint": "GET /api/accounting/periods",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_accounting_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/accounting.js"
+    },
+    {
+      "endpoint": "GET /api/approvals",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_approvals_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/approvals.js"
+    },
+    {
+      "endpoint": "GET /api/auth/me",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "auth_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/auth.js"
+    },
+    {
+      "endpoint": "GET /api/backup/download",
+      "classification": "internal_system_only",
+      "frontend_refs": [],
+      "reason": "Operational endpoint for system health, automation, or background processing.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "GET /api/barcode-templates",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "GET /api/company-profile",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_company-profile_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/company-profile.js"
+    },
+    {
+      "endpoint": "GET /api/crm/leads",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_crm_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/crm.js"
+    },
+    {
+      "endpoint": "GET /api/crm/leads/:param/activities",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_crm_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/crm.js"
+    },
+    {
+      "endpoint": "GET /api/customers/:param/sales",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "customers_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/customers.js"
+    },
+    {
+      "endpoint": "GET /api/customers/:param/wallet",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "customers_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/customers.js"
+    },
+    {
+      "endpoint": "GET /api/employees/:param/attendance-config",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "attendance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/attendance.js"
+    },
+    {
+      "endpoint": "GET /api/employees/:param/outlets",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "employees_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/employees.js"
+    },
+    {
+      "endpoint": "GET /api/expense-categories",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "GET /api/expenses",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "GET /api/expenses/summary",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "GET /api/grn",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "grn_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/grn.js"
+    },
+    {
+      "endpoint": "GET /api/grn/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "grn_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/grn.js"
+    },
+    {
+      "endpoint": "GET /api/health",
+      "classification": "internal_system_only",
+      "frontend_refs": [],
+      "reason": "Operational endpoint for system health, automation, or background processing.",
+      "owner": "registerAllRoutes_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/registerAllRoutes.js"
+    },
+    {
+      "endpoint": "GET /api/hr/payroll/periods/:param/lines",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_hr_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/hr.js"
+    },
+    {
+      "endpoint": "GET /api/integrations/mappings/customers",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_mappings_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/mappings.js"
+    },
+    {
+      "endpoint": "GET /api/integrations/mappings/locations",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_mappings_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/mappings.js"
+    },
+    {
+      "endpoint": "GET /api/integrations/mappings/products",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_mappings_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/mappings.js"
+    },
+    {
+      "endpoint": "GET /api/integrations/shopify/config",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_config_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/config.js"
+    },
+    {
+      "endpoint": "GET /api/integrations/shopify/events",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_sync_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/sync.js"
+    },
+    {
+      "endpoint": "GET /api/integrations/shopify/locations/live",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_health_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/health.js"
+    },
+    {
+      "endpoint": "GET /api/integrations/shopify/reconciliation",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_reconciliation_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/reconciliation.js"
+    },
+    {
+      "endpoint": "GET /api/integrations/shopify/status",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_health_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/health.js"
+    },
+    {
+      "endpoint": "GET /api/integrations/shopify/uat-checklist",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_health_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/health.js"
+    },
+    {
+      "endpoint": "GET /api/integrations/shopify/webhooks/setup",
+      "classification": "internal_system_only",
+      "frontend_refs": [],
+      "reason": "Operational endpoint for system health, automation, or background processing.",
+      "owner": "shopify_health_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/health.js"
+    },
+    {
+      "endpoint": "GET /api/notifications",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_notifications_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/notifications.js"
+    },
+    {
+      "endpoint": "GET /api/notifications/count",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_notifications_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/notifications.js"
+    },
+    {
+      "endpoint": "GET /api/orders",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "orders_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/orders.js"
+    },
+    {
+      "endpoint": "GET /api/orders/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "orders_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/orders.js"
+    },
+    {
+      "endpoint": "GET /api/parked-sales",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "parked-sales_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/parked-sales.js"
+    },
+    {
+      "endpoint": "GET /api/parked-sales/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "parked-sales_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/parked-sales.js"
+    },
+    {
+      "endpoint": "GET /api/products/:param/media",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "orders_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/orders.js"
+    },
+    {
+      "endpoint": "GET /api/products/:param/stock",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "products_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/products.js"
+    },
+    {
+      "endpoint": "GET /api/products/:param/variants",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "products_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/products.js"
+    },
+    {
+      "endpoint": "GET /api/products/scan/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "products_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/products.js"
+    },
+    {
+      "endpoint": "GET /api/promotions",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "promotions_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/promotions.js"
+    },
+    {
+      "endpoint": "GET /api/quotations",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_crm_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/crm.js"
+    },
+    {
+      "endpoint": "GET /api/receipt-templates/active",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "receipt-templates_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/receipt-templates.js"
+    },
+    {
+      "endpoint": "GET /api/reports/delivery-log",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "reports_governance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/reports/governance.js"
+    },
+    {
+      "endpoint": "GET /api/reports/governance/definitions",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "reports_governance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/reports/governance.js"
+    },
+    {
+      "endpoint": "GET /api/reports/saved-views",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "reports_governance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/reports/governance.js"
+    },
+    {
+      "endpoint": "GET /api/reports/schedules",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "reports_governance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/reports/governance.js"
+    },
+    {
+      "endpoint": "GET /api/reports/schedules/:param/runs",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "reports_governance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/reports/governance.js"
+    },
+    {
+      "endpoint": "GET /api/reports/top-salespeople",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "reports_sales_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/reports/sales.js"
+    },
+    {
+      "endpoint": "GET /api/roles/:param/permissions",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "roles_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/roles.js"
+    },
+    {
+      "endpoint": "GET /api/sales/:param/invoice",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "GET /api/sales/:param/invoice/export",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "GET /api/shifts",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shifts_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shifts.js"
+    },
+    {
+      "endpoint": "GET /api/shifts/:param/denominations",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shifts_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shifts.js"
+    },
+    {
+      "endpoint": "GET /api/supplier-invoices/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "grn_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/grn.js"
+    },
+    {
+      "endpoint": "GET /api/supplier-ledger/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "grn_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/grn.js"
+    },
+    {
+      "endpoint": "POST /api/action-history",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "receipt-templates_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/receipt-templates.js"
+    },
+    {
+      "endpoint": "POST /api/attendance/:param/checkout",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "attendance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/attendance.js"
+    },
+    {
+      "endpoint": "POST /api/attendance/checkin",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "attendance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/attendance.js"
+    },
+    {
+      "endpoint": "POST /api/attendance/pin-checkin",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "attendance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/attendance.js"
+    },
+    {
+      "endpoint": "POST /api/attendance/pin-checkout",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "attendance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/attendance.js"
+    },
+    {
+      "endpoint": "POST /api/attendance/pin-status",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "attendance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/attendance.js"
+    },
+    {
+      "endpoint": "POST /api/attribute-sets",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "attribute-sets_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/attribute-sets.js"
+    },
+    {
+      "endpoint": "POST /api/backup/restore",
+      "classification": "internal_system_only",
+      "frontend_refs": [],
+      "reason": "Operational endpoint for system health, automation, or background processing.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "POST /api/barcode-print-jobs",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "POST /api/barcode-templates",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "POST /api/brands",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "brands_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/brands.js"
+    },
+    {
+      "endpoint": "POST /api/categories",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "categories_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/categories.js"
+    },
+    {
+      "endpoint": "POST /api/categories/:param/move-products",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "categories_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/categories.js"
+    },
+    {
+      "endpoint": "POST /api/company-profile/logo",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_company-profile_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/company-profile.js"
+    },
+    {
+      "endpoint": "POST /api/crm/leads/:param/activities",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_crm_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/crm.js"
+    },
+    {
+      "endpoint": "POST /api/crm/leads/:param/convert",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_crm_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/crm.js"
+    },
+    {
+      "endpoint": "POST /api/customers/:param/wallet/topup",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "customers_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/customers.js"
+    },
+    {
+      "endpoint": "POST /api/employees",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "employees_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/employees.js"
+    },
+    {
+      "endpoint": "POST /api/expense-categories",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "POST /api/expenses",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "POST /api/hr/payroll/periods/:param/generate",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_hr_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/hr.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/mappings/products/apply-suggestions",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_mappings_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/mappings.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/mappings/products/auto",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_mappings_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/mappings.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/mappings/products/auto-live",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_mappings_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/mappings.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/shopify/disconnect",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_config_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/config.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/shopify/import/inventory",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_import_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/import.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/shopify/import/products",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_import_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/import.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/shopify/live-validation",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_health_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/health.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/shopify/reconciliation",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_reconciliation_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/reconciliation.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/shopify/reconciliation/:param/fix",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_reconciliation_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/reconciliation.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/shopify/reconciliation/bulk",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_reconciliation_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/reconciliation.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/shopify/sync/process-pending",
+      "classification": "internal_system_only",
+      "frontend_refs": [],
+      "reason": "Operational endpoint for system health, automation, or background processing.",
+      "owner": "shopify_sync_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/sync.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/shopify/sync/pull-orders",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_orders_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/orders.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/shopify/sync/push-inventory",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_sync_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/sync.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/shopify/sync/retry-event/:param",
+      "classification": "internal_system_only",
+      "frontend_refs": [],
+      "reason": "Operational endpoint for system health, automation, or background processing.",
+      "owner": "shopify_sync_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/sync.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/shopify/sync/retry-failed",
+      "classification": "internal_system_only",
+      "frontend_refs": [],
+      "reason": "Operational endpoint for system health, automation, or background processing.",
+      "owner": "shopify_sync_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/sync.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/shopify/verify",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_health_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/health.js"
+    },
+    {
+      "endpoint": "POST /api/integrations/shopify/webhooks/orders-create",
+      "classification": "internal_system_only",
+      "frontend_refs": [],
+      "reason": "Operational endpoint for system health, automation, or background processing.",
+      "owner": "shopify_webhooks_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/webhooks.js"
+    },
+    {
+      "endpoint": "POST /api/orders",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "orders_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/orders.js"
+    },
+    {
+      "endpoint": "POST /api/orders/:param/fulfillments",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "orders_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/orders.js"
+    },
+    {
+      "endpoint": "POST /api/orders/:param/transactions",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "orders_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/orders.js"
+    },
+    {
+      "endpoint": "POST /api/orders/bulk-update",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "orders_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/orders.js"
+    },
+    {
+      "endpoint": "POST /api/orders/mark-complete",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "orders_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/orders.js"
+    },
+    {
+      "endpoint": "POST /api/outlets",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "outlets_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/outlets.js"
+    },
+    {
+      "endpoint": "POST /api/products",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "products_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/products.js"
+    },
+    {
+      "endpoint": "POST /api/products/:param/media",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "orders_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/orders.js"
+    },
+    {
+      "endpoint": "POST /api/products/bulk-category",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "products_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/products.js"
+    },
+    {
+      "endpoint": "POST /api/products/bulk-delete",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "products_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/products.js"
+    },
+    {
+      "endpoint": "POST /api/products/bulk-import",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "products_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/products.js"
+    },
+    {
+      "endpoint": "POST /api/products/bulk-status",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "products_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/products.js"
+    },
+    {
+      "endpoint": "POST /api/promotions",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "promotions_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/promotions.js"
+    },
+    {
+      "endpoint": "POST /api/promotions/quote",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "promotions_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/promotions.js"
+    },
+    {
+      "endpoint": "POST /api/purchase-orders/:param/approve",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_approvals_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/approvals.js"
+    },
+    {
+      "endpoint": "POST /api/purchase-orders/:param/receive",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "purchase-orders_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/purchase-orders.js"
+    },
+    {
+      "endpoint": "POST /api/purchase-orders/:param/submit",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_approvals_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/approvals.js"
+    },
+    {
+      "endpoint": "POST /api/quotations",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_crm_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/crm.js"
+    },
+    {
+      "endpoint": "POST /api/quotations/:param/convert",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_crm_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/crm.js"
+    },
+    {
+      "endpoint": "POST /api/receipt-templates",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "receipt-templates_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/receipt-templates.js"
+    },
+    {
+      "endpoint": "POST /api/reports/schedules/:param/run-now",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "reports_governance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/reports/governance.js"
+    },
+    {
+      "endpoint": "POST /api/roles",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "roles_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/roles.js"
+    },
+    {
+      "endpoint": "POST /api/shifts/:param/close",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shifts_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shifts.js"
+    },
+    {
+      "endpoint": "POST /api/supplier-invoices/:param/pay",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "grn_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/grn.js"
+    },
+    {
+      "endpoint": "POST /api/suppliers",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "suppliers_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/suppliers.js"
+    },
+    {
+      "endpoint": "POST /api/taxes",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "taxes_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/taxes.js"
+    },
+    {
+      "endpoint": "POST /api/transfers/:param/approve",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_approvals_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/approvals.js"
+    },
+    {
+      "endpoint": "POST /api/transfers/:param/submit",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_approvals_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/approvals.js"
+    },
+    {
+      "endpoint": "POST /api/uploads/product-image",
+      "classification": "internal_system_only",
+      "frontend_refs": [],
+      "reason": "Operational endpoint for system health, automation, or background processing.",
+      "owner": "orders_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/orders.js"
+    },
+    {
+      "endpoint": "PUT /api/accounting/periods/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_accounting_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/accounting.js"
+    },
+    {
+      "endpoint": "PUT /api/attribute-sets/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "attribute-sets_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/attribute-sets.js"
+    },
+    {
+      "endpoint": "PUT /api/barcode-templates/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "PUT /api/brands/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "brands_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/brands.js"
+    },
+    {
+      "endpoint": "PUT /api/categories/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "categories_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/categories.js"
+    },
+    {
+      "endpoint": "PUT /api/crm/leads/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_crm_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/crm.js"
+    },
+    {
+      "endpoint": "PUT /api/customers/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "customers_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/customers.js"
+    },
+    {
+      "endpoint": "PUT /api/customers/:param/points",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "customers_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/customers.js"
+    },
+    {
+      "endpoint": "PUT /api/employees/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "employees_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/employees.js"
+    },
+    {
+      "endpoint": "PUT /api/employees/:param/attendance-config",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "attendance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/attendance.js"
+    },
+    {
+      "endpoint": "PUT /api/employees/:param/outlets",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "employees_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/employees.js"
+    },
+    {
+      "endpoint": "PUT /api/expense-categories/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "PUT /api/expenses/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "PUT /api/feature-flags/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "registerAllRoutes_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/registerAllRoutes.js"
+    },
+    {
+      "endpoint": "PUT /api/hr/leave/:param/status",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_hr_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/hr.js"
+    },
+    {
+      "endpoint": "PUT /api/integrations/mappings/customers/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_mappings_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/mappings.js"
+    },
+    {
+      "endpoint": "PUT /api/integrations/mappings/locations/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_mappings_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/mappings.js"
+    },
+    {
+      "endpoint": "PUT /api/integrations/mappings/products/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_mappings_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/mappings.js"
+    },
+    {
+      "endpoint": "PUT /api/integrations/shopify/config",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_config_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/config.js"
+    },
+    {
+      "endpoint": "PUT /api/integrations/shopify/reconciliation/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "shopify_reconciliation_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/shopify/reconciliation.js"
+    },
+    {
+      "endpoint": "PUT /api/notifications/:param/read",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_notifications_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/notifications.js"
+    },
+    {
+      "endpoint": "PUT /api/orders/:param/status",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "orders_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/orders.js"
+    },
+    {
+      "endpoint": "PUT /api/outlets/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "outlets_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/outlets.js"
+    },
+    {
+      "endpoint": "PUT /api/products/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "products_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/products.js"
+    },
+    {
+      "endpoint": "PUT /api/promotions/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "promotions_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/promotions.js"
+    },
+    {
+      "endpoint": "PUT /api/quotations/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_crm_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/crm.js"
+    },
+    {
+      "endpoint": "PUT /api/quotations/:param/status",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "tier4_crm_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/tier4/crm.js"
+    },
+    {
+      "endpoint": "PUT /api/receipt-templates/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "receipt-templates_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/receipt-templates.js"
+    },
+    {
+      "endpoint": "PUT /api/reports/saved-views/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "reports_governance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/reports/governance.js"
+    },
+    {
+      "endpoint": "PUT /api/reports/schedules/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "reports_governance_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/reports/governance.js"
+    },
+    {
+      "endpoint": "PUT /api/roles/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "roles_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/roles.js"
+    },
+    {
+      "endpoint": "PUT /api/roles/:param/permissions",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "roles_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/roles.js"
+    },
+    {
+      "endpoint": "PUT /api/sales/:param/void",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "sales_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/sales.js"
+    },
+    {
+      "endpoint": "PUT /api/suppliers/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "suppliers_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/suppliers.js"
+    },
+    {
+      "endpoint": "PUT /api/taxes/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
+      "owner": "taxes_maintainer",
+      "review_date": "2026-03-06",
+      "source": "backend/routes/taxes.js"
+    }
+  ]
+}

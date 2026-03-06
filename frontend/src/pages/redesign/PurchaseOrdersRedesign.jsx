@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
+import { fmtDate, fmtDateTime } from "../../utils/dates";
 import {
   Badge,
   Button,
@@ -484,7 +485,7 @@ export default function PurchaseOrdersRedesign() {
     return (
       <PageShell
         title={poNumber(po.id)}
-        subtitle={`Supplier: ${po.supplier_name} | Created: ${new Date(po.created_at).toLocaleString()}`}
+        subtitle={`Supplier: ${po.supplier_name} | Created: ${fmtDateTime(po.created_at)}`}
         right={
           <Button onClick={() => { setView("list"); setWarn(""); }}>
             <ArrowLeft size={14} className="mr-1 inline" />
@@ -739,7 +740,7 @@ export default function PurchaseOrdersRedesign() {
                     <td className="px-3 py-2 font-medium text-(--ui-text)">{poNumber(po.id)}</td>
                     <td className="px-3 py-2 text-(--ui-text)">{po.supplier_name}</td>
                     <td className="px-3 py-2 text-(--ui-text-muted)">
-                      {new Date(po.created_at).toLocaleDateString()}
+                      {fmtDate(po.created_at)}
                     </td>
                     <td className="px-3 py-2">
                       <Badge tone={statusTone(po.status)}>{po.status}</Badge>

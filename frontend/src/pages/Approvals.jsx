@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { CheckCircle, XCircle, Clock, RefreshCw } from "lucide-react";
+import { fmtDateTime } from "../utils/dates";
 import { useAuth } from "../auth/AuthProvider";
 
 import { API } from '../config';
@@ -174,7 +175,7 @@ export default function Approvals() {
                       {formatApprovalNotes(ap)}
                     </td>
                     <td className="px-4 py-3 text-gray-500">
-                      {new Date(ap.created_at).toLocaleString()}
+                      {fmtDateTime(ap.created_at)}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>

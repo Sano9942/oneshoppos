@@ -374,7 +374,7 @@ export default function KioskRedesign() {
             )}
             {s === "clocked_out" && (
               <p className="text-blue-400 font-semibold mt-1">
-                Day completed - {fmtDuration(netHours)} worked
+                Checked out — {fmtDuration(netHours)} worked today
               </p>
             )}
           </div>
@@ -419,12 +419,21 @@ export default function KioskRedesign() {
           )}
 
           {s === "clocked_out" && (
-            <button
-              onClick={resetToIdle}
-              className="w-full py-4 text-lg font-bold rounded-2xl bg-slate-700 hover:bg-slate-600 active:scale-95 transition-all"
-            >
-              Done
-            </button>
+            <>
+              <button
+                onClick={clockIn}
+                disabled={loading}
+                className="w-full py-5 text-xl font-bold rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 transition-all disabled:opacity-50"
+              >
+                {loading ? "Please wait..." : "Clock In Again"}
+              </button>
+              <button
+                onClick={resetToIdle}
+                className="w-full py-4 text-lg font-bold rounded-2xl bg-slate-700 hover:bg-slate-600 active:scale-95 transition-all"
+              >
+                Done
+              </button>
+            </>
           )}
 
           {error && <p className="text-red-400 text-sm text-center">{error}</p>}

@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { X, Printer, RotateCcw, Search } from "lucide-react";
 import { API_BASE as API } from "../../../config";
 import { usePOS } from "./POSContext";
+import { fmtDateTime, fmtTime } from "../../../utils/dates";
 
 function money(n) {
   return `PKRs ${Number(n || 0).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -59,7 +60,7 @@ export default function POSRecentSalesPanel() {
         employee: s.employee_name ? { name: s.employee_name } : (employee || null),
         discountAmount: s.discount_amount || 0,
         discountType: s.discount_type || "fixed",
-        timestamp: new Date(s.timestamp || Date.now()).toLocaleString(),
+        timestamp: fmtDateTime(s.timestamp),
       };
       printSlip(slip);
     } catch {
@@ -113,7 +114,7 @@ export default function POSRecentSalesPanel() {
                   {sale.customer_name || "Walk-in"} · {money(sale.total_amount)}
                 </p>
                 <p className="text-xs text-slate-400">
-                  {new Date(sale.timestamp || Date.now()).toLocaleTimeString()}
+                  {fmtTime(sale.timestamp)}
                 </p>
               </div>
               <div className="flex gap-1.5 shrink-0">

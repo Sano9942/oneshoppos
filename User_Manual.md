@@ -216,6 +216,10 @@ Login uses:
 
 - **Username:** employee name (as configured in the system)
 - **PIN:** employee PIN code
+  Hassan 2580 Administrator
+  mubashir 2222 Manager
+  naeem shah 1234 Manager
+  ishtiaq 3333 Cashier
 
 Employee accounts are managed in the Employees section by an Administrator. Each employee's PIN is set when their account is created.
 
@@ -254,3 +258,12 @@ New POS features (e.g. loyalty program improvements, new report types, new Shopi
 The natural next step is SaaS Phase 1 — it's purely additive (no existing files modified), creates the foundation everything else builds on, and the test infrastructure is now solid enough to support it properly.
 
 Want to start brainstorming/planning SaaS Phase 1?
+
+Feature Can do now? Blocks anything?
+ESC/POS printer ✅ Yes Nothing
+Email receipts ✅ Yes Nothing
+Cross-outlet reports ✅ Yes Nothing
+Payment gateway ✅ Yes (but better after JWT) Better after SaaS Phase 2
+2FA/MFA ✅ Yes (but better with JWT) Better after SaaS Phase 2
+SaaS Phase 1 ✅ Yes All other SaaS phases
+SaaS Phase 2+ ❌ Needs Phase 1 first Sequential

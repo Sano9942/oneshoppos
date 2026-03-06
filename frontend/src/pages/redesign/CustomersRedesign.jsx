@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Search, Trash2, UserRound } from "lucide-react";
 import { API_BASE as API_BASE_URL } from "../../config";
+import { fmtDate } from "../../utils/dates";
 import {
   Badge,
   BulkActionBar,
@@ -532,7 +533,7 @@ export default function CustomersRedesign() {
                       <div key={s.id} className="rounded border border-(--ui-border) p-2 text-xs">
                         <p className="font-medium text-(--ui-text)">Sale #{s.id}</p>
                         <p className="text-(--ui-text-muted)">
-                          {new Date(s.timestamp).toLocaleDateString()} | {money(s.total_amount)}
+                          {fmtDate(s.timestamp)} | {money(s.total_amount)}
                         </p>
                       </div>
                     ))
