@@ -1005,3 +1005,71 @@ Implemented mandatory post-login branch/outlet context across 6 batches (A-F):
 New: `migrate61.js`, `ContextSelect.jsx`, `RequireContext.jsx`, `ContextSwitcher.jsx`
 
 **Status:** Complete. All 3 feature flags live. Backend enforcement verified with 6 test scenarios.
+
+---
+
+## Shift Linkage — Direct shift_id on Sales & Returns (Mar 2026)
+
+### Problem
+
+Shift-linked reports (`shift-summary`, `shift-sales`, `cash-audit`, `payment-summary`, `z-report`) identified sales and returns belonging to a shift using time-window matching:
+
+```sql
+WHERE outlet_id = ? AND timestamp >= opened_at AND timestamp <= COALESCE(closed_at, datetime('now'))
+```
+
+This is fragile: open shifts expand their window to `now` capturing future sales, boundary transactions are ambiguous, and overlapping shifts cause double-counting.
+
+### What Was Done
+
+- `migrate63.js` — `ALTER TABLE sales ADD COLUMN shift_id`, `ALTER TABLE returns ADD COLUMN shift_id` (both nullable FK to `cash_shifts`). Backfill via same time-window logic for historical rows. Indexes added on both columns.
+- `routes/sales.js` — hoisted `activeShift` out of the `try` block scope; added `shift_id` to `INSERT INTO sales`
+- `routes/returns.js` — added `db.get` for active shift before `processReturn()`; added `shift_id` to `INSERT INTO returns`
+- `tests/helpers/seedSchema.js` — `shift_id` column added to both in-memory test table definitions
+- `tests/integration/shift-linkage.test.js` — 3 new tests: sale gets correct `shift_id`, two shifts produce different `shift_id` values, return gets correct `shift_id`
+
+### Key Technical Decision
+
+`getActiveShiftForOutlet()` was already called in `POST /api/sales` as a **gate** (reject if no open shift). Its return value was thrown away. Promoting it from a guard to a persisted FK costs zero extra DB queries and makes shift attribution exact and permanent.
+
+The time-window queries in `routes/reports/shifts.js` are **not changed** — they remain valid for any historical rows that didn't get a backfill match. A future step can migrate those queries to `WHERE shift_id = ?` once the column is confirmed stable.
+
+### Files: 2 new, 3 modified
+
+New: `migrate63.js`, `tests/integration/shift-linkage.test.js`
+
+Modified: `routes/sales.js`, `routes/returns.js`, `tests/helpers/seedSchema.js`
+
+**Status:** Complete. 336 backend tests passing (3 new). Zero regressions.
+
+---
+
+## Shift Report Attribution + PO Credit Limit Warning (Mar 2026)
+
+### What Was Done
+
+**Shift reports (routes/reports/shifts.js):**
+- Removed `shiftTimeWhere()` helper entirely
+- Rewrote 5 endpoints (`cash-audit`, `shift-summary`, `shift-sales`, `payment-summary`, `current-session-zreport`) to use `WHERE shift_id = ?` directly instead of time-window matching
+- `cash-flow` and `all-denominations` unchanged (don't filter by sales/returns)
+- 3 new tests in `shift-report-attribution.test.js` verifying cross-shift isolation
+
+**PO credit limit warning (routes/purchase-orders.js):**
+- `POST /api/purchase-orders` now runs a supplier credit check before opening the transaction
+- If supplier has `payment_terms = 'credit'`, `credit_limit > 0`, and `running_balance + total_cost > credit_limit` → PO is created but response includes `{ id, warning: "..." }`
+- Cash suppliers and suppliers with `credit_limit = 0` (unlimited) are unaffected
+- `seedSchema.js` updated with `payment_terms`, `credit_days`, `credit_limit` on `suppliers` table
+- 4 new tests in `po-credit-limit.test.js`
+- Frontend `PurchaseOrdersRedesign.jsx` shows amber banner on credit warnings
+
+### Known Limitation
+
+The credit check computes `running_balance` from `supplier_invoices` (created at GRN/receive time). Draft POs awaiting approval are not included. Multiple concurrent draft POs against the same supplier can each pass the credit check independently. If a future upgrade hardens this to a hard block, the check should also aggregate `SUM(total_cost) FROM purchase_orders WHERE supplier_id = ? AND status IN ('Draft', 'Pending')`.
+
+### Files: 3 new, 5 modified
+
+New: `tests/integration/shift-report-attribution.test.js`, `tests/integration/po-credit-limit.test.js`, `docs/plans/2026-03-06-shift-reports-and-po-credit-limit.md`
+
+Modified: `routes/reports/shifts.js`, `routes/purchase-orders.js`, `tests/helpers/seedSchema.js`, `frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx`, `REFACTOR_NOTES.md`
+
+**Status:** Complete. 248 backend tests passing (7 new). Zero regressions.

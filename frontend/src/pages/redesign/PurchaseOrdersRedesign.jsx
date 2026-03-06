@@ -166,6 +166,7 @@ export default function PurchaseOrdersRedesign() {
 
   const openCreate = () => {
     setNotice("");
+    setWarn("");
     setError("");
     setForm({ supplier_id: "", due_date: "" });
     setProductSearch("");
