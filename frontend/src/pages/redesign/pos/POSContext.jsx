@@ -5,6 +5,7 @@ import React, {
   useEffect,
   useMemo,
   useRef,
+  useCallback,
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE as API } from "../../../config";
@@ -114,6 +115,8 @@ export const POSProvider = ({ children }) => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const noticeTimer = useRef(null);
+  const barcodeBuffer = useRef("");
+  const barcodeTimer = useRef(null);
 
   const showNotice = (msg) => {
     setNotice(msg);
@@ -340,6 +343,54 @@ export const POSProvider = ({ children }) => {
     setShowResults(false);
     searchRef.current?.focus();
   };
+
+  const handleBarcodeScanned = useCallback(async (barcode) => {
+    try {
+      const res = await fetch(`${API}/api/products?barcode=${encodeURIComponent(barcode)}`, {
+        headers: { "x-employee-id": String(employee?.id || "") },
+      });
+      const data = await res.json();
+      // API returns { products: [...] } or an array directly — handle both
+      const product = Array.isArray(data) ? data[0] : (data?.products || [])[0];
+      if (product) {
+        addToCart(product);
+      }
+      // No toast on miss — silently ignore unknown barcodes to avoid noise
+    } catch (err) {
+      console.error("Barcode lookup failed:", err);
+    }
+  }, [employee?.id, addToCart]);
+
+  // Barcode scanner — rapid keystroke detection (scanners type ~50ms between chars)
+  useEffect(() => {
+    function handleKeyDown(e) {
+      // Ignore keypresses when user is typing in an input, textarea, or select
+      const tag = document.activeElement?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+      if (e.key === "Enter") {
+        const code = barcodeBuffer.current.trim();
+        barcodeBuffer.current = "";
+        clearTimeout(barcodeTimer.current);
+        if (code.length >= 3) {
+          handleBarcodeScanned(code);
+        }
+        return;
+      }
+
+      if (e.key.length === 1) {
+        barcodeBuffer.current += e.key;
+        clearTimeout(barcodeTimer.current);
+        // Reset buffer if no new char within 100ms — not a scanner, just keyboard
+        barcodeTimer.current = setTimeout(() => {
+          barcodeBuffer.current = "";
+        }, 100);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleBarcodeScanned]);
 
   const updateQty = (id, delta) => {
     setCart((prev) =>
