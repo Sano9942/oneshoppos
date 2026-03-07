@@ -998,21 +998,6 @@ setInterval(runAutoBackup, 24 * 60 * 60 * 1000);
 setInterval(cleanupSyncEvents, 24 * 60 * 60 * 1000);
 setInterval(cleanupReportScheduleArtifacts, 24 * 60 * 60 * 1000);
 
-// ONE-TIME SETUP: create owner account (remove after first use)
-app.post("/api/setup/owner", (req, res) => {
-  const { secret, name, pin_code } = req.body;
-  if (secret !== process.env.SETUP_SECRET) return res.status(403).json({ error: "Forbidden" });
-  db.run(
-    `INSERT INTO employees (name, role, role_id, pin_code, salary_type, monthly_salary, hourly_rate, daily_rate, work_hours_per_day)
-     VALUES (?, 'Administrator', 1, ?, 'monthly', 0, 0, 0, 8)`,
-    [name, pin_code],
-    function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ id: this.lastID, name, role: "Administrator" });
-    }
-  );
-});
-
 // Health check (used by Railway healthcheckPath)
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
