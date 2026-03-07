@@ -85,23 +85,10 @@ module.exports = function createCompanyProfileRouter({
     },
   );
 
-  const companyLogoStorage = multer.diskStorage({
-    destination: (req, file, cb) => {
-      // In multi-tenant mode, write to the tenant's uploads directory
-      const dir = req.tenantDir
-        ? path.join(req.tenantDir, "uploads", "company")
-        : COMPANY_UPLOADS_DIR;
-      const fs = require("fs");
-      fs.mkdirSync(dir, { recursive: true });
-      cb(null, dir);
-    },
-    filename: (req, file, cb) => {
-      const ext = path.extname(file.originalname || "").toLowerCase() || ".png";
-      cb(null, `company_logo_${Date.now()}${ext}`);
-    },
-  });
+  const { uploadToR2 } = require("../../utils/r2");
+
   const companyLogoUpload = multer({
-    storage: companyLogoStorage,
+    storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },
   });
 
@@ -110,18 +97,25 @@ module.exports = function createCompanyProfileRouter({
     requirePerm("all_access"),
     requireFeature("multi_company"),
     companyLogoUpload.single("logo"),
-    (req, res) => {
+    async (req, res) => {
       if (!req.file)
         return res.status(400).json({ error: "Logo file is required" });
-      const logoUrl = `/uploads/company/${req.file.filename}`;
-      db.run(
-        "UPDATE company_profile SET logo_url = ?, updated_at = datetime('now','localtime') WHERE id = 1",
-        [logoUrl],
-        (err) => {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ message: "Company logo updated", logo_url: logoUrl });
-        },
-      );
+      try {
+        const ext = path.extname(req.file.originalname || "").toLowerCase() || ".png";
+        const filename = `company_logo_${Date.now()}${ext}`;
+        const key = `company/${filename}`;
+        const logoUrl = await uploadToR2(req.file.buffer, key, req.file.mimetype);
+        db.run(
+          "UPDATE company_profile SET logo_url = ?, updated_at = datetime('now','localtime') WHERE id = 1",
+          [logoUrl],
+          (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: "Company logo updated", logo_url: logoUrl });
+          },
+        );
+      } catch (err) {
+        res.status(500).json({ error: "Upload failed: " + err.message });
+      }
     },
   );
 

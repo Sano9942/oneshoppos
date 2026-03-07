@@ -219,6 +219,24 @@ app.use(
 ); // Parse JSON bodies
 // Single-tenant static file serving (fallback for MT mode when no tenant context)
 app.use("/uploads", express.static(UPLOADS_DIR));
+
+// R2 proxy — serves /r2/<key> by streaming from Cloudflare R2
+// Only used when R2_PUBLIC_URL is not set (i.e. no public bucket / custom domain)
+if (!process.env.R2_PUBLIC_URL) {
+  const { GetObjectCommand } = require("@aws-sdk/client-s3");
+  const { r2, bucket } = require("./utils/r2");
+  app.get("/r2/*", async (req, res) => {
+    const key = req.params[0];
+    try {
+      const data = await r2.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+      res.setHeader("Content-Type", data.ContentType || "application/octet-stream");
+      res.setHeader("Cache-Control", "public, max-age=31536000");
+      data.Body.pipe(res);
+    } catch (err) {
+      res.status(404).json({ error: "Not found" });
+    }
+  });
+}
 app.use(cookieParser()); // Parse cookies (needed for JWT refresh token httpOnly cookie)
 app.use(globalLimiter);
 

@@ -169,30 +169,11 @@ module.exports = function registerOrderRoutes(app, deps) {
     },
   );
 
-  // Upload a product image file and return a served URL
-  const productImageStorage = multer.diskStorage({
-    destination: (req, file, cb) => {
-      // In multi-tenant mode, write to the tenant's uploads directory
-      const dir = req.tenantDir
-        ? path.join(req.tenantDir, "uploads", "products")
-        : PRODUCT_UPLOADS_DIR;
-      fs.mkdirSync(dir, { recursive: true });
-      cb(null, dir);
-    },
-    filename: (req, file, cb) => {
-      const ext = path.extname(file.originalname || "").toLowerCase();
-      const safeExt = [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(ext)
-        ? ext
-        : ".jpg";
-      cb(
-        null,
-        `product_${Date.now()}_${Math.round(Math.random() * 1e6)}${safeExt}`,
-      );
-    },
-  });
+  // Upload a product image file to R2 and return a served URL
+  const { uploadToR2 } = require("../utils/r2");
 
   const productImageUpload = multer({
-    storage: productImageStorage,
+    storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
     fileFilter: (req, file, cb) => {
       if (!file || !file.mimetype) return cb(new Error("Invalid file"));
@@ -207,16 +188,20 @@ module.exports = function registerOrderRoutes(app, deps) {
     "/api/uploads/product-image",
     requirePerm("manage_inventory"),
     productImageUpload.single("image"),
-    (req, res) => {
+    async (req, res) => {
       if (!req.file)
         return res.status(400).json({ error: "No image uploaded" });
-      const relativeUrl = `/uploads/products/${req.file.filename}`;
-      res.json({
-        url: relativeUrl,
-        filename: req.file.filename,
-        original_name: req.file.originalname,
-        size: req.file.size,
-      });
+      try {
+        const ext = path.extname(req.file.originalname || "").toLowerCase();
+        const safeExt = [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(ext)
+          ? ext : ".jpg";
+        const filename = `product_${Date.now()}_${Math.round(Math.random() * 1e6)}${safeExt}`;
+        const key = `products/${filename}`;
+        const url = await uploadToR2(req.file.buffer, key, req.file.mimetype);
+        res.json({ url, filename, original_name: req.file.originalname, size: req.file.size });
+      } catch (err) {
+        res.status(500).json({ error: "Upload failed: " + err.message });
+      }
     },
   );
 
