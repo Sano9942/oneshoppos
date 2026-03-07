@@ -492,11 +492,11 @@ module.exports = function (app, deps) {
           SELECT ROUND(COALESCE(SUM(gi.qty_received * gi.cost_price), 0), 2) AS total
           FROM goods_received_notes grn
           JOIN grn_items gi ON gi.grn_id = grn.id
-          WHERE grn.received_at >= ?
-            AND grn.received_at < ?
+          WHERE date(grn.received_at) >= ?
+            AND date(grn.received_at) <= ?
           ${outletIds.length === 1 ? "AND grn.outlet_id = ?" : outletIds.length > 1 ? `AND grn.outlet_id IN (${outletIds.map(() => "?").join(",")})` : ""}
         `,
-        [monthStart, todayEnd, ...outletIds],
+        [monthStartStr, todayStr, ...outletIds],
       );
       const monthPurchases = Number(monthPurchasesRows[0]?.total || 0);
 
@@ -559,13 +559,13 @@ module.exports = function (app, deps) {
           ),
           purchase_daily AS (
             SELECT
-              date(grn.received_at, 'localtime') AS day,
+              date(grn.received_at) AS day,
               ROUND(COALESCE(SUM(gi.qty_received * gi.cost_price), 0), 2) AS purchase_total
             FROM goods_received_notes grn
             JOIN grn_items gi ON gi.grn_id = grn.id
-            WHERE grn.received_at >= ?
+            WHERE date(grn.received_at) >= ?
               ${outletIds.length === 1 ? "AND grn.outlet_id = ?" : outletIds.length > 1 ? `AND grn.outlet_id IN (${outletIds.map(() => "?").join(",")})` : ""}
-            GROUP BY date(grn.received_at, 'localtime')
+            GROUP BY date(grn.received_at)
           )
           SELECT
             dates.day,
@@ -576,7 +576,7 @@ module.exports = function (app, deps) {
           LEFT JOIN purchase_daily ON purchase_daily.day = dates.day
           ORDER BY dates.day ASC
         `,
-        [sixDaysAgoStr, todayStr, sixDaysAgoStart, ...outletParams, sixDaysAgoStart, ...outletIds],
+        [sixDaysAgoStr, todayStr, sixDaysAgoStart, ...outletParams, sixDaysAgoStr, ...outletIds],
       );
 
       const attendanceDetails = attendanceToday.map((row) => {

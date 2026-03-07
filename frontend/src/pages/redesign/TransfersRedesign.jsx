@@ -12,10 +12,9 @@ import {
   TableToolbar,
 } from "../../ui/primitives";
 import { useAuth } from "../../auth/AuthProvider";
+import { fmtUtcDateTime } from "../../utils/dates";
 
-function fmtDate(ts) {
-  return new Date(ts).toLocaleString();
-}
+const fmtDate = fmtUtcDateTime;
 
 export default function TransfersRedesign() {
   const { employee } = useAuth();

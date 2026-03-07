@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import supertest from "supertest";
-import { createTestApp, closeDb, dbGet, dbAll } from "../helpers/createTestApp";
+const supertest = require("supertest");
+const { createTestApp, closeDb, dbGet, dbAll } = require("../helpers/createTestApp");
 
 describe("Attendance & Kiosk Integration Tests", () => {
   let app, db, deps;

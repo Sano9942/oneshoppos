@@ -401,7 +401,7 @@ module.exports = function registerOrderRoutes(app, deps) {
      SET order_status = COALESCE(?, order_status),
          payment_status = COALESCE(?, payment_status),
          fulfillment_status = COALESCE(?, fulfillment_status),
-         updated_at = datetime('now')
+         updated_at = datetime('now','localtime')
      WHERE id = ?`,
         [
           order_status || null,
@@ -448,12 +448,12 @@ module.exports = function registerOrderRoutes(app, deps) {
        SET order_status = 'closed',
            fulfillment_status = 'fulfilled',
            payment_status = 'paid',
-           updated_at = datetime('now')
+           updated_at = datetime('now','localtime')
        WHERE id IN (${placeholders})`
         : `UPDATE web_orders
        SET order_status = 'closed',
            fulfillment_status = 'fulfilled',
-           updated_at = datetime('now')
+           updated_at = datetime('now','localtime')
        WHERE id IN (${placeholders})`;
 
       db.run(sql, normalizedIds, function (err) {
@@ -511,7 +511,7 @@ module.exports = function registerOrderRoutes(app, deps) {
           .json({ error: "At least one status field is required" });
       }
 
-      updates.push("updated_at = datetime('now')");
+      updates.push("updated_at = datetime('now','localtime')");
       const placeholders = normalizedIds.map(() => "?").join(",");
       const sql = `UPDATE web_orders SET ${updates.join(", ")} WHERE id IN (${placeholders})`;
 
@@ -979,9 +979,9 @@ module.exports = function registerOrderRoutes(app, deps) {
 
           db.run(
             `UPDATE shopify_connections
-           SET last_sync_at = datetime('now'),
+           SET last_sync_at = datetime('now','localtime'),
                last_error = ?,
-               updated_at = datetime('now')
+               updated_at = datetime('now','localtime')
            WHERE id = ?`,
             [failed > 0 ? `${failed} event(s) failed` : null, conn.id],
             () => cb(null, { processed, failed, skipped }),

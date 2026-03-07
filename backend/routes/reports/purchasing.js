@@ -369,16 +369,16 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
     const adjustmentParams = [];
 
     if (date_from) {
-      receiptWhere.push("grn.received_at >= ?");
-      receiptParams.push(toUtcStart(date_from, tz));
+      receiptWhere.push("date(grn.received_at) >= ?");
+      receiptParams.push(date_from);
       transferWhere.push("it.timestamp >= ?");
       transferParams.push(toUtcStart(date_from, tz));
       adjustmentWhere.push("sa.timestamp >= ?");
       adjustmentParams.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      receiptWhere.push("grn.received_at < ?");
-      receiptParams.push(toUtcEnd(date_to, tz));
+      receiptWhere.push("date(grn.received_at) <= ?");
+      receiptParams.push(date_to);
       transferWhere.push("it.timestamp < ?");
       transferParams.push(toUtcEnd(date_to, tz));
       adjustmentWhere.push("sa.timestamp < ?");

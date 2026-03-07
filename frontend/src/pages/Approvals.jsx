@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { CheckCircle, XCircle, Clock, RefreshCw } from "lucide-react";
-import { fmtDateTime } from "../utils/dates";
+import { fmtLocalDateTime as fmtDateTime } from "../utils/dates";
 import { useAuth } from "../auth/AuthProvider";
 
 import { API } from '../config';

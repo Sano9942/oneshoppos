@@ -34,22 +34,21 @@ module.exports = function (app, deps) {
       if (date_from) {
         saleWhere.push("s.timestamp >= ?");
         saleParams.push(toUtcStart(date_from, tz));
-        attendWhere.push("session_start >= ?");
-        attendParams.push(toUtcStart(date_from, tz));
+        attendWhere.push("date(session_start) >= ?");
+        attendParams.push(date_from);
       } else {
         const thirtyDaysAgoStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 30 * 24 * 3600 * 1000));
-        const thirtyDaysAgoStart = toUtcStart(thirtyDaysAgoStr, tz);
         saleWhere.push("s.timestamp >= ?");
-        saleParams.push(thirtyDaysAgoStart);
-        attendWhere.push("session_start >= ?");
-        attendParams.push(thirtyDaysAgoStart);
+        saleParams.push(toUtcStart(thirtyDaysAgoStr, tz));
+        attendWhere.push("date(session_start) >= ?");
+        attendParams.push(thirtyDaysAgoStr);
       }
 
       if (date_to) {
         saleWhere.push("s.timestamp < ?");
         saleParams.push(toUtcEnd(date_to, tz));
-        attendWhere.push("session_start < ?");
-        attendParams.push(toUtcEnd(date_to, tz));
+        attendWhere.push("date(session_start) <= ?");
+        attendParams.push(date_to);
       }
 
       if (outlet_id) {

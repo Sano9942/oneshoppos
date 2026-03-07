@@ -314,6 +314,15 @@ module.exports = function registerAttendanceRoutes(app, deps) {
         const today = todayLocal();
         const now = nowLocal();
 
+        // F1: Auto-close any stale open sessions from previous days
+        db.run(
+          `UPDATE attendance_sessions
+           SET session_end = session_start, session_type = 'auto_closed'
+           WHERE employee_id = ? AND session_end IS NULL AND date(session_start) < ?`,
+          [emp.id, today],
+          () => {} // fire-and-forget; errors are non-critical
+        );
+
         db.get(
           `SELECT * FROM attendance_sessions
            WHERE employee_id = ? AND session_end IS NULL

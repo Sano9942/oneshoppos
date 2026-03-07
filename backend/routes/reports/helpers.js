@@ -142,6 +142,18 @@ module.exports = function (db) {
     return lines.join("\n");
   }
 
+  /** For UTC-stored columns (sales.timestamp, returns.timestamp, etc.) */
+  function applyUtcDateFilter(where, params, { date_from, date_to, column }, tz) {
+    if (date_from) { where.push(`${column} >= ?`); params.push(toUtcStart(date_from, tz)); }
+    if (date_to)   { where.push(`${column} < ?`);  params.push(toUtcEnd(date_to, tz)); }
+  }
+
+  /** For LOCAL-stored columns (expenses.expense_date, grn.received_at, etc.) */
+  function applyLocalDateFilter(where, params, { date_from, date_to, column }) {
+    if (date_from) { where.push(`date(${column}) >= ?`); params.push(date_from); }
+    if (date_to)   { where.push(`date(${column}) <= ?`); params.push(date_to); }
+  }
+
   return {
     buildCategoryMetaMap,
     withCategoryPaths,
@@ -151,5 +163,7 @@ module.exports = function (db) {
     nextRunAtIso,
     toCsvLines,
     getDescendantLeafIds: (id) => getDescendantLeafIds(db, id),
+    applyUtcDateFilter,
+    applyLocalDateFilter,
   };
 };

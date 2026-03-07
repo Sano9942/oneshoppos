@@ -13,11 +13,11 @@ import {
 } from "../../ui/primitives";
 import { useAuth } from "../../auth/AuthProvider";
 
+import { fmtUtcDateTime } from "../../utils/dates";
+
 const REASONS = ["Damaged", "Expired", "Lost/Stolen", "Found", "Counting Error", "Other"];
 
-function fmtDate(ts) {
-  return new Date(ts).toLocaleString();
-}
+const fmtDate = fmtUtcDateTime;
 
 export default function StockAdjustmentsRedesign() {
   const { employee } = useAuth();

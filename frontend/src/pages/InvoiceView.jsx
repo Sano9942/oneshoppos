@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { Printer, ArrowLeft, RefreshCw, FileText, Download } from "lucide-react";
 
 import { API_BASE as API } from '../config';
+import { fmtUtcDateTime } from '../utils/dates';
 
 const fmt = (n) => `PKR ${Number(n || 0).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmtDate = (dt) => dt ? new Date(dt).toLocaleString() : "—";
+const fmtDate = fmtUtcDateTime;
 
 // Build a DOM element with optional attrs/text
 function el(doc, tag, opts = {}) {

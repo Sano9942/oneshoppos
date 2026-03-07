@@ -13,13 +13,13 @@ import {
 } from "../../ui/primitives";
 import { useAuth } from "../../auth/AuthProvider";
 
+import { fmtUtcDateTime } from "../../utils/dates";
+
 function money(v) {
   return `PKRs ${Number(v || 0).toFixed(2)}`;
 }
 
-function fmtDate(ts) {
-  return ts ? new Date(ts).toLocaleString() : "-";
-}
+const fmtDate = fmtUtcDateTime;
 
 export default function ReturnedStockRedesign() {
   const { employee } = useAuth();

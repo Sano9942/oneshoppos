@@ -1016,6 +1016,18 @@ setInterval(runAutoBackup, 24 * 60 * 60 * 1000);
 setInterval(cleanupSyncEvents, 24 * 60 * 60 * 1000);
 setInterval(cleanupReportScheduleArtifacts, 24 * 60 * 60 * 1000);
 
+// F2: Close stale attendance sessions from previous days (runs on boot + daily)
+function closeStaleAttendanceSessions() {
+  deps.db.run(
+    `UPDATE attendance_sessions
+     SET session_end = session_start, session_type = 'auto_closed'
+     WHERE session_end IS NULL AND date(session_start) < date('now', 'localtime')`,
+    (err) => { if (err) console.error("Stale session cleanup error:", err.message); }
+  );
+}
+closeStaleAttendanceSessions();
+setInterval(closeStaleAttendanceSessions, 24 * 60 * 60 * 1000);
+
 // Health check (used by Railway healthcheckPath)
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

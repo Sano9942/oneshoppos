@@ -10,17 +10,9 @@ import {
   TableToolbar,
 } from "../../ui/primitives";
 
-const fmtDate = (d) =>
-  d
-    ? new Date(d).toLocaleString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      })
-    : "—";
+import { fmtUtcDateTime } from "../../utils/dates";
+
+const fmtDate = fmtUtcDateTime;
 
 export default function ActionHistoryRedesign() {
   const [logs, setLogs] = useState([]);

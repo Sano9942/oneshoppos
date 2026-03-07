@@ -20,8 +20,9 @@ const EMPTY_FORM = {
   priority: "medium", stage: "new", expected_value: 0, assigned_to: "", notes: "",
 };
 
+import { fmtLocalDateTime } from "../../utils/dates";
 const money = (v) => `PKRs ${Number(v || 0).toFixed(2)}`;
-const fmtDate = (d) => d ? new Date(d).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
+const fmtDate = fmtLocalDateTime;
 
 export default function CRMRedesign() {
   const { authHeaders } = useAuth();

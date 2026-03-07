@@ -4,9 +4,8 @@
  * Targets bug: B10 (BXGY treats cart lines independently — doesn't combine quantities)
  */
 
-import { beforeAll, afterAll, describe, it, expect } from "vitest";
-import { createTestApp, closeDb, dbAll, dbGet, dbRun } from "../helpers/createTestApp";
-import { makeRequest, ADMIN_ID, MANAGER_ID, CASHIER_ID } from "../helpers/request";
+const { createTestApp, closeDb, dbAll, dbGet, dbRun } = require("../helpers/createTestApp");
+const { makeRequest, ADMIN_ID, MANAGER_ID, CASHIER_ID } = require("../helpers/request");
 
 let app, db;
 

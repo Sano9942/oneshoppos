@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { createTestApp, closeDb, dbRun, dbGet } from "../helpers/createTestApp";
-import { makeRequest, ADMIN_ID } from "../helpers/request";
+const { createTestApp, closeDb, dbRun, dbGet } = require("../helpers/createTestApp");
+const { makeRequest, ADMIN_ID } = require("../helpers/request");
 
 describe("Settings CRUD Integration Tests", () => {
   let app;

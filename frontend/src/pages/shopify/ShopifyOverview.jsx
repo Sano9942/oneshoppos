@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { fmtLocalDateTime } from "../../utils/dates";
 import { useShopify } from "./ShopifyContext";
 
 export default function ShopifyOverview() {
@@ -78,7 +79,7 @@ export default function ShopifyOverview() {
             </div>
             <div className="text-sm font-semibold text-slate-800">
               {status?.last_sync_at
-                ? new Date(status.last_sync_at).toLocaleString()
+                ? fmtLocalDateTime(status.last_sync_at)
                 : "Never"}
             </div>
           </div>

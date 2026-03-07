@@ -1,28 +1,13 @@
 import React from "react";
 import { Download, ClipboardList, Search, X } from "lucide-react";
+import { fmtUtcDate, fmtUtcDateTime } from "../../utils/dates";
 
 // --- Formatters ---------------------------------------------------------------
 export const fmt = (n) => "PKRs " + Number(n || 0).toFixed(2);
 
-export const fmtDate = (d) =>
-  d
-    ? new Date(d).toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })
-    : "—";
+export const fmtDate = fmtUtcDate;
 
-export const fmtDateTime = (d) =>
-  d
-    ? new Date(d).toLocaleString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "—";
+export const fmtDateTime = fmtUtcDateTime;
 
 // --- CSV Export Utilities -----------------------------------------------------
 export const exportCSV = (filename, cols, rows) => {
@@ -70,7 +55,7 @@ export function TableShell({
   return (
     <div className="overflow-hidden rounded-b-2xl">
       <div className="max-h-[70vh] overflow-auto">
-        <table className="w-full min-w-[720px] border-collapse text-left">
+        <table className="w-full min-w-180 border-collapse text-left">
         <thead>
           <tr className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500 backdrop-blur">
             {cols.map((c) => (

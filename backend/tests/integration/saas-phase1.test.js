@@ -141,10 +141,10 @@ describe('tenant-provisioner.js', () => {
     expect(rows[0].timezone).toBe('UTC');
   });
 
-  test('seed: schema_migrations version = 66', async () => {
+  test('seed: schema_migrations version = 70', async () => {
     const rows = await dbQuery(tenantDbPath, 'SELECT version FROM schema_migrations');
     expect(rows.length).toBe(1);
-    expect(rows[0].version).toBe(66);
+    expect(rows[0].version).toBe(70);
   });
 
   test('master.db: tenant row has correct slug, timezone, and status', async () => {
@@ -180,11 +180,48 @@ describe('tenant-provisioner.js', () => {
 });
 
 describe('tenant-db-manager.js', () => {
-  let firstTenantId;
+  const dbmSlug = `test-dbm-${Date.now()}`;
+  const dbmTenantDir = path.join(BACKEND_DIR, 'tenants', `t_${dbmSlug}`);
+  let dbmTenantId;
 
   beforeAll(async () => {
-    const rows = await dbQuery(MASTER_DB_PATH, 'SELECT id FROM tenants WHERE status = ? ORDER BY id LIMIT 1', ['active']);
-    firstTenantId = rows.length > 0 ? rows[0].id : null;
+    // Provision a dedicated tenant for db-manager tests
+    const result = runProvisioner([
+      '--slug', dbmSlug,
+      '--name', 'DBM Test',
+      '--timezone', 'UTC',
+      '--pin', '1234',
+    ]);
+    if (result.status !== 0) {
+      throw new Error(`Provisioner failed for dbm tests: ${result.stderr}`);
+    }
+    const rows = await dbQuery(MASTER_DB_PATH, 'SELECT id FROM tenants WHERE slug = ?', [dbmSlug]);
+    dbmTenantId = rows[0].id;
+  });
+
+  afterAll(async () => {
+    const { closeAll } = require('../../tenant-db-manager');
+    await closeAll();
+    if (fs.existsSync(dbmTenantDir)) {
+      fs.rmSync(dbmTenantDir, { recursive: true, force: true });
+    }
+    return new Promise((resolve, reject) => {
+      const db = new sqlite3.Database(MASTER_DB_PATH);
+      db.run(
+        'DELETE FROM tenant_audit_log WHERE tenant_id IN (SELECT id FROM tenants WHERE slug = ?)',
+        [dbmSlug],
+        (err) => {
+          if (err) return reject(err);
+          db.run('DELETE FROM tenants WHERE slug = ?', [dbmSlug], (err2) => {
+            if (err2) return reject(err2);
+            db.close((e) => {
+              if (e) console.error('afterAll close error:', e.message);
+              resolve();
+            });
+          });
+        }
+      );
+    });
   });
 
   afterEach(async () => {
@@ -193,25 +230,20 @@ describe('tenant-db-manager.js', () => {
   });
 
   test('getDb returns a live db handle for provisioned tenant', async () => {
-    if (!firstTenantId) throw new Error('No active tenants in master.db — cannot test getDb');
-    const { getDb, closeAll } = require('../../tenant-db-manager');
-    const db = await getDb(firstTenantId);
+    const { getDb } = require('../../tenant-db-manager');
+    const db = await getDb(dbmTenantId);
     expect(db).toBeTruthy();
-    await closeAll();
   });
 
   test('healthCheck returns ok for provisioned tenant', async () => {
-    if (!firstTenantId) throw new Error('No active tenants in master.db — cannot test healthCheck');
-    const { healthCheck, closeAll } = require('../../tenant-db-manager');
-    const result = await healthCheck(firstTenantId);
+    const { healthCheck } = require('../../tenant-db-manager');
+    const result = await healthCheck(dbmTenantId);
     expect(result.ok).toBe(true);
-    expect(result.tenantId).toBe(firstTenantId);
-    await closeAll();
+    expect(result.tenantId).toBe(dbmTenantId);
   });
 
   test('getDb rejects for nonexistent tenant id', async () => {
-    const { getDb, closeAll } = require('../../tenant-db-manager');
+    const { getDb } = require('../../tenant-db-manager');
     await expect(getDb(999999)).rejects.toThrow(/not found/i);
-    await closeAll();
   });
 });

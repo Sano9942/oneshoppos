@@ -19,8 +19,9 @@ const STATUS_TONE = {
   rejected: "danger", expired: "warning", converted: "success",
 };
 
+import { fmtLocalDate } from "../../utils/dates";
 const money = (v) => `PKRs ${Number(v || 0).toFixed(2)}`;
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "—";
+const fmtDate = fmtLocalDate;
 
 const EMPTY_FORM = {
   customer_id: "", outlet_id: "", employee_id: "",

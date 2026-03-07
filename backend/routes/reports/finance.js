@@ -28,6 +28,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
       supplierColumn,
       searchSql,
       searchParams,
+      columnType, // "utc" (default) or "local"
     } = opts;
     const {
       date_from,
@@ -47,20 +48,39 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         ? Number(supplier_id)
         : null;
 
+    const isLocal = columnType === "local";
     if (date_from && dateColumn) {
-      where.push(`${dateColumn} >= ?`);
-      params.push(toUtcStart(date_from, tz));
+      if (isLocal) {
+        where.push(`date(${dateColumn}) >= ?`);
+        params.push(date_from);
+      } else {
+        where.push(`${dateColumn} >= ?`);
+        params.push(toUtcStart(date_from, tz));
+      }
     }
     if (date_to && dateColumn) {
-      where.push(`${dateColumn} < ?`);
-      params.push(toUtcEnd(date_to, tz));
+      if (isLocal) {
+        where.push(`date(${dateColumn}) <= ?`);
+        params.push(date_to);
+      } else {
+        where.push(`${dateColumn} < ?`);
+        params.push(toUtcEnd(date_to, tz));
+      }
     }
     if (time_from && timeColumn) {
-      where.push(`time(${timeColumn}, 'localtime') >= time(?)`);
+      if (isLocal) {
+        where.push(`time(${timeColumn}) >= time(?)`);
+      } else {
+        where.push(`time(${timeColumn}, 'localtime') >= time(?)`);
+      }
       params.push(time_from);
     }
     if (time_to && timeColumn) {
-      where.push(`time(${timeColumn}, 'localtime') <= time(?)`);
+      if (isLocal) {
+        where.push(`time(${timeColumn}) <= time(?)`);
+      } else {
+        where.push(`time(${timeColumn}, 'localtime') <= time(?)`);
+      }
       params.push(time_to);
     }
     if (outletIds.length && outletColumn) {
@@ -157,6 +177,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
       applyRangeFilters(expenseWhere, expenseParams, req.query, {
         dateColumn: "e.expense_date",
         outletColumn: "e.outlet_id",
+        columnType: "local",
       }, tz);
 
       const supplierPaymentWhere = ["1 = 1"];
@@ -169,6 +190,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         searchSql:
           "(s.name LIKE ? OR COALESCE(si.invoice_number, '') LIKE ? OR COALESCE(sp.reference, '') LIKE ?)",
         searchParams: [1, 1, 1],
+        columnType: "local",
       }, tz);
 
       const invoiceWhere = ["1 = 1"];
@@ -180,6 +202,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         searchSql:
           "(s.name LIKE ? OR COALESCE(si.invoice_number, '') LIKE ?)",
         searchParams: [1, 1],
+        columnType: "local",
       }, tz);
 
       const customerWhere = ["COALESCE(c.balance, 0) <> 0"];
@@ -534,6 +557,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         searchSql:
           "(s.name LIKE ? OR COALESCE(si.invoice_number, '') LIKE ?)",
         searchParams: [1, 1],
+        columnType: "local",
       }, tz);
 
       const paymentWhere = ["1 = 1"];
@@ -960,6 +984,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         dateColumn: "grn.received_at",
         timeColumn: "grn.received_at",
         outletColumn: "grn.outlet_id",
+        columnType: "local",
       }, tz);
       await applyProductFilters(receivedWhere, receivedParams, req.query, {
         product: "p",

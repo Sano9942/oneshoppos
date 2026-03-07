@@ -1,4 +1,5 @@
 const express = require("express");
+const { toUtcStart, toUtcEnd } = require("../../utils/tz");
 
 module.exports = function createAccountingRouter({
   db,
@@ -15,8 +16,9 @@ module.exports = function createAccountingRouter({
       const { from, to, outlet_id } = req.query || {};
       if (!from || !to)
         return res.status(400).json({ error: "from and to are required" });
+      const tz = req.company?.timezone || "UTC";
 
-      const salesParams = [from, to];
+      const salesParams = [toUtcStart(from, tz), toUtcEnd(to, tz)];
       const outletSql = outlet_id ? " AND outlet_id = ?" : "";
       if (outlet_id) salesParams.push(outlet_id);
 
@@ -25,12 +27,12 @@ module.exports = function createAccountingRouter({
               COALESCE(SUM(discount_amount), 0) AS discounts
        FROM sales
        WHERE voided = 0
-         AND date(timestamp) BETWEEN ? AND ?${outletSql}`,
+         AND timestamp >= ? AND timestamp < ?${outletSql}`,
         salesParams,
         (err, salesRow) => {
           if (err) return res.status(500).json({ error: err.message });
 
-          const cogsParams = [from, to];
+          const cogsParams = [toUtcStart(from, tz), toUtcEnd(to, tz)];
           let cogsOutletSql = "";
           if (outlet_id) {
             cogsOutletSql = " AND s.outlet_id = ?";
@@ -41,7 +43,7 @@ module.exports = function createAccountingRouter({
            FROM sale_items si
            JOIN sales s ON s.id = si.sale_id
            WHERE s.voided = 0
-             AND date(s.timestamp) BETWEEN ? AND ?${cogsOutletSql}`,
+             AND s.timestamp >= ? AND s.timestamp < ?${cogsOutletSql}`,
             cogsParams,
             (err2, cogsRow) => {
               if (err2) return res.status(500).json({ error: err2.message });
@@ -49,8 +51,8 @@ module.exports = function createAccountingRouter({
                 `SELECT COALESCE(SUM(ri.refund_price * ri.quantity), 0) AS returns
                FROM return_items ri
                JOIN returns r ON r.id = ri.return_id
-               WHERE date(r.timestamp) BETWEEN ? AND ?`,
-                [from, to],
+               WHERE r.timestamp >= ? AND r.timestamp < ?`,
+                [toUtcStart(from, tz), toUtcEnd(to, tz)],
                 (err3, returnsRow) => {
                   if (err3)
                     return res.status(500).json({ error: err3.message });
@@ -116,23 +118,24 @@ module.exports = function createAccountingRouter({
       if (!from || !to)
         return res.status(400).json({ error: "from and to are required" });
 
+      const tz = req.company?.timezone || "UTC";
       db.all(
         `SELECT sp.payment_method, COALESCE(SUM(sp.amount), 0) AS total
        FROM sale_payments sp
        JOIN sales s ON s.id = sp.sale_id
-       WHERE s.voided = 0 AND date(s.timestamp) BETWEEN ? AND ?
+       WHERE s.voided = 0 AND s.timestamp >= ? AND s.timestamp < ?
        GROUP BY sp.payment_method
        ORDER BY total DESC`,
-        [from, to],
+        [toUtcStart(from, tz), toUtcEnd(to, tz)],
         (err, inflowsRows) => {
           if (err) return res.status(500).json({ error: err.message });
           db.get(
-            "SELECT COALESCE(SUM(amount), 0) AS expenses FROM expenses WHERE date(expense_date) BETWEEN ? AND ?",
+            "SELECT COALESCE(SUM(amount), 0) AS expenses FROM expenses WHERE date(expense_date) >= ? AND date(expense_date) <= ?",
             [from, to],
             (err2, expenseRow) => {
               if (err2) return res.status(500).json({ error: err2.message });
               db.get(
-                "SELECT COALESCE(SUM(amount), 0) AS supplier_payments FROM supplier_payments WHERE date(paid_at) BETWEEN ? AND ?",
+                "SELECT COALESCE(SUM(amount), 0) AS supplier_payments FROM supplier_payments WHERE date(paid_at) >= ? AND date(paid_at) <= ?",
                 [from, to],
                 (err3, supplierRow) => {
                   if (err3)
@@ -457,6 +460,7 @@ module.exports = function createAccountingRouter({
     (req, res) => {
       const { from, to } = req.query || {};
       if (!from || !to) return res.status(400).json({ error: "from and to are required" });
+      const tz = req.company?.timezone || "UTC";
       db.all(
         `SELECT t.name AS tax_name, t.rate,
                 COUNT(DISTINCT s.id) AS transaction_count,
@@ -466,10 +470,10 @@ module.exports = function createAccountingRouter({
          JOIN sales s ON s.id = si.sale_id AND s.voided = 0
          JOIN products p ON p.id = si.product_id
          JOIN taxes t ON t.id = p.tax_id
-         WHERE date(s.timestamp) BETWEEN ? AND ?
+         WHERE s.timestamp >= ? AND s.timestamp < ?
          GROUP BY t.id, t.name, t.rate
          ORDER BY tax_collected DESC`,
-        [from, to],
+        [toUtcStart(from, tz), toUtcEnd(to, tz)],
         (err, rows) => {
           if (err) return res.status(500).json({ error: err.message });
           const total_tax = (rows || []).reduce((s, r) => s + Number(r.tax_collected || 0), 0);

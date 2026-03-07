@@ -13,14 +13,13 @@ import {
 import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import { ArrowLeftRight, Plus, Search } from "lucide-react";
+import { fmtUtcDateTime } from "../../utils/dates";
 
 function money(v) {
   return `PKRs ${Number(v || 0).toFixed(2)}`;
 }
 
-function fmtDate(ts) {
-  return new Date(ts).toLocaleString();
-}
+const fmtDate = fmtUtcDateTime;
 
 export default function ReturnsRedesign() {
   const location = useLocation();

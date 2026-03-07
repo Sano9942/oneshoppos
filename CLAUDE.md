@@ -10,7 +10,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 ## Current Status Snapshot (March 2026)
 
 - Latest migration is `backend/migrate70.js`
-- **Test suite: 296/298 Jest integration tests passing (2 pre-existing vitest-format failures in concurrency.test.js)**
+- **Test suite: 395/395 Jest integration tests passing (37 suites, 0 failures)**
   - 7 new test files added in Phase 6: data-integrity, negative-cases, security, auditability, concurrency, failure-handling, compliance
   - `shift-linkage.test.js` added: 3 tests verifying `shift_id` written to sales and returns at creation
   - `printer.test.js` added: 9 tests for `/api/print/*` routes
@@ -58,6 +58,8 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - Repo cleanup (Mar 2026): deleted `reports.monolith.bak.js`, `reports.stable.bak.js`, `tier4.monolith.bak.js`, `ShopifyIntegration.monolith.bak.jsx` (dead backup files); deleted one-off debug scripts (`repro_zeros.js`, `test_zeros.js`, `verify_zeros_fix.js`, `preflight.js`, `setup_toy_store_defaults.js`, etc.); deleted 2,247 accumulated CSV exports; `backend/exports/`, `backend/uploads/`, `backend/test_results*.json` added to `.gitignore`
 - Attendance UTC-boundary bug fixed (Mar 2026): `GET /api/attendance`, `GET /api/attendance/sessions` (both in `backend/routes/attendance.js`) and dashboard `attendanceToday` + `operationalReadiness` staffCounts (in `backend/routes/reports/dashboard.js`) were incorrectly filtering local-time columns using `toUtcStart/toUtcEnd` UTC boundaries — sessions after local 19:00 in `Asia/Karachi` were excluded. Fixed to use `date(col) = ?` / `date(col) >= ?` / `date(col) <= ?` with plain YYYY-MM-DD strings. RULE: **never use `toUtcStart/toUtcEnd` on `session_start` or `check_in` — those columns are local time**
 - Dashboard auto-refresh (Mar 2026): `DashboardRedesign.jsx` now silently re-fetches every 60 seconds via `refreshKey` state + `setInterval`; manual refresh button in subtitle with spinning icon + last-updated timestamp
+- Timezone Phase 1 complete (Mar 2026): All single-tenant timezone correctness bugs fixed (Sections A-F from `TIMEZONE-AUDIT.md`): backend UTC/LOCAL query fixes across 10 route files, `dates.js` dual-parser rewrite (UTC+LOCAL formatters), 13 frontend display fixes (C1-C5), stale attendance session auto-close (F1+F2), shared `applyUtcDateFilter`/`applyLocalDateFilter` helpers in `reports/helpers.js`; 292/298 tests passing (zero new regressions)
+- Multi-tenant readiness: Before flipping `MULTI_TENANT=1` in production, the following are still needed: (1) Timezone Phase 2 — ~30 `'localtime'` SQL modifiers in GROUP BY must use tenant timezone, `loadCompanyProfile` cache must be keyed per-tenant; (2) tenant isolation testing; (3) tenant onboarding from super-admin dashboard; (4) tenant-aware scheduled jobs (stale session cleanup, report scheduler); (5) subdomain/slug routing; (6) Railway multi-DB volume strategy; (7) backup/restore per-tenant; (8) rate limiting per-tenant
 
 ## Completed Baseline Before Testing Plan (as of 2026-03-05)
 

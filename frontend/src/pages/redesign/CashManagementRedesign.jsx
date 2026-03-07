@@ -12,6 +12,7 @@ import {
 import { API_BASE as API } from "../../config";
 import { Calculator, Download, RefreshCw } from "lucide-react";
 import { useAuth } from "../../auth/AuthProvider";
+import { fmtUtcDateTime } from "../../utils/dates";
 
 const DENOMS = [5000, 1000, 500, 100, 50, 20, 10];
 
@@ -19,10 +20,7 @@ function money(v) {
   return `PKRs ${Number(v || 0).toFixed(2)}`;
 }
 
-function fmtDate(ts) {
-  if (!ts) return "-";
-  return new Date(ts).toLocaleString();
-}
+const fmtDate = fmtUtcDateTime;
 
 function exportCsv(rows) {
   if (!rows.length) return;

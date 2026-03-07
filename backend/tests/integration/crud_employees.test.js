@@ -1,12 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import {
+const {
   createTestApp,
   closeDb,
   dbRun,
   dbGet,
   dbAll,
-} from "../helpers/createTestApp";
-import { makeRequest, ADMIN_ID } from "../helpers/request";
+} = require("../helpers/createTestApp");
+const { makeRequest, ADMIN_ID } = require("../helpers/request");
 
 describe("Employee & Role CRUD Integration Tests", () => {
   let app;

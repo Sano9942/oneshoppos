@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { RefreshCw, Search, Filter } from "lucide-react";
 import { useShopify } from "./ShopifyContext";
 import { API } from "../../config";
-import { fmtDateTime } from "../../utils/dates";
+import { fmtLocalDateTime } from "../../utils/dates";
 
 export default function ShopifyEvents() {
   const { apiFetch, setError, setSuccess } = useShopify();
@@ -144,7 +144,7 @@ export default function ShopifyEvents() {
                   {ev.id}
                 </td>
                 <td className="p-3 text-slate-600 truncate max-w-30">
-                  {fmtDateTime(ev.timestamp)}
+                  {fmtLocalDateTime(ev.created_at)}
                 </td>
                 <td className="p-3">
                   <div className="text-slate-700 font-medium capitalize">

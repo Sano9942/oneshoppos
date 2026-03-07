@@ -12,14 +12,13 @@ import {
 import { API_BASE as API } from "../../config";
 import InvoiceView from "../InvoiceView";
 import { Ban, Download, FileText, Printer, RefreshCw, Search } from "lucide-react";
+import { fmtUtcDateTime } from "../../utils/dates";
 
 function money(n) {
   return `PKRs ${Number(n || 0).toFixed(2)}`;
 }
 
-function formatDate(ts) {
-  return new Date(ts).toLocaleString();
-}
+const formatDate = fmtUtcDateTime;
 
 function exportCsv(rows) {
   if (!rows.length) return;

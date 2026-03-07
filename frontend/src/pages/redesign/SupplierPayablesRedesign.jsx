@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, RefreshCw, X, BookOpen } from "lucide-react";
 import { API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
-import { fmtDate } from "../../utils/dates";
+import { fmtLocalDate as fmtDate } from "../../utils/dates";
 import {
   Badge,
   Button,

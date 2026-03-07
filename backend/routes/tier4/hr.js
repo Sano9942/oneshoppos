@@ -188,7 +188,7 @@ module.exports = function createHRRouter({
 
                 employees.forEach((emp) => {
                   db.all(
-                    `SELECT date(check_in, 'localtime') AS work_date,
+                    `SELECT date(check_in) AS work_date,
                        COALESCE(SUM(
                          CASE WHEN check_out IS NOT NULL
                            THEN (julianday(check_out) - julianday(check_in)) * 24.0
@@ -197,7 +197,7 @@ module.exports = function createHRRouter({
                      FROM employee_attendance
                      WHERE employee_id = ?
                        AND date(check_in) BETWEEN ? AND ?
-                     GROUP BY date(check_in, 'localtime')`,
+                     GROUP BY date(check_in)`,
                     [emp.id, period.start_date, period.end_date],
                     (attErr, attDays) => {
                       if (attErr && !failed) {

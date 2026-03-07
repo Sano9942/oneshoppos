@@ -1,7 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import supertest from "supertest";
-import { createTestApp, closeDb, dbGet, dbAll, dbRun } from "../helpers/createTestApp";
-import { makeRequest } from "../helpers/request";
+const supertest = require("supertest");
+const { createTestApp, closeDb, dbGet, dbAll, dbRun } = require("../helpers/createTestApp");
+const { makeRequest } = require("../helpers/request");
 
 describe("Customer Loyalty & Wallet Integration Tests", () => {
   let app, db, deps;

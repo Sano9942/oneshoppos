@@ -7,16 +7,15 @@ module.exports = function registerGRNRoutes(app, deps) {
 
   app.get("/api/grn", (req, res) => {
     const { date_from, date_to } = req.query;
-    const tz = req.company?.timezone || "UTC";
     const where = [];
     const params = [];
     if (date_from) {
-      where.push("g.received_at >= ?");
-      params.push(toUtcStart(date_from, tz));
+      where.push("date(g.received_at) >= ?");
+      params.push(date_from);
     }
     if (date_to) {
-      where.push("g.received_at < ?");
-      params.push(toUtcEnd(date_to, tz));
+      where.push("date(g.received_at) <= ?");
+      params.push(date_to);
     }
     const sql = `
     SELECT g.id, g.grn_number, g.received_at, g.notes,

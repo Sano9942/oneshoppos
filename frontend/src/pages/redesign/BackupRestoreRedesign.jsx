@@ -10,7 +10,8 @@ import {
   SectionCard,
 } from "../../ui/primitives";
 
-const fmt = (dt) => (dt ? new Date(dt).toLocaleString() : "—");
+import { fmtLocalDateTime } from "../../utils/dates";
+const fmt = fmtLocalDateTime;
 const fmtBytes = (b) => {
   if (!b) return "—";
   if (b < 1024) return `${b} B`;

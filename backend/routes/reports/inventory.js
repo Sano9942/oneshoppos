@@ -1,3 +1,5 @@
+const { toUtcStart, toUtcEnd } = require("../../utils/tz");
+
 module.exports = function (app, deps, helpers) {
   const { db, requireFeature } = deps;
   const { buildCategoryMetaMap, withCategoryPaths, getDescendantLeafIds } =
@@ -311,15 +313,16 @@ module.exports = function (app, deps, helpers) {
   // Inventory Loss: stock adjustments with negative quantity
   app.get("/api/reports/inventory-loss", (req, res) => {
     const { date_from, date_to } = req.query;
+    const tz = req.company?.timezone || "UTC";
     let where = ["sa.quantity_change < 0"];
     const params = [];
     if (date_from) {
-      where.push("date(sa.timestamp,'localtime') >= ?");
-      params.push(date_from);
+      where.push("sa.timestamp >= ?");
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      where.push("date(sa.timestamp,'localtime') <= ?");
-      params.push(date_to);
+      where.push("sa.timestamp < ?");
+      params.push(toUtcEnd(date_to, tz));
     }
     const sql = `
     SELECT sa.timestamp, p.name AS product_name, p.barcode,
@@ -340,15 +343,16 @@ module.exports = function (app, deps, helpers) {
   // Wastage: stock adjustments for Damaged or Expired reasons
   app.get("/api/reports/wastage", (req, res) => {
     const { date_from, date_to } = req.query;
+    const tz = req.company?.timezone || "UTC";
     let where = ["sa.reason IN ('Damaged','Expired')"];
     const params = [];
     if (date_from) {
-      where.push("date(sa.timestamp,'localtime') >= ?");
-      params.push(date_from);
+      where.push("sa.timestamp >= ?");
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      where.push("date(sa.timestamp,'localtime') <= ?");
-      params.push(date_to);
+      where.push("sa.timestamp < ?");
+      params.push(toUtcEnd(date_to, tz));
     }
     const sql = `
     SELECT sa.timestamp, p.name AS product_name, p.barcode,
@@ -592,7 +596,7 @@ module.exports = function (app, deps, helpers) {
     },
   );
 
-  async function buildForecastRows(filters, cb) {
+  async function buildForecastRows(filters, tz, cb) {
     const lookbackDays = Math.max(
       7,
       Math.min(
@@ -600,11 +604,12 @@ module.exports = function (app, deps, helpers) {
         parseInt(filters.lookback_days || filters.lookbackDays || 28, 10),
       ),
     );
+    const lookbackDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - lookbackDays * 24 * 3600 * 1000));
     const where = [
       "s.voided = 0",
-      "date(s.timestamp,'localtime') >= date('now', '-' || ? || ' days', 'localtime')",
+      "s.timestamp >= ?",
     ];
-    const whereParams = [lookbackDays];
+    const whereParams = [toUtcStart(lookbackDateStr, tz)];
     applyOutletFilter(where, whereParams, filters.outlet_id, "s.outlet_id");
     if (filters.brand_id) {
       where.push("p.brand_id = ?");
@@ -679,12 +684,15 @@ module.exports = function (app, deps, helpers) {
     "/api/reports/stockout-risk",
     requireFeature("reports_inventory_health_plus"),
     async (req, res) => {
+      const tz = req.company?.timezone || "UTC";
       const lookbackDays = Math.max(
         7,
         Math.min(365, parseInt(req.query.lookback_days || 30, 10)),
       );
+      const lookbackDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - lookbackDays * 24 * 3600 * 1000));
+      const lookbackStart = toUtcStart(lookbackDateStr, tz);
       const where = ["os.quantity > 0"];
-      const params = [lookbackDays, lookbackDays, lookbackDays, lookbackDays, lookbackDays];
+      const params = [lookbackStart, lookbackDays, lookbackDays, lookbackDays, lookbackDays];
       applyOutletFilter(where, params, req.query.outlet_id);
       await applyInventoryProductFilters(where, params, req.query);
       const sql = `
@@ -696,7 +704,7 @@ module.exports = function (app, deps, helpers) {
         FROM sale_items si
         JOIN sales s ON s.id = si.sale_id
         WHERE s.voided = 0
-          AND date(s.timestamp, 'localtime') >= date('now', '-' || ? || ' days', 'localtime')
+          AND s.timestamp >= ?
         GROUP BY si.product_id, s.outlet_id
       )
       SELECT
@@ -750,7 +758,7 @@ module.exports = function (app, deps, helpers) {
     "/api/reports/forecast-demand",
     requireFeature("reports_inventory_health_plus"),
     (req, res) => {
-      buildForecastRows(req.query || {}, async (err, rows, lookbackDays) => {
+      buildForecastRows(req.query || {}, req.company?.timezone || "UTC", async (err, rows, lookbackDays) => {
         if (err) return res.status(500).json({ error: err.message });
         const categoryMeta = await buildCategoryMetaMap();
         const items = withCategoryPaths(rows, categoryMeta);
@@ -774,7 +782,7 @@ module.exports = function (app, deps, helpers) {
         7,
         Math.min(90, parseInt(req.query.forecast_days || 14, 10)),
       );
-      buildForecastRows(req.query || {}, async (err, rows, lookbackDays) => {
+      buildForecastRows(req.query || {}, req.company?.timezone || "UTC", async (err, rows, lookbackDays) => {
         if (err) return res.status(500).json({ error: err.message });
         const smart = (rows || []).map((r) => {
           const avgDaily = Number(r.avg_daily_units || 0);
@@ -805,15 +813,16 @@ module.exports = function (app, deps, helpers) {
   // Product Movement (Inter-Outlet Transfers)
   app.get("/api/reports/product-movement", (req, res) => {
     const { date_from, date_to, outlet_id } = req.query;
+    const tz = req.company?.timezone || "UTC";
     let where = [];
     const params = [];
     if (date_from) {
-      where.push("date(it.timestamp,'localtime') >= ?");
-      params.push(date_from);
+      where.push("it.timestamp >= ?");
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      where.push("date(it.timestamp,'localtime') <= ?");
-      params.push(date_to);
+      where.push("it.timestamp < ?");
+      params.push(toUtcEnd(date_to, tz));
     }
     if (outlet_id) {
       where.push("(it.from_outlet_id = ? OR it.to_outlet_id = ?)");
@@ -839,15 +848,16 @@ module.exports = function (app, deps, helpers) {
   // STR Report (Stock Transfer Register - functionally similar to product movement but used as a formal register)
   app.get("/api/reports/str-report", (req, res) => {
     const { date_from, date_to, outlet_id } = req.query;
+    const tz = req.company?.timezone || "UTC";
     let where = [];
     const params = [];
     if (date_from) {
-      where.push("date(it.timestamp,'localtime') >= ?");
-      params.push(date_from);
+      where.push("it.timestamp >= ?");
+      params.push(toUtcStart(date_from, tz));
     }
     if (date_to) {
-      where.push("date(it.timestamp,'localtime') <= ?");
-      params.push(date_to);
+      where.push("it.timestamp < ?");
+      params.push(toUtcEnd(date_to, tz));
     }
     if (outlet_id) {
       where.push("(it.from_outlet_id = ? OR it.to_outlet_id = ?)");
@@ -876,17 +886,17 @@ module.exports = function (app, deps, helpers) {
     const params = [];
 
     if (date_from) {
-      where.push("date(grn.received_at, 'localtime') >= ?");
+      where.push("date(grn.received_at) >= ?");
       params.push(date_from);
     }
     if (date_to) {
-      where.push("date(grn.received_at, 'localtime') <= ?");
+      where.push("date(grn.received_at) <= ?");
       params.push(date_to);
     }
     applyOutletFilter(where, params, outlet_id, "grn.outlet_id");
 
     const sql = `
-      SELECT date(grn.received_at, 'localtime') as date, p.name as product_name,
+      SELECT date(grn.received_at) as date, p.name as product_name,
              s.name as supplier_name, gi.qty_received AS quantity, gi.cost_price
       FROM goods_received_notes grn
       JOIN purchase_orders po ON grn.po_id = po.id
@@ -909,19 +919,19 @@ module.exports = function (app, deps, helpers) {
     await applyInventoryProductFilters(where, params, req.query);
 
     if (req.query.date_from) {
-      where.push("date(grn.received_at, 'localtime') >= ?");
+      where.push("date(grn.received_at) >= ?");
       params.push(req.query.date_from);
     }
     if (req.query.date_to) {
-      where.push("date(grn.received_at, 'localtime') <= ?");
+      where.push("date(grn.received_at) <= ?");
       params.push(req.query.date_to);
     }
     if (req.query.time_from) {
-      where.push("strftime('%H:%M', grn.received_at, 'localtime') >= ?");
+      where.push("strftime('%H:%M', grn.received_at) >= ?");
       params.push(req.query.time_from);
     }
     if (req.query.time_to) {
-      where.push("strftime('%H:%M', grn.received_at, 'localtime') <= ?");
+      where.push("strftime('%H:%M', grn.received_at) <= ?");
       params.push(req.query.time_to);
     }
     applyOutletFilter(where, params, req.query.outlet_id, "grn.outlet_id");
@@ -972,13 +982,14 @@ module.exports = function (app, deps, helpers) {
     const params = [];
     await applyInventoryProductFilters(where, params, req.query);
 
+    const tz = req.company?.timezone || "UTC";
     if (req.query.date_from) {
-      where.push("date(s.timestamp, 'localtime') >= ?");
-      params.push(req.query.date_from);
+      where.push("s.timestamp >= ?");
+      params.push(toUtcStart(req.query.date_from, tz));
     }
     if (req.query.date_to) {
-      where.push("date(s.timestamp, 'localtime') <= ?");
-      params.push(req.query.date_to);
+      where.push("s.timestamp < ?");
+      params.push(toUtcEnd(req.query.date_to, tz));
     }
     if (req.query.time_from) {
       where.push("strftime('%H:%M', s.timestamp, 'localtime') >= ?");
@@ -1122,7 +1133,7 @@ module.exports = function (app, deps, helpers) {
         const totalStock = Number(row.total_stock || 0);
         const minQty = Number(row.min_qty || 0);
         const maxQty = Number(row.max_qty || 0);
-        const lastSoldAt = row.last_sold_at ? new Date(row.last_sold_at) : null;
+        const lastSoldAt = row.last_sold_at ? new Date(row.last_sold_at + "Z") : null;
         const now = new Date();
         const daysSinceSale = lastSoldAt
           ? Math.floor((now.getTime() - lastSoldAt.getTime()) / (1000 * 60 * 60 * 24))

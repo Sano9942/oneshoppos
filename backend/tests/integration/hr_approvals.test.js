@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { createTestApp, closeDb, dbRun, dbGet } from "../helpers/createTestApp";
-import { makeRequest } from "../helpers/request";
+const { createTestApp, closeDb, dbRun, dbGet } = require("../helpers/createTestApp");
+const { makeRequest } = require("../helpers/request");
 
 describe("HR Payroll & Approvals Integration Tests", () => {
   let app;

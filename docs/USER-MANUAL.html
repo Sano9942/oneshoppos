@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SanoPOS User Manual</title>
+<style>
+  @media print {
+    body { font-size: 11pt; }
+    .page-break { page-break-before: always; }
+    .no-print { display: none; }
+    h2 { page-break-before: always; }
+    h2:first-of-type { page-break-before: avoid; }
+    table { page-break-inside: avoid; }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.6;
+    color: #1e293b;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 40px 30px;
+    background: #fff;
+  }
+  .cover {
+    text-align: center;
+    padding: 120px 0 80px;
+    border-bottom: 3px solid #8066FF;
+    margin-bottom: 40px;
+  }
+  .cover h1 {
+    font-size: 42px;
+    color: #8066FF;
+    margin-bottom: 10px;
+    letter-spacing: -1px;
+  }
+  .cover .subtitle {
+    font-size: 20px;
+    color: #64748b;
+    margin-bottom: 30px;
+  }
+  .cover .version {
+    font-size: 14px;
+    color: #94a3b8;
+  }
+  .print-btn {
+    display: inline-block;
+    background: #8066FF;
+    color: #fff;
+    border: none;
+    padding: 12px 32px;
+    font-size: 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 20px;
+  }
+  .print-btn:hover { background: #7055E6; }
+  h2 {
+    font-size: 24px;
+    color: #8066FF;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 8px;
+    margin: 40px 0 16px;
+  }
+  h3 {
+    font-size: 18px;
+    color: #334155;
+    margin: 24px 0 8px;
+  }
+  h4 {
+    font-size: 15px;
+    color: #475569;
+    margin: 16px 0 6px;
+  }
+  p { margin: 8px 0; }
+  ul, ol {
+    margin: 8px 0 8px 24px;
+  }
+  li { margin: 4px 0; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid #e2e8f0;
+    padding: 8px 12px;
+    text-align: left;
+  }
+  th {
+    background: #f1f5f9;
+    font-weight: 600;
+    color: #334155;
+  }
+  td:nth-child(n+2) { text-align: center; }
+  .nav-path {
+    display: inline-block;
+    background: #f1f5f9;
+    color: #64748b;
+    font-size: 13px;
+    padding: 2px 10px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+  }
+  .important {
+    background: #fef3c7;
+    border-left: 4px solid #f59e0b;
+    padding: 10px 16px;
+    margin: 12px 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 14px;
+  }
+  .tip {
+    background: #ecfdf5;
+    border-left: 4px solid #10b981;
+    padding: 10px 16px;
+    margin: 12px 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 14px;
+  }
+  .warning {
+    background: #fef2f2;
+    border-left: 4px solid #ef4444;
+    padding: 10px 16px;
+    margin: 12px 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 14px;
+  }
+  code {
+    background: #f1f5f9;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 13px;
+    color: #8066FF;
+  }
+  .toc {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 20px 30px;
+    margin: 20px 0 40px;
+  }
+  .toc h3 { margin-top: 0; color: #8066FF; }
+  .toc ol { margin-left: 20px; }
+  .toc li { margin: 3px 0; font-size: 14px; }
+  .toc a { color: #334155; text-decoration: none; }
+  .toc a:hover { color: #8066FF; }
+  .checklist {
+    list-style: none;
+    margin-left: 0;
+  }
+  .checklist li::before {
+    content: "☐ ";
+    color: #8066FF;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>SanoPOS</h1>
+  <p class="subtitle">Complete User Manual</p>
+  <p class="version">Version 1.0 &middot; March 2026</p>
+  <br>
+  <button class="print-btn no-print" onclick="window.print()">Save as PDF (Ctrl+P)</button>
+</div>
+
+<div class="toc no-print">
+  <h3>Table of Contents</h3>
+  <ol>
+    <li><a href="#getting-started">Getting Started</a></li>
+    <li><a href="#dashboard">Dashboard</a></li>
+    <li><a href="#pos">Point of Sale (POS)</a></li>
+    <li><a href="#cash-management">Cash Management</a></li>
+    <li><a href="#orders">Orders</a></li>
+    <li><a href="#customers">Customers</a></li>
+    <li><a href="#returns">Returns & Exchanges</a></li>
+    <li><a href="#sales-history">Sales History</a></li>
+    <li><a href="#products">Products</a></li>
+    <li><a href="#categories">Categories</a></li>
+    <li><a href="#brands">Brands</a></li>
+    <li><a href="#taxes">Taxes</a></li>
+    <li><a href="#attribute-sets">Attribute Sets</a></li>
+    <li><a href="#promotions">Promotions</a></li>
+    <li><a href="#purchase-orders">Purchase Orders</a></li>
+    <li><a href="#stock-adjustments">Stock Adjustments</a></li>
+    <li><a href="#stock-transfers">Stock Transfers</a></li>
+    <li><a href="#returned-stock">Returned Stock</a></li>
+    <li><a href="#suppliers">Suppliers</a></li>
+    <li><a href="#expenses">Expenses</a></li>
+    <li><a href="#approvals">Approvals</a></li>
+    <li><a href="#reports">Reports</a></li>
+    <li><a href="#accounting">Accounting</a></li>
+    <li><a href="#kiosk">Kiosk (Clock-In Terminal)</a></li>
+    <li><a href="#attendance">Attendance</a></li>
+    <li><a href="#employees">Employees</a></li>
+    <li><a href="#outlets">Outlets (Branches)</a></li>
+    <li><a href="#company-settings">Company Settings</a></li>
+    <li><a href="#roles">Roles & Permissions</a></li>
+    <li><a href="#receipt-templates">Receipt Templates</a></li>
+    <li><a href="#barcode-templates">Barcode Templates</a></li>
+    <li><a href="#printer-settings">Printer Settings</a></li>
+    <li><a href="#shopify">Shopify Integration</a></li>
+    <li><a href="#backup">Backup & Restore</a></li>
+    <li><a href="#audit">Action History</a></li>
+    <li><a href="#permissions">Appendix A: Permissions</a></li>
+    <li><a href="#feature-flags">Appendix B: Feature Flags</a></li>
+    <li><a href="#tips">Appendix C: Tips & Troubleshooting</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="getting-started">1. Getting Started</h2>
+
+<h3>Logging In</h3>
+<ol>
+  <li>Open the app in your browser</li>
+  <li>Enter your <strong>Employee ID or Email</strong> and your <strong>PIN code</strong></li>
+  <li>Click <strong>Login</strong></li>
+</ol>
+
+<h3>Selecting Your Branch</h3>
+<p>After login, select which branch (outlet) you're working at today. If your store has only one branch, this step is automatic.</p>
+
+<h3>Your First Day Checklist</h3>
+<ul class="checklist">
+  <li>Log in and select your branch</li>
+  <li>Open a shift in the POS (required before making sales)</li>
+  <li>Clock in via the Kiosk (required before checkout)</li>
+  <li>Start selling — use the POS to ring up sales</li>
+  <li>At end of day: Close the shift with cash denomination count</li>
+  <li>Review your day on the Dashboard and Reports</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="dashboard">2. Dashboard</h2>
+<p class="nav-path">Sidebar &rarr; Overview &rarr; Dashboard</p>
+
+<p>The Dashboard is your command center. It shows everything happening in your store at a glance.</p>
+
+<h3>What You'll See</h3>
+<ul>
+  <li><strong>KPI Cards</strong> — Today's sales total, number of transactions, average order value, and comparison to yesterday</li>
+  <li><strong>Operational Readiness</strong> — Shows if your shift is open, how many employees are clocked in, and any issues</li>
+  <li><strong>Quick Actions</strong> — Shortcuts to common tasks (Open POS, View Reports, etc.)</li>
+  <li><strong>Needs Attention</strong> — Alerts for low stock, outlets without shifts, and other issues</li>
+  <li><strong>Sales Trends</strong> — Chart showing sales over time</li>
+  <li><strong>Top Categories</strong> — Which product categories are selling the most</li>
+  <li><strong>Low Stock Alerts</strong> — Products that need reordering</li>
+  <li><strong>Staff Today</strong> — Who's clocked in, on break, or clocked out</li>
+  <li><strong>Recent Sales</strong> — Latest transactions with quick reprint access</li>
+</ul>
+
+<div class="tip">The Dashboard auto-refreshes every 60 seconds. Click the refresh button for instant updates.</div>
+
+<!-- ============================================================ -->
+<h2 id="pos">3. Point of Sale (POS)</h2>
+<p class="nav-path">Sidebar &rarr; Commerce &rarr; POS (opens in new tab)</p>
+
+<p>The POS is where you ring up sales. It opens in a separate browser tab so you can keep it running all day.</p>
+
+<h3>Opening a Shift</h3>
+<div class="important">You must open a shift before making any sales.</div>
+<ol>
+  <li>When you enter POS, you'll see the <strong>Open Shift</strong> screen</li>
+  <li>Enter your opening cash using denomination buttons (Rs 5000, Rs 1000, Rs 500, Rs 100, Rs 50, Rs 20, Rs 10)</li>
+  <li>Click <strong>Open Shift</strong></li>
+</ol>
+
+<h3>Making a Sale</h3>
+<ol>
+  <li><strong>Find products</strong> — Type in the search bar or scan a barcode</li>
+  <li><strong>Add to cart</strong> — Click a product to add it. Click again to increase quantity</li>
+  <li><strong>Adjust quantities</strong> — Use the +/&minus; buttons on each cart item</li>
+  <li><strong>Apply discounts</strong> (optional):
+    <ul>
+      <li>Click the <strong>Discount</strong> button</li>
+      <li>Choose <strong>Percentage (%)</strong> or <strong>Fixed Amount</strong></li>
+      <li>Enter the value and click <strong>Apply</strong></li>
+    </ul>
+  </li>
+  <li><strong>Checkout</strong>:
+    <ul>
+      <li>Click <strong>Checkout</strong></li>
+      <li>Select payment: <strong>Cash</strong>, <strong>Card</strong>, or <strong>Split Payment</strong></li>
+      <li>For cash: enter amount tendered to see change due</li>
+      <li>For split: enter the cash portion, remainder goes to card</li>
+      <li>Click <strong>Complete Sale</strong></li>
+    </ul>
+  </li>
+  <li><strong>Receipt</strong> — A receipt popup appears. Print it or close it.</li>
+</ol>
+
+<h3>Barcode Scanning</h3>
+<p>If you have a USB barcode scanner, simply scan any product barcode. The POS automatically detects the scan and adds the product to your cart.</p>
+
+<h3>Parked Sales</h3>
+<p>Need to set a sale aside?</p>
+<ol>
+  <li>Add items to cart</li>
+  <li>Click <strong>Park Sale</strong></li>
+  <li>To retrieve: click <strong>Parked Sales</strong>, find your sale, click <strong>Resume</strong></li>
+</ol>
+
+<h3>Recent Sales</h3>
+<p>Click the <strong>Recent Sales</strong> panel to see latest transactions. From here you can:</p>
+<ul>
+  <li><strong>Reprint</strong> any receipt</li>
+  <li><strong>Email</strong> a receipt to a customer</li>
+  <li><strong>Start a Return or Exchange</strong></li>
+</ul>
+
+<h3>Closing a Shift</h3>
+<ol>
+  <li>Click <strong>Close Shift</strong></li>
+  <li>Count your cash using denomination buttons</li>
+  <li>The system shows expected cash vs. your count (any variance)</li>
+  <li>Click <strong>Close Shift</strong></li>
+</ol>
+
+<div class="important">
+  <strong>Rules:</strong><br>
+  &bull; You must have an <strong>open shift</strong> to make sales<br>
+  &bull; You must be <strong>clocked in</strong> (via Kiosk) to complete checkout<br>
+  &bull; If your shift is closed, open a new one to continue selling
+</div>
+
+<!-- ============================================================ -->
+<h2 id="cash-management">4. Cash Management</h2>
+<p class="nav-path">Sidebar &rarr; Commerce &rarr; Cash Management</p>
+
+<p>Detailed view of your cash shifts — opening/closing times, denomination breakdowns, cash variance tracking, and CSV export.</p>
+
+<!-- ============================================================ -->
+<h2 id="orders">5. Orders</h2>
+<p class="nav-path">Sidebar &rarr; Commerce &rarr; Orders</p>
+
+<p>Manage web orders (from Shopify or manual entry). View, filter, and fulfill orders.</p>
+
+<!-- ============================================================ -->
+<h2 id="customers">6. Customers</h2>
+<p class="nav-path">Sidebar &rarr; Commerce &rarr; Customers</p>
+
+<ul>
+  <li><strong>Add customers</strong> — Name, phone, email, address</li>
+  <li><strong>View history</strong> — All purchases, returns, and account balance</li>
+  <li><strong>Search</strong> — Find by name, phone, or email</li>
+  <li><strong>Store credit</strong> — Track customer wallet balances from returns/exchanges</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="returns">7. Returns & Exchanges</h2>
+<p class="nav-path">Sidebar &rarr; Commerce &rarr; Returns (or from POS Recent Sales)</p>
+
+<h3>Processing a Return</h3>
+<p><strong>From POS (easiest):</strong></p>
+<ol>
+  <li>Open <strong>Recent Sales</strong> panel in POS</li>
+  <li>Find the sale &rarr; click <strong>Return/Exchange</strong></li>
+  <li>Select which items to return (all or specific)</li>
+  <li>Choose refund method: <strong>Cash</strong> or <strong>Store Credit</strong></li>
+  <li>Click <strong>Process Return</strong></li>
+</ol>
+
+<h3>Processing an Exchange</h3>
+<ol>
+  <li>Start a return (as above)</li>
+  <li>Select <strong>Exchange</strong> instead of refund</li>
+  <li>Add the new items the customer wants</li>
+  <li>System calculates the price difference</li>
+  <li>A new invoice is generated for the exchange</li>
+</ol>
+
+<div class="tip">Stock is automatically adjusted — returned items go back into inventory.</div>
+
+<!-- ============================================================ -->
+<h2 id="sales-history">8. Sales History</h2>
+<p class="nav-path">Sidebar &rarr; Commerce &rarr; Sales History</p>
+
+<ul>
+  <li><strong>Search</strong> by invoice number, customer, or product</li>
+  <li><strong>Filter</strong> by date range, payment method, employee, or outlet</li>
+  <li><strong>View details</strong> — Full breakdown of any sale</li>
+  <li><strong>Reprint receipts</strong> for any past sale</li>
+  <li><strong>Export to CSV</strong></li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="products">9. Products</h2>
+<p class="nav-path">Sidebar &rarr; Inventory &rarr; Products</p>
+
+<h3>Adding a Simple Product</h3>
+<ol>
+  <li>Click <strong>Add Product</strong></li>
+  <li>Fill in: Name (required), SKU, Barcode, Category, Brand, Price (required), Cost, Stock, Tax</li>
+  <li>Click <strong>Save</strong></li>
+</ol>
+
+<h3>Adding a Product with Variants</h3>
+<p>For products with sizes, colors, etc.:</p>
+<ol>
+  <li>Click <strong>Add Product</strong> and fill in base details</li>
+  <li>Toggle <strong>Has Variants</strong> on</li>
+  <li>Add variants — each needs a name, SKU, price, and stock</li>
+  <li>Click <strong>Save</strong></li>
+</ol>
+
+<h3>Bulk Import via CSV</h3>
+<ol>
+  <li>Click <strong>Import CSV</strong></li>
+  <li>Download the <strong>CSV Template</strong></li>
+  <li>Fill in your data and upload</li>
+  <li>Review import results</li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="categories">10. Categories</h2>
+<p class="nav-path">Sidebar &rarr; Inventory &rarr; Categories</p>
+
+<p>Organize products in a hierarchical tree. Products can only be assigned to <strong>leaf categories</strong> (categories with no children).</p>
+
+<p>Example tree:</p>
+<ul>
+  <li>Electronics
+    <ul>
+      <li>Phones (products go here)</li>
+      <li>Accessories
+        <ul>
+          <li>Cases (products go here)</li>
+          <li>Chargers (products go here)</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="brands">11. Brands</h2>
+<p class="nav-path">Sidebar &rarr; Inventory &rarr; Brands</p>
+<p>Manage product brands. Add, edit, delete. Assign to products for filtering and reporting.</p>
+
+<!-- ============================================================ -->
+<h2 id="taxes">12. Taxes</h2>
+<p class="nav-path">Sidebar &rarr; Inventory &rarr; Taxes</p>
+<p>Configure tax rules (name, rate %, inclusive/exclusive). Assign to products. Tax is calculated automatically at checkout.</p>
+
+<!-- ============================================================ -->
+<h2 id="attribute-sets">13. Attribute Sets</h2>
+<p class="nav-path">Sidebar &rarr; Inventory &rarr; Attribute Sets</p>
+<p>Define attributes for product variants (Size: S/M/L/XL, Color: Red/Blue/Green). Standardizes variant naming across your catalog.</p>
+
+<!-- ============================================================ -->
+<h2 id="promotions">14. Promotions</h2>
+<p class="nav-path">Sidebar &rarr; Inventory &rarr; Promotions</p>
+
+<h3>Promotion Types</h3>
+<table>
+  <tr><th>Type</th><th>Description</th><th>Example</th></tr>
+  <tr><td>Percent</td><td>Percentage discount</td><td>10% off</td></tr>
+  <tr><td>Fixed</td><td>Fixed amount off</td><td>Rs 50 off</td></tr>
+  <tr><td>Threshold Percent</td><td>% off when cart exceeds minimum</td><td>15% off orders over Rs 5,000</td></tr>
+  <tr><td>Threshold Fixed</td><td>Fixed off when cart exceeds minimum</td><td>Rs 200 off orders over Rs 3,000</td></tr>
+  <tr><td>BXGY</td><td>Buy X Get Y free/discounted</td><td>Buy 2 Get 1 Free</td></tr>
+</table>
+
+<p>Promotions are automatically applied at checkout when conditions are met.</p>
+
+<!-- ============================================================ -->
+<h2 id="purchase-orders">15. Purchase Orders</h2>
+<p class="nav-path">Sidebar &rarr; Stock Control &rarr; Purchase Orders</p>
+
+<h3>PO Workflow</h3>
+<ol>
+  <li><strong>Draft</strong> — Created but not sent</li>
+  <li><strong>Ordered</strong> — Confirmed with supplier</li>
+  <li><strong>Received</strong> — Stock arrived (create GRN)</li>
+  <li><strong>Invoiced</strong> — Supplier invoice attached</li>
+</ol>
+
+<div class="tip">The system warns (but allows) when a credit supplier's total would exceed their credit limit.</div>
+
+<!-- ============================================================ -->
+<h2 id="stock-adjustments">16. Stock Adjustments</h2>
+<p class="nav-path">Sidebar &rarr; Stock Control &rarr; Stock Adjustments</p>
+
+<p>Manually adjust stock for damaged goods, stocktake corrections, theft, or found items. Select outlet, product, quantity, and reason. All adjustments are recorded for audit.</p>
+
+<!-- ============================================================ -->
+<h2 id="stock-transfers">17. Stock Transfers</h2>
+<p class="nav-path">Sidebar &rarr; Stock Control &rarr; Transfers</p>
+
+<p>Move stock between branches. Select source outlet, destination outlet, products, and quantities. Stock is immediately updated in both locations.</p>
+
+<!-- ============================================================ -->
+<h2 id="returned-stock">18. Returned Stock</h2>
+<p class="nav-path">Sidebar &rarr; Stock Control &rarr; Returned Stock</p>
+
+<p>Track goods sent back to suppliers — defective items, wrong shipments. Record products, reasons, and status.</p>
+
+<!-- ============================================================ -->
+<h2 id="suppliers">19. Suppliers</h2>
+<p class="nav-path">Sidebar &rarr; Procurement &rarr; Suppliers</p>
+
+<p>Manage your supplier directory: contact details, payment terms, credit limits, and transaction history.</p>
+
+<!-- ============================================================ -->
+<h2 id="expenses">20. Expenses</h2>
+<p class="nav-path">Sidebar &rarr; Procurement &rarr; Expenses</p>
+
+<p>Record business expenses (Rent, Utilities, Salary, etc.). Enter amount, category, description, and optionally attach a receipt image. Expenses appear in Accounting reports.</p>
+
+<!-- ============================================================ -->
+<h2 id="approvals">21. Approvals</h2>
+<p class="nav-path">Sidebar &rarr; Procurement &rarr; Approvals</p>
+
+<p>Review and approve pending requests. Filter by: Pending, Approved, or Rejected.</p>
+
+<!-- ============================================================ -->
+<h2 id="reports">22. Reports</h2>
+<p class="nav-path">Sidebar &rarr; Insights &rarr; Reports</p>
+
+<p>SanoPOS has <strong>67 report tabs</strong> across 8 categories.</p>
+
+<h3>How to Use</h3>
+<ol>
+  <li>Select a <strong>category</strong> (Sales, Customers, Inventory, etc.)</li>
+  <li>Select the specific <strong>report tab</strong></li>
+  <li>Apply <strong>filters</strong>: date range, outlet(s), category, brand, employee</li>
+  <li><strong>Export</strong> to CSV</li>
+</ol>
+
+<h3>Report Categories</h3>
+
+<h4>Sales (21 tabs)</h4>
+<p>Overview, Daily Operations, Comparative Trends, Sales Heatmap, Revenue Leaks, Product Mix, Sales Summary, Sales Detail, Order Wise, Item Wise, Category Wise, Sub-Category Wise, Monthly MOP Matrix, Cashier Wise, Refunds & Voids, Shift Summary, Shift Sales, Payment Summary, Cash Flow, Cash Audit, Denominations, Z-Report</p>
+
+<h4>Customers (5 tabs)</h4>
+<p>Customer Details, Customer Wise, RFM Analysis, Customer Retention, Capture Rate</p>
+
+<h4>Inventory (18 tabs)</h4>
+<p>Merchandising, Product Performance, Brand Wise, Retail Matrix, Pricing Matrix, Sales & Stock, Inventory Dump, On Hand, Product Spec, History Cost, History Sale, Product Audit, Replenishment, Dead Stock, Stock Aging, Stockout Risk, Forecast Demand, Smart Replenishment</p>
+
+<h4>Operations (5 tabs)</h4>
+<p>Outlet Comparison, Inventory Loss, Wastage, Product Movement, STR Report</p>
+
+<h4>Procurement (7 tabs)</h4>
+<p>Total Purchases, Itemwise Purchases, PO Workflow, Procurement Parity, Supplier Wise, Purchase Orders, GRN Report</p>
+
+<h4>Finance (6 tabs)</h4>
+<p>Settlement Overview, Payables/Receivables, Supplier Payments, Payment Mix, GST Output, GST Type Summary</p>
+
+<h4>HR (3 tabs)</h4>
+<p>Attendance, Labor Performance, Loss Prevention</p>
+
+<h4>Governance (3 tabs)</h4>
+<p>Audit Controls, Discount Leakage, Exceptions</p>
+
+<!-- ============================================================ -->
+<h2 id="accounting">23. Accounting</h2>
+<p class="nav-path">Sidebar &rarr; Insights &rarr; Accounting</p>
+
+<h3>Profit & Loss</h3>
+<p>Gross Sales &minus; Discounts &minus; Returns = Net Revenue &minus; COGS = Gross Profit &minus; Expenses = Net Profit</p>
+
+<h3>Cash Flow</h3>
+<p>Inflows (sales) &minus; Outflows (expenses, payments) = Net Cash Flow</p>
+
+<!-- ============================================================ -->
+<h2 id="kiosk">24. Kiosk (Clock-In Terminal)</h2>
+<p class="nav-path">Sidebar &rarr; Operations &rarr; Kiosk (opens in new tab)</p>
+
+<p>Standalone PIN-based terminal for employee clock-in/out. Designed to run on a tablet at the store entrance.</p>
+
+<h3>How to Use</h3>
+<ol>
+  <li>Enter your <strong>4-digit PIN</strong></li>
+  <li>System shows your name and status</li>
+  <li><strong>Clock In</strong> &rarr; <strong>Start Break</strong> &rarr; <strong>End Break</strong> &rarr; <strong>Clock Out</strong></li>
+</ol>
+
+<div class="important">
+  <strong>Important:</strong> Employees must be clocked in to complete sales at the POS. A shift must also be open.
+</div>
+
+<!-- ============================================================ -->
+<h2 id="attendance">25. Attendance</h2>
+<p class="nav-path">Sidebar &rarr; Operations &rarr; Attendance</p>
+
+<p>View today's attendance, past records, session details (clock-in/out times, break times, hours worked). Configure per-employee work hours and leave allowance.</p>
+
+<!-- ============================================================ -->
+<h2 id="employees">26. Employees</h2>
+<p class="nav-path">Sidebar &rarr; Setup &rarr; Employees</p>
+
+<h3>Adding an Employee</h3>
+<ol>
+  <li>Click <strong>Add Employee</strong></li>
+  <li>Enter: Name, Email, Phone, PIN Code (4-digit), Role, Salary</li>
+  <li>Click <strong>Save</strong></li>
+</ol>
+
+<p>New employees are automatically assigned to all active outlets.</p>
+
+<h3>Roles</h3>
+<table>
+  <tr><th>Role</th><th>Access Level</th></tr>
+  <tr><td>Cashier</td><td>POS, Sales History, Returns, Customers</td></tr>
+  <tr><td>Manager</td><td>All Cashier + Inventory, Procurement, Reports, Attendance</td></tr>
+  <tr><td>Administrator</td><td>Full access to everything</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="outlets">27. Outlets (Branches)</h2>
+<p class="nav-path">Sidebar &rarr; Setup &rarr; Outlets</p>
+
+<p>Manage store locations. Each outlet has its own stock, sales, and shift tracking. Stock can be transferred between outlets.</p>
+
+<!-- ============================================================ -->
+<h2 id="company-settings">28. Company Settings</h2>
+<p class="nav-path">Sidebar &rarr; Setup &rarr; Company Settings</p>
+
+<ul>
+  <li><strong>Company Name & Logo</strong> — Appears on receipts</li>
+  <li><strong>Timezone</strong> — IANA timezone (e.g., Asia/Karachi)</li>
+  <li><strong>Currency</strong> — e.g., PKR</li>
+  <li><strong>Dashboard Targets</strong> — Monthly sales target, margin/refund/void thresholds</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="roles">29. Roles & Permissions</h2>
+<p class="nav-path">Sidebar &rarr; Admin &rarr; Administrator</p>
+
+<p>View and customize role permissions. Toggle individual permissions on/off for each role.</p>
+
+<!-- ============================================================ -->
+<h2 id="receipt-templates">30. Receipt Templates</h2>
+<p class="nav-path">Sidebar &rarr; Setup &rarr; Receipt Templates</p>
+
+<p>Customize receipt appearance: header text, footer text, barcode toggle, and logo.</p>
+
+<!-- ============================================================ -->
+<h2 id="barcode-templates">31. Barcode Templates</h2>
+<p class="nav-path">Sidebar &rarr; Setup &rarr; Barcode Templates</p>
+
+<p>Create barcode label templates (Code128, QR). Configure label size, layout, and content (name, SKU, price, barcode).</p>
+
+<!-- ============================================================ -->
+<h2 id="printer-settings">32. Printer Settings</h2>
+<p class="nav-path">Sidebar &rarr; Setup &rarr; Printer Settings</p>
+
+<h3>Thermal Printer</h3>
+<p>Connect via USB or TCP/IP. Set paper width (80mm or 58mm). Test print to verify.</p>
+
+<h3>Email Settings</h3>
+<p>Configure SMTP for email receipts: host, port, username, app password, from name. Send test email to verify.</p>
+
+<div class="tip">If no printer is configured, receipts open in a browser popup. Use Ctrl+P to print.</div>
+
+<!-- ============================================================ -->
+<h2 id="shopify">33. Shopify Integration</h2>
+<p class="nav-path">Sidebar &rarr; Setup &rarr; Shopify Integration</p>
+
+<ul>
+  <li><strong>Import products</strong> from Shopify</li>
+  <li><strong>Sync inventory</strong> — Push stock levels to Shopify</li>
+  <li><strong>Pull web orders</strong> into SanoPOS</li>
+  <li><strong>Map locations</strong> — Connect Shopify locations to outlets</li>
+  <li><strong>Webhooks</strong> — Automatic real-time order sync</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="backup">34. Backup & Restore</h2>
+<p class="nav-path">Sidebar &rarr; Admin &rarr; Backup & Restore</p>
+
+<p><strong>Download Backup:</strong> Downloads a complete copy of your database. Store safely.</p>
+<p><strong>Restore from File:</strong> Upload a backup to restore your data.</p>
+
+<div class="warning"><strong>Warning:</strong> Restoring a backup overwrites ALL current data. Any changes made after the backup was taken will be lost.</div>
+
+<div class="tip">Download a backup at least once a week.</div>
+
+<!-- ============================================================ -->
+<h2 id="audit">35. Action History (Audit Trail)</h2>
+<p class="nav-path">Sidebar &rarr; Admin &rarr; Action History</p>
+
+<p>Log of all system actions: who did what, when, and what was changed. Searchable by action type, employee, or date.</p>
+
+<!-- ============================================================ -->
+<h2 id="permissions">Appendix A: Permission Matrix</h2>
+
+<table>
+  <tr><th>Feature</th><th>Cashier</th><th>Manager</th><th>Admin</th></tr>
+  <tr><td>POS (make sales)</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td>View Sales History</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td>Process Returns</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td>View Customers</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td>Manage Products</td><td>No</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td>Manage Categories</td><td>No</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td>Manage Inventory</td><td>No</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td>Purchase Orders</td><td>No</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td>Manage Suppliers</td><td>No</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td>View Reports</td><td>Limited</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td>View Attendance</td><td>No</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td>Manage Employees</td><td>No</td><td>No</td><td>Yes</td></tr>
+  <tr><td>Manage Outlets</td><td>No</td><td>No</td><td>Yes</td></tr>
+  <tr><td>Company Settings</td><td>No</td><td>No</td><td>Yes</td></tr>
+  <tr><td>Roles & Permissions</td><td>No</td><td>No</td><td>Yes</td></tr>
+  <tr><td>Backup & Restore</td><td>No</td><td>No</td><td>Yes</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="feature-flags">Appendix B: Feature Flags</h2>
+
+<p>Some features are controlled by flags. Contact your administrator to enable:</p>
+
+<table>
+  <tr><th>Feature</th><th>Flag</th></tr>
+  <tr><td>Company Settings page</td><td><code>multi_company</code></td></tr>
+  <tr><td>Accounting page</td><td><code>accounting_core</code></td></tr>
+  <tr><td>Backup & Restore</td><td><code>backup_restore</code></td></tr>
+  <tr><td>Supplier Payables</td><td><code>supplier_payables</code></td></tr>
+  <tr><td>CRM & Quotations</td><td><code>crm_quotations</code></td></tr>
+  <tr><td>Advanced HR</td><td><code>advanced_hr</code></td></tr>
+  <tr><td>Context Selection</td><td><code>context_selection_required</code></td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="tips">Appendix C: Tips & Troubleshooting</h2>
+
+<h3>Tips</h3>
+<ul>
+  <li>Bookmark the POS tab for quick access each morning</li>
+  <li>Keep POS and Kiosk tabs running all day in separate browser tabs</li>
+  <li>Use Ctrl+P for browser printing if no thermal printer is connected</li>
+  <li>Almost every report can be exported to CSV for Excel</li>
+  <li>Use Split Payment to accept both cash and card in one transaction</li>
+</ul>
+
+<h3>Troubleshooting</h3>
+<table>
+  <tr><th style="width:45%">Problem</th><th>Solution</th></tr>
+  <tr><td>"Cannot checkout — employee not clocked in"</td><td>Go to Kiosk tab and clock in with your PIN</td></tr>
+  <tr><td>"No active shift"</td><td>Open a shift in POS or Cash Management</td></tr>
+  <tr><td>Can't find a feature in sidebar</td><td>Your role may lack permission — contact Administrator</td></tr>
+  <tr><td>Product stock shows 0 after adding</td><td>Enter stock quantity when creating the product</td></tr>
+  <tr><td>Receipt not printing</td><td>Check Printer Settings, or use Ctrl+P as fallback</td></tr>
+  <tr><td>Report shows no data</td><td>Check date range and outlet filter settings</td></tr>
+</table>
+
+<br><br>
+<hr>
+<p style="text-align:center; color:#94a3b8; font-size:13px; margin-top:20px;">
+  SanoPOS User Manual &middot; Version 1.0 &middot; March 2026<br>
+  For technical support, contact your system administrator.
+</p>
+
+</body>
+</html>

@@ -2,6 +2,7 @@ import React from "react";
 import { Play, X, ShoppingCart } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { API_BASE as API } from "../../../config";
+import { fmtLocalDateTime } from "../../../utils/dates";
 
 export default function POSParkedModal() {
   const {
@@ -49,7 +50,7 @@ export default function POSParkedModal() {
                       Parked Sale #{p.id}
                     </div>
                     <div className="text-xs text-slate-500 mt-0.5">
-                      {new Date(p.parked_at).toLocaleString()} · {p.item_count}{" "}
+                      {fmtLocalDateTime(p.parked_at)} · {p.item_count}{" "}
                       item(s) · {p.customer_name || "Walk-in"}
                     </div>
                     {p.notes && (

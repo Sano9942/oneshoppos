@@ -125,7 +125,7 @@ Safe to run multiple times. They use `IF NOT EXISTS` and `ADD COLUMN` with dupli
 
 ### Latest migration
 
-Always check `backend/migrate69.js` (or the highest number) for the current DB schema.
+Always check `backend/migrate70.js` (or the highest number) for the current DB schema.
 
 ---
 
@@ -252,3 +252,162 @@ Think of it like a restaurant franchise:
 - **Multi-tenant** = a franchise with many restaurants, each independent
 - **`git push`** = sending updated recipes to all locations
 - **Uploading the DB** = physically moving all the food and records from one location to another
+
+---
+
+## Full Development Cycle — End to End
+
+### Stage 1: You work locally (your laptop)
+
+```
+Your laptop
+├── frontend/    ← React app, Vite dev server at localhost:5173
+├── backend/     ← Express server at localhost:5000
+└── backend/sanopos.db  ← YOUR local database (test data, not real)
+```
+
+You make changes — fix a bug, add a feature, add a new DB column.
+Everything runs and is tested locally first.
+
+---
+
+### Stage 2: What exactly transfers when you `git push`
+
+```
+git add <files>
+git commit -m "..."
+git push
+```
+
+**What goes up:**
+- All `.js`, `.jsx`, `.json`, `.css`, `.md` files you changed
+- Migration files (e.g. `backend/migrate71.js`) — the *instructions* for schema changes
+- `run_migrations.js` — the list that tells Railway which migrations to run
+
+**What NEVER goes up:**
+- `backend/sanopos.db` — gitignored, your local data stays local
+- `backend/master.db` — gitignored
+- `backend/.env` — gitignored, your JWT secrets and ports stay local
+- `backend/uploads/` — gitignored
+- `backend/exports/` — gitignored
+
+---
+
+### Stage 3: Railway receives the push and redeploys
+
+Railway detects the push automatically and:
+
+1. Pulls the new code from GitHub
+2. Runs `npm install` (installs any new packages)
+3. Runs `start.sh` which does:
+   - Symlinks `/app/sanopos.db` and `/app/oneshop.db` → `/data/sanopos.db` (the volume)
+   - Runs `node run_migrations.js` — applies any new migration files against Railway's DB
+   - Starts the Express server
+
+**What changes in Railway's DB after a migration:**
+- New tables are created (`IF NOT EXISTS` — safe if they already exist)
+- New columns are added (`ADD COLUMN IF NOT EXISTS` — safe to re-run)
+- No data is touched — migrations only change structure, never rows
+
+**What does NOT change in Railway's DB:**
+- Existing rows (products, employees, sales, feature flags, outlets, etc.)
+- Any data you entered directly through the live app
+
+---
+
+### Stage 4: Vercel receives the push and rebuilds the frontend
+
+Vercel detects the same push and:
+
+1. Runs `npm run build` inside `frontend/`
+2. Reads `frontend/.env.production` — this bakes `VITE_API_BASE` (Railway URL) into the build
+3. Serves the compiled static files globally via CDN
+
+The frontend build is a snapshot — environment variables are burned in at build time, not runtime.
+
+---
+
+### Stage 5: What does NOT automatically replicate from local → Railway
+
+| Local change | Does it replicate? | How to replicate manually |
+|---|---|---|
+| New feature flag row in DB | No | Add it through the app UI on live, or write a migration that inserts it |
+| New outlet/branch | No | Add it through the live app UI |
+| New employee | No | Add it through the live app UI |
+| Products, categories | No | Add through live app UI, or upload your local DB (replaces all production data) |
+| Fixed bad data rows locally | No | Write a migration or run a fix script on Railway shell |
+| `backend/.env` changes | No | Update environment variables in Railway dashboard |
+
+---
+
+### Stage 6: How a customer gets their own database (Multi-Tenant mode)
+
+This is the SaaS path — currently built but not activated on Railway (`MULTI_TENANT=0`).
+
+When a new customer signs up, here is what happens:
+
+```
+Super-Admin runs: node tenant-provisioner.js --slug acme --name "Acme Store" --plan starter
+```
+
+The provisioner does this automatically:
+
+1. **Creates a directory**: `/data/tenants/acme/`
+2. **Creates a fresh database**: `/data/tenants/acme/sanopos.db`
+   - Schema is extracted from the live `sanopos.db` via `backend/schema-full.js` (reads `sqlite_master`)
+   - This means the new tenant DB always has the latest schema — no migrations needed
+3. **Seeds default data**: inserts default roles, permissions, feature flags into their DB
+4. **Registers in master.db**: adds a row to the `tenants` table in `backend/master.db`
+   - Stores: slug, company name, plan, DB path, created date
+
+From that point on, every API request from that customer:
+
+1. Frontend sends `Authorization: Bearer <JWT>` — the JWT contains the tenant slug
+2. `loadTenantAndPerms` middleware verifies the JWT, extracts the slug
+3. `resolveTenant` middleware looks up the slug in `master.db`, gets the DB path
+4. Sets the AsyncLocalStorage context to that tenant's DB connection
+5. All route handlers transparently read/write that tenant's DB — no code changes needed
+
+```
+Request from "acme" customer
+    │
+    ▼
+loadTenantAndPerms  →  verify JWT, extract slug="acme"
+    │
+    ▼
+resolveTenant  →  look up master.db → path="/data/tenants/acme/sanopos.db"
+    │
+    ▼
+AsyncLocalStorage  →  set db context = acme's connection pool
+    │
+    ▼
+Route handler  →  calls db.get() / db.run() → hits /data/tenants/acme/sanopos.db
+```
+
+Each customer's data is completely isolated — one customer can never see another's data.
+
+---
+
+### Full Cycle Summary (one diagram)
+
+```
+YOUR LAPTOP                     GITHUB                    RAILWAY                   CUSTOMER
+─────────────────               ──────                    ───────                   ────────
+Write code          git push →  Stores code  auto-deploy→ Pulls code
+Fix bug                                                    npm install
+Add migration                                              run_migrations.js
+                                                           ↓
+                                                           Railway DB schema updated
+                                                           (structure only, no data)
+                                                           ↓
+                                                           Express server running
+                                                                                    Signs up
+                                                           tenant-provisioner.js  ←
+                                                           ↓
+                                                           /data/tenants/slug/sanopos.db created
+                                                           master.db row inserted
+                                                                                    Logs in
+                                                           JWT issued with slug    ←
+                                                           resolveTenant routes    →
+                                                           to their DB                Their data
+```
