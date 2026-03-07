@@ -323,6 +323,19 @@ oneshoppos/
 - `POST /api/purchase-orders` warns (but allows) when a credit supplier's running balance + new PO total exceeds `credit_limit` — response includes `{ warning: "..." }` field
 - `running_balance` counts only invoiced/received POs (via `supplier_invoices`), not draft POs — acceptable for advisory model
 
+## Production Deployment (Railway + Vercel)
+
+### Live URLs
+- Frontend: `https://oneshoppos.vercel.app` (Vercel, root dir: `frontend`)
+- Backend: `https://oneshoppos-production.up.railway.app` (Railway, root dir: `/backend`)
+
+### Railway gotchas
+- Volume must be created manually in Railway UI (project canvas → Add → Volume, mount `/data`) — `railway.toml` `[[volumes]]` alone does NOT provision it
+- All 66 migration files hardcode `path.resolve(__dirname, "oneshop.db")` — `start.sh` symlinks `/app/oneshop.db` and `/app/sanopos.db` → `$DATA_DIR/sanopos.db` before migrations run
+- Railway's `PORT` env var overrides the app's PORT — server will bind to 8080 even if `PORT=5000` is set; this is fine
+- Employee API (`PUT /api/employees/:id`, `DELETE`) requires Administrator session token — cannot be called unauthenticated even from curl
+- To bootstrap a first Administrator when locked out: add a temp `POST /api/setup/owner` endpoint gated by `SETUP_SECRET` env var, deploy, call it, then remove the endpoint
+
 ## Refactor History
 
 Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
@@ -346,3 +359,4 @@ Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
 - Mar 2026: SaaS Phase 2 — JWT auth overhaul; bcrypt PIN hashing (migrate66); `jwt-auth.js` utility module; multi-tenant routes (`mt-login`, `refresh`, `kiosk-login`, `update-context`) gated behind `MULTI_TENANT=1`; `loadTenantAndPerms` middleware toggles with env flag; `cookie-parser` for httpOnly refresh cookies; `.env.example` added; 13 new tests; 296/298 passing
 - Mar 2026: SaaS Phase 3+4 — Multi-tenant DB proxy (`tenant-db-proxy.js`, AsyncLocalStorage + Proxy pattern); `resolveTenant` middleware wraps requests in ALS; `tenant-multer.js` tenant-aware upload factories; `plan-limits.js` enforces plan caps; tenant-scoped `/uploads` serving; upload destinations in `orders.js`, `barcode-expenses.js`, `company-profile.js` made tenant-aware; frontend JWT integration — `AuthProvider.jsx` silent refresh + Bearer auth; `Login.jsx` Store Code field (VITE_MULTI_TENANT); `ContextSelect.jsx` JWT re-sign on outlet select; `.env.development` + `.env.production`; 296/298 passing (zero regressions)
 - Mar 2026: SaaS Phase 5 — Super-Admin Dashboard; `routes/admin.js` (13 endpoints: login, tenant CRUD, suspend/activate/delete, migration runner, stats, PIN reset); `tenant-migrate.js` (CLI + programmatic migration runner, reads `backend/migrations/`); `seed-admin.js` (super-admin seeder); admin JWT uses `jwt.sign()` directly with `role: "super_admin"` claim; routes mounted before tenant middleware; frontend: 5 admin pages at `/admin/*` (Login, Layout, Dashboard, TenantList, TenantDetail); `adminFetch` shared helper; separate auth session in localStorage; provisioner now detects `pin_hash` column via PRAGMA; SCHEMA_VERSION=66; 296/298 passing
+- Mar 2026: Phase 6 deployment — Railway backend + Vercel frontend live; `start.sh` symlinks legacy DB names (`oneshop.db`, `sanopos.db`) to `$DATA_DIR/sanopos.db` (volume); Railway volume must be provisioned manually in UI; `DATA_DIR=/data`, `MULTI_TENANT=0` for single-tenant mode; frontend env at `frontend/.env.production`
