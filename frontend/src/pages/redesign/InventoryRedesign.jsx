@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Download, Plus, Search, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Download, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   Badge,
@@ -259,6 +259,42 @@ function exportCSV(rows, filename) {
   URL.revokeObjectURL(a.href);
 }
 
+const CSV_IMPORT_HEADERS = [
+  "name", "barcode", "sku", "price", "cost_price", "compare_at_price",
+  "stock", "unit", "status", "product_type", "vendor", "tags",
+  "description_html", "gst", "min_qty", "max_qty",
+];
+
+function downloadImportTemplate() {
+  const blob = new Blob([CSV_IMPORT_HEADERS.join(",") + "\n"], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "products-import-template.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+  return lines.slice(1).map((line) => {
+    // Handle quoted fields with commas inside
+    const values = [];
+    let cur = "", inQuote = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { inQuote = !inQuote; continue; }
+      if (ch === "," && !inQuote) { values.push(cur); cur = ""; continue; }
+      cur += ch;
+    }
+    values.push(cur);
+    const row = {};
+    headers.forEach((h, i) => { row[h] = (values[i] || "").trim(); });
+    return row;
+  });
+}
+
 export default function InventoryRedesign() {
   const { authHeaders, hasPerm } = useAuth();
   const canViewAllLocations = hasPerm("all_access");
@@ -277,6 +313,9 @@ export default function InventoryRedesign() {
   const [modalProduct, setModalProduct] = useState(undefined); // undefined=closed, null=new, object=edit
   const [categoryId, setCategoryId] = useState("");
   const [bulkCategoryTarget, setBulkCategoryTarget] = useState("");
+  const [importResults, setImportResults] = useState(null); // null=closed, array=results
+  const [importing, setImporting] = useState(false);
+  const importFileRef = useRef(null);
   const [page, setPage] = useState(1);
 
   const fetchProducts = async () => {
@@ -396,6 +435,31 @@ export default function InventoryRedesign() {
     }
   };
 
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    const text = await file.text();
+    const rows = parseCSV(text);
+    if (!rows.length) return alert("CSV is empty or unreadable.");
+    setImporting(true);
+    try {
+      const res = await fetch(`${API}/api/products/bulk-import`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Import failed");
+      setImportResults(data.results || []);
+      await fetchProducts();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const selectedCount = selectedIds.size;
 
   return (
@@ -405,6 +469,21 @@ export default function InventoryRedesign() {
       subtitle="Manage products, pricing, stock levels, and variants."
       right={
         <div className="flex items-center gap-2">
+          <Button onClick={downloadImportTemplate}>
+            <Download size={14} className="mr-1 inline" />
+            CSV Template
+          </Button>
+          <Button onClick={() => importFileRef.current?.click()} disabled={importing}>
+            <Upload size={14} className="mr-1 inline" />
+            {importing ? "Importing…" : "Import CSV"}
+          </Button>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={handleImportFile}
+          />
           <Button
             onClick={() =>
               exportCSV(
@@ -420,6 +499,7 @@ export default function InventoryRedesign() {
                   vendor: p.vendor || "",
                   tags: p.tags || "",
                   price: p.price,
+                  cost_price: p.cost_price || 0,
                   stock: p.total_stock,
                 })),
                 "inventory-export.csv",
@@ -489,8 +569,8 @@ export default function InventoryRedesign() {
                 <option value="price:desc">Price (High-Low)</option>
                 <option value="stock:desc">Stock (High-Low)</option>
                 <option value="stock:asc">Stock (Low-High)</option>
-                <option value="min_qty:asc">Min Qty (Low-High)</option>
-                <option value="min_qty:desc">Min Qty (High-Low)</option>
+                <option value="cost_price:asc">Cost (Low-High)</option>
+                <option value="cost_price:desc">Cost (High-Low)</option>
                 <option value="created_at:desc">Newest</option>
               </Select>
             </>
@@ -621,14 +701,15 @@ export default function InventoryRedesign() {
                   Product
                 </th>
                 <th className="px-3 py-2">Barcode</th>
+                <th className="px-3 py-2">SKU</th>
                 <th className="cursor-pointer px-3 py-2 text-right" onClick={() => toggleSort("price")}>
                   Price
                 </th>
+                <th className="cursor-pointer px-3 py-2 text-right" onClick={() => toggleSort("cost_price")}>
+                  Cost
+                </th>
                 <th className="cursor-pointer px-3 py-2 text-right" onClick={() => toggleSort("stock")}>
                   Stock
-                </th>
-                <th className="cursor-pointer px-3 py-2 text-right" onClick={() => toggleSort("min_qty")}>
-                  Min Qty
                 </th>
                 <th className="px-3 py-2">Category</th>
                 <th className="px-3 py-2">Status</th>
@@ -659,14 +740,17 @@ export default function InventoryRedesign() {
                   <td className="px-3 py-2 font-mono text-xs text-(--ui-text-muted)">
                     {p.barcode || "-"}
                   </td>
+                  <td className="px-3 py-2 font-mono text-xs text-(--ui-text-muted)">
+                    {p.sku || "-"}
+                  </td>
                   <td className="px-3 py-2 text-right text-(--ui-text)">
                     PKRs {(Number(p.price || 0)).toFixed(2)}
                   </td>
-                  <td className="px-3 py-2 text-right text-(--ui-text)">
-                    {p.total_stock ?? 0}
+                  <td className="px-3 py-2 text-right text-(--ui-text-muted)">
+                    PKRs {(Number(p.cost_price || 0)).toFixed(2)}
                   </td>
                   <td className="px-3 py-2 text-right text-(--ui-text)">
-                    {p.min_qty ?? 0}
+                    {p.total_stock ?? 0}
                   </td>
                   <td className="px-3 py-2 text-(--ui-text-muted)">
                     {p.category_path_label || p.category_name || "-"}
@@ -723,6 +807,55 @@ export default function InventoryRedesign() {
         onClose={() => setModalProduct(undefined)}
         onSaved={() => { setModalProduct(undefined); fetchProducts(); }}
       />
+    )}
+    {importResults !== null && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-(--ui-border)">
+            <div>
+              <p className="font-semibold text-(--ui-text)">Import Results</p>
+              <p className="text-xs text-(--ui-text-muted)">
+                {importResults.filter((r) => r.status === "inserted").length} inserted &nbsp;·&nbsp;
+                {importResults.filter((r) => r.status === "error").length} errors
+              </p>
+            </div>
+            <button onClick={() => setImportResults(null)} className="text-(--ui-text-muted) hover:text-(--ui-text)">
+              <X size={18} />
+            </button>
+          </div>
+          <div className="overflow-y-auto flex-1 px-5 py-3">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-(--ui-text-muted) border-b border-(--ui-border)">
+                  <th className="py-2 pr-3">Row</th>
+                  <th className="py-2 pr-3">Name</th>
+                  <th className="py-2 pr-3">Barcode</th>
+                  <th className="py-2">Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                {importResults.map((r, i) => (
+                  <tr key={i} className="border-t border-(--ui-border)">
+                    <td className="py-1.5 pr-3 text-(--ui-text-muted)">{i + 1}</td>
+                    <td className="py-1.5 pr-3 text-(--ui-text)">{r.name || "-"}</td>
+                    <td className="py-1.5 pr-3 font-mono text-xs text-(--ui-text-muted)">{r.barcode || "-"}</td>
+                    <td className="py-1.5">
+                      {r.status === "inserted" ? (
+                        <span className="text-emerald-600 font-medium">Inserted</span>
+                      ) : (
+                        <span className="text-red-600 text-xs">{r.message || "Error"}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-5 py-3 border-t border-(--ui-border) flex justify-end">
+            <Button onClick={() => setImportResults(null)}>Close</Button>
+          </div>
+        </div>
+      </div>
     )}
     </>
   );

@@ -384,6 +384,11 @@ module.exports = function registerProductRoutes(app, deps) {
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
+    const parsedPrice = Number(price);
+    if (!price || isNaN(parsedPrice) || parsedPrice <= 0) {
+      return res.status(400).json({ error: "Sale price is required and must be greater than zero" });
+    }
+
     const productMediaItems = normalizeProductMediaInput(media, image_urls);
 
     db.serialize(() => {
@@ -391,10 +396,10 @@ module.exports = function registerProductRoutes(app, deps) {
       db.run(
         "INSERT INTO products (barcode, sku, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit, description_html, compare_at_price, product_type, vendor, tags, status) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
-          barcode,
+          barcode || null,
           sku || null,
           name,
-          price,
+          parsedPrice,
           cost_price || 0,
           gst === "" ? null : gst,
           category_id || null,
@@ -415,9 +420,6 @@ module.exports = function registerProductRoutes(app, deps) {
         function (err) {
           if (err) {
             db.run("ROLLBACK");
-            if (err.message.includes("UNIQUE constraint failed")) {
-              return res.status(400).json({ error: "Barcode already exists" });
-            }
             return res.status(500).json({ error: err.message });
           }
           const newProductId = this.lastID;
@@ -550,6 +552,7 @@ module.exports = function registerProductRoutes(app, deps) {
       const row = rows[index];
       const {
         barcode,
+        sku,
         name,
         price,
         cost_price,
@@ -579,92 +582,58 @@ module.exports = function registerProductRoutes(app, deps) {
             : [],
       );
 
-      if (!barcode || !name || !price) {
+      const parsedBulkPrice = parseFloat(price);
+      if (!name || isNaN(parsedBulkPrice) || parsedBulkPrice <= 0) {
         results.push({
           barcode: barcode || "?",
+          name: name || "?",
           status: "error",
-          message: "barcode, name, and price are required",
+          message: "name and a sale price greater than zero are required",
         });
         return processNext(index + 1);
       }
 
-      db.get(
-        "SELECT id FROM products WHERE barcode = ?",
-        [barcode],
-        (findErr, existing) => {
-          if (findErr) {
+      db.run(
+        `INSERT INTO products (barcode, sku, name, price, cost_price, compare_at_price, description_html, product_type, vendor, tags, status, gst, stock, min_qty, max_qty, unit)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          barcode || null,
+          sku || null,
+          name,
+          parsedBulkPrice,
+          parseFloat(cost_price) || 0,
+          parseFloat(compare_at_price) || 0,
+          description_html || null,
+          product_type || null,
+          vendor || null,
+          tags || null,
+          status || "active",
+          gst !== "" && gst != null ? parseFloat(gst) : null,
+          parseInt(stock) || 0,
+          parseInt(min_qty) || 0,
+          parseInt(max_qty) || 0,
+          unit || "pcs",
+        ],
+        function (err) {
+          if (err) {
             results.push({
-              barcode,
+              barcode: barcode || "?",
+              name,
               status: "error",
-              message: findErr.message,
+              message: err.message,
             });
             return processNext(index + 1);
           }
 
-          db.run(
-            `INSERT INTO products (barcode, name, price, cost_price, compare_at_price, description_html, product_type, vendor, tags, status, gst, stock, min_qty, max_qty, unit)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(barcode) DO UPDATE SET
-             name = excluded.name,
-             price = excluded.price,
-             cost_price = excluded.cost_price,
-             compare_at_price = excluded.compare_at_price,
-             description_html = excluded.description_html,
-             product_type = excluded.product_type,
-             vendor = excluded.vendor,
-             tags = excluded.tags,
-             status = excluded.status,
-             gst = excluded.gst,
-             stock = excluded.stock,
-             min_qty = excluded.min_qty,
-             max_qty = excluded.max_qty,
-             unit = excluded.unit`,
-            [
-              barcode,
-              name,
-              parseFloat(price) || 0,
-              parseFloat(cost_price) || 0,
-              parseFloat(compare_at_price) || 0,
-              description_html || null,
-              product_type || null,
-              vendor || null,
-              tags || null,
-              status || "active",
-              gst !== "" && gst != null ? parseFloat(gst) : null,
-              parseInt(stock) || 0,
-              parseInt(min_qty) || 0,
-              parseInt(max_qty) || 0,
-              unit || "pcs",
-            ],
-            function (err) {
-              if (err) {
-                results.push({
-                  barcode,
-                  status: "error",
-                  message: err.message,
-                });
-                return processNext(index + 1);
-              }
-
-              const productId = existing ? existing.id : this.lastID;
-              replaceProductMedia(productId, productMediaItems, (mediaErr) => {
-                if (mediaErr) {
-                  results.push({
-                    barcode,
-                    status: "error",
-                    message: mediaErr.message,
-                  });
-                } else {
-                  results.push({
-                    barcode,
-                    name,
-                    status: existing ? "updated" : "inserted",
-                  });
-                }
-                processNext(index + 1);
-              });
-            },
-          );
+          const productId = this.lastID;
+          replaceProductMedia(productId, productMediaItems, (mediaErr) => {
+            if (mediaErr) {
+              results.push({ barcode: barcode || "?", name, status: "error", message: mediaErr.message });
+            } else {
+              results.push({ barcode: barcode || "?", name, status: "inserted" });
+            }
+            processNext(index + 1);
+          });
         },
       );
     };
@@ -718,14 +687,16 @@ module.exports = function registerProductRoutes(app, deps) {
       db.run("BEGIN TRANSACTION");
 
       // 1. Update main product
+      const imageUrlProvided = Object.prototype.hasOwnProperty.call(req.body || {}, "image_url");
+      const barcodeValue = barcode === "" ? null : (barcode || null);
       db.run(
-        "UPDATE products SET name = COALESCE(?, name), price = COALESCE(?, price), cost_price = COALESCE(?, cost_price), gst = ?, barcode = COALESCE(?, barcode), sku = COALESCE(?, sku), category_id = COALESCE(?, category_id), tax_id = COALESCE(?, tax_id), brand_id = COALESCE(?, brand_id), min_qty = COALESCE(?, min_qty), max_qty = COALESCE(?, max_qty), unit = COALESCE(?, unit), description_html = COALESCE(?, description_html), compare_at_price = COALESCE(?, compare_at_price), product_type = COALESCE(?, product_type), vendor = COALESCE(?, vendor), tags = COALESCE(?, tags), status = COALESCE(?, status) WHERE id = ?",
+        `UPDATE products SET name = COALESCE(?, name), price = COALESCE(?, price), cost_price = COALESCE(?, cost_price), gst = ?, barcode = ?, sku = ?, category_id = ?, tax_id = COALESCE(?, tax_id), brand_id = ?, min_qty = COALESCE(?, min_qty), max_qty = COALESCE(?, max_qty), unit = COALESCE(?, unit), description_html = COALESCE(?, description_html), compare_at_price = COALESCE(?, compare_at_price), product_type = ?, vendor = ?, tags = ?, status = COALESCE(?, status)${imageUrlProvided ? ", image_url = ?" : ""} WHERE id = ?`,
         [
           name,
           price,
           cost_price,
           gst === "" ? null : gst,
-          barcode,
+          barcodeValue,
           sku || null,
           category_id || null,
           tax_id || null,
@@ -739,6 +710,7 @@ module.exports = function registerProductRoutes(app, deps) {
           vendor || null,
           tags || null,
           status || null,
+          ...(imageUrlProvided ? [req.body.image_url || null] : []),
           id,
         ],
         function (err) {
