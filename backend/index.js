@@ -225,8 +225,8 @@ app.use("/uploads", express.static(UPLOADS_DIR));
 if (!process.env.R2_PUBLIC_URL) {
   const { GetObjectCommand } = require("@aws-sdk/client-s3");
   const { r2, bucket } = require("./utils/r2");
-  app.get("/r2/*", async (req, res) => {
-    const key = req.params[0];
+  app.get("/r2/*key", async (req, res) => {
+    const key = req.params.key;
     try {
       const data = await r2.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
       res.setHeader("Content-Type", data.ContentType || "application/octet-stream");
