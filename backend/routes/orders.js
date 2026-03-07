@@ -169,12 +169,13 @@ module.exports = function registerOrderRoutes(app, deps) {
     },
   );
 
-  // Upload a product image file to R2 and return a served URL
+  // Upload a product image file to R2 — resized to 800x800 WebP before upload
   const { uploadToR2 } = require("../utils/r2");
+  const sharp = require("sharp");
 
   const productImageUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB raw upload limit
     fileFilter: (req, file, cb) => {
       if (!file || !file.mimetype) return cb(new Error("Invalid file"));
       if (!file.mimetype.startsWith("image/")) {
@@ -192,13 +193,15 @@ module.exports = function registerOrderRoutes(app, deps) {
       if (!req.file)
         return res.status(400).json({ error: "No image uploaded" });
       try {
-        const ext = path.extname(req.file.originalname || "").toLowerCase();
-        const safeExt = [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(ext)
-          ? ext : ".jpg";
-        const filename = `product_${Date.now()}_${Math.round(Math.random() * 1e6)}${safeExt}`;
+        // Resize to max 800x800, convert to WebP (~50-150KB output)
+        const resized = await sharp(req.file.buffer)
+          .resize(800, 800, { fit: "inside", withoutEnlargement: true })
+          .webp({ quality: 82 })
+          .toBuffer();
+        const filename = `product_${Date.now()}_${Math.round(Math.random() * 1e6)}.webp`;
         const key = `products/${filename}`;
-        const url = await uploadToR2(req.file.buffer, key, req.file.mimetype);
-        res.json({ url, filename, original_name: req.file.originalname, size: req.file.size });
+        const url = await uploadToR2(resized, key, "image/webp");
+        res.json({ url, filename, original_name: req.file.originalname, size: resized.length });
       } catch (err) {
         res.status(500).json({ error: "Upload failed: " + err.message });
       }
