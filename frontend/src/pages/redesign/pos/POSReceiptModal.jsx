@@ -119,7 +119,7 @@ export default function POSReceiptModal() {
               </div>
             ) : slip.discountAmount > 0 && (
               <div className="flex justify-between text-red-500">
-                <span>{slip.discountType === "percentage" ? `Discount (${slip.discountAmount}%)` : "Discount"}</span>
+                <span>{slip.discountType === "percent" ? `Discount (${slip.discountInput}%)` : "Discount"}</span>
                 <span>− {money(slip.discountAmount)}</span>
               </div>
             )}

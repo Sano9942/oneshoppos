@@ -386,6 +386,7 @@ module.exports = function (app, deps) {
         [sixDaysAgoStart, ...outletParams],
       );
 
+      // attendance_sessions.session_start stores local time — use date() with local date string
       const attendanceToday = await getQuery(
         `
           SELECT
@@ -399,8 +400,7 @@ module.exports = function (app, deps) {
             SELECT employee_id, session_type, break_reason
             FROM attendance_sessions
             WHERE session_end IS NULL
-              AND session_start >= ?
-              AND session_start < ?
+              AND date(session_start) = ?
               ${outletIds.length === 1 ? "AND outlet_id = ?" : outletIds.length > 1 ? `AND outlet_id IN (${outletIds.map(() => "?").join(",")})` : ""}
           ) active ON active.employee_id = e.id
           LEFT JOIN (
@@ -408,16 +408,15 @@ module.exports = function (app, deps) {
             FROM attendance_sessions
             WHERE session_type = 'work'
               AND session_end IS NOT NULL
-              AND session_start >= ?
-              AND session_start < ?
+              AND date(session_start) = ?
               ${outletIds.length === 1 ? "AND outlet_id = ?" : outletIds.length > 1 ? `AND outlet_id IN (${outletIds.map(() => "?").join(",")})` : ""}
             GROUP BY employee_id
           ) work_hours ON work_hours.employee_id = e.id
           ORDER BY e.name ASC
         `,
         outletIds.length
-          ? [todayStart, todayEnd, ...outletIds, todayStart, todayEnd, ...outletIds]
-          : [todayStart, todayEnd, todayStart, todayEnd],
+          ? [todayStr, ...outletIds, todayStr, ...outletIds]
+          : [todayStr, todayStr],
       );
 
       const refundsTodayRows = await getQuery(
@@ -628,8 +627,8 @@ module.exports = function (app, deps) {
               SUM(CASE WHEN session_type = 'work' AND session_end IS NULL THEN 1 ELSE 0 END) AS clocked_in,
               SUM(CASE WHEN session_type = 'break' AND session_end IS NULL THEN 1 ELSE 0 END) AS on_break
              FROM attendance_sessions
-             WHERE outlet_id = ? AND session_start >= ? AND session_start < ?`,
-            [outlet.id, todayStart, todayEnd],
+             WHERE outlet_id = ? AND date(session_start) = ?`,
+            [outlet.id, todayStr],
           );
           const [lastSaleRow] = await getQuery(
             `SELECT MAX(timestamp) AS last_sale_at FROM sales WHERE outlet_id = ? AND voided = 0`,

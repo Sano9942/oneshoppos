@@ -360,7 +360,7 @@ module.exports = function registerProductRoutes(app, deps) {
       tax_id,
       brand_id,
       outlet_id,
-      initial_stock,
+      initial_stock: _initial_stock,
       has_variants,
       attribute_set_id,
       variants, // Array of variant objects if has_variants is true
@@ -388,6 +388,7 @@ module.exports = function registerProductRoutes(app, deps) {
     if (!price || isNaN(parsedPrice) || parsedPrice <= 0) {
       return res.status(400).json({ error: "Sale price is required and must be greater than zero" });
     }
+    const initial_stock = _initial_stock || req.body.stock;
 
     const productMediaItems = normalizeProductMediaInput(media, image_urls);
 
@@ -441,6 +442,13 @@ module.exports = function registerProductRoutes(app, deps) {
             let pendingVariants = variants.length;
             let hasError = false;
 
+            const failOnce = (msg) => {
+              if (hasError) return;
+              hasError = true;
+              db.run("ROLLBACK");
+              res.status(500).json({ error: msg });
+            };
+
             variants.forEach((variant) => {
               if (hasError) return;
 
@@ -459,19 +467,14 @@ module.exports = function registerProductRoutes(app, deps) {
                   variant.weight_unit || "kg",
                 ],
                 function (vErr) {
+                  if (hasError) return;
                   if (vErr) {
-                    hasError = true;
-                    db.run("ROLLBACK");
-                    return res.status(500).json({
-                      error: "Variant SKU constraint failed: " + vErr.message,
-                    });
+                    return failOnce("Variant SKU constraint failed: " + vErr.message);
                   }
                   const variantId = this.lastID;
 
                   // Insert Outlet stock for variant if provided
                   if (outlet_id && variant.initial_stock) {
-                    // TODO: Variant stock should probably be tracked in a outlet_variant_stock table in the future.
-                    // For now we'll put it in the base variant table's stock column.
                     db.run(
                       "UPDATE product_variants SET stock = ? WHERE id = ?",
                       [variant.initial_stock, variantId],
@@ -492,10 +495,9 @@ module.exports = function registerProductRoutes(app, deps) {
                       "INSERT INTO variant_option_values (variant_id, attribute_id, attribute_option_id) VALUES (?, ?, ?)",
                       [variantId, opt.attribute_id, opt.attribute_option_id],
                       function (oErr) {
+                        if (hasError) return;
                         if (oErr) {
-                          hasError = true;
-                          db.run("ROLLBACK");
-                          return res.status(500).json({ error: oErr.message });
+                          return failOnce(oErr.message);
                         }
                         pendingOptions--;
                         if (pendingOptions === 0) {

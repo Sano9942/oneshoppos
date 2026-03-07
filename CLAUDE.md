@@ -53,7 +53,11 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - SaaS Phase 3+4 complete (Mar 2026): Multi-tenant DB proxy + frontend JWT integration — `backend/tenant-db-proxy.js` (AsyncLocalStorage + Proxy pattern, routes all DB calls to tenant DB transparently); `backend/tenant-multer.js` (tenant-aware upload storage factories); `backend/middleware/plan-limits.js` (enforces max_employees/products/outlets from master.db plan); `resolveTenant` middleware in `index.js` wraps each request in ALS context; `registerAllRoutes.js` wires tenant-scoped `/uploads` serving; upload destinations in `orders.js`, `barcode-expenses.js`, `tier4/company-profile.js` made tenant-aware; frontend: `AuthProvider.jsx` rewritten for JWT Bearer auth + silent refresh (401 retry with httpOnly cookie) + `window._nativeFetch` anti-recursion; `Login.jsx` gains Store Code field (VITE_MULTI_TENANT env var); `ContextSelect.jsx` calls `/api/auth/update-context` to re-sign JWT with outlet; `config.js` exports `IS_MULTI_TENANT`; `authStore.js` gains `readToken`/`writeToken`/`readTenantSlug` helpers; `.env.development` + `.env.production` files added; 296/298 tests passing (zero regressions)
 - Operations Dashboard complete (Mar 2026): `DashboardRedesign.jsx` rewritten as ~130-line thin orchestrator; 12 focused components in `frontend/src/pages/dashboard/` (KPICards, OpsReadiness, QuickActions, Exceptions, OutletRanking, Contribution, Trends, InventoryAlerts, Attendance, RecentSales, Attention, Shared); dashboard API extended with currency, targets, yesterday comparison (same-elapsed-time window), operationalReadiness[], exception pct_of_sales/pct_of_orders; `migrate69.js` adds monthly_sales_target + margin/refund/void threshold columns to company_profile and outlets; Company Settings gains Dashboard Targets section; Reports.jsx reads ?tab=&date=today&outlet_id= URL params on mount via TAB_ALIASES map
 - Attendance double-localtime bug fixed (Mar 2026): `attendance_sessions.session_start` and `employee_attendance.check_in` are stored in local time (DEFAULT datetime('now','localtime')) — all queries now use `date(session_start)` / `date(check_in)` with NO 'localtime' modifier; using `date(col,'localtime')` on already-local values shifts dates forward by UTC offset causing wrong-day lookups; `migrate70.js` closes all stale open sessions from previous days (data artifact of the old bug)
+- Attendance UTC-boundary bug fixed (Mar 2026): `GET /api/attendance`, `GET /api/attendance/sessions`, dashboard `attendanceToday` and `operationalReadiness` staffCounts queries were using `toUtcStart/toUtcEnd` on local-time columns — when company timezone is non-UTC (e.g. `Asia/Karachi` UTC+5), sessions after 19:00 local were excluded because the UTC end-of-day `"2026-03-07 19:00:00"` < local `"2026-03-07 21:xx:xx"`. Fix: all four queries now use `date(col) = ?` / `date(col) >= ?` / `date(col) <= ?` with plain YYYY-MM-DD strings — no UTC conversion for local-time columns
+- Dashboard auto-refresh added (Mar 2026): `DashboardRedesign.jsx` auto-fetches every 60 seconds (silent background refresh via `refreshKey` state + `setInterval`) and shows a manual refresh button with last-updated timestamp in the subtitle
 - Repo cleanup (Mar 2026): deleted `reports.monolith.bak.js`, `reports.stable.bak.js`, `tier4.monolith.bak.js`, `ShopifyIntegration.monolith.bak.jsx` (dead backup files); deleted one-off debug scripts (`repro_zeros.js`, `test_zeros.js`, `verify_zeros_fix.js`, `preflight.js`, `setup_toy_store_defaults.js`, etc.); deleted 2,247 accumulated CSV exports; `backend/exports/`, `backend/uploads/`, `backend/test_results*.json` added to `.gitignore`
+- Attendance UTC-boundary bug fixed (Mar 2026): `GET /api/attendance`, `GET /api/attendance/sessions` (both in `backend/routes/attendance.js`) and dashboard `attendanceToday` + `operationalReadiness` staffCounts (in `backend/routes/reports/dashboard.js`) were incorrectly filtering local-time columns using `toUtcStart/toUtcEnd` UTC boundaries — sessions after local 19:00 in `Asia/Karachi` were excluded. Fixed to use `date(col) = ?` / `date(col) >= ?` / `date(col) <= ?` with plain YYYY-MM-DD strings. RULE: **never use `toUtcStart/toUtcEnd` on `session_start` or `check_in` — those columns are local time**
+- Dashboard auto-refresh (Mar 2026): `DashboardRedesign.jsx` now silently re-fetches every 60 seconds via `refreshKey` state + `setInterval`; manual refresh button in subtitle with spinning icon + last-updated timestamp
 
 ## Completed Baseline Before Testing Plan (as of 2026-03-05)
 
@@ -167,7 +171,7 @@ oneshoppos/
 │   ├── utils/
 │   │   ├── tz.js                 # Timezone utils — toUtcStart/toUtcEnd for SaaS date filters
 │   │   └── receiptEmail.js       # Server-side HTML receipt builder for email (inline CSS, no scripts)
-│   └── migrate65.js              # Latest DB migration — READ THIS for schema questions
+│   └── migrate70.js              # Latest DB migration — READ THIS for schema questions
 └── frontend/
     └── src/
         ├── components/           # Reusable UI components (all small, < 200 lines)
@@ -222,7 +226,7 @@ oneshoppos/
 - `registerAllRoutes.js` is now just an orchestrator (~340 lines) — no routes defined there. Each domain is loaded via its modular directory. In MT mode, also wires `resolveTenant` + tenant-scoped `/uploads` serving.
 - **Super-admin routes**: `backend/routes/admin.js` is mounted in `index.js` BEFORE `registerAllRoutes` — this ensures admin endpoints bypass `loadTenantAndPerms`/`resolveTenant` middleware. Admin JWT uses `jwt.sign()` directly (not `signAccessToken`) because the shared utility strips custom claims like `role`/`aid`/`email`.
 - **Multi-tenant DB routing**: When `MULTI_TENANT=1`, `deps.db` is a Proxy (`tenant-db-proxy.js`) that delegates all calls to the tenant DB resolved from AsyncLocalStorage. Route closures that captured `db` at boot time transparently hit the correct tenant DB. Middleware order: `loadTenantAndPerms` (JWT verify) → `resolveTenant` (ALS context + `req.tenantDir`) → tenant-scoped `/uploads` → `loadCompanyProfile` → `resolveContext`.
-- Database schema: read only `backend/migrate65.js` (latest), never older migrations
+- Database schema: read only `backend/migrate70.js` (latest), never older migrations
 - Internal product categories are hierarchical; products and category promotions may target leaf categories only
 - Parent category filters expand to descendant leaves in products and reports
 - SQLite DB file: `backend/sanopos.db`
@@ -232,7 +236,7 @@ oneshoppos/
 
 - Find which file owns the route: check the table in this file above
 - Read ONLY that route file — do not read registerAllRoutes.js for route logic
-- Schema questions → `backend/migrate65.js` (latest)
+- Schema questions → `backend/migrate70.js` (latest)
 - Email receipt HTML builder (server-side) → `backend/utils/receiptEmail.js`
 - Category tree logic → `backend/category-tree.js`
 - Server middleware/config → `backend/index.js`

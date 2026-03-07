@@ -105,6 +105,16 @@ module.exports = function registerEmployeeRoutes(app, deps) {
           }
         );
       });
+      // Auto-assign new employee to all active outlets
+      await new Promise((resolve) => {
+        db.run(
+          `INSERT OR IGNORE INTO employee_outlets (employee_id, outlet_id, is_primary)
+           SELECT ?, o.id, CASE WHEN o.id = (SELECT MIN(id) FROM outlets WHERE is_active = 1) THEN 1 ELSE 0 END
+           FROM outlets o WHERE o.is_active = 1`,
+          [result],
+          () => resolve()
+        );
+      });
       res.json({ id: result, name, role_id });
     } catch (err) {
       if (err.message.includes("UNIQUE constraint failed")) {

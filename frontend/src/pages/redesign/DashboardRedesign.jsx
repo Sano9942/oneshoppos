@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { RefreshCw } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import { readContext, readSession } from "../../auth/authStore";
@@ -23,7 +24,10 @@ export default function DashboardRedesign() {
   const [data, setData] = useState(null);
   const [recentSales, setRecentSales] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [lastRefreshed, setLastRefreshed] = useState(null);
 
   // Role detection
   const isAdmin = hasPerm("all_access");
@@ -37,8 +41,10 @@ export default function DashboardRedesign() {
   // Current employee id (for cashier attendance filtering)
   const currentEmployeeId = readSession()?.employee?.id;
 
-  useEffect(() => {
+  const fetchDashboard = useCallback((silent = false) => {
     let mounted = true;
+    if (!silent) setLoading(true);
+    else setRefreshing(true);
     Promise.all([
       fetch(`${API}/api/reports/dashboard`, { headers: authHeaders() }).then((r) => r.json()),
       fetch(`${API}/api/sales?limit=10`, { headers: authHeaders() })
@@ -49,17 +55,31 @@ export default function DashboardRedesign() {
         if (!mounted) return;
         setData(dash);
         setRecentSales(salesData.sales || []);
+        setLastRefreshed(new Date());
+        setError("");
       })
       .catch((e) => {
         if (mounted) setError(e.message || "Failed to load dashboard");
       })
       .finally(() => {
-        if (mounted) setLoading(false);
+        if (mounted) { setLoading(false); setRefreshing(false); }
       });
     return () => { mounted = false; };
   }, [authHeaders]);
 
+  // Initial load + re-fetch when refreshKey changes
+  useEffect(() => {
+    return fetchDashboard(refreshKey > 0);
+  }, [fetchDashboard, refreshKey]);
+
+  // Auto-refresh every 60 seconds
+  useEffect(() => {
+    const timer = setInterval(() => setRefreshKey((k) => k + 1), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
   const onNavigate = (path) => navigate(path);
+  const handleManualRefresh = () => setRefreshKey((k) => k + 1);
 
   if (loading) {
     return (
@@ -76,7 +96,25 @@ export default function DashboardRedesign() {
   }
 
   return (
-    <PageShell title="Dashboard" subtitle="Operations at a glance.">
+    <PageShell
+      title="Dashboard"
+      subtitle={
+        <span className="flex items-center gap-3">
+          <span>Operations at a glance.</span>
+          <button
+            onClick={handleManualRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-50"
+            title="Refresh dashboard"
+          >
+            <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
+            {lastRefreshed
+              ? `Updated ${lastRefreshed.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`
+              : "Refresh"}
+          </button>
+        </span>
+      }
+    >
       {error && (
         <SectionCard className="mb-4 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
           {error}

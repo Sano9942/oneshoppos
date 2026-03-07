@@ -7,6 +7,16 @@ const db = new sqlite3.Database(DB_PATH);
 db.serialize(() => {
   db.run("PRAGMA foreign_keys = ON");
 
+  // 0. Ensure outlets.is_active exists (original CREATE TABLE omitted it)
+  db.run(
+    "ALTER TABLE outlets ADD COLUMN is_active INTEGER DEFAULT 1",
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("migrate61 outlets.is_active:", err.message);
+      }
+    }
+  );
+
   // 1. Companies table (seeded from company_profile singleton)
   db.run(`
     CREATE TABLE IF NOT EXISTS companies (

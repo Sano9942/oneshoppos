@@ -1,7 +1,7 @@
 @echo off
-title OneShopPOS - Fresh Start
+title SanoPOS - Fresh Start
 echo ================================
-echo   OneShopPOS - Fresh Start
+echo   SanoPOS - Fresh Start
 echo   (clears Vite cache first)
 echo ================================
 
@@ -18,11 +18,11 @@ if exist "d:\newprojects\oneshoppos\frontend\node_modules\.vite" (
 )
 
 echo [3/4] Starting backend server...
-start "OneShopPOS Backend" cmd /k "cd /d d:\newprojects\oneshoppos\backend && node index.js"
+start "SanoPOS Backend" cmd /k "cd /d d:\newprojects\oneshoppos\backend && node index.js"
 timeout /t 3 /nobreak >nul
 
 echo [4/4] Starting frontend dev server...
-start "OneShopPOS Frontend" cmd /k "cd /d d:\newprojects\oneshoppos\frontend && npm run dev"
+start "SanoPOS Frontend" cmd /k "cd /d d:\newprojects\oneshoppos\frontend && npm run dev"
 timeout /t 4 /nobreak >nul
 
 echo.

@@ -152,7 +152,7 @@ export function buildReceiptHtml(slip, template) {
   if (s.exchangeCredit > 0) {
     b.appendChild(row("Return Credit", `- ${fmt(s.exchangeCredit)}`, "ret"));
   } else if (s.discountAmount > 0) {
-    const label = s.discountType === "percentage" ? "Discount (%)" : "Discount";
+    const label = s.discountType === "percent" ? "Discount (%)" : "Discount";
     b.appendChild(row(label, `- ${fmt(s.discountAmount)}`));
   }
 

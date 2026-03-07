@@ -61,7 +61,7 @@ export const POSProvider = ({ children }) => {
   const [taxInclusive, setTaxInclusive] = useState(false);
 
   // ── Order-level discount / note ───────────────────────────────────────────
-  const [discountType, setDiscountType] = useState("fixed");
+  const [discountType, setDiscountType] = useState("percent");
   const [discountInput, setDiscountInput] = useState("");
   const [orderNote, setOrderNote] = useState("");
   const [showDiscountModal, setShowDiscountModal] = useState(false);
@@ -710,7 +710,8 @@ export const POSProvider = ({ children }) => {
         customer: custObj || null,
         outlet: outlets.find((o) => String(o.id) === String(selectedOutletId)),
         employee: employee,
-        discountAmount: Number(discountInput || 0),
+        discountAmount: discountValue,
+        discountInput: Number(discountInput || 0),
         discountType,
         taxAmount: taxInclusive && taxTotal > 0 ? taxTotal : 0,
         taxInclusive,

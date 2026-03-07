@@ -85,7 +85,7 @@ module.exports = function registerSalesRoutes(app, deps) {
       db.get(
         `SELECT * FROM attendance_sessions
          WHERE employee_id = ? AND outlet_id = ? AND session_end IS NULL
-           AND date(session_start, 'localtime') = ?
+           AND date(session_start) = ?
          ORDER BY session_start DESC
          LIMIT 1`,
         [Number(employeeId), Number(outletId), today],
@@ -100,7 +100,7 @@ module.exports = function registerSalesRoutes(app, deps) {
             `SELECT COUNT(*) AS cnt
              FROM attendance_sessions
              WHERE employee_id = ? AND outlet_id = ?
-               AND date(session_start, 'localtime') = ?`,
+               AND date(session_start) = ?`,
             [Number(employeeId), Number(outletId), today],
             (countErr, countRow) => {
               if (countErr) return reject(countErr);
