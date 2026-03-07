@@ -29,9 +29,11 @@ backend/master.db-shm
 backend/master.db-wal
 backend/tenants/
 
-# Generated files (report exports, local uploads)
+# Generated files (report exports, local uploads, test artifacts)
 backend/exports/
 backend/uploads/
+backend/test_results*.json
+backend/schema_dump.json
 
 # Local dev scripts with credentials
 START-ADMIN.bat
