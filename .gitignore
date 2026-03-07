@@ -29,5 +29,9 @@ backend/master.db-shm
 backend/master.db-wal
 backend/tenants/
 
+# Generated files (report exports, local uploads)
+backend/exports/
+backend/uploads/
+
 # Local dev scripts with credentials
 START-ADMIN.bat
