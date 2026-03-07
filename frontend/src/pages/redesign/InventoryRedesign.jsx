@@ -20,7 +20,7 @@ const PAGE_SIZE = 50;
 const BLANK_FORM = {
   name: "", barcode: "", sku: "", price: "", cost_price: "",
   stock: "", category_id: "", brand_id: "", status: "active", unit: "pcs",
-  product_type: "", vendor: "", tags: "",
+  product_type: "", vendor: "", tags: "", image_url: "",
 };
 
 function ProductModal({ product, categories, brands, authHeaders, onClose, onSaved }) {
@@ -41,11 +41,13 @@ function ProductModal({ product, categories, brands, authHeaders, onClose, onSav
           product_type: product.product_type || "",
           vendor: product.vendor || "",
           tags: product.tags || "",
+          image_url: product.image_url || "",
         }
       : { ...BLANK_FORM },
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [imageUploading, setImageUploading] = useState(false);
   const [outletStock, setOutletStock] = useState([]);
 
   useEffect(() => {
@@ -57,6 +59,28 @@ function ProductModal({ product, categories, brands, authHeaders, onClose, onSav
   }, [isEdit, product?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const upd = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("image", file);
+      const res = await fetch(`${API}/api/uploads/product-image`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      upd("image_url", data.url);
+    } catch (err) {
+      setError("Image upload failed: " + err.message);
+    } finally {
+      setImageUploading(false);
+    }
+  };
 
   const save = async (e) => {
     e.preventDefault();
@@ -79,6 +103,7 @@ function ProductModal({ product, categories, brands, authHeaders, onClose, onSav
           stock: form.stock !== "" ? Number(form.stock) : 0,
           category_id: form.category_id || null,
           brand_id: form.brand_id || null,
+          image_url: form.image_url || null,
         }),
       });
       const data = await res.json();
@@ -96,8 +121,8 @@ function ProductModal({ product, categories, brands, authHeaders, onClose, onSav
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-lg rounded-xl border border-(--ui-border) bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-(--ui-border) px-5 py-4">
+      <div className="w-full max-w-lg rounded-xl border border-(--ui-border) bg-white shadow-2xl flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between border-b border-(--ui-border) px-5 py-4 shrink-0">
           <h2 className="font-semibold text-(--ui-text)">
             {isEdit ? "Edit Product" : "Add Product"}
           </h2>
@@ -105,7 +130,7 @@ function ProductModal({ product, categories, brands, authHeaders, onClose, onSav
             <X size={18} />
           </button>
         </div>
-        <form onSubmit={save} className="space-y-3 p-5">
+        <form onSubmit={save} className="space-y-3 p-5 overflow-y-auto">
           {error && (
             <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
           )}
@@ -175,6 +200,22 @@ function ProductModal({ product, categories, brands, authHeaders, onClose, onSav
                 <option value="draft">Draft</option>
                 <option value="inactive">Inactive</option>
               </Select>
+            </div>
+            <div className="col-span-2 flex flex-col gap-2">
+              <label className="text-xs font-medium text-(--ui-text-muted)">Product Image</label>
+              {form.image_url && (
+                <div className="relative w-24 h-24">
+                  <img src={form.image_url} alt="Product" className="w-24 h-24 rounded-lg object-cover border border-(--ui-border)" />
+                  <button type="button" onClick={() => upd("image_url", "")}
+                    className="absolute -top-1 -right-1 rounded-full bg-rose-500 text-white p-0.5 hover:bg-rose-600">
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+              <label className={`flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-(--ui-border) px-3 py-2 text-sm text-(--ui-text-muted) hover:border-(--ui-text-muted) transition-colors ${imageUploading ? "opacity-50 pointer-events-none" : ""}`}>
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={imageUploading} />
+                {imageUploading ? "Uploading…" : form.image_url ? "Replace image" : "Upload image"}
+              </label>
             </div>
           </div>
           {isEdit && outletStock.length > 0 && (
