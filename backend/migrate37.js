@@ -1,7 +1,7 @@
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
 
-const dbPath = path.resolve(__dirname, "oneshop.db");
+const dbPath = path.resolve(__dirname, "sanopos.db");
 const db = new sqlite3.Database(dbPath);
 
 console.log("Running migration 37: backup_log + invoice_sequences + invoice_number on sales");

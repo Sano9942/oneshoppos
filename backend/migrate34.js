@@ -1,7 +1,7 @@
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
 
-const dbPath = path.resolve(__dirname, "oneshop.db");
+const dbPath = path.resolve(__dirname, "sanopos.db");
 const db = new sqlite3.Database(dbPath);
 
 console.log("Running migration 34: barcode_templates + barcode_print_jobs");

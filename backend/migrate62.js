@@ -10,7 +10,7 @@
  */
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
-const DB_PATH = path.join(__dirname, "oneshop.db");
+const DB_PATH = path.join(__dirname, "sanopos.db");
 const db = new sqlite3.Database(DB_PATH);
 
 db.serialize(() => {
