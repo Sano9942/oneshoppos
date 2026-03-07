@@ -46,7 +46,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
       db.get(
         `SELECT * FROM attendance_sessions
          WHERE employee_id = ? AND session_end IS NULL
-           AND date(session_start, 'localtime') = ?${outletClause}
+           AND date(session_start) = ?${outletClause}
          ORDER BY session_start DESC
          LIMIT 1`,
         [Number(employeeId), today, ...outletParams],
@@ -58,7 +58,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
                COALESCE(SUM(CASE WHEN session_type = 'work' THEN duration_hours ELSE 0 END), 0) AS net_work_hours,
                COALESCE(SUM(CASE WHEN session_type = 'break' THEN duration_hours ELSE 0 END), 0) AS break_hours
              FROM attendance_sessions
-             WHERE employee_id = ? AND date(session_start, 'localtime') = ?${outletClause}
+             WHERE employee_id = ? AND date(session_start) = ?${outletClause}
                AND session_end IS NOT NULL`,
             [Number(employeeId), today, ...outletParams],
             (totalsErr, totals) => {
@@ -77,7 +77,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
               db.get(
                 `SELECT COUNT(*) AS cnt
                  FROM attendance_sessions
-                 WHERE employee_id = ? AND date(session_start, 'localtime') = ?${outletClause}`,
+                 WHERE employee_id = ? AND date(session_start) = ?${outletClause}`,
                 [Number(employeeId), today, ...outletParams],
                 (countErr, countRow) => {
                   if (countErr) return reject(countErr);
@@ -208,7 +208,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
         db.get(
           `SELECT * FROM attendance_sessions
            WHERE employee_id = ? AND session_end IS NULL
-             AND date(session_start, 'localtime') = ?${outletClause}`,
+             AND date(session_start) = ?${outletClause}`,
           [emp.id, today, ...outletParams],
           (err2, openSession) => {
             if (err2) return res.status(500).json({ error: err2.message });
@@ -219,7 +219,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
                  COALESCE(SUM(CASE WHEN session_type = 'work' THEN duration_hours ELSE 0 END), 0) AS net_work_hours,
                  COALESCE(SUM(CASE WHEN session_type = 'break' THEN duration_hours ELSE 0 END), 0) AS break_hours
                FROM attendance_sessions
-               WHERE employee_id = ? AND date(session_start, 'localtime') = ?${outletClause}
+               WHERE employee_id = ? AND date(session_start) = ?${outletClause}
                  AND session_end IS NOT NULL`,
               [emp.id, today, ...outletParams],
               (err3, totals) => {
@@ -240,7 +240,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
                 // No open session — check if they had any sessions today
                 db.get(
                   `SELECT COUNT(*) AS cnt FROM attendance_sessions
-                   WHERE employee_id = ? AND date(session_start, 'localtime') = ?${outletClause}`,
+                   WHERE employee_id = ? AND date(session_start) = ?${outletClause}`,
                   [emp.id, today, ...outletParams],
                   (err4, countRow) => {
                     if (err4) return res.status(500).json({ error: err4.message });
@@ -319,7 +319,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
         db.get(
           `SELECT * FROM attendance_sessions
            WHERE employee_id = ? AND session_end IS NULL
-             AND date(session_start, 'localtime') = ?`,
+             AND date(session_start) = ?`,
           [emp.id, today],
           (err2, openSession) => {
             if (err2) return res.status(500).json({ error: err2.message });
@@ -380,7 +380,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
             db.get(
               `SELECT id FROM employee_attendance
                WHERE employee_id = ? AND outlet_id = ?
-                 AND date(check_in, 'localtime') = ?`,
+                 AND date(check_in) = ?`,
               [emp.id, outlet_id, today],
               (err3, dayRecord) => {
                 if (err3) return res.status(500).json({ error: err3.message });
@@ -454,7 +454,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
         db.get(
           `SELECT * FROM attendance_sessions
            WHERE employee_id = ? AND session_type = 'work' AND session_end IS NULL
-             AND date(session_start, 'localtime') = ?`,
+             AND date(session_start) = ?`,
           [emp.id, today],
           (err2, openWork) => {
             if (err2) return res.status(500).json({ error: err2.message });
@@ -480,7 +480,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
                   `SELECT COALESCE(SUM(duration_hours), 0) AS net_work_hours
                    FROM attendance_sessions
                    WHERE employee_id = ? AND session_type = 'work'
-                     AND date(session_start, 'localtime') = ?
+                     AND date(session_start) = ?
                      AND session_end IS NOT NULL`,
                   [emp.id, today],
                   (err4, totals) => {
@@ -506,7 +506,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
                         `UPDATE employee_attendance
                          SET check_out = ?, hours = ?, status = 'checked_out'
                          WHERE employee_id = ? AND outlet_id = ?
-                           AND date(check_in, 'localtime') = ?`,
+                           AND date(check_in) = ?`,
                         [now, netHours, emp.id, openWork.outlet_id, today],
                         (err5) => {
                           if (err5) return res.status(500).json({ error: err5.message });

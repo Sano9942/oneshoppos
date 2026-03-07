@@ -253,6 +253,61 @@ module.exports = function (app, deps) {
       const saleCount = Number(saleCountRow[0]?.count || 0);
       const averageBill = saleCount > 0 ? Number((totalRevenueToday / saleCount).toFixed(2)) : 0;
 
+      // Same-time-of-day comparison: yesterday 00:00 local → yesterday at same elapsed time as now
+      const elapsedMs = Date.now() - new Date(todayStart.replace(" ", "T") + "Z").getTime();
+      const yesterdayDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 24 * 3600 * 1000));
+      const yesterdayStart = toUtcStart(yesterdayDateStr, tz);
+      const yesterdayEndMs = new Date(yesterdayStart.replace(" ", "T") + "Z").getTime() + elapsedMs;
+      const yesterdayEnd = new Date(yesterdayEndMs).toISOString().replace("T", " ").slice(0, 19);
+
+      const yesterdaySalesRows = await getQuery(
+        `SELECT
+          ROUND(COALESCE(SUM(s.total_amount), 0), 2) AS revenue,
+          COUNT(s.id) AS sale_count
+         FROM sales s
+         WHERE s.voided = 0
+           AND s.timestamp >= ?
+           AND s.timestamp < ?
+           ${outletFilter}`,
+        [yesterdayStart, yesterdayEnd, ...outletParams],
+      );
+      const yesterdayRevenue = Number(yesterdaySalesRows[0]?.revenue || 0);
+      const yesterdaySaleCount = Number(yesterdaySalesRows[0]?.sale_count || 0);
+
+      const yesterdayProfitRows = await getQuery(
+        `SELECT
+          ROUND(
+            COALESCE(SUM(
+              CASE
+                WHEN t.id IS NOT NULL
+                  THEN (si.quantity * si.price_at_sale) / (1 + (t.rate / 100.0))
+                ELSE (si.quantity * si.price_at_sale) / (1 + (COALESCE(p.gst, 0) / 100.0))
+              END
+            ), 0), 2) AS tax_exclusive,
+          ROUND(COALESCE(SUM(si.quantity * si.cost_price_at_sale), 0), 2) AS total_cost
+         FROM sale_items si
+         JOIN sales s ON si.sale_id = s.id
+         JOIN products p ON si.product_id = p.id
+         LEFT JOIN taxes t ON p.tax_id = t.id
+         WHERE s.voided = 0
+           AND s.timestamp >= ?
+           AND s.timestamp < ?
+           ${outletFilter}`,
+        [yesterdayStart, yesterdayEnd, ...outletParams],
+      );
+      const yProfitRow = yesterdayProfitRows[0] || {};
+      const yesterdayProfit = Number(((Number(yProfitRow.tax_exclusive || 0) - Number(yProfitRow.total_cost || 0)).toFixed(2)));
+
+      const yesterdayRefundRows = await getQuery(
+        `SELECT ROUND(COALESCE(SUM(ri.quantity * ri.refund_price), 0), 2) AS refund_value
+         FROM returns r
+         LEFT JOIN return_items ri ON ri.return_id = r.id
+         WHERE r.timestamp >= ? AND r.timestamp < ?
+         ${outletIds.length === 1 ? "AND r.outlet_id = ?" : outletIds.length > 1 ? `AND r.outlet_id IN (${outletIds.map(() => "?").join(",")})` : ""}`,
+        [yesterdayStart, yesterdayEnd, ...outletIds],
+      );
+      const yesterdayRefunds = Number(yesterdayRefundRows[0]?.refund_value || 0);
+
       // Compute UTC start for 29-days-ago local date
       const twentyNineDaysAgoStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 29 * 24 * 3600 * 1000));
       const twentyNineDaysAgoStart = toUtcStart(twentyNineDaysAgoStr, tz);
@@ -556,10 +611,62 @@ module.exports = function (app, deps) {
         details: attendanceDetails,
       };
 
+      // Operational readiness — per outlet: shift status, staff counts, last sale time
+      const allOutlets = await getQuery(`SELECT id, name FROM outlets ORDER BY name ASC`);
+      const operationalReadiness = await Promise.all(
+        allOutlets.map(async (outlet) => {
+          const [shiftRow] = await getQuery(
+            `SELECT cs.id, e.name AS employee_name, cs.opened_at, cs.opening_float
+             FROM cash_shifts cs
+             LEFT JOIN employees e ON cs.employee_id = e.id
+             WHERE cs.outlet_id = ? AND cs.status = 'open'
+             ORDER BY cs.opened_at DESC LIMIT 1`,
+            [outlet.id],
+          );
+          const [staffCounts] = await getQuery(
+            `SELECT
+              SUM(CASE WHEN session_type = 'work' AND session_end IS NULL THEN 1 ELSE 0 END) AS clocked_in,
+              SUM(CASE WHEN session_type = 'break' AND session_end IS NULL THEN 1 ELSE 0 END) AS on_break
+             FROM attendance_sessions
+             WHERE outlet_id = ? AND session_start >= ? AND session_start < ?`,
+            [outlet.id, todayStart, todayEnd],
+          );
+          const [lastSaleRow] = await getQuery(
+            `SELECT MAX(timestamp) AS last_sale_at FROM sales WHERE outlet_id = ? AND voided = 0`,
+            [outlet.id],
+          );
+          return {
+            outlet_id: outlet.id,
+            outlet_name: outlet.name,
+            shift_open: !!shiftRow,
+            shift_employee: shiftRow?.employee_name || null,
+            shift_opened_at: shiftRow?.opened_at || null,
+            opening_float: shiftRow?.opening_float || 0,
+            staff_clocked_in: Number(staffCounts?.clocked_in || 0),
+            staff_on_break: Number(staffCounts?.on_break || 0),
+            last_sale_at: lastSaleRow?.last_sale_at || null,
+          };
+        }),
+      );
+
       res.json({
+        currency: {
+          symbol: req.company?.currency_symbol || "PKRs",
+          code: req.company?.currency_code || "PKR",
+        },
+        targets: {
+          monthly_sales_target: Number(req.company?.monthly_sales_target || 0),
+          margin_threshold_pct: Number(req.company?.margin_threshold_pct || 20),
+          refund_threshold_pct: Number(req.company?.refund_threshold_pct || 5),
+          void_threshold_pct: Number(req.company?.void_threshold_pct || 3),
+        },
         totalRevenueToday: Number(totalRevenueToday.toFixed(2)),
         saleCount,
         averageBill,
+        yesterdayRevenue,
+        yesterdaySaleCount,
+        yesterdayProfit,
+        yesterdayRefunds,
         monthSales,
         monthPurchases,
         monthGrossMargin,
@@ -568,9 +675,24 @@ module.exports = function (app, deps) {
         todayProfit,
         todayGrossProfit: Number(todayGrossProfit.toFixed(2)),
         todayExpenses,
-        refundsToday,
-        voidsToday,
-        discountsToday,
+        refundsToday: {
+          count: refundsToday.count,
+          value: refundsToday.value,
+          pct_of_sales: totalRevenueToday > 0 ? Number(((refundsToday.value / totalRevenueToday) * 100).toFixed(1)) : 0,
+          pct_of_orders: saleCount > 0 ? Number(((refundsToday.count / saleCount) * 100).toFixed(1)) : 0,
+        },
+        voidsToday: {
+          count: voidsToday.count,
+          value: voidsToday.value,
+          pct_of_sales: totalRevenueToday > 0 ? Number(((voidsToday.value / totalRevenueToday) * 100).toFixed(1)) : 0,
+          pct_of_orders: saleCount > 0 ? Number(((voidsToday.count / saleCount) * 100).toFixed(1)) : 0,
+        },
+        discountsToday: {
+          count: discountsToday.count,
+          value: discountsToday.value,
+          pct_of_sales: totalRevenueToday > 0 ? Number(((discountsToday.value / totalRevenueToday) * 100).toFixed(1)) : 0,
+          pct_of_orders: saleCount > 0 ? Number(((discountsToday.count / saleCount) * 100).toFixed(1)) : 0,
+        },
         taxInclusive,
         taxExclusive,
         inventoryValue,
@@ -581,6 +703,7 @@ module.exports = function (app, deps) {
         salePurchaseComparison,
         categoryContribution,
         attendanceSummary,
+        operationalReadiness,
         salesByOutlet,
         topProducts,
         monthlyTrend,

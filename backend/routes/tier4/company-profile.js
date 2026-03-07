@@ -41,6 +41,10 @@ module.exports = function createCompanyProfileRouter({
         currency_code,
         fiscal_year_start,
         timezone,
+        monthly_sales_target,
+        margin_threshold_pct,
+        refund_threshold_pct,
+        void_threshold_pct,
       } = req.body || {};
 
       db.run(
@@ -59,6 +63,10 @@ module.exports = function createCompanyProfileRouter({
            currency_code = COALESCE(?, currency_code),
            fiscal_year_start = COALESCE(?, fiscal_year_start),
            timezone = COALESCE(?, timezone),
+           monthly_sales_target = COALESCE(?, monthly_sales_target),
+           margin_threshold_pct = COALESCE(?, margin_threshold_pct),
+           refund_threshold_pct = COALESCE(?, refund_threshold_pct),
+           void_threshold_pct = COALESCE(?, void_threshold_pct),
            updated_at = datetime('now','localtime')
        WHERE id = 1`,
         [
@@ -76,6 +84,10 @@ module.exports = function createCompanyProfileRouter({
           currency_code || null,
           fiscal_year_start || null,
           timezone || null,
+          monthly_sales_target != null ? Number(monthly_sales_target) : null,
+          margin_threshold_pct != null ? Number(margin_threshold_pct) : null,
+          refund_threshold_pct != null ? Number(refund_threshold_pct) : null,
+          void_threshold_pct != null ? Number(void_threshold_pct) : null,
         ],
         function (err) {
           if (err) return res.status(500).json({ error: err.message });

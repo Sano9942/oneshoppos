@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Building2, CheckCircle, Globe, Upload, X } from "lucide-react";
+import { Building2, CheckCircle, Globe, Target, Upload, X } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import {
@@ -14,6 +14,8 @@ const DEFAULT_FORM = {
   city: "", country: "Pakistan", phone: "", email: "", website: "",
   currency_symbol: "PKRs", currency_code: "PKR",
   fiscal_year_start: "01-01", timezone: "Asia/Karachi", logo_url: "",
+  monthly_sales_target: 0, margin_threshold_pct: 20,
+  refund_threshold_pct: 5, void_threshold_pct: 3,
 };
 
 function FormField({ label, children }) {
@@ -270,6 +272,58 @@ export default function CompanySettingsRedesign() {
                 placeholder="Asia/Karachi"
                 value={form.timezone || ""}
                 onChange={(e) => upd("timezone", e.target.value)}
+              />
+            </FormField>
+          </div>
+        </SectionCard>
+
+        {/* Dashboard Targets */}
+        <SectionCard className="p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <Target size={15} className="text-(--ui-accent)" />
+            <h2 className="font-semibold text-(--ui-text)">Dashboard Targets</h2>
+          </div>
+          <p className="mb-3 text-xs text-(--ui-text-muted)">
+            Set targets and thresholds to drive the attention queue and exception color coding on the dashboard.
+          </p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <FormField label="Monthly Sales Target">
+              <Input
+                type="number"
+                min="0"
+                placeholder="0"
+                value={form.monthly_sales_target ?? 0}
+                onChange={(e) => upd("monthly_sales_target", e.target.value)}
+              />
+            </FormField>
+            <FormField label="Margin Threshold (%)">
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                placeholder="20"
+                value={form.margin_threshold_pct ?? 20}
+                onChange={(e) => upd("margin_threshold_pct", e.target.value)}
+              />
+            </FormField>
+            <FormField label="Refund Alert Threshold (%)">
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                placeholder="5"
+                value={form.refund_threshold_pct ?? 5}
+                onChange={(e) => upd("refund_threshold_pct", e.target.value)}
+              />
+            </FormField>
+            <FormField label="Void Alert Threshold (%)">
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                placeholder="3"
+                value={form.void_threshold_pct ?? 3}
+                onChange={(e) => upd("void_threshold_pct", e.target.value)}
               />
             </FormField>
           </div>

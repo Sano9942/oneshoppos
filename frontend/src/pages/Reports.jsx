@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   BarChart3,
   TrendingUp,
@@ -723,8 +724,22 @@ export function ReportTabStandalone({ tabId }) {
   );
 }
 
+// Maps dashboard URL shorthand → actual tab IDs
+const TAB_ALIASES = {
+  sales: "sales-summary",
+  finance: "profit-loss",
+  governance: "governance",
+  inventory: "inventory-dump",
+  analytics: "heatmaps",
+};
+
 export default function Reports() {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = searchParams.get("tab");
+    return (tab && TAB_ALIASES[tab]) || tab || "overview";
+  });
+  const didApplyParams = useRef(false);
   const [filters, setFilters] = useState({
     dateFrom: "",
     dateTo: "",
@@ -785,6 +800,21 @@ export default function Reports() {
     };
     loadMeta();
   }, [filters.outletIds, filters.dateFrom, filters.dateTo]);
+
+  // Apply URL params once after meta loads (need outlet list to validate outlet_id)
+  useEffect(() => {
+    if (didApplyParams.current) return;
+    const outletId = searchParams.get("outlet_id");
+    const date = searchParams.get("date");
+    if (outletId) {
+      setFilters((f) => ({ ...f, outletIds: [Number(outletId)] }));
+    }
+    if (date === "today") {
+      const today = new Date().toISOString().slice(0, 10);
+      setFilters((f) => ({ ...f, dateFrom: today, dateTo: today }));
+    }
+    didApplyParams.current = true;
+  }, [searchParams]);
 
   const activeGroup = GROUPS.find((g) =>
     g.tabs.some((t) => t.id === activeTab),
