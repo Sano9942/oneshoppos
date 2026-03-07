@@ -1,4 +1,5 @@
 const { toUtcStart, toUtcEnd } = require("../../utils/tz");
+const { uploadToR2 } = require("../../utils/r2");
 
 module.exports = function (app, deps, helpers) {
   const { db, requirePerm, requireAnyPerm, requireFeature, path, fs } = deps;
@@ -14,17 +15,6 @@ module.exports = function (app, deps, helpers) {
       where.push(`${col} IN (${ids.map(() => "?").join(",")})`);
       params.push(...ids);
     }
-  }
-
-  const REPORT_EXPORT_DIR = path.resolve(
-    __dirname,
-    "..",
-    "..",
-    "exports",
-    "reports",
-  );
-  if (!fs.existsSync(REPORT_EXPORT_DIR)) {
-    fs.mkdirSync(REPORT_EXPORT_DIR, { recursive: true });
   }
 
   function columnsForScheduleReport(reportKey) {
@@ -194,56 +184,48 @@ module.exports = function (app, deps, helpers) {
             }
 
             const fileName = `report_${schedule.report_key}_${schedule.id}_${Date.now()}.csv`;
-            const filePath = path.join(REPORT_EXPORT_DIR, fileName);
+            const r2Key = `reports/${fileName}`;
             const csv = toCsvLines(
               rows,
               columnsForScheduleReport(schedule.report_key),
               filters,
             );
-            try {
-              fs.writeFileSync(filePath, csv, "utf8");
-            } catch (e) {
-              db.run(
-                "UPDATE report_schedule_runs SET status='failed', run_finished_at=datetime('now','localtime'), error_message=? WHERE id=?",
-                [e.message, runId],
-              );
-              db.run(
-                "INSERT INTO report_delivery_log (schedule_run_id, schedule_id, channel, recipient, status, message) VALUES (?, ?, 'file', ?, 'failed', ?)",
-                [runId, schedule.id, schedule.recipient || null, e.message],
-              );
-              return cb(e);
-            }
 
-            db.run(
-              `UPDATE report_schedule_runs
-               SET status='success', run_finished_at=datetime('now','localtime'),
-                   file_path=?, row_count=?
-               WHERE id=?`,
-              [filePath, rows.length, runId],
-            );
-            db.run(
-              "INSERT INTO report_delivery_log (schedule_run_id, schedule_id, channel, recipient, status, message) VALUES (?, ?, 'file', ?, 'sent', ?)",
-              [
-                runId,
-                schedule.id,
-                schedule.recipient || null,
-                `Generated file: ${fileName}`,
-              ],
-            );
-            const nextRun = nextRunAtIso(
-              schedule.frequency,
-              schedule.run_hour,
-              schedule.run_minute,
-            );
-            db.run(
-              "UPDATE report_schedules SET last_run_at=datetime('now','localtime'), next_run_at=?, updated_at=datetime('now','localtime') WHERE id=?",
-              [nextRun, schedule.id],
-            );
-            return cb(null, {
-              run_id: runId,
-              file_path: filePath,
-              row_count: rows.length,
-            });
+            uploadToR2(Buffer.from(csv, "utf8"), r2Key, "text/csv")
+              .then((fileUrl) => {
+                db.run(
+                  `UPDATE report_schedule_runs
+                   SET status='success', run_finished_at=datetime('now','localtime'),
+                       file_path=?, row_count=?
+                   WHERE id=?`,
+                  [fileUrl, rows.length, runId],
+                );
+                db.run(
+                  "INSERT INTO report_delivery_log (schedule_run_id, schedule_id, channel, recipient, status, message) VALUES (?, ?, 'file', ?, 'sent', ?)",
+                  [runId, schedule.id, schedule.recipient || null, `Generated file: ${fileName}`],
+                );
+                const nextRun = nextRunAtIso(
+                  schedule.frequency,
+                  schedule.run_hour,
+                  schedule.run_minute,
+                );
+                db.run(
+                  "UPDATE report_schedules SET last_run_at=datetime('now','localtime'), next_run_at=?, updated_at=datetime('now','localtime') WHERE id=?",
+                  [nextRun, schedule.id],
+                );
+                return cb(null, { run_id: runId, file_path: fileUrl, row_count: rows.length });
+              })
+              .catch((e) => {
+                db.run(
+                  "UPDATE report_schedule_runs SET status='failed', run_finished_at=datetime('now','localtime'), error_message=? WHERE id=?",
+                  [e.message, runId],
+                );
+                db.run(
+                  "INSERT INTO report_delivery_log (schedule_run_id, schedule_id, channel, recipient, status, message) VALUES (?, ?, 'file', ?, 'failed', ?)",
+                  [runId, schedule.id, schedule.recipient || null, e.message],
+                );
+                return cb(e);
+              });
           },
         );
       },
