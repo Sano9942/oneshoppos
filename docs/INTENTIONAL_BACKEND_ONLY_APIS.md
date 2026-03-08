@@ -12,6 +12,7 @@ Generated from `docs/api-parity/parity-registry.json`.
 
 | Endpoint | Classification | Owner | Review Date | Reason |
 |---|---|---|---|---|
+| `DELETE /api/admin/tenants/:param` | `backend_only_by_design` | admin_maintainer | 2026-03-09 | Super-admin tenant management endpoint; used only by admin dashboard, not POS UI. |
 | `DELETE /api/barcode-templates/:param` | `backend_only_by_design` | barcode-expenses_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `DELETE /api/categories/:param` | `backend_only_by_design` | categories_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `DELETE /api/crm/leads/:param` | `backend_only_by_design` | tier4_crm_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
@@ -85,12 +86,18 @@ Generated from `docs/api-parity/parity-registry.json`.
 | `GET /api/supplier-invoices/:param` | `backend_only_by_design` | grn_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `GET /api/supplier-ledger/:param` | `backend_only_by_design` | grn_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/action-history` | `backend_only_by_design` | receipt-templates_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
+| `POST /api/admin/migrate-all` | `backend_only_by_design` | admin_maintainer | 2026-03-09 | Super-admin endpoint to run migrations across all tenant databases. |
+| `POST /api/admin/tenants/:param/activate` | `backend_only_by_design` | admin_maintainer | 2026-03-09 | Super-admin endpoint to activate a suspended tenant. |
+| `POST /api/admin/tenants/:param/migrate` | `backend_only_by_design` | admin_maintainer | 2026-03-09 | Super-admin endpoint to run migrations on a specific tenant database. |
+| `POST /api/admin/tenants/:param/reset-pin` | `backend_only_by_design` | admin_maintainer | 2026-03-09 | Super-admin endpoint to reset an employee PIN for a tenant. |
+| `POST /api/admin/tenants/:param/suspend` | `backend_only_by_design` | admin_maintainer | 2026-03-09 | Super-admin endpoint to suspend a tenant. |
 | `POST /api/attendance/:param/checkout` | `backend_only_by_design` | attendance_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/attendance/checkin` | `backend_only_by_design` | attendance_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/attendance/pin-checkin` | `backend_only_by_design` | attendance_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/attendance/pin-checkout` | `backend_only_by_design` | attendance_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/attendance/pin-status` | `backend_only_by_design` | attendance_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/attribute-sets` | `backend_only_by_design` | attribute-sets_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
+| `POST /api/auth/kiosk-login` | `backend_only_by_design` | auth_maintainer | 2026-03-09 | Multi-tenant kiosk PIN login endpoint; gated behind MULTI_TENANT=1 flag. |
 | `POST /api/backup/restore` | `internal_system_only` | barcode-expenses_maintainer | 2026-03-06 | Operational endpoint for system health, automation, or background processing. |
 | `POST /api/barcode-print-jobs` | `backend_only_by_design` | barcode-expenses_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/barcode-templates` | `backend_only_by_design` | barcode-expenses_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |

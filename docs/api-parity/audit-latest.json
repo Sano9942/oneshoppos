@@ -1,14 +1,119 @@
 {
-  "generated_at": "2026-03-06T08:40:16.836Z",
+  "generated_at": "2026-03-08T21:59:39.302Z",
   "summary": {
-    "backend_endpoints": 316,
-    "frontend_calls": 203,
+    "backend_endpoints": 342,
+    "frontend_calls": 227,
     "backend_only": 125,
     "frontend_only": 0,
     "unclassified_backend_only": 0,
-    "method_mismatch_paths": 11
+    "method_mismatch_paths": 10
   },
   "backend_endpoints": [
+    {
+      "endpoint": "POST /api/admin/auth/login",
+      "method": "POST",
+      "path": "/api/admin/auth/login",
+      "source": "backend/routes/admin.js",
+      "frontend_refs": [
+        "frontend/src/pages/admin/AdminLogin.jsx"
+      ]
+    },
+    {
+      "endpoint": "GET /api/admin/tenants",
+      "method": "GET",
+      "path": "/api/admin/tenants",
+      "source": "backend/routes/admin.js",
+      "frontend_refs": [
+        "frontend/src/pages/admin/AdminTenantDetail.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/admin/tenants",
+      "method": "POST",
+      "path": "/api/admin/tenants",
+      "source": "backend/routes/admin.js",
+      "frontend_refs": [
+        "frontend/src/pages/admin/AdminTenantList.jsx"
+      ]
+    },
+    {
+      "endpoint": "GET /api/admin/tenants/:param",
+      "method": "GET",
+      "path": "/api/admin/tenants/:param",
+      "source": "backend/routes/admin.js",
+      "frontend_refs": [
+        "frontend/src/pages/admin/AdminTenantDetail.jsx"
+      ]
+    },
+    {
+      "endpoint": "PUT /api/admin/tenants/:param",
+      "method": "PUT",
+      "path": "/api/admin/tenants/:param",
+      "source": "backend/routes/admin.js",
+      "frontend_refs": [
+        "frontend/src/pages/admin/AdminTenantDetail.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/admin/tenants/:param/suspend",
+      "method": "POST",
+      "path": "/api/admin/tenants/:param/suspend",
+      "source": "backend/routes/admin.js",
+      "frontend_refs": []
+    },
+    {
+      "endpoint": "POST /api/admin/tenants/:param/activate",
+      "method": "POST",
+      "path": "/api/admin/tenants/:param/activate",
+      "source": "backend/routes/admin.js",
+      "frontend_refs": []
+    },
+    {
+      "endpoint": "DELETE /api/admin/tenants/:param",
+      "method": "DELETE",
+      "path": "/api/admin/tenants/:param",
+      "source": "backend/routes/admin.js",
+      "frontend_refs": []
+    },
+    {
+      "endpoint": "GET /api/admin/tenants/:param/stats",
+      "method": "GET",
+      "path": "/api/admin/tenants/:param/stats",
+      "source": "backend/routes/admin.js",
+      "frontend_refs": [
+        "frontend/src/pages/admin/AdminTenantDetail.jsx"
+      ]
+    },
+    {
+      "endpoint": "GET /api/admin/stats",
+      "method": "GET",
+      "path": "/api/admin/stats",
+      "source": "backend/routes/admin.js",
+      "frontend_refs": [
+        "frontend/src/pages/admin/AdminDashboard.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/admin/tenants/:param/migrate",
+      "method": "POST",
+      "path": "/api/admin/tenants/:param/migrate",
+      "source": "backend/routes/admin.js",
+      "frontend_refs": []
+    },
+    {
+      "endpoint": "POST /api/admin/migrate-all",
+      "method": "POST",
+      "path": "/api/admin/migrate-all",
+      "source": "backend/routes/admin.js",
+      "frontend_refs": []
+    },
+    {
+      "endpoint": "POST /api/admin/tenants/:param/reset-pin",
+      "method": "POST",
+      "path": "/api/admin/tenants/:param/reset-pin",
+      "source": "backend/routes/admin.js",
+      "frontend_refs": []
+    },
     {
       "endpoint": "GET /api/attendance",
       "method": "GET",
@@ -156,6 +261,40 @@
       "frontend_refs": [
         "frontend/src/components/ContextSwitcher.jsx"
       ]
+    },
+    {
+      "endpoint": "POST /api/auth/mt-login",
+      "method": "POST",
+      "path": "/api/auth/mt-login",
+      "source": "backend/routes/auth.js",
+      "frontend_refs": [
+        "frontend/src/auth/AuthProvider.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/auth/refresh",
+      "method": "POST",
+      "path": "/api/auth/refresh",
+      "source": "backend/routes/auth.js",
+      "frontend_refs": [
+        "frontend/src/auth/AuthProvider.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/auth/update-context",
+      "method": "POST",
+      "path": "/api/auth/update-context",
+      "source": "backend/routes/auth.js",
+      "frontend_refs": [
+        "frontend/src/pages/ContextSelect.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/auth/kiosk-login",
+      "method": "POST",
+      "path": "/api/auth/kiosk-login",
+      "source": "backend/routes/auth.js",
+      "frontend_refs": []
     },
     {
       "endpoint": "GET /api/auth/me",
@@ -353,7 +492,9 @@
       "method": "POST",
       "path": "/api/categories",
       "source": "backend/routes/categories.js",
-      "frontend_refs": []
+      "frontend_refs": [
+        "frontend/src/pages/redesign/ProductFormPage.jsx"
+      ]
     },
     {
       "endpoint": "PUT /api/categories/:param",
@@ -448,6 +589,42 @@
       "path": "/api/customers/:param",
       "source": "backend/routes/customers.js",
       "frontend_refs": []
+    },
+    {
+      "endpoint": "GET /api/email/config",
+      "method": "GET",
+      "path": "/api/email/config",
+      "source": "backend/routes/email.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/PrinterSettingsRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "PUT /api/email/config",
+      "method": "PUT",
+      "path": "/api/email/config",
+      "source": "backend/routes/email.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/PrinterSettingsRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/email/test",
+      "method": "POST",
+      "path": "/api/email/test",
+      "source": "backend/routes/email.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/PrinterSettingsRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/email/send-receipt",
+      "method": "POST",
+      "path": "/api/email/send-receipt",
+      "source": "backend/routes/email.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/pos/POSEmailReceiptModal.jsx"
+      ]
     },
     {
       "endpoint": "GET /api/employees",
@@ -641,7 +818,9 @@
       "method": "POST",
       "path": "/api/uploads/product-image",
       "source": "backend/routes/orders.js",
-      "frontend_refs": []
+      "frontend_refs": [
+        "frontend/src/pages/redesign/ProductFormPage.jsx"
+      ]
     },
     {
       "endpoint": "GET /api/orders/:param",
@@ -761,6 +940,42 @@
       ]
     },
     {
+      "endpoint": "POST /api/print/receipt",
+      "method": "POST",
+      "path": "/api/print/receipt",
+      "source": "backend/routes/printer.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/PrinterSettingsRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "GET /api/print/status",
+      "method": "GET",
+      "path": "/api/print/status",
+      "source": "backend/routes/printer.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/PrinterSettingsRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "GET /api/print/config",
+      "method": "GET",
+      "path": "/api/print/config",
+      "source": "backend/routes/printer.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/PrinterSettingsRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "PUT /api/print/config",
+      "method": "PUT",
+      "path": "/api/print/config",
+      "source": "backend/routes/printer.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/PrinterSettingsRedesign.jsx"
+      ]
+    },
+    {
       "endpoint": "GET /api/products",
       "method": "GET",
       "path": "/api/products",
@@ -770,11 +985,22 @@
       ]
     },
     {
+      "endpoint": "GET /api/products/:param",
+      "method": "GET",
+      "path": "/api/products/:param",
+      "source": "backend/routes/products.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/ProductFormPage.jsx"
+      ]
+    },
+    {
       "endpoint": "GET /api/products/:param/variants",
       "method": "GET",
       "path": "/api/products/:param/variants",
       "source": "backend/routes/products.js",
-      "frontend_refs": []
+      "frontend_refs": [
+        "frontend/src/pages/redesign/ProductFormPage.jsx"
+      ]
     },
     {
       "endpoint": "GET /api/products/:param/stock",
@@ -782,7 +1008,7 @@
       "path": "/api/products/:param/stock",
       "source": "backend/routes/products.js",
       "frontend_refs": [
-        "frontend/src/pages/redesign/InventoryRedesign.jsx"
+        "frontend/src/pages/redesign/ProductFormPage.jsx"
       ]
     },
     {
@@ -815,7 +1041,9 @@
       "method": "POST",
       "path": "/api/products/bulk-import",
       "source": "backend/routes/products.js",
-      "frontend_refs": []
+      "frontend_refs": [
+        "frontend/src/pages/redesign/InventoryRedesign.jsx"
+      ]
     },
     {
       "endpoint": "PUT /api/products/:param",
@@ -937,7 +1165,9 @@
       "method": "GET",
       "path": "/api/receipt-templates/active",
       "source": "backend/routes/receipt-templates.js",
-      "frontend_refs": []
+      "frontend_refs": [
+        "frontend/src/pages/redesign/pos/POSContext.jsx"
+      ]
     },
     {
       "endpoint": "POST /api/receipt-templates",
@@ -1800,7 +2030,9 @@
       "method": "GET",
       "path": "/api/roles/:param/permissions",
       "source": "backend/routes/roles.js",
-      "frontend_refs": []
+      "frontend_refs": [
+        "frontend/src/auth/AuthProvider.jsx"
+      ]
     },
     {
       "endpoint": "PUT /api/roles/:param/permissions",
@@ -2163,7 +2395,7 @@
       "path": "/api/suppliers",
       "source": "backend/routes/suppliers.js",
       "frontend_refs": [
-        "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+        "frontend/src/pages/redesign/ProductFormPage.jsx"
       ]
     },
     {
@@ -2171,7 +2403,9 @@
       "method": "POST",
       "path": "/api/suppliers",
       "source": "backend/routes/suppliers.js",
-      "frontend_refs": []
+      "frontend_refs": [
+        "frontend/src/pages/redesign/ProductFormPage.jsx"
+      ]
     },
     {
       "endpoint": "PUT /api/suppliers/:param",
@@ -2606,9 +2840,21 @@
   ],
   "frontend_calls": [
     {
-      "endpoint": "POST /api/roles/:param/permissions",
-      "method": "POST",
+      "endpoint": "GET /api/roles/:param/permissions",
+      "method": "GET",
       "path": "/api/roles/:param/permissions",
+      "source": "frontend/src/auth/AuthProvider.jsx"
+    },
+    {
+      "endpoint": "POST /api/auth/refresh",
+      "method": "POST",
+      "path": "/api/auth/refresh",
+      "source": "frontend/src/auth/AuthProvider.jsx"
+    },
+    {
+      "endpoint": "POST /api/auth/mt-login",
+      "method": "POST",
+      "path": "/api/auth/mt-login",
       "source": "frontend/src/auth/AuthProvider.jsx"
     },
     {
@@ -2738,6 +2984,48 @@
       "source": "frontend/src/pages/Accounting.jsx"
     },
     {
+      "endpoint": "GET /api/admin/stats",
+      "method": "GET",
+      "path": "/api/admin/stats",
+      "source": "frontend/src/pages/admin/AdminDashboard.jsx"
+    },
+    {
+      "endpoint": "POST /api/admin/auth/login",
+      "method": "POST",
+      "path": "/api/admin/auth/login",
+      "source": "frontend/src/pages/admin/AdminLogin.jsx"
+    },
+    {
+      "endpoint": "GET /api/admin/tenants/:param",
+      "method": "GET",
+      "path": "/api/admin/tenants/:param",
+      "source": "frontend/src/pages/admin/AdminTenantDetail.jsx"
+    },
+    {
+      "endpoint": "GET /api/admin/tenants/:param/stats",
+      "method": "GET",
+      "path": "/api/admin/tenants/:param/stats",
+      "source": "frontend/src/pages/admin/AdminTenantDetail.jsx"
+    },
+    {
+      "endpoint": "GET /api/admin/tenants",
+      "method": "GET",
+      "path": "/api/admin/tenants",
+      "source": "frontend/src/pages/admin/AdminTenantDetail.jsx"
+    },
+    {
+      "endpoint": "PUT /api/admin/tenants/:param",
+      "method": "PUT",
+      "path": "/api/admin/tenants/:param",
+      "source": "frontend/src/pages/admin/AdminTenantDetail.jsx"
+    },
+    {
+      "endpoint": "POST /api/admin/tenants",
+      "method": "POST",
+      "path": "/api/admin/tenants",
+      "source": "frontend/src/pages/admin/AdminTenantList.jsx"
+    },
+    {
       "endpoint": "GET /api/attendance/sessions",
       "method": "GET",
       "path": "/api/attendance/sessions",
@@ -2760,6 +3048,12 @@
       "method": "PUT",
       "path": "/api/attendance/:param",
       "source": "frontend/src/pages/Attendance.jsx"
+    },
+    {
+      "endpoint": "POST /api/auth/update-context",
+      "method": "POST",
+      "path": "/api/auth/update-context",
+      "source": "frontend/src/pages/ContextSelect.jsx"
     },
     {
       "endpoint": "GET /api/sales/:param/invoice",
@@ -3068,18 +3362,6 @@
       "source": "frontend/src/pages/redesign/HRManagementRedesign.jsx"
     },
     {
-      "endpoint": "GET /api/products/:param/stock",
-      "method": "GET",
-      "path": "/api/products/:param/stock",
-      "source": "frontend/src/pages/redesign/InventoryRedesign.jsx"
-    },
-    {
-      "endpoint": "GET /api/products/:param",
-      "method": "GET",
-      "path": "/api/products/:param",
-      "source": "frontend/src/pages/redesign/InventoryRedesign.jsx"
-    },
-    {
       "endpoint": "GET /api/products",
       "method": "GET",
       "path": "/api/products",
@@ -3089,6 +3371,12 @@
       "endpoint": "POST /api/products/:param",
       "method": "POST",
       "path": "/api/products/:param",
+      "source": "frontend/src/pages/redesign/InventoryRedesign.jsx"
+    },
+    {
+      "endpoint": "POST /api/products/bulk-import",
+      "method": "POST",
+      "path": "/api/products/bulk-import",
       "source": "frontend/src/pages/redesign/InventoryRedesign.jsx"
     },
     {
@@ -3107,6 +3395,12 @@
       "endpoint": "GET /api/customers",
       "method": "GET",
       "path": "/api/customers",
+      "source": "frontend/src/pages/redesign/pos/POSContext.jsx"
+    },
+    {
+      "endpoint": "GET /api/receipt-templates/active",
+      "method": "GET",
+      "path": "/api/receipt-templates/active",
       "source": "frontend/src/pages/redesign/pos/POSContext.jsx"
     },
     {
@@ -3170,6 +3464,12 @@
       "source": "frontend/src/pages/redesign/pos/POSContext.jsx"
     },
     {
+      "endpoint": "POST /api/email/send-receipt",
+      "method": "POST",
+      "path": "/api/email/send-receipt",
+      "source": "frontend/src/pages/redesign/pos/POSEmailReceiptModal.jsx"
+    },
+    {
       "endpoint": "GET /api/sales/:param",
       "method": "GET",
       "path": "/api/sales/:param",
@@ -3182,15 +3482,93 @@
       "source": "frontend/src/pages/redesign/pos/POSReturnExchangeModal.jsx"
     },
     {
-      "endpoint": "GET /api/purchase-orders",
+      "endpoint": "GET /api/print/config",
       "method": "GET",
-      "path": "/api/purchase-orders",
-      "source": "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+      "path": "/api/print/config",
+      "source": "frontend/src/pages/redesign/PrinterSettingsRedesign.jsx"
+    },
+    {
+      "endpoint": "GET /api/email/config",
+      "method": "GET",
+      "path": "/api/email/config",
+      "source": "frontend/src/pages/redesign/PrinterSettingsRedesign.jsx"
+    },
+    {
+      "endpoint": "PUT /api/print/config",
+      "method": "PUT",
+      "path": "/api/print/config",
+      "source": "frontend/src/pages/redesign/PrinterSettingsRedesign.jsx"
+    },
+    {
+      "endpoint": "PUT /api/email/config",
+      "method": "PUT",
+      "path": "/api/email/config",
+      "source": "frontend/src/pages/redesign/PrinterSettingsRedesign.jsx"
+    },
+    {
+      "endpoint": "POST /api/email/test",
+      "method": "POST",
+      "path": "/api/email/test",
+      "source": "frontend/src/pages/redesign/PrinterSettingsRedesign.jsx"
+    },
+    {
+      "endpoint": "GET /api/print/status",
+      "method": "GET",
+      "path": "/api/print/status",
+      "source": "frontend/src/pages/redesign/PrinterSettingsRedesign.jsx"
+    },
+    {
+      "endpoint": "POST /api/print/receipt",
+      "method": "POST",
+      "path": "/api/print/receipt",
+      "source": "frontend/src/pages/redesign/PrinterSettingsRedesign.jsx"
+    },
+    {
+      "endpoint": "POST /api/suppliers",
+      "method": "POST",
+      "path": "/api/suppliers",
+      "source": "frontend/src/pages/redesign/ProductFormPage.jsx"
+    },
+    {
+      "endpoint": "GET /api/products/:param",
+      "method": "GET",
+      "path": "/api/products/:param",
+      "source": "frontend/src/pages/redesign/ProductFormPage.jsx"
+    },
+    {
+      "endpoint": "POST /api/uploads/product-image",
+      "method": "POST",
+      "path": "/api/uploads/product-image",
+      "source": "frontend/src/pages/redesign/ProductFormPage.jsx"
+    },
+    {
+      "endpoint": "POST /api/categories",
+      "method": "POST",
+      "path": "/api/categories",
+      "source": "frontend/src/pages/redesign/ProductFormPage.jsx"
     },
     {
       "endpoint": "GET /api/suppliers",
       "method": "GET",
       "path": "/api/suppliers",
+      "source": "frontend/src/pages/redesign/ProductFormPage.jsx"
+    },
+    {
+      "endpoint": "GET /api/products/:param/variants",
+      "method": "GET",
+      "path": "/api/products/:param/variants",
+      "source": "frontend/src/pages/redesign/ProductFormPage.jsx"
+    },
+    {
+      "endpoint": "GET /api/products/:param/stock",
+      "method": "GET",
+      "path": "/api/products/:param/stock",
+      "source": "frontend/src/pages/redesign/ProductFormPage.jsx"
+    },
+    {
+      "endpoint": "GET /api/purchase-orders",
+      "method": "GET",
+      "path": "/api/purchase-orders",
       "source": "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
     },
     {
@@ -3826,6 +4204,21 @@
   ],
   "backend_only": [
     {
+      "endpoint": "DELETE /api/admin/tenants/:param",
+      "method": "DELETE",
+      "path": "/api/admin/tenants/:param",
+      "source": "backend/routes/admin.js",
+      "registry": {
+        "endpoint": "DELETE /api/admin/tenants/:param",
+        "classification": "backend_only_by_design",
+        "frontend_refs": [],
+        "reason": "Super-admin tenant management endpoint; used only by admin dashboard, not POS UI.",
+        "owner": "admin_maintainer",
+        "review_date": "2026-03-09",
+        "source": "backend/routes/admin.js"
+      }
+    },
+    {
       "endpoint": "DELETE /api/barcode-templates/:param",
       "method": "DELETE",
       "path": "/api/barcode-templates/:param",
@@ -4381,21 +4774,6 @@
       }
     },
     {
-      "endpoint": "GET /api/products/:param/variants",
-      "method": "GET",
-      "path": "/api/products/:param/variants",
-      "source": "backend/routes/products.js",
-      "registry": {
-        "endpoint": "GET /api/products/:param/variants",
-        "classification": "backend_only_by_design",
-        "frontend_refs": [],
-        "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
-        "owner": "products_maintainer",
-        "review_date": "2026-03-06",
-        "source": "backend/routes/products.js"
-      }
-    },
-    {
       "endpoint": "GET /api/promotions",
       "method": "GET",
       "path": "/api/promotions",
@@ -4408,21 +4786,6 @@
         "owner": "promotions_maintainer",
         "review_date": "2026-03-06",
         "source": "backend/routes/promotions.js"
-      }
-    },
-    {
-      "endpoint": "GET /api/receipt-templates/active",
-      "method": "GET",
-      "path": "/api/receipt-templates/active",
-      "source": "backend/routes/receipt-templates.js",
-      "registry": {
-        "endpoint": "GET /api/receipt-templates/active",
-        "classification": "backend_only_by_design",
-        "frontend_refs": [],
-        "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
-        "owner": "receipt-templates_maintainer",
-        "review_date": "2026-03-06",
-        "source": "backend/routes/receipt-templates.js"
       }
     },
     {
@@ -4456,21 +4819,6 @@
       }
     },
     {
-      "endpoint": "GET /api/roles/:param/permissions",
-      "method": "GET",
-      "path": "/api/roles/:param/permissions",
-      "source": "backend/routes/roles.js",
-      "registry": {
-        "endpoint": "GET /api/roles/:param/permissions",
-        "classification": "backend_only_by_design",
-        "frontend_refs": [],
-        "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
-        "owner": "roles_maintainer",
-        "review_date": "2026-03-06",
-        "source": "backend/routes/roles.js"
-      }
-    },
-    {
       "endpoint": "GET /api/supplier-invoices/:param",
       "method": "GET",
       "path": "/api/supplier-invoices/:param",
@@ -4498,6 +4846,81 @@
         "owner": "receipt-templates_maintainer",
         "review_date": "2026-03-06",
         "source": "backend/routes/receipt-templates.js"
+      }
+    },
+    {
+      "endpoint": "POST /api/admin/migrate-all",
+      "method": "POST",
+      "path": "/api/admin/migrate-all",
+      "source": "backend/routes/admin.js",
+      "registry": {
+        "endpoint": "POST /api/admin/migrate-all",
+        "classification": "backend_only_by_design",
+        "frontend_refs": [],
+        "reason": "Super-admin endpoint to run migrations across all tenant databases.",
+        "owner": "admin_maintainer",
+        "review_date": "2026-03-09",
+        "source": "backend/routes/admin.js"
+      }
+    },
+    {
+      "endpoint": "POST /api/admin/tenants/:param/activate",
+      "method": "POST",
+      "path": "/api/admin/tenants/:param/activate",
+      "source": "backend/routes/admin.js",
+      "registry": {
+        "endpoint": "POST /api/admin/tenants/:param/activate",
+        "classification": "backend_only_by_design",
+        "frontend_refs": [],
+        "reason": "Super-admin endpoint to activate a suspended tenant.",
+        "owner": "admin_maintainer",
+        "review_date": "2026-03-09",
+        "source": "backend/routes/admin.js"
+      }
+    },
+    {
+      "endpoint": "POST /api/admin/tenants/:param/migrate",
+      "method": "POST",
+      "path": "/api/admin/tenants/:param/migrate",
+      "source": "backend/routes/admin.js",
+      "registry": {
+        "endpoint": "POST /api/admin/tenants/:param/migrate",
+        "classification": "backend_only_by_design",
+        "frontend_refs": [],
+        "reason": "Super-admin endpoint to run migrations on a specific tenant database.",
+        "owner": "admin_maintainer",
+        "review_date": "2026-03-09",
+        "source": "backend/routes/admin.js"
+      }
+    },
+    {
+      "endpoint": "POST /api/admin/tenants/:param/reset-pin",
+      "method": "POST",
+      "path": "/api/admin/tenants/:param/reset-pin",
+      "source": "backend/routes/admin.js",
+      "registry": {
+        "endpoint": "POST /api/admin/tenants/:param/reset-pin",
+        "classification": "backend_only_by_design",
+        "frontend_refs": [],
+        "reason": "Super-admin endpoint to reset an employee PIN for a tenant.",
+        "owner": "admin_maintainer",
+        "review_date": "2026-03-09",
+        "source": "backend/routes/admin.js"
+      }
+    },
+    {
+      "endpoint": "POST /api/admin/tenants/:param/suspend",
+      "method": "POST",
+      "path": "/api/admin/tenants/:param/suspend",
+      "source": "backend/routes/admin.js",
+      "registry": {
+        "endpoint": "POST /api/admin/tenants/:param/suspend",
+        "classification": "backend_only_by_design",
+        "frontend_refs": [],
+        "reason": "Super-admin endpoint to suspend a tenant.",
+        "owner": "admin_maintainer",
+        "review_date": "2026-03-09",
+        "source": "backend/routes/admin.js"
       }
     },
     {
@@ -4591,6 +5014,21 @@
       }
     },
     {
+      "endpoint": "POST /api/auth/kiosk-login",
+      "method": "POST",
+      "path": "/api/auth/kiosk-login",
+      "source": "backend/routes/auth.js",
+      "registry": {
+        "endpoint": "POST /api/auth/kiosk-login",
+        "classification": "backend_only_by_design",
+        "frontend_refs": [],
+        "reason": "Multi-tenant kiosk PIN login endpoint; gated behind MULTI_TENANT=1 flag.",
+        "owner": "auth_maintainer",
+        "review_date": "2026-03-09",
+        "source": "backend/routes/auth.js"
+      }
+    },
+    {
       "endpoint": "POST /api/barcode-print-jobs",
       "method": "POST",
       "path": "/api/barcode-print-jobs",
@@ -4633,21 +5071,6 @@
         "owner": "brands_maintainer",
         "review_date": "2026-03-06",
         "source": "backend/routes/brands.js"
-      }
-    },
-    {
-      "endpoint": "POST /api/categories",
-      "method": "POST",
-      "path": "/api/categories",
-      "source": "backend/routes/categories.js",
-      "registry": {
-        "endpoint": "POST /api/categories",
-        "classification": "backend_only_by_design",
-        "frontend_refs": [],
-        "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
-        "owner": "categories_maintainer",
-        "review_date": "2026-03-06",
-        "source": "backend/routes/categories.js"
       }
     },
     {
@@ -5116,21 +5539,6 @@
       }
     },
     {
-      "endpoint": "POST /api/products/bulk-import",
-      "method": "POST",
-      "path": "/api/products/bulk-import",
-      "source": "backend/routes/products.js",
-      "registry": {
-        "endpoint": "POST /api/products/bulk-import",
-        "classification": "backend_only_by_design",
-        "frontend_refs": [],
-        "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
-        "owner": "products_maintainer",
-        "review_date": "2026-03-06",
-        "source": "backend/routes/products.js"
-      }
-    },
-    {
       "endpoint": "POST /api/products/bulk-status",
       "method": "POST",
       "path": "/api/products/bulk-status",
@@ -5236,21 +5644,6 @@
       }
     },
     {
-      "endpoint": "POST /api/suppliers",
-      "method": "POST",
-      "path": "/api/suppliers",
-      "source": "backend/routes/suppliers.js",
-      "registry": {
-        "endpoint": "POST /api/suppliers",
-        "classification": "backend_only_by_design",
-        "frontend_refs": [],
-        "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
-        "owner": "suppliers_maintainer",
-        "review_date": "2026-03-06",
-        "source": "backend/routes/suppliers.js"
-      }
-    },
-    {
       "endpoint": "POST /api/taxes",
       "method": "POST",
       "path": "/api/taxes",
@@ -5293,21 +5686,6 @@
         "owner": "tier4_approvals_maintainer",
         "review_date": "2026-03-06",
         "source": "backend/routes/tier4/approvals.js"
-      }
-    },
-    {
-      "endpoint": "POST /api/uploads/product-image",
-      "method": "POST",
-      "path": "/api/uploads/product-image",
-      "source": "backend/routes/orders.js",
-      "registry": {
-        "endpoint": "POST /api/uploads/product-image",
-        "classification": "internal_system_only",
-        "frontend_refs": [],
-        "reason": "Operational endpoint for system health, automation, or background processing.",
-        "owner": "orders_maintainer",
-        "review_date": "2026-03-06",
-        "source": "backend/routes/orders.js"
       }
     },
     {
@@ -5792,6 +6170,7 @@
       "path": "/api/products/:param",
       "backend_methods": [
         "DELETE",
+        "GET",
         "PUT"
       ],
       "frontend_methods": [
@@ -5799,7 +6178,6 @@
         "POST"
       ],
       "unmatched_frontend_methods": [
-        "GET",
         "POST"
       ]
     },
@@ -5816,19 +6194,6 @@
       ],
       "unmatched_frontend_methods": [
         "GET"
-      ]
-    },
-    {
-      "path": "/api/roles/:param/permissions",
-      "backend_methods": [
-        "GET",
-        "PUT"
-      ],
-      "frontend_methods": [
-        "POST"
-      ],
-      "unmatched_frontend_methods": [
-        "POST"
       ]
     },
     {
@@ -5953,11 +6318,6 @@
     },
     {
       "type": "frontend_dynamic_path_ambiguous",
-      "source": "frontend/src/pages/redesign/InventoryRedesign.jsx",
-      "detail": "GET /api/products/:param -> GET /api/products/:param/media, GET /api/products/:param/variants, GET /api/products/:param/stock, GET /api/products/search, GET /api/products/scan/:param"
-    },
-    {
-      "type": "frontend_dynamic_path_ambiguous",
       "source": "frontend/src/pages/ReceiptTemplates.jsx",
       "detail": "GET /api/receipt-templates/:param -> GET /api/receipt-templates/active"
     },
@@ -5995,11 +6355,6 @@
       "type": "frontend_method_ambiguous",
       "source": "frontend/src/pages/redesign/TaxesRedesign.jsx",
       "detail": "GET /api/taxes/:param -> backend methods on same path: PUT, DELETE"
-    },
-    {
-      "type": "frontend_method_ambiguous",
-      "source": "frontend/src/auth/AuthProvider.jsx",
-      "detail": "POST /api/roles/:param/permissions -> backend methods on same path: GET, PUT"
     },
     {
       "type": "frontend_method_ambiguous",

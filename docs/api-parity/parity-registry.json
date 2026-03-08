@@ -3,6 +3,15 @@
   "generated_at": "2026-03-06T08:27:09.225Z",
   "entries": [
     {
+      "endpoint": "DELETE /api/admin/tenants/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "Super-admin tenant management endpoint; used only by admin dashboard, not POS UI.",
+      "owner": "admin_maintainer",
+      "review_date": "2026-03-09",
+      "source": "backend/routes/admin.js"
+    },
+    {
       "endpoint": "DELETE /api/barcode-templates/:param",
       "classification": "backend_only_by_design",
       "frontend_refs": [],
@@ -660,6 +669,51 @@
       "source": "backend/routes/receipt-templates.js"
     },
     {
+      "endpoint": "POST /api/admin/migrate-all",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "Super-admin endpoint to run migrations across all tenant databases.",
+      "owner": "admin_maintainer",
+      "review_date": "2026-03-09",
+      "source": "backend/routes/admin.js"
+    },
+    {
+      "endpoint": "POST /api/admin/tenants/:param/activate",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "Super-admin endpoint to activate a suspended tenant.",
+      "owner": "admin_maintainer",
+      "review_date": "2026-03-09",
+      "source": "backend/routes/admin.js"
+    },
+    {
+      "endpoint": "POST /api/admin/tenants/:param/migrate",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "Super-admin endpoint to run migrations on a specific tenant database.",
+      "owner": "admin_maintainer",
+      "review_date": "2026-03-09",
+      "source": "backend/routes/admin.js"
+    },
+    {
+      "endpoint": "POST /api/admin/tenants/:param/reset-pin",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "Super-admin endpoint to reset an employee PIN for a tenant.",
+      "owner": "admin_maintainer",
+      "review_date": "2026-03-09",
+      "source": "backend/routes/admin.js"
+    },
+    {
+      "endpoint": "POST /api/admin/tenants/:param/suspend",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "Super-admin endpoint to suspend a tenant.",
+      "owner": "admin_maintainer",
+      "review_date": "2026-03-09",
+      "source": "backend/routes/admin.js"
+    },
+    {
       "endpoint": "POST /api/attendance/:param/checkout",
       "classification": "backend_only_by_design",
       "frontend_refs": [],
@@ -712,6 +766,15 @@
       "owner": "attribute-sets_maintainer",
       "review_date": "2026-03-06",
       "source": "backend/routes/attribute-sets.js"
+    },
+    {
+      "endpoint": "POST /api/auth/kiosk-login",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "Multi-tenant kiosk PIN login endpoint; gated behind MULTI_TENANT=1 flag.",
+      "owner": "auth_maintainer",
+      "review_date": "2026-03-09",
+      "source": "backend/routes/auth.js"
     },
     {
       "endpoint": "POST /api/backup/restore",
