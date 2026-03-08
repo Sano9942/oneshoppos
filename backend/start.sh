@@ -2,6 +2,9 @@
 # Production startup: run migrations then start server
 set -e
 
+# Set timezone explicitly so SQLite datetime('now','localtime') returns PKT
+export TZ="${TZ:-Asia/Karachi}"
+
 # Ensure the data directory exists
 mkdir -p "${DATA_DIR:-/data}"
 
