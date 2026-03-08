@@ -70,6 +70,8 @@ module.exports = function registerAllRoutes(app, deps) {
   // Enforce outlet assignment for non-admin employees on branch-scoped requests.
   app.use((req, res, next) => {
     if (!req.path.startsWith("/api/")) return next();
+    // Kiosk PIN routes are public (PIN is the auth) — skip session-based outlet check
+    if (req.path.startsWith("/api/attendance/pin-")) return next();
     const employeeId = Number(req.headers["x-employee-id"] || 0);
     if (!employeeId) return next();
     const perms = req.employeePerms || [];
