@@ -1512,11 +1512,6 @@ export function DailyOperationsTab({ filters }) {
               This view consolidates sales, refunds, voids, and cashier activity for the selected reporting window.
             </p>
           </div>
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 xl:max-w-md">
-            Shift-linked sales and returns are not stored in the live schema. Shift and cash tabs are validated from
-            <span className="mx-1 font-mono text-[12px]">cash_shifts</span>
-            time windows instead of direct session IDs.
-          </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           {scopeBadges.map((badge) => (
