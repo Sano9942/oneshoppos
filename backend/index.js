@@ -1033,20 +1033,6 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// TEMPORARY: one-shot attendance cleanup (remove after use)
-app.post("/api/_cleanup-attendance", (req, res) => {
-  const secret = req.headers["x-cleanup-secret"];
-  if (secret !== process.env.RESET_SECRET) return res.status(403).json({ error: "Forbidden" });
-  const realDb = IS_MULTI_TENANT ? dbProxy : db;
-  realDb.serialize(() => {
-    realDb.run("DELETE FROM attendance_sessions WHERE date(session_start) < '2026-03-09'");
-    realDb.run("DELETE FROM employee_attendance WHERE date(check_in) < '2026-03-09'", function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ ok: true, msg: "Stale pre-Mar-9 attendance purged" });
-    });
-  });
-});
-
 // Start server
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
