@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Clock, User, Search, Pencil, X, Check } from "lucide-react";
 
 import { API_BASE as API } from '../config';
+import { fmtLocalTime, fmtLocalDate, parseLocalDate } from '../utils/dates';
 
 // "8.25" → "8h 15m"
 const fmtHours = (n) => {
@@ -10,18 +11,12 @@ const fmtHours = (n) => {
   const m = Math.round((n - h) * 60);
   return `${h}h ${m}m`;
 };
-const fmtTime = (dt) =>
-  dt
-    ? new Date(dt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
-    : "—";
-const fmtDate = (dt) =>
-  dt
-    ? new Date(dt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
-    : "—";
+const fmtTime = (dt) => fmtLocalTime(dt, { hour: "2-digit", minute: "2-digit" });
+const fmtDate = (dt) => fmtLocalDate(dt);
 // Format a datetime to "YYYY-MM-DDTHH:MM" for datetime-local inputs
 const toInputDt = (dt) => {
   if (!dt) return "";
-  const d = new Date(dt);
+  const d = parseLocalDate(dt);
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
