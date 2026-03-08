@@ -1,15 +1,15 @@
 /**
  * seed-60days.js
  *
- * Generates 60 days of realistic store operations data directly into sanopos.db.
- * Backdates all timestamps to simulate Jan 8 – Mar 8, 2026.
+ * Generates 90 days of realistic store operations data directly into sanopos.db.
+ * Backdates all timestamps to simulate Dec 9, 2025 – Mar 9, 2026.
  *
  * What it creates:
  *   - 4 new employees (2 per branch: 1 manager + 1 cashier each)
  *   - 6 new suppliers across different categories
  *   - 40+ new products across 8 category trees
  *   - 10 new customers (+ walk-ins)
- *   - 60 days × 2 outlets of: shifts, attendance, 8–18 sales/day, occasional returns
+ *   - 90 days × 2 outlets of: shifts, attendance, 8–18 sales/day, occasional returns
  *   - Weekly purchase orders → GRNs → supplier invoices → payments
  *   - Monthly payroll periods + payroll lines + salary payments
  *   - Leave requests (approved + rejected)
@@ -68,7 +68,7 @@ function serialize(fn) {
 }
 
 /** Returns 'YYYY-MM-DD HH:MM:SS' string offset from START_DATE */
-const START_DATE = new Date('2026-01-08T00:00:00');
+const START_DATE = new Date('2025-12-09T00:00:00');
 
 function ts(dayOffset, hour = 9, minute = 0, second = 0) {
   const d = new Date(START_DATE);
@@ -113,7 +113,7 @@ async function main() {
     return;
   }
 
-  console.log('🌱 Starting 60-day data seed...\n');
+  console.log('🌱 Starting 90-day data seed...\n');
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SECTION 1: MASTER DATA
@@ -435,7 +435,7 @@ async function main() {
 
   console.log('\n📅 Generating 60 days of operations (Jan 8 – Mar 8, 2026)...\n');
 
-  const DAYS = 60;
+  const DAYS = 90;
   // Sunday = 0. Fridays (5) are half-days, stores close earlier.
   // Store is closed every Sunday.
 
