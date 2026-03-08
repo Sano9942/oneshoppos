@@ -758,16 +758,18 @@ module.exports = function (app, deps, helpers) {
   // Outlet comparison
   app.get("/api/reports/outlet-comparison", (req, res) => {
     const tz = req.company?.timezone || "UTC";
-    const { date_from, date_to } = req.query;
-    const conditions = ["s.voided = 0"];
+    const { from, to, date_from, date_to } = req.query;
+    const f = from || date_from;
+    const t2 = to || date_to;
+    const conditions = ["sale_status != 'voided'"];
     const params = [];
-    if (date_from) {
-      conditions.push("s.timestamp >= ?");
-      params.push(toUtcStart(date_from, tz));
+    if (f) {
+      conditions.push("timestamp >= ?");
+      params.push(toUtcStart(f, tz));
     }
-    if (date_to) {
-      conditions.push("s.timestamp < ?");
-      params.push(toUtcEnd(date_to, tz));
+    if (t2) {
+      conditions.push("timestamp < ?");
+      params.push(toUtcEnd(t2, tz));
     }
     const saleWhere = conditions.join(" AND ");
     const sql = `

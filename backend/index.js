@@ -1033,18 +1033,6 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// TEMPORARY: run 90-day seed remotely (remove after use)
-app.post("/api/_run-seed", (req, res) => {
-  const secret = req.headers["x-cleanup-secret"];
-  if (secret !== process.env.RESET_SECRET) return res.status(403).json({ error: "Forbidden" });
-  res.json({ ok: true, msg: "Seed started in background — check logs" });
-  const { execFile } = require("child_process");
-  const seedPath = require("path").join(__dirname, "seed-60days.js");
-  execFile("node", [seedPath], { timeout: 300000 }, (err, stdout, stderr) => {
-    if (err) console.error("[seed] ERROR:", err.message, stderr);
-    else console.log("[seed] DONE:\n", stdout);
-  });
-});
 
 // Start server
 app.listen(PORT, () => {
