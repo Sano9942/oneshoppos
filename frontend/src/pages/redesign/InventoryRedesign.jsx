@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Download, Plus, Search, Trash2, Upload } from "lucide-react";
+import { Download, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   Badge,
