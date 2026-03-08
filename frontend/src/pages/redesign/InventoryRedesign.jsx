@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Download, Plus, Search, Trash2, Upload } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   Badge,
@@ -23,225 +24,6 @@ const BLANK_FORM = {
   product_type: "", vendor: "", tags: "", image_url: "",
 };
 
-function ProductModal({ product, categories, brands, authHeaders, onClose, onSaved }) {
-  const isEdit = Boolean(product);
-  const [form, setForm] = useState(
-    isEdit
-      ? {
-          name: product.name || "",
-          barcode: product.barcode || "",
-          sku: product.sku || "",
-          price: product.price ?? "",
-          cost_price: product.cost_price ?? "",
-          stock: product.total_stock ?? "",
-          category_id: product.category_id || "",
-          brand_id: product.brand_id || "",
-          status: product.status || "active",
-          unit: product.unit || "pcs",
-          product_type: product.product_type || "",
-          vendor: product.vendor || "",
-          tags: product.tags || "",
-          image_url: product.image_url || "",
-        }
-      : { ...BLANK_FORM },
-  );
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [imageUploading, setImageUploading] = useState(false);
-  const [outletStock, setOutletStock] = useState([]);
-
-  useEffect(() => {
-    if (!isEdit || !product?.id) return;
-    fetch(`${API}/api/products/${product.id}/stock`, { headers: authHeaders() })
-      .then((r) => r.json())
-      .then((d) => setOutletStock(d.stock || []))
-      .catch(() => setOutletStock([]));
-  }, [isEdit, product?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const upd = (k, v) => setForm((p) => ({ ...p, [k]: v }));
-
-  const handleImageUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImageUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append("image", file);
-      const res = await fetch(`${API}/api/uploads/product-image`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: fd,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-      upd("image_url", data.url);
-    } catch (err) {
-      setError("Image upload failed: " + err.message);
-    } finally {
-      setImageUploading(false);
-    }
-  };
-
-  const save = async (e) => {
-    e.preventDefault();
-    if (!form.name.trim()) { setError("Product name is required."); return; }
-    if (form.price === "" || isNaN(Number(form.price))) { setError("Valid price is required."); return; }
-    setSaving(true);
-    setError("");
-    try {
-      const url = isEdit
-        ? `${API}/api/products/${product.id}`
-        : `${API}/api/products`;
-      const method = isEdit ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          price: Number(form.price),
-          cost_price: form.cost_price !== "" ? Number(form.cost_price) : 0,
-          stock: form.stock !== "" ? Number(form.stock) : 0,
-          category_id: form.category_id || null,
-          brand_id: form.brand_id || null,
-          image_url: form.image_url || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Save failed");
-      onSaved();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="w-full max-w-lg rounded-xl border border-(--ui-border) bg-white shadow-2xl flex flex-col max-h-[90vh]">
-        <div className="flex items-center justify-between border-b border-(--ui-border) px-5 py-4 shrink-0">
-          <h2 className="font-semibold text-(--ui-text)">
-            {isEdit ? "Edit Product" : "Add Product"}
-          </h2>
-          <button onClick={onClose} className="text-(--ui-text-muted) hover:text-(--ui-text)">
-            <X size={18} />
-          </button>
-        </div>
-        <form onSubmit={save} className="space-y-3 p-5 overflow-y-auto">
-          {error && (
-            <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
-          )}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2 flex flex-col gap-1">
-              <label className="text-xs font-medium text-(--ui-text-muted)">Product Name *</label>
-              <Input value={form.name} onChange={(e) => upd("name", e.target.value)} placeholder="e.g. Blue T-Shirt" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-(--ui-text-muted)">Barcode</label>
-              <Input value={form.barcode} onChange={(e) => upd("barcode", e.target.value)} placeholder="Scan or type" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-(--ui-text-muted)">SKU</label>
-              <Input value={form.sku} onChange={(e) => upd("sku", e.target.value)} placeholder="e.g. BTS-001" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-(--ui-text-muted)">Selling Price *</label>
-              <Input type="number" min="0" step="0.01" value={form.price} onChange={(e) => upd("price", e.target.value)} placeholder="0.00" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-(--ui-text-muted)">Cost Price</label>
-              <Input type="number" min="0" step="0.01" value={form.cost_price} onChange={(e) => upd("cost_price", e.target.value)} placeholder="0.00" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-(--ui-text-muted)">Opening Stock</label>
-              <Input type="number" min="0" value={form.stock} onChange={(e) => upd("stock", e.target.value)} placeholder="0" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-(--ui-text-muted)">Unit</label>
-              <Input value={form.unit} onChange={(e) => upd("unit", e.target.value)} placeholder="pcs" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-(--ui-text-muted)">Category</label>
-              <Select value={form.category_id} onChange={(e) => upd("category_id", e.target.value)}>
-                <option value="">No category</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id} disabled={!c.is_leaf}>
-                    {indentLabel(c)}{c.is_leaf ? "" : " (parent)"}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-(--ui-text-muted)">Brand</label>
-              <Select value={form.brand_id} onChange={(e) => upd("brand_id", e.target.value)}>
-                <option value="">No brand</option>
-                {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-(--ui-text-muted)">Product Type</label>
-              <Input value={form.product_type} onChange={(e) => upd("product_type", e.target.value)} placeholder="e.g. STEM Robotics Kit" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-(--ui-text-muted)">Vendor</label>
-              <Input value={form.vendor} onChange={(e) => upd("vendor", e.target.value)} placeholder="e.g. LEGO" />
-            </div>
-            <div className="col-span-2 flex flex-col gap-1">
-              <label className="text-xs font-medium text-(--ui-text-muted)">Tags</label>
-              <Input value={form.tags} onChange={(e) => upd("tags", e.target.value)} placeholder="Comma-separated tags, e.g. Age 5+,STEM,Indoor,Gift" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-(--ui-text-muted)">Status</label>
-              <Select value={form.status} onChange={(e) => upd("status", e.target.value)}>
-                <option value="active">Active</option>
-                <option value="draft">Draft</option>
-                <option value="inactive">Inactive</option>
-              </Select>
-            </div>
-            <div className="col-span-2 flex flex-col gap-2">
-              <label className="text-xs font-medium text-(--ui-text-muted)">Product Image</label>
-              {form.image_url && (
-                <div className="relative w-24 h-24">
-                  <img src={form.image_url} alt="Product" className="w-24 h-24 rounded-lg object-cover border border-(--ui-border)" />
-                  <button type="button" onClick={() => upd("image_url", "")}
-                    className="absolute -top-1 -right-1 rounded-full bg-rose-500 text-white p-0.5 hover:bg-rose-600">
-                    <X size={12} />
-                  </button>
-                </div>
-              )}
-              <label className={`flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-(--ui-border) px-3 py-2 text-sm text-(--ui-text-muted) hover:border-(--ui-text-muted) transition-colors ${imageUploading ? "opacity-50 pointer-events-none" : ""}`}>
-                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={imageUploading} />
-                {imageUploading ? "Uploading…" : form.image_url ? "Replace image" : "Upload image"}
-              </label>
-            </div>
-          </div>
-          {isEdit && outletStock.length > 0 && (
-            <div className="rounded-lg border border-(--ui-border) p-3">
-              <p className="mb-2 text-xs font-semibold uppercase text-(--ui-text-muted)">Stock by Location</p>
-              <div className="space-y-1">
-                {outletStock.map((os) => (
-                  <div key={os.outlet_id} className="flex items-center justify-between text-sm">
-                    <span className="text-(--ui-text)">{os.outlet_name}</span>
-                    <span className="font-semibold text-(--ui-text)">{os.quantity} pcs</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="flex justify-end gap-2 border-t border-(--ui-border) pt-3">
-            <Button type="button" onClick={onClose} disabled={saving}>Cancel</Button>
-            <Button tone="primary" type="submit" disabled={saving}>
-              {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Product"}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
 
 function exportCSV(rows, filename) {
   if (!rows.length) return;
@@ -297,6 +79,7 @@ function parseCSV(text) {
 
 export default function InventoryRedesign() {
   const { authHeaders, hasPerm } = useAuth();
+  const navigate = useNavigate();
   const canViewAllLocations = hasPerm("all_access");
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -310,7 +93,6 @@ export default function InventoryRedesign() {
   const [sortOrder, setSortOrder] = useState("asc");
   const [status, setStatus] = useState("");
   const [outletFilter, setOutletFilter] = useState("");
-  const [modalProduct, setModalProduct] = useState(undefined); // undefined=closed, null=new, object=edit
   const [categoryId, setCategoryId] = useState("");
   const [bulkCategoryTarget, setBulkCategoryTarget] = useState("");
   const [importResults, setImportResults] = useState(null); // null=closed, array=results
@@ -509,7 +291,7 @@ export default function InventoryRedesign() {
             <Download size={14} className="mr-1 inline" />
             Export all
           </Button>
-          <Button tone="primary" onClick={() => setModalProduct(null)}>
+          <Button tone="primary" onClick={() => navigate("/products/new")}>
             <Plus size={14} className="mr-1 inline" />
             Add Product
           </Button>
@@ -722,7 +504,7 @@ export default function InventoryRedesign() {
                   className={`border-t border-(--ui-border) cursor-pointer ${
                     selectedIds.has(p.id) ? "bg-emerald-50" : "hover:bg-slate-50 bg-white"
                   }`}
-                  onClick={() => setModalProduct(p)}
+                  onClick={() => navigate(`/products/${p.id}`)}
                 >
                   <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                     <input
@@ -798,16 +580,6 @@ export default function InventoryRedesign() {
         </div>
       </SectionCard>
     </PageShell>
-    {modalProduct !== undefined && (
-      <ProductModal
-        product={modalProduct}
-        categories={categories}
-        brands={brands}
-        authHeaders={authHeaders}
-        onClose={() => setModalProduct(undefined)}
-        onSaved={() => { setModalProduct(undefined); fetchProducts(); }}
-      />
-    )}
     {importResults !== null && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
         <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
