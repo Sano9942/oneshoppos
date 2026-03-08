@@ -207,6 +207,24 @@ module.exports = function registerProductRoutes(app, deps) {
     }
   });
 
+  // Get a single product by id
+  app.get("/api/products/:id", (req, res) => {
+    const { id } = req.params;
+    db.get(
+      `SELECT p.*, COALESCE(SUM(os.quantity), 0) as total_stock
+       FROM products p
+       LEFT JOIN outlet_stock os ON p.id = os.product_id
+       WHERE p.id = ?
+       GROUP BY p.id`,
+      [id],
+      (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(404).json({ error: "Not found" });
+        res.json({ product: row });
+      }
+    );
+  });
+
   // Get variants for a specific product
   app.get("/api/products/:id/variants", (req, res) => {
     const { id } = req.params;
