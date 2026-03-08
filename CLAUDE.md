@@ -59,7 +59,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - Repo cleanup (Mar 2026): deleted `reports.monolith.bak.js`, `reports.stable.bak.js`, `tier4.monolith.bak.js`, `ShopifyIntegration.monolith.bak.jsx` (dead backup files); deleted one-off debug scripts (`repro_zeros.js`, `test_zeros.js`, `verify_zeros_fix.js`, `preflight.js`, `setup_toy_store_defaults.js`, etc.); deleted 2,247 accumulated CSV exports; `backend/exports/`, `backend/uploads/`, `backend/test_results*.json` added to `.gitignore`
 - Attendance UTC-boundary bug fixed (Mar 2026): `GET /api/attendance`, `GET /api/attendance/sessions` (both in `backend/routes/attendance.js`) and dashboard `attendanceToday` + `operationalReadiness` staffCounts (in `backend/routes/reports/dashboard.js`) were incorrectly filtering local-time columns using `toUtcStart/toUtcEnd` UTC boundaries — sessions after local 19:00 in `Asia/Karachi` were excluded. Fixed to use `date(col) = ?` / `date(col) >= ?` / `date(col) <= ?` with plain YYYY-MM-DD strings. RULE: **never use `toUtcStart/toUtcEnd` on `session_start` or `check_in` — those columns are local time**
 - Dashboard auto-refresh (Mar 2026): `DashboardRedesign.jsx` now silently re-fetches every 60 seconds via `refreshKey` state + `setInterval`; manual refresh button in subtitle with spinning icon + last-updated timestamp
-- Timezone Phase 1 complete (Mar 2026): All single-tenant timezone correctness bugs fixed (Sections A-F from `TIMEZONE-AUDIT.md`): backend UTC/LOCAL query fixes across 10 route files, `dates.js` dual-parser rewrite (UTC+LOCAL formatters), 13 frontend display fixes (C1-C5), stale attendance session auto-close (F1+F2), shared `applyUtcDateFilter`/`applyLocalDateFilter` helpers in `reports/helpers.js`; 292/298 tests passing (zero new regressions)
+- Timezone Phase 1 complete (Mar 2026): All single-tenant timezone correctness bugs fixed (Sections A-F + J from `TIMEZONE-AUDIT.md`): backend UTC/LOCAL query fixes across 10 route files, `dates.js` dual-parser rewrite (UTC+LOCAL formatters), 13 frontend display fixes (C1-C5), stale attendance session auto-close (F1+F2), shared `applyUtcDateFilter`/`applyLocalDateFilter` helpers in `reports/helpers.js`; 292/298 tests passing (zero new regressions). **Sections J1/J2 + 2 additional files were missed in the original commit and fixed separately (Mar 9 2026):** `Attendance.jsx`, `KioskRedesign.jsx`, `ReportsStaff.jsx` all had `new Date(dt)` on LOCAL-time columns — Chrome parses space-separated SQLite strings as UTC causing -5h display shift; fixed by importing `parseLocalDate`/`fmtLocalTime`/`fmtLocalDate` from `dates.js`. `HRManagementRedesign.jsx` and `DashboardTrends.jsx` use `new Date(d + "T00:00:00")` which is correct for date-only strings — left unchanged.
 - Multi-tenant readiness: Before flipping `MULTI_TENANT=1` in production, the following are still needed: (1) Timezone Phase 2 — ~30 `'localtime'` SQL modifiers in GROUP BY must use tenant timezone, `loadCompanyProfile` cache must be keyed per-tenant; (2) tenant isolation testing; (3) tenant onboarding from super-admin dashboard; (4) tenant-aware scheduled jobs (stale session cleanup, report scheduler); (5) subdomain/slug routing; (6) Railway multi-DB volume strategy; (7) backup/restore per-tenant; (8) rate limiting per-tenant
 
 ## Completed Baseline Before Testing Plan (as of 2026-03-05)
@@ -303,13 +303,19 @@ oneshoppos/
 - `req.company.timezone` (IANA string, e.g. `'America/New_York'`) is set by the `loadCompanyProfile` middleware — use it in all date filter queries; **never use `date(col,'localtime')` for new queries on UTC-stored columns**
 - **CRITICAL — attendance date queries**: `attendance_sessions.session_start` and `employee_attendance.check_in` default to `datetime('now','localtime')` — already local. Always write `date(session_start)` and `date(check_in)` with NO modifier. Writing `date(session_start,'localtime')` applies UTC→local conversion a second time, shifting dates forward by your UTC offset and breaking clock-in for anyone in UTC+ timezones
 
-### Displaying UTC timestamps in the frontend (CRITICAL — recurring bug)
-- **NEVER** use `new Date(x.timestamp)` or `new Date(x.created_at)` directly on values from the API — SQLite UTC strings like `"2026-03-06 08:56:04"` have no `Z` suffix, so browsers parse them as local time and `.toLocaleString()` shows the wrong (UTC) hour
-- **ALWAYS** use the shared utility at `frontend/src/utils/dates.js`:
-  - `fmtDateTime(str)` — date + time
-  - `fmtDate(str)` — date only
-  - `fmtTime(str, opts?)` — time only
-- Exception: `attendance_sessions` / `employee_attendance` fields are stored in local time — `new Date(dt)` is correct there
+### Displaying timestamps in the frontend (CRITICAL — recurring bug)
+The DB has two timestamp storage systems. You MUST use the matching formatter or display will be off by 5 hours.
+
+**UTC columns** (`sales.timestamp`, `returns.timestamp`, `cash_shifts`, `stock_adjustments`, `inventory_transfers`, `action_history`, etc.):
+- **NEVER** use `new Date(x.timestamp)` directly — SQLite UTC strings have no `Z` suffix so Chrome parses them as local time, showing the wrong hour
+- **ALWAYS** use `fmtUtcDateTime` / `fmtUtcDate` / `fmtUtcTime` from `frontend/src/utils/dates.js` (aliases: `fmtDateTime`, `fmtDate`, `fmtTime`)
+
+**LOCAL columns** (`attendance_sessions.session_start`, `employee_attendance.check_in`, `expenses`, `GRN`, `parked_sales`, etc.):
+- **NEVER** use `new Date(dt)` directly — Chrome also parses space-separated SQLite local strings as UTC, shifting display back by 5 hours (confirmed production bug Mar 2026)
+- **ALWAYS** use `fmtLocalDateTime` / `fmtLocalDate` / `fmtLocalTime` / `parseLocalDate` from `frontend/src/utils/dates.js`
+- The old note saying "`new Date(dt)` is correct for attendance" was WRONG and has been removed — it caused the production bug
+
+**Exception:** `new Date(d + "T00:00:00")` is correct ONLY for plain date-only strings (`YYYY-MM-DD` with no time) used purely as labels — e.g. `HRManagementRedesign.jsx` leave dates, `DashboardTrends.jsx` chart axis labels.
 
 ### POS architecture (`redesign/pos/`)
 - All POS state lives in `POSContext.jsx` — 128+ exported values. Add new state/functions here, mount new modals in `POSRedesign.jsx`

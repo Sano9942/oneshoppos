@@ -21,7 +21,7 @@ const toInputDt = (dt) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-const today = new Date().toISOString().slice(0, 10);
+const today = new Date().toLocaleDateString("sv-SE");
 
 const statusBadge = (status) => {
   const map = {
