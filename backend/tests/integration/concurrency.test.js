@@ -73,7 +73,7 @@ describe("CON1 — Simultaneous shift opens", () => {
 // ─── CON2 ────────────────────────────────────────────────────────────────────
 
 describe("CON2 — Rapid sales of last stock unit", () => {
-  it("two rapid sales maintain DB consistency (stock may go negative)", async () => {
+  it("second sale is rejected when stock is insufficient (B2 fix)", async () => {
     const ctx = await createTestApp();
     const { app, db } = ctx;
 
@@ -95,8 +95,8 @@ describe("CON2 — Rapid sales of last stock unit", () => {
 
     // First sale must succeed
     expect(res1.status).toBe(200);
-    // Second may succeed (stock goes negative) or fail — both acceptable
-    expect([200, 400, 500]).toContain(res2.status);
+    // Second must be rejected — stock is now 0
+    expect(res2.status).toBe(400);
 
     // DB must be consistent — no orphaned sale_items without sales
     const orphans = await dbAll(db,

@@ -214,7 +214,7 @@ describe("POST /api/purchase-orders/:id/receive — Receive PO", () => {
       db,
       "SELECT quantity FROM outlet_stock WHERE product_id = 2 AND outlet_id = 1",
     );
-    expect(stockAfter2.quantity).toBe(stockBefore2.quantity + 5); // BUG: B5 — should be +0, is +5
+    expect(stockAfter2.quantity).toBe(stockBefore2.quantity + 0); // B5 fix: omitted items default to 0
   });
 
   it("BUG B6: receive auto-creates supplier_invoices row (outside transaction)", async () => {

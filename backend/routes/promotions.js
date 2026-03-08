@@ -193,11 +193,22 @@ module.exports = function registerPromotionRoutes(app, deps) {
               discount = Math.min(promo.value, matchedTotal);
           } else if (promo.type === "bxgy") {
             if (promo.buy_qty > 0 && promo.get_qty > 0) {
+              // B10 fix: aggregate quantities across cart lines by product_id
+              const aggregated = {};
               matchedItems.forEach((item) => {
+                const pid = item.product_id;
+                if (!aggregated[pid]) {
+                  aggregated[pid] = { quantity: 0, totalValue: 0 };
+                }
+                aggregated[pid].quantity += item.quantity;
+                aggregated[pid].totalValue += item.quantity * item.price;
+              });
+              Object.values(aggregated).forEach((agg) => {
                 const sets = Math.floor(
-                  item.quantity / (promo.buy_qty + promo.get_qty),
+                  agg.quantity / (promo.buy_qty + promo.get_qty),
                 );
-                discount += sets * promo.get_qty * item.price;
+                const avgPrice = agg.totalValue / agg.quantity;
+                discount += sets * promo.get_qty * avgPrice;
               });
             }
           }

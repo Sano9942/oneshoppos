@@ -219,9 +219,7 @@ describe("POST /api/sales — Checkout", () => {
 
   // --- Bug-finding tests ---
 
-  it("BUG B2: checkout qty exceeding stock succeeds — creates negative outlet_stock", async () => {
-    // Widget A has limited stock. Sell way more than available.
-    // First check current stock
+  it("B2 fix: checkout qty exceeding stock is rejected", async () => {
     const stockBefore = await dbGet(db, "SELECT quantity FROM outlet_stock WHERE product_id = 3 AND outlet_id = 1");
 
     const res = await makeRequest(app, ADMIN_ID)
@@ -230,16 +228,16 @@ describe("POST /api/sales — Checkout", () => {
         cartItems: [{ id: 3, quantity: stockBefore.quantity + 10, price: 500, cost_price: 300 }],
       }));
 
-    // BUG: B2 — No WHERE quantity >= ? guard, so this succeeds
-    expect(res.status).toBe(200);
+    // B2 fix: insufficient stock returns 400
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("insufficient_stock");
 
+    // Stock unchanged
     const stockAfter = await dbGet(db, "SELECT quantity FROM outlet_stock WHERE product_id = 3 AND outlet_id = 1");
-    // BUG: B2 — Stock goes negative
-    expect(stockAfter.quantity).toBe(-10);
+    expect(stockAfter.quantity).toBe(stockBefore.quantity);
   });
 
-  it("BUG B3: Wallet payment exceeding balance succeeds — overdrafts to negative", async () => {
-    // Give customer a known balance
+  it("B3 fix: Wallet payment exceeding balance is rejected", async () => {
     await dbRun(db, "UPDATE customers SET balance = 50 WHERE id = 1");
 
     const res = await makeRequest(app, ADMIN_ID)
@@ -250,12 +248,13 @@ describe("POST /api/sales — Checkout", () => {
         payments: [{ method: "Wallet", amount: 200 }],
       }));
 
-    // BUG: B3 — No balance check, sale succeeds
-    expect(res.status).toBe(200);
+    // B3 fix: insufficient wallet returns 400
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("insufficient_wallet");
 
+    // Balance unchanged
     const after = await dbGet(db, "SELECT balance FROM customers WHERE id = 1");
-    // BUG: B3 — Balance goes negative (50 - 200 = -150)
-    expect(after.balance).toBe(-150);
+    expect(after.balance).toBe(50);
   });
 });
 

@@ -301,18 +301,17 @@ describe("POST /api/promotions/quote — BXGY Promotions", () => {
     expect(res.body.total_promotion_discount).toBe(0);
   });
 
-  it("BUG B10: same product split across 2 lines doesn't combine quantities", async () => {
+  it("B10 fix: same product split across 2 lines combines quantities", async () => {
     await activateOnly(bxgyPromoId);
 
-    // 2 cart lines, each qty=2 of product 1 → total qty=4 → should qualify (sets=1)
-    // But BXGY processes each line independently: floor(2/3)=0 + floor(2/3)=0 = 0
+    // 2 cart lines, each qty=2 of product 1 → total qty=4 → sets=floor(4/3)=1
     const res = await quote([
       { product_id: 1, category_id: 1, quantity: 2, price: 100 },
       { product_id: 1, category_id: 1, quantity: 2, price: 100 },
     ]);
 
-    // BUG: B10 — Should be 100 (1 set from combined qty=4), but is 0
-    expect(res.body.total_promotion_discount).toBe(0); // BUG: B10 — lines not combined
+    // B10 fixed: combined qty=4, sets=1, discount = 1 * 1 * 100 = 100
+    expect(res.body.total_promotion_discount).toBe(100);
   });
 });
 

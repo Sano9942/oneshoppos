@@ -209,7 +209,7 @@ describe("POST /api/shifts/:id/close — Close Shift", () => {
     await makeRequest(app, ADMIN_ID)
       .post("/api/sales")
       .send({
-        cartItems: [{ id: 4, quantity: 1, price: 50, cost_price: 30 }],
+        cartItems: [{ id: 1, quantity: 1, price: 50, cost_price: 30 }],
         paymentMethod: "Cash",
         outlet_id: 2,
         employee_id: ADMIN_ID,
@@ -240,7 +240,7 @@ describe("POST /api/shifts/:id/close — Close Shift", () => {
     const saleRes = await makeRequest(app, ADMIN_ID)
       .post("/api/sales")
       .send({
-        cartItems: [{ id: 4, quantity: 1, price: 50, cost_price: 30 }],
+        cartItems: [{ id: 1, quantity: 1, price: 50, cost_price: 30 }],
         paymentMethod: "Cash",
         outlet_id: 2,
         employee_id: ADMIN_ID,
@@ -254,7 +254,7 @@ describe("POST /api/shifts/:id/close — Close Shift", () => {
     await makeRequest(app, ADMIN_ID)
       .post("/api/sales")
       .send({
-        cartItems: [{ id: 5, quantity: 1, price: 75, cost_price: 45 }],
+        cartItems: [{ id: 2, quantity: 1, price: 75, cost_price: 45 }],
         paymentMethod: "Cash",
         outlet_id: 2,
         employee_id: ADMIN_ID,

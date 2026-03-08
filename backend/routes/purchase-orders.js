@@ -185,7 +185,8 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
 
             // Build a map of qty_received: use provided items or default to full quantity
             const receivedMap = {};
-            if (receivedItems && Array.isArray(receivedItems)) {
+            const hasPartialReceive = receivedItems && Array.isArray(receivedItems) && receivedItems.length > 0;
+            if (hasPartialReceive) {
               receivedItems.forEach((ri) => {
                 receivedMap[ri.product_id] = parseFloat(ri.qty_received) || 0;
               });
@@ -226,8 +227,9 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
               `);
 
                   poItems.forEach((item) => {
-                    const qtyReceived =
-                      receivedMap[item.product_id] ?? item.quantity;
+                    const qtyReceived = hasPartialReceive
+                      ? (receivedMap[item.product_id] ?? 0)
+                      : item.quantity;
                     grnItemStmt.run(
                       grnId,
                       item.product_id,
@@ -255,7 +257,9 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
                       product_id: item.product_id,
                       outlet_id,
                       delta: Number(
-                        receivedMap[item.product_id] ?? item.quantity ?? 0,
+                        hasPartialReceive
+                          ? (receivedMap[item.product_id] ?? 0)
+                          : (item.quantity ?? 0),
                       ),
                       reason: "po_receive",
                       reference_type: "purchase_order",

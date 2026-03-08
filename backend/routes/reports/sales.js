@@ -235,7 +235,13 @@ module.exports = function (app, deps, helpers) {
     SELECT s.id AS sale_id, s.timestamp, COALESCE(c.name,'Walk-in') AS customer_name,
            p.name AS product_name, p.barcode,
            si.quantity, si.price_at_sale, si.cost_price_at_sale,
-           (si.quantity * si.price_at_sale) AS line_total
+           (si.quantity * si.price_at_sale) AS line_gross,
+           ROUND(
+             (si.quantity * si.price_at_sale)
+             * (1.0 - COALESCE(s.discount_amount, 0)
+                / NULLIF((SELECT SUM(si2.quantity * si2.price_at_sale) FROM sale_items si2 WHERE si2.sale_id = s.id), 0)),
+             2
+           ) AS line_total
     FROM sale_items si
     JOIN sales s ON si.sale_id = s.id
     JOIN products p ON si.product_id = p.id

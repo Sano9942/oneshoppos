@@ -209,17 +209,15 @@ describe("Customer Loyalty & Wallet Integration Tests", () => {
   });
 
   describe("Bug Verification", () => {
-    it("Verify Bug B3: Wallet payment should block if insufficient balance (CURRENTLY FAILS - PROVING BUG)", async () => {
+    it("Wallet payment is blocked when balance is insufficient (B3 fix)", async () => {
       await ensureCheckoutContext(1);
-
-      // Problem B3: Wallet payment doesn't check for sufficient balance.
 
       // 1. Ensure balance is low
       await dbRun(db, "UPDATE customers SET balance = 50 WHERE id = ?", [
         CUSTOMER_ID,
       ]);
 
-      // 2. Perform a sale for 200
+      // 2. Attempt a sale for 200 via Wallet — should be rejected
       const res = await makeRequest(app, ADMIN_ID)
         .post("/api/sales")
         .send({
@@ -229,16 +227,16 @@ describe("Customer Loyalty & Wallet Integration Tests", () => {
           customer_id: CUSTOMER_ID,
         });
 
-      // If we expect it to fail, it currently passes and allows negative balance.
-      // We will document that it currently allows it.
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe("insufficient_wallet");
 
+      // Balance should remain unchanged
       const customer = await dbGet(
         db,
         "SELECT balance FROM customers WHERE id = ?",
         [CUSTOMER_ID],
       );
-      expect(customer.balance).toBe(-150); // 50 - 200 = -150
+      expect(customer.balance).toBe(50);
     });
   });
 });

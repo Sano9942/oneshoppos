@@ -78,7 +78,7 @@ describe("Reports Accuracy Integration Tests", () => {
       (i) => i.sale_id === saleId,
     );
     const detailSum = detailItems.reduce((sum, i) => sum + i.line_total, 0);
-    expect(detailSum).toBe(200); // Gross Total (Confirmed Bug B11: doesn't account for discounts per line)
+    expect(detailSum).toBe(180); // Net Total (B11 fix: discount distributed proportionally across lines)
 
     // 5. Fetch Item Wise
     const itemWiseRes = await makeRequest(app, ADMIN_ID).get(

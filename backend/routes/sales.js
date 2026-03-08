@@ -382,6 +382,43 @@ module.exports = function registerSalesRoutes(app, deps) {
       return res.status(500).json({ error: validationErr.message });
     }
 
+    // B2 fix: Check stock availability before starting the transaction
+    try {
+      const stockChecks = await Promise.all(
+        cartItems.map((item) => {
+          const productId = item.original_product_id || item.id;
+          return new Promise((resolve, reject) => {
+            db.get(
+              "SELECT COALESCE(quantity, 0) AS available FROM outlet_stock WHERE product_id = ? AND outlet_id = ?",
+              [productId, outlet_id],
+              (err, row) => {
+                if (err) return reject(err);
+                resolve({
+                  productId,
+                  name: item.name || `Product #${productId}`,
+                  requested: Number(item.quantity),
+                  available: row ? row.available : 0,
+                });
+              },
+            );
+          });
+        }),
+      );
+      const insufficient = stockChecks.filter((s) => s.requested > s.available);
+      if (insufficient.length > 0) {
+        const details = insufficient
+          .map((s) => `${s.name}: requested ${s.requested}, available ${s.available}`)
+          .join("; ");
+        return res.status(400).json({
+          error: `Insufficient stock: ${details}`,
+          code: "insufficient_stock",
+          items: insufficient,
+        });
+      }
+    } catch (stockErr) {
+      return res.status(500).json({ error: stockErr.message });
+    }
+
     // 1. Calculate Expected Total (subtotal minus discount)
     const subtotal = cartItems.reduce(
       (acc, item) => acc + item.price * item.quantity,
@@ -404,6 +441,35 @@ module.exports = function registerSalesRoutes(app, deps) {
       mainPaymentMethod = "Split";
     } else if (finalPayments.length === 1) {
       mainPaymentMethod = finalPayments[0].method;
+    }
+
+    // B3 fix: Check wallet balance before allowing Wallet payment
+    const walletPaymentsBefore = (finalPayments || []).filter(
+      (p) => p.method === "Wallet",
+    );
+    if (customer_id && walletPaymentsBefore.length > 0) {
+      const walletTotalNeeded = walletPaymentsBefore.reduce(
+        (s, p) => s + p.amount,
+        0,
+      );
+      try {
+        const walletRow = await new Promise((resolve, reject) => {
+          db.get(
+            "SELECT COALESCE(balance, 0) AS balance FROM customers WHERE id = ?",
+            [customer_id],
+            (err, row) => (err ? reject(err) : resolve(row)),
+          );
+        });
+        const walletBalance = walletRow ? walletRow.balance : 0;
+        if (walletTotalNeeded > walletBalance) {
+          return res.status(400).json({
+            error: `Insufficient wallet balance: required ${walletTotalNeeded}, available ${walletBalance}`,
+            code: "insufficient_wallet",
+          });
+        }
+      } catch (walletErr) {
+        return res.status(500).json({ error: walletErr.message });
+      }
     }
 
     // Start Transaction Logic
