@@ -7,7 +7,7 @@ RUN npm ci --omit=dev
 
 # Stage 2: Production image (no build tools)
 FROM node:22-alpine
-RUN apk add --no-cache sqlite
+RUN apk add --no-cache sqlite tzdata
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY . .
