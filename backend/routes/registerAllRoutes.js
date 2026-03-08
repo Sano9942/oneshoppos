@@ -185,7 +185,14 @@ module.exports = function registerAllRoutes(app, deps) {
 
   app.get("/api/feature-flags", (req, res) => {
     const employeeId = Number(req.headers["x-employee-id"] || 0);
-    if (!employeeId) return res.status(401).json({ error: "Unauthorized" });
+    if (!employeeId) {
+      // Return defaults for unauthenticated callers (e.g. kiosk)
+      const fallback = Object.keys(DEFAULT_FEATURE_FLAGS).map((k) => ({
+        key: k, enabled: DEFAULT_FEATURE_FLAGS[k] ? 1 : 0,
+        description: null, updated_by: null, updated_at: null,
+      }));
+      return res.json({ flags: fallback });
+    }
     db.all(
       "SELECT key, enabled, description, updated_by, updated_at FROM feature_flags ORDER BY key ASC",
       [],
