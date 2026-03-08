@@ -1028,6 +1028,21 @@ function closeStaleAttendanceSessions() {
 closeStaleAttendanceSessions();
 setInterval(closeStaleAttendanceSessions, 24 * 60 * 60 * 1000);
 
+// ONE-TIME RESET ENDPOINT — remove after use
+app.post("/api/reset-db", async (req, res) => {
+  const secret = req.headers["x-reset-secret"];
+  if (!secret || secret !== process.env.RESET_SECRET) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    const resetScript = require("./reset-production");
+    await resetScript(db);
+    res.json({ ok: true, message: "DB reset complete" });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Health check (used by Railway healthcheckPath)
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
