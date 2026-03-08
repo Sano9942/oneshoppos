@@ -9,6 +9,9 @@ export const fmtDate = fmtUtcDate;
 
 export const fmtDateTime = fmtUtcDateTime;
 
+// Columns whose values must be text in Excel to preserve leading zeros (e.g. "002990")
+const CSV_TEXT_KEYS = new Set(["barcode", "sku"]);
+
 // --- CSV Export Utilities -----------------------------------------------------
 export const exportCSV = (filename, cols, rows) => {
   const headers = cols.map((c) => (typeof c === "string" ? c : c.header));
@@ -18,8 +21,9 @@ export const exportCSV = (filename, cols, rows) => {
     ...rows.map((r) =>
       keys
         .map((k) => {
-          const v = r[k] ?? "";
-          return `"${String(v).replace(/"/g, '""')}"`;
+          const v = String(r[k] ?? "").replace(/"/g, '""');
+          // ="value" forces Excel to treat cell as text, preserving leading zeros
+          return CSV_TEXT_KEYS.has(k) ? `="${v}"` : `"${v}"`;
         })
         .join(","),
     ),

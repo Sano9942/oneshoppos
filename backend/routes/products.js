@@ -393,6 +393,7 @@ module.exports = function registerProductRoutes(app, deps) {
       status,
       media,
       image_urls,
+      supplier_id,
     } = req.body;
     try {
       const categoryError = await validateLeafCategory(category_id);
@@ -413,7 +414,7 @@ module.exports = function registerProductRoutes(app, deps) {
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
       db.run(
-        "INSERT INTO products (barcode, sku, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit, description_html, compare_at_price, product_type, vendor, tags, status) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO products (barcode, sku, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit, description_html, compare_at_price, product_type, vendor, tags, status, supplier_id) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           barcode || null,
           sku || null,
@@ -435,6 +436,7 @@ module.exports = function registerProductRoutes(app, deps) {
           vendor || null,
           tags || null,
           status || "active",
+          supplier_id || null,
         ],
         function (err) {
           if (err) {
@@ -558,7 +560,7 @@ module.exports = function registerProductRoutes(app, deps) {
 
   // Bulk import products from CSV rows (upsert by barcode)
   app.post("/api/products/bulk-import", requirePerm("manage_inventory"), (req, res) => {
-    const { rows } = req.body; // [{ barcode, name, price, ..., image_url, image_urls }]
+    const { rows } = req.body; // [{ barcode, name, price, outlet_id, stock, ..., image_url, image_urls }]
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ error: "No rows provided" });
     }
@@ -587,6 +589,8 @@ module.exports = function registerProductRoutes(app, deps) {
         min_qty,
         max_qty,
         unit,
+        outlet_id,
+        supplier_name,
         image_url,
         image_urls,
       } = row;
@@ -613,49 +617,86 @@ module.exports = function registerProductRoutes(app, deps) {
         return processNext(index + 1);
       }
 
-      db.run(
-        `INSERT INTO products (barcode, sku, name, price, cost_price, compare_at_price, description_html, product_type, vendor, tags, status, gst, stock, min_qty, max_qty, unit)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          barcode || null,
-          sku || null,
-          name,
-          parsedBulkPrice,
-          parseFloat(cost_price) || 0,
-          parseFloat(compare_at_price) || 0,
-          description_html || null,
-          product_type || null,
-          vendor || null,
-          tags || null,
-          status || "active",
-          gst !== "" && gst != null ? parseFloat(gst) : null,
-          parseInt(stock) || 0,
-          parseInt(min_qty) || 0,
-          parseInt(max_qty) || 0,
-          unit || "pcs",
-        ],
-        function (err) {
-          if (err) {
-            results.push({
-              barcode: barcode || "?",
-              name,
-              status: "error",
-              message: err.message,
-            });
-            return processNext(index + 1);
-          }
+      const parsedStock = parseInt(stock) || 0;
+      const parsedOutletId = outlet_id ? parseInt(outlet_id) || null : null;
+      const trimmedSupplierName = supplier_name ? String(supplier_name).trim() : "";
 
-          const productId = this.lastID;
-          replaceProductMedia(productId, productMediaItems, (mediaErr) => {
-            if (mediaErr) {
-              results.push({ barcode: barcode || "?", name, status: "error", message: mediaErr.message });
-            } else {
-              results.push({ barcode: barcode || "?", name, status: "inserted" });
+      const insertProduct = (resolvedSupplierId) => {
+        db.run(
+          `INSERT INTO products (barcode, sku, name, price, cost_price, compare_at_price, description_html, product_type, vendor, tags, status, gst, stock, min_qty, max_qty, unit, supplier_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            barcode || null,
+            sku || null,
+            name,
+            parsedBulkPrice,
+            parseFloat(cost_price) || 0,
+            parseFloat(compare_at_price) || 0,
+            description_html || null,
+            product_type || null,
+            vendor || null,
+            tags || null,
+            status || "active",
+            gst !== "" && gst != null ? parseFloat(gst) : null,
+            parsedOutletId ? 0 : parsedStock,
+            parseInt(min_qty) || 0,
+            parseInt(max_qty) || 0,
+            unit || "pcs",
+            resolvedSupplierId || null,
+          ],
+          function (err) {
+            if (err) {
+              results.push({ barcode: barcode || "?", name, status: "error", message: err.message });
+              return processNext(index + 1);
             }
-            processNext(index + 1);
+
+            const productId = this.lastID;
+
+            const finishRow = (extraMsg) => {
+              replaceProductMedia(productId, productMediaItems, (mediaErr) => {
+                if (mediaErr) {
+                  results.push({ barcode: barcode || "?", name, status: "error", message: mediaErr.message });
+                } else {
+                  results.push({ barcode: barcode || "?", name, status: "inserted", message: extraMsg });
+                }
+                processNext(index + 1);
+              });
+            };
+
+            if (parsedOutletId && parsedStock > 0) {
+              db.run(
+                `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+                 VALUES (?, ?, ?)
+                 ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = quantity + excluded.quantity`,
+                [productId, parsedOutletId, parsedStock],
+                (stockErr) => {
+                  if (stockErr) {
+                    results.push({ barcode: barcode || "?", name, status: "error", message: "Product created but outlet stock failed: " + stockErr.message });
+                    processNext(index + 1);
+                  } else {
+                    finishRow(null);
+                  }
+                },
+              );
+            } else {
+              finishRow(null);
+            }
+          },
+        );
+      };
+
+      // Resolve supplier: if name given, find existing or create new, then insert product
+      if (trimmedSupplierName) {
+        db.get("SELECT id FROM suppliers WHERE name = ? COLLATE NOCASE", [trimmedSupplierName], (err, existing) => {
+          if (err) return insertProduct(null);
+          if (existing) return insertProduct(existing.id);
+          db.run("INSERT INTO suppliers (name) VALUES (?)", [trimmedSupplierName], function (insErr) {
+            insertProduct(insErr ? null : this.lastID);
           });
-        },
-      );
+        });
+      } else {
+        insertProduct(null);
+      }
     };
 
     processNext(0);
@@ -686,6 +727,7 @@ module.exports = function registerProductRoutes(app, deps) {
       media,
       image_urls,
       variants, // Optional array of variants to update
+      supplier_id,
     } = req.body;
     try {
       if (Object.prototype.hasOwnProperty.call(req.body || {}, "category_id")) {
@@ -710,7 +752,7 @@ module.exports = function registerProductRoutes(app, deps) {
       const imageUrlProvided = Object.prototype.hasOwnProperty.call(req.body || {}, "image_url");
       const barcodeValue = barcode === "" ? null : (barcode || null);
       db.run(
-        `UPDATE products SET name = COALESCE(?, name), price = COALESCE(?, price), cost_price = COALESCE(?, cost_price), gst = ?, barcode = ?, sku = ?, category_id = ?, tax_id = COALESCE(?, tax_id), brand_id = ?, min_qty = COALESCE(?, min_qty), max_qty = COALESCE(?, max_qty), unit = COALESCE(?, unit), description_html = COALESCE(?, description_html), compare_at_price = COALESCE(?, compare_at_price), product_type = ?, vendor = ?, tags = ?, status = COALESCE(?, status)${imageUrlProvided ? ", image_url = ?" : ""} WHERE id = ?`,
+        `UPDATE products SET name = COALESCE(?, name), price = COALESCE(?, price), cost_price = COALESCE(?, cost_price), gst = ?, barcode = ?, sku = ?, category_id = ?, tax_id = COALESCE(?, tax_id), brand_id = ?, min_qty = COALESCE(?, min_qty), max_qty = COALESCE(?, max_qty), unit = COALESCE(?, unit), description_html = COALESCE(?, description_html), compare_at_price = COALESCE(?, compare_at_price), product_type = ?, vendor = ?, tags = ?, status = COALESCE(?, status), supplier_id = ?${imageUrlProvided ? ", image_url = ?" : ""} WHERE id = ?`,
         [
           name,
           price,
@@ -730,6 +772,7 @@ module.exports = function registerProductRoutes(app, deps) {
           vendor || null,
           tags || null,
           status || null,
+          supplier_id !== undefined ? (supplier_id || null) : null,
           ...(imageUrlProvided ? [req.body.image_url || null] : []),
           id,
         ],

@@ -152,6 +152,7 @@ export default function OutletsRedesign() {
           <table className="min-w-full border-t border-(--ui-border) text-sm">
             <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
               <tr>
+                <th className="px-3 py-2 text-left text-(--ui-text-muted) w-12">ID</th>
                 <th className="px-3 py-2 text-left">Name</th>
                 <th className="px-3 py-2 text-left">Address</th>
                 <th className="px-3 py-2 text-left">Phone</th>
@@ -162,6 +163,7 @@ export default function OutletsRedesign() {
               {!loading &&
                 visible.map((o) => (
                   <tr key={o.id} className="border-t border-(--ui-border) hover:bg-(--ui-muted-surface)">
+                    <td className="px-3 py-2 font-mono text-xs text-(--ui-text-muted)">{o.id}</td>
                     <td className="px-3 py-2 font-medium text-(--ui-text)">{o.name}</td>
                     <td className="px-3 py-2 text-(--ui-text-muted)">
                       {o.address ? (

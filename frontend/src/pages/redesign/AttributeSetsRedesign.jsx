@@ -262,7 +262,7 @@ export default function AttributeSetsRedesign() {
                 <h3 className="text-lg font-semibold text-(--ui-text)">{selected.name}</h3>
                 <p className="text-xs text-(--ui-text-muted)">{selected.description || "No description"}</p>
               </div>
-              <div className="max-h-[420px] space-y-2 overflow-auto">
+              <div className="max-h-105 space-y-2 overflow-auto">
                 {(selected.attributes || []).map((attr) => (
                   <SectionCard key={attr.id} className="p-2">
                     <p className="text-sm font-semibold text-(--ui-text)">{attr.name}</p>

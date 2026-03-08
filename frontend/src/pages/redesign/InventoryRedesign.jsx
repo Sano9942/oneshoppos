@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import * as XLSX from "xlsx";
 import { useNavigate } from "react-router-dom";
 import { Download, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { API_BASE as API } from "../../config";
@@ -25,12 +26,24 @@ const BLANK_FORM = {
 };
 
 
+// Columns that must be treated as text in Excel to preserve leading zeros.
+// We emit them as ="value" (Excel text-formula) so Excel never auto-casts to number.
+const TEXT_COLS = new Set(["barcode", "sku"]);
+
 function exportCSV(rows, filename) {
   if (!rows.length) return;
-  const headers = Object.keys(rows[0]).join(",");
+  const keys = Object.keys(rows[0]);
+  const headers = keys.join(",");
   const body = rows.map((r) =>
-    Object.values(r)
-      .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
+    keys
+      .map((k) => {
+        const v = String(r[k] ?? "");
+        if (TEXT_COLS.has(k)) {
+          // ="002990" forces Excel to treat as text — inner quotes escaped as ""
+          return `="${v.replace(/"/g, '""')}"`;
+        }
+        return `"${v.replace(/"/g, '""')}"`;
+      })
       .join(","),
   );
   const blob = new Blob([[headers, ...body].join("\n")], { type: "text/csv" });
@@ -43,17 +56,72 @@ function exportCSV(rows, filename) {
 
 const CSV_IMPORT_HEADERS = [
   "name", "barcode", "sku", "price", "cost_price", "compare_at_price",
-  "stock", "unit", "status", "product_type", "vendor", "tags",
+  "stock", "outlet_id", "supplier_name", "unit", "status", "product_type", "vendor", "tags",
   "description_html", "gst", "min_qty", "max_qty",
 ];
 
-function downloadImportTemplate() {
-  const blob = new Blob([CSV_IMPORT_HEADERS.join(",") + "\n"], { type: "text/csv" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "products-import-template.csv";
-  a.click();
-  URL.revokeObjectURL(a.href);
+// Indices (0-based) of TEXT_COLS within CSV_IMPORT_HEADERS — used to pre-format xlsx template
+const TEXT_COL_INDICES = CSV_IMPORT_HEADERS.reduce((acc, h, i) => {
+  if (TEXT_COLS.has(h)) acc.push(i);
+  return acc;
+}, []);
+
+function downloadImportTemplate(outlets = []) {
+  const wb = XLSX.utils.book_new();
+  const sampleRow = {
+    name: "Sample Product",
+    barcode: "001234",
+    sku: "SKU-001",
+    price: 99.99,
+    cost_price: 50,
+    compare_at_price: "",
+    stock: 10,
+    outlet_id: outlets[0]?.id ?? "",
+    supplier_name: "",
+    unit: "pcs",
+    status: "active",
+    product_type: "",
+    vendor: "",
+    tags: "",
+    description_html: "",
+    gst: "",
+    min_qty: "",
+    max_qty: "",
+  };
+  // Build 500 rows: row 1 = sample, rows 2-500 = blank but with Text-formatted barcode/sku cells
+  const TEMPLATE_ROWS = 500;
+  const allRows = [sampleRow];
+  for (let i = 1; i < TEMPLATE_ROWS; i++) {
+    const blank = {};
+    CSV_IMPORT_HEADERS.forEach((h) => { blank[h] = ""; });
+    allRows.push(blank);
+  }
+  const ws = XLSX.utils.json_to_sheet(allRows, { header: CSV_IMPORT_HEADERS });
+
+  // Force Text format on every barcode/sku cell (rows 1-500) so leading zeros are
+  // preserved whether the user types, pastes, or drags values into any row
+  TEXT_COL_INDICES.forEach((colIdx) => {
+    for (let rowIdx = 0; rowIdx <= TEMPLATE_ROWS; rowIdx++) {
+      const addr = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx });
+      if (!ws[addr]) ws[addr] = { t: "s", v: rowIdx === 0 ? "barcode" : "", z: "@" };
+      ws[addr].t = "s";
+      ws[addr].z = "@";
+    }
+    if (!ws["!cols"]) ws["!cols"] = [];
+    ws["!cols"][colIdx] = { wch: 20, z: "@" };
+  });
+
+  XLSX.utils.book_append_sheet(wb, ws, "Products");
+
+  // Second sheet: branch reference so users know which outlet_id to use
+  if (outlets.length > 0) {
+    const outletRows = outlets.map((o) => ({ outlet_id: o.id, branch_name: o.name }));
+    const wsOutlets = XLSX.utils.json_to_sheet(outletRows, { header: ["outlet_id", "branch_name"] });
+    wsOutlets["!cols"] = [{ wch: 12 }, { wch: 30 }];
+    XLSX.utils.book_append_sheet(wb, wsOutlets, "Branches (reference)");
+  }
+
+  XLSX.writeFile(wb, "products-import-template.xlsx");
 }
 
 function parseCSV(text) {
@@ -72,7 +140,12 @@ function parseCSV(text) {
     }
     values.push(cur);
     const row = {};
-    headers.forEach((h, i) => { row[h] = (values[i] || "").trim(); });
+    headers.forEach((h, i) => {
+      let val = (values[i] || "").trim();
+      // Strip Excel text-formula wrapper ="..." that may appear after a round-trip
+      if (val.startsWith('="') && val.endsWith('"')) val = val.slice(2, -1);
+      row[h] = val;
+    });
     return row;
   });
 }
@@ -221,9 +294,23 @@ export default function InventoryRedesign() {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-    const text = await file.text();
-    const rows = parseCSV(text);
-    if (!rows.length) return alert("CSV is empty or unreadable.");
+
+    let rows;
+    const isXlsx = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
+    if (isXlsx) {
+      // Parse xlsx using SheetJS — values are already typed correctly (no leading-zero loss)
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array", cellText: true, cellDates: false });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      // raw:false keeps everything as strings (preserves leading zeros stored as text)
+      rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: false });
+    } else {
+      const text = await file.text();
+      rows = parseCSV(text);
+    }
+    // Strip blank rows (template has 500 pre-formatted rows; only send ones with a name)
+    rows = rows.filter((r) => String(r.name || "").trim() !== "");
+    if (!rows.length) return alert("File is empty or unreadable.");
     setImporting(true);
     try {
       const res = await fetch(`${API}/api/products/bulk-import`, {
@@ -251,18 +338,18 @@ export default function InventoryRedesign() {
       subtitle="Manage products, pricing, stock levels, and variants."
       right={
         <div className="flex items-center gap-2">
-          <Button onClick={downloadImportTemplate}>
+          <Button onClick={() => downloadImportTemplate(outlets)}>
             <Download size={14} className="mr-1 inline" />
-            CSV Template
+            Template
           </Button>
           <Button onClick={() => importFileRef.current?.click()} disabled={importing}>
             <Upload size={14} className="mr-1 inline" />
-            {importing ? "Importing…" : "Import CSV"}
+            {importing ? "Importing…" : "Import"}
           </Button>
           <input
             ref={importFileRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,text/csv,.xlsx,.xls"
             className="hidden"
             onChange={handleImportFile}
           />

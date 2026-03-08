@@ -44,6 +44,7 @@ const BLANK_FORM = {
   status: "active",
   has_variants: false,
   attribute_set_id: "",
+  supplier_id: "",
 };
 
 export default function ProductFormPage() {
@@ -56,12 +57,14 @@ export default function ProductFormPage() {
   const [variants, setVariants] = useState([]);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [attributeSets, setAttributeSets] = useState([]);
   const [outletStock, setOutletStock] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [imageUploading, setImageUploading] = useState(false);
+  const [newSupplierName, setNewSupplierName] = useState("");
 
   const upd = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const updVariant = (key, field, value) =>
@@ -76,6 +79,21 @@ export default function ProductFormPage() {
     setSaving(true);
     setError("");
     try {
+      // If user typed a new supplier name, create it first and get the ID back
+      let resolvedSupplierId = form.supplier_id || null;
+      if (form.supplier_id === "__new__" && newSupplierName.trim()) {
+        const sRes = await fetch(`${API}/api/suppliers`, {
+          method: "POST",
+          headers: { ...authHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({ name: newSupplierName.trim() }),
+        });
+        const sData = await sRes.json();
+        if (!sRes.ok) throw new Error(sData.error || "Failed to create supplier");
+        resolvedSupplierId = sData.id;
+        // Add to local list so it shows immediately if user navigates back
+        setSuppliers((prev) => [...prev, sData]);
+      }
+
       const payload = {
         name: form.name.trim(),
         description_html: form.description,
@@ -94,6 +112,7 @@ export default function ProductFormPage() {
         sku: form.sku || null,
         unit: form.unit || "pcs",
         status: form.status,
+        supplier_id: resolvedSupplierId || null,
         has_variants: form.has_variants ? 1 : 0,
         attribute_set_id: form.has_variants ? (form.attribute_set_id || null) : null,
       };
@@ -169,6 +188,7 @@ export default function ProductFormPage() {
       fetch(`${API}/api/categories`, { headers: h }).then(r => r.json()),
       fetch(`${API}/api/brands`, { headers: h }).then(r => r.json()),
       fetch(`${API}/api/attribute-sets`, { headers: h }).then(r => r.json()),
+      fetch(`${API}/api/suppliers`, { headers: h }).then(r => r.json()),
     ];
     const all = isEdit
       ? [...base,
@@ -178,10 +198,11 @@ export default function ProductFormPage() {
         ]
       : base;
 
-    Promise.all(all).then(([catD, brandD, attrD, ...editParts]) => {
+    Promise.all(all).then(([catD, brandD, attrD, suppD, ...editParts]) => {
       setCategories(sortCategories(catD.categories || []));
       setBrands(brandD.brands || []);
       setAttributeSets(attrD.attributeSets || []);
+      setSuppliers(suppD.suppliers || []);
       if (isEdit) {
         const [prodD, varD, stockD] = editParts;
         const p = prodD.product || prodD;
@@ -206,6 +227,7 @@ export default function ProductFormPage() {
             status: p.status || "active",
             has_variants: Boolean(p.has_variants),
             attribute_set_id: p.attribute_set_id || "",
+            supplier_id: p.supplier_id || "",
           });
         }
         if (varD?.variants?.length) {
@@ -498,6 +520,36 @@ export default function ProductFormPage() {
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-medium text-(--ui-text-muted)">Tags</label>
                 <Input value={form.tags} onChange={(e) => upd("tags", e.target.value)} placeholder="Comma-separated, e.g. Age 5+,STEM" />
+              </div>
+            </div>
+          </SectionCard>
+
+          {/* Supplier */}
+          <SectionCard>
+            <div className="p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Supplier</p>
+              <div className="flex flex-col gap-1">
+                <Select
+                  value={form.supplier_id}
+                  onChange={(e) => {
+                    upd("supplier_id", e.target.value);
+                    if (e.target.value !== "__new__") setNewSupplierName("");
+                  }}
+                >
+                  <option value="">No supplier</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                  <option value="__new__">+ Create new supplier…</option>
+                </Select>
+                {form.supplier_id === "__new__" && (
+                  <Input
+                    value={newSupplierName}
+                    onChange={(e) => setNewSupplierName(e.target.value)}
+                    placeholder="Supplier name"
+                    autoFocus
+                  />
+                )}
               </div>
             </div>
           </SectionCard>
