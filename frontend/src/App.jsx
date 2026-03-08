@@ -20,6 +20,7 @@ import DashboardRoute from "./pages/DashboardRoute";
 import EmployeesRoute from "./pages/EmployeesRoute";
 import ExpensesRoute from "./pages/ExpensesRoute";
 import InventoryRoute from "./pages/InventoryRoute";
+import ProductFormPage from "./pages/redesign/ProductFormPage";
 import Login from "./pages/Login";
 import OutletsRoute from "./pages/OutletsRoute";
 import PlaceholderPage from "./pages/PlaceholderPage";
@@ -172,6 +173,22 @@ function App() {
             element={
                 <RequirePerm perm="manage_inventory">
                 <InventoryRoute />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/products/new"
+            element={
+              <RequirePerm perm="manage_inventory">
+                <ProductFormPage />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/products/:id"
+            element={
+              <RequirePerm perm="manage_inventory">
+                <ProductFormPage />
               </RequirePerm>
             }
           />
