@@ -67,6 +67,80 @@ export default function ProductFormPage() {
   const updVariant = (key, field, value) =>
     setVariants((prev) => prev.map((v) => v._key === key ? { ...v, [field]: value } : v));
 
+  const save = async () => {
+    if (!form.name.trim()) { setError("Product name is required."); return; }
+    if (form.price === "" || isNaN(Number(form.price))) { setError("Valid price is required."); return; }
+    if (form.has_variants && !form.attribute_set_id) { setError("Select an attribute set for variant products."); return; }
+    if (form.has_variants && variants.length === 0) { setError("No variants generated. Select an attribute set."); return; }
+
+    setSaving(true);
+    setError("");
+    try {
+      const payload = {
+        name: form.name.trim(),
+        description_html: form.description,
+        image_url: form.image_url || null,
+        price: Number(form.price),
+        cost_price: form.cost_price !== "" ? Number(form.cost_price) : 0,
+        compare_at_price: form.compare_at_price !== "" ? Number(form.compare_at_price) : 0,
+        gst: form.gst !== "" ? Number(form.gst) : null,
+        stock: form.stock !== "" ? Number(form.stock) : 0,
+        category_id: form.category_id || null,
+        brand_id: form.brand_id || null,
+        product_type: form.product_type || null,
+        vendor: form.vendor || null,
+        tags: form.tags || null,
+        barcode: form.barcode || null,
+        sku: form.sku || null,
+        unit: form.unit || "pcs",
+        status: form.status,
+        has_variants: form.has_variants ? 1 : 0,
+        attribute_set_id: form.has_variants ? (form.attribute_set_id || null) : null,
+      };
+
+      if (!isEdit && form.has_variants && variants.length > 0) {
+        payload.variants = variants.map((v) => ({
+          sku: v.sku || null,
+          barcode: v.barcode || null,
+          price: v.price !== "" ? Number(v.price) : Number(form.price),
+          cost_price: v.cost_price !== "" ? Number(v.cost_price) : 0,
+          initial_stock: v.stock !== "" ? Number(v.stock) : 0,
+          options: v.options.map((o) => ({
+            attribute_id: o.attribute_id,
+            attribute_option_id: o.attribute_option_id,
+          })),
+        }));
+      }
+
+      if (isEdit && form.has_variants && variants.length > 0) {
+        payload.variants = variants
+          .filter((v) => v.id)
+          .map((v) => ({
+            id: v.id,
+            sku: v.sku || null,
+            barcode: v.barcode || null,
+            price: v.price !== "" ? Number(v.price) : Number(form.price),
+            cost_price: v.cost_price !== "" ? Number(v.cost_price) : 0,
+            stock: v.stock !== "" ? Number(v.stock) : 0,
+          }));
+      }
+
+      const url = isEdit ? `${API}/api/products/${id}` : `${API}/api/products`;
+      const method = isEdit ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Save failed");
+      navigate("/inventory");
+    } catch (err) {
+      setError(err.message);
+      setSaving(false);
+    }
+  };
+
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -167,7 +241,7 @@ export default function ProductFormPage() {
       right={
         <div className="flex gap-2">
           <Button onClick={() => navigate("/inventory")} disabled={saving}>Cancel</Button>
-          <Button tone="primary" onClick={() => {}} disabled={saving}>
+          <Button tone="primary" onClick={save} disabled={saving}>
             {saving ? "Saving…" : isEdit ? "Save Changes" : "Add Product"}
           </Button>
         </div>
