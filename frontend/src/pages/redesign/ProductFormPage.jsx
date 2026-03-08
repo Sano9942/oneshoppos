@@ -6,6 +6,35 @@ import { useAuth } from "../../auth/AuthProvider";
 import { sortCategories, indentLabel } from "../../utils/categoryTree";
 import { X } from "lucide-react";
 
+function cartesian(arrays) {
+  return arrays.reduce(
+    (acc, arr) => acc.flatMap((combo) => arr.map((item) => [...combo, item])),
+    [[]]
+  );
+}
+
+function buildVariantRows(attributeSet, basePrice, baseCost) {
+  if (!attributeSet?.attributes?.length) return [];
+  const attrArrays = attributeSet.attributes.map((attr) =>
+    attr.options.map((opt) => ({
+      attribute_id: attr.id,
+      attribute_name: attr.name,
+      attribute_option_id: opt.id,
+      option_value: opt.value,
+    }))
+  );
+  return cartesian(attrArrays).map((combo) => ({
+    _key: combo.map((c) => c.option_value).join("|"),
+    label: combo.map((c) => c.option_value).join(" / "),
+    price: basePrice,
+    cost_price: baseCost,
+    stock: 0,
+    sku: "",
+    barcode: "",
+    options: combo,
+  }));
+}
+
 const BLANK_FORM = {
   name: "", description: "", image_url: "",
   price: "", cost_price: "", compare_at_price: "", gst: "",
@@ -35,6 +64,8 @@ export default function ProductFormPage() {
   const [imageUploading, setImageUploading] = useState(false);
 
   const upd = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const updVariant = (key, field, value) =>
+    setVariants((prev) => prev.map((v) => v._key === key ? { ...v, [field]: value } : v));
 
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -241,6 +272,107 @@ export default function ProductFormPage() {
               </div>
             </SectionCard>
           )}
+
+          {/* Variants */}
+          <SectionCard>
+            <div className="p-4 space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Variants</p>
+
+              {/* Toggle — locked in edit mode */}
+              <div
+                className={`flex items-center gap-3 ${isEdit ? "opacity-60 pointer-events-none" : "cursor-pointer"}`}
+                onClick={() => {
+                  if (isEdit) return;
+                  const next = !form.has_variants;
+                  upd("has_variants", next);
+                  if (!next) {
+                    upd("attribute_set_id", "");
+                    setVariants([]);
+                  }
+                }}
+              >
+                <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-0.5 ${form.has_variants ? "bg-(--ui-primary)" : "bg-slate-200"}`}>
+                  <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${form.has_variants ? "translate-x-4" : ""}`} />
+                </div>
+                <span className="text-sm font-medium text-(--ui-text)">This product has variants</span>
+              </div>
+
+              {form.has_variants && (
+                <>
+                  {/* Attribute Set Selector — locked in edit mode */}
+                  <div className="flex flex-col gap-1 max-w-xs">
+                    <label className="text-xs font-medium text-(--ui-text-muted)">Attribute Set</label>
+                    <Select
+                      value={form.attribute_set_id}
+                      disabled={isEdit}
+                      onChange={(e) => {
+                        const setId = e.target.value;
+                        upd("attribute_set_id", setId);
+                        if (!setId) { setVariants([]); return; }
+                        const attrSet = attributeSets.find((s) => String(s.id) === String(setId));
+                        setVariants(buildVariantRows(attrSet, form.price, form.cost_price));
+                      }}
+                    >
+                      <option value="">Select attribute set…</option>
+                      {attributeSets.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </Select>
+                  </div>
+
+                  {/* Variant Grid */}
+                  {variants.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs font-semibold uppercase text-(--ui-text-muted) border-b border-(--ui-border)">
+                            <th className="pb-2 text-left pr-3">Combination</th>
+                            <th className="pb-2 text-right pr-3">Price</th>
+                            <th className="pb-2 text-right pr-3">Cost</th>
+                            <th className="pb-2 text-right pr-3">Stock</th>
+                            <th className="pb-2 text-left pr-3">SKU</th>
+                            <th className="pb-2 text-left">Barcode</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {variants.map((v) => (
+                            <tr key={v._key} className="border-b border-(--ui-border) last:border-0">
+                              <td className="py-2 pr-3 font-medium text-(--ui-text) whitespace-nowrap">{v.label}</td>
+                              <td className="py-2 pr-3">
+                                <Input type="number" min="0" step="0.01" value={v.price}
+                                  onChange={(e) => updVariant(v._key, "price", e.target.value)}
+                                  className="w-24 text-right" />
+                              </td>
+                              <td className="py-2 pr-3">
+                                <Input type="number" min="0" step="0.01" value={v.cost_price}
+                                  onChange={(e) => updVariant(v._key, "cost_price", e.target.value)}
+                                  className="w-24 text-right" />
+                              </td>
+                              <td className="py-2 pr-3">
+                                <Input type="number" min="0" value={v.stock}
+                                  onChange={(e) => updVariant(v._key, "stock", e.target.value)}
+                                  className="w-20 text-right" />
+                              </td>
+                              <td className="py-2 pr-3">
+                                <Input value={v.sku}
+                                  onChange={(e) => updVariant(v._key, "sku", e.target.value)}
+                                  className="w-28" placeholder="SKU" />
+                              </td>
+                              <td className="py-2">
+                                <Input value={v.barcode}
+                                  onChange={(e) => updVariant(v._key, "barcode", e.target.value)}
+                                  className="w-32" placeholder="Barcode" />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </SectionCard>
 
         </div>
 
