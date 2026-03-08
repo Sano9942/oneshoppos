@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { API_BASE } from "../../config";
 import { readContext } from "../../auth/authStore";
+import { parseLocalDate, fmtLocalTime } from "../../utils/dates";
 
 const API = `${API_BASE}/api`;
 
@@ -12,14 +13,12 @@ const fmtDuration = (hours) => {
   return `${h}h ${m}m`;
 };
 
-const fmtTime = (dt) => {
-  if (!dt) return "";
-  return new Date(dt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-};
+// session_start is LOCAL time — use parseLocalDate so browser doesn't treat it as UTC
+const fmtTime = (dt) => fmtLocalTime(dt, { hour: "2-digit", minute: "2-digit" });
 
 const fmtElapsed = (start) => {
   if (!start) return "";
-  const mins = Math.round((Date.now() - new Date(start)) / 60000);
+  const mins = Math.round((Date.now() - parseLocalDate(start)) / 60000);
   if (mins < 60) return `${mins}m`;
   const h = Math.floor(mins / 60);
   const m = mins % 60;

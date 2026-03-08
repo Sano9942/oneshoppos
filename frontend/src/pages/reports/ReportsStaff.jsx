@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { API_BASE as API } from "../../config";
+import { parseLocalDate } from "../../utils/dates";
 import {
   fmt,
   fmtDate,
@@ -39,9 +40,10 @@ export function AttendanceTab({ filters }) {
     load();
   }, [load]);
 
+  // check_in / check_out are LOCAL-time columns — use parseLocalDate (no UTC shift)
   const fmtTime = (dt) => {
     if (!dt) return "--:--";
-    const d = new Date(dt);
+    const d = parseLocalDate(dt);
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
