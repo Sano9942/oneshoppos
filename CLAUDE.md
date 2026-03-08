@@ -55,6 +55,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - Attendance double-localtime bug fixed (Mar 2026): `attendance_sessions.session_start` and `employee_attendance.check_in` are stored in local time (DEFAULT datetime('now','localtime')) — all queries now use `date(session_start)` / `date(check_in)` with NO 'localtime' modifier; using `date(col,'localtime')` on already-local values shifts dates forward by UTC offset causing wrong-day lookups; `migrate70.js` closes all stale open sessions from previous days (data artifact of the old bug)
 - Attendance UTC-boundary bug fixed (Mar 2026): `GET /api/attendance`, `GET /api/attendance/sessions`, dashboard `attendanceToday` and `operationalReadiness` staffCounts queries were using `toUtcStart/toUtcEnd` on local-time columns — when company timezone is non-UTC (e.g. `Asia/Karachi` UTC+5), sessions after 19:00 local were excluded because the UTC end-of-day `"2026-03-07 19:00:00"` < local `"2026-03-07 21:xx:xx"`. Fix: all four queries now use `date(col) = ?` / `date(col) >= ?` / `date(col) <= ?` with plain YYYY-MM-DD strings — no UTC conversion for local-time columns
 - Dashboard auto-refresh added (Mar 2026): `DashboardRedesign.jsx` auto-fetches every 60 seconds (silent background refresh via `refreshKey` state + `setInterval`) and shows a manual refresh button with last-updated timestamp in the subtitle
+- Product form page (Mar 2026): `ProductFormPage.jsx` at `/products/new` + `/products/:id` — full-page Shopify-style two-column layout replacing the old compact modal; variant management UI with cartesian product generation from attribute sets; `GET /api/products/:id` added to backend; `InventoryRedesign.jsx` navigates to route instead of opening modal
 - Repo cleanup (Mar 2026): deleted `reports.monolith.bak.js`, `reports.stable.bak.js`, `tier4.monolith.bak.js`, `ShopifyIntegration.monolith.bak.jsx` (dead backup files); deleted one-off debug scripts (`repro_zeros.js`, `test_zeros.js`, `verify_zeros_fix.js`, `preflight.js`, `setup_toy_store_defaults.js`, etc.); deleted 2,247 accumulated CSV exports; `backend/exports/`, `backend/uploads/`, `backend/test_results*.json` added to `.gitignore`
 - Attendance UTC-boundary bug fixed (Mar 2026): `GET /api/attendance`, `GET /api/attendance/sessions` (both in `backend/routes/attendance.js`) and dashboard `attendanceToday` + `operationalReadiness` staffCounts (in `backend/routes/reports/dashboard.js`) were incorrectly filtering local-time columns using `toUtcStart/toUtcEnd` UTC boundaries — sessions after local 19:00 in `Asia/Karachi` were excluded. Fixed to use `date(col) = ?` / `date(col) >= ?` / `date(col) <= ?` with plain YYYY-MM-DD strings. RULE: **never use `toUtcStart/toUtcEnd` on `session_start` or `check_in` — those columns are local time**
 - Dashboard auto-refresh (Mar 2026): `DashboardRedesign.jsx` now silently re-fetches every 60 seconds via `refreshKey` state + `setInterval`; manual refresh button in subtitle with spinning icon + last-updated timestamp
@@ -239,6 +240,7 @@ oneshoppos/
 - Find which file owns the route: check the table in this file above
 - Read ONLY that route file — do not read registerAllRoutes.js for route logic
 - Schema questions → `backend/migrate70.js` (latest)
+- Products API: `GET /api/products/:id` exists (added Mar 2026) — returns `{ product: { ...fields, total_stock } }`; route is registered BEFORE `/:id/variants` in `products.js` — preserve this order when adding new routes
 - Email receipt HTML builder (server-side) → `backend/utils/receiptEmail.js`
 - Category tree logic → `backend/category-tree.js`
 - Server middleware/config → `backend/index.js`
@@ -266,6 +268,8 @@ oneshoppos/
 - All redesign wrappers use `PageShell` from `frontend/src/ui/primitives.jsx` and render the original as a child
 - Nav is driven by `frontend/src/ui/nav-config.js` — add entries here to make pages visible in the sidebar
 - Shared design-system primitives: `frontend/src/ui/primitives.jsx`
+  - `PageShell` props: `title`, `subtitle`, `right` (action buttons) — no `actions` prop
+  - `SectionCard` props: `children`, `className` only — no `title` prop; use a `<p>` heading inside children
 - Shared components: `frontend/src/components/`
 - Category tree UI helpers: `frontend/src/utils/categoryTree.js`
 - UTC timestamp display helpers: `frontend/src/utils/dates.js` — use `fmtDate`/`fmtTime`/`fmtDateTime` (never `new Date(x.timestamp)` directly)
