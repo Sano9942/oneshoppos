@@ -207,6 +207,96 @@ module.exports = function registerProductRoutes(app, deps) {
     }
   });
 
+  // Search products by name or barcode (for autocomplete and search)
+  // NOTE: must be registered BEFORE /:id to prevent Express matching "search" as an id param
+  app.get("/api/products/search", (req, res) => {
+    const { query, outlet_id, field } = req.query;
+
+    if (!query) return res.json({ products: [] });
+
+    const searchQuery = `%${query}%`;
+    let whereClause =
+      "p.name LIKE ? OR p.barcode LIKE ? OR p.sku LIKE ? OR CAST(p.price AS TEXT) LIKE ?";
+    let params = [searchQuery, searchQuery, searchQuery, searchQuery];
+
+    if (field === "barcode") {
+      whereClause = "p.barcode LIKE ?";
+      params = [searchQuery];
+    } else if (field === "sku") {
+      whereClause = "p.sku LIKE ?";
+      params = [searchQuery];
+    } else if (field === "price") {
+      whereClause = "p.price = ?";
+      params = [query];
+    }
+
+    let sql = `
+        SELECT p.*, t.rate as tax_rate, t.name as tax_name,
+               COALESCE(SUM(os.quantity), 0) as local_stock
+        FROM products p
+        LEFT JOIN taxes t ON p.tax_id = t.id
+        LEFT JOIN outlet_stock os ON p.id = os.product_id ${outlet_id ? `AND os.outlet_id = ${outlet_id}` : ""}
+        WHERE ${whereClause}
+        GROUP BY p.id
+        ORDER BY p.name ASC
+        LIMIT 50
+    `;
+
+    db.all(sql, params, (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      // Normalize Tax Output for the POS Terminal
+      const productsWithTax = rows.map((row) => {
+        const effectiveTaxRate =
+          row.tax_rate !== null ? row.tax_rate : row.gst !== null ? row.gst : 0;
+        const effectiveTaxName =
+          row.tax_name || (row.gst !== null ? "GST" : "No Tax");
+        return {
+          ...row,
+          effectiveTaxRate,
+          effectiveTaxName,
+        };
+      });
+
+      res.json({ products: productsWithTax });
+    });
+  });
+
+  // Scan/Find a product by barcode (Crucial for POS speed)
+  // NOTE: must be registered BEFORE /:id to prevent Express matching "scan" as an id param
+  app.get("/api/products/scan/:barcode", (req, res) => {
+    const { barcode } = req.params;
+    const outlet_id = req.query.outlet_id; // Pass outlet ID from POS to get local stock
+
+    let query = `
+        SELECT p.*, t.rate as tax_rate, t.name as tax_name,
+               COALESCE(SUM(os.quantity), 0) as local_stock
+        FROM products p
+        LEFT JOIN taxes t ON p.tax_id = t.id
+        LEFT JOIN outlet_stock os ON p.id = os.product_id ${outlet_id ? `AND os.outlet_id = ${outlet_id}` : ""}
+        WHERE p.barcode = ? OR p.sku = ?
+        GROUP BY p.id
+    `;
+
+    db.get(query, [barcode, barcode], (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: "Product not found" });
+
+      const effectiveTaxRate =
+        row.tax_rate !== null ? row.tax_rate : row.gst !== null ? row.gst : 0;
+      const effectiveTaxName =
+        row.tax_name || (row.gst !== null ? "GST" : "No Tax");
+
+      const productWithTax = {
+        ...row,
+        effectiveTaxRate,
+        effectiveTaxName,
+      };
+
+      res.json({ product: productWithTax });
+    });
+  });
+
   // Get a single product by id
   app.get("/api/products/:id", (req, res) => {
     const { id } = req.params;
@@ -273,96 +363,6 @@ module.exports = function registerProductRoutes(app, deps) {
         res.json({ stock: rows });
       },
     );
-  });
-
-  // Search products by name or barcode (for autocomplete and search)
-  app.get("/api/products/search", (req, res) => {
-    const { query, outlet_id, field } = req.query;
-
-    if (!query) return res.json({ products: [] });
-
-    const searchQuery = `%${query}%`;
-    let whereClause =
-      "p.name LIKE ? OR p.barcode LIKE ? OR p.sku LIKE ? OR CAST(p.price AS TEXT) LIKE ?";
-    let params = [searchQuery, searchQuery, searchQuery, searchQuery];
-
-    if (field === "barcode") {
-      whereClause = "p.barcode LIKE ?";
-      params = [searchQuery];
-    } else if (field === "sku") {
-      whereClause = "p.sku LIKE ?";
-      params = [searchQuery];
-    } else if (field === "price") {
-      whereClause = "p.price = ?";
-      params = [query];
-    }
-
-    let sql = `
-        SELECT p.*, t.rate as tax_rate, t.name as tax_name,
-               COALESCE(SUM(os.quantity), 0) as local_stock
-        FROM products p
-        LEFT JOIN taxes t ON p.tax_id = t.id
-        LEFT JOIN outlet_stock os ON p.id = os.product_id ${outlet_id ? `AND os.outlet_id = ${outlet_id}` : ""}
-        WHERE ${whereClause}
-        GROUP BY p.id
-        ORDER BY p.name ASC
-        LIMIT 50
-    `;
-
-    db.all(sql, params, (err, rows) => {
-      if (err) return res.status(500).json({ error: err.message });
-
-      // Normalize Tax Output for the POS Terminal
-      const productsWithTax = rows.map((row) => {
-        const effectiveTaxRate =
-          row.tax_rate !== null ? row.tax_rate : row.gst !== null ? row.gst : 0;
-        const effectiveTaxName =
-          row.tax_name || (row.gst !== null ? "GST" : "No Tax");
-        return {
-          ...row,
-          effectiveTaxRate,
-          effectiveTaxName,
-        };
-      });
-
-      res.json({ products: productsWithTax });
-    });
-  });
-
-  // Scan/Find a product by barcode (Crucial for POS speed)
-  app.get("/api/products/scan/:barcode", (req, res) => {
-    const { barcode } = req.params;
-    const outlet_id = req.query.outlet_id; // Pass outlet ID from POS to get local stock
-
-    let query = `
-        SELECT p.*, t.rate as tax_rate, t.name as tax_name,
-               COALESCE(SUM(os.quantity), 0) as local_stock
-        FROM products p
-        LEFT JOIN taxes t ON p.tax_id = t.id
-        LEFT JOIN outlet_stock os ON p.id = os.product_id ${outlet_id ? `AND os.outlet_id = ${outlet_id}` : ""}
-        WHERE p.barcode = ? OR p.sku = ?
-        GROUP BY p.id
-    `;
-
-    db.get(query, [barcode, barcode], (err, row) => {
-      if (err) return res.status(500).json({ error: err.message });
-      if (!row) return res.status(404).json({ error: "Product not found" });
-
-      // Normalize Tax Output for the POS Terminal
-      // If it has a tax profile, use it. Otherwise fallback to legacy GST.
-      const effectiveTaxRate =
-        row.tax_rate !== null ? row.tax_rate : row.gst !== null ? row.gst : 0;
-      const effectiveTaxName =
-        row.tax_name || (row.gst !== null ? "GST" : "No Tax");
-
-      const productWithTax = {
-        ...row,
-        effectiveTaxRate,
-        effectiveTaxName,
-      };
-
-      res.json({ product: productWithTax });
-    });
   });
 
   // Add a new product (and optionally set initial stock for a specific outlet)

@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-03-08T21:59:39.302Z",
+  "generated_at": "2026-03-09T16:02:08.307Z",
   "summary": {
-    "backend_endpoints": 342,
-    "frontend_calls": 227,
-    "backend_only": 125,
+    "backend_endpoints": 367,
+    "frontend_calls": 251,
+    "backend_only": 127,
     "frontend_only": 0,
-    "unclassified_backend_only": 0,
-    "method_mismatch_paths": 10
+    "unclassified_backend_only": 6,
+    "method_mismatch_paths": 11
   },
   "backend_endpoints": [
     {
@@ -447,6 +447,83 @@
       ]
     },
     {
+      "endpoint": "GET /api/notifications",
+      "method": "GET",
+      "path": "/api/notifications",
+      "source": "backend/routes/barcode-expenses.js",
+      "frontend_refs": [
+        "frontend/src/components/NotificationBell.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/notifications/:param/read",
+      "method": "POST",
+      "path": "/api/notifications/:param/read",
+      "source": "backend/routes/barcode-expenses.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/NotificationsRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "GET /api/products/:param/serials",
+      "method": "GET",
+      "path": "/api/products/:param/serials",
+      "source": "backend/routes/barcode-expenses.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/InventoryRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/products/:param/serials",
+      "method": "POST",
+      "path": "/api/products/:param/serials",
+      "source": "backend/routes/barcode-expenses.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/InventoryRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/serials/:param/assign",
+      "method": "POST",
+      "path": "/api/serials/:param/assign",
+      "source": "backend/routes/barcode-expenses.js",
+      "frontend_refs": []
+    },
+    {
+      "endpoint": "GET /api/gift-cards",
+      "method": "GET",
+      "path": "/api/gift-cards",
+      "source": "backend/routes/barcode-expenses.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/InventoryRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/gift-cards",
+      "method": "POST",
+      "path": "/api/gift-cards",
+      "source": "backend/routes/barcode-expenses.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/InventoryRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "GET /api/gift-cards/:param",
+      "method": "GET",
+      "path": "/api/gift-cards/:param",
+      "source": "backend/routes/barcode-expenses.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/InventoryRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/gift-cards/:param/redeem",
+      "method": "POST",
+      "path": "/api/gift-cards/:param/redeem",
+      "source": "backend/routes/barcode-expenses.js",
+      "frontend_refs": []
+    },
+    {
       "endpoint": "GET /api/brands",
       "method": "GET",
       "path": "/api/brands",
@@ -574,7 +651,9 @@
       "method": "GET",
       "path": "/api/customers/:param/wallet",
       "source": "backend/routes/customers.js",
-      "frontend_refs": []
+      "frontend_refs": [
+        "frontend/src/pages/redesign/pos/POSContext.jsx"
+      ]
     },
     {
       "endpoint": "POST /api/customers/:param/wallet/topup",
@@ -704,7 +783,9 @@
       "method": "DELETE",
       "path": "/api/purchase-orders/:param",
       "source": "backend/routes/grn.js",
-      "frontend_refs": []
+      "frontend_refs": [
+        "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+      ]
     },
     {
       "endpoint": "GET /api/supplier-invoices",
@@ -720,7 +801,9 @@
       "method": "GET",
       "path": "/api/supplier-invoices/:param",
       "source": "backend/routes/grn.js",
-      "frontend_refs": []
+      "frontend_refs": [
+        "frontend/src/pages/redesign/SupplierPayablesRedesign.jsx"
+      ]
     },
     {
       "endpoint": "POST /api/supplier-invoices/:param/pay",
@@ -735,6 +818,15 @@
       "endpoint": "GET /api/supplier-aging",
       "method": "GET",
       "path": "/api/supplier-aging",
+      "source": "backend/routes/grn.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/SupplierPayablesRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/supplier-payments/:param/void",
+      "method": "POST",
+      "path": "/api/supplier-payments/:param/void",
       "source": "backend/routes/grn.js",
       "frontend_refs": [
         "frontend/src/pages/redesign/SupplierPayablesRedesign.jsx"
@@ -768,6 +860,15 @@
       ]
     },
     {
+      "endpoint": "POST /api/transfers/:param/reverse",
+      "method": "POST",
+      "path": "/api/transfers/:param/reverse",
+      "source": "backend/routes/inventory.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/TransfersRedesign.jsx"
+      ]
+    },
+    {
       "endpoint": "GET /api/adjustments",
       "method": "GET",
       "path": "/api/adjustments",
@@ -780,6 +881,22 @@
       "endpoint": "POST /api/adjustments",
       "method": "POST",
       "path": "/api/adjustments",
+      "source": "backend/routes/inventory.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/StockAdjustmentsRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "PUT /api/adjustments/:param",
+      "method": "PUT",
+      "path": "/api/adjustments/:param",
+      "source": "backend/routes/inventory.js",
+      "frontend_refs": []
+    },
+    {
+      "endpoint": "DELETE /api/adjustments/:param",
+      "method": "DELETE",
+      "path": "/api/adjustments/:param",
       "source": "backend/routes/inventory.js",
       "frontend_refs": [
         "frontend/src/pages/redesign/StockAdjustmentsRedesign.jsx"
@@ -1008,7 +1125,7 @@
       "path": "/api/products/:param/stock",
       "source": "backend/routes/products.js",
       "frontend_refs": [
-        "frontend/src/pages/redesign/ProductFormPage.jsx"
+        "frontend/src/pages/redesign/InventoryRedesign.jsx"
       ]
     },
     {
@@ -1026,7 +1143,7 @@
       "path": "/api/products/scan/:param",
       "source": "backend/routes/products.js",
       "frontend_refs": [
-        "frontend/src/pages/redesign/ReturnsRedesign.jsx"
+        "frontend/src/pages/redesign/pos/POSContext.jsx"
       ]
     },
     {
@@ -1143,6 +1260,60 @@
       ]
     },
     {
+      "endpoint": "GET /api/po-templates",
+      "method": "GET",
+      "path": "/api/po-templates",
+      "source": "backend/routes/purchase-orders.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/po-templates",
+      "method": "POST",
+      "path": "/api/po-templates",
+      "source": "backend/routes/purchase-orders.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/po-templates/:param/use",
+      "method": "POST",
+      "path": "/api/po-templates/:param/use",
+      "source": "backend/routes/purchase-orders.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "DELETE /api/po-templates/:param",
+      "method": "DELETE",
+      "path": "/api/po-templates/:param",
+      "source": "backend/routes/purchase-orders.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "PUT /api/purchase-orders/:param",
+      "method": "PUT",
+      "path": "/api/purchase-orders/:param",
+      "source": "backend/routes/purchase-orders.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "POST /api/purchase-orders/:param/approve",
+      "method": "POST",
+      "path": "/api/purchase-orders/:param/approve",
+      "source": "backend/routes/purchase-orders.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+      ]
+    },
+    {
       "endpoint": "POST /api/purchase-orders/:param/receive",
       "method": "POST",
       "path": "/api/purchase-orders/:param/receive",
@@ -1198,6 +1369,13 @@
       "endpoint": "POST /api/action-history",
       "method": "POST",
       "path": "/api/action-history",
+      "source": "backend/routes/receipt-templates.js",
+      "frontend_refs": []
+    },
+    {
+      "endpoint": "POST /api/action-history/log",
+      "method": "POST",
+      "path": "/api/action-history/log",
       "source": "backend/routes/receipt-templates.js",
       "frontend_refs": []
     },
@@ -1593,27 +1771,16 @@
       ]
     },
     {
+      "endpoint": "GET /api/reports/pricing-margin",
+      "method": "GET",
+      "path": "/api/reports/pricing-margin",
+      "source": "backend/routes/reports/inventory.js",
+      "frontend_refs": []
+    },
+    {
       "endpoint": "GET /api/reports/dead-stock",
       "method": "GET",
       "path": "/api/reports/dead-stock",
-      "source": "backend/routes/reports/inventory.js",
-      "frontend_refs": [
-        "frontend/src/pages/redesign/ReportsPowerUpPanel.jsx"
-      ]
-    },
-    {
-      "endpoint": "GET /api/reports/stock-aging",
-      "method": "GET",
-      "path": "/api/reports/stock-aging",
-      "source": "backend/routes/reports/inventory.js",
-      "frontend_refs": [
-        "frontend/src/pages/redesign/ReportsPowerUpPanel.jsx"
-      ]
-    },
-    {
-      "endpoint": "GET /api/reports/stockout-risk",
-      "method": "GET",
-      "path": "/api/reports/stockout-risk",
       "source": "backend/routes/reports/inventory.js",
       "frontend_refs": [
         "frontend/src/pages/redesign/ReportsPowerUpPanel.jsx"
@@ -1632,6 +1799,24 @@
       "endpoint": "GET /api/reports/replenishment-smart",
       "method": "GET",
       "path": "/api/reports/replenishment-smart",
+      "source": "backend/routes/reports/inventory.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/ReorderAlertsRedesign.jsx"
+      ]
+    },
+    {
+      "endpoint": "GET /api/reports/stock-aging",
+      "method": "GET",
+      "path": "/api/reports/stock-aging",
+      "source": "backend/routes/reports/inventory.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/ReportsPowerUpPanel.jsx"
+      ]
+    },
+    {
+      "endpoint": "GET /api/reports/stockout-risk",
+      "method": "GET",
+      "path": "/api/reports/stockout-risk",
       "source": "backend/routes/reports/inventory.js",
       "frontend_refs": [
         "frontend/src/pages/redesign/ReportsPowerUpPanel.jsx"
@@ -1717,6 +1902,13 @@
       "frontend_refs": [
         "frontend/src/pages/reports/ReportsPurchasing.jsx"
       ]
+    },
+    {
+      "endpoint": "GET /api/reports/purchase-orders-report",
+      "method": "GET",
+      "path": "/api/reports/purchase-orders-report",
+      "source": "backend/routes/reports/purchasing.js",
+      "frontend_refs": []
     },
     {
       "endpoint": "GET /api/reports/procurement-parity",
@@ -2474,6 +2666,24 @@
       ]
     },
     {
+      "endpoint": "GET /api/accounting/cashflow/daily",
+      "method": "GET",
+      "path": "/api/accounting/cashflow/daily",
+      "source": "backend/routes/tier4/accounting.js",
+      "frontend_refs": [
+        "frontend/src/pages/Accounting.jsx"
+      ]
+    },
+    {
+      "endpoint": "GET /api/accounting/ap-ar",
+      "method": "GET",
+      "path": "/api/accounting/ap-ar",
+      "source": "backend/routes/tier4/accounting.js",
+      "frontend_refs": [
+        "frontend/src/pages/Accounting.jsx"
+      ]
+    },
+    {
       "endpoint": "GET /api/accounting/ap",
       "method": "GET",
       "path": "/api/accounting/ap",
@@ -2569,13 +2779,6 @@
       "frontend_refs": [
         "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
       ]
-    },
-    {
-      "endpoint": "POST /api/purchase-orders/:param/approve",
-      "method": "POST",
-      "path": "/api/purchase-orders/:param/approve",
-      "source": "backend/routes/tier4/approvals.js",
-      "frontend_refs": []
     },
     {
       "endpoint": "POST /api/transfers/:param/submit",
@@ -2721,6 +2924,15 @@
       ]
     },
     {
+      "endpoint": "POST /api/quotations/:param/send",
+      "method": "POST",
+      "path": "/api/quotations/:param/send",
+      "source": "backend/routes/tier4/crm.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/QuotationsRedesign.jsx"
+      ]
+    },
+    {
       "endpoint": "DELETE /api/quotations/:param",
       "method": "DELETE",
       "path": "/api/quotations/:param",
@@ -2766,6 +2978,15 @@
       ]
     },
     {
+      "endpoint": "GET /api/hr/leave/balance",
+      "method": "GET",
+      "path": "/api/hr/leave/balance",
+      "source": "backend/routes/tier4/hr.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/HRManagementRedesign.jsx"
+      ]
+    },
+    {
       "endpoint": "GET /api/hr/payroll/periods",
       "method": "GET",
       "path": "/api/hr/payroll/periods",
@@ -2802,12 +3023,12 @@
       ]
     },
     {
-      "endpoint": "GET /api/notifications",
-      "method": "GET",
-      "path": "/api/notifications",
-      "source": "backend/routes/tier4/notifications.js",
+      "endpoint": "POST /api/hr/payroll/periods/:param/lines",
+      "method": "POST",
+      "path": "/api/hr/payroll/periods/:param/lines",
+      "source": "backend/routes/tier4/hr.js",
       "frontend_refs": [
-        "frontend/src/components/NotificationBell.jsx"
+        "frontend/src/pages/redesign/HRManagementRedesign.jsx"
       ]
     },
     {
@@ -2963,6 +3184,18 @@
       "endpoint": "GET /api/accounting/periods",
       "method": "GET",
       "path": "/api/accounting/periods",
+      "source": "frontend/src/pages/Accounting.jsx"
+    },
+    {
+      "endpoint": "GET /api/accounting/cashflow/daily",
+      "method": "GET",
+      "path": "/api/accounting/cashflow/daily",
+      "source": "frontend/src/pages/Accounting.jsx"
+    },
+    {
+      "endpoint": "GET /api/accounting/ap-ar",
+      "method": "GET",
+      "path": "/api/accounting/ap-ar",
       "source": "frontend/src/pages/Accounting.jsx"
     },
     {
@@ -3332,6 +3565,12 @@
       "source": "frontend/src/pages/redesign/HRManagementRedesign.jsx"
     },
     {
+      "endpoint": "GET /api/hr/leave/balance",
+      "method": "GET",
+      "path": "/api/hr/leave/balance",
+      "source": "frontend/src/pages/redesign/HRManagementRedesign.jsx"
+    },
+    {
       "endpoint": "GET /api/hr/payroll/periods/:param/lines",
       "method": "GET",
       "path": "/api/hr/payroll/periods/:param/lines",
@@ -3362,9 +3601,51 @@
       "source": "frontend/src/pages/redesign/HRManagementRedesign.jsx"
     },
     {
+      "endpoint": "POST /api/hr/payroll/periods/:param/lines",
+      "method": "POST",
+      "path": "/api/hr/payroll/periods/:param/lines",
+      "source": "frontend/src/pages/redesign/HRManagementRedesign.jsx"
+    },
+    {
       "endpoint": "GET /api/products",
       "method": "GET",
       "path": "/api/products",
+      "source": "frontend/src/pages/redesign/InventoryRedesign.jsx"
+    },
+    {
+      "endpoint": "GET /api/products/:param/stock",
+      "method": "GET",
+      "path": "/api/products/:param/stock",
+      "source": "frontend/src/pages/redesign/InventoryRedesign.jsx"
+    },
+    {
+      "endpoint": "GET /api/products/:param/serials",
+      "method": "GET",
+      "path": "/api/products/:param/serials",
+      "source": "frontend/src/pages/redesign/InventoryRedesign.jsx"
+    },
+    {
+      "endpoint": "POST /api/products/:param/serials",
+      "method": "POST",
+      "path": "/api/products/:param/serials",
+      "source": "frontend/src/pages/redesign/InventoryRedesign.jsx"
+    },
+    {
+      "endpoint": "GET /api/gift-cards",
+      "method": "GET",
+      "path": "/api/gift-cards",
+      "source": "frontend/src/pages/redesign/InventoryRedesign.jsx"
+    },
+    {
+      "endpoint": "POST /api/gift-cards",
+      "method": "POST",
+      "path": "/api/gift-cards",
+      "source": "frontend/src/pages/redesign/InventoryRedesign.jsx"
+    },
+    {
+      "endpoint": "GET /api/gift-cards/:param",
+      "method": "GET",
+      "path": "/api/gift-cards/:param",
       "source": "frontend/src/pages/redesign/InventoryRedesign.jsx"
     },
     {
@@ -3378,6 +3659,12 @@
       "method": "POST",
       "path": "/api/products/bulk-import",
       "source": "frontend/src/pages/redesign/InventoryRedesign.jsx"
+    },
+    {
+      "endpoint": "POST /api/notifications/:param/read",
+      "method": "POST",
+      "path": "/api/notifications/:param/read",
+      "source": "frontend/src/pages/redesign/NotificationsRedesign.jsx"
     },
     {
       "endpoint": "GET /api/outlets/:param",
@@ -3425,6 +3712,18 @@
       "endpoint": "GET /api/products/search",
       "method": "GET",
       "path": "/api/products/search",
+      "source": "frontend/src/pages/redesign/pos/POSContext.jsx"
+    },
+    {
+      "endpoint": "GET /api/products/scan/:param",
+      "method": "GET",
+      "path": "/api/products/scan/:param",
+      "source": "frontend/src/pages/redesign/pos/POSContext.jsx"
+    },
+    {
+      "endpoint": "GET /api/customers/:param/wallet",
+      "method": "GET",
+      "path": "/api/customers/:param/wallet",
       "source": "frontend/src/pages/redesign/pos/POSContext.jsx"
     },
     {
@@ -3560,20 +3859,62 @@
       "source": "frontend/src/pages/redesign/ProductFormPage.jsx"
     },
     {
-      "endpoint": "GET /api/products/:param/stock",
-      "method": "GET",
-      "path": "/api/products/:param/stock",
-      "source": "frontend/src/pages/redesign/ProductFormPage.jsx"
-    },
-    {
       "endpoint": "GET /api/purchase-orders",
       "method": "GET",
       "path": "/api/purchase-orders",
       "source": "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
     },
     {
+      "endpoint": "GET /api/po-templates",
+      "method": "GET",
+      "path": "/api/po-templates",
+      "source": "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+    },
+    {
+      "endpoint": "POST /api/po-templates",
+      "method": "POST",
+      "path": "/api/po-templates",
+      "source": "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+    },
+    {
+      "endpoint": "GET /api/po-templates/:param",
+      "method": "GET",
+      "path": "/api/po-templates/:param",
+      "source": "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+    },
+    {
+      "endpoint": "POST /api/po-templates/:param/use",
+      "method": "POST",
+      "path": "/api/po-templates/:param/use",
+      "source": "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+    },
+    {
+      "endpoint": "DELETE /api/po-templates/:param",
+      "method": "DELETE",
+      "path": "/api/po-templates/:param",
+      "source": "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+    },
+    {
+      "endpoint": "DELETE /api/purchase-orders/:param",
+      "method": "DELETE",
+      "path": "/api/purchase-orders/:param",
+      "source": "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+    },
+    {
+      "endpoint": "POST /api/purchase-orders/:param/approve",
+      "method": "POST",
+      "path": "/api/purchase-orders/:param/approve",
+      "source": "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+    },
+    {
       "endpoint": "GET /api/purchase-orders/:param",
       "method": "GET",
+      "path": "/api/purchase-orders/:param",
+      "source": "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
+    },
+    {
+      "endpoint": "PUT /api/purchase-orders/:param",
+      "method": "PUT",
       "path": "/api/purchase-orders/:param",
       "source": "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx"
     },
@@ -3626,6 +3967,18 @@
       "source": "frontend/src/pages/redesign/QuotationsRedesign.jsx"
     },
     {
+      "endpoint": "POST /api/quotations/:param/send",
+      "method": "POST",
+      "path": "/api/quotations/:param/send",
+      "source": "frontend/src/pages/redesign/QuotationsRedesign.jsx"
+    },
+    {
+      "endpoint": "GET /api/reports/replenishment-smart",
+      "method": "GET",
+      "path": "/api/reports/replenishment-smart",
+      "source": "frontend/src/pages/redesign/ReorderAlertsRedesign.jsx"
+    },
+    {
       "endpoint": "GET /api/reports/profit-summary",
       "method": "GET",
       "path": "/api/reports/profit-summary",
@@ -3674,12 +4027,6 @@
       "source": "frontend/src/pages/redesign/ReportsPowerUpPanel.jsx"
     },
     {
-      "endpoint": "GET /api/reports/replenishment-smart",
-      "method": "GET",
-      "path": "/api/reports/replenishment-smart",
-      "source": "frontend/src/pages/redesign/ReportsPowerUpPanel.jsx"
-    },
-    {
       "endpoint": "GET /api/reports/exceptions",
       "method": "GET",
       "path": "/api/reports/exceptions",
@@ -3716,12 +4063,6 @@
       "source": "frontend/src/pages/redesign/ReturnsRedesign.jsx"
     },
     {
-      "endpoint": "GET /api/products/scan/:param",
-      "method": "GET",
-      "path": "/api/products/scan/:param",
-      "source": "frontend/src/pages/redesign/ReturnsRedesign.jsx"
-    },
-    {
       "endpoint": "PUT /api/sales/:param/void",
       "method": "PUT",
       "path": "/api/sales/:param/void",
@@ -3737,6 +4078,12 @@
       "endpoint": "POST /api/adjustments",
       "method": "POST",
       "path": "/api/adjustments",
+      "source": "frontend/src/pages/redesign/StockAdjustmentsRedesign.jsx"
+    },
+    {
+      "endpoint": "DELETE /api/adjustments/:param",
+      "method": "DELETE",
+      "path": "/api/adjustments/:param",
       "source": "frontend/src/pages/redesign/StockAdjustmentsRedesign.jsx"
     },
     {
@@ -3761,6 +4108,18 @@
       "endpoint": "POST /api/supplier-invoices/:param/pay",
       "method": "POST",
       "path": "/api/supplier-invoices/:param/pay",
+      "source": "frontend/src/pages/redesign/SupplierPayablesRedesign.jsx"
+    },
+    {
+      "endpoint": "GET /api/supplier-invoices/:param",
+      "method": "GET",
+      "path": "/api/supplier-invoices/:param",
+      "source": "frontend/src/pages/redesign/SupplierPayablesRedesign.jsx"
+    },
+    {
+      "endpoint": "POST /api/supplier-payments/:param/void",
+      "method": "POST",
+      "path": "/api/supplier-payments/:param/void",
       "source": "frontend/src/pages/redesign/SupplierPayablesRedesign.jsx"
     },
     {
@@ -3803,6 +4162,12 @@
       "endpoint": "POST /api/transfers",
       "method": "POST",
       "path": "/api/transfers",
+      "source": "frontend/src/pages/redesign/TransfersRedesign.jsx"
+    },
+    {
+      "endpoint": "POST /api/transfers/:param/reverse",
+      "method": "POST",
+      "path": "/api/transfers/:param/reverse",
       "source": "frontend/src/pages/redesign/TransfersRedesign.jsx"
     },
     {
@@ -4354,21 +4719,6 @@
       }
     },
     {
-      "endpoint": "DELETE /api/purchase-orders/:param",
-      "method": "DELETE",
-      "path": "/api/purchase-orders/:param",
-      "source": "backend/routes/grn.js",
-      "registry": {
-        "endpoint": "DELETE /api/purchase-orders/:param",
-        "classification": "backend_only_by_design",
-        "frontend_refs": [],
-        "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
-        "owner": "grn_maintainer",
-        "review_date": "2026-03-06",
-        "source": "backend/routes/grn.js"
-      }
-    },
-    {
       "endpoint": "DELETE /api/reports/saved-views/:param",
       "method": "DELETE",
       "path": "/api/reports/saved-views/:param",
@@ -4465,21 +4815,6 @@
       "source": "backend/routes/customers.js",
       "registry": {
         "endpoint": "GET /api/customers/:param/sales",
-        "classification": "backend_only_by_design",
-        "frontend_refs": [],
-        "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
-        "owner": "customers_maintainer",
-        "review_date": "2026-03-06",
-        "source": "backend/routes/customers.js"
-      }
-    },
-    {
-      "endpoint": "GET /api/customers/:param/wallet",
-      "method": "GET",
-      "path": "/api/customers/:param/wallet",
-      "source": "backend/routes/customers.js",
-      "registry": {
-        "endpoint": "GET /api/customers/:param/wallet",
         "classification": "backend_only_by_design",
         "frontend_refs": [],
         "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
@@ -4789,6 +5124,20 @@
       }
     },
     {
+      "endpoint": "GET /api/reports/pricing-margin",
+      "method": "GET",
+      "path": "/api/reports/pricing-margin",
+      "source": "backend/routes/reports/inventory.js",
+      "registry": null
+    },
+    {
+      "endpoint": "GET /api/reports/purchase-orders-report",
+      "method": "GET",
+      "path": "/api/reports/purchase-orders-report",
+      "source": "backend/routes/reports/purchasing.js",
+      "registry": null
+    },
+    {
       "endpoint": "GET /api/reports/schedules/:param/runs",
       "method": "GET",
       "path": "/api/reports/schedules/:param/runs",
@@ -4819,21 +5168,6 @@
       }
     },
     {
-      "endpoint": "GET /api/supplier-invoices/:param",
-      "method": "GET",
-      "path": "/api/supplier-invoices/:param",
-      "source": "backend/routes/grn.js",
-      "registry": {
-        "endpoint": "GET /api/supplier-invoices/:param",
-        "classification": "backend_only_by_design",
-        "frontend_refs": [],
-        "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
-        "owner": "grn_maintainer",
-        "review_date": "2026-03-06",
-        "source": "backend/routes/grn.js"
-      }
-    },
-    {
       "endpoint": "POST /api/action-history",
       "method": "POST",
       "path": "/api/action-history",
@@ -4847,6 +5181,13 @@
         "review_date": "2026-03-06",
         "source": "backend/routes/receipt-templates.js"
       }
+    },
+    {
+      "endpoint": "POST /api/action-history/log",
+      "method": "POST",
+      "path": "/api/action-history/log",
+      "source": "backend/routes/receipt-templates.js",
+      "registry": null
     },
     {
       "endpoint": "POST /api/admin/migrate-all",
@@ -5132,6 +5473,13 @@
         "review_date": "2026-03-06",
         "source": "backend/routes/barcode-expenses.js"
       }
+    },
+    {
+      "endpoint": "POST /api/gift-cards/:param/redeem",
+      "method": "POST",
+      "path": "/api/gift-cards/:param/redeem",
+      "source": "backend/routes/barcode-expenses.js",
+      "registry": null
     },
     {
       "endpoint": "POST /api/integrations/mappings/products/apply-suggestions",
@@ -5584,21 +5932,6 @@
       }
     },
     {
-      "endpoint": "POST /api/purchase-orders/:param/approve",
-      "method": "POST",
-      "path": "/api/purchase-orders/:param/approve",
-      "source": "backend/routes/tier4/approvals.js",
-      "registry": {
-        "endpoint": "POST /api/purchase-orders/:param/approve",
-        "classification": "backend_only_by_design",
-        "frontend_refs": [],
-        "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
-        "owner": "tier4_approvals_maintainer",
-        "review_date": "2026-03-06",
-        "source": "backend/routes/tier4/approvals.js"
-      }
-    },
-    {
       "endpoint": "POST /api/quotations",
       "method": "POST",
       "path": "/api/quotations",
@@ -5644,6 +5977,13 @@
       }
     },
     {
+      "endpoint": "POST /api/serials/:param/assign",
+      "method": "POST",
+      "path": "/api/serials/:param/assign",
+      "source": "backend/routes/barcode-expenses.js",
+      "registry": null
+    },
+    {
       "endpoint": "POST /api/taxes",
       "method": "POST",
       "path": "/api/taxes",
@@ -5687,6 +6027,13 @@
         "review_date": "2026-03-06",
         "source": "backend/routes/tier4/approvals.js"
       }
+    },
+    {
+      "endpoint": "PUT /api/adjustments/:param",
+      "method": "PUT",
+      "path": "/api/adjustments/:param",
+      "source": "backend/routes/inventory.js",
+      "registry": null
     },
     {
       "endpoint": "PUT /api/attribute-sets/:param",
@@ -6167,6 +6514,19 @@
       ]
     },
     {
+      "path": "/api/po-templates/:param",
+      "backend_methods": [
+        "DELETE"
+      ],
+      "frontend_methods": [
+        "DELETE",
+        "GET"
+      ],
+      "unmatched_frontend_methods": [
+        "GET"
+      ]
+    },
+    {
       "path": "/api/products/:param",
       "backend_methods": [
         "DELETE",
@@ -6308,6 +6668,11 @@
     },
     {
       "type": "frontend_non_api_path",
+      "source": "frontend/src/pages/redesign/ParkedSalesRedesign.jsx",
+      "detail": "/outlets"
+    },
+    {
+      "type": "frontend_non_api_path",
       "source": "frontend/src/pages/redesign/PromotionsRedesign.jsx",
       "detail": "/products"
     },
@@ -6324,7 +6689,7 @@
     {
       "type": "frontend_dynamic_path_ambiguous",
       "source": "frontend/src/pages/redesign/InventoryRedesign.jsx",
-      "detail": "POST /api/products/:param -> POST /api/products/:param/media, POST /api/products/bulk-import, POST /api/products/bulk-delete, POST /api/products/bulk-status, POST /api/products/bulk-category"
+      "detail": "POST /api/products/:param -> POST /api/products/:param/serials, POST /api/products/:param/media, POST /api/products/bulk-import, POST /api/products/bulk-delete, POST /api/products/bulk-status, POST /api/products/bulk-category"
     },
     {
       "type": "frontend_method_ambiguous",
@@ -6345,6 +6710,11 @@
       "type": "frontend_method_ambiguous",
       "source": "frontend/src/pages/redesign/OutletsRedesign.jsx",
       "detail": "GET /api/outlets/:param -> backend methods on same path: PUT, DELETE"
+    },
+    {
+      "type": "frontend_method_ambiguous",
+      "source": "frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx",
+      "detail": "GET /api/po-templates/:param -> backend methods on same path: DELETE"
     },
     {
       "type": "frontend_method_ambiguous",

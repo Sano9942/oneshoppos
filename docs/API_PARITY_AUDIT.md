@@ -1,15 +1,15 @@
 # API Parity Audit
 
-Generated: 2026-03-08T21:59:39.302Z
+Generated: 2026-03-09T16:02:08.307Z
 
 ## Summary
 
-- Backend endpoints (method+path): 342
-- Frontend API usages (method+path): 227
-- Backend-only endpoints: 125
+- Backend endpoints (method+path): 367
+- Frontend API usages (method+path): 251
+- Backend-only endpoints: 127
 - Frontend-only usages: 0
-- Unclassified backend-only endpoints: 0
-- Method mismatch paths: 10
+- Unclassified backend-only endpoints: 6
+- Method mismatch paths: 11
 
 ## Backend Only
 
@@ -23,7 +23,6 @@ Generated: 2026-03-08T21:59:39.302Z
 - `DELETE /api/products/:param` (backend/routes/products.js)
 - `DELETE /api/products/:param/media/:param` (backend/routes/orders.js)
 - `DELETE /api/promotions/:param` (backend/routes/promotions.js)
-- `DELETE /api/purchase-orders/:param` (backend/routes/grn.js)
 - `DELETE /api/reports/saved-views/:param` (backend/routes/reports/governance.js)
 - `DELETE /api/reports/schedules/:param` (backend/routes/reports/governance.js)
 - `DELETE /api/roles/:param` (backend/routes/roles.js)
@@ -31,7 +30,6 @@ Generated: 2026-03-08T21:59:39.302Z
 - `GET /api/auth/me` (backend/routes/auth.js)
 - `GET /api/barcode-templates` (backend/routes/barcode-expenses.js)
 - `GET /api/customers/:param/sales` (backend/routes/customers.js)
-- `GET /api/customers/:param/wallet` (backend/routes/customers.js)
 - `GET /api/expense-categories` (backend/routes/barcode-expenses.js)
 - `GET /api/expenses` (backend/routes/barcode-expenses.js)
 - `GET /api/expenses/summary` (backend/routes/barcode-expenses.js)
@@ -52,10 +50,12 @@ Generated: 2026-03-08T21:59:39.302Z
 - `GET /api/orders/:param` (backend/routes/orders.js)
 - `GET /api/products/:param/media` (backend/routes/orders.js)
 - `GET /api/promotions` (backend/routes/promotions.js)
+- `GET /api/reports/pricing-margin` (backend/routes/reports/inventory.js)
+- `GET /api/reports/purchase-orders-report` (backend/routes/reports/purchasing.js)
 - `GET /api/reports/schedules/:param/runs` (backend/routes/reports/governance.js)
 - `GET /api/reports/top-salespeople` (backend/routes/reports/sales.js)
-- `GET /api/supplier-invoices/:param` (backend/routes/grn.js)
 - `POST /api/action-history` (backend/routes/receipt-templates.js)
+- `POST /api/action-history/log` (backend/routes/receipt-templates.js)
 - `POST /api/admin/migrate-all` (backend/routes/admin.js)
 - `POST /api/admin/tenants/:param/activate` (backend/routes/admin.js)
 - `POST /api/admin/tenants/:param/migrate` (backend/routes/admin.js)
@@ -75,6 +75,7 @@ Generated: 2026-03-08T21:59:39.302Z
 - `POST /api/employees` (backend/routes/employees.js)
 - `POST /api/expense-categories` (backend/routes/barcode-expenses.js)
 - `POST /api/expenses` (backend/routes/barcode-expenses.js)
+- `POST /api/gift-cards/:param/redeem` (backend/routes/barcode-expenses.js)
 - `POST /api/integrations/mappings/products/apply-suggestions` (backend/routes/shopify/mappings.js)
 - `POST /api/integrations/mappings/products/auto` (backend/routes/shopify/mappings.js)
 - `POST /api/integrations/mappings/products/auto-live` (backend/routes/shopify/mappings.js)
@@ -105,13 +106,14 @@ Generated: 2026-03-08T21:59:39.302Z
 - `POST /api/products/bulk-status` (backend/routes/products.js)
 - `POST /api/promotions` (backend/routes/promotions.js)
 - `POST /api/promotions/quote` (backend/routes/promotions.js)
-- `POST /api/purchase-orders/:param/approve` (backend/routes/tier4/approvals.js)
 - `POST /api/quotations` (backend/routes/tier4/crm.js)
 - `POST /api/receipt-templates` (backend/routes/receipt-templates.js)
 - `POST /api/roles` (backend/routes/roles.js)
+- `POST /api/serials/:param/assign` (backend/routes/barcode-expenses.js)
 - `POST /api/taxes` (backend/routes/taxes.js)
 - `POST /api/transfers/:param/approve` (backend/routes/tier4/approvals.js)
 - `POST /api/transfers/:param/submit` (backend/routes/tier4/approvals.js)
+- `PUT /api/adjustments/:param` (backend/routes/inventory.js)
 - `PUT /api/attribute-sets/:param` (backend/routes/attribute-sets.js)
 - `PUT /api/barcode-templates/:param` (backend/routes/barcode-expenses.js)
 - `PUT /api/brands/:param` (backend/routes/brands.js)
@@ -151,6 +153,7 @@ Generated: 2026-03-08T21:59:39.302Z
 - `/api/categories/:param` backend=DELETE,PUT frontend=DELETE,GET unmatched_frontend=GET
 - `/api/employees/:param` backend=DELETE,PUT frontend=DELETE,GET unmatched_frontend=GET
 - `/api/outlets/:param` backend=DELETE,PUT frontend=DELETE,GET unmatched_frontend=GET
+- `/api/po-templates/:param` backend=DELETE frontend=DELETE,GET unmatched_frontend=GET
 - `/api/products/:param` backend=DELETE,GET,PUT frontend=GET,POST unmatched_frontend=POST
 - `/api/receipt-templates/:param` backend=DELETE,PUT frontend=DELETE,GET,PUT unmatched_frontend=GET
 - `/api/suppliers/:param` backend=DELETE,PUT frontend=DELETE,GET unmatched_frontend=GET
@@ -174,14 +177,16 @@ Generated: 2026-03-08T21:59:39.302Z
 - `frontend_non_api_path` /attendance/pin-status (frontend/src/pages/redesign/KioskRedesign.jsx)
 - `frontend_non_api_path` /attendance/pin-checkin (frontend/src/pages/redesign/KioskRedesign.jsx)
 - `frontend_non_api_path` /attendance/pin-checkout (frontend/src/pages/redesign/KioskRedesign.jsx)
+- `frontend_non_api_path` /outlets (frontend/src/pages/redesign/ParkedSalesRedesign.jsx)
 - `frontend_non_api_path` /products (frontend/src/pages/redesign/PromotionsRedesign.jsx)
 - `frontend_dynamic_path_ambiguous` GET /api/employees/:param -> GET /api/employees/:param/attendance-config, GET /api/employees/:param/outlets (frontend/src/pages/redesign/EmployeesRedesign.jsx)
 - `frontend_dynamic_path_ambiguous` GET /api/receipt-templates/:param -> GET /api/receipt-templates/active (frontend/src/pages/ReceiptTemplates.jsx)
-- `frontend_dynamic_path_ambiguous` POST /api/products/:param -> POST /api/products/:param/media, POST /api/products/bulk-import, POST /api/products/bulk-delete, POST /api/products/bulk-status, POST /api/products/bulk-category (frontend/src/pages/redesign/InventoryRedesign.jsx)
+- `frontend_dynamic_path_ambiguous` POST /api/products/:param -> POST /api/products/:param/serials, POST /api/products/:param/media, POST /api/products/bulk-import, POST /api/products/bulk-delete, POST /api/products/bulk-status, POST /api/products/bulk-category (frontend/src/pages/redesign/InventoryRedesign.jsx)
 - `frontend_method_ambiguous` GET /api/attribute-sets/:param -> backend methods on same path: PUT, DELETE (frontend/src/pages/redesign/AttributeSetsRedesign.jsx)
 - `frontend_method_ambiguous` GET /api/brands/:param -> backend methods on same path: PUT, DELETE (frontend/src/pages/redesign/BrandsRedesign.jsx)
 - `frontend_method_ambiguous` GET /api/categories/:param -> backend methods on same path: PUT, DELETE (frontend/src/pages/redesign/CategoriesRedesign.jsx)
 - `frontend_method_ambiguous` GET /api/outlets/:param -> backend methods on same path: PUT, DELETE (frontend/src/pages/redesign/OutletsRedesign.jsx)
+- `frontend_method_ambiguous` GET /api/po-templates/:param -> backend methods on same path: DELETE (frontend/src/pages/redesign/PurchaseOrdersRedesign.jsx)
 - `frontend_method_ambiguous` GET /api/suppliers/:param -> backend methods on same path: PUT, DELETE (frontend/src/pages/redesign/SuppliersRedesign.jsx)
 - `frontend_method_ambiguous` GET /api/taxes/:param -> backend methods on same path: PUT, DELETE (frontend/src/pages/redesign/TaxesRedesign.jsx)
 - `frontend_method_ambiguous` PUT /api/accounting/periods -> backend methods on same path: GET, POST (frontend/src/pages/Accounting.jsx)

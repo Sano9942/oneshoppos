@@ -161,7 +161,7 @@ function inferMethodFromContext(text, idx) {
 
 function cleanFrontendApiCandidate(candidate) {
   let out = String(candidate || "");
-  out = out.replace(/[+)]*$/g, "");
+  out = out.replace(/[+),]*$/g, "");
   out = out.replace(/\$\{[^}]*$/g, "__EXPR__");
   out = out.replace(/\$\{[^}]+\}/g, "__EXPR__");
   out = out.replace(/\/__EXPR__(?=\/|\?|$)/g, "/:param");
