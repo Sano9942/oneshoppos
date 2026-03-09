@@ -303,7 +303,7 @@ export default function ProductFormPage() {
               <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Media</p>
               {form.image_url && (
                 <div className="relative w-32 h-32">
-                  <img src={form.image_url} alt="Product" className="w-32 h-32 rounded-lg object-cover border border-(--ui-border)" />
+                  <img src={form.image_url.startsWith("/uploads") ? `${API}${form.image_url}` : form.image_url} alt="Product" className="w-32 h-32 rounded-lg object-cover border border-(--ui-border)" />
                   <button type="button" onClick={() => upd("image_url", "")}
                     className="absolute -top-1.5 -right-1.5 rounded-full bg-rose-500 text-white p-0.5 hover:bg-rose-600">
                     <X size={14} />
