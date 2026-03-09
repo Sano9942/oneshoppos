@@ -14,17 +14,36 @@ import { fmtUtcDateTime } from "../../utils/dates";
 
 const fmtDate = fmtUtcDateTime;
 
+const ACTION_TYPES = [
+  "All",
+  "Sale",
+  "Return",
+  "Void",
+  "Adjustment",
+  "Transfer",
+  "Purchase Order",
+  "Login",
+];
+
 export default function ActionHistoryRedesign() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [actionType, setActionType] = useState("");
   const [error, setError] = useState("");
 
-  const fetchLogs = async (q = "") => {
+  const fetchLogs = async ({ q = search, from = dateFrom, to = dateTo, type = actionType } = {}) => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/action-history?search=${encodeURIComponent(q)}`);
+      const params = new URLSearchParams();
+      if (q) params.set("search", q);
+      if (from) params.set("date_from", from);
+      if (to) params.set("date_to", to);
+      if (type) params.set("action_type", type);
+      const res = await fetch(`${API}/api/action-history?${params}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load action history");
       setLogs(data.logs || []);
@@ -35,20 +54,25 @@ export default function ActionHistoryRedesign() {
     }
   };
 
-  useEffect(() => { fetchLogs(); }, []);
+  useEffect(() => { fetchLogs(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced search
   useEffect(() => {
-    const t = setTimeout(() => fetchLogs(search), 300);
+    const t = setTimeout(() => fetchLogs({ q: search }), 300);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Instant filter for date + action type
+  useEffect(() => {
+    fetchLogs({ from: dateFrom, to: dateTo, type: actionType });
+  }, [dateFrom, dateTo, actionType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <PageShell
       title="Action History"
       subtitle="Audit log of all system actions and events."
       right={
-        <Button onClick={() => fetchLogs(search)}>
+        <Button onClick={() => fetchLogs()}>
           <RefreshCcw size={14} className="mr-1 inline" /> Refresh
         </Button>
       }
@@ -60,14 +84,37 @@ export default function ActionHistoryRedesign() {
       <SectionCard>
         <TableToolbar
           left={
-            <div className="relative min-w-65">
-              <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)" />
-              <Input
-                className="pl-8"
-                placeholder="Search actions, employees, entities..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-1.5 text-sm text-(--ui-text)"
               />
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-1.5 text-sm text-(--ui-text)"
+              />
+              <select
+                value={actionType}
+                onChange={(e) => setActionType(e.target.value === "All" ? "" : e.target.value)}
+                className="rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-1.5 text-sm text-(--ui-text)"
+              >
+                {ACTION_TYPES.map((t) => (
+                  <option key={t} value={t === "All" ? "" : t}>{t}</option>
+                ))}
+              </select>
+              <div className="relative min-w-65">
+                <Search size={14} className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)" />
+                <Input
+                  className="pl-8"
+                  placeholder="Search actions, employees, entities..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
             </div>
           }
           right={<span className="text-xs text-(--ui-text-muted)">{logs.length} entries</span>}

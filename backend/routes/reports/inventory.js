@@ -498,7 +498,160 @@ module.exports = function (app, deps, helpers) {
     });
   });
 
-  // Dead Stock
+  // Pricing Margin: all products with cost vs sell price and margin analysis
+  app.get("/api/reports/pricing-margin", async (req, res) => {
+    const { outlet_id, category_id } = req.query;
+    const where = [];
+    const params = [];
+    if (category_id) {
+      const leafIds = await getDescendantLeafIds(category_id);
+      if (!leafIds.length) {
+        where.push("1 = 0");
+      } else if (leafIds.length === 1) {
+        where.push("p.category_id = ?");
+        params.push(Number(leafIds[0]));
+      } else {
+        where.push(`p.category_id IN (${leafIds.map(() => "?").join(",")})`);
+        params.push(...leafIds.map(Number));
+      }
+    }
+    if (outlet_id) {
+      const ids = String(outlet_id).split(",").map(Number).filter(Boolean);
+      if (ids.length === 1) {
+        where.push("EXISTS (SELECT 1 FROM outlet_stock os2 WHERE os2.product_id = p.id AND os2.outlet_id = ?)");
+        params.push(ids[0]);
+      } else if (ids.length > 1) {
+        where.push(`EXISTS (SELECT 1 FROM outlet_stock os2 WHERE os2.product_id = p.id AND os2.outlet_id IN (${ids.map(() => "?").join(",")}))`);
+        params.push(...ids);
+      }
+    }
+    const sql = `
+      SELECT
+        p.id AS product_id,
+        p.name,
+        p.sku,
+        COALESCE(p.cost_price, 0) AS cost_price,
+        COALESCE(p.price, 0) AS selling_price,
+        ROUND(COALESCE(p.price, 0) - COALESCE(p.cost_price, 0), 2) AS margin_amount,
+        ROUND(
+          CASE WHEN COALESCE(p.price, 0) > 0
+            THEN ((COALESCE(p.price, 0) - COALESCE(p.cost_price, 0)) * 100.0) / COALESCE(p.price, 0)
+            ELSE 0
+          END, 2
+        ) AS margin_pct,
+        COALESCE(cat.name, '—') AS category_name,
+        p.category_id
+      FROM products p
+      LEFT JOIN categories cat ON cat.id = p.category_id
+      ${where.length ? "WHERE " + where.join(" AND ") : ""}
+      ORDER BY margin_pct ASC, p.name ASC
+    `;
+    db.all(sql, params, async (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      const categoryMeta = await buildCategoryMetaMap();
+      const items = withCategoryPaths(rows || [], categoryMeta);
+      res.json({ items });
+    });
+  });
+
+  // Dead Stock (ungated): products with zero sales in last N days (default 90)
+  app.get("/api/reports/dead-stock", async (req, res) => {
+    const inactiveDays = Math.max(
+      1,
+      Math.min(3650, parseInt(req.query.inactive_days || 90, 10)),
+    );
+    const where = ["os.quantity > 0"];
+    const params = [];
+    applyOutletFilter(where, params, req.query.outlet_id);
+    await applyInventoryProductFilters(where, params, req.query);
+    const sql = `
+      SELECT
+        p.id AS product_id,
+        p.name AS product_name,
+        p.sku,
+        p.barcode,
+        p.category_id,
+        COALESCE(cat.name, '-') AS category,
+        COALESCE(SUM(os.quantity), 0) AS current_stock,
+        MAX(s.timestamp) AS last_sold_date,
+        CAST(julianday('now') - julianday(MAX(s.timestamp)) AS INTEGER) AS days_since_sold,
+        ROUND(COALESCE(SUM(os.quantity), 0) * COALESCE(p.cost_price, 0), 2) AS cost_value
+      FROM outlet_stock os
+      JOIN products p ON p.id = os.product_id
+      LEFT JOIN categories cat ON cat.id = p.category_id
+      LEFT JOIN sale_items si ON si.product_id = p.id
+      LEFT JOIN sales s ON s.id = si.sale_id AND s.voided = 0
+      WHERE ${where.join(" AND ")}
+      GROUP BY p.id
+      HAVING COALESCE(days_since_sold, 99999) >= ?
+      ORDER BY cost_value DESC
+      LIMIT 500
+    `;
+    db.all(sql, [...params, inactiveDays], async (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      const categoryMeta = await buildCategoryMetaMap();
+      const items = withCategoryPaths(rows || [], categoryMeta);
+      res.json({ items, inactive_days: inactiveDays });
+    });
+  });
+
+  // Forecast Demand (ungated): avg daily sales over lookback window per product
+  app.get("/api/reports/forecast-demand", (req, res) => {
+    buildForecastRows(req.query || {}, req.company?.timezone || "UTC", async (err, rows, lookbackDays) => {
+      if (err) return res.status(500).json({ error: err.message });
+      const categoryMeta = await buildCategoryMetaMap();
+      const items = withCategoryPaths(rows, categoryMeta);
+      res.json({
+        items,
+        rows: items,
+        lookback_days: lookbackDays,
+        formula: "moving_average_daily_velocity",
+        data_as_of: new Date().toISOString(),
+      });
+    });
+  });
+
+  // Replenishment Smart (ungated): days_of_cover < 14, sorted by urgency ASC
+  app.get("/api/reports/replenishment-smart", (req, res) => {
+    const forecastDays = Math.max(
+      7,
+      Math.min(90, parseInt(req.query.forecast_days || 14, 10)),
+    );
+    buildForecastRows(req.query || {}, req.company?.timezone || "UTC", async (err, rows, lookbackDays) => {
+      if (err) return res.status(500).json({ error: err.message });
+      const smart = (rows || [])
+        .map((r) => {
+          const avgDaily = Number(r.avg_daily_units || 0);
+          const onHand = Number(r.on_hand_qty || 0);
+          const target = avgDaily * forecastDays;
+          const suggested = Math.max(0, Math.ceil(target - onHand));
+          return {
+            ...r,
+            forecast_days: forecastDays,
+            target_cover_units: Number(target.toFixed(2)),
+            suggested_reorder_qty: suggested,
+          };
+        })
+        .filter((r) => r.days_of_cover === null || Number(r.days_of_cover) < 14)
+        .sort((a, b) => {
+          const aDoc = a.days_of_cover === null ? -1 : Number(a.days_of_cover);
+          const bDoc = b.days_of_cover === null ? -1 : Number(b.days_of_cover);
+          return aDoc - bDoc;
+        });
+      const categoryMeta = await buildCategoryMetaMap();
+      const items = withCategoryPaths(smart, categoryMeta);
+      res.json({
+        items,
+        rows: items,
+        lookback_days: lookbackDays,
+        forecast_days: forecastDays,
+        formula: "moving_average_cover_gap",
+        data_as_of: new Date().toISOString(),
+      });
+    });
+  });
+
+  // Dead Stock (feature-gated variant — kept for backward compat with flag-enabled tenants)
   app.get(
     "/api/reports/dead-stock",
     requireFeature("reports_inventory_health_plus"),

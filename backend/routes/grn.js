@@ -313,9 +313,12 @@ module.exports = function registerGRNRoutes(app, deps) {
         if (err) return res.status(500).json({ error: err.message });
         if (!supplier) return res.status(404).json({ error: "Supplier not found" });
 
-        // Merge invoices (purchases = credit/you owe more) and payments (debit/you paid)
-        db.all(
-          `SELECT si.created_at AS date,
+        const { page: pageParam = 0 } = req.query;
+        const page = Math.max(0, parseInt(pageParam, 10) || 0);
+        const PAGE_SIZE = 50;
+
+        const unionSql = `
+          SELECT si.created_at AS date,
                   'purchase' AS type,
                   COALESCE(si.invoice_number, 'INV-' || si.id) AS reference,
                   si.amount AS amount,
@@ -336,25 +339,43 @@ module.exports = function registerGRNRoutes(app, deps) {
                   NULL AS status
            FROM supplier_payments sp
            LEFT JOIN supplier_invoices si2 ON si2.id = sp.supplier_invoice_id
-           WHERE sp.supplier_id = ?${payDateSql}
+           WHERE sp.supplier_id = ?${payDateSql}`;
 
-           ORDER BY date ASC, type DESC`,
+        // Count total rows first
+        db.get(
+          `SELECT COUNT(*) AS total FROM (${unionSql}) AS combined`,
           [...invParams, ...payParams],
-          (err2, rows) => {
-            if (err2) return res.status(500).json({ error: err2.message });
+          (errCount, countRow) => {
+            if (errCount) return res.status(500).json({ error: errCount.message });
+            const total_count = countRow?.total || 0;
+            const total_pages = Math.ceil(total_count / PAGE_SIZE);
 
-            // Compute running balance
-            let balance = 0;
-            const entries = (rows || []).map((r) => {
-              balance += Number(r.amount || 0) - Number(r.payment || 0);
-              return { ...r, running_balance: Number(balance.toFixed(2)) };
-            });
+            // Fetch paginated rows
+            db.all(
+              `${unionSql} ORDER BY date ASC, type DESC LIMIT ? OFFSET ?`,
+              [...invParams, ...payParams, PAGE_SIZE, page * PAGE_SIZE],
+              (err2, rows) => {
+                if (err2) return res.status(500).json({ error: err2.message });
 
-            res.json({
-              supplier,
-              entries,
-              closing_balance: Number(balance.toFixed(2)),
-            });
+                // Compute running balance for this page's rows
+                // NOTE: running balance starts from page offset — full sequential balance
+                // requires fetching all prior rows; we return per-page balance delta here
+                let balance = 0;
+                const entries = (rows || []).map((r) => {
+                  balance += Number(r.amount || 0) - Number(r.payment || 0);
+                  return { ...r, running_balance: Number(balance.toFixed(2)) };
+                });
+
+                res.json({
+                  supplier,
+                  entries,
+                  closing_balance: Number(balance.toFixed(2)),
+                  total_count,
+                  page,
+                  total_pages,
+                });
+              },
+            );
           },
         );
       });

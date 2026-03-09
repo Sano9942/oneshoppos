@@ -121,15 +121,28 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
   });
 
   app.get("/api/action-history", (req, res) => {
-    const { search } = req.query;
-    let where = "";
-    let params = [];
+    const { search, date_from, date_to, action_type } = req.query;
+    const conditions = [];
+    const params = [];
 
     if (search) {
-      where =
-        "WHERE user_name LIKE ? OR action_type LIKE ? OR description LIKE ?";
-      params = [`%${search}%`, `%${search}%`, `%${search}%`];
+      conditions.push("(user_name LIKE ? OR action_type LIKE ? OR description LIKE ?)");
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
+    if (date_from) {
+      conditions.push("date(timestamp) >= ?");
+      params.push(date_from);
+    }
+    if (date_to) {
+      conditions.push("date(timestamp) <= ?");
+      params.push(date_to);
+    }
+    if (action_type) {
+      conditions.push("action_type = ?");
+      params.push(action_type);
+    }
+
+    const where = conditions.length ? "WHERE " + conditions.join(" AND ") : "";
 
     db.all(
       `SELECT * FROM action_history ${where} ORDER BY timestamp DESC LIMIT 500`,

@@ -358,6 +358,55 @@ module.exports = function registerPurchasingReports(app, deps, helpers) {
     });
   });
 
+  // Purchase Orders Report: read-only PO list for the reports tab
+  app.get("/api/reports/purchase-orders-report", (req, res) => {
+    const { date_from, date_to, status, supplier_id } = req.query;
+    const tz = req.company?.timezone || "UTC";
+    const where = [];
+    const params = [];
+
+    if (date_from) {
+      where.push("po.created_at >= ?");
+      params.push(toUtcStart(date_from, tz));
+    }
+    if (date_to) {
+      where.push("po.created_at < ?");
+      params.push(toUtcEnd(date_to, tz));
+    }
+    if (status) {
+      where.push("po.status = ?");
+      params.push(status);
+    }
+    if (supplier_id) {
+      where.push("po.supplier_id = ?");
+      params.push(supplier_id);
+    }
+
+    const sql = `
+      SELECT
+        po.id,
+        po.created_at,
+        po.status,
+        s.name AS supplier_name,
+        COALESCE(o.name, 'Unreceived / Not Assigned') AS outlet_name,
+        ROUND(COALESCE(SUM(poi.quantity * poi.cost_price), 0), 2) AS total_amount,
+        grn.received_at
+      FROM purchase_orders po
+      JOIN suppliers s ON s.id = po.supplier_id
+      LEFT JOIN goods_received_notes grn ON grn.po_id = po.id
+      LEFT JOIN outlets o ON o.id = grn.outlet_id
+      LEFT JOIN purchase_order_items poi ON poi.po_id = po.id
+      ${where.length ? "WHERE " + where.join(" AND ") : ""}
+      GROUP BY po.id
+      ORDER BY po.created_at DESC, po.id DESC
+    `;
+
+    db.all(sql, params, (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ items: rows || [] });
+    });
+  });
+
   app.get("/api/reports/procurement-parity", (req, res) => {
     const { date_from, date_to, outlet_id } = req.query;
     const tz = req.company?.timezone || "UTC";
