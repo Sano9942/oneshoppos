@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { useNavigate } from "react-router-dom";
-import { Download, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { BarChart2, CreditCard, Download, Hash, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { API_BASE as API } from "../../config";
+import { fmtUtcDateTime } from "../../utils/dates";
 import {
   Badge,
   BulkActionBar,
@@ -173,6 +174,22 @@ export default function InventoryRedesign() {
   const importFileRef = useRef(null);
   const [page, setPage] = useState(1);
 
+  // Stock popup
+  const [stockPopup, setStockPopup] = useState(null); // { productId, productName, loading, stock: [] }
+
+  // Serials modal
+  const [serialsModal, setSerialsModal] = useState(null); // { productId, productName, loading, serials: [], newSerials: "" }
+  const [serialsSaving, setSerialsSaving] = useState(false);
+
+  // Gift cards
+  const [activeTab, setActiveTab] = useState("products"); // "products" | "giftcards"
+  const [giftCards, setGiftCards] = useState([]);
+  const [giftCardsLoading, setGiftCardsLoading] = useState(false);
+  const [gcInitialValue, setGcInitialValue] = useState("");
+  const [gcGenerating, setGcGenerating] = useState(false);
+  const [gcLookupCode, setGcLookupCode] = useState("");
+  const [gcLookupResult, setGcLookupResult] = useState(null);
+
   const fetchProducts = async () => {
     setLoading(true);
     try {
@@ -215,6 +232,101 @@ export default function InventoryRedesign() {
     }
   };
 
+  const openStockPopup = async (productId, productName, e) => {
+    e.stopPropagation();
+    setStockPopup({ productId, productName, loading: true, stock: [] });
+    try {
+      const res = await fetch(`${API}/api/products/${productId}/stock`, { headers: authHeaders() });
+      const data = await res.json();
+      setStockPopup({ productId, productName, loading: false, stock: data.stock || [] });
+    } catch {
+      setStockPopup((prev) => prev && ({ ...prev, loading: false }));
+    }
+  };
+
+  const openSerialsModal = async (productId, productName, e) => {
+    e.stopPropagation();
+    setSerialsModal({ productId, productName, loading: true, serials: [], newSerials: "" });
+    try {
+      const res = await fetch(`${API}/api/products/${productId}/serials`, { headers: authHeaders() });
+      const data = await res.json();
+      setSerialsModal({ productId, productName, loading: false, serials: data.serials || [], newSerials: "" });
+    } catch {
+      setSerialsModal((prev) => prev && ({ ...prev, loading: false }));
+    }
+  };
+
+  const addSerials = async () => {
+    if (!serialsModal || !serialsModal.newSerials.trim()) return;
+    const serial_numbers = serialsModal.newSerials.split("\n").map((s) => s.trim()).filter(Boolean);
+    if (!serial_numbers.length) return;
+    setSerialsSaving(true);
+    try {
+      const res = await fetch(`${API}/api/products/${serialsModal.productId}/serials`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ serial_numbers }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to add serials");
+      // Refresh serials list
+      const refetch = await fetch(`${API}/api/products/${serialsModal.productId}/serials`, { headers: authHeaders() });
+      const refetchData = await refetch.json();
+      setSerialsModal((prev) => prev && ({ ...prev, serials: refetchData.serials || [], newSerials: "" }));
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSerialsSaving(false);
+    }
+  };
+
+  const fetchGiftCards = async () => {
+    setGiftCardsLoading(true);
+    try {
+      const res = await fetch(`${API}/api/gift-cards`, { headers: authHeaders() });
+      const data = await res.json();
+      setGiftCards(data.giftCards || data.gift_cards || []);
+    } catch {
+      // non-fatal
+    } finally {
+      setGiftCardsLoading(false);
+    }
+  };
+
+  const generateGiftCard = async () => {
+    const val = Number(gcInitialValue);
+    if (!val || val <= 0) { alert("Enter a valid initial value."); return; }
+    setGcGenerating(true);
+    try {
+      const res = await fetch(`${API}/api/gift-cards`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ initial_value: val }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to generate gift card");
+      setGcInitialValue("");
+      alert(`Gift card generated!\nCode: ${data.code || data.gift_card?.code || "—"}`);
+      await fetchGiftCards();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setGcGenerating(false);
+    }
+  };
+
+  const lookupGiftCard = async () => {
+    if (!gcLookupCode.trim()) return;
+    try {
+      const res = await fetch(`${API}/api/gift-cards/${encodeURIComponent(gcLookupCode.trim())}`, { headers: authHeaders() });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Not found");
+      setGcLookupResult(data.giftCard || data.gift_card || data);
+    } catch (err) {
+      setGcLookupResult({ error: err.message });
+    }
+  };
+
   useEffect(() => {
     fetchCategories();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -225,6 +337,10 @@ export default function InventoryRedesign() {
     if (!outlets.length) return;
     setOutletFilter(String(outlets[0].id));
   }, [canViewAllLocations, outletFilter, outlets]);
+
+  useEffect(() => {
+    if (activeTab === "giftcards") fetchGiftCards();
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const t = setTimeout(fetchProducts, search ? 250 : 0);
@@ -338,6 +454,19 @@ export default function InventoryRedesign() {
       subtitle="Manage products, pricing, stock levels, and variants."
       right={
         <div className="flex items-center gap-2">
+          <button
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium ${activeTab === "products" ? "bg-(--ui-primary) text-white" : "text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"}`}
+            onClick={() => setActiveTab("products")}
+          >
+            Products
+          </button>
+          <button
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium ${activeTab === "giftcards" ? "bg-(--ui-primary) text-white" : "text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"}`}
+            onClick={() => setActiveTab("giftcards")}
+          >
+            <CreditCard size={13} className="mr-1 inline" />
+            Gift Cards
+          </button>
           <Button onClick={() => downloadImportTemplate(outlets)}>
             <Download size={14} className="mr-1 inline" />
             Template
@@ -385,7 +514,105 @@ export default function InventoryRedesign() {
         </div>
       }
     >
-      <SectionCard>
+      {activeTab === "giftcards" ? (
+        <SectionCard className="p-4">
+          <div className="mb-4 flex items-center justify-between">
+            <p className="font-semibold text-(--ui-text)">Gift Cards</p>
+            <Button size="sm" onClick={fetchGiftCards} disabled={giftCardsLoading}>Refresh</Button>
+          </div>
+
+          {/* Generate new gift card */}
+          <div className="mb-4 flex items-end gap-2 rounded border border-(--ui-border) bg-(--ui-muted-surface) p-3">
+            <div>
+              <label className="mb-1 block text-xs text-(--ui-text-muted)">Initial Value (PKRs)</label>
+              <Input
+                type="number"
+                min="1"
+                step="0.01"
+                value={gcInitialValue}
+                onChange={(e) => setGcInitialValue(e.target.value)}
+                placeholder="e.g. 500"
+                className="w-40"
+              />
+            </div>
+            <Button tone="primary" onClick={generateGiftCard} disabled={gcGenerating}>
+              <CreditCard size={13} className="mr-1 inline" />
+              {gcGenerating ? "Generating..." : "Generate Gift Card"}
+            </Button>
+          </div>
+
+          {/* Lookup */}
+          <div className="mb-4 flex items-end gap-2 rounded border border-(--ui-border) p-3">
+            <div>
+              <label className="mb-1 block text-xs text-(--ui-text-muted)">Look up Gift Card</label>
+              <Input
+                value={gcLookupCode}
+                onChange={(e) => { setGcLookupCode(e.target.value); setGcLookupResult(null); }}
+                placeholder="Enter code"
+                className="w-52"
+              />
+            </div>
+            <Button onClick={lookupGiftCard}>Lookup</Button>
+            {gcLookupResult ? (
+              gcLookupResult.error ? (
+                <p className="text-sm text-rose-600">{gcLookupResult.error}</p>
+              ) : (
+                <div className="text-sm">
+                  <span className="font-mono font-medium text-(--ui-text)">{gcLookupResult.code}</span>
+                  {" · "}
+                  <span className="text-(--ui-text-muted)">
+                    Balance: PKRs {Number(gcLookupResult.remaining_value ?? gcLookupResult.balance ?? 0).toFixed(2)}
+                  </span>
+                  {" · "}
+                  <Badge tone={gcLookupResult.status === "active" ? "success" : "default"}>
+                    {gcLookupResult.status || "active"}
+                  </Badge>
+                </div>
+              )
+            ) : null}
+          </div>
+
+          {/* Gift cards list */}
+          <div className="overflow-auto">
+            <table className="min-w-full border-t border-(--ui-border) text-sm">
+              <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
+                <tr>
+                  <th className="px-3 py-2 text-left">Code</th>
+                  <th className="px-3 py-2 text-right">Initial Value</th>
+                  <th className="px-3 py-2 text-right">Remaining</th>
+                  <th className="px-3 py-2 text-left">Status</th>
+                  <th className="px-3 py-2 text-left">Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {giftCards.map((gc) => (
+                  <tr key={gc.id} className="border-t border-(--ui-border)">
+                    <td className="px-3 py-2 font-mono text-xs text-(--ui-text)">{gc.code}</td>
+                    <td className="px-3 py-2 text-right text-(--ui-text)">
+                      PKRs {Number(gc.initial_value || 0).toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-medium text-(--ui-text)">
+                      PKRs {Number(gc.remaining_value ?? gc.balance ?? gc.initial_value ?? 0).toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Badge tone={gc.status === "active" ? "success" : "default"}>{gc.status || "active"}</Badge>
+                    </td>
+                    <td className="px-3 py-2 text-(--ui-text-muted)">{fmtUtcDateTime(gc.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {giftCardsLoading ? (
+              <p className="p-6 text-center text-sm text-(--ui-text-muted)">Loading gift cards...</p>
+            ) : null}
+            {!giftCardsLoading && giftCards.length === 0 ? (
+              <p className="p-6 text-center text-sm text-(--ui-text-muted)">No gift cards yet. Generate one above.</p>
+            ) : null}
+          </div>
+        </SectionCard>
+      ) : null}
+
+      {activeTab === "products" ? <SectionCard>
         <TableToolbar
           left={
             <>
@@ -582,6 +809,7 @@ export default function InventoryRedesign() {
                 </th>
                 <th className="px-3 py-2">Category</th>
                 <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2 text-right">Tools</th>
               </tr>
             </thead>
             <tbody>
@@ -637,6 +865,24 @@ export default function InventoryRedesign() {
                       {p.status || "active"}
                     </Badge>
                   </td>
+                  <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        title="Stock by outlet"
+                        className="rounded p-1 text-(--ui-text-muted) hover:bg-(--ui-muted-surface) hover:text-(--ui-text)"
+                        onClick={(e) => openStockPopup(p.id, p.name, e)}
+                      >
+                        <BarChart2 size={14} />
+                      </button>
+                      <button
+                        title="Serial numbers"
+                        className="rounded p-1 text-(--ui-text-muted) hover:bg-(--ui-muted-surface) hover:text-(--ui-text)"
+                        onClick={(e) => openSerialsModal(p.id, p.name, e)}
+                      >
+                        <Hash size={14} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -665,7 +911,7 @@ export default function InventoryRedesign() {
             </Button>
           </div>
         </div>
-      </SectionCard>
+      </SectionCard> : null}
     </PageShell>
     {importResults !== null && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -716,6 +962,117 @@ export default function InventoryRedesign() {
         </div>
       </div>
     )}
+
+    {/* Stock by outlet popup */}
+    {stockPopup ? (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
+        <div className="w-full max-w-sm rounded-xl border border-(--ui-border) bg-white shadow-xl">
+          <div className="flex items-center justify-between border-b border-(--ui-border) px-4 py-3">
+            <div>
+              <p className="font-semibold text-(--ui-text)">Stock by Outlet</p>
+              <p className="text-xs text-(--ui-text-muted)">{stockPopup.productName}</p>
+            </div>
+            <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={() => setStockPopup(null)}>
+              <X size={16} />
+            </button>
+          </div>
+          <div className="overflow-auto p-4">
+            {stockPopup.loading ? (
+              <p className="py-4 text-center text-sm text-(--ui-text-muted)">Loading...</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-(--ui-border) text-left text-xs uppercase text-(--ui-text-muted)">
+                    <th className="pb-2 pr-4">Outlet</th>
+                    <th className="pb-2 text-right">Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(stockPopup.stock || []).map((s) => (
+                    <tr key={s.outlet_id} className="border-t border-(--ui-border)">
+                      <td className="py-1.5 pr-4 text-(--ui-text)">{s.outlet_name || `Outlet #${s.outlet_id}`}</td>
+                      <td className="py-1.5 text-right font-medium text-(--ui-text)">{s.quantity ?? 0}</td>
+                    </tr>
+                  ))}
+                  {(stockPopup.stock || []).length > 1 ? (
+                    <tr className="border-t-2 border-(--ui-border) font-semibold">
+                      <td className="py-1.5 pr-4 text-(--ui-text)">Total</td>
+                      <td className="py-1.5 text-right text-(--ui-text)">
+                        {(stockPopup.stock || []).reduce((sum, s) => sum + (s.quantity ?? 0), 0)}
+                      </td>
+                    </tr>
+                  ) : null}
+                  {(stockPopup.stock || []).length === 0 ? (
+                    <tr>
+                      <td colSpan="2" className="py-4 text-center text-xs text-(--ui-text-muted)">No stock data</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <div className="flex justify-end border-t border-(--ui-border) px-4 py-3">
+            <Button size="sm" onClick={() => setStockPopup(null)}>Close</Button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+
+    {/* Serial numbers modal */}
+    {serialsModal ? (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
+        <div className="w-full max-w-md rounded-xl border border-(--ui-border) bg-white shadow-xl">
+          <div className="flex items-center justify-between border-b border-(--ui-border) px-4 py-3">
+            <div>
+              <p className="font-semibold text-(--ui-text)">Serial Numbers</p>
+              <p className="text-xs text-(--ui-text-muted)">{serialsModal.productName}</p>
+            </div>
+            <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={() => setSerialsModal(null)}>
+              <X size={16} />
+            </button>
+          </div>
+          <div className="max-h-[40vh] overflow-auto p-4">
+            {serialsModal.loading ? (
+              <p className="py-4 text-center text-sm text-(--ui-text-muted)">Loading...</p>
+            ) : (
+              <>
+                {(serialsModal.serials || []).length === 0 ? (
+                  <p className="text-center text-sm text-(--ui-text-muted)">No serial numbers yet.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {serialsModal.serials.map((s) => (
+                      <div key={s.id} className="flex items-center justify-between rounded border border-(--ui-border) px-2 py-1">
+                        <span className="font-mono text-xs text-(--ui-text)">{s.serial_number}</span>
+                        <Badge tone={s.status === "available" ? "success" : "default"}>
+                          {s.status || "available"}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          <div className="border-t border-(--ui-border) p-4">
+            <p className="mb-2 text-xs font-medium text-(--ui-text-muted)">Add Serial Numbers (one per line)</p>
+            <textarea
+              className="w-full rounded border border-(--ui-border) p-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-(--ui-primary)"
+              rows={4}
+              placeholder={"SN-001\nSN-002\nSN-003"}
+              value={serialsModal.newSerials}
+              onChange={(e) => setSerialsModal((prev) => prev && ({ ...prev, newSerials: e.target.value }))}
+            />
+            <div className="mt-2 flex justify-end gap-2">
+              <Button size="sm" onClick={() => setSerialsModal(null)}>Close</Button>
+              <Button size="sm" tone="primary" onClick={addSerials} disabled={serialsSaving}>
+                <Hash size={12} className="mr-1 inline" />
+                {serialsSaving ? "Adding..." : "Add Serials"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    ) : null}
     </>
   );
 }
