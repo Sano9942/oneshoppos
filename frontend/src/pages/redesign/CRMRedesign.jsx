@@ -15,6 +15,23 @@ const STAGES = ["new", "contacted", "qualified", "converted", "lost"];
 const STAGE_TONE = { new: "default", contacted: "info", qualified: "warning", converted: "success", lost: "danger" };
 const PRIORITY_TONE = { low: "default", medium: "warning", high: "danger" };
 
+const ACTIVITY_TYPES = [
+  { value: "note", label: "Note" },
+  { value: "call", label: "Call" },
+  { value: "email", label: "Email" },
+  { value: "meeting", label: "Meeting" },
+  { value: "demo", label: "Demo" },
+  { value: "follow_up", label: "Follow-up" },
+];
+const ACTIVITY_TYPE_STYLE = {
+  note:      "bg-gray-100 text-gray-700",
+  call:      "bg-blue-100 text-blue-700",
+  email:     "bg-purple-100 text-purple-700",
+  meeting:   "bg-green-100 text-green-700",
+  demo:      "bg-orange-100 text-orange-700",
+  follow_up: "bg-amber-100 text-amber-700",
+};
+
 const EMPTY_FORM = {
   name: "", company: "", phone: "", email: "", source: "",
   priority: "medium", stage: "new", expected_value: 0, assigned_to: "", notes: "",
@@ -38,6 +55,7 @@ export default function CRMRedesign() {
   const [activityLead, setActivityLead] = useState(null);
   const [activities, setActivities] = useState([]);
   const [activityText, setActivityText] = useState("");
+  const [activityType, setActivityType] = useState("note");
   const [addingActivity, setAddingActivity] = useState(false);
 
   const load = useCallback(async () => {
@@ -124,9 +142,10 @@ export default function CRMRedesign() {
       await fetch(`${API}/api/crm/leads/${activityLead.id}/activities`, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ type: "note", description: activityText, employee_id: null }),
+        body: JSON.stringify({ type: activityType, description: activityText, employee_id: null }),
       });
       setActivityText("");
+      setActivityType("note");
       await loadActivities(activityLead.id);
     } finally {
       setAddingActivity(false);
@@ -296,16 +315,27 @@ export default function CRMRedesign() {
               </button>
             </div>
 
-            <form onSubmit={addActivity} className="mb-3 flex gap-2">
-              <Input
-                className="flex-1"
-                placeholder="Add a note..."
-                value={activityText}
-                onChange={(e) => setActivityText(e.target.value)}
-              />
-              <Button tone="primary" type="submit" disabled={addingActivity}>
-                {addingActivity ? "..." : "Add"}
-              </Button>
+            <form onSubmit={addActivity} className="mb-3 flex flex-col gap-2">
+              <div className="flex gap-2">
+                <Select
+                  value={activityType}
+                  onChange={(e) => setActivityType(e.target.value)}
+                  className="w-36 shrink-0"
+                >
+                  {ACTIVITY_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </Select>
+                <Input
+                  className="flex-1"
+                  placeholder="Add a note..."
+                  value={activityText}
+                  onChange={(e) => setActivityText(e.target.value)}
+                />
+                <Button tone="primary" type="submit" disabled={addingActivity}>
+                  {addingActivity ? "..." : "Add"}
+                </Button>
+              </div>
             </form>
 
             <div className="flex-1 overflow-auto divide-y divide-(--ui-border) rounded-lg border border-(--ui-border)">
@@ -314,6 +344,11 @@ export default function CRMRedesign() {
               )}
               {activities.map((a) => (
                 <div key={a.id} className="p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold capitalize ${ACTIVITY_TYPE_STYLE[a.type] || ACTIVITY_TYPE_STYLE.note}`}>
+                      {(a.type || "note").replace("_", " ")}
+                    </span>
+                  </div>
                   <p className="text-sm text-(--ui-text)">{a.description}</p>
                   <p className="mt-0.5 text-xs text-(--ui-text-muted)">
                     {a.employee_name || "System"} · {fmtDate(a.created_at)}
