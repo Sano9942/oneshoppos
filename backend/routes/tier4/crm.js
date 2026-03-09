@@ -1,4 +1,12 @@
 const express = require("express");
+const nodemailer = require("nodemailer");
+
+// ─── FBR E-INVOICING PLACEHOLDER ───────────────────────────────────────
+// When FBR credentials are available, POST sale data to FBR on each sale.
+// Required: FBR_API_URL, FBR_CLIENT_ID, FBR_CLIENT_SECRET in .env
+// Payload fields: invoice_number, buyer_ntn, items[], total_amount, tax_amount
+// Implementation deferred — feature flag: e_invoicing_export
+// ────────────────────────────────────────────────────────────────────────
 
 module.exports = function createCRMRouter({
   db,
@@ -573,6 +581,107 @@ module.exports = function createCRMRouter({
             message: "Quotation status updated",
             changed: this.changes || 0,
           });
+        },
+      );
+    },
+  );
+
+  router.post(
+    "/api/quotations/:id/send",
+    requirePerm("manage_orders"),
+    requireFeature("crm_quotations"),
+    (req, res) => {
+      const { id } = req.params;
+      db.get(
+        `SELECT q.*, c.name AS customer_name, c.email AS customer_email
+         FROM quotations q
+         LEFT JOIN customers c ON c.id = q.customer_id
+         WHERE q.id = ?`,
+        [id],
+        (err, quote) => {
+          if (err) return res.status(500).json({ error: err.message });
+          if (!quote) return res.status(404).json({ error: "Quotation not found" });
+
+          const toEmail = quote.customer_email;
+          if (!toEmail) return res.status(400).json({ error: "Customer has no email address." });
+
+          db.all(
+            `SELECT qi.*, p.name AS product_name
+             FROM quotation_items qi
+             JOIN products p ON p.id = qi.product_id
+             WHERE qi.quotation_id = ?`,
+            [id],
+            (itemErr, items) => {
+              if (itemErr) return res.status(500).json({ error: itemErr.message });
+
+              db.get("SELECT * FROM email_config LIMIT 1", [], (cfgErr, cfg) => {
+                if (cfgErr) return res.status(500).json({ error: cfgErr.message });
+                if (!cfg || !cfg.smtp_host) {
+                  return res.status(400).json({ error: "Email not configured. Set up SMTP in Printer Settings." });
+                }
+
+                const rowsHtml = (items || []).map((it) =>
+                  `<tr>
+                    <td style="padding:6px 10px;border-bottom:1px solid #eee">${it.product_name || "—"}</td>
+                    <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">${it.quantity}</td>
+                    <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">PKRs ${Number(it.unit_price || 0).toFixed(2)}</td>
+                    <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">PKRs ${Number(it.line_total || 0).toFixed(2)}</td>
+                  </tr>`
+                ).join("");
+
+                const html = `
+                  <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+                    <h2 style="color:#1e293b">Quotation #${quote.quote_number || quote.id}</h2>
+                    <p>Dear ${quote.customer_name || "Customer"},</p>
+                    <p>Please find your quotation details below:</p>
+                    <p><strong>Date:</strong> ${quote.created_at ? quote.created_at.split(" ")[0] : "—"}</p>
+                    ${quote.valid_until ? `<p><strong>Valid Until:</strong> ${quote.valid_until}</p>` : ""}
+                    <table style="width:100%;border-collapse:collapse;margin:16px 0">
+                      <thead>
+                        <tr style="background:#f8fafc">
+                          <th style="padding:8px 10px;text-align:left;border-bottom:2px solid #e2e8f0">Product</th>
+                          <th style="padding:8px 10px;text-align:right;border-bottom:2px solid #e2e8f0">Qty</th>
+                          <th style="padding:8px 10px;text-align:right;border-bottom:2px solid #e2e8f0">Unit Price</th>
+                          <th style="padding:8px 10px;text-align:right;border-bottom:2px solid #e2e8f0">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>${rowsHtml}</tbody>
+                      <tfoot>
+                        <tr>
+                          <td colspan="3" style="padding:8px 10px;text-align:right;font-weight:bold">Grand Total</td>
+                          <td style="padding:8px 10px;text-align:right;font-weight:bold">PKRs ${Number(quote.total_amount || 0).toFixed(2)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                    ${quote.notes ? `<p><em>Notes: ${quote.notes}</em></p>` : ""}
+                  </div>`;
+
+                const transporter = nodemailer.createTransport({
+                  host: cfg.smtp_host,
+                  port: Number(cfg.smtp_port || 587),
+                  secure: cfg.smtp_port === 465,
+                  auth: { user: cfg.smtp_user, pass: cfg.smtp_pass },
+                });
+
+                transporter.sendMail({
+                  from: cfg.from_email || cfg.smtp_user,
+                  to: toEmail,
+                  subject: `Quotation #${quote.quote_number || quote.id} from ${cfg.company_name || "Us"}`,
+                  html,
+                }, (mailErr) => {
+                  if (mailErr) return res.status(500).json({ error: `Failed to send email: ${mailErr.message}` });
+                  db.run(
+                    "UPDATE quotations SET status = 'sent', updated_at = datetime('now','localtime') WHERE id = ?",
+                    [id],
+                    (updErr) => {
+                      if (updErr) return res.status(500).json({ error: updErr.message });
+                      res.json({ success: true, message: `Quotation sent to ${toEmail}` });
+                    },
+                  );
+                });
+              });
+            },
+          );
         },
       );
     },

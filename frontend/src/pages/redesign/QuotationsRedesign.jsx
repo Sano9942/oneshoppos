@@ -40,6 +40,7 @@ export default function QuotationsRedesign() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [sendMsg, setSendMsg] = useState({ id: null, msg: "", ok: true });
 
   // Editor state
   const [editing, setEditing] = useState(null); // null = list view, else quotation obj
@@ -180,6 +181,23 @@ export default function QuotationsRedesign() {
       });
       await load();
     } catch { /* silent */ }
+  };
+
+  const sendEmail = async (id) => {
+    setSendMsg({ id, msg: "Sending...", ok: true });
+    try {
+      const res = await fetch(`${API}/api/quotations/${id}/send`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to send email");
+      setSendMsg({ id, msg: data.message || "Email sent", ok: true });
+      await load();
+    } catch (e) {
+      setSendMsg({ id, msg: e.message || "Failed to send email", ok: false });
+    }
+    setTimeout(() => setSendMsg({ id: null, msg: "", ok: true }), 4000);
   };
 
   const updateItem = (idx, key, value) =>
@@ -412,17 +430,30 @@ export default function QuotationsRedesign() {
                     <td className="px-3 py-2 text-(--ui-text-muted)">{fmtDate(q.valid_until)}</td>
                     <td className="px-3 py-2 text-right font-semibold text-(--ui-text)">{money(q.total_amount)}</td>
                     <td className="px-3 py-2 text-right">
-                      <div className="inline-flex flex-wrap justify-end gap-1">
-                        <Button size="sm" onClick={() => openEdit(q.id)}>Edit</Button>
-                        {q.status === "draft" && (
-                          <Button size="sm" onClick={() => setStatus(q.id, "sent")}>Send</Button>
+                      <div className="inline-flex flex-col items-end gap-1">
+                        <div className="inline-flex flex-wrap justify-end gap-1">
+                          <Button size="sm" onClick={() => openEdit(q.id)}>Edit</Button>
+                          {q.status === "draft" && (
+                            <Button size="sm" onClick={() => setStatus(q.id, "sent")}>Mark Sent</Button>
+                          )}
+                          {(q.status === "draft" || q.status === "sent") && (
+                            <Button size="sm" tone="info" onClick={() => sendEmail(q.id)}
+                              disabled={sendMsg.id === q.id && sendMsg.msg === "Sending..."}>
+                              Send Email
+                            </Button>
+                          )}
+                          {q.status === "accepted" && (
+                            <Button size="sm" tone="primary" onClick={() => convert(q.id)}>Convert</Button>
+                          )}
+                          <Button size="sm" tone="danger" onClick={() => remove(q.id)}>
+                            <Trash2 size={11} />
+                          </Button>
+                        </div>
+                        {sendMsg.id === q.id && sendMsg.msg && (
+                          <span className={`text-xs ${sendMsg.ok ? "text-emerald-600" : "text-rose-600"}`}>
+                            {sendMsg.msg}
+                          </span>
                         )}
-                        {q.status === "accepted" && (
-                          <Button size="sm" tone="primary" onClick={() => convert(q.id)}>Convert</Button>
-                        )}
-                        <Button size="sm" tone="danger" onClick={() => remove(q.id)}>
-                          <Trash2 size={11} />
-                        </Button>
                       </div>
                     </td>
                   </tr>

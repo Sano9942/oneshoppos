@@ -1,6 +1,11 @@
 module.exports = function registerReceiptTemplateRoutes(app, deps) {
   const { db, requirePerm } = deps;
 
+  // Extend action_history with extra columns if not already present (best-effort)
+  db.run("ALTER TABLE action_history ADD COLUMN entity_id INTEGER", () => {});
+  db.run("ALTER TABLE action_history ADD COLUMN entity_type TEXT", () => {});
+  db.run("ALTER TABLE action_history ADD COLUMN employee_id INTEGER", () => {});
+
 // --- RECEIPT TEMPLATES ---
 
   app.get("/api/receipt-templates", (req, res) => {
@@ -116,6 +121,25 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
       function (err) {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ id: this.lastID, message: "Action logged" });
+      },
+    );
+  });
+
+  // Utility logging endpoint — body: { action_type, description, entity_id, entity_type, employee_id }
+  app.post("/api/action-history/log", requirePerm("view_reports"), (req, res) => {
+    const { action_type, description, entity_id, entity_type } = req.body;
+    if (!action_type || !description) {
+      return res.status(400).json({ error: "action_type and description are required" });
+    }
+    const employee_id =
+      req.body.employee_id || req.headers["x-employee-id"] || null;
+    db.run(
+      `INSERT INTO action_history (action_type, description, entity_id, entity_type, employee_id)
+       VALUES (?, ?, ?, ?, ?)`,
+      [action_type, description, entity_id || null, entity_type || null, employee_id ? Number(employee_id) : null],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, id: this.lastID });
       },
     );
   });

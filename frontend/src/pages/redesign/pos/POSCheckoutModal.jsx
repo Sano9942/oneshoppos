@@ -8,6 +8,9 @@ import {
   Wallet,
   Trash2,
   CheckCircle2,
+  Star,
+  ToggleLeft,
+  ToggleRight,
 } from "lucide-react";
 import { usePOS } from "./POSContext";
 
@@ -45,7 +48,36 @@ export default function POSCheckoutModal() {
     change,
     completeSale,
     submitting,
+    // Loyalty & wallet
+    checkoutWalletBalance,
+    checkoutWalletLoading,
+    redeemPointsOn,
+    setRedeemPointsOn,
+    payWithWalletOn,
+    setPayWithWalletOn,
+    checkoutCustomerPoints,
+    pointsDiscount,
+    total,
   } = usePOS();
+
+  // Toggle wallet payment — adds/removes a Wallet entry in the payments array
+  const handleWalletToggle = () => {
+    const next = !payWithWalletOn;
+    setPayWithWalletOn(next);
+    if (next) {
+      // Add wallet payment entry capped at total due
+      const walletAmt = Math.min(checkoutWalletBalance, total);
+      if (walletAmt > 0) {
+        setPayments((prev) => [
+          ...prev.filter((p) => p.method !== "Wallet"),
+          { method: "Wallet", amount: walletAmt },
+        ]);
+      }
+    } else {
+      // Remove wallet payment entries
+      setPayments((prev) => prev.filter((p) => p.method !== "Wallet"));
+    }
+  };
 
   if (!checkoutOpen) return null;
 
@@ -235,6 +267,88 @@ export default function POSCheckoutModal() {
               </div>
             )}
           </div>
+
+          {/* Loyalty & Wallet panel — shown only when a customer is selected */}
+          {checkoutCustomerId && (
+            <div className="rounded-2xl border border-violet-100 bg-violet-50/60 px-4 py-3 space-y-3">
+              {/* Balance summary */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-violet-700 uppercase tracking-wide">
+                  <Star size={13} className="text-amber-500" />
+                  Points & Wallet
+                </div>
+                {checkoutWalletLoading && (
+                  <span className="text-xs text-violet-400">Loading…</span>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1 bg-white rounded-xl px-3 py-2 text-center border border-violet-100">
+                  <p className="text-xs text-slate-500 mb-0.5">Points</p>
+                  <p className="text-lg font-black text-violet-700">
+                    {checkoutCustomerPoints}
+                  </p>
+                </div>
+                <div className="flex-1 bg-white rounded-xl px-3 py-2 text-center border border-violet-100">
+                  <p className="text-xs text-slate-500 mb-0.5">Wallet</p>
+                  <p className="text-lg font-black text-emerald-600">
+                    {money(checkoutWalletBalance)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Redeem Points toggle */}
+              {checkoutCustomerPoints >= 100 && (
+                <button
+                  type="button"
+                  onClick={() => setRedeemPointsOn((v) => !v)}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border-2 transition font-semibold text-sm ${
+                    redeemPointsOn
+                      ? "border-amber-400 bg-amber-50 text-amber-800"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <Star size={14} className="text-amber-500" />
+                    Redeem {Math.floor(checkoutCustomerPoints / 100) * 100} pts
+                    <span className="text-xs text-slate-400 font-normal">
+                      = {money(pointsDiscount)} off
+                    </span>
+                  </span>
+                  {redeemPointsOn ? (
+                    <ToggleRight size={20} className="text-amber-500" />
+                  ) : (
+                    <ToggleLeft size={20} className="text-slate-400" />
+                  )}
+                </button>
+              )}
+
+              {/* Pay with Wallet toggle */}
+              {checkoutWalletBalance > 0 && (
+                <button
+                  type="button"
+                  onClick={handleWalletToggle}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border-2 transition font-semibold text-sm ${
+                    payWithWalletOn
+                      ? "border-emerald-400 bg-emerald-50 text-emerald-800"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <Wallet size={14} className="text-emerald-600" />
+                    Pay with Wallet
+                    <span className="text-xs text-slate-400 font-normal">
+                      ({money(checkoutWalletBalance)} available)
+                    </span>
+                  </span>
+                  {payWithWalletOn ? (
+                    <ToggleRight size={20} className="text-emerald-500" />
+                  ) : (
+                    <ToggleLeft size={20} className="text-slate-400" />
+                  )}
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Payment method */}
           <div>

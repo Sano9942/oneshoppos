@@ -17,7 +17,8 @@ import { fmtUtcDateTime } from "../../utils/dates";
 const fmtDate = fmtUtcDateTime;
 
 export default function TransfersRedesign() {
-  const { employee } = useAuth();
+  const { employee, hasPerm } = useAuth();
+  const isAdmin = hasPerm("all_access");
   const [rows, setRows] = useState([]);
   const [products, setProducts] = useState([]);
   const [outlets, setOutlets] = useState([]);
@@ -114,6 +115,19 @@ export default function TransfersRedesign() {
     }
   };
 
+  const reverseTransfer = async (row) => {
+    if (!window.confirm(`Reverse transfer of ${row.quantity}x "${row.product_name}" from ${row.from_outlet_name} → ${row.to_outlet_name}? Stock will be returned to source.`)) return;
+    setError("");
+    try {
+      const res = await fetch(`${API}/api/transfers/${row.id}/reverse`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to reverse transfer");
+      await load();
+    } catch (e) {
+      setError(e.message || "Failed to reverse transfer");
+    }
+  };
+
   return (
     <PageShell
       title="Transfers"
@@ -139,6 +153,7 @@ export default function TransfersRedesign() {
                 <th className="px-3 py-2 text-right">Qty</th>
                 <th className="px-3 py-2 text-left">Note</th>
                 <th className="px-3 py-2 text-left">Employee</th>
+                {isAdmin ? <th className="px-3 py-2 text-right">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -151,6 +166,15 @@ export default function TransfersRedesign() {
                   <td className="px-3 py-2 text-right"><Badge>{r.quantity}</Badge></td>
                   <td className="px-3 py-2 text-(--ui-text-muted)">{r.note || "-"}</td>
                   <td className="px-3 py-2 text-(--ui-text-muted)">{r.employee_name || "Admin"}</td>
+                  {isAdmin ? (
+                    <td className="px-3 py-2 text-right">
+                      {!r.reversed ? (
+                        <Button size="sm" tone="danger" onClick={() => reverseTransfer(r)}>Reverse</Button>
+                      ) : (
+                        <span className="text-xs text-(--ui-text-muted)">Reversed</span>
+                      )}
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>

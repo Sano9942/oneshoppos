@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckSquare, Download, Eye, RefreshCw, Save, Search } from "lucide-react";
+import { CheckSquare, Download, Eye, Package, RefreshCw, Save, Search, Truck } from "lucide-react";
+import { fmtUtcDateTime } from "../../utils/dates";
 import { API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import {
@@ -79,6 +80,7 @@ export default function OrdersRedesign() {
   const [busy, setBusy] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [detailTab, setDetailTab] = useState("items");
   const [page, setPage] = useState(1);
 
   const loadOrders = async () => {
@@ -573,22 +575,96 @@ export default function OrdersRedesign() {
                 </Button>
               </div>
 
+              {/* Detail tabs */}
               <div>
-                <h4 className="mb-2 text-sm font-semibold text-(--ui-text)">Items</h4>
-                <div className="max-h-44 space-y-2 overflow-auto">
-                  {(detail.items || []).map((i) => (
-                    <div
-                      key={i.id}
-                      className="rounded border border-(--ui-border) p-2 text-xs"
+                <div className="mb-2 flex gap-1 border-b border-(--ui-border)">
+                  {[
+                    { id: "items", label: "Items", icon: Package },
+                    { id: "transactions", label: "Transactions", icon: RefreshCw },
+                    { id: "fulfillments", label: "Fulfillments", icon: Truck },
+                  ].map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      onClick={() => setDetailTab(id)}
+                      className={`flex items-center gap-1 border-b-2 px-3 py-1.5 text-xs font-medium transition-colors ${
+                        detailTab === id
+                          ? "border-(--ui-primary) text-(--ui-primary)"
+                          : "border-transparent text-(--ui-text-muted) hover:text-(--ui-text)"
+                      }`}
                     >
-                      <p className="font-medium text-(--ui-text)">
-                        {i.title || i.sku || i.barcode || "Item"}
-                      </p>
-                      <p className="text-(--ui-text-muted)">
-                        Qty {i.qty} | Unit PKRs {Number(i.unit_price || 0).toFixed(2)}
-                      </p>
-                    </div>
+                      <Icon size={11} />
+                      {label}
+                    </button>
                   ))}
+                </div>
+
+                <div className="max-h-52 overflow-auto space-y-1.5">
+                  {detailTab === "items" && (
+                    <>
+                      {(detail.items || []).length === 0 && (
+                        <p className="py-4 text-center text-xs text-(--ui-text-muted)">No items</p>
+                      )}
+                      {(detail.items || []).map((i) => (
+                        <div key={i.id} className="rounded border border-(--ui-border) p-2 text-xs">
+                          <p className="font-medium text-(--ui-text)">{i.title || i.sku || i.barcode || "Item"}</p>
+                          <p className="text-(--ui-text-muted)">Qty {i.qty} | Unit PKRs {Number(i.unit_price || 0).toFixed(2)}</p>
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {detailTab === "transactions" && (
+                    <>
+                      {(detail.transactions || []).length === 0 && (
+                        <p className="py-4 text-center text-xs text-(--ui-text-muted)">No transactions</p>
+                      )}
+                      {(detail.transactions || []).length > 0 && (
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-(--ui-border) text-left text-(--ui-text-muted)">
+                              <th className="pb-1 pr-2">Amount</th>
+                              <th className="pb-1 pr-2">Method</th>
+                              <th className="pb-1">Date</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(detail.transactions || []).map((t) => (
+                              <tr key={t.id} className="border-b border-(--ui-border)">
+                                <td className="py-1 pr-2 font-semibold text-(--ui-text)">
+                                  PKRs {Number(t.amount || 0).toFixed(2)}
+                                </td>
+                                <td className="py-1 pr-2 text-(--ui-text-muted)">{t.method || t.gateway || "-"}</td>
+                                <td className="py-1 text-(--ui-text-muted)">{fmtUtcDateTime(t.created_at || t.timestamp)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </>
+                  )}
+
+                  {detailTab === "fulfillments" && (
+                    <>
+                      {(detail.fulfillments || []).length === 0 && (
+                        <p className="py-4 text-center text-xs text-(--ui-text-muted)">No fulfillments</p>
+                      )}
+                      {(detail.fulfillments || []).map((f) => (
+                        <div key={f.id} className="rounded border border-(--ui-border) p-2 text-xs space-y-0.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium text-(--ui-text)">{f.tracking_number || "No tracking"}</span>
+                            <Badge tone={pillTone(f.status)}>{f.status || "-"}</Badge>
+                          </div>
+                          <p className="text-(--ui-text-muted)">Carrier: {f.carrier || "-"}</p>
+                          <p className="text-(--ui-text-muted)">Shipped: {f.shipped_at ? fmtUtcDateTime(f.shipped_at) : "-"}</p>
+                          {(f.items || []).length > 0 && (
+                            <p className="text-(--ui-text-muted)">
+                              Items: {(f.items || []).map((i) => `${i.title || i.sku} ×${i.qty}`).join(", ")}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               </div>
             </div>

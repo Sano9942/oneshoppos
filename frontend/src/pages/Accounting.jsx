@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_BASE as API } from "../config";
 import { useAuth } from "../auth/AuthProvider";
+import { fmtUtcDate } from "../utils/dates";
 
 function fmt(v) {
   return `PKRs ${Number(v || 0).toFixed(2)}`;
@@ -43,6 +44,10 @@ export default function Accounting() {
   const [ap, setAp] = useState({ supplier_ap: [], customer_ar: [] });
   const [bs, setBs] = useState(null);
 
+  // cashflow daily entries & AP/AR summary
+  const [cashflowDaily, setCashflowDaily] = useState([]);
+  const [apArSummary, setApArSummary] = useState(null);
+
   // new tabs data
   const [expenseData, setExpenseData] = useState({ expenses: [], categories: [] });
   const [expCatFilter, setExpCatFilter] = useState("");
@@ -65,7 +70,7 @@ export default function Accounting() {
     const q = new URLSearchParams({ from, to });
     if (outletId) q.set("outlet_id", outletId);
     try {
-      const [a, b, c, d, e, f, g, h, i] = await Promise.all([
+      const [a, b, c, d, e, f, g, h, i, j, k] = await Promise.all([
         fetch(`${API}/api/accounting/pnl?${q}`, { headers: authHeaders() }).then((r) => r.json()),
         fetch(`${API}/api/accounting/cashflow?from=${from}&to=${to}`, { headers: authHeaders() }).then((r) => r.json()),
         fetch(`${API}/api/accounting/ap`, { headers: authHeaders() }).then((r) => r.json()),
@@ -75,6 +80,8 @@ export default function Accounting() {
         fetch(`${API}/api/accounting/tax-ledger?from=${from}&to=${to}`, { headers: authHeaders() }).then((r) => r.json()),
         fetch(`${API}/api/accounting/supplier-payments?from=${from}&to=${to}`, { headers: authHeaders() }).then((r) => r.json()),
         fetch(`${API}/api/accounting/periods`, { headers: authHeaders() }).then((r) => r.json()),
+        fetch(`${API}/api/accounting/cashflow/daily?from=${from}&to=${to}`, { headers: authHeaders() }).then((r) => r.json()),
+        fetch(`${API}/api/accounting/ap-ar`, { headers: authHeaders() }).then((r) => r.json()),
       ]);
       setPnl(a);
       setCashflow(b);
@@ -85,6 +92,8 @@ export default function Accounting() {
       setTaxLedger(g || null);
       setSupPay(h || { payments: [], total: 0 });
       setPeriods(i?.periods || []);
+      setCashflowDaily(j?.entries || []);
+      setApArSummary(k || null);
     } catch { /* ignore */ }
   }, [authHeaders, from, to, outletId]);
 
@@ -215,35 +224,86 @@ export default function Accounting() {
 
       {/* ── Cash Flow ── */}
       {tab === "cashflow" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white border rounded-xl p-4">
-            <p className="font-semibold text-slate-700 mb-2">Inflows</p>
-            <table className="w-full text-sm">
-              <tbody>
-                {(cashflow?.inflows || []).map((r) => (
-                  <tr key={r.payment_method}><td>{r.payment_method}</td><td className="text-right">{fmt(r.total)}</td></tr>
-                ))}
-                <tr className="font-semibold border-t"><td>Total Inflows</td><td className="text-right">{fmt(cashflow?.total_inflows)}</td></tr>
-              </tbody>
-            </table>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white border rounded-xl p-4">
+              <p className="font-semibold text-slate-700 mb-2">Inflows</p>
+              <table className="w-full text-sm">
+                <tbody>
+                  {(cashflow?.inflows || []).map((r) => (
+                    <tr key={r.payment_method}><td>{r.payment_method}</td><td className="text-right">{fmt(r.total)}</td></tr>
+                  ))}
+                  <tr className="font-semibold border-t"><td>Total Inflows</td><td className="text-right">{fmt(cashflow?.total_inflows)}</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="bg-white border rounded-xl p-4">
+              <p className="font-semibold text-slate-700 mb-2">Outflows</p>
+              <table className="w-full text-sm">
+                <tbody>
+                  <tr><td>Expenses</td><td className="text-right">{fmt(cashflow?.outflows?.expenses)}</td></tr>
+                  <tr><td>Supplier Payments</td><td className="text-right">{fmt(cashflow?.outflows?.supplier_payments)}</td></tr>
+                  <tr className="font-semibold border-t"><td>Total Outflows</td><td className="text-right">{fmt(cashflow?.outflows?.total)}</td></tr>
+                </tbody>
+              </table>
+              <p className="text-xl font-bold mt-4">Net Cash Flow: {fmt(cashflow?.net_cashflow)}</p>
+            </div>
           </div>
           <div className="bg-white border rounded-xl p-4">
-            <p className="font-semibold text-slate-700 mb-2">Outflows</p>
-            <table className="w-full text-sm">
-              <tbody>
-                <tr><td>Expenses</td><td className="text-right">{fmt(cashflow?.outflows?.expenses)}</td></tr>
-                <tr><td>Supplier Payments</td><td className="text-right">{fmt(cashflow?.outflows?.supplier_payments)}</td></tr>
-                <tr className="font-semibold border-t"><td>Total Outflows</td><td className="text-right">{fmt(cashflow?.outflows?.total)}</td></tr>
-              </tbody>
-            </table>
-            <p className="text-xl font-bold mt-4">Net Cash Flow: {fmt(cashflow?.net_cashflow)}</p>
+            <p className="font-semibold text-slate-700 mb-3">Daily Cash Flow</p>
+            <div className="overflow-auto max-h-100">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-slate-500 text-left sticky top-0">
+                  <tr>
+                    <th className="px-2 py-2">Date</th>
+                    <th className="px-2 py-2 text-right">Inflow</th>
+                    <th className="px-2 py-2 text-right">Outflow</th>
+                    <th className="px-2 py-2 text-right">Net</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cashflowDaily.map((r) => (
+                    <tr key={r.date} className="border-t">
+                      <td className="px-2 py-2">{fmtUtcDate(r.date) || r.date}</td>
+                      <td className="px-2 py-2 text-right">{fmt(r.inflow)}</td>
+                      <td className="px-2 py-2 text-right">{fmt(r.outflow)}</td>
+                      <td className={`px-2 py-2 text-right font-semibold ${Number(r.net) >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                        {fmt(r.net)}
+                      </td>
+                    </tr>
+                  ))}
+                  {cashflowDaily.length === 0 && (
+                    <tr><td colSpan={4} className="px-2 py-8 text-center text-slate-400">No daily cash flow data for this period</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
       {/* ── AP & AR ── */}
       {tab === "ap" && (
-        <div className="grid grid-cols-1 gap-4">
+        <div className="space-y-4">
+          {apArSummary && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="bg-white border rounded-xl p-4">
+                <p className="text-xs text-slate-500">Total Payable (AP)</p>
+                <p className="text-xl font-bold text-rose-600 mt-1">{fmt(apArSummary.total_ap)}</p>
+              </div>
+              <div className="bg-white border rounded-xl p-4">
+                <p className="text-xs text-slate-500">Total Receivable (AR)</p>
+                <p className="text-xl font-bold text-emerald-600 mt-1">{fmt(apArSummary.total_ar)}</p>
+              </div>
+              <div className="bg-white border rounded-xl p-4">
+                <p className="text-xs text-slate-500">Net Position</p>
+                <p className={`text-xl font-bold mt-1 ${Number(apArSummary.net_position) >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                  {fmt(apArSummary.net_position)}
+                </p>
+              </div>
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-4">
           <div className="bg-white border rounded-xl p-4 overflow-auto">
             <p className="font-semibold text-slate-700 mb-2">Supplier AP</p>
             <table className="w-full text-sm min-w-175">
@@ -287,6 +347,7 @@ export default function Accounting() {
                 ))}
               </tbody>
             </table>
+          </div>
           </div>
         </div>
       )}

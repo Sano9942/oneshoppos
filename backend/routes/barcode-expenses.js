@@ -1,6 +1,47 @@
 module.exports = function registerBarcodeExpenseRoutes(app, deps) {
   const { db, requirePerm, requireFeature, sqlite3, multer, path, fs, UPLOADS_DIR, DB_PATH, runtimeState } = deps;
 
+  // --- NOTIFICATIONS TABLE ---
+  db.run(`CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    message TEXT,
+    type TEXT DEFAULT 'info',
+    read INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`, (err) => {
+    if (!err) {
+      db.get("SELECT COUNT(*) as cnt FROM notifications", (e, r) => {
+        if (!e && r.cnt === 0) {
+          db.run("INSERT INTO notifications (title, message, type) VALUES ('Welcome to SanoPOS', 'Your POS system is ready.', 'info')");
+          db.run("INSERT INTO notifications (title, message, type) VALUES ('Low Stock Alert', '3 products are below reorder level.', 'warning')");
+          db.run("INSERT INTO notifications (title, message, type) VALUES ('Shift Closed', 'Morning shift closed with PKR 0 variance.', 'success')");
+        }
+      });
+    }
+  });
+
+  // --- PRODUCT SERIAL NUMBERS TABLE ---
+  db.run(`CREATE TABLE IF NOT EXISTS product_serial_numbers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL,
+    sale_id INTEGER,
+    serial_number TEXT NOT NULL,
+    status TEXT DEFAULT 'available',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // --- GIFT CARDS TABLE ---
+  db.run(`CREATE TABLE IF NOT EXISTS gift_cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
+    initial_value REAL NOT NULL,
+    remaining_value REAL NOT NULL,
+    status TEXT DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    redeemed_at DATETIME
+  )`);
+
 // --- BARCODE TEMPLATES ---
 
   app.get("/api/barcode-templates", (req, res) => {
@@ -798,4 +839,139 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
   );
 
   // ─── 3.6 Auto DB Backup (daily, 7-copy retention) ────────────────────────────
+
+  // --- NOTIFICATIONS ---
+
+  app.get("/api/notifications", requirePerm("view_reports"), (req, res) => {
+    db.all(
+      "SELECT * FROM notifications ORDER BY read ASC, created_at DESC",
+      [],
+      (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ notifications: rows });
+      },
+    );
+  });
+
+  app.post("/api/notifications/:id/read", requirePerm("view_reports"), (req, res) => {
+    const { id } = req.params;
+    db.run("UPDATE notifications SET read=1 WHERE id=?", [id], function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      if (this.changes === 0) return res.status(404).json({ error: "Notification not found" });
+      res.json({ updated: true });
+    });
+  });
+
+  // --- SERIAL NUMBERS ---
+
+  app.get("/api/products/:id/serials", requirePerm("manage_inventory"), (req, res) => {
+    const { id } = req.params;
+    db.all(
+      "SELECT * FROM product_serial_numbers WHERE product_id=? ORDER BY created_at DESC",
+      [id],
+      (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ serials: rows });
+      },
+    );
+  });
+
+  app.post("/api/products/:id/serials", requirePerm("manage_inventory"), (req, res) => {
+    const { id } = req.params;
+    const { serial_numbers } = req.body;
+    if (!Array.isArray(serial_numbers) || serial_numbers.length === 0)
+      return res.status(400).json({ error: "serial_numbers array required" });
+    const stmt = db.prepare(
+      "INSERT INTO product_serial_numbers (product_id, serial_number) VALUES (?, ?)",
+    );
+    let inserted = 0;
+    let failed = 0;
+    serial_numbers.forEach((sn) => {
+      stmt.run([id, sn], (err) => {
+        if (err) failed++;
+        else inserted++;
+      });
+    });
+    stmt.finalize((err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ inserted, failed });
+    });
+  });
+
+  app.post("/api/serials/:id/assign", requirePerm("manage_inventory"), (req, res) => {
+    const { id } = req.params;
+    const { sale_id } = req.body;
+    if (!sale_id) return res.status(400).json({ error: "sale_id required" });
+    db.run(
+      "UPDATE product_serial_numbers SET status='sold', sale_id=? WHERE id=?",
+      [sale_id, id],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: "Serial not found" });
+        res.json({ updated: true });
+      },
+    );
+  });
+
+  // --- GIFT CARDS ---
+
+  app.get("/api/gift-cards", requirePerm("manage_orders"), (req, res) => {
+    db.all(
+      "SELECT * FROM gift_cards ORDER BY created_at DESC",
+      [],
+      (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ gift_cards: rows });
+      },
+    );
+  });
+
+  app.post("/api/gift-cards", requirePerm("manage_orders"), (req, res) => {
+    const { initial_value } = req.body;
+    if (!initial_value || Number(initial_value) <= 0)
+      return res.status(400).json({ error: "initial_value must be greater than 0" });
+    const code = require("crypto").randomBytes(4).toString("hex").toUpperCase();
+    const val = Number(initial_value);
+    db.run(
+      "INSERT INTO gift_cards (code, initial_value, remaining_value) VALUES (?, ?, ?)",
+      [code, val, val],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ id: this.lastID, code });
+      },
+    );
+  });
+
+  app.get("/api/gift-cards/:code", (req, res) => {
+    const { code } = req.params;
+    db.get("SELECT * FROM gift_cards WHERE code=?", [code], (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: "Gift card not found" });
+      res.json({ gift_card: row });
+    });
+  });
+
+  app.post("/api/gift-cards/:code/redeem", requirePerm("manage_orders"), (req, res) => {
+    const { code } = req.params;
+    const { amount } = req.body;
+    if (!amount || Number(amount) <= 0)
+      return res.status(400).json({ error: "amount must be greater than 0" });
+    db.get("SELECT * FROM gift_cards WHERE code=?", [code], (err, card) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!card) return res.status(404).json({ error: "Gift card not found" });
+      if (card.status !== "active") return res.status(400).json({ error: "Gift card is not active" });
+      const deduct = Math.min(Number(amount), card.remaining_value);
+      const newBalance = card.remaining_value - deduct;
+      const newStatus = newBalance <= 0 ? "redeemed" : "active";
+      const redeemedAt = newBalance <= 0 ? new Date().toISOString().replace("T", " ").slice(0, 19) : null;
+      db.run(
+        "UPDATE gift_cards SET remaining_value=?, status=?, redeemed_at=COALESCE(redeemed_at, ?) WHERE code=?",
+        [newBalance, newStatus, redeemedAt, code],
+        function (upErr) {
+          if (upErr) return res.status(500).json({ error: upErr.message });
+          res.json({ deducted: deduct, remaining_value: newBalance, status: newStatus });
+        },
+      );
+    });
+  });
 };

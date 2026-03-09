@@ -247,6 +247,10 @@ app.use(globalLimiter);
 
 function loadEmployeePerms(req, res, next) {
   const employeeId = req.headers["x-employee-id"];
+  const parsed = parseInt(employeeId, 10);
+  if (employeeId !== undefined && (isNaN(parsed) || parsed <= 0 || parsed > 999999)) {
+    return res.status(400).json({ error: "Invalid employee ID header" });
+  }
   if (!employeeId) {
     req.employeePerms = [];
     return next();

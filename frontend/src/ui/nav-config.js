@@ -31,6 +31,9 @@ import {
   Clock,
   Printer,
   Monitor,
+  AlertTriangle,
+  Bell,
+  PauseCircle,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -43,6 +46,7 @@ export const SHOPIFY_NAV_GROUPS = [
     items: [
       { name: "POS", path: "/pos", icon: MonitorPlay, newTab: true },
       { name: "Orders", path: "/orders", icon: ShoppingCart, requiredPerm: "manage_orders" },
+      { name: "Parked Sales", path: "/parked-sales", icon: PauseCircle, requiredPerm: "manage_orders" },
       { name: "Customers", path: "/customers", icon: Users },
       { name: "Returns", path: "/returns", icon: RotateCcw },
       { name: "Sales History", path: "/sales-history", icon: Receipt },
@@ -68,6 +72,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Transfers", path: "/transfers", icon: ArrowLeftRight, requiredPerm: "manage_inventory" },
       { name: "Returned Stock", path: "/returned-stock", icon: Package, requiredPerm: "manage_orders" },
       { name: "Supplier Payables", path: "/supplier-payables", icon: CreditCard, requiredPerm: "manage_orders", requiredFlag: "supplier_payables" },
+      { name: "Reorder Alerts", path: "/reorder-alerts", icon: AlertTriangle, requiredPerm: "manage_inventory" },
     ],
   },
   {
@@ -93,6 +98,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Quotations", path: "/quotations", icon: FileText, requiredPerm: "manage_orders", requiredFlag: "crm_quotations" },
       { name: "Attendance", path: "/attendance", icon: Clock, requiredPerm: "view_reports" },
       { name: "HR", path: "/hr", icon: User, requiredPerm: "all_access", requiredFlag: "advanced_hr" },
+      { name: "Notifications", path: "/notifications", icon: Bell, requiredFlag: "notifications" },
     ],
   },
   {

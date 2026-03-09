@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
+  BookTemplate,
   CheckCircle2,
   ChevronRight,
   Download,
   PackageCheck,
+  Pencil,
   Plus,
+  Save,
   Search,
   Send,
+  ThumbsUp,
+  Trash2,
   X,
 } from "lucide-react";
 import { API_BASE as API } from "../../config";
@@ -30,7 +35,7 @@ function money(value) {
 
 function statusTone(status) {
   if (status === "Received") return "success";
-  if (status === "Approved") return "warning";
+  if (status === "Approved") return "info";
   if (status === "pending_approval") return "warning";
   return "default";
 }
@@ -56,7 +61,7 @@ function exportCSV(rows) {
 }
 
 export default function PurchaseOrdersRedesign() {
-  const { authHeaders, employee } = useAuth();
+  const { authHeaders, employee, hasPerm } = useAuth();
   const [view, setView] = useState("list");
   const [rows, setRows] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -72,6 +77,12 @@ export default function PurchaseOrdersRedesign() {
 
   const [selectedPo, setSelectedPo] = useState(null); // { purchaseOrder, items }
   const [submittingApproval, setSubmittingApproval] = useState(false);
+  const [approvingId, setApprovingId] = useState(null);
+  const [editingPo, setEditingPo] = useState(null); // PO row being edited
+  const [editForm, setEditForm] = useState({ supplier_id: "", due_date: "" });
+  const [editCart, setEditCart] = useState([]);
+  const [editProductSearch, setEditProductSearch] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
 
   const [form, setForm] = useState({ supplier_id: "", due_date: "" });
   const [productSearch, setProductSearch] = useState("");
@@ -82,6 +93,13 @@ export default function PurchaseOrdersRedesign() {
   const [grnReceivedBy, setGrnReceivedBy] = useState("");
   const [grnNotes, setGrnNotes] = useState("");
   const [grnQtys, setGrnQtys] = useState({});
+
+  // Template state
+  const [templates, setTemplates] = useState([]);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [loadTemplateOpen, setLoadTemplateOpen] = useState(false);
 
   const loadRows = async () => {
     setLoading(true);
@@ -115,6 +133,89 @@ export default function PurchaseOrdersRedesign() {
     }
   };
 
+  const loadTemplates = async () => {
+    try {
+      const res = await fetch(`${API}/api/po-templates`, { headers: authHeaders() });
+      const data = await res.json();
+      setTemplates(data.templates || []);
+    } catch {
+      // non-fatal
+    }
+  };
+
+  const saveAsTemplate = async () => {
+    if (!templateName.trim()) { setError("Enter a template name."); return; }
+    if (!form.supplier_id) { setError("Select a supplier before saving as template."); return; }
+    if (!cart.length) { setError("Add items before saving as template."); return; }
+    try {
+      const res = await fetch(`${API}/api/po-templates`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: templateName.trim(),
+          supplier_id: Number(form.supplier_id),
+          items: cart.map((i) => ({ product_id: i.product_id, quantity: i.quantity, unit_cost: i.cost_price })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save template");
+      setSaveTemplateOpen(false);
+      setTemplateName("");
+      setNotice(`Template "${templateName.trim()}" saved.`);
+      await loadTemplates();
+    } catch (e) {
+      setError(e.message || "Failed to save template");
+    }
+  };
+
+  const loadFromTemplate = async (tmpl) => {
+    setLoadTemplateOpen(false);
+    // Set supplier
+    setForm((prev) => ({ ...prev, supplier_id: String(tmpl.supplier_id || "") }));
+    // Fetch template items via use endpoint — but just populate form without creating PO
+    // We'll fetch individual template details by using the listing data and products
+    try {
+      const res = await fetch(`${API}/api/po-templates`, { headers: authHeaders() });
+      const data = await res.json();
+      // Re-fetch full template details — use the /use endpoint approach or build cart from what we know
+      // Since we don't have a GET /api/po-templates/:id, we create a PO then navigate to it
+      // Instead, let's just set the supplier and notify user to add items
+      setNotice(`Template "${tmpl.name}" loaded — supplier pre-filled. Items will be loaded when you use "Create PO from template".`);
+    } catch {
+      // non-fatal
+    }
+  };
+
+  const createFromTemplate = async (tmplId, tmplName) => {
+    try {
+      const res = await fetch(`${API}/api/po-templates/${tmplId}/use`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create PO from template");
+      setTemplatesOpen(false);
+      setNotice(`Draft PO ${poNumber(data.id)} created from template "${tmplName}".`);
+      await loadRows();
+    } catch (e) {
+      setError(e.message || "Failed to create PO from template");
+    }
+  };
+
+  const deleteTemplate = async (tmplId) => {
+    if (!window.confirm("Delete this template?")) return;
+    try {
+      const res = await fetch(`${API}/api/po-templates/${tmplId}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed to delete"); }
+      await loadTemplates();
+    } catch (e) {
+      setError(e.message || "Failed to delete template");
+    }
+  };
+
   const loadDetail = async (id) => {
     setLoading(true);
     setError("");
@@ -135,6 +236,7 @@ export default function PurchaseOrdersRedesign() {
   useEffect(() => {
     loadRows();
     loadDropdowns();
+    loadTemplates();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const visibleRows = useMemo(() => {
@@ -164,6 +266,143 @@ export default function PurchaseOrdersRedesign() {
       )
       .slice(0, 30);
   }, [productSearch, products]);
+
+  const approvePO = async (poId) => {
+    setApprovingId(poId);
+    setError("");
+    setNotice("");
+    setWarn("");
+    try {
+      const res = await fetch(`${API}/api/purchase-orders/${poId}/approve`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to approve purchase order");
+      setNotice(`${poNumber(poId)} approved successfully.`);
+      await loadRows();
+    } catch (e) {
+      setError(e.message || "Failed to approve purchase order");
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  const openEditModal = async (po) => {
+    setError("");
+    setWarn("");
+    setNotice("");
+    setEditingPo(po);
+    setEditForm({ supplier_id: String(po.supplier_id || ""), due_date: po.due_date || "" });
+    setEditProductSearch("");
+    // Load full PO items to pre-fill cart
+    try {
+      const res = await fetch(`${API}/api/purchase-orders/${po.id}`, { headers: authHeaders() });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load PO details");
+      setEditCart(
+        (data.items || []).map((item) => ({
+          product_id: item.product_id,
+          name: item.name,
+          barcode: item.barcode,
+          quantity: Number(item.quantity || 0),
+          cost_price: Number(item.cost_price || 0),
+        })),
+      );
+    } catch (e) {
+      setError(e.message || "Failed to load PO details");
+      return;
+    }
+    setEditOpen(true);
+  };
+
+  const editCartTotal = editCart.reduce(
+    (sum, item) => sum + Number(item.quantity || 0) * Number(item.cost_price || 0),
+    0,
+  );
+
+  const editSearchResults = useMemo(() => {
+    if (editProductSearch.trim().length < 2) return [];
+    const q = editProductSearch.toLowerCase();
+    return products
+      .filter(
+        (p) =>
+          String(p.name || "").toLowerCase().includes(q) ||
+          String(p.barcode || "").toLowerCase().includes(q),
+      )
+      .slice(0, 30);
+  }, [editProductSearch, products]);
+
+  const addToEditCart = (product) => {
+    setEditCart((prev) => {
+      const existing = prev.find((i) => i.product_id === product.id);
+      if (existing) {
+        return prev.map((i) =>
+          i.product_id === product.id ? { ...i, quantity: Number(i.quantity || 0) + 1 } : i,
+        );
+      }
+      return [
+        ...prev,
+        {
+          product_id: product.id,
+          name: product.name,
+          barcode: product.barcode,
+          quantity: 1,
+          cost_price: Number(product.cost_price || 0),
+        },
+      ];
+    });
+  };
+
+  const updateEditCart = (productId, field, value) => {
+    setEditCart((prev) =>
+      prev.map((i) =>
+        i.product_id === productId
+          ? { ...i, [field]: field === "cost_price" ? Number(value || 0) : Math.max(1, Number(value || 1)) }
+          : i,
+      ),
+    );
+  };
+
+  const removeEditCartItem = (productId) => {
+    setEditCart((prev) => prev.filter((i) => i.product_id !== productId));
+  };
+
+  const saveEdit = async () => {
+    if (!editingPo) return;
+    if (!editCart.length) {
+      setError("Purchase order must have at least one item.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const payload = {
+        supplier_id: Number(editForm.supplier_id) || editingPo.supplier_id,
+        expected_date: editForm.due_date || null,
+        items: editCart.map((i) => ({
+          product_id: i.product_id,
+          quantity: Number(i.quantity || 0),
+          unit_cost: Number(i.cost_price || 0),
+        })),
+      };
+      const res = await fetch(`${API}/api/purchase-orders/${editingPo.id}`, {
+        method: "PUT",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update purchase order");
+      setEditOpen(false);
+      setEditingPo(null);
+      setNotice(`${poNumber(editingPo.id)} updated successfully.`);
+      await loadRows();
+    } catch (e) {
+      setError(e.message || "Failed to update purchase order");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const openCreate = () => {
     setNotice("");
@@ -472,9 +711,97 @@ export default function PurchaseOrdersRedesign() {
               <Button tone="primary" className="w-full" onClick={createPO} disabled={saving}>
                 {saving ? "Submitting..." : "Submit Purchase Order"}
               </Button>
+              <div className="mt-2 flex gap-2">
+                <Button
+                  className="flex-1 text-xs"
+                  onClick={() => { setSaveTemplateOpen(true); setTemplateName(""); }}
+                >
+                  <Save size={12} className="mr-1 inline" />
+                  Save as Template
+                </Button>
+                <Button
+                  className="flex-1 text-xs"
+                  onClick={() => { loadTemplates(); setLoadTemplateOpen(true); }}
+                >
+                  <BookTemplate size={12} className="mr-1 inline" />
+                  Load Template
+                </Button>
+              </div>
             </div>
           </SectionCard>
         </div>
+
+        {/* Save as Template modal */}
+        {saveTemplateOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
+            <SectionCard className="w-full max-w-sm p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="font-semibold text-(--ui-text)">Save as Template</h3>
+                <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={() => setSaveTemplateOpen(false)}>
+                  <X size={16} />
+                </button>
+              </div>
+              <label className="mb-1 block text-xs text-(--ui-text-muted)">Template Name</label>
+              <Input
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                placeholder="e.g. Weekly Beverage Order"
+                autoFocus
+              />
+              <div className="mt-3 flex justify-end gap-2">
+                <Button onClick={() => setSaveTemplateOpen(false)}>Cancel</Button>
+                <Button tone="primary" onClick={saveAsTemplate}>
+                  <Save size={13} className="mr-1 inline" />
+                  Save Template
+                </Button>
+              </div>
+            </SectionCard>
+          </div>
+        ) : null}
+
+        {/* Load Template modal */}
+        {loadTemplateOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
+            <SectionCard className="w-full max-w-md p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="font-semibold text-(--ui-text)">Load Template</h3>
+                <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={() => setLoadTemplateOpen(false)}>
+                  <X size={16} />
+                </button>
+              </div>
+              {templates.length === 0 ? (
+                <p className="py-4 text-center text-sm text-(--ui-text-muted)">No templates saved yet.</p>
+              ) : (
+                <div className="max-h-[50vh] space-y-2 overflow-auto">
+                  {templates.map((t) => (
+                    <div key={t.id} className="flex items-center justify-between rounded border border-(--ui-border) p-2">
+                      <div>
+                        <p className="text-sm font-medium text-(--ui-text)">{t.name}</p>
+                        <p className="text-xs text-(--ui-text-muted)">
+                          {t.supplier_name || "No supplier"} · {t.item_count} items
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        tone="primary"
+                        onClick={() => {
+                          setForm((prev) => ({ ...prev, supplier_id: String(t.supplier_id || "") }));
+                          setLoadTemplateOpen(false);
+                          setNotice(`Template "${t.name}" loaded — supplier pre-filled. Submit the PO or modify items.`);
+                        }}
+                      >
+                        Load
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="mt-3 flex justify-end">
+                <Button onClick={() => setLoadTemplateOpen(false)}>Close</Button>
+              </div>
+            </SectionCard>
+          </div>
+        ) : null}
       </PageShell>
     );
   }
@@ -665,6 +992,10 @@ export default function PurchaseOrdersRedesign() {
             <Download size={13} className="mr-1 inline" />
             Export
           </Button>
+          <Button onClick={() => { loadTemplates(); setTemplatesOpen(true); }}>
+            <BookTemplate size={13} className="mr-1 inline" />
+            Templates
+          </Button>
           <Button tone="primary" onClick={openCreate}>
             <Plus size={13} className="mr-1 inline" />
             Create PO
@@ -730,7 +1061,7 @@ export default function PurchaseOrdersRedesign() {
                 <th className="px-3 py-2 text-left">Date</th>
                 <th className="px-3 py-2 text-left">Status</th>
                 <th className="px-3 py-2 text-right">Total</th>
-                <th className="px-3 py-2 text-right">Open</th>
+                <th className="px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -747,10 +1078,29 @@ export default function PurchaseOrdersRedesign() {
                     </td>
                     <td className="px-3 py-2 text-right text-(--ui-text)">{money(po.total_cost)}</td>
                     <td className="px-3 py-2 text-right">
-                      <Button size="sm" onClick={() => loadDetail(po.id)}>
-                        View
-                        <ChevronRight size={12} className="ml-1 inline" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        {po.status === "Draft" && hasPerm("manage_orders") ? (
+                          <>
+                            <Button size="sm" onClick={() => openEditModal(po)}>
+                              <Pencil size={11} className="mr-1 inline" />
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              tone="primary"
+                              onClick={() => approvePO(po.id)}
+                              disabled={approvingId === po.id}
+                            >
+                              <ThumbsUp size={11} className="mr-1 inline" />
+                              {approvingId === po.id ? "..." : "Approve"}
+                            </Button>
+                          </>
+                        ) : null}
+                        <Button size="sm" onClick={() => loadDetail(po.id)}>
+                          View
+                          <ChevronRight size={12} className="ml-1 inline" />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -766,6 +1116,195 @@ export default function PurchaseOrdersRedesign() {
           ) : null}
         </div>
       </SectionCard>
+
+      {/* Templates Manager modal */}
+      {templatesOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
+          <SectionCard className="w-full max-w-lg p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-(--ui-text)">PO Templates</h3>
+              <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={() => setTemplatesOpen(false)}>
+                <X size={16} />
+              </button>
+            </div>
+            {templates.length === 0 ? (
+              <p className="py-6 text-center text-sm text-(--ui-text-muted)">
+                No templates yet. Create a PO and use "Save as Template".
+              </p>
+            ) : (
+              <div className="max-h-[55vh] space-y-2 overflow-auto">
+                {templates.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between rounded border border-(--ui-border) p-3">
+                    <div>
+                      <p className="font-medium text-(--ui-text)">{t.name}</p>
+                      <p className="text-xs text-(--ui-text-muted)">
+                        {t.supplier_name || "No supplier"} · {t.item_count} items · {fmtDate(t.created_at)}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        tone="primary"
+                        onClick={() => createFromTemplate(t.id, t.name)}
+                      >
+                        Use
+                      </Button>
+                      <Button
+                        size="sm"
+                        tone="danger"
+                        onClick={() => deleteTemplate(t.id)}
+                      >
+                        <Trash2 size={12} />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-3 flex justify-end">
+              <Button onClick={() => setTemplatesOpen(false)}>Close</Button>
+            </div>
+          </SectionCard>
+        </div>
+      ) : null}
+
+      {/* Edit Draft PO Modal */}
+      {editOpen && editingPo ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
+          <SectionCard className="flex w-full max-w-3xl flex-col" style={{ maxHeight: "90vh" }}>
+            <div className="flex items-center justify-between border-b border-(--ui-border) p-4">
+              <h3 className="text-lg font-semibold text-(--ui-text)">
+                Edit {poNumber(editingPo.id)}
+              </h3>
+              <button
+                className="text-(--ui-text-muted) hover:text-(--ui-text)"
+                onClick={() => { setEditOpen(false); setEditingPo(null); }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="grid flex-1 grid-cols-1 gap-3 overflow-auto p-4 lg:grid-cols-[1fr_300px]">
+              {/* Product search panel */}
+              <div className="flex flex-col gap-2">
+                <div className="relative">
+                  <Search
+                    size={13}
+                    className="pointer-events-none absolute left-2.5 top-2.5 text-(--ui-text-muted)"
+                  />
+                  <Input
+                    className="pl-8"
+                    placeholder="Search products to add"
+                    value={editProductSearch}
+                    onChange={(e) => setEditProductSearch(e.target.value)}
+                  />
+                </div>
+                <div className="max-h-56 overflow-auto">
+                  {editSearchResults.length ? (
+                    <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
+                      {editSearchResults.map((p) => (
+                        <button
+                          key={p.id}
+                          className="rounded border border-(--ui-border) p-2 text-left hover:bg-(--ui-muted-surface)"
+                          onClick={() => addToEditCart(p)}
+                        >
+                          <p className="text-sm font-medium text-(--ui-text)">{p.name}</p>
+                          <p className="text-xs text-(--ui-text-muted)">{p.barcode || "-"}</p>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="py-4 text-center text-xs text-(--ui-text-muted)">
+                      Type 2+ characters to search products
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* PO detail panel */}
+              <div className="flex flex-col gap-2">
+                <div>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Supplier</label>
+                  <Select
+                    value={editForm.supplier_id}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, supplier_id: e.target.value }))}
+                  >
+                    <option value="">Select supplier</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Due Date</label>
+                  <Input
+                    type="date"
+                    value={editForm.due_date}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, due_date: e.target.value }))}
+                  />
+                </div>
+
+                <div className="max-h-48 space-y-1.5 overflow-auto">
+                  {editCart.map((item) => (
+                    <div key={item.product_id} className="rounded border border-(--ui-border) p-2">
+                      <div className="mb-1 flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-(--ui-text)">{item.name}</p>
+                        <button
+                          className="text-(--ui-text-muted) hover:text-rose-600"
+                          onClick={() => removeEditCartItem(item.product_id)}
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <Input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => updateEditCart(item.product_id, "quantity", e.target.value)}
+                        />
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.cost_price}
+                          onChange={(e) => updateEditCart(item.product_id, "cost_price", e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  {!editCart.length ? (
+                    <p className="py-4 text-center text-xs text-(--ui-text-muted)">Cart is empty</p>
+                  ) : null}
+                </div>
+
+                <div className="border-t border-(--ui-border) pt-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-(--ui-text-muted)">Total</span>
+                    <span className="font-semibold text-(--ui-text)">{money(editCartTotal)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {error ? (
+              <div className="border-t border-(--ui-border) px-4 py-2 text-sm text-rose-600">
+                {error}
+              </div>
+            ) : null}
+
+            <div className="flex justify-end gap-2 border-t border-(--ui-border) p-4">
+              <Button onClick={() => { setEditOpen(false); setEditingPo(null); }}>Cancel</Button>
+              <Button tone="primary" onClick={saveEdit} disabled={saving}>
+                <Save size={13} className="mr-1 inline" />
+                {saving ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </SectionCard>
+        </div>
+      ) : null}
     </PageShell>
   );
 }

@@ -110,11 +110,21 @@ export default function BackupRestoreRedesign() {
       title="Backup & Restore"
       subtitle="Download a database backup or restore from a previous backup file."
       right={
-        <Button onClick={() => fetchLog(false)}>
+        <Button onClick={() => fetchLog(false)} disabled={restoring || loading}>
           <RefreshCw size={14} className="mr-1 inline" /> Refresh Log
         </Button>
       }
     >
+      {restoring && (
+        <SectionCard className="mb-4 flex items-center gap-3 border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <RefreshCw size={18} className="animate-spin shrink-0 text-amber-600" />
+          <div>
+            <p className="font-semibold">Restoring database, please wait…</p>
+            <p className="text-xs text-amber-700 mt-0.5">Do not close this page or navigate away until the restore is complete.</p>
+          </div>
+        </SectionCard>
+      )}
+
       {msg && (
         <SectionCard
           className={`mb-4 flex items-center gap-2 p-3 text-sm ${
@@ -140,7 +150,7 @@ export default function BackupRestoreRedesign() {
               <p className="text-xs text-(--ui-text-muted)">Export current database as SQLite file</p>
             </div>
           </div>
-          <Button tone="primary" onClick={handleDownload} disabled={loading} className="w-full">
+          <Button tone="primary" onClick={handleDownload} disabled={loading || restoring} className="w-full">
             {loading ? (
               <><RefreshCw size={14} className="mr-1 inline animate-spin" />Creating backup...</>
             ) : (

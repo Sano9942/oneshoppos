@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, RefreshCw, X, BookOpen } from "lucide-react";
+import { ChevronDown, ChevronUp, RefreshCw, X, BookOpen, Ban } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import { fmtLocalDate as fmtDate } from "../../utils/dates";
@@ -28,11 +28,16 @@ function calcDue(inv) {
 }
 
 export default function SupplierPayablesRedesign() {
-  const { authHeaders } = useAuth();
+  const { authHeaders, hasPerm } = useAuth();
+  const isAdmin = hasPerm("all_access");
   const [tab, setTab] = useState("aging");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  const [voidModal, setVoidModal] = useState(null); // { payment }
+  const [voidReason, setVoidReason] = useState("");
+  const [voiding, setVoiding] = useState(false);
 
   const [aging, setAging] = useState([]);
   const [invoices, setInvoices] = useState([]);
@@ -48,6 +53,10 @@ export default function SupplierPayablesRedesign() {
   const [payBy, setPayBy] = useState("");
   const [payNotes, setPayNotes] = useState("");
   const [paying, setPaying] = useState(false);
+
+  // Invoice payment expansion (for Void)
+  const [expandedInvoiceId, setExpandedInvoiceId] = useState(null);
+  const [invoicePayments, setInvoicePayments] = useState({});
 
   // Ledger state
   const [suppliers, setSuppliers] = useState([]);
@@ -191,6 +200,49 @@ export default function SupplierPayablesRedesign() {
       setError(e.message || "Payment failed");
     } finally {
       setPaying(false);
+    }
+  };
+
+  const toggleInvoicePayments = async (invId) => {
+    if (expandedInvoiceId === invId) { setExpandedInvoiceId(null); return; }
+    setExpandedInvoiceId(invId);
+    if (invoicePayments[invId]) return;
+    try {
+      const res = await fetch(`${API}/api/supplier-invoices/${invId}`, { headers: authHeaders() });
+      const data = await res.json();
+      setInvoicePayments((prev) => ({ ...prev, [invId]: data.payments || [] }));
+    } catch { setInvoicePayments((prev) => ({ ...prev, [invId]: [] })); }
+  };
+
+  const openVoidModal = (payment) => {
+    setVoidModal(payment);
+    setVoidReason("");
+  };
+
+  const handleVoid = async () => {
+    if (!voidModal) return;
+    setVoiding(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await fetch(`${API}/api/supplier-payments/${voidModal.id}/void`, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: voidReason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to void payment");
+      setNotice("Payment voided successfully.");
+      setVoidModal(null);
+      setVoidReason("");
+      setSupplierInvoices({});
+      setInvoicePayments({});
+      await fetchAging();
+      if (tab === "invoices") await fetchInvoices();
+    } catch (e) {
+      setError(e.message || "Failed to void payment");
+    } finally {
+      setVoiding(false);
     }
   };
 
@@ -402,28 +454,83 @@ export default function SupplierPayablesRedesign() {
               </thead>
               <tbody>
                 {invoices.map((inv) => (
-                  <tr key={inv.id} className="border-t border-(--ui-border)">
-                    <td className="px-3 py-2 font-mono text-(--ui-text)">
-                      {inv.invoice_number || `#${inv.id}`}
-                    </td>
-                    <td className="px-3 py-2 text-(--ui-text)">{inv.supplier_name}</td>
-                    <td className="px-3 py-2 text-right text-(--ui-text)">{money(inv.amount)}</td>
-                    <td className="px-3 py-2 text-right text-emerald-700">{money(inv.amount_paid)}</td>
-                    <td className="px-3 py-2 text-right font-semibold text-rose-700">{money(calcDue(inv))}</td>
-                    <td className="px-3 py-2">
-                      <Badge tone={STATUS_TONE[inv.status] || "default"}>{inv.status}</Badge>
-                    </td>
-                    <td className="px-3 py-2 text-(--ui-text-muted)">
-                      {fmtDate(inv.created_at)}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {inv.status !== "paid" ? (
-                        <Button size="sm" tone="primary" onClick={() => openPayModal(inv)}>
-                          Pay
-                        </Button>
-                      ) : null}
-                    </td>
-                  </tr>
+                  <Fragment key={inv.id}>
+                    <tr className="border-t border-(--ui-border)">
+                      <td className="px-3 py-2 font-mono text-(--ui-text)">
+                        {inv.invoice_number || `#${inv.id}`}
+                      </td>
+                      <td className="px-3 py-2 text-(--ui-text)">{inv.supplier_name}</td>
+                      <td className="px-3 py-2 text-right text-(--ui-text)">{money(inv.amount)}</td>
+                      <td className="px-3 py-2 text-right text-emerald-700">{money(inv.amount_paid)}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-rose-700">{money(calcDue(inv))}</td>
+                      <td className="px-3 py-2">
+                        <Badge tone={STATUS_TONE[inv.status] || "default"}>{inv.status}</Badge>
+                      </td>
+                      <td className="px-3 py-2 text-(--ui-text-muted)">
+                        {fmtDate(inv.created_at)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="inline-flex gap-2">
+                          {inv.status !== "paid" ? (
+                            <Button size="sm" tone="primary" onClick={() => openPayModal(inv)}>Pay</Button>
+                          ) : null}
+                          {isAdmin ? (
+                            <Button size="sm" onClick={() => toggleInvoicePayments(inv.id)}>
+                              {expandedInvoiceId === inv.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                            </Button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                    {isAdmin && expandedInvoiceId === inv.id ? (
+                      <tr className="border-t border-(--ui-border) bg-(--ui-muted-surface)/70">
+                        <td colSpan={8} className="px-4 py-3">
+                          {(invoicePayments[inv.id] || []).length === 0 ? (
+                            <p className="text-xs text-(--ui-text-muted)">No payments recorded</p>
+                          ) : (
+                            <table className="min-w-full text-xs">
+                              <thead className="text-(--ui-text-muted)">
+                                <tr>
+                                  <th className="py-1 text-left">Date</th>
+                                  <th className="py-1 text-right">Amount</th>
+                                  <th className="py-1 text-left">Method</th>
+                                  <th className="py-1 text-left">Reference</th>
+                                  <th className="py-1 text-left">Status</th>
+                                  {isAdmin ? <th className="py-1 text-right">Action</th> : null}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(invoicePayments[inv.id] || []).map((pmt) => (
+                                  <tr key={pmt.id} className={`border-t border-(--ui-border) ${pmt.voided ? "opacity-50" : ""}`}>
+                                    <td className="py-1.5 text-(--ui-text-muted)">{pmt.paid_at?.slice(0, 10) || "-"}</td>
+                                    <td className="py-1.5 text-right text-emerald-700 font-medium">{money(pmt.amount)}</td>
+                                    <td className="py-1.5 text-(--ui-text)">{pmt.payment_method || "-"}</td>
+                                    <td className="py-1.5 font-mono text-(--ui-text-muted)">{pmt.reference || "-"}</td>
+                                    <td className="py-1.5">
+                                      {pmt.voided ? (
+                                        <Badge tone="danger">Voided{pmt.void_reason ? `: ${pmt.void_reason}` : ""}</Badge>
+                                      ) : (
+                                        <Badge tone="success">Active</Badge>
+                                      )}
+                                    </td>
+                                    {isAdmin ? (
+                                      <td className="py-1.5 text-right">
+                                        {!pmt.voided ? (
+                                          <Button size="sm" tone="danger" onClick={() => openVoidModal(pmt)}>
+                                            <Ban size={10} className="mr-1 inline" />Void
+                                          </Button>
+                                        ) : null}
+                                      </td>
+                                    ) : null}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -612,6 +719,31 @@ export default function SupplierPayablesRedesign() {
                 disabled={paying || !payAmount || Number(payAmount) <= 0}
               >
                 {paying ? "Recording..." : "Record Payment"}
+              </Button>
+            </div>
+          </SectionCard>
+        </div>
+      ) : null}
+      {voidModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
+          <SectionCard className="w-full max-w-md p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-(--ui-text)">Void Payment</h3>
+              <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={() => setVoidModal(null)}><X size={16} /></button>
+            </div>
+            <div className="mb-3 rounded border border-(--ui-border) bg-(--ui-muted-surface) p-3 text-sm">
+              <p className="text-(--ui-text-muted)">Amount: <span className="font-semibold text-rose-700">{money(voidModal.amount)}</span></p>
+              <p className="text-(--ui-text-muted)">Method: <span className="text-(--ui-text)">{voidModal.payment_method}</span></p>
+              <p className="text-xs text-rose-600 mt-1">This will reverse the payment and recalculate the invoice status.</p>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-(--ui-text-muted)">Void Reason (optional)</label>
+              <Input value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Enter reason..." />
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <Button onClick={() => setVoidModal(null)}>Cancel</Button>
+              <Button tone="danger" onClick={handleVoid} disabled={voiding}>
+                {voiding ? "Voiding..." : "Confirm Void"}
               </Button>
             </div>
           </SectionCard>

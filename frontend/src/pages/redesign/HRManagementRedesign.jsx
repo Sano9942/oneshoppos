@@ -65,6 +65,13 @@ export default function HRManagementRedesign() {
   // Rejection note modal
   const [rejectModal, setRejectModal] = useState(null); // { id, note }
 
+  // Leave balance from backend
+  const [leaveBalances, setLeaveBalances] = useState([]);
+
+  // Add payroll line form
+  const [lineForm, setLineForm] = useState({ employee_id: "", type: "Basic", amount: "" });
+  const [savingLine, setSavingLine] = useState(false);
+
   // Attendance summary state
   const [attMonth, setAttMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [attSummary, setAttSummary] = useState([]);
@@ -72,14 +79,16 @@ export default function HRManagementRedesign() {
 
   const loadAll = useCallback(async () => {
     try {
-      const [empRes, leaveRes, periodRes] = await Promise.all([
+      const [empRes, leaveRes, periodRes, balanceRes] = await Promise.all([
         fetch(`${API}/api/employees`, { headers: authHeaders() }).then((r) => r.json()),
         fetch(`${API}/api/hr/leave`, { headers: authHeaders() }).then((r) => r.json()),
         fetch(`${API}/api/hr/payroll/periods`, { headers: authHeaders() }).then((r) => r.json()),
+        fetch(`${API}/api/hr/leave/balance`, { headers: authHeaders() }).then((r) => r.json()),
       ]);
       setEmployees(empRes.employees || []);
       setLeaves(leaveRes.leave_requests || []);
       setPeriods(periodRes.periods || []);
+      setLeaveBalances(balanceRes.balances || []);
     } catch (e) {
       setError(e.message || "Failed to load HR data");
     }
@@ -200,7 +209,28 @@ export default function HRManagementRedesign() {
     } catch { /* silent */ }
   };
 
-  // Leave balance: compute from leaves data
+  const savePayrollLine = async (e) => {
+    e.preventDefault();
+    if (!selectedPeriod) return;
+    setSavingLine(true);
+    try {
+      const res = await fetch(`${API}/api/hr/payroll/periods/${selectedPeriod}/lines`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(lineForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save line");
+      setLineForm({ employee_id: "", type: "Basic", amount: "" });
+      await loadLines(selectedPeriod);
+    } catch (e2) {
+      setError(e2.message || "Failed to save line");
+    } finally {
+      setSavingLine(false);
+    }
+  };
+
+  // Leave balance: compute from leaves data (fallback if API unavailable)
   const leaveBalance = employees.map((emp) => {
     const empLeaves = leaves.filter((l) => l.employee_id === emp.id && l.status === "approved");
     const used = {};
@@ -326,37 +356,38 @@ export default function HRManagementRedesign() {
         <SectionCard>
           <div className="border-b border-(--ui-border) px-4 py-3">
             <p className="font-semibold text-(--ui-text)">Leave Balance by Employee</p>
-            <p className="text-xs text-(--ui-text-muted) mt-0.5">Based on all approved leave requests on record.</p>
+            <p className="text-xs text-(--ui-text-muted) mt-0.5">Annual allowance vs used leave days from the backend.</p>
           </div>
           <div className="overflow-auto">
             <table className="min-w-full text-sm">
               <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                 <tr>
                   <th className="px-3 py-2 text-left">Employee</th>
-                  {LEAVE_TYPES.map((t) => (
-                    <th key={t} className="px-3 py-2 text-right capitalize">{t}</th>
-                  ))}
-                  <th className="px-3 py-2 text-right">Total Used</th>
+                  <th className="px-3 py-2 text-right">Allowance (days)</th>
+                  <th className="px-3 py-2 text-right">Used</th>
+                  <th className="px-3 py-2 text-right">Remaining</th>
                 </tr>
               </thead>
               <tbody>
-                {leaveBalance.map((emp) => {
-                  const total = LEAVE_TYPES.reduce((s, t) => s + (emp.used[t] || 0), 0);
+                {leaveBalances.map((emp) => {
+                  const remaining = Number(emp.remaining || 0);
+                  const remainingColor = remaining === 0
+                    ? "text-rose-600"
+                    : remaining <= 2
+                    ? "text-amber-500"
+                    : "text-emerald-600";
                   return (
-                    <tr key={emp.id} className="border-t border-(--ui-border) hover:bg-(--ui-muted-surface)">
+                    <tr key={emp.employee_id} className="border-t border-(--ui-border) hover:bg-(--ui-muted-surface)">
                       <td className="px-3 py-2 font-medium text-(--ui-text)">{emp.name}</td>
-                      {LEAVE_TYPES.map((t) => (
-                        <td key={t} className={`px-3 py-2 text-right ${emp.used[t] > 0 ? "text-(--ui-text)" : "text-(--ui-text-muted)"}`}>
-                          {emp.used[t] || 0}d
-                        </td>
-                      ))}
-                      <td className="px-3 py-2 text-right font-semibold text-(--ui-text)">{total}d</td>
+                      <td className="px-3 py-2 text-right text-(--ui-text-muted)">{emp.allowance}</td>
+                      <td className="px-3 py-2 text-right text-(--ui-text)">{emp.used}</td>
+                      <td className={`px-3 py-2 text-right font-semibold ${remainingColor}`}>{remaining}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-            {leaveBalance.length === 0 && <EmptyState title="No employees" body="Add employees to see leave balances." />}
+            {leaveBalances.length === 0 && <EmptyState title="No leave balance data" body="Leave balances will appear here once employees and leave allowances are configured." />}
           </div>
         </SectionCard>
       )}
@@ -485,6 +516,52 @@ export default function HRManagementRedesign() {
               )}
             </div>
           </SectionCard>
+
+          {selectedPeriod && (
+            <SectionCard className="p-4">
+              <p className="mb-3 font-semibold text-(--ui-text)">Add Payroll Line</p>
+              <form className="flex flex-wrap gap-2 items-end" onSubmit={savePayrollLine}>
+                <div className="flex-1 min-w-36">
+                  <label className="block text-xs text-(--ui-text-muted) mb-1">Employee</label>
+                  <Select
+                    required
+                    value={lineForm.employee_id}
+                    onChange={(e) => setLineForm((f) => ({ ...f, employee_id: e.target.value }))}
+                  >
+                    <option value="">Select employee</option>
+                    {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-xs text-(--ui-text-muted) mb-1">Type</label>
+                  <Select
+                    value={lineForm.type}
+                    onChange={(e) => setLineForm((f) => ({ ...f, type: e.target.value }))}
+                  >
+                    <option value="Basic">Basic</option>
+                    <option value="Bonus">Bonus</option>
+                    <option value="Deduction">Deduction</option>
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-xs text-(--ui-text-muted) mb-1">Amount</label>
+                  <Input
+                    required
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    placeholder="Amount"
+                    value={lineForm.amount}
+                    onChange={(e) => setLineForm((f) => ({ ...f, amount: e.target.value }))}
+                    className="w-36"
+                  />
+                </div>
+                <Button tone="primary" type="submit" disabled={savingLine}>
+                  {savingLine ? "Saving..." : "Save Line"}
+                </Button>
+              </form>
+            </SectionCard>
+          )}
         </div>
       )}
 
