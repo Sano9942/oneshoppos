@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Trash2 } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   Badge,
@@ -20,7 +20,8 @@ const REASONS = ["Damaged", "Expired", "Lost/Stolen", "Found", "Counting Error",
 const fmtDate = fmtUtcDateTime;
 
 export default function StockAdjustmentsRedesign() {
-  const { employee } = useAuth();
+  const { employee, hasPerm } = useAuth();
+  const isAdmin = hasPerm("all_access");
   const [rows, setRows] = useState([]);
   const [products, setProducts] = useState([]);
   const [outlets, setOutlets] = useState([]);
@@ -120,6 +121,19 @@ export default function StockAdjustmentsRedesign() {
     }
   };
 
+  const deleteAdj = async (row) => {
+    if (!window.confirm(`Delete adjustment for "${row.product_name}" (${Number(row.quantity_change) > 0 ? "+" : ""}${row.quantity_change})? This will reverse the stock effect.`)) return;
+    setError("");
+    try {
+      const res = await fetch(`${API}/api/adjustments/${row.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to delete adjustment");
+      await load();
+    } catch (e) {
+      setError(e.message || "Failed to delete adjustment");
+    }
+  };
+
   return (
     <PageShell
       title="Stock Adjustments"
@@ -160,6 +174,7 @@ export default function StockAdjustmentsRedesign() {
                 <th className="px-3 py-2 text-left">Reason</th>
                 <th className="px-3 py-2 text-right">Adjustment</th>
                 <th className="px-3 py-2 text-left">Employee</th>
+                {isAdmin ? <th className="px-3 py-2 text-right">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -176,6 +191,13 @@ export default function StockAdjustmentsRedesign() {
                     {Number(r.quantity_change || 0) > 0 ? "+" : ""}{r.quantity_change}
                   </td>
                   <td className="px-3 py-2 text-(--ui-text-muted)">{r.employee_name || "Admin"}</td>
+                  {isAdmin ? (
+                    <td className="px-3 py-2 text-right">
+                      <Button size="sm" tone="danger" onClick={() => deleteAdj(r)}>
+                        <Trash2 size={12} className="mr-1 inline" />Delete
+                      </Button>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>

@@ -3,6 +3,10 @@ const { toUtcStart, toUtcEnd } = require("../utils/tz");
 module.exports = function registerGRNRoutes(app, deps) {
   const { db, requirePerm, requireFeature, createNotification } = deps;
 
+  // Safe column additions for payment void support
+  db.run("ALTER TABLE supplier_payments ADD COLUMN voided INTEGER DEFAULT 0", () => {});
+  db.run("ALTER TABLE supplier_payments ADD COLUMN void_reason TEXT", () => {});
+
 // --- GRN (Goods Received Notes) ---
 
   app.get("/api/grn", (req, res) => {
@@ -284,6 +288,72 @@ module.exports = function registerGRNRoutes(app, deps) {
           res.json({ aging: rows });
         },
       );
+    },
+  );
+
+  // POST void a supplier payment
+  app.post(
+    "/api/supplier-payments/:id/void",
+    requirePerm("all_access"),
+    (req, res) => {
+      const { id } = req.params;
+      const { reason } = req.body || {};
+
+      db.get("SELECT * FROM supplier_payments WHERE id = ?", [id], (err, payment) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!payment) return res.status(404).json({ error: "Payment not found" });
+        if (payment.voided) return res.status(400).json({ error: "Payment is already voided" });
+
+        db.serialize(() => {
+          db.run("BEGIN TRANSACTION");
+
+          db.run(
+            "UPDATE supplier_payments SET voided = 1, void_reason = ? WHERE id = ?",
+            [reason || null, id],
+            function (err) {
+              if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
+            },
+          );
+
+          // Reverse the effect on the invoice: reduce amount_paid
+          db.run(
+            "UPDATE supplier_invoices SET amount_paid = MAX(0, COALESCE(amount_paid, 0) - ?) WHERE id = ?",
+            [Number(payment.amount), payment.supplier_invoice_id],
+            function (err) {
+              if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
+            },
+          );
+
+          // Recalculate invoice status based on new payment totals
+          db.get(
+            `SELECT si.amount,
+                    COALESCE(SUM(CASE WHEN sp.voided = 0 OR sp.voided IS NULL THEN sp.amount ELSE 0 END), 0) AS total_paid
+             FROM supplier_invoices si
+             LEFT JOIN supplier_payments sp ON sp.supplier_invoice_id = si.id
+             WHERE si.id = ?`,
+            [payment.supplier_invoice_id],
+            (err2, row) => {
+              if (err2) { db.run("ROLLBACK"); return res.status(500).json({ error: err2.message }); }
+              const totalPaid = Number(row?.total_paid || 0);
+              const invoiceAmount = Number(row?.amount || 0);
+              const newStatus = totalPaid <= 0 ? "unpaid" : totalPaid >= invoiceAmount - 0.001 ? "paid" : "partial";
+
+              db.run(
+                "UPDATE supplier_invoices SET status = ? WHERE id = ?",
+                [newStatus, payment.supplier_invoice_id],
+                (err3) => {
+                  if (err3) { db.run("ROLLBACK"); return res.status(500).json({ error: err3.message }); }
+
+                  db.run("COMMIT", (err4) => {
+                    if (err4) return res.status(500).json({ error: err4.message });
+                    res.json({ message: "Payment voided successfully", new_invoice_status: newStatus });
+                  });
+                },
+              );
+            },
+          );
+        });
+      });
     },
   );
 

@@ -1,6 +1,9 @@
 module.exports = function registerInventoryRoutes(app, deps) {
   const { db, requirePerm, createNotification } = deps;
 
+  // Safe column additions — errors (column already exists) are silently ignored
+  db.run("ALTER TABLE inventory_transfers ADD COLUMN reversed INTEGER DEFAULT 0", () => {});
+
   function enqueueInventorySyncEvents(changes, context, cb) {
     try {
       const fn = deps.enqueueInventorySyncEvents;
@@ -164,6 +167,70 @@ module.exports = function registerInventoryRoutes(app, deps) {
     );
   });
 
+  // Reverse a completed inventory transfer
+  app.post("/api/transfers/:id/reverse", requirePerm("all_access"), (req, res) => {
+    const { id } = req.params;
+    db.get(
+      "SELECT * FROM inventory_transfers WHERE id = ?",
+      [id],
+      (err, transfer) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!transfer) return res.status(404).json({ error: "Transfer not found" });
+        if (transfer.reversed) return res.status(400).json({ error: "Transfer has already been reversed" });
+
+        const { product_id, from_outlet_id, to_outlet_id, quantity } = transfer;
+
+        db.serialize(() => {
+          db.run("BEGIN TRANSACTION");
+
+          // Mark original as reversed
+          db.run(
+            "UPDATE inventory_transfers SET reversed = 1 WHERE id = ?",
+            [id],
+            function (err) {
+              if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
+            },
+          );
+
+          // Deduct from to_outlet (reversal)
+          db.run(
+            "UPDATE outlet_stock SET quantity = quantity - ? WHERE product_id = ? AND outlet_id = ?",
+            [quantity, product_id, to_outlet_id],
+            function (err) {
+              if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
+            },
+          );
+
+          // Add back to from_outlet
+          db.run(
+            `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+             VALUES (?, ?, ?)
+             ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = quantity + ?`,
+            [product_id, from_outlet_id, quantity, quantity],
+            function (err) {
+              if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
+            },
+          );
+
+          // Insert reversal transfer record
+          db.run(
+            `INSERT INTO inventory_transfers (product_id, from_outlet_id, to_outlet_id, quantity, employee_id, note, reversed)
+             VALUES (?, ?, ?, ?, ?, ?, 0)`,
+            [product_id, to_outlet_id, from_outlet_id, quantity, transfer.employee_id || null, `Reversal of transfer #${id}`],
+            function (err) {
+              if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
+            },
+          );
+
+          db.run("COMMIT", (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: "Transfer reversed successfully" });
+          });
+        });
+      },
+    );
+  });
+
   // --- STOCK ADJUSTMENTS ---
 
   app.get("/api/adjustments", (req, res) => {
@@ -248,6 +315,55 @@ module.exports = function registerInventoryRoutes(app, deps) {
           );
         },
       );
+    });
+  });
+
+  // Update adjustment notes/reason only (no stock recalculation)
+  app.put("/api/adjustments/:id", requirePerm("all_access"), (req, res) => {
+    const { id } = req.params;
+    const { reason, notes } = req.body;
+    db.run(
+      `UPDATE stock_adjustments
+       SET reason = COALESCE(?, reason),
+           notes  = COALESCE(?, notes)
+       WHERE id = ?`,
+      [reason || null, notes || null, id],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: "Adjustment not found" });
+        res.json({ message: "Adjustment updated" });
+      },
+    );
+  });
+
+  // Delete adjustment and reverse stock effect
+  app.delete("/api/adjustments/:id", requirePerm("all_access"), (req, res) => {
+    const { id } = req.params;
+    db.get("SELECT * FROM stock_adjustments WHERE id = ?", [id], (err, adj) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!adj) return res.status(404).json({ error: "Adjustment not found" });
+
+      const reversal = -Number(adj.quantity_change || 0);
+      db.serialize(() => {
+        db.run("BEGIN TRANSACTION");
+
+        db.run(
+          "UPDATE outlet_stock SET quantity = quantity + ? WHERE product_id = ? AND outlet_id = ?",
+          [reversal, adj.product_id, adj.outlet_id],
+          function (err) {
+            if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
+          },
+        );
+
+        db.run("DELETE FROM stock_adjustments WHERE id = ?", [id], function (err) {
+          if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
+        });
+
+        db.run("COMMIT", (err) => {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json({ message: "Adjustment deleted and stock reversed" });
+        });
+      });
     });
   });
 };

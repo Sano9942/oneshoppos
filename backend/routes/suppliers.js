@@ -75,13 +75,23 @@ module.exports = function registerSupplierRoutes(app, deps) {
     );
   });
 
-  // Delete a supplier
+  // Delete a supplier — blocked when outstanding invoices exist
   app.delete("/api/suppliers/:id", requirePerm("manage_inventory"), (req, res) => {
     const { id } = req.params;
-    db.run("DELETE FROM suppliers WHERE id = ?", [id], function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      if (this.changes === 0) return res.status(404).json({ error: "Supplier not found" });
-      res.json({ message: "Supplier deleted" });
-    });
+    db.get(
+      `SELECT COUNT(*) as cnt FROM supplier_invoices WHERE supplier_id = ? AND (status != 'paid' OR status IS NULL)`,
+      [id],
+      (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (Number(row?.cnt || 0) > 0) {
+          return res.status(400).json({ error: "Cannot delete supplier with outstanding invoices. Settle all invoices first." });
+        }
+        db.run("DELETE FROM suppliers WHERE id = ?", [id], function (err2) {
+          if (err2) return res.status(500).json({ error: err2.message });
+          if (this.changes === 0) return res.status(404).json({ error: "Supplier not found" });
+          res.json({ message: "Supplier deleted" });
+        });
+      },
+    );
   });
 };
