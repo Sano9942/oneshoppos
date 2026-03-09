@@ -8,6 +8,24 @@ module.exports = function createHRRouter({
 }) {
   const router = express.Router();
 
+  // Create hr_payroll_lines table if it doesn't exist (manual pay line overrides)
+  db.run(
+    `CREATE TABLE IF NOT EXISTS hr_payroll_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      period_id INTEGER NOT NULL,
+      employee_id INTEGER NOT NULL,
+      base_salary REAL DEFAULT 0,
+      deductions REAL DEFAULT 0,
+      net_pay REAL DEFAULT 0,
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(period_id, employee_id)
+    )`,
+    (err) => {
+      if (err) console.error("[HR] hr_payroll_lines table init error:", err.message);
+    },
+  );
+
   router.get(
     "/api/hr/leave",
     requirePerm("all_access"),
@@ -101,6 +119,71 @@ module.exports = function createHRRouter({
             message: "Leave request updated",
             changed: this.changes || 0,
           });
+        },
+      );
+    },
+  );
+
+  // ── Leave Balance ─────────────────────────────────────────────────────────
+  router.get(
+    "/api/hr/leave/balance",
+    requirePerm("all_access"),
+    requireFeature("advanced_hr"),
+    (req, res) => {
+      // Default to current YYYY-MM if not provided
+      const month = req.query.month || new Date().toISOString().slice(0, 7);
+
+      db.all(
+        `SELECT e.id AS employee_id, e.name AS employee_name,
+                COALESCE(e.monthly_leave_allowance, 2) AS monthly_allowance
+         FROM employees
+         ORDER BY e.name ASC`,
+        [],
+        (err, employees) => {
+          if (err) return res.status(500).json({ error: err.message });
+
+          if (!employees || employees.length === 0) {
+            return res.json({ balances: [] });
+          }
+
+          // Count approved leave days per employee for the given month
+          // hr_leave stores individual leave dates; leave_requests stores date ranges.
+          // The payroll generate code uses leave_requests — use it for consistency.
+          let pending = employees.length;
+          const results = [];
+          let failed = false;
+
+          for (const emp of employees) {
+            db.get(
+              `SELECT COALESCE(SUM(days), 0) AS used_this_month
+               FROM leave_requests
+               WHERE employee_id = ?
+                 AND status = 'approved'
+                 AND strftime('%Y-%m', start_date) = ?`,
+              [emp.employee_id, month],
+              (err2, row) => {
+                if (err2 && !failed) {
+                  failed = true;
+                  return res.status(500).json({ error: err2.message });
+                }
+                if (!failed) {
+                  const used = Number(row?.used_this_month || 0);
+                  results.push({
+                    employee_id: emp.employee_id,
+                    employee_name: emp.employee_name,
+                    monthly_allowance: Number(emp.monthly_allowance || 2),
+                    used_this_month: used,
+                    remaining: Math.max(0, Number(emp.monthly_allowance || 2) - used),
+                  });
+                }
+                pending -= 1;
+                if (pending === 0 && !failed) {
+                  results.sort((a, b) => a.employee_name.localeCompare(b.employee_name));
+                  res.json({ month, balances: results });
+                }
+              },
+            );
+          }
         },
       );
     },
@@ -378,6 +461,55 @@ module.exports = function createHRRouter({
         (err, rows) => {
           if (err) return res.status(500).json({ error: err.message });
           res.json({ lines: rows || [] });
+        },
+      );
+    },
+  );
+
+  // ── HR Payroll Lines (manual overrides in hr_payroll_lines) ───────────────
+  router.post(
+    "/api/hr/payroll/periods/:id/lines",
+    requirePerm("all_access"),
+    requireFeature("advanced_hr"),
+    (req, res) => {
+      const { id } = req.params;
+      const { employee_id, base_salary, deductions, net_pay, notes } = req.body || {};
+      if (!employee_id) {
+        return res.status(400).json({ error: "employee_id is required" });
+      }
+      const baseSalary = Number(base_salary || 0);
+      const deductAmt = Number(deductions || 0);
+      // If net_pay not supplied, compute it from base_salary - deductions
+      const netPay = net_pay !== undefined ? Number(net_pay) : baseSalary - deductAmt;
+
+      // Upsert: replace existing line for this period+employee if present
+      db.run(
+        `INSERT INTO hr_payroll_lines (period_id, employee_id, base_salary, deductions, net_pay, notes)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(period_id, employee_id) DO UPDATE SET
+           base_salary = excluded.base_salary,
+           deductions  = excluded.deductions,
+           net_pay     = excluded.net_pay,
+           notes       = excluded.notes`,
+        [id, employee_id, baseSalary, deductAmt, netPay, notes || null],
+        function (err) {
+          if (err) {
+            // ON CONFLICT requires a UNIQUE constraint — fall back to plain INSERT if table
+            // doesn't have the constraint yet (first run before schema is updated)
+            if (err.message && err.message.includes("ON CONFLICT")) {
+              return db.run(
+                `INSERT INTO hr_payroll_lines (period_id, employee_id, base_salary, deductions, net_pay, notes)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [id, employee_id, baseSalary, deductAmt, netPay, notes || null],
+                function (err2) {
+                  if (err2) return res.status(500).json({ error: err2.message });
+                  res.json({ message: "Pay line created", id: this.lastID });
+                },
+              );
+            }
+            return res.status(500).json({ error: err.message });
+          }
+          res.json({ message: this.lastID ? "Pay line created" : "Pay line updated", id: this.lastID });
         },
       );
     },

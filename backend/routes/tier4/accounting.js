@@ -169,6 +169,104 @@ module.exports = function createAccountingRouter({
     },
   );
 
+  // ── Daily Cashflow Breakdown ──────────────────────────────────────────────
+  router.get(
+    "/api/accounting/cashflow/daily",
+    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireFeature("accounting_core"),
+    (req, res) => {
+      const { date_from, date_to, outlet_id } = req.query || {};
+      if (!date_from || !date_to)
+        return res.status(400).json({ error: "date_from and date_to are required" });
+
+      const tz = req.company?.timezone || "UTC";
+      const inflowParams = [toUtcStart(date_from, tz), toUtcEnd(date_to, tz)];
+      const outletSql = outlet_id ? " AND s.outlet_id = ?" : "";
+      if (outlet_id) inflowParams.push(outlet_id);
+
+      // Daily cash inflows from sale_payments (Cash only)
+      db.all(
+        `SELECT date(s.timestamp) AS date,
+                COALESCE(SUM(sp.amount), 0) AS inflow
+         FROM sale_payments sp
+         JOIN sales s ON s.id = sp.sale_id
+         WHERE s.voided = 0
+           AND sp.payment_method = 'Cash'
+           AND s.timestamp >= ? AND s.timestamp < ?${outletSql}
+         GROUP BY date(s.timestamp)`,
+        inflowParams,
+        (err, inflowRows) => {
+          if (err) return res.status(500).json({ error: err.message });
+
+          // Daily cash outflows from expenses (local date — no UTC conversion)
+          const expParams = [date_from, date_to];
+          if (outlet_id) expParams.push(outlet_id);
+          const expOutletSql = outlet_id ? " AND outlet_id = ?" : "";
+
+          db.all(
+            `SELECT date(expense_date) AS date,
+                    COALESCE(SUM(amount), 0) AS outflow
+             FROM expenses
+             WHERE date(expense_date) >= ? AND date(expense_date) <= ?${expOutletSql}
+             GROUP BY date(expense_date)`,
+            expParams,
+            (err2, outflowRows) => {
+              if (err2) return res.status(500).json({ error: err2.message });
+
+              // Merge by date
+              const map = {};
+              for (const r of inflowRows || []) {
+                map[r.date] = { date: r.date, inflow: Number(r.inflow || 0), outflow: 0 };
+              }
+              for (const r of outflowRows || []) {
+                if (!map[r.date]) map[r.date] = { date: r.date, inflow: 0, outflow: 0 };
+                map[r.date].outflow = Number(r.outflow || 0);
+              }
+              const rows = Object.values(map)
+                .sort((a, b) => (a.date < b.date ? -1 : 1))
+                .map((r) => ({ ...r, net: r.inflow - r.outflow }));
+
+              res.json({ cashflow: rows });
+            },
+          );
+        },
+      );
+    },
+  );
+
+  // ── AP/AR Summary ─────────────────────────────────────────────────────────
+  router.get(
+    "/api/accounting/ap-ar",
+    requireAnyPerm(["view_reports", "manage_employees"]),
+    requireFeature("accounting_core"),
+    (req, res) => {
+      db.get(
+        `SELECT COALESCE(SUM(si.amount - COALESCE(sp.paid_amount, 0)), 0) AS total_ap
+         FROM supplier_invoices si
+         LEFT JOIN (
+           SELECT supplier_invoice_id, SUM(amount) AS paid_amount
+           FROM supplier_payments GROUP BY supplier_invoice_id
+         ) sp ON sp.supplier_invoice_id = si.id
+         WHERE si.status != 'paid'`,
+        [],
+        (err, apRow) => {
+          if (err) return res.status(500).json({ error: err.message });
+          db.get(
+            `SELECT COALESCE(SUM(balance), 0) AS total_ar
+             FROM customers WHERE COALESCE(balance, 0) > 0`,
+            [],
+            (err2, arRow) => {
+              if (err2) return res.status(500).json({ error: err2.message });
+              const total_ap = Number(apRow?.total_ap || 0);
+              const total_ar = Number(arRow?.total_ar || 0);
+              res.json({ total_ap, total_ar, net_position: total_ar - total_ap });
+            },
+          );
+        },
+      );
+    },
+  );
+
   router.get(
     "/api/accounting/ap",
     requireAnyPerm(["view_reports", "manage_employees"]),

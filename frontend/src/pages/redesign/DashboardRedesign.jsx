@@ -17,6 +17,7 @@ import { DashboardInventoryAlerts } from "../dashboard/DashboardInventoryAlerts"
 import { DashboardAttendance } from "../dashboard/DashboardAttendance";
 import { DashboardRecentSales } from "../dashboard/DashboardRecentSales";
 import { DashboardAttention } from "../dashboard/DashboardAttention";
+import { DashboardTopProducts } from "../dashboard/DashboardTopProducts";
 
 export default function DashboardRedesign() {
   const navigate = useNavigate();
@@ -166,6 +167,13 @@ export default function DashboardRedesign() {
       {!isCashier && (
         <div className="mb-4">
           <DashboardContribution data={data} />
+        </div>
+      )}
+
+      {/* Top products — hidden for cashier */}
+      {!isCashier && (
+        <div className="mb-4">
+          <DashboardTopProducts data={data} />
         </div>
       )}
 
