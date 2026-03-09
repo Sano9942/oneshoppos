@@ -104,7 +104,9 @@
       "Bash(echo \"$TSHIRT\")",
       "Bash(python -c \":*)",
       "Skill(commit-commands:commit)",
-      "Skill(commit-commands:commit:*)"
+      "Skill(commit-commands:commit:*)",
+      "WebFetch(domain:www.smythstoys.com)",
+      "WebFetch(domain:www.thetoyshop.com)"
     ],
     "additionalDirectories": [
       "\\tmp"
