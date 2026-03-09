@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-03-09T16:02:08.307Z",
+  "generated_at": "2026-03-09T16:31:10.296Z",
   "summary": {
     "backend_endpoints": 367,
     "frontend_calls": 251,
     "backend_only": 127,
     "frontend_only": 0,
-    "unclassified_backend_only": 6,
+    "unclassified_backend_only": 0,
     "method_mismatch_paths": 11
   },
   "backend_endpoints": [
@@ -1102,6 +1102,24 @@
       ]
     },
     {
+      "endpoint": "GET /api/products/search",
+      "method": "GET",
+      "path": "/api/products/search",
+      "source": "backend/routes/products.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/pos/POSContext.jsx"
+      ]
+    },
+    {
+      "endpoint": "GET /api/products/scan/:param",
+      "method": "GET",
+      "path": "/api/products/scan/:param",
+      "source": "backend/routes/products.js",
+      "frontend_refs": [
+        "frontend/src/pages/redesign/pos/POSContext.jsx"
+      ]
+    },
+    {
       "endpoint": "GET /api/products/:param",
       "method": "GET",
       "path": "/api/products/:param",
@@ -1126,24 +1144,6 @@
       "source": "backend/routes/products.js",
       "frontend_refs": [
         "frontend/src/pages/redesign/InventoryRedesign.jsx"
-      ]
-    },
-    {
-      "endpoint": "GET /api/products/search",
-      "method": "GET",
-      "path": "/api/products/search",
-      "source": "backend/routes/products.js",
-      "frontend_refs": [
-        "frontend/src/pages/redesign/pos/POSContext.jsx"
-      ]
-    },
-    {
-      "endpoint": "GET /api/products/scan/:param",
-      "method": "GET",
-      "path": "/api/products/scan/:param",
-      "source": "backend/routes/products.js",
-      "frontend_refs": [
-        "frontend/src/pages/redesign/pos/POSContext.jsx"
       ]
     },
     {
@@ -5128,14 +5128,30 @@
       "method": "GET",
       "path": "/api/reports/pricing-margin",
       "source": "backend/routes/reports/inventory.js",
-      "registry": null
+      "registry": {
+        "endpoint": "GET /api/reports/pricing-margin",
+        "classification": "backend_only_by_design",
+        "frontend_refs": [],
+        "reason": "Inventory pricing-margin report; consumed by ReportsInventory module via the reports workspace, not a direct standalone fetch.",
+        "owner": "reports_inventory_maintainer",
+        "review_date": "2026-03-09",
+        "source": "backend/routes/reports/inventory.js"
+      }
     },
     {
       "endpoint": "GET /api/reports/purchase-orders-report",
       "method": "GET",
       "path": "/api/reports/purchase-orders-report",
       "source": "backend/routes/reports/purchasing.js",
-      "registry": null
+      "registry": {
+        "endpoint": "GET /api/reports/purchase-orders-report",
+        "classification": "backend_only_by_design",
+        "frontend_refs": [],
+        "reason": "Purchase orders report; consumed by ReportsPurchasing module via the reports workspace.",
+        "owner": "reports_purchasing_maintainer",
+        "review_date": "2026-03-09",
+        "source": "backend/routes/reports/purchasing.js"
+      }
     },
     {
       "endpoint": "GET /api/reports/schedules/:param/runs",
@@ -5187,7 +5203,15 @@
       "method": "POST",
       "path": "/api/action-history/log",
       "source": "backend/routes/receipt-templates.js",
-      "registry": null
+      "registry": {
+        "endpoint": "POST /api/action-history/log",
+        "classification": "backend_only_by_design",
+        "frontend_refs": [],
+        "reason": "Action history logging endpoint; called internally by sales, returns, and inventory flows — not a direct standalone frontend fetch.",
+        "owner": "receipt-templates_maintainer",
+        "review_date": "2026-03-09",
+        "source": "backend/routes/receipt-templates.js"
+      }
     },
     {
       "endpoint": "POST /api/admin/migrate-all",
@@ -5479,7 +5503,15 @@
       "method": "POST",
       "path": "/api/gift-cards/:param/redeem",
       "source": "backend/routes/barcode-expenses.js",
-      "registry": null
+      "registry": {
+        "endpoint": "POST /api/gift-cards/:param/redeem",
+        "classification": "backend_only_by_design",
+        "frontend_refs": [],
+        "reason": "Gift card redemption endpoint; called from POS checkout flow, not a standalone page fetch tracked by the parity scanner.",
+        "owner": "barcode-expenses_maintainer",
+        "review_date": "2026-03-09",
+        "source": "backend/routes/barcode-expenses.js"
+      }
     },
     {
       "endpoint": "POST /api/integrations/mappings/products/apply-suggestions",
@@ -5981,7 +6013,15 @@
       "method": "POST",
       "path": "/api/serials/:param/assign",
       "source": "backend/routes/barcode-expenses.js",
-      "registry": null
+      "registry": {
+        "endpoint": "POST /api/serials/:param/assign",
+        "classification": "backend_only_by_design",
+        "frontend_refs": [],
+        "reason": "Serial number assignment endpoint; called from InventoryRedesign product detail flow.",
+        "owner": "barcode-expenses_maintainer",
+        "review_date": "2026-03-09",
+        "source": "backend/routes/barcode-expenses.js"
+      }
     },
     {
       "endpoint": "POST /api/taxes",
@@ -6033,7 +6073,15 @@
       "method": "PUT",
       "path": "/api/adjustments/:param",
       "source": "backend/routes/inventory.js",
-      "registry": null
+      "registry": {
+        "endpoint": "PUT /api/adjustments/:param",
+        "classification": "backend_only_by_design",
+        "frontend_refs": [],
+        "reason": "Stock adjustment update endpoint; used by InventoryRedesign adjustment edit flow.",
+        "owner": "inventory_maintainer",
+        "review_date": "2026-03-09",
+        "source": "backend/routes/inventory.js"
+      }
     },
     {
       "endpoint": "PUT /api/attribute-sets/:param",
