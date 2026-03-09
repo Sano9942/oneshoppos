@@ -377,6 +377,7 @@ export default function CashManagementRedesign() {
                     <span className="text-sm font-semibold text-(--ui-text)">Total</span>
                     <span />
                     <p className="text-right text-sm font-semibold text-(--ui-text)">{money(openingCash)}</p>
+                  </div>
                 </div>
               </SectionCard>
               <Select
