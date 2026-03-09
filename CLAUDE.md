@@ -10,6 +10,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 ## Current Status Snapshot (March 2026)
 
 - Latest migration is `backend/migrate70.js`
+- **Roadmap Phase 2 complete (Mar 9 2026)**: All 25 remaining roadmap items shipped in 9 parallel sessions — loyalty/wallet frontend, security fixes (SEC6+SEC8), reorder alerts, accounting/HR wire-up, PO edit+approval, orders detail tabs, quotations email, parked sales page, stock/transfer/supplier/category guards, CRM typed activities, backup progress, notifications, serial numbers, gift cards, PO templates, stock-by-outlet popup, action history logging, reports governance UI
 - **Test suite: 395/395 Jest integration tests passing (37 suites, 0 failures)**
   - 7 new test files added in Phase 6: data-integrity, negative-cases, security, auditability, concurrency, failure-handling, compliance
   - `shift-linkage.test.js` added: 3 tests verifying `shift_id` written to sales and returns at creation
@@ -61,6 +62,24 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - Dashboard auto-refresh (Mar 2026): `DashboardRedesign.jsx` now silently re-fetches every 60 seconds via `refreshKey` state + `setInterval`; manual refresh button in subtitle with spinning icon + last-updated timestamp
 - Timezone Phase 1 complete (Mar 2026): All single-tenant timezone correctness bugs fixed (Sections A-F + J from `TIMEZONE-AUDIT.md`): backend UTC/LOCAL query fixes across 10 route files, `dates.js` dual-parser rewrite (UTC+LOCAL formatters), 13 frontend display fixes (C1-C5), stale attendance session auto-close (F1+F2), shared `applyUtcDateFilter`/`applyLocalDateFilter` helpers in `reports/helpers.js`; 292/298 tests passing (zero new regressions). **Sections J1/J2 + 2 additional files were missed in the original commit and fixed separately (Mar 9 2026):** `Attendance.jsx`, `KioskRedesign.jsx`, `ReportsStaff.jsx` all had `new Date(dt)` on LOCAL-time columns — Chrome parses space-separated SQLite strings as UTC causing -5h display shift; fixed by importing `parseLocalDate`/`fmtLocalTime`/`fmtLocalDate` from `dates.js`. `HRManagementRedesign.jsx` and `DashboardTrends.jsx` use `new Date(d + "T00:00:00")` which is correct for date-only strings — left unchanged.
 - Multi-tenant readiness: Before flipping `MULTI_TENANT=1` in production, the following are still needed: (1) Timezone Phase 2 — ~30 `'localtime'` SQL modifiers in GROUP BY must use tenant timezone, `loadCompanyProfile` cache must be keyed per-tenant; (2) tenant isolation testing; (3) tenant onboarding from super-admin dashboard; (4) tenant-aware scheduled jobs (stale session cleanup, report scheduler); (5) subdomain/slug routing; (6) Railway multi-DB volume strategy; (7) backup/restore per-tenant; (8) rate limiting per-tenant
+- **New pages/routes added in Phase 2** (all wired in `App.jsx`, all have nav entries):
+  - `/reorder-alerts` — `ReorderAlertsRedesign.jsx` (Stock Control section)
+  - `/parked-sales` — `ParkedSalesRedesign.jsx` (Sales section)
+  - `/notifications` — `NotificationsRedesign.jsx` (top-level, gated by `notifications` feature flag)
+  - Serial numbers + gift cards backend routes in `barcode-expenses.js`; frontend in `InventoryRedesign.jsx`
+  - PO templates: `GET/POST/DELETE /api/purchase-orders/templates` in `purchase-orders.js`
+  - Stock by outlet popup: `GET /api/products/:id/stock` UI in `InventoryRedesign.jsx`
+  - Action history logging: expanded inserts in `sales.js`, `returns.js`, `inventory.js`
+  - Reports governance: `frontend/src/pages/reports/ReportsGovernance.jsx` (schedule manager + saved views)
+- **Security** (SEC6 + SEC8 both fixed and tested):
+  - SEC6: `x-employee-id` header validated as positive integer in `loadEmployeePerms` (`index.js` line ~248)
+  - SEC8: `GET /api/feature-flags` returns 401 if no `x-employee-id` header (`registerAllRoutes.js` line ~187)
+- **Loyalty & Wallet at POS**: `POSCheckoutModal.jsx` shows points balance + wallet balance; redeem toggle applies points as discount; `POSContext.jsx` fetches customer wallet/points on customer select; `CustomersRedesign.jsx` has Loyalty & Wallet history tab
+- **PO Edit + Approval**: `PUT /api/purchase-orders/:id` edits draft POs; `POST /api/purchase-orders/:id/approve` transitions Draft→Approved (manager/admin only); `PurchaseOrdersRedesign.jsx` shows status badge + approve button
+- **Orders detail**: `OrdersRedesign.jsx` detail modal has Transactions tab + Fulfillments tab fed from `GET /api/orders/:id`
+- **Quotations email**: `POST /api/quotations/:id/send` in `tier4/crm.js` sends HTML email via nodemailer; Send button in `QuotationsRedesign.jsx`
+- **CRM typed activities**: `crm_activities.type` column exists since migrate46; `CRMRedesign.jsx` shows type selector (Call, Email, Meeting, Demo, Follow-up, Note)
+- **Transfer reverse + Stock adj delete + Supplier payment void**: all in `inventory.js` / `grn.js`; delete guards for suppliers (`suppliers.js`) and categories (`categories.js`) block deletes when dependent records exist
 
 ## Completed Baseline Before Testing Plan (as of 2026-03-05)
 
