@@ -290,6 +290,7 @@ export const POSProvider = ({ children }) => {
         const fieldParam = field !== "all" ? `&field=${field}` : "";
         const res = await fetch(
           `${API}/api/products/search?query=${encodeURIComponent(query)}${outletParam}${fieldParam}`,
+          { headers: authHeaders() },
         );
         const data = await res.json();
         setResults(data.products || []);
