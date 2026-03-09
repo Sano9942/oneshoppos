@@ -110,6 +110,144 @@ This file tracks everything we want to build, fix, or improve for SanoPOS.
 
 ---
 
+## 🔴 Next Up: First-Run Setup Wizard
+
+**Priority:** HIGH — should be built before any new store deployment
+**Why:** Eliminates all timezone/currency/identity bugs by forcing correct configuration before the first transaction. Also solves the chicken-and-egg problem of "how do you log in when no admin exists yet."
+
+### The Problem It Solves
+1. Fresh database has no employees — nobody can log in to configure the store
+2. Default timezone (`Asia/Karachi`) is wrong for any non-Pakistan deployment
+3. Default currency (`PKR`) is wrong for international stores
+4. Previously required a temporary `SETUP_SECRET` endpoint hack to bootstrap the first admin
+5. Users who never visit Company Settings run with incorrect defaults forever
+
+### Design: Invitation Link (One-Time Token)
+
+**Single-tenant mode (`MULTI_TENANT=0`):**
+- Server boots, sees `setup_complete = 0`, generates a random setup token
+- Token stored in `company_profile.setup_token`
+- Server logs a setup URL to console: `https://your-app.com/setup?token=a8f3c9...`
+- Deployer clicks the link or sends it to the store owner
+- Wizard validates token → runs setup → deletes token → sets `setup_complete = 1`
+- Link is dead forever after first use
+
+**Multi-tenant mode (`MULTI_TENANT=1`):**
+- No public wizard — tenants are provisioned by super-admin
+- Super-admin provisions tenant → gets a setup link from Admin Dashboard
+- Tenant owner clicks link → same wizard → configures their own store
+- Same token mechanism, same wizard code — works identically for both modes
+
+**Server restart safety:** If `setup_complete = 0`, server regenerates and logs a new token on every boot (in case the deployer lost the original).
+
+### Wizard Screens (4 steps, cannot be skipped)
+
+**Screen 1 — Store Identity**
+- Store name (required)
+- Country (dropdown — auto-suggests timezone + currency on next screen)
+- City
+- Phone / Email
+
+**Screen 2 — Time, Location & Currency**
+- Timezone — searchable dropdown, pre-filtered by country from screen 1
+- **Live clock preview:** "Current time in Asia/Karachi: 11:42 PM, Mar 9" — user sees immediately if it's correct
+- Currency symbol + currency code (auto-filled from country, can override)
+- Fiscal year start month
+- Primary tax name + rate (optional — "Skip, I'll add later" button)
+
+**Screen 3 — First Outlet**
+- Outlet name (default: "Main Store")
+- Outlet address (optional — appears on receipts)
+
+**Screen 4 — Administrator Account**
+- Your name (required)
+- Choose PIN — 4-6 digits, with confirm field
+- Auto-assigned: Administrator role + assigned to outlet from screen 3
+
+### What `POST /api/setup/complete` Creates (in one transaction)
+
+1. Updates `company_profile` — store name, country, city, timezone, currency, fiscal year, tax
+2. Creates first outlet (or updates existing if seed created one)
+3. Creates default roles: Administrator, Manager, Cashier + permission sets
+4. Creates first employee (Administrator) with chosen PIN + assigns to outlet
+5. Creates default receipt template (so POS print works on day one)
+6. Seeds feature flags with sane defaults
+7. Sets `setup_complete = 1`, deletes `setup_token`
+8. Returns `{ success: true }` → frontend redirects to `/login`
+
+### Security
+
+- Wizard endpoint only works when `setup_complete = 0` AND token matches
+- Once used, token is deleted — endpoint permanently rejects all future calls
+- No env var secrets needed — token is auto-generated
+- Backend rejects ALL other API calls with `503 Setup required` until wizard completes
+
+### Backend middleware check
+
+```
+if (!MULTI_TENANT && !company.setup_complete) {
+  // Only allow /api/setup/* endpoints
+  // Everything else → 503 "Setup required"
+}
+```
+
+### Important: server TZ env var still needed
+
+The wizard sets `company_profile.timezone` which fixes all report date filters. But `attendance_sessions` uses SQLite `datetime('now','localtime')` which reads the **server OS timezone**. The wizard should display a reminder on the final screen:
+
+> "For attendance times to be stored correctly, ensure your server's `TZ` environment variable is set to `Asia/Karachi`."
+
+In multi-tenant mode, Timezone Phase 2 (GROUP BY localtime → tenant tz) must also be completed.
+
+### Files to Create/Modify
+
+| File | Action |
+|------|--------|
+| `backend/migrate71.js` | Add `setup_complete INTEGER DEFAULT 0` + `setup_token TEXT` to `company_profile`; existing deployments auto-set `setup_complete = 1` |
+| `backend/routes/setup.js` | `GET /api/setup/status`, `POST /api/setup/complete` (token-gated, creates all seed data) |
+| `backend/index.js` | Middleware: if `!setup_complete`, block all routes except `/api/setup/*` with 503; on boot if `setup_complete = 0`, generate token + log URL |
+| `frontend/src/pages/SetupWizard.jsx` | 4-step wizard with live timezone preview |
+| `frontend/src/App.jsx` | Add `/setup` route (unauthenticated, before `RequireAuth`) |
+| `backend/run_migrations.js` | Add `migrate71.js` to migration array |
+| `backend/tenant-provisioner.js` | Generate setup token for new tenants, return it to super-admin |
+| `frontend/src/pages/admin/AdminTenantDetail.jsx` | Show/regenerate setup link for provisioned tenants |
+
+### How existing deployments are handled
+
+`migrate71.js` should:
+```sql
+ALTER TABLE company_profile ADD COLUMN setup_complete INTEGER DEFAULT 0;
+ALTER TABLE company_profile ADD COLUMN setup_token TEXT;
+-- Auto-complete for existing stores (they're already configured)
+UPDATE company_profile SET setup_complete = 1 WHERE company_name != 'My Store' OR timezone != 'Asia/Karachi';
+-- Safety: if ANY employees exist, store is already set up
+UPDATE company_profile SET setup_complete = 1 WHERE (SELECT COUNT(*) FROM employees) > 0;
+```
+
+---
+
+## 🐛 Known Live Bugs (Production)
+
+### ~~BUG-1~~: `ContextSwitcher` calls `/api/context/bootstrap` without auth headers — ✅ FIXED Mar 9 2026
+**File:** `frontend/src/components/ContextSwitcher.jsx`
+**Root cause:** Missing `{ headers: authHeaders() }` — caused POS Opening Gate to show empty branch dropdown, blocking the entire POS flow including product search
+**Fix applied:** Added `authHeaders` from `useAuth()` and passed it to the fetch call
+
+### BUG-2: Dashboard KPIs show "No sales yet today" despite recent sales existing
+**Severity:** Medium — misleading dashboard data
+**File:** `frontend/src/pages/redesign/DashboardRedesign.jsx` line 50
+**Root cause:** Caused by BUG-1 — no outlet context stored after login so `/api/reports/dashboard` had no `x-outlet-id`; expected to resolve automatically now that BUG-1 is fixed
+**Effect:** All KPI cards (today's sales, revenue, exceptions) show zero/empty; Recent Sales loads fine (separate `/api/sales` call)
+**Status:** Monitor after BUG-1 deploys; if still failing, investigate `x-outlet-id` injection in `AuthProvider`
+
+### BUG-3: `ReportsSales.jsx` calls report endpoints without explicit auth headers
+**Severity:** Low — global `window.fetch` patch handles headers for logged-in users so this works in practice
+**File:** `frontend/src/pages/reports/ReportsSales.jsx` (9 fetch calls, none pass `authHeaders()`)
+**Root cause:** File never imported `useAuth` — relies entirely on the global `window.fetch` patch
+**Status:** Monitor; only a problem if the patch has a race condition on mount
+
+---
+
 ## 📋 Discussed but Deferred
 
 - **Payment gateway integration** (card machines, JazzCash, EasyPaisa)

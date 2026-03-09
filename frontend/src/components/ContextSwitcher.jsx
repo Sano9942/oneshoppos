@@ -6,7 +6,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { API_BASE as API } from "../config";
 
 export default function ContextSwitcher() {
-  const { employee, hasPerm } = useAuth();
+  const { employee, hasPerm, authHeaders } = useAuth();
   const navigate = useNavigate();
   const [ctx, setCtx] = useState(() => readContext());
   const [outlets, setOutlets] = useState([]);
@@ -16,7 +16,7 @@ export default function ContextSwitcher() {
   // Load allowed outlets on mount
   useEffect(() => {
     if (!employee?.id) return;
-    fetch(`${API}/api/context/bootstrap`)
+    fetch(`${API}/api/context/bootstrap`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((data) => {
         if (data.outlets) setOutlets(data.outlets);
