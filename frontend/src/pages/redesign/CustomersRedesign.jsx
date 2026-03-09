@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, Plus, Search, UserRound } from "lucide-react";
+import { Download, Plus, Search, UserRound, Wallet } from "lucide-react";
 import { API_BASE as API_BASE_URL } from "../../config";
-import { fmtDate } from "../../utils/dates";
+import { fmtDate, fmtUtcDateTime } from "../../utils/dates";
 import {
   Badge,
   Button,
@@ -74,6 +74,7 @@ export default function CustomersRedesign() {
   const [detail, setDetail] = useState(null);
   const [customerSales, setCustomerSales] = useState([]);
   const [walletBalance, setWalletBalance] = useState(0);
+  const [walletLedger, setWalletLedger] = useState([]);
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(1);
 
@@ -117,9 +118,11 @@ export default function CustomersRedesign() {
       const walletData = await walletRes.json();
       setCustomerSales(salesData.sales || []);
       setWalletBalance(walletData.balance || 0);
+      setWalletLedger(walletData.ledger || []);
     } catch {
       setCustomerSales([]);
       setWalletBalance(0);
+      setWalletLedger([]);
     }
   };
 
@@ -457,9 +460,12 @@ export default function CustomersRedesign() {
               </SectionCard>
 
               <SectionCard className="p-2">
-                <p className="mb-2 text-xs text-(--ui-text-muted)">
-                  Wallet balance: {money(walletBalance)}
-                </p>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Wallet size={13} className="text-emerald-600" />
+                  <p className="text-xs font-semibold text-(--ui-text)">
+                    Wallet · {money(walletBalance)}
+                  </p>
+                </div>
                 <div className="space-y-2">
                   <Input
                     type="number"
@@ -478,6 +484,42 @@ export default function CustomersRedesign() {
                     Top Up Wallet
                   </Button>
                 </div>
+                {walletLedger.length > 0 && (
+                  <div className="mt-3 border-t border-(--ui-border) pt-2">
+                    <p className="text-xs font-semibold text-(--ui-text-muted) mb-1.5">
+                      Wallet History
+                    </p>
+                    <div className="max-h-44 overflow-auto space-y-1">
+                      {walletLedger.slice(0, 10).map((entry, i) => (
+                        <div
+                          key={i}
+                          className="flex items-start justify-between rounded border border-(--ui-border) px-2 py-1.5 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <p
+                              className={`font-semibold truncate ${
+                                entry.type === "credit"
+                                  ? "text-emerald-700"
+                                  : "text-rose-600"
+                              }`}
+                            >
+                              {entry.type === "credit" ? "+" : "-"}
+                              {money(Math.abs(entry.amount))}
+                              {entry.note ? (
+                                <span className="ml-1 font-normal text-(--ui-text-muted)">
+                                  · {entry.note}
+                                </span>
+                              ) : null}
+                            </p>
+                            <p className="text-(--ui-text-muted)">
+                              {fmtUtcDateTime(entry.created_at)}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </SectionCard>
 
               <div>

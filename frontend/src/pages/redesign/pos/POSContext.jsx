@@ -87,6 +87,15 @@ export const POSProvider = ({ children }) => {
   const [submitting, setSubmitting] = useState(false);
   const payAmountRef = useRef(null);
 
+  // ── Loyalty & Wallet (checkout) ───────────────────────────────────────────
+  // TODO: make earn rate configurable from Company Settings
+  const LOYALTY_EARN_RATE = 1; // 1 point per PKR 100 spent
+  const LOYALTY_REDEEM_RATE = 10; // 100 points = PKR 10 discount
+  const [checkoutWalletBalance, setCheckoutWalletBalance] = useState(0);
+  const [checkoutWalletLoading, setCheckoutWalletLoading] = useState(false);
+  const [redeemPointsOn, setRedeemPointsOn] = useState(false);
+  const [payWithWalletOn, setPayWithWalletOn] = useState(false);
+
   // ── Quick-create customer inside checkout ─────────────────────────────────
   const [custMode, setCustMode] = useState("search");
   const [newCustName, setNewCustName] = useState("");
@@ -391,6 +400,24 @@ export const POSProvider = ({ children }) => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleBarcodeScanned]);
 
+  // Fetch wallet balance when a customer is selected at checkout
+  useEffect(() => {
+    if (!checkoutCustomerId) {
+      setCheckoutWalletBalance(0);
+      setRedeemPointsOn(false);
+      setPayWithWalletOn(false);
+      return;
+    }
+    setCheckoutWalletLoading(true);
+    fetch(`${API}/api/customers/${checkoutCustomerId}/wallet`, {
+      headers: authHeaders(),
+    })
+      .then((r) => r.json())
+      .then((d) => setCheckoutWalletBalance(Number(d.balance || 0)))
+      .catch(() => setCheckoutWalletBalance(0))
+      .finally(() => setCheckoutWalletLoading(false));
+  }, [checkoutCustomerId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const updateQty = (id, delta) => {
     setCart((prev) =>
       prev.map((x) => {
@@ -434,8 +461,25 @@ export const POSProvider = ({ children }) => {
     grossTotal - discountValue + (taxInclusive ? 0 : taxTotal),
   );
   const totalPaid = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
-  const remaining = Math.max(0, total - totalPaid);
-  const change = Math.max(0, totalPaid - total);
+
+  // ── Loyalty computations ──────────────────────────────────────────────────
+  const checkoutCustomer = useMemo(
+    () => customers.find((c) => String(c.id) === String(checkoutCustomerId)) || null,
+    [customers, checkoutCustomerId],
+  );
+  const checkoutCustomerPoints = checkoutCustomer?.loyalty_points || 0;
+  // Points earned on this sale (1 point per PKR 100)
+  const pointsEarned = Math.floor(total / 100) * LOYALTY_EARN_RATE;
+  // Points discount: floor(points / 100) * PKR 10
+  const pointsDiscount = redeemPointsOn
+    ? Math.floor(checkoutCustomerPoints / 100) * LOYALTY_REDEEM_RATE
+    : 0;
+  const pointsRedeemed = redeemPointsOn
+    ? Math.floor(checkoutCustomerPoints / 100) * 100
+    : 0;
+
+  const remaining = Math.max(0, total - totalPaid - pointsDiscount);
+  const change = Math.max(0, totalPaid - total + pointsDiscount);
 
   const effectiveCustomerId = checkoutOpen
     ? checkoutCustomerId
@@ -570,6 +614,8 @@ export const POSProvider = ({ children }) => {
     setNewCustName("");
     setNewCustMobile("");
     setNewCustError("");
+    setRedeemPointsOn(false);
+    setPayWithWalletOn(false);
     setCheckoutOpen(true);
   };
 
@@ -691,6 +737,8 @@ export const POSProvider = ({ children }) => {
           discount_amount: Number(discountInput || 0),
           discount_type: discountType,
           notes: orderNote || null,
+          points_earned: checkoutCustomerId ? pointsEarned : 0,
+          points_redeemed: checkoutCustomerId ? pointsRedeemed : 0,
         }),
       });
       const data = await res.json();
@@ -916,6 +964,19 @@ export const POSProvider = ({ children }) => {
     returnSourceSale,
     setReturnSourceSale,
     openReturnFromSale,
+    // Loyalty & wallet
+    checkoutWalletBalance,
+    checkoutWalletLoading,
+    redeemPointsOn,
+    setRedeemPointsOn,
+    payWithWalletOn,
+    setPayWithWalletOn,
+    checkoutCustomerPoints,
+    pointsEarned,
+    pointsDiscount,
+    pointsRedeemed,
+    LOYALTY_EARN_RATE,
+    LOYALTY_REDEEM_RATE,
   };
 
   return <POSContext.Provider value={value}>{children}</POSContext.Provider>;

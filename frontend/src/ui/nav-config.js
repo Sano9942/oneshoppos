@@ -31,6 +31,8 @@ import {
   Clock,
   Printer,
   Monitor,
+  AlertTriangle,
+  Bell,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -68,6 +70,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Transfers", path: "/transfers", icon: ArrowLeftRight, requiredPerm: "manage_inventory" },
       { name: "Returned Stock", path: "/returned-stock", icon: Package, requiredPerm: "manage_orders" },
       { name: "Supplier Payables", path: "/supplier-payables", icon: CreditCard, requiredPerm: "manage_orders", requiredFlag: "supplier_payables" },
+      { name: "Reorder Alerts", path: "/reorder-alerts", icon: AlertTriangle, requiredPerm: "manage_inventory" },
     ],
   },
   {
