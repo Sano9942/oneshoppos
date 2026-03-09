@@ -216,8 +216,8 @@ module.exports = function registerProductRoutes(app, deps) {
 
     const searchQuery = `%${query}%`;
     let whereClause =
-      "p.name LIKE ? OR p.barcode LIKE ? OR p.sku LIKE ? OR CAST(p.price AS TEXT) LIKE ?";
-    let params = [searchQuery, searchQuery, searchQuery, searchQuery];
+      "p.name LIKE ? OR p.barcode LIKE ? OR p.sku LIKE ? OR CAST(p.price AS TEXT) LIKE ? OR p.description_html LIKE ?";
+    let params = [searchQuery, searchQuery, searchQuery, searchQuery, searchQuery];
 
     if (field === "barcode") {
       whereClause = "p.barcode LIKE ?";
@@ -226,8 +226,8 @@ module.exports = function registerProductRoutes(app, deps) {
       whereClause = "p.sku LIKE ?";
       params = [searchQuery];
     } else if (field === "price") {
-      whereClause = "p.price = ?";
-      params = [query];
+      whereClause = "CAST(p.price AS TEXT) LIKE ?";
+      params = [searchQuery];
     }
 
     let sql = `

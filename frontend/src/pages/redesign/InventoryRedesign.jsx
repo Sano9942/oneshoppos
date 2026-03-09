@@ -793,6 +793,7 @@ export default function InventoryRedesign() {
                     onChange={toggleSelectPage}
                   />
                 </th>
+                <th className="px-3 py-2 w-10"></th>
                 <th className="cursor-pointer px-3 py-2" onClick={() => toggleSort("name")}>
                   Product
                 </th>
@@ -827,6 +828,17 @@ export default function InventoryRedesign() {
                       checked={selectedIds.has(p.id)}
                       onChange={() => toggleSelect(p.id)}
                     />
+                  </td>
+                  <td className="px-3 py-2 w-10">
+                    {p.image_url ? (
+                      <img
+                        src={p.image_url.startsWith("/uploads") ? `${API}${p.image_url}` : p.image_url}
+                        alt=""
+                        className="w-8 h-8 rounded object-cover border border-(--ui-border)"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded bg-(--ui-muted-surface) border border-(--ui-border)" />
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     <div className="font-medium text-(--ui-text)">{p.name}</div>

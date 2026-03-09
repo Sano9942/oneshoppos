@@ -387,20 +387,40 @@ module.exports = function registerSalesRoutes(app, deps) {
       const stockChecks = await Promise.all(
         cartItems.map((item) => {
           const productId = item.original_product_id || item.id;
+          const variantId = item.variant_id || null;
           return new Promise((resolve, reject) => {
-            db.get(
-              "SELECT COALESCE(quantity, 0) AS available FROM outlet_stock WHERE product_id = ? AND outlet_id = ?",
-              [productId, outlet_id],
-              (err, row) => {
-                if (err) return reject(err);
-                resolve({
-                  productId,
-                  name: item.name || `Product #${productId}`,
-                  requested: Number(item.quantity),
-                  available: row ? row.available : 0,
-                });
-              },
-            );
+            if (variantId) {
+              // For variant items: check product_variants.stock (the variant-level pool)
+              db.get(
+                "SELECT COALESCE(stock, 0) AS available FROM product_variants WHERE id = ?",
+                [variantId],
+                (err, row) => {
+                  if (err) return reject(err);
+                  resolve({
+                    productId,
+                    variantId,
+                    name: item.name || `Product #${productId}`,
+                    requested: Number(item.quantity),
+                    available: row ? row.available : 0,
+                  });
+                },
+              );
+            } else {
+              // For non-variant items: check outlet_stock
+              db.get(
+                "SELECT COALESCE(quantity, 0) AS available FROM outlet_stock WHERE product_id = ? AND outlet_id = ?",
+                [productId, outlet_id],
+                (err, row) => {
+                  if (err) return reject(err);
+                  resolve({
+                    productId,
+                    name: item.name || `Product #${productId}`,
+                    requested: Number(item.quantity),
+                    available: row ? row.available : 0,
+                  });
+                },
+              );
+            }
           });
         }),
       );
