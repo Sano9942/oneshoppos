@@ -33,6 +33,7 @@ import {
   Monitor,
   AlertTriangle,
   Bell,
+  PauseCircle,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -45,6 +46,7 @@ export const SHOPIFY_NAV_GROUPS = [
     items: [
       { name: "POS", path: "/pos", icon: MonitorPlay, newTab: true },
       { name: "Orders", path: "/orders", icon: ShoppingCart, requiredPerm: "manage_orders" },
+      { name: "Parked Sales", path: "/parked-sales", icon: PauseCircle, requiredPerm: "manage_orders" },
       { name: "Customers", path: "/customers", icon: Users },
       { name: "Returns", path: "/returns", icon: RotateCcw },
       { name: "Sales History", path: "/sales-history", icon: Receipt },

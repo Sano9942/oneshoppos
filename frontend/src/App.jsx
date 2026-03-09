@@ -52,6 +52,9 @@ import CustomersRoute from "./pages/CustomersRoute";
 import SalesHistoryRoute from "./pages/SalesHistoryRoute";
 import CashManagementRoute from "./pages/CashManagementRoute";
 import ReturnsRoute from "./pages/ReturnsRoute";
+import ParkedSalesRedesign from "./pages/redesign/ParkedSalesRedesign";
+import ReorderAlertsRedesign from "./pages/redesign/ReorderAlertsRedesign";
+import NotificationsRedesign from "./pages/redesign/NotificationsRedesign";
 
 const ReportsRoute = lazy(() => import("./pages/ReportsRoute"));
 const ReportTabStandaloneRoute = lazy(() =>
@@ -154,6 +157,14 @@ function App() {
               </RequirePerm>
             }
           />
+          <Route
+            path="/parked-sales"
+            element={
+              <RequirePerm perm="manage_orders">
+                <ParkedSalesRedesign />
+              </RequirePerm>
+            }
+          />
           <Route path="/lookup" element={<PlaceholderPage />} />
           <Route path="/custom-fields" element={<PlaceholderPage />} />
           <Route path="/partners" element={<PlaceholderPage />} />
@@ -189,6 +200,14 @@ function App() {
             element={
               <RequirePerm perm="manage_inventory">
                 <ProductFormPage />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/reorder-alerts"
+            element={
+              <RequirePerm perm="manage_inventory">
+                <ReorderAlertsRedesign />
               </RequirePerm>
             }
           />
@@ -355,6 +374,7 @@ function App() {
             }
           />
 
+          <Route path="/notifications" element={<NotificationsRedesign />} />
           <Route
             path="/attendance"
             element={
