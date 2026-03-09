@@ -1,11 +1,12 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Bell, ChevronLeft, ChevronRight, Search, User } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, User } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { SHOPIFY_NAV_GROUPS } from "../ui/nav-config";
 import { Input } from "../ui/primitives";
 import useFeatureFlags from "../hooks/useFeatureFlags";
 import ContextSwitcher from "./ContextSwitcher";
+import NotificationBell from "./NotificationBell";
 
 export default function AppLayoutRedesign() {
   const location = useLocation();
@@ -108,9 +109,7 @@ export default function AppLayoutRedesign() {
           </div>
           <div className="ml-4 flex items-center gap-4">
             <ContextSwitcher />
-            <button className="ui-focus-ring rounded-md p-1.5 text-(--ui-text-muted) hover:bg-(--ui-muted-surface)">
-              <Bell size={16} />
-            </button>
+            <NotificationBell />
             <button
               className="ui-focus-ring rounded-md px-2 py-1 text-xs text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
               onClick={async () => {
