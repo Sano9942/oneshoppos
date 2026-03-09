@@ -346,16 +346,15 @@ export const POSProvider = ({ children }) => {
 
   const handleBarcodeScanned = useCallback(async (barcode) => {
     try {
-      const res = await fetch(`${API}/api/products?barcode=${encodeURIComponent(barcode)}`, {
+      const res = await fetch(`${API}/api/products/scan/${encodeURIComponent(barcode)}`, {
         headers: { "x-employee-id": String(employee?.id || "") },
       });
+      if (!res.ok) return; // 404 = product not found — silently ignore
       const data = await res.json();
-      // API returns { products: [...] } or an array directly — handle both
-      const product = Array.isArray(data) ? data[0] : (data?.products || [])[0];
+      const product = data.product;
       if (product) {
         addToCart(product);
       }
-      // No toast on miss — silently ignore unknown barcodes to avoid noise
     } catch (err) {
       console.error("Barcode lookup failed:", err);
     }

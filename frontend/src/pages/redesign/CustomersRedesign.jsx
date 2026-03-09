@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, Plus, Search, Trash2, UserRound } from "lucide-react";
+import { Download, Plus, Search, UserRound } from "lucide-react";
 import { API_BASE as API_BASE_URL } from "../../config";
 import { fmtDate } from "../../utils/dates";
 import {
   Badge,
-  BulkActionBar,
   Button,
   EmptyState,
   Input,
@@ -320,43 +319,10 @@ export default function CustomersRedesign() {
             }
           />
 
-          <div className="p-3">
-            {selectedCount > 0 ? (
-              <BulkActionBar>
-                <span className="text-sm font-semibold text-emerald-800">
-                  {selectedCount} selected
-                </span>
-                <Button
-                  size="sm"
-                  tone="danger"
-                  disabled={busy}
-                  onClick={() => deleteCustomers([...selectedIds])}
-                >
-                  <Trash2 size={13} className="mr-1 inline" />
-                  Delete selected
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => exportCsv(rows.filter((r) => selectedIds.has(r.id)))}
-                >
-                  <Download size={13} className="mr-1 inline" />
-                  Export selected
-                </Button>
-              </BulkActionBar>
-            ) : null}
-          </div>
-
           <div className="overflow-auto">
             <table className="min-w-full border-t border-(--ui-border) text-sm">
               <thead className="bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
                 <tr>
-                  <th className="px-3 py-2">
-                    <input
-                      type="checkbox"
-                      checked={paged.length > 0 && paged.every((r) => selectedIds.has(r.id))}
-                      onChange={toggleSelectPage}
-                    />
-                  </th>
                   <th className="px-3 py-2 text-left">Customer</th>
                   <th className="px-3 py-2 text-left">Mobile</th>
                   <th className="px-3 py-2 text-left">Email</th>
@@ -375,13 +341,6 @@ export default function CustomersRedesign() {
                         detail?.id === r.id ? "bg-emerald-50" : ""
                       }`}
                     >
-                      <td className="px-3 py-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(r.id)}
-                          onChange={() => toggleSelect(r.id)}
-                        />
-                      </td>
                       <td className="px-3 py-2">
                         <button
                           className="flex items-center gap-2 text-left"

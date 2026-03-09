@@ -977,6 +977,26 @@ module.exports = function registerProductRoutes(app, deps) {
     },
   );
 
+  // Upload a product image — returns { url: "/uploads/products/<filename>" }
+  const productImageUpload = multer({
+    storage: multer.diskStorage({
+      destination: (req, file, cb) => cb(null, PRODUCT_UPLOADS_DIR),
+      filename: (req, file, cb) =>
+        cb(null, Date.now() + require("path").extname(file.originalname)),
+    }),
+    limits: { fileSize: 10 * 1024 * 1024 },
+  });
+
+  app.post(
+    "/api/uploads/product-image",
+    requirePerm("manage_inventory"),
+    productImageUpload.single("image"),
+    (req, res) => {
+      if (!req.file) return res.status(400).json({ error: "Image file is required" });
+      res.json({ url: `/uploads/products/${req.file.filename}` });
+    },
+  );
+
   // Bulk assign category to products
   app.post(
     "/api/products/bulk-category",
