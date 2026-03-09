@@ -265,3 +265,6 @@ UPDATE company_profile SET setup_complete = 1 WHERE (SELECT COUNT(*) FROM employ
 | Mar 9 2026 | Merged + pushed to main | Live on Vercel + Railway |
 | Mar 9 2026 | Roadmap Phase 2 — 9 parallel sessions | All 25 remaining items complete, 28 files changed, 2,936 lines, 395/395 tests passing |
 | Mar 9 2026 | Merged feature/roadmap-phase2 → main | Live on Vercel + Railway |
+| Mar 9 2026 | **BUG FIX — POS product search broken** | `POSContext.jsx` `triggerSearch()` called `fetch()` without `authHeaders()` → backend rejected with "Not found"; fixed in PR #3, merged + deployed |
+| Mar 9 2026 | **BUG FIX — POS Opening Gate empty branch dropdown** | `ContextSwitcher.jsx` called `/api/context/bootstrap` without `authHeaders()` → 401, no outlet stored in context → POS gate never cleared; fixed + pushed to main, deployed |
+| Mar 9 2026 | **Railway 502** | Backend went down (unrelated to code); redeployed via Railway GraphQL API from CLI, back up within ~35 seconds |
