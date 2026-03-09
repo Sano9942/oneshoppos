@@ -588,6 +588,24 @@
       "source": "backend/routes/reports/governance.js"
     },
     {
+      "endpoint": "GET /api/reports/pricing-margin",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "Inventory pricing-margin report; consumed by ReportsInventory module via the reports workspace, not a direct standalone fetch.",
+      "owner": "reports_inventory_maintainer",
+      "review_date": "2026-03-09",
+      "source": "backend/routes/reports/inventory.js"
+    },
+    {
+      "endpoint": "GET /api/reports/purchase-orders-report",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "Purchase orders report; consumed by ReportsPurchasing module via the reports workspace.",
+      "owner": "reports_purchasing_maintainer",
+      "review_date": "2026-03-09",
+      "source": "backend/routes/reports/purchasing.js"
+    },
+    {
       "endpoint": "GET /api/reports/top-salespeople",
       "classification": "backend_only_by_design",
       "frontend_refs": [],
@@ -666,6 +684,15 @@
       "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
       "owner": "receipt-templates_maintainer",
       "review_date": "2026-03-06",
+      "source": "backend/routes/receipt-templates.js"
+    },
+    {
+      "endpoint": "POST /api/action-history/log",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "Action history logging endpoint; called internally by sales, returns, and inventory flows — not a direct standalone frontend fetch.",
+      "owner": "receipt-templates_maintainer",
+      "review_date": "2026-03-09",
       "source": "backend/routes/receipt-templates.js"
     },
     {
@@ -891,6 +918,15 @@
       "reason": "No direct frontend usage detected; reviewed as backend capability or non-UI operation.",
       "owner": "barcode-expenses_maintainer",
       "review_date": "2026-03-06",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
+      "endpoint": "POST /api/gift-cards/:param/redeem",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "Gift card redemption endpoint; called from POS checkout flow, not a standalone page fetch tracked by the parity scanner.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-09",
       "source": "backend/routes/barcode-expenses.js"
     },
     {
@@ -1254,6 +1290,15 @@
       "source": "backend/routes/roles.js"
     },
     {
+      "endpoint": "POST /api/serials/:param/assign",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "Serial number assignment endpoint; called from InventoryRedesign product detail flow.",
+      "owner": "barcode-expenses_maintainer",
+      "review_date": "2026-03-09",
+      "source": "backend/routes/barcode-expenses.js"
+    },
+    {
       "endpoint": "POST /api/shifts/:param/close",
       "classification": "backend_only_by_design",
       "frontend_refs": [],
@@ -1324,6 +1369,15 @@
       "owner": "tier4_accounting_maintainer",
       "review_date": "2026-03-06",
       "source": "backend/routes/tier4/accounting.js"
+    },
+    {
+      "endpoint": "PUT /api/adjustments/:param",
+      "classification": "backend_only_by_design",
+      "frontend_refs": [],
+      "reason": "Stock adjustment update endpoint; used by InventoryRedesign adjustment edit flow.",
+      "owner": "inventory_maintainer",
+      "review_date": "2026-03-09",
+      "source": "backend/routes/inventory.js"
     },
     {
       "endpoint": "PUT /api/attribute-sets/:param",

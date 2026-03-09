@@ -1,6 +1,6 @@
 # API Parity Audit
 
-Generated: 2026-03-09T16:02:08.307Z
+Generated: 2026-03-09T16:31:10.296Z
 
 ## Summary
 
@@ -8,7 +8,7 @@ Generated: 2026-03-09T16:02:08.307Z
 - Frontend API usages (method+path): 251
 - Backend-only endpoints: 127
 - Frontend-only usages: 0
-- Unclassified backend-only endpoints: 6
+- Unclassified backend-only endpoints: 0
 - Method mismatch paths: 11
 
 ## Backend Only

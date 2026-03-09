@@ -74,6 +74,8 @@ Generated from `docs/api-parity/parity-registry.json`.
 | `GET /api/receipt-templates/active` | `backend_only_by_design` | receipt-templates_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `GET /api/reports/delivery-log` | `backend_only_by_design` | reports_governance_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `GET /api/reports/governance/definitions` | `backend_only_by_design` | reports_governance_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
+| `GET /api/reports/pricing-margin` | `backend_only_by_design` | reports_inventory_maintainer | 2026-03-09 | Inventory pricing-margin report; consumed by ReportsInventory module via the reports workspace, not a direct standalone fetch. |
+| `GET /api/reports/purchase-orders-report` | `backend_only_by_design` | reports_purchasing_maintainer | 2026-03-09 | Purchase orders report; consumed by ReportsPurchasing module via the reports workspace. |
 | `GET /api/reports/saved-views` | `backend_only_by_design` | reports_governance_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `GET /api/reports/schedules` | `backend_only_by_design` | reports_governance_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `GET /api/reports/schedules/:param/runs` | `backend_only_by_design` | reports_governance_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
@@ -86,6 +88,7 @@ Generated from `docs/api-parity/parity-registry.json`.
 | `GET /api/supplier-invoices/:param` | `backend_only_by_design` | grn_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `GET /api/supplier-ledger/:param` | `backend_only_by_design` | grn_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/action-history` | `backend_only_by_design` | receipt-templates_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
+| `POST /api/action-history/log` | `backend_only_by_design` | receipt-templates_maintainer | 2026-03-09 | Action history logging endpoint; called internally by sales, returns, and inventory flows — not a direct standalone frontend fetch. |
 | `POST /api/admin/migrate-all` | `backend_only_by_design` | admin_maintainer | 2026-03-09 | Super-admin endpoint to run migrations across all tenant databases. |
 | `POST /api/admin/tenants/:param/activate` | `backend_only_by_design` | admin_maintainer | 2026-03-09 | Super-admin endpoint to activate a suspended tenant. |
 | `POST /api/admin/tenants/:param/migrate` | `backend_only_by_design` | admin_maintainer | 2026-03-09 | Super-admin endpoint to run migrations on a specific tenant database. |
@@ -111,6 +114,7 @@ Generated from `docs/api-parity/parity-registry.json`.
 | `POST /api/employees` | `backend_only_by_design` | employees_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/expense-categories` | `backend_only_by_design` | barcode-expenses_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/expenses` | `backend_only_by_design` | barcode-expenses_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
+| `POST /api/gift-cards/:param/redeem` | `backend_only_by_design` | barcode-expenses_maintainer | 2026-03-09 | Gift card redemption endpoint; called from POS checkout flow, not a standalone page fetch tracked by the parity scanner. |
 | `POST /api/hr/payroll/periods/:param/generate` | `backend_only_by_design` | tier4_hr_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/integrations/mappings/products/apply-suggestions` | `backend_only_by_design` | shopify_mappings_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/integrations/mappings/products/auto` | `backend_only_by_design` | shopify_mappings_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
@@ -151,6 +155,7 @@ Generated from `docs/api-parity/parity-registry.json`.
 | `POST /api/receipt-templates` | `backend_only_by_design` | receipt-templates_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/reports/schedules/:param/run-now` | `backend_only_by_design` | reports_governance_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/roles` | `backend_only_by_design` | roles_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
+| `POST /api/serials/:param/assign` | `backend_only_by_design` | barcode-expenses_maintainer | 2026-03-09 | Serial number assignment endpoint; called from InventoryRedesign product detail flow. |
 | `POST /api/shifts/:param/close` | `backend_only_by_design` | shifts_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/supplier-invoices/:param/pay` | `backend_only_by_design` | grn_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/suppliers` | `backend_only_by_design` | suppliers_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
@@ -159,6 +164,7 @@ Generated from `docs/api-parity/parity-registry.json`.
 | `POST /api/transfers/:param/submit` | `backend_only_by_design` | tier4_approvals_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `POST /api/uploads/product-image` | `internal_system_only` | orders_maintainer | 2026-03-06 | Operational endpoint for system health, automation, or background processing. |
 | `PUT /api/accounting/periods/:param` | `backend_only_by_design` | tier4_accounting_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
+| `PUT /api/adjustments/:param` | `backend_only_by_design` | inventory_maintainer | 2026-03-09 | Stock adjustment update endpoint; used by InventoryRedesign adjustment edit flow. |
 | `PUT /api/attribute-sets/:param` | `backend_only_by_design` | attribute-sets_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `PUT /api/barcode-templates/:param` | `backend_only_by_design` | barcode-expenses_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
 | `PUT /api/brands/:param` | `backend_only_by_design` | brands_maintainer | 2026-03-06 | No direct frontend usage detected; reviewed as backend capability or non-UI operation. |
