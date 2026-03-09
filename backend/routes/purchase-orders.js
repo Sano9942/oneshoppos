@@ -1,6 +1,22 @@
 module.exports = function registerPurchaseOrderRoutes(app, deps) {
   const { db, requirePerm, createNotification } = deps;
 
+  // --- PO TEMPLATES TABLES ---
+  db.run(`CREATE TABLE IF NOT EXISTS po_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    supplier_id INTEGER,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.run(`CREATE TABLE IF NOT EXISTS po_template_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    template_id INTEGER NOT NULL,
+    product_id INTEGER,
+    quantity INTEGER DEFAULT 1,
+    unit_cost REAL DEFAULT 0
+  )`);
+
   function enqueueInventorySyncEvents(changes, context, cb) {
     try {
       const fn = deps.enqueueInventorySyncEvents;
@@ -151,6 +167,251 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
         });
       },
     );
+  });
+
+  // --- ROUTES: PO TEMPLATES ---
+
+  // List all PO templates with item count
+  app.get("/api/po-templates", requirePerm("manage_orders"), (req, res) => {
+    db.all(
+      `SELECT t.*, s.name as supplier_name,
+              COUNT(ti.id) as item_count
+       FROM po_templates t
+       LEFT JOIN suppliers s ON t.supplier_id = s.id
+       LEFT JOIN po_template_items ti ON ti.template_id = t.id
+       GROUP BY t.id
+       ORDER BY t.created_at DESC`,
+      [],
+      (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ templates: rows });
+      },
+    );
+  });
+
+  // Create a new PO template
+  app.post("/api/po-templates", requirePerm("manage_orders"), (req, res) => {
+    const { name, supplier_id, notes, items } = req.body;
+    if (!name) return res.status(400).json({ error: "Template name is required" });
+
+    db.run(
+      "INSERT INTO po_templates (name, supplier_id, notes) VALUES (?, ?, ?)",
+      [name, supplier_id || null, notes || null],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        const templateId = this.lastID;
+        if (!items || !items.length) {
+          return res.json({ id: templateId, message: "Template created" });
+        }
+        const stmt = db.prepare(
+          "INSERT INTO po_template_items (template_id, product_id, quantity, unit_cost) VALUES (?, ?, ?, ?)",
+        );
+        items.forEach((item) => {
+          stmt.run(templateId, item.product_id || null, item.quantity || 1, item.unit_cost || 0);
+        });
+        stmt.finalize((finalizeErr) => {
+          if (finalizeErr) return res.status(500).json({ error: "Failed to save template items" });
+          res.json({ id: templateId, message: "Template created" });
+        });
+      },
+    );
+  });
+
+  // Use a template — creates a new draft PO from the template
+  app.post("/api/po-templates/:id/use", requirePerm("manage_orders"), (req, res) => {
+    const { id } = req.params;
+    db.get(
+      `SELECT t.*, GROUP_CONCAT(ti.product_id||':'||ti.quantity||':'||ti.unit_cost) as items_raw
+       FROM po_templates t
+       LEFT JOIN po_template_items ti ON ti.template_id = t.id
+       WHERE t.id = ?
+       GROUP BY t.id`,
+      [id],
+      (err, tmpl) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!tmpl) return res.status(404).json({ error: "Template not found" });
+
+        const items = tmpl.items_raw
+          ? tmpl.items_raw.split(",").map((s) => {
+              const [product_id, quantity, unit_cost] = s.split(":");
+              return { product_id: Number(product_id), quantity: Number(quantity), cost_price: Number(unit_cost) };
+            })
+          : [];
+
+        if (!tmpl.supplier_id) {
+          return res.status(400).json({ error: "Template has no supplier — cannot create PO" });
+        }
+        if (!items.length) {
+          return res.status(400).json({ error: "Template has no items — cannot create PO" });
+        }
+
+        const total_cost = items.reduce((sum, i) => sum + i.quantity * i.cost_price, 0);
+
+        db.serialize(() => {
+          db.run("BEGIN TRANSACTION");
+          db.run(
+            "INSERT INTO purchase_orders (supplier_id, total_cost, status) VALUES (?, ?, 'Draft')",
+            [tmpl.supplier_id, total_cost],
+            function (insertErr) {
+              if (insertErr) {
+                db.run("ROLLBACK");
+                return res.status(500).json({ error: "Failed to create PO" });
+              }
+              const poId = this.lastID;
+              const stmt = db.prepare(
+                "INSERT INTO purchase_order_items (po_id, product_id, quantity, cost_price) VALUES (?, ?, ?, ?)",
+              );
+              items.forEach((item) => {
+                stmt.run(poId, item.product_id, item.quantity, item.cost_price);
+              });
+              stmt.finalize((finalizeErr) => {
+                if (finalizeErr) {
+                  db.run("ROLLBACK");
+                  return res.status(500).json({ error: "Failed to add items to PO" });
+                }
+                db.run("COMMIT", (commitErr) => {
+                  if (commitErr) return res.status(500).json({ error: "Failed to commit PO" });
+                  res.json({ id: poId, message: "Draft PO created from template" });
+                });
+              });
+            },
+          );
+        });
+      },
+    );
+  });
+
+  // Delete a template and its items
+  app.delete("/api/po-templates/:id", requirePerm("manage_orders"), (req, res) => {
+    const { id } = req.params;
+    db.serialize(() => {
+      db.run("DELETE FROM po_template_items WHERE template_id = ?", [id]);
+      db.run("DELETE FROM po_templates WHERE id = ?", [id], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: "Template not found" });
+        res.json({ message: "Template deleted" });
+      });
+    });
+  });
+
+  // Edit a draft purchase order
+  app.put("/api/purchase-orders/:id", requirePerm("manage_orders"), (req, res) => {
+    const { id } = req.params;
+    const { supplier_id, expected_date, notes, items } = req.body;
+
+    db.get("SELECT * FROM purchase_orders WHERE id = ?", [id], (err, po) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!po) return res.status(404).json({ error: "Purchase order not found" });
+      if (po.status !== "Draft") {
+        return res.status(400).json({ error: "Only Draft purchase orders can be edited" });
+      }
+
+      if (!items || !items.length) {
+        return res.status(400).json({ error: "Purchase order must have at least one item" });
+      }
+
+      const newSupplierId = supplier_id ? Number(supplier_id) : po.supplier_id;
+      const newDueDate = expected_date !== undefined ? (expected_date || null) : po.due_date;
+      const newTotal = items.reduce(
+        (sum, i) => sum + Number(i.quantity || 0) * Number(i.unit_cost || i.cost_price || 0),
+        0,
+      );
+
+      db.serialize(() => {
+        db.run("BEGIN TRANSACTION");
+
+        db.run(
+          "UPDATE purchase_orders SET supplier_id = ?, total_cost = ?, due_date = ? WHERE id = ?",
+          [newSupplierId, newTotal, newDueDate, id],
+          function (updateErr) {
+            if (updateErr) {
+              db.run("ROLLBACK");
+              return res.status(500).json({ error: "Failed to update purchase order" });
+            }
+
+            db.run("DELETE FROM purchase_order_items WHERE po_id = ?", [id], (delErr) => {
+              if (delErr) {
+                db.run("ROLLBACK");
+                return res.status(500).json({ error: "Failed to clear existing items" });
+              }
+
+              const stmt = db.prepare(
+                "INSERT INTO purchase_order_items (po_id, product_id, quantity, cost_price) VALUES (?, ?, ?, ?)",
+              );
+              let hasError = false;
+
+              items.forEach((item) => {
+                stmt.run(
+                  id,
+                  item.product_id,
+                  Number(item.quantity || 0),
+                  Number(item.unit_cost || item.cost_price || 0),
+                  (runErr) => {
+                    if (runErr) hasError = true;
+                  },
+                );
+              });
+
+              stmt.finalize((finalizeErr) => {
+                if (finalizeErr || hasError) {
+                  db.run("ROLLBACK");
+                  return res.status(500).json({ error: "Failed to insert updated items" });
+                }
+
+                db.run("COMMIT", (commitErr) => {
+                  if (commitErr) return res.status(500).json({ error: "Failed to commit update" });
+
+                  // Return updated PO with items
+                  db.get(
+                    `SELECT po.*, s.name as supplier_name
+                     FROM purchase_orders po
+                     JOIN suppliers s ON po.supplier_id = s.id
+                     WHERE po.id = ?`,
+                    [id],
+                    (poErr, updatedPo) => {
+                      if (poErr) return res.status(500).json({ error: poErr.message });
+                      db.all(
+                        `SELECT poi.*, p.name, p.barcode
+                         FROM purchase_order_items poi
+                         JOIN products p ON poi.product_id = p.id
+                         WHERE poi.po_id = ?`,
+                        [id],
+                        (itemsErr, updatedItems) => {
+                          if (itemsErr) return res.status(500).json({ error: itemsErr.message });
+                          res.json({ purchaseOrder: updatedPo, items: updatedItems });
+                        },
+                      );
+                    },
+                  );
+                });
+              });
+            });
+          },
+        );
+      });
+    });
+  });
+
+  // Approve a draft purchase order
+  app.post("/api/purchase-orders/:id/approve", requirePerm("manage_orders"), (req, res) => {
+    const { id } = req.params;
+
+    db.get("SELECT * FROM purchase_orders WHERE id = ?", [id], (err, po) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!po) return res.status(404).json({ error: "Purchase order not found" });
+      if (po.status !== "Draft") {
+        return res.status(400).json({ error: `Purchase order is already ${po.status} — only Draft POs can be approved` });
+      }
+
+      db.run(
+        "UPDATE purchase_orders SET status = 'Approved' WHERE id = ?",
+        [id],
+        function (updateErr) {
+          if (updateErr) return res.status(500).json({ error: updateErr.message });
+          res.json({ success: true, status: "Approved" });
+        },
+      );
+    });
   });
 
   // Receive a purchase order (Updates Inventory Stock & Cost Price)
