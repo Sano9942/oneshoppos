@@ -7,6 +7,7 @@ import {
   Input,
   PageShell,
   SectionCard,
+  Select,
   TableToolbar,
 } from "../../ui/primitives";
 import { API_BASE as API } from "../../config";
@@ -66,6 +67,9 @@ export default function SalesHistoryRedesign() {
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
+  const [employees, setEmployees] = useState([]);
   const [activeTab, setActiveTab] = useState("all");
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
@@ -128,12 +132,21 @@ export default function SalesHistoryRedesign() {
     return () => clearTimeout(t);
   }, [search, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    fetch(`${API}/api/employees`)
+      .then((r) => r.json())
+      .then((d) => setEmployees(d.employees || []))
+      .catch(() => {});
+  }, []);
+
   const visibleRows = useMemo(() => {
-    if (activeTab === "all") return rows;
-    if (activeTab === "completed") return rows.filter((r) => Number(r.voided || 0) === 0);
-    if (activeTab === "voided") return rows.filter((r) => Number(r.voided || 0) === 1);
-    return rows;
-  }, [rows, activeTab]);
+    let filtered = rows;
+    if (activeTab === "completed") filtered = filtered.filter((r) => Number(r.voided || 0) === 0);
+    else if (activeTab === "voided") filtered = filtered.filter((r) => Number(r.voided || 0) === 1);
+    if (paymentMethod) filtered = filtered.filter((r) => r.payment_method === paymentMethod);
+    if (employeeId) filtered = filtered.filter((r) => String(r.employee_id) === String(employeeId));
+    return filtered;
+  }, [rows, activeTab, paymentMethod, employeeId]);
 
   const handleVoid = async () => {
     if (!selected || !detail) return;
@@ -243,6 +256,19 @@ export default function SalesHistoryRedesign() {
                 </div>
                 <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
                 <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                <Select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                  <option value="">All Methods</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Card">Card</option>
+                  <option value="Wallet">Wallet</option>
+                  <option value="Split">Split</option>
+                </Select>
+                <Select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+                  <option value="">All Employees</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                  ))}
+                </Select>
                 <div className="flex gap-1 rounded border border-(--ui-border) p-1">
                   {[
                     ["all", "All"],

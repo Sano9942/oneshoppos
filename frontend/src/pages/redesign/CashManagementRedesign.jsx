@@ -347,10 +347,13 @@ export default function CashManagementRedesign() {
                   <Calculator size={14} />
                   Opening Denominations
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-[80px_1fr_1fr] gap-2 pb-1 text-xs font-medium text-(--ui-text-muted)">
+                    <span>Denom</span><span>Count</span><span className="text-right">Subtotal</span>
+                  </div>
                   {openingDenoms.map((d, idx) => (
-                    <div key={d.denomination}>
-                      <p className="text-xs text-(--ui-text-muted)">{d.denomination}</p>
+                    <div key={d.denomination} className="grid grid-cols-[80px_1fr_1fr] items-center gap-2">
+                      <p className="text-sm text-(--ui-text)">{d.denomination}</p>
                       <Input
                         type="number"
                         min="0"
@@ -363,10 +366,18 @@ export default function CashManagementRedesign() {
                           )
                         }
                       />
+                      <p className="text-right text-sm text-(--ui-text-muted)">
+                        {d.denomination * Number(d.count || 0) > 0
+                          ? `PKRs ${(d.denomination * Number(d.count || 0)).toLocaleString()}`
+                          : "—"}
+                      </p>
                     </div>
                   ))}
+                  <div className="mt-1 border-t border-(--ui-border) pt-2 grid grid-cols-[80px_1fr_1fr] items-center gap-2">
+                    <span className="text-sm font-semibold text-(--ui-text)">Total</span>
+                    <span />
+                    <p className="text-right text-sm font-semibold text-(--ui-text)">{money(openingCash)}</p>
                 </div>
-                <p className="mt-2 text-sm font-semibold text-(--ui-text)">Opening Float: {money(openingCash)}</p>
               </SectionCard>
               <Select
                 value={openForm.employee_id}
@@ -415,10 +426,13 @@ export default function CashManagementRedesign() {
                     <Calculator size={14} />
                     Denomination Count
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1.5">
+                    <div className="grid grid-cols-[80px_1fr_1fr] gap-2 pb-1 text-xs font-medium text-(--ui-text-muted)">
+                      <span>Denom</span><span>Count</span><span className="text-right">Subtotal</span>
+                    </div>
                     {denoms.map((d, idx) => (
-                      <div key={d.denomination}>
-                        <p className="text-xs text-(--ui-text-muted)">{d.denomination}</p>
+                      <div key={d.denomination} className="grid grid-cols-[80px_1fr_1fr] items-center gap-2">
+                        <p className="text-sm text-(--ui-text)">{d.denomination}</p>
                         <Input
                           type="number"
                           min="0"
@@ -431,10 +445,19 @@ export default function CashManagementRedesign() {
                             )
                           }
                         />
+                        <p className="text-right text-sm text-(--ui-text-muted)">
+                          {d.denomination * Number(d.count || 0) > 0
+                            ? `PKRs ${(d.denomination * Number(d.count || 0)).toLocaleString()}`
+                            : "—"}
+                        </p>
                       </div>
                     ))}
+                    <div className="mt-1 border-t border-(--ui-border) pt-2 grid grid-cols-[80px_1fr_1fr] items-center gap-2">
+                      <span className="text-sm font-semibold text-(--ui-text)">Total</span>
+                      <span />
+                      <p className="text-right text-sm font-semibold text-(--ui-text)">{money(closingCash)}</p>
+                    </div>
                   </div>
-                  <p className="mt-2 text-sm font-semibold text-(--ui-text)">Counted Total: {money(closingCash)}</p>
                 </SectionCard>
 
                 <Select value={varianceReason} onChange={(e) => setVarianceReason(e.target.value)}>
