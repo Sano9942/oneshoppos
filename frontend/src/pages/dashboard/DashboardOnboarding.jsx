@@ -93,7 +93,7 @@ export function DashboardOnboarding({ data, onNavigate }) {
           </div>
           <button
             onClick={dismiss}
-            className="flex-shrink-0 rounded p-0.5 text-(--ui-text-muted) hover:bg-(--ui-muted-surface) hover:text-(--ui-text) transition-colors"
+            className="shrink-0 rounded p-0.5 text-(--ui-text-muted) hover:bg-(--ui-muted-surface) hover:text-(--ui-text) transition-colors"
             title="Dismiss"
           >
             <X size={15} />
@@ -115,9 +115,9 @@ export function DashboardOnboarding({ data, onNavigate }) {
           {steps.map((step) => (
             <li key={step.id} className="flex items-center gap-3">
               {step.done ? (
-                <CheckCircle2 size={18} className="flex-shrink-0 text-emerald-500" />
+                <CheckCircle2 size={18} className="shrink-0 text-emerald-500" />
               ) : (
-                <Circle size={18} className="flex-shrink-0 text-(--ui-text-muted)" />
+                <Circle size={18} className="shrink-0 text-(--ui-text-muted)" />
               )}
               <span
                 className={`flex-1 text-sm ${
@@ -131,7 +131,7 @@ export function DashboardOnboarding({ data, onNavigate }) {
               {!step.done && (
                 <button
                   onClick={step.navigate}
-                  className="flex-shrink-0 text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+                  className="shrink-0 text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
                 >
                   Go →
                 </button>

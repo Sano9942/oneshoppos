@@ -216,7 +216,8 @@ const TABLES = [
     points_redeemed INTEGER DEFAULT 0,
     notes TEXT,
     invoice_number TEXT,
-    shift_id INTEGER REFERENCES cash_shifts(id)
+    shift_id INTEGER REFERENCES cash_shifts(id),
+    idempotency_key TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS sale_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -922,6 +923,7 @@ const INDEXES = [
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_parent_name_unique ON categories(COALESCE(parent_id, -1), lower(name))`,
   `CREATE INDEX IF NOT EXISTS idx_eo_employee ON employee_outlets(employee_id)`,
   `CREATE INDEX IF NOT EXISTS idx_eo_outlet ON employee_outlets(outlet_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_idempotency_key ON sales(idempotency_key) WHERE idempotency_key IS NOT NULL`,
 ];
 
 function seedSchema(db) {
