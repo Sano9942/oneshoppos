@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-*Last updated: March 9 2026 — post roadmap phase 2 — all 25 items complete (9-session parallel run)*
+*Last updated: March 10 2026 — Phase 3 robustness: 8/9 P0+P1 items shipped, offline queuing deferred*
 
 ---
 
@@ -110,10 +110,9 @@ This file tracks everything we want to build, fix, or improve for SanoPOS.
 
 ---
 
-## 🔴 Next Up: First-Run Setup Wizard
+## ✅ First-Run Setup Wizard (Built Mar 10 2026)
 
-**Priority:** HIGH — should be built before any new store deployment
-**Why:** Eliminates all timezone/currency/identity bugs by forcing correct configuration before the first transaction. Also solves the chicken-and-egg problem of "how do you log in when no admin exists yet."
+`migrate72.js` + `backend/routes/setup.js` + `frontend/src/pages/SetupWizard.jsx` — token-gated 4-step wizard.
 
 ### The Problem It Solves
 1. Fresh database has no employees — nobody can log in to configure the store
@@ -248,11 +247,48 @@ UPDATE company_profile SET setup_complete = 1 WHERE (SELECT COUNT(*) FROM employ
 
 ---
 
+## ✅ Phase 3 — Core Robustness (Mar 10 2026) — 8/9 items shipped
+
+These items make the product reliable for the current single-tenant production deployment. Built on `feature/phase3-robustness` branch (8 commits, 27 files, 1,824 lines).
+
+### P0 — Do First (Highest Impact)
+
+- ~~**Split payment at POS**~~ — ✅ **Already built** (verified Mar 10 2026). `POST /api/sales` accepts `payments[]` array, `sale_payments` table stores each tender, frontend `POSCheckoutModal.jsx` has full multi-tender UI, receipts show breakdown, reports aggregate by method. Minor gap: returns only support single `refund_method` (no split refunds).
+- ~~**Login brute-force throttling**~~ — ✅ **Fixed** (Mar 10 2026). Changed `skip: () => true` → `skip: () => process.env.NODE_ENV === 'test'` — rate limiter now active in production (429 after 20 req/15min), disabled during test runs.
+- **Offline sale queuing** — ⏳ **Deferred** (3-5 day effort). Service worker only handles GET, no IndexedDB queue, no Background Sync. Needs full SW rewrite + reconnect sync + offline indicator UI.
+- ~~**Soft deletes on core tables**~~ — ✅ **Built** (Mar 10 2026). `migrate73.js` adds `deleted_at DATETIME DEFAULT NULL` to products, customers, employees. DELETE endpoints → UPDATE SET deleted_at. Listings filter `WHERE deleted_at IS NULL`. Frontend "Delete" → "Archive" wording. Report JOINs untouched (historical data preserved). 3 test files updated.
+- ~~**Idempotency on POST /api/sales**~~ — ✅ **Built** (Mar 10 2026). `migrate71.js` adds `idempotency_key TEXT` + unique index on `sales`. Frontend generates `crypto.randomUUID()` per sale. Backend checks for duplicate before insert, returns `{ duplicate: true }` if found.
+
+### P1 — High Value, Low Effort (all done)
+
+- ~~**End-of-day email digest**~~ — ✅ **Built** (Mar 10 2026). `backend/utils/digestEmail.js` builds HTML email; `reports/governance.js` sends via nodemailer when `schedule.recipient` is email + `report_key = "eod-digest"`.
+- ~~**Price change audit log**~~ — ✅ **Built** (Mar 10 2026). `products.js` PUT compares old/new price+cost, inserts into `action_history` with `action_type = "price_change"`.
+- ~~**In-app onboarding checklist**~~ — ✅ **Built** (Mar 10 2026). `DashboardOnboarding.jsx` — 5-step checklist, progress bar, dismiss via localStorage, auto-dismiss after 3s when all complete.
+- ~~**Session timeout handling at POS**~~ — ✅ **Built** (Mar 10 2026). `POSSessionExpiredModal.jsx` — PIN re-login auto-retries pending sale; "Park sale & go to login" option.
+
+### P2 — Important But Can Wait
+
+- **Subscription / billing layer** — Stripe or JazzCash integration for plan billing, trial enforcement, subscription expiry. Build after tenant isolation is complete.
+- **Tenant health monitoring** — Super-admin visibility into tenant DAU/MAU, last login, failed jobs, plan limit proximity, DB size. Build after stable multi-tenant infrastructure.
+- **Mobile / tablet POS layout** — Responsive redesign of POS screen for Android tablet use at the counter. Expands addressable market significantly.
+- **IP allowlisting for /api/admin** — Restrict super-admin endpoints to known IPs or add 2FA. Currently public on the internet with only password protection.
+- **Stock discrepancy / shrinkage report** — Automated: (opening stock + purchases) - sales - adjustments = expected; compare to actual count; flag difference. Anti-theft feature for multi-outlet retail.
+
+### P3 — Nice to Have
+
+- **Customer-facing display** — Second screen or URL (`/customer-display/:session`) showing cart items and total to the customer during checkout. Memorable UX feature.
+- **Weighing scale integration** — USB scale support for weight-based pricing. Niche (grocery, pharmacy) but expands addressable market.
+- **API key revocation** — Mechanism to invalidate a specific employee token without requiring password change. Security hardening.
+
+---
+
 ## 📋 Discussed but Deferred
 
 - **Payment gateway integration** (card machines, JazzCash, EasyPaisa)
 - **Profit-sharing / payroll module** — seed data mentions it but no UI
 - **Shopcast / digital signage**
+- **FBR e-invoicing** — placeholder added; needed for Pakistan tax compliance but deferred
+- **Advance / layaway payments** — installment-based sales; common in furniture/electronics retail
 
 ---
 
@@ -268,3 +304,6 @@ UPDATE company_profile SET setup_complete = 1 WHERE (SELECT COUNT(*) FROM employ
 | Mar 9 2026 | **BUG FIX — POS product search broken** | `POSContext.jsx` `triggerSearch()` called `fetch()` without `authHeaders()` → backend rejected with "Not found"; fixed in PR #3, merged + deployed |
 | Mar 9 2026 | **BUG FIX — POS Opening Gate empty branch dropdown** | `ContextSwitcher.jsx` called `/api/context/bootstrap` without `authHeaders()` → 401, no outlet stored in context → POS gate never cleared; fixed + pushed to main, deployed |
 | Mar 9 2026 | **Railway 502** | Backend went down (unrelated to code); redeployed via Railway GraphQL API from CLI, back up within ~35 seconds |
+| Mar 10 2026 | Phase 3 robustness backlog added | 14 items across P0–P3: offline queuing, split payment, brute-force throttling, soft deletes, idempotency, end-of-day digest, price audit log, onboarding checklist, session timeout, billing layer, tenant health monitoring, mobile layout, IP allowlisting, shrinkage report |
+| Mar 10 2026 | Phase 3 P0 deep audit | Split payment confirmed fully built (moved to shipped). Rate limiter found DISABLED (`skip: () => true` in index.js:191) — 1-line fix needed. Soft deletes, idempotency, offline queuing confirmed not built. Offline queuing worse than estimated — SW only handles GET, AuthProvider blocks POST with 503, no IndexedDB/queue/retry exists. |
+| Mar 10 2026 | **Phase 3 shipped** | 8/9 items built on `feature/phase3-robustness` (8 commits, 27 files, 1,824 lines): rate limiter fix, idempotency on sales (migrate71), price audit log, email digest, session timeout at POS, onboarding checklist, setup wizard (migrate72), soft deletes (migrate73). Offline queuing deferred. 395/395 tests passing. Locally tested via Playwright. |

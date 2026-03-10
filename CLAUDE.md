@@ -9,7 +9,8 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 
 ## Current Status Snapshot (March 2026)
 
-- Latest migration is `backend/migrate70.js`
+- Latest migration is `backend/migrate73.js`
+- **Roadmap Phase 3 complete (Mar 10 2026)**: 8 of 9 core robustness items shipped (offline queuing deferred) — rate limiter activation, session timeout at POS, idempotency on sales, price change audit log, end-of-day email digest, onboarding checklist, setup wizard, soft deletes
 - **Roadmap Phase 2 complete (Mar 9 2026)**: All 25 remaining roadmap items shipped in 9 parallel sessions — loyalty/wallet frontend, security fixes (SEC6+SEC8), reorder alerts, accounting/HR wire-up, PO edit+approval, orders detail tabs, quotations email, parked sales page, stock/transfer/supplier/category guards, CRM typed activities, backup progress, notifications, serial numbers, gift cards, PO templates, stock-by-outlet popup, action history logging, reports governance UI
 - **Test suite: 395/395 Jest integration tests passing (37 suites, 0 failures)**
   - 7 new test files added in Phase 6: data-integrity, negative-cases, security, auditability, concurrency, failure-handling, compliance
@@ -80,6 +81,16 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - **Quotations email**: `POST /api/quotations/:id/send` in `tier4/crm.js` sends HTML email via nodemailer; Send button in `QuotationsRedesign.jsx`
 - **CRM typed activities**: `crm_activities.type` column exists since migrate46; `CRMRedesign.jsx` shows type selector (Call, Email, Meeting, Demo, Follow-up, Note)
 - **Transfer reverse + Stock adj delete + Supplier payment void**: all in `inventory.js` / `grn.js`; delete guards for suppliers (`suppliers.js`) and categories (`categories.js`) block deletes when dependent records exist
+- **Phase 3 — Core Robustness (Mar 10 2026)**:
+  - Rate limiter activated: `index.js` line 191 changed `skip: () => true` → `skip: () => process.env.NODE_ENV === 'test'` — 429 after 20 req/15min in production, skipped in tests
+  - Idempotency on `POST /api/sales`: `migrate71.js` adds `idempotency_key TEXT` + unique index to `sales`; frontend generates `crypto.randomUUID()` per sale; backend checks for duplicate before insert, returns `{ duplicate: true }` if found
+  - Price change audit log: `products.js` PUT route compares old/new price+cost, inserts into `action_history` with `action_type = "price_change"` and descriptive text
+  - End-of-day email digest: `backend/utils/digestEmail.js` builds HTML email (revenue, payment breakdown, top 5 products, exceptions, low stock); `reports/governance.js` sends via nodemailer when `schedule.recipient` is email + `report_key = "eod-digest"`
+  - Session timeout at POS: `POSContext.jsx` detects 401 during `completeSale`, stores pending sale in `pendingSaleRef`, shows `POSSessionExpiredModal.jsx` (PIN re-login → auto-retry sale, or park sale → logout)
+  - Onboarding checklist: `DashboardOnboarding.jsx` — 5-step checklist (store, product, employees, shift, sale), progress bar, dismiss via localStorage, auto-dismiss after 3s when all complete; shown on dashboard for admin/manager
+  - Setup wizard: `migrate72.js` adds `setup_complete` + `setup_token` to `company_profile`; `backend/routes/setup.js` — `GET /api/setup/status` (no auth) + `POST /api/setup/complete` (token-gated, transactional seed of company/outlet/roles/employee/receipt template); `index.js` 503 gate blocks all routes except `/api/setup` + `/api/health` when `setup_complete=0`; boot-time token generation logs setup URL to console; `frontend/src/pages/SetupWizard.jsx` — 4-step wizard (Store Identity → Time & Currency → First Outlet → Admin Account); `App.jsx` HomeRedirect checks setup status
+  - Soft deletes: `migrate73.js` adds `deleted_at DATETIME DEFAULT NULL` to products, customers, employees + indexes; `DELETE` endpoints changed to `UPDATE SET deleted_at = datetime('now')`; listings filter `WHERE deleted_at IS NULL`; frontend "Delete" → "Archive" wording; report JOINs untouched (historical data preserved); 3 test files updated for soft-delete semantics
+  - Offline sale queuing: **deferred** (3-5 day effort — needs SW rewrite, IndexedDB, Background Sync)
 
 ## Completed Baseline Before Testing Plan (as of 2026-03-05)
 
@@ -148,6 +159,7 @@ oneshoppos/
 │   │   ├── attendance.js         # /api/attendance + /api/attendance/pin-* (kiosk) + /api/employees/:id/attendance-config
 │   │   ├── attribute-sets.js     # /api/attribute-sets
 │   │   ├── receipt-templates.js  # /api/receipt-templates + action history
+│   │   ├── setup.js              # /api/setup/* (first-run wizard — status + complete)
 │   │   ├── printer.js            # /api/print/* (receipt, status, config)
 │   │   ├── email.js              # /api/email/* (config, test, send-receipt)
 │   │   ├── supplier-returns.js   # /api/supplier-returns
@@ -192,8 +204,11 @@ oneshoppos/
 │   │   └── printer.js            # PrinterService — ESC/POS USB+TCP, paper-width-aware formatting, cash drawer
 │   ├── utils/
 │   │   ├── tz.js                 # Timezone utils — toUtcStart/toUtcEnd for SaaS date filters
-│   │   └── receiptEmail.js       # Server-side HTML receipt builder for email (inline CSS, no scripts)
-│   └── migrate70.js              # Latest DB migration — READ THIS for schema questions
+│   │   ├── receiptEmail.js       # Server-side HTML receipt builder for email (inline CSS, no scripts)
+│   │   └── digestEmail.js        # End-of-day HTML digest email builder (revenue, top products, exceptions)
+│   ├── migrate71.js              # Idempotency key on sales table
+│   ├── migrate72.js              # Setup wizard (setup_complete + setup_token on company_profile)
+│   └── migrate73.js              # Soft deletes (deleted_at on products, customers, employees) — READ THIS for schema questions
 └── frontend/
     └── src/
         ├── components/           # Reusable UI components (all small, < 200 lines)
@@ -222,6 +237,10 @@ oneshoppos/
             │   ├── AdminDashboard.jsx    # Stats cards, plan distribution, recent activity
             │   ├── AdminTenantList.jsx   # Searchable table + provision modal
             │   └── AdminTenantDetail.jsx # Details, edit, actions, usage stats, audit log
+            ├── dashboard/
+            │   ├── DashboardOnboarding.jsx  # 5-step onboarding checklist (auto-detects from API data)
+            │   └── [11 other dashboard components]
+            ├── SetupWizard.jsx              # 4-step first-run wizard (unauthenticated, token-gated)
             └── redesign/                 # Active UI — ALL pages now rendered here
                 ├── POSRedesign.jsx
                 ├── KioskRedesign.jsx         # PIN clock-in terminal (standalone, no sidebar)
@@ -248,7 +267,7 @@ oneshoppos/
 - `registerAllRoutes.js` is now just an orchestrator (~340 lines) — no routes defined there. Each domain is loaded via its modular directory. In MT mode, also wires `resolveTenant` + tenant-scoped `/uploads` serving.
 - **Super-admin routes**: `backend/routes/admin.js` is mounted in `index.js` BEFORE `registerAllRoutes` — this ensures admin endpoints bypass `loadTenantAndPerms`/`resolveTenant` middleware. Admin JWT uses `jwt.sign()` directly (not `signAccessToken`) because the shared utility strips custom claims like `role`/`aid`/`email`.
 - **Multi-tenant DB routing**: When `MULTI_TENANT=1`, `deps.db` is a Proxy (`tenant-db-proxy.js`) that delegates all calls to the tenant DB resolved from AsyncLocalStorage. Route closures that captured `db` at boot time transparently hit the correct tenant DB. Middleware order: `loadTenantAndPerms` (JWT verify) → `resolveTenant` (ALS context + `req.tenantDir`) → tenant-scoped `/uploads` → `loadCompanyProfile` → `resolveContext`.
-- Database schema: read only `backend/migrate70.js` (latest), never older migrations
+- Database schema: read only `backend/migrate73.js` (latest), never older migrations
 - Internal product categories are hierarchical; products and category promotions may target leaf categories only
 - Parent category filters expand to descendant leaves in products and reports
 - SQLite DB file: `backend/sanopos.db`
@@ -258,7 +277,7 @@ oneshoppos/
 
 - Find which file owns the route: check the table in this file above
 - Read ONLY that route file — do not read registerAllRoutes.js for route logic
-- Schema questions → `backend/migrate70.js` (latest)
+- Schema questions → `backend/migrate73.js` (latest)
 - Products API: `GET /api/products/:id` exists (added Mar 2026) — returns `{ product: { ...fields, total_stock } }`; route is registered BEFORE `/:id/variants` in `products.js` — preserve this order when adding new routes
 - Email receipt HTML builder (server-side) → `backend/utils/receiptEmail.js`
 - Category tree logic → `backend/category-tree.js`
@@ -342,6 +361,7 @@ The DB has two timestamp storage systems. You MUST use the matching formatter or
 - `POST /api/sales` requires: active shift + clocked-in employee — exchange sales from return flow will fail if shift is closed
 - `POST /api/sales` stock deduction: uses `item.variant_id` for variant stock (`product_variants` table), `item.id` for `outlet_stock` — always pass `variant_id` when known
 - POS Recent Sales + Return/Exchange flow: `POSRecentSalesPanel.jsx` + `POSReturnExchangeModal.jsx` (both new, Mar 2026)
+- POS Session Expired modal: `POSSessionExpiredModal.jsx` — shown on 401 during checkout; PIN re-login auto-retries pending sale; "Park sale & go to login" option
 - Receipt rendering: **all receipt logic lives in `frontend/src/utils/receipt.js`** — `buildReceiptSections(slip, template)` returns data, `buildReceiptHtml(slip, template)` opens the browser popup, `printToHardware(slip, template)` sends to hardware via `/api/print/receipt`; `POSContext.printSlip` tries hardware first (fallback to browser popup if `result.fallback`); `POSReceiptModal` calls `buildReceiptSections` for `storeName`/`footerText`/`showBarcode`; never duplicate receipt logic elsewhere
 
 ### reports_accuracy.test.js uses vitest syntax
@@ -400,3 +420,4 @@ Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
 - Mar 2026: SaaS Phase 5 — Super-Admin Dashboard; `routes/admin.js` (13 endpoints: login, tenant CRUD, suspend/activate/delete, migration runner, stats, PIN reset); `tenant-migrate.js` (CLI + programmatic migration runner, reads `backend/migrations/`); `seed-admin.js` (super-admin seeder); admin JWT uses `jwt.sign()` directly with `role: "super_admin"` claim; routes mounted before tenant middleware; frontend: 5 admin pages at `/admin/*` (Login, Layout, Dashboard, TenantList, TenantDetail); `adminFetch` shared helper; separate auth session in localStorage; provisioner now detects `pin_hash` column via PRAGMA; SCHEMA_VERSION=66; 296/298 passing
 - Mar 2026: Phase 6 deployment — Railway backend + Vercel frontend live; `start.sh` symlinks legacy DB names (`oneshop.db`, `sanopos.db`) to `$DATA_DIR/sanopos.db` (volume); Railway volume must be provisioned manually in UI; `DATA_DIR=/data`, `MULTI_TENANT=0` for single-tenant mode; frontend env at `frontend/.env.production`
 - Mar 2026: Products table improvements — `migrate68.js` removes `UNIQUE` constraint on `products.barcode` (table recreate, duplicate barcodes now allowed); `POST /api/products` validates `price > 0` (400 if missing/zero); bulk-import route adds `sku` field + plain INSERT (removed `ON CONFLICT` upsert which required the now-dropped UNIQUE); `InventoryRedesign.jsx` replaces Min Qty column with SKU + Cost columns; bulk import UI added (CSV Template download + Import CSV button + results modal)
+- Mar 2026: Phase 3 Core Robustness — `migrate71.js` (idempotency_key on sales), `migrate72.js` (setup wizard — setup_complete + setup_token on company_profile), `migrate73.js` (soft deletes — deleted_at on products/customers/employees); rate limiter activated (`skip: () => process.env.NODE_ENV === 'test'`); price change audit log in `products.js` PUT; end-of-day email digest in `reports/governance.js` + `utils/digestEmail.js`; POS session timeout handling (`POSSessionExpiredModal.jsx`); dashboard onboarding checklist (`DashboardOnboarding.jsx`); first-run setup wizard (`routes/setup.js` + `SetupWizard.jsx`); soft deletes on products/customers/employees (DELETE → UPDATE SET deleted_at, frontend "Archive" wording); 3 test files updated; 395/395 tests passing
