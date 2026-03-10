@@ -1,8 +1,17 @@
 module.exports = function registerInventoryRoutes(app, deps) {
   const { db, requirePerm, createNotification } = deps;
 
-  // Safe column additions — errors (column already exists) are silently ignored
-  db.run("ALTER TABLE inventory_transfers ADD COLUMN reversed INTEGER DEFAULT 0", () => {});
+  // Safe column addition — Postgres: use DO block to check if column exists
+  (async () => {
+    try {
+      await db.query(`
+        DO $$ BEGIN
+          ALTER TABLE inventory_transfers ADD COLUMN reversed BOOLEAN DEFAULT false;
+        EXCEPTION WHEN duplicate_column THEN NULL;
+        END $$;
+      `);
+    } catch { /* ignore */ }
+  })();
 
   function enqueueInventorySyncEvents(changes, context, cb) {
     try {
@@ -15,8 +24,9 @@ module.exports = function registerInventoryRoutes(app, deps) {
 // --- INVENTORY TRANSFERS ---
 
   // Get all transfers (with product, outlet, employee names)
-  app.get("/api/transfers", (req, res) => {
-    const query = `
+  app.get("/api/transfers", async (req, res) => {
+    try {
+      const { rows } = await db.query(`
         SELECT it.*,
                p.name as product_name, p.barcode,
                fo.name as from_outlet_name,
@@ -28,15 +38,15 @@ module.exports = function registerInventoryRoutes(app, deps) {
         JOIN outlets to_o ON it.to_outlet_id = to_o.id
         LEFT JOIN employees e ON it.employee_id = e.id
         ORDER BY it.timestamp DESC
-    `;
-    db.all(query, [], (err, rows) => {
-      if (err) return res.status(500).json({ error: err.message });
+      `);
       res.json({ transfers: rows });
-    });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Create a new inventory transfer (atomically moves stock between outlets)
-  app.post("/api/transfers", requirePerm("manage_inventory"), (req, res) => {
+  app.post("/api/transfers", requirePerm("manage_inventory"), async (req, res) => {
     const {
       product_id,
       from_outlet_id,
@@ -63,192 +73,138 @@ module.exports = function registerInventoryRoutes(app, deps) {
         .json({ error: "Quantity must be greater than zero" });
     }
 
-    // First: validate sufficient stock in source outlet
-    db.get(
-      "SELECT quantity FROM outlet_stock WHERE product_id = ? AND outlet_id = ?",
-      [product_id, from_outlet_id],
-      (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        const currentStock = row ? row.quantity : 0;
-        if (currentStock < quantity) {
-          return res.status(400).json({
-            error: `Insufficient stock. Only ${currentStock} available at source outlet.`,
-          });
-        }
-
-        // All valid — perform atomic transfer
-        db.serialize(() => {
-          db.run("BEGIN TRANSACTION");
-
-          // 1. Record the transfer
-          db.run(
-            `INSERT INTO inventory_transfers (product_id, from_outlet_id, to_outlet_id, quantity, employee_id, note)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-            [
-              product_id,
-              from_outlet_id,
-              to_outlet_id,
-              quantity,
-              employee_id || null,
-              note || null,
-            ],
-            function (err) {
-              if (err) {
-                db.run("ROLLBACK");
-                return res
-                  .status(500)
-                  .json({ error: "Failed to record transfer" });
-              }
-            },
-          );
-
-          // 2. Deduct from source outlet
-          db.run(
-            "UPDATE outlet_stock SET quantity = quantity - ? WHERE product_id = ? AND outlet_id = ?",
-            [quantity, product_id, from_outlet_id],
-            function (err) {
-              if (err) {
-                db.run("ROLLBACK");
-                return res
-                  .status(500)
-                  .json({ error: "Failed to deduct stock from source outlet" });
-              }
-            },
-          );
-
-          // 3. Add to destination outlet (upsert)
-          db.run(
-            `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
-           VALUES (?, ?, ?)
-           ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = quantity + ?`,
-            [product_id, to_outlet_id, quantity, quantity],
-            function (err) {
-              if (err) {
-                db.run("ROLLBACK");
-                return res
-                  .status(500)
-                  .json({ error: "Failed to add stock to destination outlet" });
-              }
-            },
-          );
-
-          // 4. Commit
-          db.run("COMMIT", (err) => {
-            if (err)
-              return res
-                .status(500)
-                .json({ error: "Failed to commit transfer transaction" });
-            enqueueInventorySyncEvents(
-              [
-                {
-                  product_id,
-                  outlet_id: from_outlet_id,
-                  delta: -1 * Number(quantity || 0),
-                  reason: "transfer_out",
-                  reference_type: "transfer",
-                  reference_id: null,
-                },
-                {
-                  product_id,
-                  outlet_id: to_outlet_id,
-                  delta: Number(quantity || 0),
-                  reason: "transfer_in",
-                  reference_type: "transfer",
-                  reference_id: null,
-                },
-              ],
-              {},
-              () => {},
-            );
-            res.json({ message: "Transfer completed successfully" });
-          });
+    try {
+      // Validate sufficient stock in source outlet
+      const { rows: stockRows } = await db.query(
+        "SELECT quantity FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2",
+        [product_id, from_outlet_id],
+      );
+      const currentStock = stockRows.length ? stockRows[0].quantity : 0;
+      if (currentStock < quantity) {
+        return res.status(400).json({
+          error: `Insufficient stock. Only ${currentStock} available at source outlet.`,
         });
-      },
-    );
+      }
+
+      await db.transaction(async (client) => {
+        // 1. Record the transfer
+        await client.query(
+          `INSERT INTO inventory_transfers (product_id, from_outlet_id, to_outlet_id, quantity, employee_id, note)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [product_id, from_outlet_id, to_outlet_id, quantity, employee_id || null, note || null],
+        );
+
+        // 2. Deduct from source outlet
+        await client.query(
+          "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
+          [quantity, product_id, from_outlet_id],
+        );
+
+        // 3. Add to destination outlet (upsert)
+        await client.query(
+          `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+           VALUES ($1, $2, $3)
+           ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
+          [product_id, to_outlet_id, quantity, quantity],
+        );
+      });
+
+      enqueueInventorySyncEvents(
+        [
+          {
+            product_id,
+            outlet_id: from_outlet_id,
+            delta: -1 * Number(quantity || 0),
+            reason: "transfer_out",
+            reference_type: "transfer",
+            reference_id: null,
+          },
+          {
+            product_id,
+            outlet_id: to_outlet_id,
+            delta: Number(quantity || 0),
+            reason: "transfer_in",
+            reference_type: "transfer",
+            reference_id: null,
+          },
+        ],
+        {},
+        () => {},
+      );
+      res.json({ message: "Transfer completed successfully" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Reverse a completed inventory transfer
-  app.post("/api/transfers/:id/reverse", requirePerm("all_access"), (req, res) => {
+  app.post("/api/transfers/:id/reverse", requirePerm("all_access"), async (req, res) => {
     const { id } = req.params;
-    db.get(
-      "SELECT * FROM inventory_transfers WHERE id = ?",
-      [id],
-      (err, transfer) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!transfer) return res.status(404).json({ error: "Transfer not found" });
-        if (transfer.reversed) return res.status(400).json({ error: "Transfer has already been reversed" });
+    try {
+      const { rows: transferRows } = await db.query(
+        "SELECT * FROM inventory_transfers WHERE id = $1",
+        [id],
+      );
+      if (!transferRows.length) return res.status(404).json({ error: "Transfer not found" });
+      const transfer = transferRows[0];
+      if (transfer.reversed) return res.status(400).json({ error: "Transfer has already been reversed" });
 
-        const { product_id, from_outlet_id, to_outlet_id, quantity } = transfer;
+      const { product_id, from_outlet_id, to_outlet_id, quantity } = transfer;
 
-        db.serialize(() => {
-          db.run("BEGIN TRANSACTION");
+      await db.transaction(async (client) => {
+        // Mark original as reversed
+        await client.query(
+          "UPDATE inventory_transfers SET reversed = true WHERE id = $1",
+          [id],
+        );
 
-          // Mark original as reversed
-          db.run(
-            "UPDATE inventory_transfers SET reversed = 1 WHERE id = ?",
-            [id],
-            function (err) {
-              if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
-            },
-          );
+        // Deduct from to_outlet (reversal)
+        await client.query(
+          "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
+          [quantity, product_id, to_outlet_id],
+        );
 
-          // Deduct from to_outlet (reversal)
-          db.run(
-            "UPDATE outlet_stock SET quantity = quantity - ? WHERE product_id = ? AND outlet_id = ?",
-            [quantity, product_id, to_outlet_id],
-            function (err) {
-              if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
-            },
-          );
+        // Add back to from_outlet
+        await client.query(
+          `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+           VALUES ($1, $2, $3)
+           ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
+          [product_id, from_outlet_id, quantity, quantity],
+        );
 
-          // Add back to from_outlet
-          db.run(
-            `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
-             VALUES (?, ?, ?)
-             ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = quantity + ?`,
-            [product_id, from_outlet_id, quantity, quantity],
-            function (err) {
-              if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
-            },
-          );
+        // Insert reversal transfer record
+        await client.query(
+          `INSERT INTO inventory_transfers (product_id, from_outlet_id, to_outlet_id, quantity, employee_id, note, reversed)
+           VALUES ($1, $2, $3, $4, $5, $6, false)`,
+          [product_id, to_outlet_id, from_outlet_id, quantity, transfer.employee_id || null, `Reversal of transfer #${id}`],
+        );
+      });
 
-          // Insert reversal transfer record
-          db.run(
-            `INSERT INTO inventory_transfers (product_id, from_outlet_id, to_outlet_id, quantity, employee_id, note, reversed)
-             VALUES (?, ?, ?, ?, ?, ?, 0)`,
-            [product_id, to_outlet_id, from_outlet_id, quantity, transfer.employee_id || null, `Reversal of transfer #${id}`],
-            function (err) {
-              if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
-            },
-          );
-
-          db.run("COMMIT", (err) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: "Transfer reversed successfully" });
-          });
-        });
-      },
-    );
+      res.json({ message: "Transfer reversed successfully" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // --- STOCK ADJUSTMENTS ---
 
-  app.get("/api/adjustments", (req, res) => {
-    const query = `
+  app.get("/api/adjustments", async (req, res) => {
+    try {
+      const { rows } = await db.query(`
         SELECT sa.*, p.name as product_name, p.barcode, o.name as outlet_name, e.name as employee_name
         FROM stock_adjustments sa
         JOIN products p ON sa.product_id = p.id
         JOIN outlets o ON sa.outlet_id = o.id
         LEFT JOIN employees e ON sa.employee_id = e.id
         ORDER BY sa.timestamp DESC
-    `;
-    db.all(query, [], (err, rows) => {
-      if (err) return res.status(500).json({ error: err.message });
+      `);
       res.json(rows);
-    });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.post("/api/adjustments", requirePerm("manage_inventory"), (req, res) => {
+  app.post("/api/adjustments", requirePerm("manage_inventory"), async (req, res) => {
     const { product_id, outlet_id, employee_id, quantity_change, reason } =
       req.body;
 
@@ -258,112 +214,86 @@ module.exports = function registerInventoryRoutes(app, deps) {
         .json({ error: "Missing required fields for stock adjustment" });
     }
 
-    db.serialize(() => {
-      db.run("BEGIN TRANSACTION");
+    try {
+      let adjustmentId;
+      await db.transaction(async (client) => {
+        // Insert adjustment record
+        const { rows } = await client.query(
+          `INSERT INTO stock_adjustments (product_id, outlet_id, employee_id, quantity_change, reason)
+           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+          [product_id, outlet_id, employee_id || null, quantity_change, reason],
+        );
+        adjustmentId = rows[0].id;
 
-      // Insert adjustment record
-      db.run(
-        `INSERT INTO stock_adjustments (product_id, outlet_id, employee_id, quantity_change, reason)
-             VALUES (?, ?, ?, ?, ?)`,
-        [product_id, outlet_id, employee_id || null, quantity_change, reason],
-        function (err) {
-          if (err) {
-            db.run("ROLLBACK");
-            return res
-              .status(500)
-              .json({ error: "Failed to record adjustment" });
-          }
-          const adjustmentId = this.lastID;
+        // Upsert outlet_stock
+        await client.query(
+          `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+           VALUES ($1, $2, $3)
+           ON CONFLICT(product_id, outlet_id)
+           DO UPDATE SET quantity = outlet_stock.quantity + $4`,
+          [product_id, outlet_id, quantity_change, quantity_change],
+        );
+      });
 
-          // Upsert outlet_stock
-          db.run(
-            `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
-                     VALUES (?, ?, ?)
-                     ON CONFLICT(product_id, outlet_id) 
-                     DO UPDATE SET quantity = quantity + ?`,
-            [product_id, outlet_id, quantity_change, quantity_change],
-            function (err) {
-              if (err) {
-                db.run("ROLLBACK");
-                return res
-                  .status(500)
-                  .json({ error: "Failed to update stock" });
-              }
-
-              db.run("COMMIT", (err) => {
-                if (err)
-                  return res
-                    .status(500)
-                    .json({ error: "Failed to commit adjustment transaction" });
-                enqueueInventorySyncEvents(
-                  [
-                    {
-                      product_id,
-                      outlet_id,
-                      delta: Number(quantity_change || 0),
-                      reason: "adjustment",
-                      reference_type: "adjustment",
-                      reference_id: adjustmentId || null,
-                    },
-                  ],
-                  {},
-                  () => {},
-                );
-                res.json({ message: "Stock adjusted successfully" });
-              });
-            },
-          );
-        },
+      enqueueInventorySyncEvents(
+        [
+          {
+            product_id,
+            outlet_id,
+            delta: Number(quantity_change || 0),
+            reason: "adjustment",
+            reference_type: "adjustment",
+            reference_id: adjustmentId || null,
+          },
+        ],
+        {},
+        () => {},
       );
-    });
+      res.json({ message: "Stock adjusted successfully" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Update adjustment notes/reason only (no stock recalculation)
-  app.put("/api/adjustments/:id", requirePerm("all_access"), (req, res) => {
+  app.put("/api/adjustments/:id", requirePerm("all_access"), async (req, res) => {
     const { id } = req.params;
     const { reason, notes } = req.body;
-    db.run(
-      `UPDATE stock_adjustments
-       SET reason = COALESCE(?, reason),
-           notes  = COALESCE(?, notes)
-       WHERE id = ?`,
-      [reason || null, notes || null, id],
-      function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (this.changes === 0) return res.status(404).json({ error: "Adjustment not found" });
-        res.json({ message: "Adjustment updated" });
-      },
-    );
+    try {
+      const { rowCount } = await db.query(
+        `UPDATE stock_adjustments
+         SET reason = COALESCE($1, reason),
+             notes  = COALESCE($2, notes)
+         WHERE id = $3`,
+        [reason || null, notes || null, id],
+      );
+      if (rowCount === 0) return res.status(404).json({ error: "Adjustment not found" });
+      res.json({ message: "Adjustment updated" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Delete adjustment and reverse stock effect
-  app.delete("/api/adjustments/:id", requirePerm("all_access"), (req, res) => {
+  app.delete("/api/adjustments/:id", requirePerm("all_access"), async (req, res) => {
     const { id } = req.params;
-    db.get("SELECT * FROM stock_adjustments WHERE id = ?", [id], (err, adj) => {
-      if (err) return res.status(500).json({ error: err.message });
-      if (!adj) return res.status(404).json({ error: "Adjustment not found" });
+    try {
+      const { rows: adjRows } = await db.query("SELECT * FROM stock_adjustments WHERE id = $1", [id]);
+      if (!adjRows.length) return res.status(404).json({ error: "Adjustment not found" });
+      const adj = adjRows[0];
 
       const reversal = -Number(adj.quantity_change || 0);
-      db.serialize(() => {
-        db.run("BEGIN TRANSACTION");
-
-        db.run(
-          "UPDATE outlet_stock SET quantity = quantity + ? WHERE product_id = ? AND outlet_id = ?",
+      await db.transaction(async (client) => {
+        await client.query(
+          "UPDATE outlet_stock SET quantity = quantity + $1 WHERE product_id = $2 AND outlet_id = $3",
           [reversal, adj.product_id, adj.outlet_id],
-          function (err) {
-            if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
-          },
         );
-
-        db.run("DELETE FROM stock_adjustments WHERE id = ?", [id], function (err) {
-          if (err) { db.run("ROLLBACK"); return res.status(500).json({ error: err.message }); }
-        });
-
-        db.run("COMMIT", (err) => {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ message: "Adjustment deleted and stock reversed" });
-        });
+        await client.query("DELETE FROM stock_adjustments WHERE id = $1", [id]);
       });
-    });
+
+      res.json({ message: "Adjustment deleted and stock reversed" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 };

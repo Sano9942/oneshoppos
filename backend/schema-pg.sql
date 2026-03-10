@@ -176,6 +176,7 @@ CREATE TABLE IF NOT EXISTS stock_adjustments (
   employee_id INTEGER REFERENCES employees(id),
   quantity_change INTEGER NOT NULL,
   reason TEXT NOT NULL,
+  notes TEXT,
   timestamp TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -187,6 +188,7 @@ CREATE TABLE IF NOT EXISTS inventory_transfers (
   quantity INTEGER NOT NULL,
   employee_id INTEGER REFERENCES employees(id),
   note TEXT,
+  reversed BOOLEAN DEFAULT false,
   timestamp TIMESTAMPTZ DEFAULT NOW(),
   status TEXT DEFAULT 'completed'
 );

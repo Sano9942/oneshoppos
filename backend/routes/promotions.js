@@ -3,11 +3,29 @@ const { getCategoryById, getDescendantLeafIds } = require("../category-tree");
 module.exports = function registerPromotionRoutes(app, deps) {
   const { db, requirePerm } = deps;
 
+  // Postgres-compatible db wrapper for category-tree functions
+  const dbCompat = {
+    all: (sql, params, cb) => {
+      let idx = 0;
+      const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
+      db.query(pgSql, params)
+        .then(({ rows }) => cb(null, rows))
+        .catch((err) => cb(err));
+    },
+    get: (sql, params, cb) => {
+      let idx = 0;
+      const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
+      db.query(pgSql, params)
+        .then(({ rows }) => cb(null, rows[0] || null))
+        .catch((err) => cb(err));
+    },
+  };
+
   async function validatePromotionCategory(categoryId) {
     if (!categoryId) return null;
-    const category = await getCategoryById(db, categoryId);
+    const category = await getCategoryById(dbCompat, categoryId);
     if (!category) return "Category not found";
-    const leafIds = await getDescendantLeafIds(db, category.id);
+    const leafIds = await getDescendantLeafIds(dbCompat, category.id);
     if (leafIds.length !== 1 || Number(leafIds[0]) !== Number(category.id)) {
       return "Promotions can only target leaf categories";
     }
@@ -17,15 +35,15 @@ module.exports = function registerPromotionRoutes(app, deps) {
 // --- PROMOTIONS ENGINE ---
 
   // GET all promotions
-  app.get("/api/promotions", (req, res) => {
-    db.all(
-      "SELECT * FROM promotions ORDER BY created_at DESC",
-      [],
-      (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ promotions: rows });
-      },
-    );
+  app.get("/api/promotions", async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        "SELECT * FROM promotions ORDER BY created_at DESC",
+      );
+      res.json({ promotions: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // POST create promotion
@@ -51,58 +69,10 @@ module.exports = function registerPromotionRoutes(app, deps) {
         return res.status(400).json({ error: categoryError });
       }
     }
-    db.run(
-      `INSERT INTO promotions (name, type, value, min_order_amount, buy_qty, get_qty, applies_to, product_id, category_id, starts_at, ends_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        name,
-        type,
-        value,
-        min_order_amount,
-        buy_qty,
-        get_qty,
-        applies_to,
-        product_id || null,
-        category_id || null,
-        starts_at || null,
-        ends_at || null,
-      ],
-      function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "Promotion created", id: this.lastID });
-      },
-    );
-  });
-
-  // PUT update promotion
-  app.put(
-    "/api/promotions/:id",
-    requirePerm("manage_inventory"),
-    async (req, res) => {
-      const { id } = req.params;
-      const {
-        name,
-        type,
-        value,
-        min_order_amount = 0,
-        buy_qty = 0,
-        get_qty = 0,
-        applies_to = "all",
-        product_id,
-        category_id,
-        active,
-        starts_at,
-        ends_at,
-      } = req.body;
-      if (applies_to === "category") {
-        const categoryError = await validatePromotionCategory(category_id);
-        if (categoryError) {
-          return res.status(400).json({ error: categoryError });
-        }
-      }
-      db.run(
-        `UPDATE promotions SET name=?, type=?, value=?, min_order_amount=?, buy_qty=?, get_qty=?,
-     applies_to=?, product_id=?, category_id=?, active=?, starts_at=?, ends_at=? WHERE id=?`,
+    try {
+      const { rows } = await db.query(
+        `INSERT INTO promotions (name, type, value, min_order_amount, buy_qty, get_qty, applies_to, product_id, category_id, starts_at, ends_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
         [
           name,
           type,
@@ -113,122 +83,165 @@ module.exports = function registerPromotionRoutes(app, deps) {
           applies_to,
           product_id || null,
           category_id || null,
-          active !== undefined ? active : 1,
+          starts_at || null,
+          ends_at || null,
+        ],
+      );
+      res.json({ message: "Promotion created", id: rows[0].id });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PUT update promotion
+  app.put("/api/promotions/:id", requirePerm("manage_inventory"), async (req, res) => {
+    const { id } = req.params;
+    const {
+      name,
+      type,
+      value,
+      min_order_amount = 0,
+      buy_qty = 0,
+      get_qty = 0,
+      applies_to = "all",
+      product_id,
+      category_id,
+      active,
+      starts_at,
+      ends_at,
+    } = req.body;
+    if (applies_to === "category") {
+      const categoryError = await validatePromotionCategory(category_id);
+      if (categoryError) {
+        return res.status(400).json({ error: categoryError });
+      }
+    }
+    try {
+      const { rowCount } = await db.query(
+        `UPDATE promotions SET name=$1, type=$2, value=$3, min_order_amount=$4, buy_qty=$5, get_qty=$6,
+       applies_to=$7, product_id=$8, category_id=$9, active=$10, starts_at=$11, ends_at=$12 WHERE id=$13`,
+        [
+          name,
+          type,
+          value,
+          min_order_amount,
+          buy_qty,
+          get_qty,
+          applies_to,
+          product_id || null,
+          category_id || null,
+          active !== undefined ? active : true,
           starts_at || null,
           ends_at || null,
           id,
         ],
-        function (err) {
-          if (err) return res.status(500).json({ error: err.message });
-          if (this.changes === 0)
-            return res.status(404).json({ error: "Promotion not found" });
-          res.json({ message: "Promotion updated" });
-        },
       );
-    },
-  );
+      if (rowCount === 0)
+        return res.status(404).json({ error: "Promotion not found" });
+      res.json({ message: "Promotion updated" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // DELETE promotion
-  app.delete(
-    "/api/promotions/:id",
-    requirePerm("manage_inventory"),
-    (req, res) => {
-      db.run(
-        "DELETE FROM promotions WHERE id = ?",
+  app.delete("/api/promotions/:id", requirePerm("manage_inventory"), async (req, res) => {
+    try {
+      const { rowCount } = await db.query(
+        "DELETE FROM promotions WHERE id = $1",
         [req.params.id],
-        function (err) {
-          if (err) return res.status(500).json({ error: err.message });
-          if (this.changes === 0)
-            return res.status(404).json({ error: "Promotion not found" });
-          res.json({ message: "Promotion deleted" });
-        },
       );
-    },
-  );
+      if (rowCount === 0)
+        return res.status(404).json({ error: "Promotion not found" });
+      res.json({ message: "Promotion deleted" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // POST /api/promotions/quote — evaluate active promotions against a cart
   // Body: { items: [{product_id, category_id, quantity, price}], order_total }
-  app.post("/api/promotions/quote", (req, res) => {
+  app.post("/api/promotions/quote", async (req, res) => {
     const { items = [], order_total = 0 } = req.body;
     const now = new Date().toISOString().slice(0, 10);
 
-    db.all(
-      `SELECT * FROM promotions WHERE active = 1
-     AND (starts_at IS NULL OR starts_at <= ?)
-     AND (ends_at IS NULL OR ends_at >= ?)
-     ORDER BY id ASC`,
-      [now, now],
-      (err, promos) => {
-        if (err) return res.status(500).json({ error: err.message });
+    try {
+      const { rows: promos } = await db.query(
+        `SELECT * FROM promotions WHERE active = true
+       AND (starts_at IS NULL OR starts_at <= $1)
+       AND (ends_at IS NULL OR ends_at >= $2)
+       ORDER BY id ASC`,
+        [now, now],
+      );
 
-        const applied = [];
-        let totalDiscount = 0;
+      const applied = [];
+      let totalDiscount = 0;
 
-        for (const promo of promos) {
-          const itemMatches = (item) => {
-            if (promo.applies_to === "all") return true;
-            if (promo.applies_to === "product" && promo.product_id)
-              return item.product_id === promo.product_id;
-            if (promo.applies_to === "category" && promo.category_id)
-              return item.category_id === promo.category_id;
-            return false;
-          };
+      for (const promo of promos) {
+        const itemMatches = (item) => {
+          if (promo.applies_to === "all") return true;
+          if (promo.applies_to === "product" && promo.product_id)
+            return item.product_id === promo.product_id;
+          if (promo.applies_to === "category" && promo.category_id)
+            return item.category_id === promo.category_id;
+          return false;
+        };
 
-          const matchedItems = items.filter(itemMatches);
-          const matchedTotal = matchedItems.reduce(
-            (s, i) => s + i.price * i.quantity,
-            0,
-          );
-          let discount = 0;
+        const matchedItems = items.filter(itemMatches);
+        const matchedTotal = matchedItems.reduce(
+          (s, i) => s + i.price * i.quantity,
+          0,
+        );
+        let discount = 0;
 
-          if (promo.type === "percent") {
+        if (promo.type === "percent") {
+          discount = matchedTotal * (promo.value / 100);
+        } else if (promo.type === "fixed") {
+          discount = Math.min(promo.value, matchedTotal);
+        } else if (promo.type === "threshold_percent") {
+          if (order_total >= promo.min_order_amount)
             discount = matchedTotal * (promo.value / 100);
-          } else if (promo.type === "fixed") {
+        } else if (promo.type === "threshold_fixed") {
+          if (order_total >= promo.min_order_amount)
             discount = Math.min(promo.value, matchedTotal);
-          } else if (promo.type === "threshold_percent") {
-            if (order_total >= promo.min_order_amount)
-              discount = matchedTotal * (promo.value / 100);
-          } else if (promo.type === "threshold_fixed") {
-            if (order_total >= promo.min_order_amount)
-              discount = Math.min(promo.value, matchedTotal);
-          } else if (promo.type === "bxgy") {
-            if (promo.buy_qty > 0 && promo.get_qty > 0) {
-              // B10 fix: aggregate quantities across cart lines by product_id
-              const aggregated = {};
-              matchedItems.forEach((item) => {
-                const pid = item.product_id;
-                if (!aggregated[pid]) {
-                  aggregated[pid] = { quantity: 0, totalValue: 0 };
-                }
-                aggregated[pid].quantity += item.quantity;
-                aggregated[pid].totalValue += item.quantity * item.price;
-              });
-              Object.values(aggregated).forEach((agg) => {
-                const sets = Math.floor(
-                  agg.quantity / (promo.buy_qty + promo.get_qty),
-                );
-                const avgPrice = agg.totalValue / agg.quantity;
-                discount += sets * promo.get_qty * avgPrice;
-              });
-            }
-          }
-
-          if (discount > 0) {
-            totalDiscount += discount;
-            applied.push({
-              promotion_id: promo.id,
-              name: promo.name,
-              type: promo.type,
-              discount: parseFloat(discount.toFixed(2)),
+        } else if (promo.type === "bxgy") {
+          if (promo.buy_qty > 0 && promo.get_qty > 0) {
+            const aggregated = {};
+            matchedItems.forEach((item) => {
+              const pid = item.product_id;
+              if (!aggregated[pid]) {
+                aggregated[pid] = { quantity: 0, totalValue: 0 };
+              }
+              aggregated[pid].quantity += item.quantity;
+              aggregated[pid].totalValue += item.quantity * item.price;
+            });
+            Object.values(aggregated).forEach((agg) => {
+              const sets = Math.floor(
+                agg.quantity / (promo.buy_qty + promo.get_qty),
+              );
+              const avgPrice = agg.totalValue / agg.quantity;
+              discount += sets * promo.get_qty * avgPrice;
             });
           }
         }
 
-        res.json({
-          applied_promotions: applied,
-          total_promotion_discount: parseFloat(totalDiscount.toFixed(2)),
-        });
-      },
-    );
+        if (discount > 0) {
+          totalDiscount += discount;
+          applied.push({
+            promotion_id: promo.id,
+            name: promo.name,
+            type: promo.type,
+            discount: parseFloat(discount.toFixed(2)),
+          });
+        }
+      }
+
+      res.json({
+        applied_promotions: applied,
+        total_promotion_discount: parseFloat(totalDiscount.toFixed(2)),
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 };

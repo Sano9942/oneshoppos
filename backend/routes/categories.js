@@ -1,6 +1,4 @@
 const {
-  dbAllAsync,
-  dbGetAsync,
   fetchEnrichedCategories,
   fetchCategoryIndexes,
   getCategoryById,
@@ -13,30 +11,50 @@ const {
 module.exports = function registerCategoryRoutes(app, deps) {
   const { db, requirePerm } = deps;
 
+  // Postgres-compatible async helpers that match what category-tree expects
+  // category-tree uses dbAllAsync(db, sql, params) which wraps db.all() callbacks.
+  // Our pg db proxy has db.query() returning { rows }. We create a db-like wrapper
+  // so category-tree functions work transparently.
+  const dbCompat = {
+    all: (sql, params, cb) => {
+      // Convert ? placeholders to $1, $2, ... for Postgres
+      let idx = 0;
+      const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
+      db.query(pgSql, params)
+        .then(({ rows }) => cb(null, rows))
+        .catch((err) => cb(err));
+    },
+    get: (sql, params, cb) => {
+      let idx = 0;
+      const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
+      db.query(pgSql, params)
+        .then(({ rows }) => cb(null, rows[0] || null))
+        .catch((err) => cb(err));
+    },
+  };
+
   async function sendCategories(res) {
-    const categories = await fetchEnrichedCategories(db);
+    const categories = await fetchEnrichedCategories(dbCompat);
     res.json({ categories });
   }
 
   async function ensureSiblingNameAvailable(name, parentId, excludeId = null) {
-    const rows = await dbAllAsync(
-      db,
+    const { rows } = await db.query(
       `SELECT id, parent_id
        FROM categories
-       WHERE lower(name) = lower(?)
-         AND ((parent_id IS NULL AND ? IS NULL) OR parent_id = ?)`,
-      [name, parentId, parentId],
+       WHERE lower(name) = lower($1)
+         AND ((parent_id IS NULL AND $2::INTEGER IS NULL) OR parent_id = $2)`,
+      [name, parentId],
     );
     return !(rows || []).some((row) => Number(row.id) !== Number(excludeId));
   }
 
   async function getDirectProductCount(categoryId) {
-    const row = await dbGetAsync(
-      db,
-      `SELECT COUNT(*) AS count FROM products WHERE category_id = ?`,
+    const { rows } = await db.query(
+      `SELECT COUNT(*) AS count FROM products WHERE category_id = $1`,
       [Number(categoryId)],
     );
-    return Number(row?.count || 0);
+    return Number(rows[0]?.count || 0);
   }
 
   function formatValidationError(error) {
@@ -58,7 +76,7 @@ module.exports = function registerCategoryRoutes(app, deps) {
       return "Invalid parent category";
     }
 
-    const indexes = await fetchCategoryIndexes(db);
+    const indexes = await fetchCategoryIndexes(dbCompat);
     if (normalizedParentId != null && !indexes.byId.has(normalizedParentId)) {
       return "Parent category not found";
     }
@@ -121,27 +139,19 @@ module.exports = function registerCategoryRoutes(app, deps) {
 
       const normalizedParentId =
         parent_id == null || parent_id === "" ? null : Number(parent_id);
-      db.run(
+
+      const { rows } = await db.query(
         `INSERT INTO categories (name, description, parent_id, sort_order, is_active)
-         VALUES (?, ?, ?, ?, ?)`,
+         VALUES ($1, $2, $3, $4, $5) RETURNING id, name, description, parent_id, sort_order, is_active`,
         [
           String(name).trim(),
           description || null,
           normalizedParentId,
           Number(sort_order || 0),
-          Number(is_active) === 0 ? 0 : 1,
+          Number(is_active) === 0 ? false : true,
         ],
-        async function (err) {
-          if (err) return res.status(500).json({ error: err.message });
-          const category = await dbGetAsync(
-            db,
-            `SELECT id, name, description, parent_id, sort_order, is_active
-             FROM categories WHERE id = ?`,
-            [this.lastID],
-          );
-          res.json(category);
-        },
       );
+      res.json(rows[0]);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -150,12 +160,12 @@ module.exports = function registerCategoryRoutes(app, deps) {
   app.put("/api/categories/:id", requirePerm("manage_inventory"), async (req, res) => {
     try {
       const { id } = req.params;
-      const existing = await dbGetAsync(
-        db,
+      const { rows: existRows } = await db.query(
         `SELECT id, name, description, parent_id, sort_order, is_active
-         FROM categories WHERE id = ?`,
+         FROM categories WHERE id = $1`,
         [id],
       );
+      const existing = existRows[0] || null;
       if (!existing) {
         return res.status(404).json({ error: "Category not found" });
       }
@@ -189,26 +199,25 @@ module.exports = function registerCategoryRoutes(app, deps) {
       }
 
       const descendantIds = getDescendantIds(
-        (await fetchCategoryIndexes(db)).childrenByParent,
+        (await fetchCategoryIndexes(dbCompat)).childrenByParent,
         Number(id),
       );
       if (descendantIds.length) {
-        const assignedProducts = await dbGetAsync(
-          db,
-          `SELECT COUNT(*) AS count FROM products WHERE category_id = ?`,
+        const { rows: prodRows } = await db.query(
+          `SELECT COUNT(*) AS count FROM products WHERE category_id = $1`,
           [Number(id)],
         );
-        if (Number(assignedProducts?.count || 0) > 0) {
+        if (Number(prodRows[0]?.count || 0) > 0) {
           return res.status(400).json({
             error: "Category with assigned products cannot become a parent",
           });
         }
       }
 
-      db.run(
+      const { rowCount } = await db.query(
         `UPDATE categories
-         SET name = ?, description = ?, parent_id = ?, sort_order = ?, is_active = ?
-         WHERE id = ?`,
+         SET name = $1, description = $2, parent_id = $3, sort_order = $4, is_active = $5
+         WHERE id = $6`,
         [
           String(nextName).trim(),
           nextDescription || null,
@@ -216,17 +225,14 @@ module.exports = function registerCategoryRoutes(app, deps) {
             ? null
             : Number(nextParentId),
           Number(nextSortOrder || 0),
-          Number(nextIsActive) === 0 ? 0 : 1,
+          Number(nextIsActive) === 0 ? false : true,
           id,
         ],
-        function (err) {
-          if (err) return res.status(500).json({ error: err.message });
-          if (this.changes === 0) {
-            return res.status(404).json({ error: "Category not found" });
-          }
-          res.json({ message: "Category updated successfully" });
-        },
       );
+      if (rowCount === 0) {
+        return res.status(404).json({ error: "Category not found" });
+      }
+      res.json({ message: "Category updated successfully" });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -259,63 +265,45 @@ module.exports = function registerCategoryRoutes(app, deps) {
         return res.status(400).json(formatValidationError(validationError));
       }
 
-      const parent = await getCategoryById(db, normalizedParentId);
-      if (!parent) {
+      const { rows: parentRows } = await db.query(
+        "SELECT id, name, description, parent_id, sort_order, is_active FROM categories WHERE id = $1",
+        [normalizedParentId],
+      );
+      if (!parentRows.length) {
         return res.status(404).json({ error: "Parent category not found" });
       }
 
       const directProductCount = await getDirectProductCount(normalizedParentId);
 
-      db.serialize(() => {
-        db.run("BEGIN TRANSACTION");
-        db.run(
+      const result = await db.transaction(async (client) => {
+        const { rows: insertRows } = await client.query(
           `INSERT INTO categories (name, description, parent_id, sort_order, is_active)
-           VALUES (?, ?, ?, ?, ?)`,
+           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
           [
             String(name).trim(),
             description || null,
             normalizedParentId,
             Number(sort_order || 0),
-            Number(is_active) === 0 ? 0 : 1,
+            Number(is_active) === 0 ? false : true,
           ],
-          function (insertErr) {
-            if (insertErr) {
-              db.run("ROLLBACK");
-              return res.status(500).json({ error: insertErr.message });
-            }
-            const childId = this.lastID;
-            db.run(
-              `UPDATE products
-               SET category_id = ?
-               WHERE category_id = ?`,
-              [childId, normalizedParentId],
-              async function (moveErr) {
-                if (moveErr) {
-                  db.run("ROLLBACK");
-                  return res.status(500).json({ error: moveErr.message });
-                }
-                const moved_products = Number(this.changes || 0);
-                db.run("COMMIT", async (commitErr) => {
-                  if (commitErr) {
-                    db.run("ROLLBACK");
-                    return res.status(500).json({ error: commitErr.message });
-                  }
-                  const category = await dbGetAsync(
-                    db,
-                    `SELECT id, name, description, parent_id, sort_order, is_active
-                     FROM categories WHERE id = ?`,
-                    [childId],
-                  );
-                  res.json({
-                    category,
-                    moved_products,
-                    parent_direct_products_before: directProductCount,
-                  });
-                });
-              },
-            );
-          },
         );
+        const childId = insertRows[0].id;
+        const { rowCount } = await client.query(
+          `UPDATE products SET category_id = $1 WHERE category_id = $2`,
+          [childId, normalizedParentId],
+        );
+        return { childId, moved_products: rowCount };
+      });
+
+      const { rows: catRows } = await db.query(
+        `SELECT id, name, description, parent_id, sort_order, is_active
+         FROM categories WHERE id = $1`,
+        [result.childId],
+      );
+      res.json({
+        category: catRows[0],
+        moved_products: result.moved_products,
+        parent_direct_products_before: directProductCount,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -337,15 +325,15 @@ module.exports = function registerCategoryRoutes(app, deps) {
         });
       }
 
-      const [source, target, indexes] = await Promise.all([
-        getCategoryById(db, sourceId),
-        getCategoryById(db, targetId),
-        fetchCategoryIndexes(db),
+      const [sourceRows, targetRows, indexes] = await Promise.all([
+        db.query("SELECT id, name, description, parent_id, sort_order, is_active FROM categories WHERE id = $1", [sourceId]),
+        db.query("SELECT id, name, description, parent_id, sort_order, is_active FROM categories WHERE id = $1", [targetId]),
+        fetchCategoryIndexes(dbCompat),
       ]);
-      if (!source) return res.status(404).json({ error: "Source category not found" });
-      if (!target) return res.status(404).json({ error: "Target category not found" });
+      if (!sourceRows.rows.length) return res.status(404).json({ error: "Source category not found" });
+      if (!targetRows.rows.length) return res.status(404).json({ error: "Target category not found" });
 
-      const targetLeafIds = await getDescendantLeafIds(db, targetId);
+      const targetLeafIds = await getDescendantLeafIds(dbCompat, targetId);
       if (targetLeafIds.length !== 1 || Number(targetLeafIds[0]) !== Number(targetId)) {
         return res.status(400).json({
           error: "Products can only be moved to a leaf category",
@@ -360,19 +348,14 @@ module.exports = function registerCategoryRoutes(app, deps) {
         });
       }
 
-      db.run(
-        `UPDATE products
-         SET category_id = ?
-         WHERE category_id = ?`,
+      const { rowCount } = await db.query(
+        `UPDATE products SET category_id = $1 WHERE category_id = $2`,
         [targetId, sourceId],
-        function (err) {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({
-            message: "Products moved successfully",
-            moved_products: Number(this.changes || 0),
-          });
-        },
       );
+      res.json({
+        message: "Products moved successfully",
+        moved_products: rowCount,
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -381,33 +364,29 @@ module.exports = function registerCategoryRoutes(app, deps) {
   app.delete("/api/categories/:id", requirePerm("manage_inventory"), async (req, res) => {
     try {
       const { id } = req.params;
-      const childRow = await dbGetAsync(
-        db,
-        `SELECT COUNT(*) AS count FROM categories WHERE parent_id = ?`,
+      const { rows: childRows } = await db.query(
+        `SELECT COUNT(*) AS count FROM categories WHERE parent_id = $1`,
         [id],
       );
-      if (Number(childRow?.count || 0) > 0) {
+      if (Number(childRows[0]?.count || 0) > 0) {
         return res.status(400).json({
           error: "Cannot delete category with child categories.",
         });
       }
-      const productRow = await dbGetAsync(
-        db,
-        `SELECT COUNT(*) AS count FROM products WHERE category_id = ?`,
+      const { rows: productRows } = await db.query(
+        `SELECT COUNT(*) AS count FROM products WHERE category_id = $1`,
         [id],
       );
-      if (Number(productRow?.count || 0) > 0) {
+      if (Number(productRows[0]?.count || 0) > 0) {
         return res.status(400).json({
           error: "Cannot delete category with assigned products.",
         });
       }
-      db.run("DELETE FROM categories WHERE id = ?", [id], function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (this.changes === 0) {
-          return res.status(404).json({ error: "Category not found" });
-        }
-        res.json({ message: "Category deleted" });
-      });
+      const { rowCount } = await db.query("DELETE FROM categories WHERE id = $1", [id]);
+      if (rowCount === 0) {
+        return res.status(404).json({ error: "Category not found" });
+      }
+      res.json({ message: "Category deleted" });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
