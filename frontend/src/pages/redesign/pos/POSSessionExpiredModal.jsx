@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { usePOS } from "./POSContext";
-import { API_BASE as API } from "../../../../config";
+import { API_BASE as API } from "../../../config";
 
 export default function POSSessionExpiredModal() {
   const {
@@ -53,7 +53,7 @@ export default function POSSessionExpiredModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-200 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-2xl flex flex-col items-center">
         <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600">
           <AlertTriangle size={32} />
