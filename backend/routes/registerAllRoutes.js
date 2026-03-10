@@ -363,6 +363,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- RECEIPT TEMPLATES & ACTION HISTORY ---
   require("./receipt-templates")(app, deps);
 
+  // --- ROUTES: CUSTOMER-FACING DISPLAY ---
+  require("./customer-display")(app, deps);
+
   // --- ROUTES: PRINTER (ESC/POS hardware) ---
   require("./printer")(app, deps);
 

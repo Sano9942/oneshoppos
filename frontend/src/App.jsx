@@ -57,6 +57,7 @@ import ParkedSalesRedesign from "./pages/redesign/ParkedSalesRedesign";
 import ReorderAlertsRedesign from "./pages/redesign/ReorderAlertsRedesign";
 import NotificationsRedesign from "./pages/redesign/NotificationsRedesign";
 
+const CustomerDisplayPage = lazy(() => import("./pages/CustomerDisplayPage"));
 const ReportsRoute = lazy(() => import("./pages/ReportsRoute"));
 const ReportTabStandaloneRoute = lazy(() =>
   import("./pages/ReportsRoute").then((mod) => ({
@@ -125,6 +126,16 @@ function App() {
             <RequireAuth>
               <KioskRedesign />
             </RequireAuth>
+          }
+        />
+
+        {/* Customer-Facing Display — public, no auth */}
+        <Route
+          path="/customer-display"
+          element={
+            <Suspense fallback={<RouteLoading />}>
+              <CustomerDisplayPage />
+            </Suspense>
           }
         />
 

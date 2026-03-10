@@ -780,6 +780,22 @@ export const POSProvider = ({ children }) => {
       });
       setSlipOpen(true);
 
+      // Signal "paid" to customer-facing display before clearing cart
+      if (activeShift?.id) {
+        fetch(`${API}/api/pos/customer-display`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({
+            shift_id: activeShift.id,
+            items: cart.map((i) => ({ name: i.name, qty: i.quantity, price: i.price, total: i.quantity * i.price })),
+            subtotal: grossTotal,
+            tax: taxTotal,
+            total,
+            status: "paid",
+          }),
+        }).catch(() => {});
+      }
+
       setCart([]);
       setDiscountInput("");
       setOrderNote("");
@@ -885,6 +901,34 @@ export const POSProvider = ({ children }) => {
       setLockError("Failed to connect to server");
     }
   };
+
+  // ── Customer-facing display sync ─────────────────────────────────────────
+  const customerDisplayTimerRef = useRef(null);
+  useEffect(() => {
+    if (!activeShift?.id) return;
+    clearTimeout(customerDisplayTimerRef.current);
+    customerDisplayTimerRef.current = setTimeout(() => {
+      const items = cart.map((i) => ({
+        name: i.name,
+        qty: i.quantity,
+        price: i.price,
+        total: i.quantity * i.price,
+      }));
+      fetch(`${API}/api/pos/customer-display`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({
+          shift_id: activeShift.id,
+          items,
+          subtotal: grossTotal,
+          tax: taxTotal,
+          total,
+          status: cart.length > 0 ? "active" : "idle",
+        }),
+      }).catch(() => {}); // silent fail — display is non-critical
+    }, 500);
+    return () => clearTimeout(customerDisplayTimerRef.current);
+  }, [cart, grossTotal, taxTotal, total, activeShift]);
 
   const value = {
     employee,
