@@ -9,7 +9,8 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 
 ## Current Status Snapshot (March 2026)
 
-- Latest migration is `backend/migrate73.js`
+- Latest migration is `backend/migrate74.js`
+- **Phase 3 Remaining complete (Mar 10 2026)**: 5 items shipped — mobile/tablet POS layout, IP allowlisting for admin API, JWT token revocation (migrate74), stock shrinkage report, customer-facing display
 - **Roadmap Phase 3 complete (Mar 10 2026)**: 8 of 9 core robustness items shipped (offline queuing deferred) — rate limiter activation, session timeout at POS, idempotency on sales, price change audit log, end-of-day email digest, onboarding checklist, setup wizard, soft deletes
 - **Roadmap Phase 2 complete (Mar 9 2026)**: All 25 remaining roadmap items shipped in 9 parallel sessions — loyalty/wallet frontend, security fixes (SEC6+SEC8), reorder alerts, accounting/HR wire-up, PO edit+approval, orders detail tabs, quotations email, parked sales page, stock/transfer/supplier/category guards, CRM typed activities, backup progress, notifications, serial numbers, gift cards, PO templates, stock-by-outlet popup, action history logging, reports governance UI
 - **Test suite: 395/395 Jest integration tests passing (37 suites, 0 failures)**
@@ -91,6 +92,12 @@ A full-stack Point of Sale (POS) system with Shopify integration.
   - Setup wizard: `migrate72.js` adds `setup_complete` + `setup_token` to `company_profile`; `backend/routes/setup.js` — `GET /api/setup/status` (no auth) + `POST /api/setup/complete` (token-gated, transactional seed of company/outlet/roles/employee/receipt template); `index.js` 503 gate blocks all routes except `/api/setup` + `/api/health` when `setup_complete=0`; boot-time token generation logs setup URL to console; `frontend/src/pages/SetupWizard.jsx` — 4-step wizard (Store Identity → Time & Currency → First Outlet → Admin Account); `App.jsx` HomeRedirect checks setup status
   - Soft deletes: `migrate73.js` adds `deleted_at DATETIME DEFAULT NULL` to products, customers, employees + indexes; `DELETE` endpoints changed to `UPDATE SET deleted_at = datetime('now')`; listings filter `WHERE deleted_at IS NULL`; frontend "Delete" → "Archive" wording; report JOINs untouched (historical data preserved); 3 test files updated for soft-delete semantics
   - Offline sale queuing: **deferred** (3-5 day effort — needs SW rewrite, IndexedDB, Background Sync)
+- **Phase 3 — Remaining Items (Mar 10 2026)**:
+  - Mobile/tablet POS layout: 3-tab navigation (Cart/Search/Pay) on `<768px`, sticky pay button, touch-friendly qty controls, 2-col search grid; desktop unchanged; `POSRedesign.jsx` `activeTab` state, responsive CSS in 6 POS components
+  - IP allowlisting: `ADMIN_ALLOWED_IPS` env var (comma-separated IPs/CIDR), `requireAllowedIp` middleware in `admin.js`, IPv4 CIDR matching via `ipInCidr()`, backward compatible (empty = allow all)
+  - Token revocation: `migrate74.js` creates `revoked_tokens` table + `tokens_revoked_before` column on `employees`; `jwt-auth.js` `signAccessToken` adds `jti: crypto.randomUUID()`; `loadTenantAndPerms` checks revoked tokens (MT mode only); `POST /api/employees/:id/revoke-token` + `revoke-all-tokens` endpoints; Revoke button in `EmployeesRedesign.jsx`
+  - Shrinkage report: `GET /api/reports/shrinkage` in `reports/inventory.js` — 6 LEFT JOIN subqueries (sales, returns, GRN, adjustments, transfers in/out); `ShrinkageTab` in `ReportsInventory.jsx` with color-coded variance + CSV export; wired in `Reports.jsx` under Inventory tabs
+  - Customer-facing display: `backend/routes/customer-display.js` (in-memory Map keyed by shift_id, 8h auto-cleanup); `POST /api/pos/customer-display` (auth required) + `GET` (no auth, 2s poll); `CustomerDisplayPage.jsx` dark-theme standalone page at `/customer-display`; `POSContext.jsx` debounced (500ms) cart state push
 
 ## Completed Baseline Before Testing Plan (as of 2026-03-05)
 
@@ -156,6 +163,7 @@ oneshoppos/
 │   │   │   ├── shifts.js             # /api/reports/shifts, /api/reports/cash-drawer
 │   │   │   └── helpers.js            # Shared SQL builders and formatters
 │   │   ├── returns.js            # /api/returns
+│   │   ├── customer-display.js   # /api/pos/customer-display (in-memory cart state for secondary screen)
 │   │   ├── attendance.js         # /api/attendance + /api/attendance/pin-* (kiosk) + /api/employees/:id/attendance-config
 │   │   ├── attribute-sets.js     # /api/attribute-sets
 │   │   ├── receipt-templates.js  # /api/receipt-templates + action history
@@ -208,7 +216,8 @@ oneshoppos/
 │   │   └── digestEmail.js        # End-of-day HTML digest email builder (revenue, top products, exceptions)
 │   ├── migrate71.js              # Idempotency key on sales table
 │   ├── migrate72.js              # Setup wizard (setup_complete + setup_token on company_profile)
-│   └── migrate73.js              # Soft deletes (deleted_at on products, customers, employees) — READ THIS for schema questions
+│   ├── migrate73.js              # Soft deletes (deleted_at on products, customers, employees)
+│   └── migrate74.js              # Token revocation (revoked_tokens table + tokens_revoked_before on employees) — READ THIS for schema questions
 └── frontend/
     └── src/
         ├── components/           # Reusable UI components (all small, < 200 lines)
@@ -241,6 +250,7 @@ oneshoppos/
             │   ├── DashboardOnboarding.jsx  # 5-step onboarding checklist (auto-detects from API data)
             │   └── [11 other dashboard components]
             ├── SetupWizard.jsx              # 4-step first-run wizard (unauthenticated, token-gated)
+            ├── CustomerDisplayPage.jsx      # Customer-facing display (dark theme, polls cart state, no auth)
             └── redesign/                 # Active UI — ALL pages now rendered here
                 ├── POSRedesign.jsx
                 ├── KioskRedesign.jsx         # PIN clock-in terminal (standalone, no sidebar)
@@ -267,7 +277,7 @@ oneshoppos/
 - `registerAllRoutes.js` is now just an orchestrator (~340 lines) — no routes defined there. Each domain is loaded via its modular directory. In MT mode, also wires `resolveTenant` + tenant-scoped `/uploads` serving.
 - **Super-admin routes**: `backend/routes/admin.js` is mounted in `index.js` BEFORE `registerAllRoutes` — this ensures admin endpoints bypass `loadTenantAndPerms`/`resolveTenant` middleware. Admin JWT uses `jwt.sign()` directly (not `signAccessToken`) because the shared utility strips custom claims like `role`/`aid`/`email`.
 - **Multi-tenant DB routing**: When `MULTI_TENANT=1`, `deps.db` is a Proxy (`tenant-db-proxy.js`) that delegates all calls to the tenant DB resolved from AsyncLocalStorage. Route closures that captured `db` at boot time transparently hit the correct tenant DB. Middleware order: `loadTenantAndPerms` (JWT verify) → `resolveTenant` (ALS context + `req.tenantDir`) → tenant-scoped `/uploads` → `loadCompanyProfile` → `resolveContext`.
-- Database schema: read only `backend/migrate73.js` (latest), never older migrations
+- Database schema: read only `backend/migrate74.js` (latest), never older migrations
 - Internal product categories are hierarchical; products and category promotions may target leaf categories only
 - Parent category filters expand to descendant leaves in products and reports
 - SQLite DB file: `backend/sanopos.db`
@@ -277,7 +287,7 @@ oneshoppos/
 
 - Find which file owns the route: check the table in this file above
 - Read ONLY that route file — do not read registerAllRoutes.js for route logic
-- Schema questions → `backend/migrate73.js` (latest)
+- Schema questions → `backend/migrate74.js` (latest)
 - Products API: `GET /api/products/:id` exists (added Mar 2026) — returns `{ product: { ...fields, total_stock } }`; route is registered BEFORE `/:id/variants` in `products.js` — preserve this order when adding new routes
 - Email receipt HTML builder (server-side) → `backend/utils/receiptEmail.js`
 - Category tree logic → `backend/category-tree.js`
@@ -426,3 +436,4 @@ Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
 - Mar 2026: Phase 6 deployment — Railway backend + Vercel frontend live; `start.sh` symlinks legacy DB names (`oneshop.db`, `sanopos.db`) to `$DATA_DIR/sanopos.db` (volume); Railway volume must be provisioned manually in UI; `DATA_DIR=/data`, `MULTI_TENANT=0` for single-tenant mode; frontend env at `frontend/.env.production`
 - Mar 2026: Products table improvements — `migrate68.js` removes `UNIQUE` constraint on `products.barcode` (table recreate, duplicate barcodes now allowed); `POST /api/products` validates `price > 0` (400 if missing/zero); bulk-import route adds `sku` field + plain INSERT (removed `ON CONFLICT` upsert which required the now-dropped UNIQUE); `InventoryRedesign.jsx` replaces Min Qty column with SKU + Cost columns; bulk import UI added (CSV Template download + Import CSV button + results modal)
 - Mar 2026: Phase 3 Core Robustness — `migrate71.js` (idempotency_key on sales), `migrate72.js` (setup wizard — setup_complete + setup_token on company_profile), `migrate73.js` (soft deletes — deleted_at on products/customers/employees); rate limiter activated (`skip: () => process.env.NODE_ENV === 'test'`); price change audit log in `products.js` PUT; end-of-day email digest in `reports/governance.js` + `utils/digestEmail.js`; POS session timeout handling (`POSSessionExpiredModal.jsx`); dashboard onboarding checklist (`DashboardOnboarding.jsx`); first-run setup wizard (`routes/setup.js` + `SetupWizard.jsx`); soft deletes on products/customers/employees (DELETE → UPDATE SET deleted_at, frontend "Archive" wording); 3 test files updated; 395/395 tests passing
+- Mar 2026: Phase 3 Remaining — mobile/tablet POS layout (3-tab nav: Cart/Search/Pay, sticky pay button, touch-friendly controls, 2-col mobile grid); IP allowlisting for `/api/admin` (`ADMIN_ALLOWED_IPS` env var, CIDR matching, `requireAllowedIp` middleware in `admin.js`); JWT token revocation (`migrate74.js` — `revoked_tokens` table + `tokens_revoked_before` on employees, `jti` claim in `signAccessToken`, revocation check in `loadTenantAndPerms`, `POST /api/employees/:id/revoke-token` + `revoke-all-tokens` endpoints, Revoke button in `EmployeesRedesign.jsx`); stock shrinkage report (`GET /api/reports/shrinkage` with 6-join SQL in `reports/inventory.js`, `ShrinkageTab` in `ReportsInventory.jsx`); customer-facing display (`backend/routes/customer-display.js` in-memory Map, `CustomerDisplayPage.jsx` dark-theme poll page at `/customer-display`, `POSContext.jsx` debounced cart push)
