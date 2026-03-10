@@ -19,7 +19,7 @@ function OutletCard({ outlet, compact = false }) {
             <p className="text-xs text-amber-700">No open shift</p>
           )}
         </div>
-        <span className={`mt-0.5 h-2 w-2 flex-shrink-0 rounded-full ${isReady ? "bg-emerald-500" : "bg-amber-400"}`} />
+        <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${isReady ? "bg-emerald-500" : "bg-amber-400"}`} />
       </div>
       {!compact && (
         <div className="mt-2 flex items-center justify-between">

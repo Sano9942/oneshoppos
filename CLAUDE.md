@@ -311,7 +311,12 @@ oneshoppos/
 - Shared components: `frontend/src/components/`
 - Category tree UI helpers: `frontend/src/utils/categoryTree.js`
 - UTC timestamp display helpers: `frontend/src/utils/dates.js` — use `fmtDate`/`fmtTime`/`fmtDateTime` (never `new Date(x.timestamp)` directly)
-- Tailwind v4: use `(--css-var)` syntax not `[var(--css-var)]`
+- Tailwind v4 class renames (linter enforced — old names work but get flagged):
+  - `(--css-var)` NOT `[var(--css-var)]`
+  - `shrink-0` NOT `flex-shrink-0`, `grow` NOT `flex-grow`
+  - `bg-linear-to-br` NOT `bg-gradient-to-br`
+  - `text-ellipsis` NOT `overflow-ellipsis`
+  - `z-200` NOT `z-[200]` (arbitrary z-index values are now first-class)
 - **Super-admin pages**: `frontend/src/pages/admin/` — completely separate from POS auth and layout. Use `adminFetch` from `AdminLogin.jsx` for API calls. Admin session stored in `localStorage["adminSession"]` (not POS `"authSession"`). Routes at `/admin/*` in `App.jsx` bypass `RequireAuth`/`RequireContext`.
 
 ## Running Tests
