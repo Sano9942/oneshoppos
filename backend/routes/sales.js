@@ -330,6 +330,7 @@ module.exports = function registerSalesRoutes(app, deps) {
       points_earned = 0,
       points_redeemed = 0,
       notes = null,
+      idempotency_key = null,
     } = req.body;
 
     const authenticatedEmployeeId =
@@ -492,13 +493,27 @@ module.exports = function registerSalesRoutes(app, deps) {
       }
     }
 
+    // Idempotency check — return early if this request was already processed
+    if (idempotency_key) {
+      const existing = await new Promise((resolve, reject) => {
+        db.get(
+          "SELECT id, invoice_number FROM sales WHERE idempotency_key = ?",
+          [idempotency_key],
+          (err, row) => (err ? reject(err) : resolve(row)),
+        );
+      }).catch(() => null);
+      if (existing) {
+        return res.json({ success: true, duplicate: true, saleId: existing.id, invoiceNumber: existing.invoice_number });
+      }
+    }
+
     // Start Transaction Logic
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
 
       // 2. Insert into Sales Table (outlet_id + employee_id + customer_id + discount + points + shift_id)
       db.run(
-        "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           totalAmount,
           mainPaymentMethod,
@@ -511,6 +526,7 @@ module.exports = function registerSalesRoutes(app, deps) {
           points_redeemed,
           notes || null,
           activeShift.id,
+          idempotency_key || null,
         ],
         function (err) {
           if (err) {

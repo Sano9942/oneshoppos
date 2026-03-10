@@ -15,6 +15,7 @@ import POSOpeningGateModal from "./pos/POSOpeningGateModal";
 import POSCloseShiftModal from "./pos/POSCloseShiftModal";
 import POSRecentSalesPanel from "./pos/POSRecentSalesPanel";
 import POSReturnExchangeModal from "./pos/POSReturnExchangeModal";
+import POSSessionExpiredModal from "./pos/POSSessionExpiredModal";
 
 function POSContent() {
   const { isLocked, notice, error } = usePOS();
@@ -63,6 +64,7 @@ function POSContent() {
       <POSReceiptModal />
       <POSRecentSalesPanel />
       <POSReturnExchangeModal />
+      <POSSessionExpiredModal />
     </div>
   );
 }

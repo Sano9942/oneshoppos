@@ -119,6 +119,10 @@ export const POSProvider = ({ children }) => {
   // Pre-loaded sale when opened from Recent Sales panel (null = no-bill mode)
   const [returnSourceSale, setReturnSourceSale] = useState(null);
 
+  // ── Session expiry ────────────────────────────────────────────────────────
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const pendingSaleRef = useRef(null);
+
   // ── Notices ───────────────────────────────────────────────────────────────
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -725,24 +729,32 @@ export const POSProvider = ({ children }) => {
     }
     setSubmitting(true);
     setError("");
+    const salePayload = {
+      cartItems: cart,
+      payments,
+      outlet_id: Number(selectedOutletId),
+      employee_id: employee?.id || null,
+      customer_id: checkoutCustomerId ? Number(checkoutCustomerId) : null,
+      discount_amount: Number(discountInput || 0),
+      discount_type: discountType,
+      notes: orderNote || null,
+      points_earned: checkoutCustomerId ? pointsEarned : 0,
+      points_redeemed: checkoutCustomerId ? pointsRedeemed : 0,
+      idempotency_key: crypto.randomUUID(),
+    };
     try {
       const res = await fetch(`${API}/api/sales`, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
-          cartItems: cart,
-          payments,
-          outlet_id: Number(selectedOutletId),
-          employee_id: employee?.id || null,
-          customer_id: checkoutCustomerId ? Number(checkoutCustomerId) : null,
-          discount_amount: Number(discountInput || 0),
-          discount_type: discountType,
-          notes: orderNote || null,
-          points_earned: checkoutCustomerId ? pointsEarned : 0,
-          points_redeemed: checkoutCustomerId ? pointsRedeemed : 0,
-        }),
+        body: JSON.stringify(salePayload),
       });
       const data = await res.json();
+      if (res.status === 401) {
+        pendingSaleRef.current = salePayload;
+        setSessionExpired(true);
+        setSubmitting(false);
+        return;
+      }
       if (!res.ok) throw new Error(data.error || "Failed to complete sale");
 
       const custObj = checkoutCustomerId
@@ -777,6 +789,59 @@ export const POSProvider = ({ children }) => {
       showNotice(
         `Sale #${data.saleId} completed. Invoice: ${data.invoiceNumber || "-"}`,
       );
+      await loadParked(selectedOutletId);
+    } catch (e) {
+      setError(e.message || "Failed to complete sale");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const retryPendingSale = async () => {
+    const payload = pendingSaleRef.current;
+    if (!payload) return;
+    pendingSaleRef.current = null;
+    setSessionExpired(false);
+    setSubmitting(true);
+    setError("");
+    try {
+      const res = await fetch(`${API}/api/sales`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to complete sale");
+
+      const custObj = payload.customer_id
+        ? customers.find((c) => String(c.id) === String(payload.customer_id))
+        : null;
+      setSlip({
+        saleId: data.saleId,
+        invoiceNumber: data.invoiceNumber || "-",
+        cart: [...cart],
+        payments: payload.payments,
+        total,
+        change,
+        customer: custObj || null,
+        outlet: outlets.find((o) => String(o.id) === String(selectedOutletId)),
+        employee: employee,
+        discountAmount: discountValue,
+        discountInput: payload.discount_amount,
+        discountType: payload.discount_type,
+        taxAmount: taxInclusive && taxTotal > 0 ? taxTotal : 0,
+        taxInclusive,
+        orderNote: payload.notes || null,
+        timestamp: new Date().toLocaleString(),
+      });
+      setSlipOpen(true);
+      setCart([]);
+      setDiscountInput("");
+      setOrderNote("");
+      setSelectedCustomerId("");
+      setCheckoutOpen(false);
+      setPayments([]);
+      showNotice(`Sale #${data.saleId} completed. Invoice: ${data.invoiceNumber || "-"}`);
       await loadParked(selectedOutletId);
     } catch (e) {
       setError(e.message || "Failed to complete sale");
@@ -978,6 +1043,9 @@ export const POSProvider = ({ children }) => {
     pointsRedeemed,
     LOYALTY_EARN_RATE,
     LOYALTY_REDEEM_RATE,
+    sessionExpired,
+    setSessionExpired,
+    retryPendingSale,
   };
 
   return <POSContext.Provider value={value}>{children}</POSContext.Provider>;

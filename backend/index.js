@@ -188,7 +188,7 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler: limitExceededHandler,
-  skip: () => true, // Disabled for E2E tests
+  skip: () => process.env.NODE_ENV === 'test',
 });
 
 const webhookLimiter = rateLimit({

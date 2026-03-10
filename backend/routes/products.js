@@ -745,6 +745,16 @@ module.exports = function registerProductRoutes(app, deps) {
       Object.prototype.hasOwnProperty.call(req.body || {}, "image_urls");
     const productMediaItems = normalizeProductMediaInput(media, image_urls);
 
+    // Fetch old price/cost_price/name for audit log comparison
+    let oldProduct = null;
+    try {
+      oldProduct = await new Promise((resolve, reject) => {
+        db.get("SELECT price, cost_price, name FROM products WHERE id = ?", [id], (err, row) => (err ? reject(err) : resolve(row)));
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
 
@@ -786,19 +796,51 @@ module.exports = function registerProductRoutes(app, deps) {
             return res.status(404).json({ error: "Product not found" });
           }
 
+          const commitAndRespond = () => {
+            db.run("COMMIT");
+            res.json({ message: "Product updated successfully" });
+          };
+
           const finalizeUpdate = () => {
-            if (shouldReplaceMedia) {
+            // Log price/cost changes to action_history if either changed
+            const priceChanged = oldProduct && price !== undefined && Number(price) !== Number(oldProduct.price);
+            const costChanged = oldProduct && cost_price !== undefined && Number(cost_price) !== Number(oldProduct.cost_price);
+            if (priceChanged || costChanged) {
+              const employeeId = Number(req.headers["x-employee-id"] || 0) || null;
+              const getEmployeeName = (cb) => {
+                if (!employeeId) return cb("Unknown");
+                db.get("SELECT name FROM employees WHERE id = ?", [employeeId], (err, row) => cb(row ? row.name : "Unknown"));
+              };
+              getEmployeeName((employeeName) => {
+                const parts = [];
+                if (priceChanged) parts.push(`price changed from ${oldProduct.price} to ${price}`);
+                if (costChanged) parts.push(`cost changed from ${oldProduct.cost_price} to ${cost_price}`);
+                const description = `Product '${oldProduct.name}' — ${parts.join(", ")}`;
+                db.run(
+                  "INSERT INTO action_history (user_name, action_type, description) VALUES (?, ?, ?)",
+                  [employeeName, "price_change", description],
+                  () => {
+                    if (shouldReplaceMedia) {
+                      replaceProductMedia(id, productMediaItems, (mediaErr) => {
+                        if (mediaErr) { db.run("ROLLBACK"); return res.status(500).json({ error: mediaErr.message }); }
+                        commitAndRespond();
+                      });
+                    } else {
+                      commitAndRespond();
+                    }
+                  }
+                );
+              });
+            } else if (shouldReplaceMedia) {
               replaceProductMedia(id, productMediaItems, (mediaErr) => {
                 if (mediaErr) {
                   db.run("ROLLBACK");
                   return res.status(500).json({ error: mediaErr.message });
                 }
-                db.run("COMMIT");
-                res.json({ message: "Product updated successfully" });
+                commitAndRespond();
               });
             } else {
-              db.run("COMMIT");
-              res.json({ message: "Product updated successfully" });
+              commitAndRespond();
             }
           };
 
