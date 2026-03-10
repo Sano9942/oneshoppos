@@ -15,17 +15,19 @@ export default function POSSubHeader() {
   } = usePOS();
 
   return (
-    <div className="flex items-center justify-between mb-4">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 md:mb-4 gap-2 sm:gap-0">
       <div>
-        <h2 className="text-3xl font-black text-slate-900 tracking-tight">
+        <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
           Sell
         </h2>
         <div className="flex items-center gap-1.5 mt-0.5 text-xs text-slate-400 font-medium">
-          <Calendar size={12} />
-          {new Date().toLocaleDateString("en-GB")}
+          <span className="hidden sm:flex items-center gap-1.5">
+            <Calendar size={12} />
+            {new Date().toLocaleDateString("en-GB")}
+          </span>
           <button
             onClick={() => setTaxInclusive((v) => !v)}
-            className={`ml-3 flex items-center gap-1.5 rounded-full px-2.5 py-1 border text-xs font-semibold transition ${
+            className={`sm:ml-3 flex items-center gap-1.5 rounded-full px-2.5 py-1 border text-xs font-semibold transition ${
               taxInclusive
                 ? "bg-[#8066FF]/10 border-[#8066FF] text-[#8066FF]"
                 : "bg-white border-slate-200 text-slate-500"

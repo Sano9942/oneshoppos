@@ -2,7 +2,7 @@ import React from "react";
 import { Search, User, ShoppingCart, Tag, FileText } from "lucide-react";
 import { usePOS } from "./POSContext";
 
-export default function POSSidebar() {
+export default function POSSidebar({ mobile }) {
   const {
     customerSearch,
     setCustomerSearch,
@@ -27,7 +27,7 @@ export default function POSSidebar() {
   } = usePOS();
 
   return (
-    <div className="w-80 shrink-0 bg-[#0A0A0A] text-white flex flex-col p-4 shadow-2xl z-10">
+    <div className={`${mobile ? "w-full" : "w-80 shrink-0"} bg-[#0A0A0A] text-white flex flex-col p-4 shadow-2xl z-10`}>
       {/* Customer search */}
       <div className="relative mb-4">
         <Search
