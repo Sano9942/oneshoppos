@@ -18,6 +18,7 @@ import { DashboardAttendance } from "../dashboard/DashboardAttendance";
 import { DashboardRecentSales } from "../dashboard/DashboardRecentSales";
 import { DashboardAttention } from "../dashboard/DashboardAttention";
 import { DashboardTopProducts } from "../dashboard/DashboardTopProducts";
+import { DashboardOnboarding } from "../dashboard/DashboardOnboarding";
 
 export default function DashboardRedesign() {
   const navigate = useNavigate();
@@ -120,6 +121,11 @@ export default function DashboardRedesign() {
         <SectionCard className="mb-4 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
           {error}
         </SectionCard>
+      )}
+
+      {/* Onboarding checklist — shown to admin/manager until dismissed or all steps complete */}
+      {(isAdmin || isManager) && (
+        <DashboardOnboarding data={data} onNavigate={onNavigate} />
       )}
 
       {/* Quick actions — role-aware horizontal button bar */}
