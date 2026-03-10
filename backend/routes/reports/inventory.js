@@ -1345,5 +1345,151 @@ module.exports = function (app, deps, helpers) {
     });
   });
 
+  // --- Shrinkage / Stock Discrepancy Report -----------------------------------
+  app.get("/api/reports/shrinkage", async (req, res) => {
+    try {
+      const tz = req.company?.timezone || "UTC";
+      const { date_from, date_to, outlet_id, category_id, search } = req.query;
+      if (!date_from || !date_to) {
+        return res.status(400).json({ error: "date_from and date_to are required" });
+      }
+
+      const utcStart = toUtcStart(date_from, tz);
+      const utcEnd = toUtcEnd(date_to, tz);
+
+      const where = ["p.deleted_at IS NULL"];
+      const params = [];
+
+      applyOutletFilter(where, params, outlet_id, "os.outlet_id");
+      await applyInventoryProductFilters(where, params, { category_id, search }, "p");
+
+      // 6 date-range param sets: sales(UTC), returns(UTC), grn(LOCAL), adjustments(UTC), transfers_in(UTC), transfers_out(UTC)
+      const dateParams = [
+        utcStart, utcEnd,   // sales
+        utcStart, utcEnd,   // returns
+        date_from, date_to, // grn (local date column)
+        utcStart, utcEnd,   // adjustments
+        utcStart, utcEnd,   // transfers in
+        utcStart, utcEnd,   // transfers out
+      ];
+
+      const sql = `
+        SELECT
+          p.id, p.name, p.barcode, p.sku, COALESCE(p.cost_price, 0) AS cost_price,
+          os.outlet_id, o.name AS outlet_name,
+          os.quantity AS actual_qty,
+          COALESCE(sales_sub.qty, 0) AS sales_qty,
+          COALESCE(returns_sub.qty, 0) AS returns_qty,
+          COALESCE(grn_sub.qty, 0) AS purchases_qty,
+          COALESCE(adj_sub.qty, 0) AS adjustments_qty,
+          COALESCE(tin_sub.qty, 0) AS transfers_in,
+          COALESCE(tout_sub.qty, 0) AS transfers_out
+        FROM outlet_stock os
+        JOIN products p ON p.id = os.product_id
+        JOIN outlets o ON o.id = os.outlet_id
+        LEFT JOIN (
+          SELECT si.product_id, s.outlet_id, SUM(si.quantity) AS qty
+          FROM sale_items si JOIN sales s ON s.id = si.sale_id
+          WHERE s.timestamp >= ? AND s.timestamp < ?
+          GROUP BY si.product_id, s.outlet_id
+        ) sales_sub ON sales_sub.product_id = p.id AND sales_sub.outlet_id = os.outlet_id
+        LEFT JOIN (
+          SELECT ri.product_id, r.outlet_id, SUM(ri.quantity) AS qty
+          FROM return_items ri JOIN returns r ON r.id = ri.return_id
+          WHERE r.timestamp >= ? AND r.timestamp < ?
+          GROUP BY ri.product_id, r.outlet_id
+        ) returns_sub ON returns_sub.product_id = p.id AND returns_sub.outlet_id = os.outlet_id
+        LEFT JOIN (
+          SELECT gi.product_id, g.outlet_id, SUM(gi.qty_received) AS qty
+          FROM grn_items gi JOIN grn g ON g.id = gi.grn_id
+          WHERE g.date >= ? AND g.date <= ?
+          GROUP BY gi.product_id, g.outlet_id
+        ) grn_sub ON grn_sub.product_id = p.id AND grn_sub.outlet_id = os.outlet_id
+        LEFT JOIN (
+          SELECT product_id, outlet_id, SUM(quantity_change) AS qty
+          FROM stock_adjustments
+          WHERE timestamp >= ? AND timestamp < ?
+          GROUP BY product_id, outlet_id
+        ) adj_sub ON adj_sub.product_id = p.id AND adj_sub.outlet_id = os.outlet_id
+        LEFT JOIN (
+          SELECT ti.product_id, t.to_outlet_id AS outlet_id, SUM(ti.quantity) AS qty
+          FROM transfer_items ti JOIN inventory_transfers t ON t.id = ti.transfer_id
+          WHERE t.timestamp >= ? AND t.timestamp < ?
+          GROUP BY ti.product_id, t.to_outlet_id
+        ) tin_sub ON tin_sub.product_id = p.id AND tin_sub.outlet_id = os.outlet_id
+        LEFT JOIN (
+          SELECT ti.product_id, t.from_outlet_id AS outlet_id, SUM(ti.quantity) AS qty
+          FROM transfer_items ti JOIN inventory_transfers t ON t.id = ti.transfer_id
+          WHERE t.timestamp >= ? AND t.timestamp < ?
+          GROUP BY ti.product_id, t.from_outlet_id
+        ) tout_sub ON tout_sub.product_id = p.id AND tout_sub.outlet_id = os.outlet_id
+        WHERE ${where.join(" AND ")}
+        ORDER BY p.name, o.name
+      `;
+
+      const allParams = [...dateParams, ...params];
+
+      const rows = await new Promise((resolve, reject) => {
+        db.all(sql, allParams, (err, result) => {
+          if (err) reject(err);
+          else resolve(result || []);
+        });
+      });
+
+      // Calculate opening, expected, variance for each row
+      const enriched = rows.map((r) => {
+        const actual = Number(r.actual_qty || 0);
+        const sales = Number(r.sales_qty || 0);
+        const returns = Number(r.returns_qty || 0);
+        const purchases = Number(r.purchases_qty || 0);
+        const adjustments = Number(r.adjustments_qty || 0);
+        const tIn = Number(r.transfers_in || 0);
+        const tOut = Number(r.transfers_out || 0);
+
+        // opening = actual - (all additions) + (all deductions)
+        const opening = actual - purchases - returns - tIn + sales + tOut - adjustments;
+        // expected = opening + additions - deductions
+        const expected = opening + purchases + returns + tIn - sales - tOut + adjustments;
+        // variance = actual - expected (will be 0 unless rounding or untracked movements)
+        const variance = actual - expected;
+        const cost = Number(r.cost_price || 0);
+        const variance_value = variance * cost;
+
+        return {
+          product_id: r.id,
+          product_name: r.name,
+          barcode: r.barcode,
+          sku: r.sku,
+          cost_price: cost,
+          outlet_id: r.outlet_id,
+          outlet_name: r.outlet_name,
+          opening,
+          purchases,
+          sales,
+          returns,
+          transfers_in: tIn,
+          transfers_out: tOut,
+          adjustments,
+          expected,
+          actual,
+          variance,
+          variance_value,
+        };
+      });
+
+      const summary = {
+        total_products: enriched.length,
+        total_variance_value: enriched.reduce((sum, r) => sum + r.variance_value, 0),
+        total_shrinkage_units: enriched.reduce((sum, r) => sum + (r.variance < 0 ? Math.abs(r.variance) : 0), 0),
+        rows_with_variance: enriched.filter((r) => r.variance !== 0).length,
+      };
+
+      res.json({ rows: enriched, summary });
+    } catch (err) {
+      console.error("shrinkage report error:", err);
+      res.status(500).json({ error: "Failed to generate shrinkage report" });
+    }
+  });
+
   return { buildForecastRows };
 };

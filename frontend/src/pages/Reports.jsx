@@ -76,6 +76,7 @@ import {
   StockoutRiskTab,
   ForecastDemandTab,
   ReplenishmentSmartTab,
+  ShrinkageTab,
 } from "./reports/ReportsInventory";
 import {
   InventoryLossTab,
@@ -464,6 +465,7 @@ const GROUPS = [
       { id: "stockout-risk", label: "Stockout Risk", icon: TrendingDown },
       { id: "forecast-demand", label: "Forecast Demand", icon: TrendingUp },
       { id: "replenishment-smart", label: "Replenishment Smart", icon: ShoppingCart },
+      { id: "shrinkage", label: "Shrinkage", icon: TrendingDown },
     ],
   },
   {
@@ -654,6 +656,8 @@ function TabContent({ activeTab, filters, setFilters, setActiveTab }) {
       return <ForecastDemandTab filters={filters} />;
     case "replenishment-smart":
       return <ReplenishmentSmartTab filters={filters} />;
+    case "shrinkage":
+      return <ShrinkageTab filters={filters} />;
     case "supplier-wise":
       return <SupplierWiseTab filters={filters} />;
     case "total-purchases":

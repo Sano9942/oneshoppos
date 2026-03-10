@@ -2564,3 +2564,148 @@ export function ReplenishmentSmartTab({ filters }) {
     </div>
   );
 }
+
+// --- Tab: Shrinkage / Stock Discrepancy ----------------------------------------
+export function ShrinkageTab({ filters }) {
+  const [rows, setRows] = useState([]);
+  const [summary, setSummary] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams();
+      // Default to last 30 days if no date range set
+      const today = new Date();
+      const thirtyAgo = new Date(today);
+      thirtyAgo.setDate(thirtyAgo.getDate() - 30);
+      p.set("date_from", filters.dateFrom || thirtyAgo.toISOString().slice(0, 10));
+      p.set("date_to", filters.dateTo || today.toISOString().slice(0, 10));
+      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
+      if (filters.categoryId) p.set("category_id", filters.categoryId);
+      if (filters.search) p.set("search", filters.search);
+      const res = await fetch(`${API}/api/reports/shrinkage?${p}`);
+      const d = await res.json();
+      setRows(d.rows || []);
+      setSummary(d.summary || {});
+    } catch {
+      setRows([]);
+      setSummary({});
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds, filters.categoryId, filters.search]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const totalVarianceValue = rows.reduce((sum, r) => sum + Number(r.variance_value || 0), 0);
+  const shrinkageRows = rows.filter((r) => Number(r.variance || 0) < 0);
+  const surplusRows = rows.filter((r) => Number(r.variance || 0) > 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <InventoryHealthStat label="Products Tracked" value={summary.total_products || rows.length} />
+        <InventoryHealthStat label="Rows with Variance" value={summary.rows_with_variance || 0} />
+        <InventoryHealthStat label="Shrinkage Units" value={summary.total_shrinkage_units || 0} />
+        <InventoryHealthStat
+          label="Net Variance Value"
+          value={fmt(totalVarianceValue)}
+          hint={totalVarianceValue < 0 ? "Net loss" : totalVarianceValue > 0 ? "Net surplus" : "Balanced"}
+        />
+      </div>
+
+      <CardShell
+        title="Stock Discrepancy / Shrinkage"
+        subtitle="Compares expected vs actual stock per product per outlet — all tracked movements in the date range"
+        action={
+          <ExportButton
+            onClick={() =>
+              exportCSV(
+                "shrinkage_report.csv",
+                [
+                  { header: "Product", key: "product_name" },
+                  { header: "Barcode", key: "barcode" },
+                  { header: "SKU", key: "sku" },
+                  { header: "Outlet", key: "outlet_name" },
+                  { header: "Opening", key: "opening" },
+                  { header: "Purchases", key: "purchases" },
+                  { header: "Sales", key: "sales" },
+                  { header: "Returns", key: "returns" },
+                  { header: "Transfers In", key: "transfers_in" },
+                  { header: "Transfers Out", key: "transfers_out" },
+                  { header: "Adjustments", key: "adjustments" },
+                  { header: "Expected", key: "expected" },
+                  { header: "Actual", key: "actual" },
+                  { header: "Variance", key: "variance" },
+                  { header: "Variance Value", key: "variance_value" },
+                ],
+                rows,
+              )
+            }
+          />
+        }
+      >
+        <TableShell
+          cols={[
+            "Product",
+            "Outlet",
+            "Opening",
+            "Purchases",
+            "Sales",
+            "Returns",
+            "Tfr In",
+            "Tfr Out",
+            "Adj",
+            "Expected",
+            "Actual",
+            "Variance",
+            "Var Value",
+          ]}
+          loading={loading}
+          empty={!rows.length}
+          emptyIcon={AlertTriangle}
+        >
+          {rows.map((row, i) => {
+            const v = Number(row.variance || 0);
+            const vv = Number(row.variance_value || 0);
+            const vColor = v < 0 ? "text-red-600 font-bold" : v > 0 ? "text-emerald-600 font-bold" : "text-slate-500";
+            return (
+              <tr key={`${row.product_id}-${row.outlet_id}-${i}`} className="hover:bg-slate-50">
+                <td className="px-4 py-3">
+                  <div className="text-sm font-semibold text-slate-800">{row.product_name}</div>
+                  <div className="font-mono text-[11px] text-slate-400">{row.barcode || row.sku || "-"}</div>
+                </td>
+                <td className="px-4 py-3 text-sm text-slate-700">{row.outlet_name}</td>
+                <td className="px-4 py-3 text-sm text-slate-700 text-right">{row.opening}</td>
+                <td className="px-4 py-3 text-sm text-slate-700 text-right">{row.purchases}</td>
+                <td className="px-4 py-3 text-sm text-slate-700 text-right">{row.sales}</td>
+                <td className="px-4 py-3 text-sm text-slate-700 text-right">{row.returns}</td>
+                <td className="px-4 py-3 text-sm text-slate-700 text-right">{row.transfers_in}</td>
+                <td className="px-4 py-3 text-sm text-slate-700 text-right">{row.transfers_out}</td>
+                <td className="px-4 py-3 text-sm text-slate-700 text-right">{row.adjustments}</td>
+                <td className="px-4 py-3 text-sm font-semibold text-slate-800 text-right">{row.expected}</td>
+                <td className="px-4 py-3 text-sm font-semibold text-slate-800 text-right">{row.actual}</td>
+                <td className={`px-4 py-3 text-sm text-right ${vColor}`}>{v > 0 ? `+${v}` : v}</td>
+                <td className={`px-4 py-3 text-sm text-right ${vColor}`}>{fmt(vv)}</td>
+              </tr>
+            );
+          })}
+          {rows.length > 0 && (
+            <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
+              <td className="px-4 py-3 text-sm text-slate-900" colSpan={11}>Total</td>
+              <td className={`px-4 py-3 text-sm text-right ${totalVarianceValue < 0 ? "text-red-600" : totalVarianceValue > 0 ? "text-emerald-600" : "text-slate-500"}`}>
+                {rows.reduce((s, r) => s + Number(r.variance || 0), 0)}
+              </td>
+              <td className={`px-4 py-3 text-sm text-right ${totalVarianceValue < 0 ? "text-red-600" : totalVarianceValue > 0 ? "text-emerald-600" : "text-slate-500"}`}>
+                {fmt(totalVarianceValue)}
+              </td>
+            </tr>
+          )}
+        </TableShell>
+      </CardShell>
+    </div>
+  );
+}
