@@ -13,8 +13,10 @@ module.exports = function registerCustomerRoutes(app, deps) {
   `;
     const params = [];
     if (search) {
-      query += " WHERE c.name LIKE ? OR c.mobile LIKE ? OR c.email LIKE ?";
+      query += " WHERE c.deleted_at IS NULL AND (c.name LIKE ? OR c.mobile LIKE ? OR c.email LIKE ?)";
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    } else {
+      query += " WHERE c.deleted_at IS NULL";
     }
     query += " GROUP BY c.id ORDER BY c.name ASC";
     db.all(query, params, (err, rows) => {
@@ -195,23 +197,17 @@ module.exports = function registerCustomerRoutes(app, deps) {
     });
   });
 
-  // DELETE customer (only if no linked sales)
+  // Archive a customer (soft delete)
   app.delete("/api/customers/:id", requirePerm("manage_customers"), (req, res) => {
     const { id } = req.params;
-    db.get(
-      "SELECT COUNT(*) as count FROM sales WHERE customer_id = ?",
+    db.run(
+      "UPDATE customers SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL",
       [id],
-      (err, row) => {
+      function (err) {
         if (err) return res.status(500).json({ error: err.message });
-        if (row.count > 0) {
-          return res.status(400).json({
-            error: `Cannot delete — this customer has ${row.count} linked sale(s).`,
-          });
-        }
-        db.run("DELETE FROM customers WHERE id = ?", [id], function (err) {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ message: "Customer deleted" });
-        });
+        if (this.changes === 0)
+          return res.status(404).json({ error: "Customer not found" });
+        res.json({ message: "Customer archived" });
       },
     );
   });

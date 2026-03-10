@@ -687,19 +687,19 @@ export default function InventoryRedesign() {
                 onClick={() => {
                   if (
                     window.confirm(
-                      `Delete ${selectedCount} products? This cannot be undone.`,
+                      `Archive ${selectedCount} products? They will be hidden from listings but preserved in history.`,
                     )
                   ) {
                     runBulk(
                       "bulk-delete",
                       { ids: [...selectedIds] },
-                      (d) => `Deleted ${d.deleted} products`,
+                      (d) => `Archived ${d.deleted} products`,
                     );
                   }
                 }}
               >
                 <Trash2 size={13} className="mr-1 inline" />
-                Delete
+                Archive
               </Button>
               <Button
                 size="sm"

@@ -137,7 +137,7 @@ module.exports = function registerProductRoutes(app, deps) {
     const sortCol = sortMap[sort] || "p.name";
     const sortDir = order === "desc" ? "DESC" : "ASC";
 
-    const conditions = [];
+    const conditions = ["p.deleted_at IS NULL"];
     const params = [];
 
     if (search) {
@@ -236,7 +236,7 @@ module.exports = function registerProductRoutes(app, deps) {
         FROM products p
         LEFT JOIN taxes t ON p.tax_id = t.id
         LEFT JOIN outlet_stock os ON p.id = os.product_id ${outlet_id ? `AND os.outlet_id = ${outlet_id}` : ""}
-        WHERE ${whereClause}
+        WHERE p.deleted_at IS NULL AND (${whereClause})
         GROUP BY p.id
         ORDER BY p.name ASC
         LIMIT 50
@@ -274,7 +274,7 @@ module.exports = function registerProductRoutes(app, deps) {
         FROM products p
         LEFT JOIN taxes t ON p.tax_id = t.id
         LEFT JOIN outlet_stock os ON p.id = os.product_id ${outlet_id ? `AND os.outlet_id = ${outlet_id}` : ""}
-        WHERE p.barcode = ? OR p.sku = ?
+        WHERE p.deleted_at IS NULL AND (p.barcode = ? OR p.sku = ?)
         GROUP BY p.id
     `;
 
@@ -304,7 +304,7 @@ module.exports = function registerProductRoutes(app, deps) {
       `SELECT p.*, COALESCE(SUM(os.quantity), 0) as total_stock
        FROM products p
        LEFT JOIN outlet_stock os ON p.id = os.product_id
-       WHERE p.id = ?
+       WHERE p.id = ? AND p.deleted_at IS NULL
        GROUP BY p.id`,
       [id],
       (err, row) => {
@@ -890,19 +890,22 @@ module.exports = function registerProductRoutes(app, deps) {
     });
   });
 
-  // Delete a product
+  // Archive a product (soft delete)
   app.delete("/api/products/:id", requirePerm("manage_inventory"), (req, res) => {
     const { id } = req.params;
-    db.run("DELETE FROM products WHERE id = ?", [id], function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      if (this.changes === 0)
-        return res.status(404).json({ error: "Product not found" });
-      res.json({ message: "Product deleted" });
-    });
+    db.run(
+      "UPDATE products SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL",
+      [id],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0)
+          return res.status(404).json({ error: "Product not found" });
+        res.json({ message: "Product archived" });
+      }
+    );
   });
 
-  // Bulk delete products by IDs
-  // Cleans up dependent rows; preserves sale/PO history (FK OFF so orphaned refs remain).
+  // Bulk archive products by IDs (soft delete)
   app.post(
     "/api/products/bulk-delete",
     requirePerm("manage_inventory"),
@@ -919,67 +922,21 @@ module.exports = function registerProductRoutes(app, deps) {
       let totalDeleted = 0;
       let chunkIdx = 0;
 
-      db.run("PRAGMA foreign_keys = OFF", (fkErr) => {
-        if (fkErr) return res.status(500).json({ error: fkErr.message });
-
-        const finish = (err) => {
-          db.run("PRAGMA foreign_keys = ON", () => {
+      const processChunk = () => {
+        if (chunkIdx >= chunks.length) return res.json({ deleted: totalDeleted });
+        const batch = chunks[chunkIdx++];
+        const ph = batch.map(() => "?").join(",");
+        db.run(
+          `UPDATE products SET deleted_at = datetime('now') WHERE id IN (${ph}) AND deleted_at IS NULL`,
+          batch,
+          function (err) {
             if (err) return res.status(500).json({ error: err.message });
-            res.json({ deleted: totalDeleted });
-          });
-        };
-
-        const processChunk = () => {
-          if (chunkIdx >= chunks.length) return finish(null);
-          const batch = chunks[chunkIdx++];
-          const ph = batch.map(() => "?").join(",");
-          db.run(
-            `DELETE FROM shopify_product_map WHERE product_id IN (${ph})`,
-            batch,
-            (e1) => {
-              if (e1) return finish(e1);
-              db.run(
-                `DELETE FROM outlet_stock WHERE product_id IN (${ph})`,
-                batch,
-                (e2) => {
-                  if (e2) return finish(e2);
-                  db.run(
-                    `DELETE FROM stock_adjustments WHERE product_id IN (${ph})`,
-                    batch,
-                    (e3) => {
-                      if (e3) return finish(e3);
-                      db.run(
-                        `DELETE FROM product_variants WHERE product_id IN (${ph})`,
-                        batch,
-                        (e4) => {
-                          if (e4) return finish(e4);
-                          db.run(
-                            `DELETE FROM product_media WHERE product_id IN (${ph})`,
-                            batch,
-                            (e5) => {
-                              if (e5) return finish(e5);
-                              db.run(
-                                `DELETE FROM products WHERE id IN (${ph})`,
-                                batch,
-                                function (e6) {
-                                  if (e6) return finish(e6);
-                                  totalDeleted += this.changes || 0;
-                                  processChunk();
-                                },
-                              );
-                            },
-                          );
-                        },
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          );
-        };
-        processChunk();
-      });
+            totalDeleted += this.changes || 0;
+            processChunk();
+          },
+        );
+      };
+      processChunk();
     },
   );
 

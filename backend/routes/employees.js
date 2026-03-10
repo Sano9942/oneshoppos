@@ -50,7 +50,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   // Get all employees
   app.get("/api/employees", (req, res) => {
     db.all(
-      "SELECT e.id, e.name, e.pin_code, e.salary_type, e.monthly_salary, e.hourly_rate, e.daily_rate, e.work_hours_per_day, r.name as role, e.role_id FROM employees e LEFT JOIN roles r ON e.role_id = r.id ORDER BY e.name ASC",
+      "SELECT e.id, e.name, e.pin_code, e.salary_type, e.monthly_salary, e.hourly_rate, e.daily_rate, e.work_hours_per_day, r.name as role, e.role_id FROM employees e LEFT JOIN roles r ON e.role_id = r.id WHERE e.deleted_at IS NULL ORDER BY e.name ASC",
       [],
       (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -262,7 +262,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
     },
   );
 
-  // Delete an employee
+  // Archive an employee (soft delete)
   app.delete(
     "/api/employees/:id",
     requirePerm("all_access"),
@@ -275,35 +275,16 @@ module.exports = function registerEmployeeRoutes(app, deps) {
         return res.status(400).json({ error: "You cannot delete your own account." });
       }
 
-      getEmployeeUsage(targetId, (usageErr, refs) => {
-        if (usageErr) return res.status(500).json({ error: usageErr.message });
-        if (refs.length > 0) {
-          const summary = refs
-            .map((ref) => `${ref.table}.${ref.column} (${ref.count})`)
-            .join(", ");
-          return res.status(409).json({
-            error:
-              "Cannot delete employee because historical records reference this account. Reassign activity or keep the account for audit history.",
-            references: refs,
-            summary,
-          });
-        }
-
-        db.run("DELETE FROM employees WHERE id = ?", [targetId], function (err) {
-          if (err) {
-            if (String(err.message || "").includes("FOREIGN KEY constraint failed")) {
-              return res.status(409).json({
-                error:
-                  "Cannot delete employee because related records still exist. This account is tied to historical transactions.",
-              });
-            }
-            return res.status(500).json({ error: err.message });
-          }
+      db.run(
+        "UPDATE employees SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL",
+        [targetId],
+        function (err) {
+          if (err) return res.status(500).json({ error: err.message });
           if (this.changes === 0)
             return res.status(404).json({ error: "Employee not found" });
-          res.json({ message: "Employee deleted" });
-        });
-      });
+          res.json({ message: "Employee archived" });
+        },
+      );
     },
   );
 };

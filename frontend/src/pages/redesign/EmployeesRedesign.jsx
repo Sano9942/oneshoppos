@@ -158,7 +158,7 @@ export default function EmployeesRedesign() {
   };
 
   const remove = async (emp) => {
-    if (!window.confirm(`Delete employee "${emp.name}"?`)) return;
+    if (!window.confirm(`Archive employee "${emp.name}"? They will be hidden from listings but preserved in history.`)) return;
     setError("");
     try {
       const res = await fetch(`${API}/api/employees/${emp.id}`, { method: "DELETE" });
@@ -260,7 +260,7 @@ export default function EmployeesRedesign() {
                       <div className="inline-flex gap-2">
                         <Button size="sm" onClick={() => openEdit(emp)}>Edit</Button>
                         <Button size="sm" tone="danger" onClick={() => remove(emp)}>
-                          <Trash2 size={12} className="mr-1 inline" />Delete
+                          <Trash2 size={12} className="mr-1 inline" />Archive
                         </Button>
                       </div>
                     </td>

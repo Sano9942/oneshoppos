@@ -190,7 +190,7 @@ export default function CustomersRedesign() {
 
   const deleteCustomers = async (ids) => {
     if (!ids.length) return;
-    if (!window.confirm(`Delete ${ids.length} customer(s)?`)) return;
+    if (!window.confirm(`Archive ${ids.length} customer(s)? They will be hidden from listings but preserved in history.`)) return;
     setBusy(true);
     setError("");
     try {
@@ -380,7 +380,7 @@ export default function CustomersRedesign() {
                             tone="danger"
                             onClick={() => deleteCustomers([r.id])}
                           >
-                            Delete
+                            Archive
                           </Button>
                         </div>
                       </td>

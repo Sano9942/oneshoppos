@@ -91,15 +91,20 @@ describe("Employee & Role CRUD Integration Tests", () => {
       expect(e.pin_code).toBe("9999");
     });
 
-    it("should delete an employee", async () => {
+    it("should archive an employee (soft delete)", async () => {
       const res = await makeRequest(app, ADMIN_ID).delete(
         `/api/employees/${employeeId}`,
       );
       expect(res.status).toBe(200);
+      // Row still exists in DB (soft delete) but deleted_at is set
       const e = await dbGet(db, "SELECT * FROM employees WHERE id = ?", [
         employeeId,
       ]);
-      expect(e).toBeUndefined();
+      expect(e).toBeDefined();
+      expect(e.deleted_at).not.toBeNull();
+      // Employee should not appear in API listing
+      const list = await makeRequest(app, ADMIN_ID).get("/api/employees");
+      expect(list.body.employees.find((em) => em.id === employeeId)).toBeUndefined();
     });
   });
 });

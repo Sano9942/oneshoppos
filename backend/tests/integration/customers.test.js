@@ -73,7 +73,7 @@ describe("Customer Loyalty & Wallet Integration Tests", () => {
       expect(updated.name).toBe("Updated Name");
     });
 
-    it("should block deletion if customer has sales", async () => {
+    it("should allow archiving a customer even if they have sales (soft delete preserves history)", async () => {
       // 1. Create a sale for the customer
       await dbGet(
         db,
@@ -83,8 +83,12 @@ describe("Customer Loyalty & Wallet Integration Tests", () => {
 
       const res = await makeRequest(app, ADMIN_ID).delete(`/api/customers/${CUSTOMER_ID}`);
 
-      expect(res.status).toBe(400);
-      expect(res.body.error).toContain("linked sale");
+      expect(res.status).toBe(200);
+      expect(res.body.message).toContain("archived");
+
+      // Soft-deleted customer should not appear in listings
+      const list = await makeRequest(app, ADMIN_ID).get("/api/customers");
+      expect(list.body.customers.find((c) => c.id === CUSTOMER_ID)).toBeUndefined();
     });
   });
 

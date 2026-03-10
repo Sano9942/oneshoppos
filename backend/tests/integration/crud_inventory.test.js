@@ -246,15 +246,20 @@ describe("Inventory CRUD Integration Tests", () => {
       expect(res.body.error).toMatch(/leaf categories/i);
     });
 
-    it("should delete a product", async () => {
+    it("should archive a product (soft delete)", async () => {
       const res = await makeRequest(app, ADMIN_ID).delete(
         `/api/products/${productId}`,
       );
       expect(res.status).toBe(200);
+      // Row still exists in DB (soft delete) but deleted_at is set
       const p = await dbGet(db, "SELECT * FROM products WHERE id = ?", [
         productId,
       ]);
-      expect(p).toBeUndefined();
+      expect(p).toBeDefined();
+      expect(p.deleted_at).not.toBeNull();
+      // Product should not appear in API listing
+      const list = await makeRequest(app, ADMIN_ID).get("/api/products");
+      expect(list.body.products.find((pr) => pr.id === productId)).toBeUndefined();
     });
   });
 
