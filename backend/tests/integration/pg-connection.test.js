@@ -1,5 +1,3 @@
-const { describe, it, expect, afterAll } = require("vitest");
-
 // This test verifies the pg connection layer works
 describe("db-pg connection", () => {
   let db;
