@@ -1,5 +1,7 @@
+const nodemailer = require("nodemailer");
 const { toUtcStart, toUtcEnd } = require("../../utils/tz");
 const { uploadToR2 } = require("../../utils/r2");
+const { buildDigestEmailHtml } = require("../../utils/digestEmail");
 
 module.exports = function (app, deps, helpers) {
   const { db, requirePerm, requireAnyPerm, requireFeature, path, fs } = deps;
@@ -139,6 +141,182 @@ module.exports = function (app, deps, helpers) {
       );
     }
 
+    if (reportKey === "eod-digest") {
+      // Fetch dashboard data needed for the digest email.
+      // Returns an object (not an array of rows) — runSingleSchedule handles this specially.
+      const tz = filters.timezone || "UTC";
+      const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
+      const todayStart = toUtcStart(todayStr, tz);
+      const todayEnd = toUtcEnd(todayStr, tz);
+      const twentyNineDaysAgoStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 29 * 24 * 3600 * 1000));
+      const twentyNineDaysAgoStart = toUtcStart(twentyNineDaysAgoStr, tz);
+
+      // Collect results with a simple counter pattern
+      const result = {};
+      let pending = 5;
+      let error = null;
+
+      function done(key, val) {
+        if (error) return;
+        result[key] = val;
+        pending -= 1;
+        if (pending === 0) cb(null, result);
+      }
+      function fail(err) {
+        if (error) return;
+        error = err;
+        cb(err);
+      }
+
+      // zReport — payment breakdown today
+      db.all(
+        `SELECT COALESCE(sp.payment_method, s.payment_method, 'Unknown') AS payment_method,
+                ROUND(SUM(COALESCE(sp.amount, s.total_amount)), 2) AS total
+         FROM sales s
+         LEFT JOIN sale_payments sp ON s.id = sp.sale_id
+         WHERE s.voided = 0 AND s.timestamp >= ? AND s.timestamp < ?
+         GROUP BY payment_method ORDER BY total DESC`,
+        [todayStart, todayEnd],
+        (err, rows) => {
+          if (err) return fail(err);
+          const zReport = rows || [];
+          const totalRevenueToday = zReport.reduce((s, r) => s + Number(r.total || 0), 0);
+          const paymentContribution = zReport.map((r) => ({
+            ...r,
+            contribution_pct: totalRevenueToday > 0
+              ? Number(((Number(r.total || 0) / totalRevenueToday) * 100).toFixed(2))
+              : 0,
+          }));
+          result.zReport = paymentContribution;
+          result.totalRevenueToday = Number(totalRevenueToday.toFixed(2));
+          pending -= 1; // counts as one of the 5 slots
+          if (pending === 0) cb(null, result);
+        }
+      );
+
+      // saleCount + averageBill
+      db.get(
+        `SELECT COUNT(id) AS count FROM sales WHERE voided = 0 AND timestamp >= ? AND timestamp < ?`,
+        [todayStart, todayEnd],
+        (err, row) => {
+          if (err) return fail(err);
+          result.saleCount = Number(row?.count || 0);
+          result.averageBill = result.saleCount > 0 && result.totalRevenueToday != null
+            ? Number((result.totalRevenueToday / result.saleCount).toFixed(2))
+            : 0;
+          done("_saleCount", true);
+        }
+      );
+
+      // todayProfit (gross profit - expenses)
+      db.get(
+        `SELECT
+           ROUND(COALESCE(SUM(
+             CASE WHEN t.id IS NOT NULL
+               THEN (si.quantity * si.price_at_sale) / (1 + (t.rate / 100.0))
+               ELSE (si.quantity * si.price_at_sale) / (1 + (COALESCE(p.gst, 0) / 100.0))
+             END
+           ), 0), 2) AS tax_exclusive,
+           ROUND(COALESCE(SUM(si.quantity * si.cost_price_at_sale), 0), 2) AS total_cost
+         FROM sale_items si
+         JOIN sales s ON si.sale_id = s.id
+         JOIN products p ON si.product_id = p.id
+         LEFT JOIN taxes t ON p.tax_id = t.id
+         WHERE s.voided = 0 AND s.timestamp >= ? AND s.timestamp < ?`,
+        [todayStart, todayEnd],
+        (err, profitRow) => {
+          if (err) return fail(err);
+          const grossProfit = Number(profitRow?.tax_exclusive || 0) - Number(profitRow?.total_cost || 0);
+          db.get(
+            `SELECT ROUND(COALESCE(SUM(amount), 0), 2) AS total FROM expenses WHERE expense_date = ?`,
+            [todayStr],
+            (err2, expRow) => {
+              if (err2) return fail(err2);
+              result.todayProfit = Number((grossProfit - Number(expRow?.total || 0)).toFixed(2));
+              done("_profit", true);
+            }
+          );
+        }
+      );
+
+      // exceptions (refunds, voids, discounts)
+      db.get(
+        `SELECT COUNT(DISTINCT r.id) AS refund_count,
+                ROUND(COALESCE(SUM(ri.quantity * ri.refund_price), 0), 2) AS refund_value
+         FROM returns r LEFT JOIN return_items ri ON ri.return_id = r.id
+         WHERE r.timestamp >= ? AND r.timestamp < ?`,
+        [todayStart, todayEnd],
+        (err, refRow) => {
+          if (err) return fail(err);
+          db.get(
+            `SELECT COUNT(*) AS void_count, ROUND(COALESCE(SUM(total_amount), 0), 2) AS void_value
+             FROM sales WHERE voided = 1 AND timestamp >= ? AND timestamp < ?`,
+            [todayStart, todayEnd],
+            (err2, voidRow) => {
+              if (err2) return fail(err2);
+              db.get(
+                `SELECT COUNT(*) AS discount_count, ROUND(COALESCE(SUM(discount_amount), 0), 2) AS discount_value
+                 FROM sales WHERE voided = 0 AND COALESCE(discount_amount, 0) > 0 AND timestamp >= ? AND timestamp < ?`,
+                [todayStart, todayEnd],
+                (err3, discRow) => {
+                  if (err3) return fail(err3);
+                  const rev = result.totalRevenueToday || 0;
+                  const cnt = result.saleCount || 0;
+                  result.refundsToday = {
+                    count: Number(refRow?.refund_count || 0),
+                    value: Number(refRow?.refund_value || 0),
+                    pct_of_sales: rev > 0 ? Number(((Number(refRow?.refund_value || 0) / rev) * 100).toFixed(1)) : 0,
+                    pct_of_orders: cnt > 0 ? Number(((Number(refRow?.refund_count || 0) / cnt) * 100).toFixed(1)) : 0,
+                  };
+                  result.voidsToday = {
+                    count: Number(voidRow?.void_count || 0),
+                    value: Number(voidRow?.void_value || 0),
+                    pct_of_sales: rev > 0 ? Number(((Number(voidRow?.void_value || 0) / rev) * 100).toFixed(1)) : 0,
+                    pct_of_orders: cnt > 0 ? Number(((Number(voidRow?.void_count || 0) / cnt) * 100).toFixed(1)) : 0,
+                  };
+                  result.discountsToday = {
+                    count: Number(discRow?.discount_count || 0),
+                    value: Number(discRow?.discount_value || 0),
+                    pct_of_sales: rev > 0 ? Number(((Number(discRow?.discount_value || 0) / rev) * 100).toFixed(1)) : 0,
+                    pct_of_orders: cnt > 0 ? Number(((Number(discRow?.discount_count || 0) / cnt) * 100).toFixed(1)) : 0,
+                  };
+                  done("_exceptions", true);
+                }
+              );
+            }
+          );
+        }
+      );
+
+      // topSelling + lowStock
+      db.all(
+        `SELECT p.name, SUM(si.quantity) AS total_sold
+         FROM sale_items si JOIN products p ON si.product_id = p.id JOIN sales s ON si.sale_id = s.id
+         WHERE s.voided = 0 AND s.timestamp >= ?
+         GROUP BY p.name ORDER BY total_sold DESC, p.name ASC LIMIT 5`,
+        [twentyNineDaysAgoStart],
+        (err, topRows) => {
+          if (err) return fail(err);
+          result.topSelling = topRows || [];
+          db.all(
+            `SELECT p.name, COALESCE(SUM(os.quantity), 0) AS stock
+             FROM products p LEFT JOIN outlet_stock os ON p.id = os.product_id
+             GROUP BY p.id
+             HAVING stock <= CASE WHEN COALESCE(MAX(p.min_qty), 0) > 0 THEN MAX(p.min_qty) ELSE 10 END
+             ORDER BY stock ASC, p.name ASC LIMIT 8`,
+            [],
+            (err2, stockRows) => {
+              if (err2) return fail(err2);
+              result.lowStock = stockRows || [];
+              done("_inventory", true);
+            }
+          );
+        }
+      );
+
+      return; // early return — cb called asynchronously above
+    }
+
     const sql = `
     SELECT s.id AS sale_id, s.timestamp, COALESCE(o.name,'—') AS outlet_name,
            COALESCE(e.name,'—') AS employee_name,
@@ -183,22 +361,41 @@ module.exports = function (app, deps, helpers) {
               return cb(rowsErr);
             }
 
-            const fileName = `report_${schedule.report_key}_${schedule.id}_${Date.now()}.csv`;
-            const r2Key = `reports/${fileName}`;
-            const csv = toCsvLines(
-              rows,
-              columnsForScheduleReport(schedule.report_key),
-              filters,
-            );
+            // eod-digest: rows is a plain data object, not an array
+            const isDigest = schedule.report_key === "eod-digest";
+            const rowArray = isDigest ? [] : (rows || []);
 
-            uploadToR2(Buffer.from(csv, "utf8"), r2Key, "text/csv")
+            const tz = filters.timezone || "UTC";
+            const dateStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
+
+            const fileName = isDigest
+              ? `digest_${schedule.id}_${Date.now()}.html`
+              : `report_${schedule.report_key}_${schedule.id}_${Date.now()}.csv`;
+            const r2Key = `reports/${fileName}`;
+
+            let fileContent, mimeType;
+            if (isDigest) {
+              fileContent = Buffer.from(
+                buildDigestEmailHtml(rows, filters.company_name || "SanoPOS", dateStr),
+                "utf8"
+              );
+              mimeType = "text/html";
+            } else {
+              fileContent = Buffer.from(
+                toCsvLines(rowArray, columnsForScheduleReport(schedule.report_key), filters),
+                "utf8"
+              );
+              mimeType = "text/csv";
+            }
+
+            uploadToR2(fileContent, r2Key, mimeType)
               .then((fileUrl) => {
                 db.run(
                   `UPDATE report_schedule_runs
                    SET status='success', run_finished_at=datetime('now','localtime'),
                        file_path=?, row_count=?
                    WHERE id=?`,
-                  [fileUrl, rows.length, runId],
+                  [fileUrl, rowArray.length, runId],
                 );
                 db.run(
                   "INSERT INTO report_delivery_log (schedule_run_id, schedule_id, channel, recipient, status, message) VALUES (?, ?, 'file', ?, 'sent', ?)",
@@ -213,7 +410,51 @@ module.exports = function (app, deps, helpers) {
                   "UPDATE report_schedules SET last_run_at=datetime('now','localtime'), next_run_at=?, updated_at=datetime('now','localtime') WHERE id=?",
                   [nextRun, schedule.id],
                 );
-                return cb(null, { run_id: runId, file_path: fileUrl, row_count: rows.length });
+
+                // Send digest email if recipient is set and this is an eod-digest schedule
+                if (isDigest && schedule.recipient && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(schedule.recipient)) {
+                  db.get("SELECT * FROM email_config WHERE id = 1", (emailErr, cfg) => {
+                    if (emailErr || !cfg || !cfg.enabled || !cfg.smtp_user || !cfg.smtp_pass) {
+                      // Email not configured — log as skipped, still return success
+                      db.run(
+                        "INSERT INTO report_delivery_log (schedule_run_id, schedule_id, channel, recipient, status, message) VALUES (?, ?, 'email', ?, 'skipped', ?)",
+                        [runId, schedule.id, schedule.recipient, "Email not configured or disabled"],
+                      );
+                      return cb(null, { run_id: runId, file_path: fileUrl, row_count: 0 });
+                    }
+
+                    const transport = nodemailer.createTransport({
+                      host: cfg.smtp_host,
+                      port: Number(cfg.smtp_port || 587),
+                      secure: Number(cfg.smtp_port) === 465,
+                      auth: { user: cfg.smtp_user, pass: cfg.smtp_pass },
+                    });
+
+                    const html = buildDigestEmailHtml(rows, filters.company_name || cfg.from_name || "SanoPOS", dateStr);
+
+                    transport.sendMail({
+                      from: `"${cfg.from_name || "SanoPOS"}" <${cfg.smtp_user}>`,
+                      to: schedule.recipient,
+                      subject: `End-of-Day Digest — ${dateStr}`,
+                      html,
+                    }).then(() => {
+                      db.run(
+                        "INSERT INTO report_delivery_log (schedule_run_id, schedule_id, channel, recipient, status, message) VALUES (?, ?, 'email', ?, 'sent', ?)",
+                        [runId, schedule.id, schedule.recipient, `Digest email sent for ${dateStr}`],
+                      );
+                      return cb(null, { run_id: runId, file_path: fileUrl, row_count: 0 });
+                    }).catch((mailErr) => {
+                      db.run(
+                        "INSERT INTO report_delivery_log (schedule_run_id, schedule_id, channel, recipient, status, message) VALUES (?, ?, 'email', ?, 'failed', ?)",
+                        [runId, schedule.id, schedule.recipient, mailErr.message],
+                      );
+                      // Email failure does not fail the whole schedule run
+                      return cb(null, { run_id: runId, file_path: fileUrl, row_count: 0 });
+                    });
+                  });
+                } else {
+                  return cb(null, { run_id: runId, file_path: fileUrl, row_count: rowArray.length });
+                }
               })
               .catch((e) => {
                 db.run(
