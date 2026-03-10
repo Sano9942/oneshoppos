@@ -1,5 +1,5 @@
-import { Suspense, lazy } from "react";
-import { BrowserRouter as Router, Navigate, Route, Routes } from "react-router-dom";
+import { Suspense, lazy, useEffect, useRef } from "react";
+import { BrowserRouter as Router, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth/AuthProvider";
 import RequireAuth from "./components/RequireAuth";
 import RequireContext from "./components/RequireContext";
@@ -22,6 +22,7 @@ import ExpensesRoute from "./pages/ExpensesRoute";
 import InventoryRoute from "./pages/InventoryRoute";
 import ProductFormPage from "./pages/redesign/ProductFormPage";
 import Login from "./pages/Login";
+import SetupWizard from "./pages/SetupWizard";
 import OutletsRoute from "./pages/OutletsRoute";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import PromotionsRoute from "./pages/PromotionsRoute";
@@ -75,6 +76,21 @@ function RouteLoading() {
 
 function HomeRedirect() {
   const { isAuthenticated, isBootstrapping } = useAuth();
+  const navigate = useNavigate();
+  const checkedRef = useRef(false);
+
+  useEffect(() => {
+    if (isBootstrapping || checkedRef.current) return;
+    checkedRef.current = true;
+    const apiBase = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+    fetch(`${apiBase}/api/setup/status`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.setup_complete) navigate("/setup", { replace: true });
+      })
+      .catch(() => {});
+  }, [isBootstrapping, navigate]);
+
   if (isBootstrapping) return null;
   return <Navigate to={isAuthenticated ? "/context-select" : "/login"} replace />;
 }
@@ -84,6 +100,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={<HomeRedirect />} />
+        <Route path="/setup" element={<SetupWizard />} />
         <Route path="/login" element={<Login />} />
         <Route path="/access-denied" element={<AccessDenied />} />
         <Route

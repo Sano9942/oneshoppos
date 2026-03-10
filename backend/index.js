@@ -409,9 +409,26 @@ let _cachedCompany = { timezone: "UTC" };
 let _companyLastCheck = 0;
 const COMPANY_CACHE_MS = 5 * 60 * 1000; // 5 min
 
-// Eager startup load
+// Eager startup load — also generates setup token if first-run
 db.get("SELECT * FROM company_profile WHERE id = 1", [], (err, row) => {
-  if (!err && row) _cachedCompany = row;
+  if (!err && row) {
+    _cachedCompany = row;
+    // If setup not yet complete, generate a one-time token and log the setup URL
+    if (!row.setup_complete) {
+      const setupToken = crypto.randomBytes(32).toString("hex");
+      db.run(
+        "UPDATE company_profile SET setup_token = ? WHERE id = 1",
+        [setupToken],
+        (updateErr) => {
+          if (!updateErr) {
+            _cachedCompany = { ...row, setup_token: setupToken };
+            const PORT_FOR_LOG = process.env.PORT || 5000;
+            console.log(`\n===== SETUP URL: http://localhost:${PORT_FOR_LOG}/setup?token=${setupToken} =====\n`);
+          }
+        },
+      );
+    }
+  }
   _companyLastCheck = Date.now();
 });
 
@@ -424,6 +441,17 @@ function loadCompanyProfile(req, res, next) {
     });
   }
   req.company = _cachedCompany;
+
+  // Setup gate: if setup_complete = 0, block all routes except /api/setup and /api/health
+  if (
+    _cachedCompany &&
+    !_cachedCompany.setup_complete &&
+    !req.path.startsWith("/api/setup") &&
+    !req.path.startsWith("/api/health")
+  ) {
+    return res.status(503).json({ error: "Setup required", code: "SETUP_REQUIRED" });
+  }
+
   next();
 }
 

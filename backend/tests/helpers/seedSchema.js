@@ -75,7 +75,8 @@ const TABLES = [
     joining_date TEXT,
     department TEXT,
     work_hours_per_day REAL DEFAULT 8,
-    monthly_leave_allowance INTEGER DEFAULT 2
+    monthly_leave_allowance INTEGER DEFAULT 2,
+    deleted_at DATETIME DEFAULT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS attribute_sets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,7 +118,8 @@ const TABLES = [
     vendor TEXT,
     tags TEXT,
     status TEXT DEFAULT 'active',
-    sku TEXT
+    sku TEXT,
+    deleted_at DATETIME DEFAULT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS product_variants (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -186,7 +188,8 @@ const TABLES = [
     loyalty_points INTEGER DEFAULT 0,
     cnic TEXT,
     occupation TEXT,
-    balance REAL DEFAULT 0
+    balance REAL DEFAULT 0,
+    deleted_at DATETIME DEFAULT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS customer_wallet_ledger (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -547,7 +550,9 @@ const TABLES = [
     logo_url TEXT,
     fiscal_year_start TEXT DEFAULT '01-01',
     timezone TEXT DEFAULT 'Asia/Karachi',
-    updated_at TEXT DEFAULT (datetime('now','localtime'))
+    updated_at TEXT DEFAULT (datetime('now','localtime')),
+    setup_complete INTEGER DEFAULT 1,
+    setup_token TEXT
   )`,
 
   // ── Companies (Context Unification — migrate61) ───────────────────────
@@ -924,6 +929,9 @@ const INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_eo_employee ON employee_outlets(employee_id)`,
   `CREATE INDEX IF NOT EXISTS idx_eo_outlet ON employee_outlets(outlet_id)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_idempotency_key ON sales(idempotency_key) WHERE idempotency_key IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_products_deleted_at ON products(deleted_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_customers_deleted_at ON customers(deleted_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_employees_deleted_at ON employees(deleted_at)`,
 ];
 
 function seedSchema(db) {

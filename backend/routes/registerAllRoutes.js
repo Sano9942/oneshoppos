@@ -47,6 +47,10 @@ module.exports = function registerAllRoutes(app, deps) {
     logShopifyEvent,
   } = deps;
 
+  // Setup wizard — must be BEFORE auth middleware (no session exists yet)
+  const createSetupRouter = require("./setup");
+  app.use("/api/setup", createSetupRouter(db));
+
   // Toggle auth middleware: JWT-based (MULTI_TENANT=1) vs header-based (default)
   app.use(process.env.MULTI_TENANT === "1" ? loadTenantAndPerms : loadEmployeePerms);
   // In multi-tenant mode, resolve the tenant DB via AsyncLocalStorage after JWT auth
