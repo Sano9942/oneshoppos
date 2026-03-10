@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Lock, MapPin, Plus, Search, Shield, Star, Trash2, User } from "lucide-react";
+import { KeyRound, Lock, MapPin, Plus, Search, Shield, Star, Trash2, User } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   Badge,
@@ -30,6 +30,11 @@ export default function EmployeesRedesign() {
   const [allOutlets, setAllOutlets] = useState([]);
   const [assignedOutletIds, setAssignedOutletIds] = useState([]);
   const [primaryOutletId, setPrimaryOutletId] = useState(null);
+
+  // Revoke sessions modal
+  const [revokeTarget, setRevokeTarget] = useState(null);
+  const [revokeReason, setRevokeReason] = useState("");
+  const [revoking, setRevoking] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -170,6 +175,29 @@ export default function EmployeesRedesign() {
     }
   };
 
+  const revokeAllSessions = async () => {
+    if (!revokeTarget) return;
+    setRevoking(true);
+    setError("");
+    try {
+      const res = await fetch(`${API}/api/employees/${revokeTarget.id}/revoke-all-tokens`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: revokeReason || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to revoke sessions");
+      setRevokeTarget(null);
+      setRevokeReason("");
+      setError(""); // clear any old error
+      alert(`All sessions revoked for ${revokeTarget.name}`);
+    } catch (e) {
+      setError(e.message || "Failed to revoke sessions");
+    } finally {
+      setRevoking(false);
+    }
+  };
+
   const roleLabel = (id) => roles.find((r) => r.id === id)?.name || `Role ${id}`;
 
   return (
@@ -259,6 +287,9 @@ export default function EmployeesRedesign() {
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex gap-2">
                         <Button size="sm" onClick={() => openEdit(emp)}>Edit</Button>
+                        <Button size="sm" tone="danger" onClick={() => { setRevokeTarget(emp); setRevokeReason(""); }}>
+                          <KeyRound size={12} className="mr-1 inline" />Revoke
+                        </Button>
                         <Button size="sm" tone="danger" onClick={() => remove(emp)}>
                           <Trash2 size={12} className="mr-1 inline" />Archive
                         </Button>
@@ -444,6 +475,28 @@ export default function EmployeesRedesign() {
                 </Button>
               </div>
             </form>
+          </SectionCard>
+        </div>
+      )}
+      {revokeTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
+          <SectionCard className="w-full max-w-sm p-5">
+            <h3 className="mb-2 text-lg font-semibold text-(--ui-text)">Revoke All Sessions</h3>
+            <p className="mb-3 text-sm text-(--ui-text-muted)">
+              This will force <strong>{revokeTarget.name}</strong> to log in again on all devices. Are you sure?
+            </p>
+            <Input
+              placeholder="Reason (optional)"
+              value={revokeReason}
+              onChange={(e) => setRevokeReason(e.target.value)}
+              className="mb-3"
+            />
+            <div className="flex gap-2">
+              <Button type="button" onClick={() => setRevokeTarget(null)} disabled={revoking}>Cancel</Button>
+              <Button tone="danger" onClick={revokeAllSessions} disabled={revoking}>
+                {revoking ? "Revoking..." : "Revoke All Sessions"}
+              </Button>
+            </div>
           </SectionCard>
         </div>
       )}

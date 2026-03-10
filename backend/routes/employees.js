@@ -1,5 +1,5 @@
 module.exports = function registerEmployeeRoutes(app, deps) {
-  const { db, requirePerm } = deps;
+  const { db, requirePerm, requireAnyPerm } = deps;
   const bcrypt = require("bcryptjs");
   const EMPLOYEE_USAGE_CHECKS = [
     ["sales", "employee_id"],
@@ -286,5 +286,65 @@ module.exports = function registerEmployeeRoutes(app, deps) {
         },
       );
     },
+  );
+
+  // Revoke a specific token by JTI (multi-tenant JWT only)
+  app.post(
+    "/api/employees/:id/revoke-token",
+    requireAnyPerm(["manage_employees", "all_access"]),
+    (req, res) => {
+      const { id } = req.params;
+      const { jti, reason } = req.body || {};
+      if (!jti) return res.status(400).json({ error: "jti is required" });
+
+      const revokedBy = Number(req.headers["x-employee-id"] || 0);
+
+      db.run(
+        "INSERT OR IGNORE INTO revoked_tokens (token_jti, employee_id, revoked_by, reason) VALUES (?, ?, ?, ?)",
+        [jti, Number(id), revokedBy, reason || null],
+        function (err) {
+          if (err) return res.status(500).json({ error: err.message });
+
+          // Cleanup expired entries older than 2 days
+          db.run(
+            "DELETE FROM revoked_tokens WHERE revoked_at < datetime('now', '-2 days')",
+            () => {}
+          );
+
+          res.json({ message: "Token revoked", token_jti: jti });
+        }
+      );
+    }
+  );
+
+  // Revoke all tokens for an employee (blanket revocation)
+  app.post(
+    "/api/employees/:id/revoke-all-tokens",
+    requireAnyPerm(["manage_employees", "all_access"]),
+    (req, res) => {
+      const { id } = req.params;
+      const { reason } = req.body || {};
+
+      db.run(
+        "UPDATE employees SET tokens_revoked_before = datetime('now') WHERE id = ?",
+        [Number(id)],
+        function (err) {
+          if (err) return res.status(500).json({ error: err.message });
+          if (this.changes === 0)
+            return res.status(404).json({ error: "Employee not found" });
+
+          // Log to action_history if table exists
+          const revokedBy = Number(req.headers["x-employee-id"] || 0);
+          db.run(
+            `INSERT INTO action_history (action_type, entity_type, entity_id, employee_id, description)
+             VALUES ('token_revocation', 'employee', ?, ?, ?)`,
+            [Number(id), revokedBy, `All sessions revoked${reason ? ": " + reason : ""}`],
+            () => {} // ignore errors if table doesn't exist
+          );
+
+          res.json({ message: "All tokens revoked for employee" });
+        }
+      );
+    }
   );
 };

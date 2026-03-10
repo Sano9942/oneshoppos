@@ -324,6 +324,35 @@ function loadTenantAndPerms(req, res, next) {
       : Promise.resolve(db);
 
     permDbPromise.then((permDb) => {
+      // Token revocation checks (jti-based + blanket revocation)
+      const revocationChecks = [];
+
+      if (decoded.jti) {
+        revocationChecks.push(
+          new Promise((resolve, reject) => {
+            permDb.get("SELECT 1 FROM revoked_tokens WHERE token_jti = ?", [decoded.jti], (err, row) => {
+              if (err) return resolve(); // table may not exist yet — skip check
+              if (row) return reject({ status: 401, error: "Token revoked", code: "TOKEN_REVOKED" });
+              resolve();
+            });
+          })
+        );
+      }
+
+      revocationChecks.push(
+        new Promise((resolve, reject) => {
+          permDb.get("SELECT tokens_revoked_before FROM employees WHERE id = ?", [decoded.eid], (err, row) => {
+            if (err) return resolve(); // column may not exist yet — skip check
+            if (row && row.tokens_revoked_before && decoded.iat < Date.parse(row.tokens_revoked_before) / 1000) {
+              return reject({ status: 401, error: "All sessions revoked", code: "ALL_SESSIONS_REVOKED" });
+            }
+            resolve();
+          });
+        })
+      );
+
+      return Promise.all(revocationChecks).then(() => permDb);
+    }).then((permDb) => {
       permDb.get("SELECT role_id FROM employees WHERE id = ?", [decoded.eid], (err, emp) => {
         if (err || !emp) {
           req.employeePerms = [];
@@ -334,7 +363,10 @@ function loadTenantAndPerms(req, res, next) {
           next();
         });
       });
-    }).catch(() => {
+    }).catch((err) => {
+      if (err && err.status === 401) {
+        return res.status(401).json({ error: err.error, code: err.code });
+      }
       req.employeePerms = [];
       next();
     });

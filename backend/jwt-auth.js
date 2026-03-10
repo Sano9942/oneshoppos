@@ -20,7 +20,7 @@ const defaults = {
  */
 function signAccessToken(payload, secret) {
   return jwt.sign(
-    { tid: payload.tid, eid: payload.eid, rid: payload.rid, oid: payload.oid || null, scope: payload.scope || "full" },
+    { tid: payload.tid, eid: payload.eid, rid: payload.rid, oid: payload.oid || null, scope: payload.scope || "full", jti: crypto.randomUUID() },
     secret,
     { expiresIn: defaults.accessExpiresIn }
   );

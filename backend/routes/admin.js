@@ -7,14 +7,63 @@
 const bcrypt = require("bcryptjs");
 const path = require("path");
 const fs = require("fs");
+const net = require("net");
 
 const BCRYPT_ROUNDS = 10;
+
+// ── IP Allowlist helpers ────────────────────────────────────────────────
+
+/**
+ * Check if an IPv4 address falls within a CIDR range.
+ * Plain IPs (no slash) are treated as /32.
+ */
+function ipToInt(ip) {
+  // Strip ::ffff: prefix (IPv4-mapped IPv6)
+  const clean = ip.replace(/^::ffff:/, "");
+  const parts = clean.split(".");
+  if (parts.length !== 4) return null;
+  return parts.reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
+}
+
+function ipInCidr(ip, cidr) {
+  const [network, bitsStr] = cidr.includes("/") ? cidr.split("/") : [cidr, "32"];
+  const bits = parseInt(bitsStr, 10);
+  if (bits < 0 || bits > 32) return false;
+
+  const ipInt = ipToInt(ip);
+  const netInt = ipToInt(network);
+  if (ipInt === null || netInt === null) return false;
+
+  if (bits === 0) return true; // /0 matches everything
+  const mask = (~0 << (32 - bits)) >>> 0;
+  return (ipInt & mask) === (netInt & mask);
+}
+
+function parseAllowedIps() {
+  const raw = (process.env.ADMIN_ALLOWED_IPS || "").trim();
+  if (!raw) return null; // null means allow all
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
 
 module.exports = function registerAdminRoutes(app, { authLimiter }) {
   const { getMasterDb, initMasterDb } = require("../master-db");
   const jwt = require("jsonwebtoken");
   const { verifyAccessToken, defaults: jwtDefaults } = require("../jwt-auth");
   const tenantDbManager = require("../tenant-db-manager");
+
+  // ── IP Allowlist middleware ──────────────────────────────────────────────
+
+  function requireAllowedIp(req, res, next) {
+    const allowedIps = parseAllowedIps();
+    if (!allowedIps) return next(); // env var unset → allow all
+
+    const clientIp = req.ip || "";
+    const matches = allowedIps.some((entry) => ipInCidr(clientIp, entry));
+    if (!matches) {
+      return res.status(403).json({ error: "IP not allowed" });
+    }
+    next();
+  }
 
   // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -91,7 +140,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
   // ── Auth routes ─────────────────────────────────────────────────────────
 
-  app.post("/api/admin/auth/login", authLimiter, async (req, res) => {
+  app.post("/api/admin/auth/login", requireAllowedIp, authLimiter, async (req, res) => {
     const { email, password } = req.body || {};
     if (!email || !password) {
       return res.status(400).json({ error: "email and password are required" });
@@ -122,7 +171,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
   // ── Tenant CRUD ─────────────────────────────────────────────────────────
 
-  app.get("/api/admin/tenants", requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tenants", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const tenants = await masterAll(
         `SELECT id, slug, name, owner_email, status, plan, timezone,
@@ -138,7 +187,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
     }
   });
 
-  app.post("/api/admin/tenants", requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/tenants", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     const { slug, name, owner_email, timezone, pin, plan } = req.body || {};
     if (!slug || !name || !pin) {
       return res.status(400).json({ error: "slug, name, and pin are required" });
@@ -260,7 +309,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
     }
   });
 
-  app.get("/api/admin/tenants/:id", requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tenants/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const tenant = await masterGet(
         `SELECT id, slug, name, owner_email, status, plan, db_path, timezone,
@@ -283,7 +332,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
     }
   });
 
-  app.put("/api/admin/tenants/:id", requireSuperAdmin, async (req, res) => {
+  app.put("/api/admin/tenants/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     const { name, owner_email, plan, timezone, max_employees, max_outlets, max_products } = req.body || {};
     try {
       const tenant = await masterGet("SELECT id, plan FROM tenants WHERE id = ?", [req.params.id]);
@@ -316,7 +365,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
     }
   });
 
-  app.post("/api/admin/tenants/:id/suspend", requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/tenants/:id/suspend", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const tenant = await masterGet("SELECT id, slug, status FROM tenants WHERE id = ?", [req.params.id]);
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
@@ -337,7 +386,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
     }
   });
 
-  app.post("/api/admin/tenants/:id/activate", requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/tenants/:id/activate", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const tenant = await masterGet("SELECT id, slug, status FROM tenants WHERE id = ?", [req.params.id]);
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
@@ -356,7 +405,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
     }
   });
 
-  app.delete("/api/admin/tenants/:id", requireSuperAdmin, async (req, res) => {
+  app.delete("/api/admin/tenants/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const tenant = await masterGet("SELECT id, slug, status FROM tenants WHERE id = ?", [req.params.id]);
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
@@ -378,7 +427,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
   // ── Stats ───────────────────────────────────────────────────────────────
 
-  app.get("/api/admin/tenants/:id/stats", requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/tenants/:id/stats", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const tenant = await masterGet("SELECT id, slug, db_path, status FROM tenants WHERE id = ?", [req.params.id]);
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
@@ -409,7 +458,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
     }
   });
 
-  app.get("/api/admin/stats", requireSuperAdmin, async (req, res) => {
+  app.get("/api/admin/stats", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const totals = await masterGet(
         `SELECT
@@ -441,7 +490,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
   // ── Migrations ──────────────────────────────────────────────────────────
 
-  app.post("/api/admin/tenants/:id/migrate", requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/tenants/:id/migrate", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const tenant = await masterGet("SELECT id, slug, db_path, status FROM tenants WHERE id = ?", [req.params.id]);
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
@@ -459,7 +508,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
     }
   });
 
-  app.post("/api/admin/migrate-all", requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/migrate-all", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const tenants = await masterAll(
         "SELECT id, slug, db_path, status FROM tenants WHERE status = 'active'"
@@ -488,7 +537,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
   // ── PIN Reset ───────────────────────────────────────────────────────────
 
-  app.post("/api/admin/tenants/:id/reset-pin", requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/tenants/:id/reset-pin", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const tenant = await masterGet("SELECT id, slug, db_path, status FROM tenants WHERE id = ?", [req.params.id]);
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
