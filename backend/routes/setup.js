@@ -11,7 +11,6 @@
  */
 
 const express = require('express');
-const router = express.Router();
 
 const ROLE_PERMISSIONS = {
   Administrator: ['all_access'],
@@ -29,6 +28,7 @@ const ROLE_PERMISSIONS = {
 };
 
 module.exports = function createSetupRouter(db) {
+  const router = express.Router();
   // ── GET /api/setup/status ────────────────────────────────────────────────
   router.get('/status', (req, res) => {
     db.get('SELECT setup_complete FROM company_profile WHERE id = 1', [], (err, row) => {
