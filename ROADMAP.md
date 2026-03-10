@@ -232,18 +232,11 @@ UPDATE company_profile SET setup_complete = 1 WHERE (SELECT COUNT(*) FROM employ
 **Root cause:** Missing `{ headers: authHeaders() }` — caused POS Opening Gate to show empty branch dropdown, blocking the entire POS flow including product search
 **Fix applied:** Added `authHeaders` from `useAuth()` and passed it to the fetch call
 
-### BUG-2: Dashboard KPIs show "No sales yet today" despite recent sales existing
-**Severity:** Medium — misleading dashboard data
-**File:** `frontend/src/pages/redesign/DashboardRedesign.jsx` line 50
-**Root cause:** Caused by BUG-1 — no outlet context stored after login so `/api/reports/dashboard` had no `x-outlet-id`; expected to resolve automatically now that BUG-1 is fixed
-**Effect:** All KPI cards (today's sales, revenue, exceptions) show zero/empty; Recent Sales loads fine (separate `/api/sales` call)
-**Status:** Monitor after BUG-1 deploys; if still failing, investigate `x-outlet-id` injection in `AuthProvider`
+### ~~BUG-2~~: Dashboard KPIs show "No sales yet today" despite recent sales existing — ✅ RESOLVED (auto-fixed by BUG-1)
+**Root cause:** Caused by BUG-1 — no outlet context stored after login so `/api/reports/dashboard` had no `x-outlet-id`; resolved automatically when BUG-1 (ContextSwitcher auth headers) was fixed.
 
-### BUG-3: `ReportsSales.jsx` calls report endpoints without explicit auth headers
-**Severity:** Low — global `window.fetch` patch handles headers for logged-in users so this works in practice
-**File:** `frontend/src/pages/reports/ReportsSales.jsx` (9 fetch calls, none pass `authHeaders()`)
-**Root cause:** File never imported `useAuth` — relies entirely on the global `window.fetch` patch
-**Status:** Monitor; only a problem if the patch has a race condition on mount
+### ~~BUG-3~~: `ReportsSales.jsx` calls report endpoints without explicit auth headers — ✅ FIXED Mar 10 2026
+**Fix applied:** Added `import { useAuth }` and `const { authHeaders } = useAuth()` to all 10 tab components; each `fetch()` call now passes `{ headers: authHeaders() }` explicitly. No longer dependent solely on the `window.fetch` patch race condition.
 
 ---
 

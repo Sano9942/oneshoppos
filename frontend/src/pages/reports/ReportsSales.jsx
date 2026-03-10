@@ -21,6 +21,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { API_BASE as API } from "../../config";
+import { useAuth } from "../../auth/AuthProvider";
 import {
   fmt,
   fmtDate,
@@ -33,6 +34,7 @@ import {
 
 // --- Tab: Overview Dashboard --------------------------------------------------
 export function OverviewTab({ filters }) {
+  const { authHeaders } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -42,7 +44,7 @@ export function OverviewTab({ filters }) {
     try {
       const p = new URLSearchParams();
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/dashboard?${p}`);
+      const res = await fetch(`${API}/api/reports/dashboard?${p}`, { headers: authHeaders() });
       if (!res.ok) throw new Error("Failed to fetch");
       const d = await res.json();
       setData(d);
@@ -314,6 +316,7 @@ export function OverviewTab({ filters }) {
 
 // --- Tab: Sales Summary -------------------------------------------------------
 export function SalesSummaryTab({ filters }) {
+  const { authHeaders } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -329,7 +332,7 @@ export function SalesSummaryTab({ filters }) {
         brand_id: filters.brandId,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/sales-summary?${p}`);
+      const res = await fetch(`${API}/api/reports/sales-summary?${p}`, { headers: authHeaders() });
       const d = await res.json();
       setData(d);
     } catch {
@@ -498,6 +501,7 @@ export function SalesSummaryTab({ filters }) {
 
 // --- Tab: Monthly MOP Matrix --------------------------------------------------
 export function MonthlyMOPMatrixTab({ filters }) {
+  const { authHeaders } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -511,7 +515,7 @@ export function MonthlyMOPMatrixTab({ filters }) {
         time_to: filters.timeTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/monthly-mop-matrix?${p}`);
+      const res = await fetch(`${API}/api/reports/monthly-mop-matrix?${p}`, { headers: authHeaders() });
       const d = await res.json();
       setData(d);
     } catch {
@@ -598,6 +602,7 @@ export function MonthlyMOPMatrixTab({ filters }) {
 
 // --- Tab: Sub-Category Wise ---------------------------------------------------
 export function SubcategoryWiseTab({ filters }) {
+  const { authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -614,7 +619,7 @@ export function SubcategoryWiseTab({ filters }) {
         supplier_id: filters.supplierId,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/subcategory-wise?${p}`);
+      const res = await fetch(`${API}/api/reports/subcategory-wise?${p}`, { headers: authHeaders() });
       const d = await res.json();
       setRows(d.items || []);
     } catch {
@@ -703,6 +708,7 @@ export function SubcategoryWiseTab({ filters }) {
 
 // --- Tab: Sales Detail --------------------------------------------------------
 export function SalesDetailTab({ filters }) {
+  const { authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -717,7 +723,7 @@ export function SalesDetailTab({ filters }) {
         employee_id: filters.employeeId,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/sales-detail?${p}`);
+      const res = await fetch(`${API}/api/reports/sales-detail?${p}`, { headers: authHeaders() });
       const d = await res.json();
       setRows(d.sales || []);
     } catch {
@@ -834,6 +840,7 @@ export function SalesDetailTab({ filters }) {
 
 // --- Tab: Order Wise ----------------------------------------------------------
 export function OrderWiseTab({ filters }) {
+  const { authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -847,7 +854,7 @@ export function OrderWiseTab({ filters }) {
         time_to: filters.timeTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/order-wise?${p}`);
+      const res = await fetch(`${API}/api/reports/order-wise?${p}`, { headers: authHeaders() });
       const d = await res.json();
       setRows(d.orders || []);
     } catch {
@@ -954,6 +961,7 @@ export function OrderWiseTab({ filters }) {
 
 // --- Tab: Item Wise -----------------------------------------------------------
 export function ItemWiseTab({ filters }) {
+  const { authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -969,7 +977,7 @@ export function ItemWiseTab({ filters }) {
         brand_id: filters.brandId,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/item-wise?${p}`);
+      const res = await fetch(`${API}/api/reports/item-wise?${p}`, { headers: authHeaders() });
       const d = await res.json();
       setRows(d.items || []);
     } catch {
@@ -1083,6 +1091,7 @@ export function ItemWiseTab({ filters }) {
 
 // --- Tab: Refunds & Voids ----------------------------------------------------
 export function RefundsVoidsTab({ filters }) {
+  const { authHeaders } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -1097,7 +1106,7 @@ export function RefundsVoidsTab({ filters }) {
         employee_id: filters.employeeId,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/refunds-voids?${p}`);
+      const res = await fetch(`${API}/api/reports/refunds-voids?${p}`, { headers: authHeaders() });
       const d = await res.json();
       setData(d);
     } catch {
@@ -1240,6 +1249,7 @@ export function RefundsVoidsTab({ filters }) {
 
 // --- Tab: Cashier Wise -------------------------------------------------------
 export function CashierWiseTab({ filters }) {
+  const { authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -1254,7 +1264,7 @@ export function CashierWiseTab({ filters }) {
         employee_id: filters.employeeId,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/cashier-wise?${p}`);
+      const res = await fetch(`${API}/api/reports/cashier-wise?${p}`, { headers: authHeaders() });
       const d = await res.json();
       setRows(d.items || []);
     } catch {
@@ -1363,6 +1373,7 @@ export function CashierWiseTab({ filters }) {
 
 // --- Tab: Daily Operations ---------------------------------------------------
 export function DailyOperationsTab({ filters }) {
+  const { authHeaders } = useAuth();
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState(null);
   const [refundsVoids, setRefundsVoids] = useState(null);
@@ -1382,11 +1393,12 @@ export function DailyOperationsTab({ filters }) {
       });
       if (filters.outletIds && filters.outletIds.length) commonParams.set("outlet_id", filters.outletIds.join(","));
       const common = commonParams.toString();
+      const hdrs = { headers: authHeaders() };
 
       const [salesRes, refundRes, cashierRes] = await Promise.all([
-        fetch(`${API}/api/reports/sales-summary?${common}`).then((r) => r.json()),
-        fetch(`${API}/api/reports/refunds-voids?${common}`).then((r) => r.json()),
-        fetch(`${API}/api/reports/cashier-wise?${common}`).then((r) => r.json()),
+        fetch(`${API}/api/reports/sales-summary?${common}`, hdrs).then((r) => r.json()),
+        fetch(`${API}/api/reports/refunds-voids?${common}`, hdrs).then((r) => r.json()),
+        fetch(`${API}/api/reports/cashier-wise?${common}`, hdrs).then((r) => r.json()),
       ]);
 
       setSummary(salesRes);
@@ -1395,8 +1407,8 @@ export function DailyOperationsTab({ filters }) {
 
       if (filters.shiftId) {
         const [shiftSummaryRes, shiftPaymentRes] = await Promise.all([
-          fetch(`${API}/api/reports/shift-summary?session_id=${filters.shiftId}`).then((r) => r.json()),
-        fetch(`${API}/api/reports/payment-summary?session_id=${filters.shiftId}`).then((r) => r.json()),
+          fetch(`${API}/api/reports/shift-summary?session_id=${filters.shiftId}`, hdrs).then((r) => r.json()),
+          fetch(`${API}/api/reports/payment-summary?session_id=${filters.shiftId}`, hdrs).then((r) => r.json()),
         ]);
         setSelectedShiftSummary(shiftSummaryRes);
         setSelectedShiftPayments(shiftPaymentRes.payments || []);
