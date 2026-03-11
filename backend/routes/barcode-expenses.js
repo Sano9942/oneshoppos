@@ -24,19 +24,19 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
         name,
         width_mm = 50,
         height_mm = 30,
-        show_name = 1,
-        show_price = 1,
-        show_barcode = 1,
-        show_sku = 0,
-        show_brand = 0,
+        show_name = true,
+        show_price = true,
+        show_barcode = true,
+        show_sku = false,
+        show_brand = false,
         font_size = 10,
-        is_default = 0,
+        is_default = false,
       } = req.body;
       if (!name) return res.status(400).json({ error: "Name required" });
       try {
         await db.transaction(async (client) => {
           if (is_default) {
-            await client.query("UPDATE barcode_templates SET is_default = 0");
+            await client.query("UPDATE barcode_templates SET is_default = false");
           }
           const { rows } = await client.query(
             "INSERT INTO barcode_templates (name, width_mm, height_mm, show_name, show_price, show_barcode, show_sku, show_brand, font_size, is_default) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id",
@@ -44,13 +44,13 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
               name,
               width_mm,
               height_mm,
-              show_name ? 1 : 0,
-              show_price ? 1 : 0,
-              show_barcode ? 1 : 0,
-              show_sku ? 1 : 0,
-              show_brand ? 1 : 0,
+              show_name ? true : false,
+              show_price ? true : false,
+              show_barcode ? true : false,
+              show_sku ? true : false,
+              show_brand ? true : false,
               font_size,
-              is_default ? 1 : 0,
+              is_default ? true : false,
             ]
           );
           return rows[0].id;
@@ -84,7 +84,7 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
       try {
         await db.transaction(async (client) => {
           if (is_default) {
-            await client.query("UPDATE barcode_templates SET is_default = 0");
+            await client.query("UPDATE barcode_templates SET is_default = false");
           }
           await client.query(
             "UPDATE barcode_templates SET name=$1, width_mm=$2, height_mm=$3, show_name=$4, show_price=$5, show_barcode=$6, show_sku=$7, show_brand=$8, font_size=$9, is_default=$10 WHERE id=$11",
@@ -92,13 +92,13 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
               name,
               width_mm,
               height_mm,
-              show_name ? 1 : 0,
-              show_price ? 1 : 0,
-              show_barcode ? 1 : 0,
-              show_sku ? 1 : 0,
-              show_brand ? 1 : 0,
+              show_name ? true : false,
+              show_price ? true : false,
+              show_barcode ? true : false,
+              show_sku ? true : false,
+              show_brand ? true : false,
               font_size,
-              is_default ? 1 : 0,
+              is_default ? true : false,
               id,
             ]
           );

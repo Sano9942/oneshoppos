@@ -24,8 +24,9 @@ module.exports = function emailRoutes(app, deps) {
     return true;
   }
 
-  function getConfig(cb) {
-    db.get("SELECT * FROM email_config WHERE id = 1", cb);
+  async function getConfig() {
+    const { rows } = await db.query("SELECT * FROM email_config WHERE id = 1");
+    return rows[0] || null;
   }
 
   function makeTransport(cfg) {
@@ -38,71 +39,83 @@ module.exports = function emailRoutes(app, deps) {
   }
 
   // GET /api/email/config
-  app.get("/api/email/config", (req, res) => {
+  app.get("/api/email/config", async (req, res) => {
     if (!authGuard(req, res)) return;
-    getConfig((err, row) => {
-      if (err) return res.status(500).json({ error: err.message });
+    try {
+      const row = await getConfig();
       const cfg = row || {};
       // Never expose raw password
       if (cfg.smtp_pass) cfg.smtp_pass = "*****";
       res.json(cfg);
-    });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // PUT /api/email/config
-  app.put("/api/email/config", (req, res) => {
+  app.put("/api/email/config", async (req, res) => {
     if (!authGuard(req, res)) return;
-    const { smtp_host, smtp_port, smtp_user, smtp_pass, from_name, enabled } =
-      req.body || {};
+    try {
+      const { smtp_host, smtp_port, smtp_user, smtp_pass, from_name, enabled } =
+        req.body || {};
 
-    // Only update smtp_pass if a real value is provided (not masked placeholder)
-    const passClause = smtp_pass && smtp_pass !== "*****"
-      ? ", smtp_pass = ?"
-      : "";
-    const params = [
-      smtp_host || "smtp.gmail.com",
-      Number(smtp_port || 587),
-      smtp_user || null,
-      from_name || "SanoPOS",
-      enabled != null ? (enabled ? 1 : 0) : 0,
-    ];
-    if (passClause) params.splice(3, 0, smtp_pass); // insert before from_name
+      const updatePass = smtp_pass && smtp_pass !== "*****";
 
-    db.run(
-      `UPDATE email_config SET
-         smtp_host = ?, smtp_port = ?, smtp_user = ?${passClause},
-         from_name = ?, enabled = ?
-       WHERE id = 1`,
-      params,
-      function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (this.changes === 0) return res.status(500).json({ error: "Config row missing. Run migrate65.js." });
-        res.json({ ok: true });
+      let sql, params;
+      if (updatePass) {
+        sql = `UPDATE email_config SET
+                 smtp_host = $1, smtp_port = $2, smtp_user = $3, smtp_pass = $4,
+                 from_name = $5, enabled = $6
+               WHERE id = 1`;
+        params = [
+          smtp_host || "smtp.gmail.com",
+          Number(smtp_port || 587),
+          smtp_user || null,
+          smtp_pass,
+          from_name || "SanoPOS",
+          enabled != null ? (enabled ? true : false) : false,
+        ];
+      } else {
+        sql = `UPDATE email_config SET
+                 smtp_host = $1, smtp_port = $2, smtp_user = $3,
+                 from_name = $4, enabled = $5
+               WHERE id = 1`;
+        params = [
+          smtp_host || "smtp.gmail.com",
+          Number(smtp_port || 587),
+          smtp_user || null,
+          from_name || "SanoPOS",
+          enabled != null ? (enabled ? true : false) : false,
+        ];
       }
-    );
+
+      const { rowCount } = await db.query(sql, params);
+      if (rowCount === 0) return res.status(500).json({ error: "Config row missing. Run migrate65.js." });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // POST /api/email/test
   app.post("/api/email/test", async (req, res) => {
     if (!authGuard(req, res)) return;
-    getConfig(async (err, cfg) => {
-      if (err) return res.status(500).json({ error: err.message });
+    try {
+      const cfg = await getConfig();
       if (!cfg || !cfg.enabled || !cfg.smtp_user || !cfg.smtp_pass) {
-        return res.status(503).json({ error: "Email not configured. Go to Settings → Email." });
+        return res.status(503).json({ error: "Email not configured. Go to Settings \u2192 Email." });
       }
-      try {
-        const transport = makeTransport(cfg);
-        await transport.sendMail({
-          from: `"${cfg.from_name || "SanoPOS"}" <${cfg.smtp_user}>`,
-          to: cfg.smtp_user,
-          subject: "SanoPOS — Email Test",
-          html: "<p>Email is configured correctly!</p>",
-        });
-        res.json({ ok: true, message: "Test email sent to " + cfg.smtp_user });
-      } catch (e) {
-        res.status(500).json({ error: e.message });
-      }
-    });
+      const transport = makeTransport(cfg);
+      await transport.sendMail({
+        from: `"${cfg.from_name || "SanoPOS"}" <${cfg.smtp_user}>`,
+        to: cfg.smtp_user,
+        subject: "SanoPOS \u2014 Email Test",
+        html: "<p>Email is configured correctly!</p>",
+      });
+      res.json({ ok: true, message: "Test email sent to " + cfg.smtp_user });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // POST /api/email/send-receipt
@@ -115,71 +128,65 @@ module.exports = function emailRoutes(app, deps) {
     }
     if (!saleId) return res.status(400).json({ error: "saleId is required." });
 
-    getConfig(async (err, cfg) => {
-      if (err) return res.status(500).json({ error: err.message });
+    try {
+      const cfg = await getConfig();
       if (!cfg || !cfg.enabled || !cfg.smtp_user || !cfg.smtp_pass) {
-        return res.status(503).json({ error: "Email not configured. Go to Settings → Email." });
+        return res.status(503).json({ error: "Email not configured. Go to Settings \u2192 Email." });
       }
 
       // Fetch sale + items + payments
-      db.get(
+      const { rows: saleRows } = await db.query(
         `SELECT s.*, o.name as outlet_name, e.name as employee_name,
                 c.name as customer_name
          FROM sales s
          LEFT JOIN outlets o ON s.outlet_id = o.id
          LEFT JOIN employees e ON s.employee_id = e.id
          LEFT JOIN customers c ON s.customer_id = c.id
-         WHERE s.id = ?`,
-        [saleId],
-        (err, sale) => {
-          if (err) return res.status(500).json({ error: err.message });
-          if (!sale) return res.status(404).json({ error: "Sale not found." });
-
-          db.all(
-            `SELECT si.*, p.name as product_name FROM sale_items si
-             JOIN products p ON si.product_id = p.id WHERE si.sale_id = ?`,
-            [saleId],
-            (err, items) => {
-              if (err) return res.status(500).json({ error: err.message });
-
-              db.all(
-                "SELECT * FROM sale_payments WHERE sale_id = ?",
-                [saleId],
-                async (err, payments) => {
-                  if (err) return res.status(500).json({ error: err.message });
-
-                  // Fetch active receipt template (optional)
-                  db.get(
-                    "SELECT * FROM receipt_templates WHERE is_active = 1 LIMIT 1",
-                    async (err, template) => {
-                      // template errors are non-fatal — proceed without it
-                      const html = buildReceiptEmailHtml(
-                        sale,
-                        items || [],
-                        payments || [],
-                        template || null
-                      );
-
-                      try {
-                        const transport = makeTransport(cfg);
-                        await transport.sendMail({
-                          from: `"${cfg.from_name || "SanoPOS"}" <${cfg.smtp_user}>`,
-                          to: toEmail,
-                          subject: `Receipt #${sale.invoice_number || sale.id} from ${cfg.from_name || "SanoPOS"}`,
-                          html,
-                        });
-                        res.json({ ok: true });
-                      } catch (e) {
-                        res.status(500).json({ error: e.message });
-                      }
-                    }
-                  );
-                }
-              );
-            }
-          );
-        }
+         WHERE s.id = $1`,
+        [saleId]
       );
-    });
+      const sale = saleRows[0];
+      if (!sale) return res.status(404).json({ error: "Sale not found." });
+
+      const { rows: items } = await db.query(
+        `SELECT si.*, p.name as product_name FROM sale_items si
+         JOIN products p ON si.product_id = p.id WHERE si.sale_id = $1`,
+        [saleId]
+      );
+
+      const { rows: payments } = await db.query(
+        "SELECT * FROM sale_payments WHERE sale_id = $1",
+        [saleId]
+      );
+
+      // Fetch active receipt template (optional)
+      let template = null;
+      try {
+        const { rows: tplRows } = await db.query(
+          "SELECT * FROM receipt_templates WHERE is_active = true LIMIT 1"
+        );
+        template = tplRows[0] || null;
+      } catch (_) {
+        // template errors are non-fatal — proceed without it
+      }
+
+      const html = buildReceiptEmailHtml(
+        sale,
+        items || [],
+        payments || [],
+        template
+      );
+
+      const transport = makeTransport(cfg);
+      await transport.sendMail({
+        from: `"${cfg.from_name || "SanoPOS"}" <${cfg.smtp_user}>`,
+        to: toEmail,
+        subject: `Receipt #${sale.invoice_number || sale.id} from ${cfg.from_name || "SanoPOS"}`,
+        html,
+      });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 };

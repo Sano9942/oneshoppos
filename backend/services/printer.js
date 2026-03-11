@@ -16,13 +16,9 @@ const net = require("net");
 module.exports = function makePrinterService(db) {
 
   /** Load printer_config row id=1 from DB */
-  function loadConfig() {
-    return new Promise((resolve, reject) => {
-      db.get("SELECT * FROM printer_config WHERE id = 1", (err, row) => {
-        if (err) return reject(err);
-        resolve(row || null);
-      });
-    });
+  async function loadConfig() {
+    const { rows } = await db.query("SELECT * FROM printer_config WHERE id = 1");
+    return rows[0] || null;
   }
 
   /** Build a ThermalPrinter instance from config */

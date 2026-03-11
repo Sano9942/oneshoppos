@@ -39,43 +39,46 @@ module.exports = function printerRoutes(app, deps) {
   });
 
   // GET /api/print/config — load current printer_config row
-  app.get("/api/print/config", (req, res) => {
+  app.get("/api/print/config", async (req, res) => {
     const employeeId = Number(req.headers["x-employee-id"] || 0);
     if (!employeeId) return res.status(401).json({ error: "Unauthorized" });
-    db.get("SELECT * FROM printer_config WHERE id = 1", (err, row) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json(row || {});
-    });
+    try {
+      const { rows } = await db.query("SELECT * FROM printer_config WHERE id = 1");
+      res.json(rows[0] || {});
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // PUT /api/print/config — save printer_config row
-  app.put("/api/print/config", (req, res) => {
+  app.put("/api/print/config", async (req, res) => {
     const employeeId = Number(req.headers["x-employee-id"] || 0);
     if (!employeeId) return res.status(401).json({ error: "Unauthorized" });
     const {
       connection_type, host, port, usb_vendor_id, usb_product_id,
       paper_width, cash_drawer, is_active,
     } = req.body || {};
-    db.run(
-      `UPDATE printer_config SET
-        connection_type = ?, host = ?, port = ?,
-        usb_vendor_id = ?, usb_product_id = ?,
-        paper_width = ?, cash_drawer = ?, is_active = ?
-       WHERE id = 1`,
-      [
-        connection_type || "network",
-        host || "192.168.1.100",
-        Number(port) || 9100,
-        usb_vendor_id || null,
-        usb_product_id || null,
-        Number(paper_width) || 48,
-        cash_drawer ? 1 : 0,
-        is_active ? 1 : 0,
-      ],
-      (err) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ ok: true });
-      }
-    );
+    try {
+      await db.query(
+        `UPDATE printer_config SET
+          connection_type = $1, host = $2, port = $3,
+          usb_vendor_id = $4, usb_product_id = $5,
+          paper_width = $6, cash_drawer = $7, is_active = $8
+         WHERE id = 1`,
+        [
+          connection_type || "network",
+          host || "192.168.1.100",
+          Number(port) || 9100,
+          usb_vendor_id || null,
+          usb_product_id || null,
+          Number(paper_width) || 48,
+          cash_drawer ? true : false,
+          is_active ? true : false,
+        ]
+      );
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 };

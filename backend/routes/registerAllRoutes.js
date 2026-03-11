@@ -71,7 +71,7 @@ module.exports = function registerAllRoutes(app, deps) {
   ensureDefaultRolePermissions();
 
   // Enforce outlet assignment for non-admin employees on branch-scoped requests.
-  app.use((req, res, next) => {
+  app.use(async (req, res, next) => {
     if (!req.path.startsWith("/api/")) return next();
     // Kiosk PIN routes are public (PIN is the auth) — skip session-based outlet check
     if (req.path.startsWith("/api/attendance/pin-")) return next();
@@ -89,20 +89,21 @@ module.exports = function registerAllRoutes(app, deps) {
 
     if (!outletId) return next();
 
-    db.get(
-      "SELECT 1 FROM employee_outlets WHERE employee_id = ? AND outlet_id = ? LIMIT 1",
-      [employeeId, outletId],
-      (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!row) {
-          return res.status(403).json({
-            error:
-              "Forbidden: outlet is not assigned to this employee account.",
-          });
-        }
-        return next();
-      },
-    );
+    try {
+      const { rows } = await db.query(
+        "SELECT 1 FROM employee_outlets WHERE employee_id = $1 AND outlet_id = $2 LIMIT 1",
+        [employeeId, outletId],
+      );
+      if (!rows[0]) {
+        return res.status(403).json({
+          error:
+            "Forbidden: outlet is not assigned to this employee account.",
+        });
+      }
+      return next();
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
   });
 
   app.use((req, res, next) => {
@@ -186,78 +187,77 @@ module.exports = function registerAllRoutes(app, deps) {
 
   // --- ROUTES: FEATURE FLAGS / HEALTH ---
 
-  app.get("/api/feature-flags", (req, res) => {
+  app.get("/api/feature-flags", async (req, res) => {
     const employeeId = Number(req.headers["x-employee-id"] || 0);
     if (!employeeId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
-    db.all(
-      "SELECT key, enabled, description, updated_by, updated_at FROM feature_flags ORDER BY key ASC",
-      [],
-      (err, rows) => {
-        if (err) {
-          if (String(err.message || "").includes("no such table")) {
-            const fallback = Object.keys(DEFAULT_FEATURE_FLAGS).map((k) => ({
-              key: k,
-              enabled: DEFAULT_FEATURE_FLAGS[k] ? 1 : 0,
-              description: null,
-              updated_by: null,
-              updated_at: null,
-            }));
-            return res.json({ flags: fallback });
-          }
-          return res.status(500).json({ error: err.message });
-        }
-        const rowMap = new Map((rows || []).map((r) => [r.key, r]));
-        const mergedDefaults = Object.keys(DEFAULT_FEATURE_FLAGS).map((key) => {
-          const existing = rowMap.get(key);
-          if (existing) return existing;
-          return {
-            key,
-            enabled: DEFAULT_FEATURE_FLAGS[key] ? 1 : 0,
-            description: null,
-            updated_by: null,
-            updated_at: null,
-          };
-        });
-        const extras = (rows || []).filter(
-          (r) =>
-            !Object.prototype.hasOwnProperty.call(DEFAULT_FEATURE_FLAGS, r.key),
-        );
-        return res.json({ flags: [...mergedDefaults, ...extras] });
-      },
-    );
+    try {
+      const { rows } = await db.query(
+        "SELECT key, enabled, description, updated_by, updated_at FROM feature_flags ORDER BY key ASC",
+      );
+      const rowMap = new Map(rows.map((r) => [r.key, r]));
+      const mergedDefaults = Object.keys(DEFAULT_FEATURE_FLAGS).map((key) => {
+        const existing = rowMap.get(key);
+        if (existing) return existing;
+        return {
+          key,
+          enabled: DEFAULT_FEATURE_FLAGS[key] ? true : false,
+          description: null,
+          updated_by: null,
+          updated_at: null,
+        };
+      });
+      const extras = rows.filter(
+        (r) =>
+          !Object.prototype.hasOwnProperty.call(DEFAULT_FEATURE_FLAGS, r.key),
+      );
+      return res.json({ flags: [...mergedDefaults, ...extras] });
+    } catch (err) {
+      if (String(err.message || "").includes("does not exist")) {
+        const fallback = Object.keys(DEFAULT_FEATURE_FLAGS).map((k) => ({
+          key: k,
+          enabled: DEFAULT_FEATURE_FLAGS[k] ? true : false,
+          description: null,
+          updated_by: null,
+          updated_at: null,
+        }));
+        return res.json({ flags: fallback });
+      }
+      return res.status(500).json({ error: err.message });
+    }
   });
 
   app.put(
     "/api/feature-flags/:key",
     requirePerm("all_access"),
-    (req, res) => {
+    async (req, res) => {
       const { key } = req.params;
       const { enabled, description, updated_by } = req.body || {};
-      const enabledInt = enabled ? 1 : 0;
-      db.run(
-        `INSERT INTO feature_flags (key, enabled, description, updated_by, updated_at)
-     VALUES (?, ?, ?, ?, datetime('now'))
+      const enabledVal = enabled ? true : false;
+      try {
+        await db.query(
+          `INSERT INTO feature_flags (key, enabled, description, updated_by, updated_at)
+     VALUES ($1, $2, $3, $4, NOW())
      ON CONFLICT(key) DO UPDATE SET
        enabled = excluded.enabled,
        description = COALESCE(excluded.description, feature_flags.description),
        updated_by = excluded.updated_by,
-       updated_at = datetime('now')`,
-        [key, enabledInt, description || null, updated_by || null],
-        function (err) {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({
-            message: "Feature flag updated",
-            key,
-            enabled: enabledInt,
-          });
-        },
-      );
+       updated_at = NOW()`,
+          [key, enabledVal, description || null, updated_by || null],
+        );
+        res.json({
+          message: "Feature flag updated",
+          key,
+          enabled: enabledVal,
+        });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
     },
   );
 
-  app.get("/api/health", (req, res) => {
+  app.get("/api/health", async (req, res) => {
     const requiredTables = [
       "sales",
       "sale_items",
@@ -266,26 +266,24 @@ module.exports = function registerAllRoutes(app, deps) {
       "invoice_sequences",
       "feature_flags",
     ];
-    db.all(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name IN (${requiredTables
-        .map(() => "?")
-        .join(",")})`,
-      requiredTables,
-      (err, rows) => {
-        if (err)
-          return res.status(500).json({ status: "error", error: err.message });
-        const found = new Set((rows || []).map((r) => r.name));
-        const missingTables = requiredTables.filter((t) => !found.has(t));
-        const ok = missingTables.length === 0;
-        res.status(ok ? 200 : 503).json({
-          status: ok ? "ok" : "degraded",
-          database: "reachable",
-          restore_lock: runtimeState.isRestoreInProgress,
-          missing_tables: missingTables,
-          checked_at: new Date().toISOString(),
-        });
-      },
-    );
+    try {
+      const { rows } = await db.query(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)",
+        [requiredTables],
+      );
+      const found = new Set(rows.map((r) => r.table_name));
+      const missingTables = requiredTables.filter((t) => !found.has(t));
+      const ok = missingTables.length === 0;
+      res.status(ok ? 200 : 503).json({
+        status: ok ? "ok" : "degraded",
+        database: "reachable",
+        restore_lock: runtimeState.isRestoreInProgress,
+        missing_tables: missingTables,
+        checked_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      return res.status(500).json({ status: "error", error: err.message });
+    }
   });
 
   // --- ROUTES: TIER 4 ---
