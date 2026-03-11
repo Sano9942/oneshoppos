@@ -541,8 +541,8 @@ module.exports = function createCRMRouter({
           `<tr>
             <td style="padding:6px 10px;border-bottom:1px solid #eee">${it.product_name || "—"}</td>
             <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">${it.quantity}</td>
-            <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">PKRs ${Number(it.unit_price || 0).toFixed(2)}</td>
-            <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">PKRs ${Number(it.line_total || 0).toFixed(2)}</td>
+            <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">${req.company?.currency_symbol || "$"} ${Number(it.unit_price || 0).toFixed(2)}</td>
+            <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">${req.company?.currency_symbol || "$"} ${Number(it.line_total || 0).toFixed(2)}</td>
           </tr>`
         ).join("");
 
@@ -566,7 +566,7 @@ module.exports = function createCRMRouter({
               <tfoot>
                 <tr>
                   <td colspan="3" style="padding:8px 10px;text-align:right;font-weight:bold">Grand Total</td>
-                  <td style="padding:8px 10px;text-align:right;font-weight:bold">PKRs ${Number(quote.total_amount || 0).toFixed(2)}</td>
+                  <td style="padding:8px 10px;text-align:right;font-weight:bold">${req.company?.currency_symbol || "$"} ${Number(quote.total_amount || 0).toFixed(2)}</td>
                 </tr>
               </tfoot>
             </table>

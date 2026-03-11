@@ -174,7 +174,8 @@ module.exports = function emailRoutes(app, deps) {
         sale,
         items || [],
         payments || [],
-        template
+        template,
+        req.company?.currency_symbol || "$"
       );
 
       const transport = makeTransport(cfg);

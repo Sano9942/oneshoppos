@@ -40,11 +40,11 @@ module.exports = function makePrinterService(db) {
   }
 
   /**
-   * Format a number as currency (PKR, no decimals).
+   * Format a number as currency (no decimals).
    * Mirrors the fmt() helper in frontend/src/utils/receipt.js.
    */
-  function fmtCurrency(n) {
-    return `Rs ${Math.round(Number(n) || 0).toLocaleString("en-PK")}`;
+  function fmtCurrency(n, symbol = "$") {
+    return `${symbol} ${Math.round(Number(n) || 0).toLocaleString("en-US")}`;
   }
 
   /**
@@ -66,8 +66,9 @@ module.exports = function makePrinterService(db) {
    * Build the full receipt as ESC/POS printer commands.
    * All widths are derived from cfg.paper_width.
    */
-  async function formatReceipt(printer, slip, template, cfg) {
+  async function formatReceipt(printer, slip, template, cfg, currencySymbol = "$") {
     const W = cfg.paper_width || 48;
+    const fmt = (n) => fmtCurrency(n, currencySymbol);
 
     const storeName  = template?.header_text || slip.outlet?.name || "SanoPOS";
     const footerText = template?.footer_text  || "Thank you for your purchase!";
@@ -94,7 +95,7 @@ module.exports = function makePrinterService(db) {
       printer.println("RETURNED:");
       returnedItems.forEach((item) => {
         const qty   = `${item.quantity}x  ${item.name}`.slice(0, W - 10);
-        const price = `- ${fmtCurrency(item.price * item.quantity)}`;
+        const price = `- ${fmt(item.price * item.quantity)}`;
         printer.println(padRow(qty, price, W));
       });
       printer.println(divider(W));
@@ -105,7 +106,7 @@ module.exports = function makePrinterService(db) {
     const cart = slip.cart || [];
     cart.forEach((item) => {
       const qty   = `${item.quantity}x  ${item.name}`.slice(0, W - 12);
-      const price = fmtCurrency(item.price * item.quantity);
+      const price = fmt(item.price * item.quantity);
       printer.println(padRow(qty, price, W));
     });
     printer.println(divider(W));
@@ -114,19 +115,19 @@ module.exports = function makePrinterService(db) {
     const subtotal = cart.reduce(
       (s, i) => s + Number(i.price || 0) * Number(i.quantity || 0), 0
     );
-    printer.println(padRow("Subtotal:", fmtCurrency(subtotal), W));
+    printer.println(padRow("Subtotal:", fmt(subtotal), W));
 
     const taxAmount = Number(slip.taxAmount || 0);
     if (taxAmount > 0)
-      printer.println(padRow("GST (incl.):", fmtCurrency(taxAmount), W));
+      printer.println(padRow("GST (incl.):", fmt(taxAmount), W));
 
     const exchangeCredit = Number(slip.exchangeCredit || 0);
     const discountAmount = Number(slip.discountAmount || 0);
     if (exchangeCredit > 0) {
-      printer.println(padRow("Return Credit:", `- ${fmtCurrency(exchangeCredit)}`, W));
+      printer.println(padRow("Return Credit:", `- ${fmt(exchangeCredit)}`, W));
     } else if (discountAmount > 0) {
       const label = slip.discountType === "percentage" ? "Discount (%):" : "Discount:";
-      printer.println(padRow(label, `- ${fmtCurrency(discountAmount)}`, W));
+      printer.println(padRow(label, `- ${fmt(discountAmount)}`, W));
     }
 
     printer.println(divider(W, "="));
@@ -136,21 +137,21 @@ module.exports = function makePrinterService(db) {
       ? Math.max(0, slip.balanceDue)
       : (slip.total || 0);
     printer.bold(true);
-    printer.println(padRow(totalLabel, fmtCurrency(totalValue), W));
+    printer.println(padRow(totalLabel, fmt(totalValue), W));
     printer.bold(false);
     printer.println(divider(W, "="));
 
     // --- PAYMENTS ---
     const payments = (slip.payments || []).filter(p => p.method !== "Return Credit");
     payments.forEach((p) => {
-      printer.println(padRow(`${p.method}:`, fmtCurrency(p.amount), W));
+      printer.println(padRow(`${p.method}:`, fmt(p.amount), W));
     });
     if ((slip.change || 0) > 0)
-      printer.println(padRow("Change:", fmtCurrency(slip.change), W));
+      printer.println(padRow("Change:", fmt(slip.change), W));
 
     if (slip.refundNote) {
       const refundAmt = Math.abs(slip.balanceDue || 0);
-      printer.println(padRow("Refund to Customer:", fmtCurrency(refundAmt), W));
+      printer.println(padRow("Refund to Customer:", fmt(refundAmt), W));
     }
 
     // --- ORDER NOTE ---
@@ -180,7 +181,7 @@ module.exports = function makePrinterService(db) {
    * Print a receipt slip to the configured thermal printer.
    * Returns { ok: true } on success, { error: string, fallback: true } on failure.
    */
-  async function printReceipt(slip, template) {
+  async function printReceipt(slip, template, currencySymbol = "$") {
     let cfg;
     try {
       cfg = await loadConfig();
@@ -200,7 +201,7 @@ module.exports = function makePrinterService(db) {
     }
 
     try {
-      await formatReceipt(printer, slip, template, cfg);
+      await formatReceipt(printer, slip, template, cfg, currencySymbol);
 
       // Kick cash drawer (ESC/POS pulse on pin 2)
       if (cfg.cash_drawer) {

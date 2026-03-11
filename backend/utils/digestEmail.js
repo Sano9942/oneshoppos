@@ -11,17 +11,17 @@
  */
 function buildDigestEmailHtml(data, companyName, dateStr) {
   const store = companyName || "SanoPOS";
-  const currency = data.currency?.symbol || "PKRs";
+  const currency = data.currency?.symbol || "$";
 
   function fmt(n) {
-    return `${currency} ${Number(n || 0).toLocaleString("en-PK", {
+    return `${currency} ${Number(n || 0).toLocaleString("en-US", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
   }
 
   function fmtNum(n) {
-    return Number(n || 0).toLocaleString("en-PK");
+    return Number(n || 0).toLocaleString("en-US");
   }
 
   // ── Payment breakdown rows ────────────────────────────────────────────────

@@ -10,7 +10,7 @@
  * @param {object|null} template - Row from receipt_templates (header_text, footer_text, show_barcode)
  * @returns {string} Complete HTML document string
  */
-function buildReceiptEmailHtml(sale, items, payments, template) {
+function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol = "$") {
   const storeName = template?.header_text || sale.outlet_name || "SanoPOS";
   const footerText = template?.footer_text || "Thank you for your purchase!";
 
@@ -23,7 +23,7 @@ function buildReceiptEmailHtml(sale, items, payments, template) {
   const tax = total - subtotal + discount; // derived
 
   function fmt(n) {
-    return `PKRs ${Number(n || 0).toLocaleString("en-PK", {
+    return `${currencySymbol} ${Number(n || 0).toLocaleString("en-US", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;

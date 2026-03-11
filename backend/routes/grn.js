@@ -201,7 +201,7 @@ module.exports = function registerGRNRoutes(app, deps) {
         const remaining = inv.amount - inv.amount_paid;
         if (amt > remaining + 0.001)
           return res.status(400).json({
-            error: `Payment exceeds outstanding amount (PKRs ${remaining.toFixed(2)})`,
+            error: `Payment exceeds outstanding amount (${req.company?.currency_symbol || "$"} ${remaining.toFixed(2)})`,
           });
 
         await db.transaction(async (client) => {

@@ -23,7 +23,8 @@ module.exports = function printerRoutes(app, deps) {
     const { slip, template } = req.body || {};
     if (!slip) return res.status(400).json({ error: "slip is required" });
 
-    const result = await printReceipt(slip, template || null);
+    const currencySymbol = req.company?.currency_symbol || "$";
+    const result = await printReceipt(slip, template || null, currencySymbol);
     // Always return 200 — frontend checks result.fallback, not HTTP status
     return res.json(result);
   });
