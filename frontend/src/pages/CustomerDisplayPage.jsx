@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { API_BASE } from "../config";
+import { useCurrency } from "../contexts/CurrencyContext";
 
 /**
  * Customer-Facing Display — standalone full-screen page for secondary monitor.
@@ -16,6 +17,7 @@ export default function CustomerDisplayPage() {
     total: 0,
     status: "idle",
   });
+  const { fmt: money } = useCurrency();
   const [storeName, setStoreName] = useState("SanoPOS");
   const prevItemCountRef = useRef(0);
   const [animateIdx, setAnimateIdx] = useState(-1);
@@ -56,14 +58,6 @@ export default function CustomerDisplayPage() {
     const interval = setInterval(poll, 2000);
     return () => clearInterval(interval);
   }, [shiftId]);
-
-  const money = (n) => {
-    const num = Number(n) || 0;
-    return num.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  };
 
   const statusLabel =
     data.status === "paid"
