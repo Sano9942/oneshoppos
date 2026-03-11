@@ -2,13 +2,13 @@ import React, { useState, useEffect, useCallback } from "react";
 import { API_BASE as API } from "../../config";
 import { parseLocalDate } from "../../utils/dates";
 import {
-  fmt,
   fmtDate,
   exportCSV,
   ExportButton,
   TableShell,
   CardShell,
 } from "./ReportShared";
+import { useCurrency } from "../../contexts/CurrencyContext";
 
 export function AttendanceTab({ filters }) {
   const [rows, setRows] = useState([]);
@@ -118,6 +118,7 @@ export function AttendanceTab({ filters }) {
 }
 
 export function LaborPerformanceTab({ filters }) {
+  const { fmt } = useCurrency();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -214,6 +215,7 @@ export function LaborPerformanceTab({ filters }) {
 }
 
 export function LossPreventionTab({ filters }) {
+  const { fmt } = useCurrency();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 

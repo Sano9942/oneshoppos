@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Tag, Package, SearchCheck, ReceiptText, History } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
-  fmt,
   fmtDate,
   fmtDateTime,
   exportCSV,
@@ -10,6 +9,7 @@ import {
   TableShell,
   CardShell,
 } from "./ReportShared";
+import { useCurrency } from "../../contexts/CurrencyContext";
 
 function buildCatalogParams(filters, extra = {}) {
   const p = new URLSearchParams({
@@ -30,6 +30,7 @@ function buildCatalogParams(filters, extra = {}) {
 
 // --- Tab: Category Wise -------------------------------------------------------
 export function CategoryWiseTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -104,6 +105,7 @@ export function CategoryWiseTab({ filters }) {
 
 // --- Tab: Product Specification -----------------------------------------------
 export function ProductSpecTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -286,6 +288,7 @@ export function ProductSpecTab({ filters }) {
 }
 
 export function HistoryCostTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -422,6 +425,7 @@ export function HistoryCostTab({ filters }) {
 }
 
 export function HistorySaleTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -554,6 +558,7 @@ export function HistorySaleTab({ filters }) {
 }
 
 export function ProductAuditTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);

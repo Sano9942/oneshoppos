@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Wallet, Receipt, Truck, Calculator, BadgePercent, FileSpreadsheet } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
-  fmt,
   fmtDate,
   fmtDateTime,
   exportCSV,
@@ -10,6 +9,7 @@ import {
   TableShell,
   CardShell,
 } from "./ReportShared";
+import { useCurrency } from "../../contexts/CurrencyContext";
 
 function buildFinanceParams(filters) {
   const p = new URLSearchParams({
@@ -60,6 +60,7 @@ function EmptyFinanceState({ title, body }) {
 }
 
 export function SettlementOverviewTab({ filters }) {
+  const { fmt } = useCurrency();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -261,6 +262,7 @@ export function SettlementOverviewTab({ filters }) {
 }
 
 export function PayablesReceivablesTab({ filters }) {
+  const { fmt } = useCurrency();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -405,6 +407,7 @@ export function PayablesReceivablesTab({ filters }) {
 }
 
 export function SupplierPaymentsInvoicesTab({ filters }) {
+  const { fmt } = useCurrency();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -575,6 +578,7 @@ export function SupplierPaymentsInvoicesTab({ filters }) {
 }
 
 export function FinancePaymentMixTab({ filters }) {
+  const { fmt } = useCurrency();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -726,6 +730,7 @@ export function FinancePaymentMixTab({ filters }) {
 }
 
 export function GSTOutputTab({ filters }) {
+  const { fmt } = useCurrency();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [taxMode, setTaxMode] = useState("gst");
@@ -894,6 +899,7 @@ export function GSTOutputTab({ filters }) {
 }
 
 export function GSTTypeSummaryTab({ filters }) {
+  const { fmt } = useCurrency();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 

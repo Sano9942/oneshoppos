@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Building2 } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
-  fmt,
   fmtDateTime,
   exportCSV,
   ExportButton,
@@ -10,6 +9,7 @@ import {
   CardShell,
   MetricCard,
 } from "./ReportShared";
+import { useCurrency } from "../../contexts/CurrencyContext";
 
 export function InventoryLossTab({ filters }) {
   const [rows, setRows] = useState([]);
@@ -371,6 +371,7 @@ export function STRReportTab({ filters }) {
 }
 
 export function OutletComparisonTab({ filters }) {
+  const { fmt } = useCurrency();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 

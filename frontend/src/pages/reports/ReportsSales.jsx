@@ -23,7 +23,6 @@ import {
 import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import {
-  fmt,
   fmtDate,
   fmtDateTime,
   exportCSV,
@@ -31,9 +30,11 @@ import {
   TableShell,
   CardShell,
 } from "./ReportShared";
+import { useCurrency } from "../../contexts/CurrencyContext";
 
 // --- Tab: Overview Dashboard --------------------------------------------------
 export function OverviewTab({ filters }) {
+  const { fmt } = useCurrency();
   const { authHeaders } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -316,6 +317,7 @@ export function OverviewTab({ filters }) {
 
 // --- Tab: Sales Summary -------------------------------------------------------
 export function SalesSummaryTab({ filters }) {
+  const { fmt } = useCurrency();
   const { authHeaders } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -501,6 +503,7 @@ export function SalesSummaryTab({ filters }) {
 
 // --- Tab: Monthly MOP Matrix --------------------------------------------------
 export function MonthlyMOPMatrixTab({ filters }) {
+  const { fmt } = useCurrency();
   const { authHeaders } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -602,6 +605,7 @@ export function MonthlyMOPMatrixTab({ filters }) {
 
 // --- Tab: Sub-Category Wise ---------------------------------------------------
 export function SubcategoryWiseTab({ filters }) {
+  const { fmt } = useCurrency();
   const { authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -708,6 +712,7 @@ export function SubcategoryWiseTab({ filters }) {
 
 // --- Tab: Sales Detail --------------------------------------------------------
 export function SalesDetailTab({ filters }) {
+  const { fmt } = useCurrency();
   const { authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -840,6 +845,7 @@ export function SalesDetailTab({ filters }) {
 
 // --- Tab: Order Wise ----------------------------------------------------------
 export function OrderWiseTab({ filters }) {
+  const { fmt } = useCurrency();
   const { authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -961,6 +967,7 @@ export function OrderWiseTab({ filters }) {
 
 // --- Tab: Item Wise -----------------------------------------------------------
 export function ItemWiseTab({ filters }) {
+  const { fmt } = useCurrency();
   const { authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1091,6 +1098,7 @@ export function ItemWiseTab({ filters }) {
 
 // --- Tab: Refunds & Voids ----------------------------------------------------
 export function RefundsVoidsTab({ filters }) {
+  const { fmt } = useCurrency();
   const { authHeaders } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1249,6 +1257,7 @@ export function RefundsVoidsTab({ filters }) {
 
 // --- Tab: Cashier Wise -------------------------------------------------------
 export function CashierWiseTab({ filters }) {
+  const { fmt } = useCurrency();
   const { authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1373,6 +1382,7 @@ export function CashierWiseTab({ filters }) {
 
 // --- Tab: Daily Operations ---------------------------------------------------
 export function DailyOperationsTab({ filters }) {
+  const { fmt } = useCurrency();
   const { authHeaders } = useAuth();
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState(null);

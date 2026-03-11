@@ -2,13 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Users, TrendingUp, GitBranch, Target, X } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
-  fmt,
   fmtDate,
   exportCSV,
   ExportButton,
   TableShell,
   CardShell,
 } from "./ReportShared";
+import { useCurrency } from "../../contexts/CurrencyContext";
 
 const RFM_SEGMENTS = {
   Champions: {
@@ -93,6 +93,7 @@ function scoreRFMCustomers(customers) {
 
 // --- Tab: Customer Details ----------------------------------------------------
 export function CustomerDetailsTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -204,6 +205,7 @@ export function CustomerDetailsTab({ filters }) {
 
 // --- Tab: Customer Wise -------------------------------------------------------
 export function CustomerWiseTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -321,6 +323,7 @@ export function CustomerWiseTab({ filters }) {
 
 // --- Tab: Customer RFM Segmentation -------------------------------------------
 export function CustomerRFMTab({ filters }) {
+  const { fmt } = useCurrency();
   const [raw, setRaw] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterSeg, setFilterSeg] = useState("");
@@ -494,6 +497,7 @@ export function CustomerRFMTab({ filters }) {
 
 // --- Tab: Customer Retention ----------------------------------------------------
 export function CustomerRetentionTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -588,6 +592,7 @@ export function CustomerRetentionTab({ filters }) {
 
 // --- Tab: Customer Capture Rate -------------------------------------------------
 export function CustomerCaptureRateTab({ filters }) {
+  const { fmt } = useCurrency();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 

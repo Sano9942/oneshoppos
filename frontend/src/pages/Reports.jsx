@@ -43,7 +43,6 @@ import {
 
 import { API_BASE as API } from "../config";
 import {
-  fmt,
   fmtDate,
   ExportButton,
   TableShell,

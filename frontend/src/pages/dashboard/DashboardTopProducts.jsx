@@ -2,7 +2,7 @@ import { SectionCard } from "../../ui/primitives";
 import { useCurrency } from "./DashboardShared";
 
 export function DashboardTopProducts({ data }) {
-  const fmt = useCurrency(data);
+  const { fmt } = useCurrency();
   // topProducts = today/7-day window [{name, units_sold}]
   const products = (data?.topProducts || []).slice(0, 5);
 

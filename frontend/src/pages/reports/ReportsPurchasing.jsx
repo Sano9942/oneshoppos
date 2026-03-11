@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Truck, ShoppingCart, Archive, Boxes, ClipboardList } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
-  fmt,
   fmtDate,
   fmtDateTime,
   exportCSV,
@@ -11,9 +10,11 @@ import {
   CardShell,
   MetricCard,
 } from "./ReportShared";
+import { useCurrency } from "../../contexts/CurrencyContext";
 
 // --- Tab: Supplier Wise -------------------------------------------------------
 export function SupplierWiseTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -122,6 +123,7 @@ export function SupplierWiseTab({ filters }) {
 
 // --- Tab: Purchase Orders Report ----------------------------------------------
 export function PurchaseOrdersReportTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -246,6 +248,7 @@ export function PurchaseOrdersReportTab({ filters }) {
 }
 
 export function TotalPurchasesTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -423,6 +426,7 @@ export function TotalPurchasesTab({ filters }) {
 }
 
 export function ItemwisePurchasesTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -594,6 +598,7 @@ export function ItemwisePurchasesTab({ filters }) {
 }
 
 export function POWorkflowTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -707,6 +712,7 @@ export function POWorkflowTab({ filters }) {
 }
 
 export function ProcurementParityTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -806,6 +812,7 @@ export function ProcurementParityTab({ filters }) {
 
 // --- GRN Report Tab -----------------------------------------------------------
 export function GRNReportTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 

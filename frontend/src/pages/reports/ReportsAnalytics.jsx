@@ -8,16 +8,17 @@ import {
 } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
-  fmt,
   exportCSV,
   ExportButton,
   TableShell,
   CardShell,
   MetricCard,
 } from "./ReportShared";
+import { useCurrency } from "../../contexts/CurrencyContext";
 
 // --- Tab: Comparative Trends --------------------------------------------------
 export function ComparativeTrendsTab({ filters }) {
+  const { fmt } = useCurrency();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -139,6 +140,7 @@ export function ComparativeTrendsTab({ filters }) {
 
 // --- Tab: Heatmaps ------------------------------------------------------------
 export function HeatmapsTab({ filters }) {
+  const { fmt } = useCurrency();
   const [heatmap, setHeatmap] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -262,6 +264,7 @@ export function HeatmapsTab({ filters }) {
 
 // --- Tab: Revenue Leaks -------------------------------------------------------
 export function RevenueLeaksTab({ filters }) {
+  const { fmt } = useCurrency();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -476,6 +479,7 @@ export function ProductMixTab({ filters }) {
 
 // --- Tab: Retail Matrix (Engineering) -----------------------------------------
 export function RetailMatrixTab({ filters }) {
+  const { fmt } = useCurrency();
   const [matrix, setMatrix] = useState([]);
   const [loading, setLoading] = useState(true);
 

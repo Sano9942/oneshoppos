@@ -21,7 +21,6 @@ import {
 } from "recharts";
 import { API_BASE as API } from "../../config";
 import {
-  fmt,
   fmtDate,
   exportCSV,
   ExportButton,
@@ -29,9 +28,11 @@ import {
   CardShell,
 } from "./ReportShared";
 import { useAuth } from "../../auth/AuthProvider";
+import { useCurrency } from "../../contexts/CurrencyContext";
 
 // --- Tab: Sales & Stock -------------------------------------------------------
 export function SalesStockTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -134,6 +135,7 @@ export function SalesStockTab({ filters }) {
 
 // --- Tab: Inventory Dump ------------------------------------------------------
 export function InventoryDumpTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [aggregate, setAggregate] = useState(false);
@@ -341,6 +343,7 @@ export function InventoryDumpTab({ filters }) {
 
 // --- Tab: Product Performance -------------------------------------------------
 export function ProductPerformanceTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -497,6 +500,7 @@ export function ProductPerformanceTab({ filters }) {
 
 // --- Tab: Brand Wise ----------------------------------------------------------
 export function BrandWiseTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -622,6 +626,7 @@ export function BrandWiseTab({ filters }) {
 
 // --- Tab: Merchandising Workspace --------------------------------------------
 export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab }) {
+  const { fmt } = useCurrency();
   const [data, setData] = useState(null);
   const [comparison, setComparison] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1278,6 +1283,7 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
 
 // --- Tab: On Hand Inventory ---------------------------------------------------
 export function OnHandTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [aggregate, setAggregate] = useState(false);
@@ -1695,6 +1701,7 @@ export function ReplenishmentTab({ filters }) {
 
 // --- Tab: Pricing & Margin Matrix ---------------------------------------------
 export function PricingMarginTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [aggregate, setAggregate] = useState(false);
@@ -1915,6 +1922,7 @@ function InventoryHealthStat({ label, value, hint }) {
 
 // --- Tab: Dead Stock ---------------------------------------------------------
 export function DeadStockTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [inactiveDays, setInactiveDays] = useState(60);
@@ -2046,6 +2054,7 @@ export function DeadStockTab({ filters }) {
 
 // --- Tab: Stock Aging --------------------------------------------------------
 export function StockAgingTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -2567,6 +2576,7 @@ export function ReplenishmentSmartTab({ filters }) {
 
 // --- Tab: Shrinkage / Stock Discrepancy ----------------------------------------
 export function ShrinkageTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState({});
   const [loading, setLoading] = useState(true);

@@ -2,7 +2,6 @@ import React, { useEffect, useCallback, useState } from "react";
 import { Wallet, Receipt, ListChecks, Shield, Calculator } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
-  fmt,
   fmtDate,
   fmtDateTime,
   exportCSV,
@@ -10,6 +9,7 @@ import {
   TableShell,
   CardShell,
 } from "./ReportShared";
+import { useCurrency } from "../../contexts/CurrencyContext";
 
 function ShiftRequired({ title, body }) {
   return (
@@ -21,6 +21,7 @@ function ShiftRequired({ title, body }) {
 }
 
 export function ShiftSummaryTab({ filters }) {
+  const { fmt } = useCurrency();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -165,6 +166,7 @@ export function ShiftSummaryTab({ filters }) {
 }
 
 export function ShiftSalesTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -296,6 +298,7 @@ export function ShiftSalesTab({ filters }) {
 }
 
 export function PaymentSummaryTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -404,6 +407,7 @@ export function PaymentSummaryTab({ filters }) {
 }
 
 export function CashFlowTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -519,6 +523,7 @@ export function CashFlowTab({ filters }) {
 }
 
 export function CurrentSessionZReportTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -608,6 +613,7 @@ export function CurrentSessionZReportTab({ filters }) {
 }
 
 export function CashAuditTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -710,6 +716,7 @@ export function CashAuditTab({ filters }) {
 }
 
 export function DenominationsTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
 

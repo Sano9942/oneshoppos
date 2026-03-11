@@ -2,13 +2,13 @@ import React, { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, ShieldAlert } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
-  fmt,
   fmtDateTime,
   exportCSV,
   ExportButton,
   TableShell,
   CardShell,
 } from "./ReportShared";
+import { useCurrency } from "../../contexts/CurrencyContext";
 
 function FeatureState({ title, body }) {
   return (
@@ -36,6 +36,7 @@ function buildParams(filters) {
 }
 
 export function DiscountLeakageTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [totals, setTotals] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -158,6 +159,7 @@ export function DiscountLeakageTab({ filters }) {
 }
 
 export function ExceptionsTab({ filters }) {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [type, setType] = useState("negative_margin_sales");
