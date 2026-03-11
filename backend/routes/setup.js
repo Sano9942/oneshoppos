@@ -63,6 +63,7 @@ module.exports = function createSetupRouter(db) {
       outlet_address,
       admin_name,
       admin_pin,
+      cash_denominations,
     } = req.body || {};
 
     // Basic validation
@@ -101,7 +102,8 @@ module.exports = function createSetupRouter(db) {
              timezone         = $6,
              currency_symbol  = $7,
              currency_code    = $8,
-             fiscal_year_start = $9
+             fiscal_year_start = $9,
+             cash_denominations = COALESCE($10, cash_denominations)
            WHERE id = 1`,
           [
             company_name,
@@ -113,6 +115,7 @@ module.exports = function createSetupRouter(db) {
             currency_symbol || '$',
             currency_code || 'USD',
             fiscal_year_start || '01-01',
+            cash_denominations || null,
           ]
         );
 

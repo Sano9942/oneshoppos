@@ -2,6 +2,19 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API } from "../config";
 
+const ALL_TIMEZONES = Intl.supportedValuesOf("timeZone");
+
+const COUNTRY_DENOMS = {
+  Pakistan: [5000, 1000, 500, 100, 50, 20, 10],
+  "United States": [100, 50, 20, 10, 5, 1],
+  "United Kingdom": [50, 20, 10, 5, 2, 1],
+  "United Arab Emirates": [1000, 500, 200, 100, 50, 20, 10, 5],
+  India: [2000, 500, 200, 100, 50, 20, 10],
+  "Saudi Arabia": [500, 200, 100, 50, 10, 5, 1],
+  Canada: [100, 50, 20, 10, 5],
+  Australia: [100, 50, 20, 10, 5],
+};
+
 // Country → { currency_symbol, currency_code, timezones[] }
 const COUNTRY_DATA = {
   Pakistan: { currency_symbol: "Rs", currency_code: "PKR", timezones: ["Asia/Karachi"] },
@@ -92,6 +105,8 @@ export default function SetupWizard() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [tzSearch, setTzSearch] = useState("");
+  const [denomInput, setDenomInput] = useState("");
 
   // Read token from URL
   const token = new URLSearchParams(window.location.search).get("token") || "";
@@ -108,12 +123,21 @@ export default function SetupWizard() {
     fiscal_year_start: "01-01",
     tax_name: "",
     tax_rate: "",
+    denominations: [5000, 1000, 500, 100, 50, 20, 10],
     outlet_name: "Main Store",
     outlet_address: "",
     admin_name: "",
     admin_pin: "",
     confirm_pin: "",
   });
+
+  const addDenom = () => {
+    const v = parseInt(denomInput, 10);
+    if (v > 0 && !form.denominations.includes(v)) {
+      set("denominations", [...form.denominations, v].sort((a, b) => b - a));
+    }
+    setDenomInput("");
+  };
 
   // On mount: check setup status
   useEffect(() => {
@@ -128,12 +152,13 @@ export default function SetupWizard() {
   function set(field, value) {
     setForm((prev) => {
       const next = { ...prev, [field]: value };
-      // Auto-fill currency + first timezone when country changes
+      // Auto-fill currency + first timezone + denominations when country changes
       if (field === "country") {
         const d = COUNTRY_DATA[value] || COUNTRY_DATA.Other;
         next.currency_symbol = d.currency_symbol;
         next.currency_code = d.currency_code;
         next.timezone = d.timezones[0];
+        next.denominations = COUNTRY_DENOMS[value] || [100, 50, 20, 10, 5, 1];
       }
       return next;
     });
@@ -186,6 +211,7 @@ export default function SetupWizard() {
           fiscal_year_start: form.fiscal_year_start,
           tax_name: form.tax_name,
           tax_rate: form.tax_rate,
+          cash_denominations: JSON.stringify(form.denominations),
           outlet_name: form.outlet_name,
           outlet_address: form.outlet_address,
           admin_name: form.admin_name,
@@ -210,7 +236,6 @@ export default function SetupWizard() {
     }
   }
 
-  const timezones = (COUNTRY_DATA[form.country] || COUNTRY_DATA.Other).timezones;
   const fiscalMonth = form.fiscal_year_start ? parseInt(form.fiscal_year_start.split("-")[0], 10) : 1;
 
   return (
@@ -285,12 +310,27 @@ export default function SetupWizard() {
               {step === 2 && (
                 <div className="space-y-4">
                   <h2 className="text-base font-semibold text-slate-800">Time & Currency</h2>
-                  <Field label="Timezone">
-                    <select className={selectCls} value={form.timezone} onChange={(e) => set("timezone", e.target.value)}>
-                      {timezones.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium text-slate-700">Timezone</label>
+                    <input
+                      type="text"
+                      placeholder="Search timezones..."
+                      value={tzSearch}
+                      onChange={(e) => setTzSearch(e.target.value)}
+                      className={inputCls}
+                    />
+                    <select
+                      className={inputCls}
+                      value={form.timezone || ""}
+                      onChange={(e) => set("timezone", e.target.value)}
+                    >
+                      <option value="">Select timezone</option>
+                      {ALL_TIMEZONES
+                        .filter(tz => tz.toLowerCase().includes(tzSearch.toLowerCase()))
+                        .map(tz => <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>)}
                     </select>
                     <LiveClock timezone={form.timezone} />
-                  </Field>
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Currency Symbol">
                       <input className={inputCls} value={form.currency_symbol} onChange={(e) => set("currency_symbol", e.target.value)} placeholder="$" />
@@ -298,6 +338,30 @@ export default function SetupWizard() {
                     <Field label="Currency Code">
                       <input className={inputCls} value={form.currency_code} onChange={(e) => set("currency_code", e.target.value)} placeholder="USD" maxLength={5} />
                     </Field>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium text-slate-700">Cash Denominations</label>
+                    <div className="flex flex-wrap gap-2">
+                      {(form.denominations || [])
+                        .sort((a, b) => b - a)
+                        .map((d) => (
+                          <span key={d} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-sm">
+                            {d}
+                            <button type="button" onClick={() => set("denominations", form.denominations.filter(x => x !== d))} className="text-blue-400 hover:text-red-500">&times;</button>
+                          </span>
+                        ))}
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <input
+                        type="number"
+                        className={inputCls}
+                        placeholder="Add denomination"
+                        value={denomInput}
+                        onChange={(e) => setDenomInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDenom(); } }}
+                      />
+                      <button type="button" onClick={addDenom} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">Add</button>
+                    </div>
                   </div>
                   <Field label="Fiscal Year Start">
                     <select
