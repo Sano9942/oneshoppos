@@ -93,8 +93,10 @@ export default function SetupWizard() {
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
 
-  // Read token from URL
-  const token = new URLSearchParams(window.location.search).get("token") || "";
+  // Read token and tenant slug from URL
+  const searchParams = new URLSearchParams(window.location.search);
+  const token = searchParams.get("token") || "";
+  const tenantSlug = searchParams.get("tenant") || "";
 
   const [form, setForm] = useState({
     company_name: "",
@@ -117,7 +119,7 @@ export default function SetupWizard() {
 
   // On mount: check setup status
   useEffect(() => {
-    fetch(`${API}/setup/status`)
+    fetch(`${API}/setup/status${tenantSlug ? `?tenant=${tenantSlug}` : ""}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.setup_complete) navigate("/login", { replace: true });
@@ -170,11 +172,12 @@ export default function SetupWizard() {
     setError("");
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/setup/complete`, {
+      const res = await fetch(`${API}/setup/complete${tenantSlug ? `?tenant=${tenantSlug}` : ""}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           token,
+          tenant: tenantSlug || undefined,
           company_name: form.company_name,
           country: form.country,
           city: form.city,
