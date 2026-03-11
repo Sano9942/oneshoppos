@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-*Last updated: March 10 2026 — Phase 3 robustness: 8/9 P0+P1 items shipped, offline queuing deferred*
+*Last updated: March 12 2026 — Postgres migration complete and live on Supabase. All phases shipped.*
 
 ---
 
@@ -103,10 +103,41 @@ This file tracks everything we want to build, fix, or improve for SanoPOS.
 3. **Tenant onboarding flow** — production provisioning from super-admin dashboard (not just CLI)
 4. **Tenant-aware scheduled jobs** — stale session cleanup + report scheduler must iterate all tenant DBs
 5. **Subdomain/slug routing** — frontend tenant resolution from URL
-6. **Railway multi-DB volume strategy** — N tenant SQLite files or Postgres migration
+6. ~~**Railway multi-DB volume strategy**~~ — ✅ **Resolved** (Mar 12 2026). Postgres schema-based multi-tenancy (`SET search_path TO tenant_<slug>`) replaces per-tenant SQLite files.
 7. **Backup/restore per-tenant** — current backup operates on single DB
 8. **Rate limiting** — per-tenant request limits
-9. **Timezone Phase 3** (nice-to-have) — write-path unification (~49 `datetime('now','localtime')` → UTC)
+9. **Timezone Phase 3** (nice-to-have) — write-path unification
+
+---
+
+## ✅ Postgres Migration — Complete & Live (Mar 12 2026)
+
+**Branch:** `feature/postgres-migration` — merged to `main` (28 commits, 93 files, +23,188 / -15,139 lines).
+
+**Production:** Railway backend now runs on Supabase Postgres (ap-southeast-1). Fresh DB created via setup wizard.
+
+### What Was Done
+- **Batches 1-9**: All backend route files converted from SQLite callbacks (`db.run/get/all`) to Postgres async/await (`db.query()` with `$1,$2` params). 340/340 pg tests passing.
+- **Pre-merge tasks**: `migrate-pg.js` (migration runner), `scripts/sqlite-to-pg.js` (data migration), `tenant-db-manager-pg.js` + `tenant-db-proxy-pg.js` (MT Postgres infra), boolean audit across all files.
+- **Boot guard**: `index.js` conditionally loads `db-pg` or `db` based on `DATABASE_URL`. `dotenv` loaded first (line 1) to ensure env vars are available.
+- **Cutover**: `DATABASE_URL` set on Railway, `DATA_DIR` removed. Setup wizard created store, outlet, admin account.
+
+### Key New Files
+| File | Purpose |
+|------|---------|
+| `backend/db-pg.js` | pg.Pool wrapper — `query()`, `transaction()`, `getClient()` |
+| `backend/schema-pg.sql` | Full DDL + seed data + schema_version table |
+| `backend/migrate-pg.js` | Version-tracked migration runner |
+| `backend/scripts/sqlite-to-pg.js` | One-time SQLite→Postgres data migration |
+| `backend/tenant-db-manager-pg.js` | Schema-switching multi-tenant |
+| `backend/tenant-db-proxy-pg.js` | AsyncLocalStorage proxy for per-request DB routing |
+| `backend/master-db-pg.js` | Postgres master DB for tenant registry |
+| `docker-compose.yml` | Local Postgres for testing |
+
+### SQLite Cleanup (deferred)
+- `backend/db.js` (SQLite module) still exists — boot guard falls back to it without `DATABASE_URL`
+- SQLite volume still mounted on Railway as safety net
+- After 1 week with no issues: remove volume, remove `db.js`, remove `better-sqlite3` from package.json
 
 ---
 
@@ -263,15 +294,15 @@ These items make the product reliable for the current single-tenant production d
 
 - **Subscription / billing layer** — Stripe or JazzCash integration for plan billing, trial enforcement, subscription expiry. Build after tenant isolation is complete.
 - **Tenant health monitoring** — Super-admin visibility into tenant DAU/MAU, last login, failed jobs, plan limit proximity, DB size. Build after stable multi-tenant infrastructure.
-- **Mobile / tablet POS layout** — Responsive redesign of POS screen for Android tablet use at the counter. Expands addressable market significantly.
-- **IP allowlisting for /api/admin** — Restrict super-admin endpoints to known IPs or add 2FA. Currently public on the internet with only password protection.
-- **Stock discrepancy / shrinkage report** — Automated: (opening stock + purchases) - sales - adjustments = expected; compare to actual count; flag difference. Anti-theft feature for multi-outlet retail.
+- ~~**Mobile / tablet POS layout**~~ — ✅ **Built** (Mar 10 2026). 3-tab nav (Cart/Search/Pay) on `<768px`, sticky pay button, touch-friendly qty controls, 2-col mobile grid; desktop unchanged.
+- ~~**IP allowlisting for /api/admin**~~ — ✅ **Built** (Mar 10 2026). `ADMIN_ALLOWED_IPS` env var (comma-separated IPs/CIDR), `requireAllowedIp` middleware in `admin.js`, backward compatible (empty = allow all).
+- ~~**Stock discrepancy / shrinkage report**~~ — ✅ **Built** (Mar 10 2026). `GET /api/reports/shrinkage` (6-join SQL), `ShrinkageTab` in `ReportsInventory.jsx`, color-coded variance + CSV export.
 
 ### P3 — Nice to Have
 
-- **Customer-facing display** — Second screen or URL (`/customer-display/:session`) showing cart items and total to the customer during checkout. Memorable UX feature.
+- ~~**Customer-facing display**~~ — ✅ **Built** (Mar 10 2026). `backend/routes/customer-display.js` (in-memory Map, 8h auto-cleanup), `CustomerDisplayPage.jsx` dark-theme at `/customer-display`, `POSContext.jsx` debounced (500ms) cart push.
 - **Weighing scale integration** — USB scale support for weight-based pricing. Niche (grocery, pharmacy) but expands addressable market.
-- **API key revocation** — Mechanism to invalidate a specific employee token without requiring password change. Security hardening.
+- ~~**API key revocation**~~ — ✅ **Built** (Mar 10 2026). `migrate74.js` (`revoked_tokens` table + `tokens_revoked_before`), `jti` claim in `signAccessToken`, revocation check in `loadTenantAndPerms`, revoke endpoints in `employees.js`, Revoke button in `EmployeesRedesign.jsx`.
 
 ---
 
@@ -301,3 +332,5 @@ These items make the product reliable for the current single-tenant production d
 | Mar 10 2026 | Phase 3 P0 deep audit | Split payment confirmed fully built (moved to shipped). Rate limiter found DISABLED (`skip: () => true` in index.js:191) — 1-line fix needed. Soft deletes, idempotency, offline queuing confirmed not built. Offline queuing worse than estimated — SW only handles GET, AuthProvider blocks POST with 503, no IndexedDB/queue/retry exists. |
 | Mar 10 2026 | **Phase 3 shipped** | 8/9 items built on `feature/phase3-robustness` (8 commits, 27 files, 1,824 lines): rate limiter fix, idempotency on sales (migrate71), price audit log, email digest, session timeout at POS, onboarding checklist, setup wizard (migrate72), soft deletes (migrate73). Offline queuing deferred. 395/395 tests passing. Locally tested via Playwright. |
 | Mar 10 2026 | **Phase 3 remaining shipped** | 5 items built on `feature/phase3-remaining` (4 commits, 21 files, 1,003 lines): mobile/tablet POS layout (3-tab nav, sticky pay button), IP allowlisting for /api/admin (CIDR matching), token revocation (migrate74, jti claim, revoke endpoints), stock shrinkage report (6-join SQL + ShrinkageTab), customer-facing display (/customer-display page + in-memory cart sync). 395/395 tests passing. Frontend build clean. |
+| Mar 11 2026 | **Postgres migration — pre-merge tasks** | 4 tasks completed on `feature/postgres-migration`: last SQLite files converted (email.js, printer routes, registerAllRoutes.js), migrate-pg.js migration runner, sqlite-to-pg.js cutover script + checklist, MT Postgres infra (tenant-db-manager-pg, tenant-db-proxy-pg). 340/340 pg tests passing. |
+| Mar 12 2026 | **Postgres migration merged + deployed** | `feature/postgres-migration` merged to `main` (28 commits, 93 files, +23,188/-15,139 lines). Boot guard added (conditional db-pg/db import). dotenv load order fix (must load before boot guard). Supabase Postgres provisioned (ap-southeast-1). `DATABASE_URL` set on Railway, `DATA_DIR` removed. Fresh DB created via setup wizard. `schema-pg.sql` seed row fix for company_profile. Production live on Postgres. |

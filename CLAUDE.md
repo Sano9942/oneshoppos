@@ -10,9 +10,9 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 ## Current Status Snapshot (March 2026)
 
 - Latest migration (SQLite) is `backend/migrate74.js`
-- **Postgres migration COMPLETE** on `feature/postgres-migration` branch — all backend files converted, 340/340 pg integration tests passing (Batches 1-9 + pre-merge tasks). See "Postgres Migration" section below.
-- **Pre-merge tasks COMPLETE** (Mar 11 2026): boolean audit, `migrate-pg.js` migration runner, `sqlite-to-pg.js` cutover script, `tenant-db-manager-pg.js` + `tenant-db-proxy-pg.js` MT infrastructure
-- **CRITICAL: `db-pg.js` requires `DATABASE_URL`** — merging to main without setting this env var on Railway will crash the app at boot. Must either add a boot guard OR set `DATABASE_URL` before deploying.
+- **Postgres migration COMPLETE and LIVE** (Mar 12 2026) — merged to `main`, production running on Supabase Postgres. Boot guard in `index.js` conditionally loads `db-pg` (Postgres) or `db` (SQLite) based on `DATABASE_URL`. 340/340 pg integration tests passing.
+- **Production database: Supabase Postgres** — `DATABASE_URL` set on Railway, `DATA_DIR` removed. Fresh DB via setup wizard (no SQLite data migrated). SQLite volume still mounted on Railway as safety net.
+- `schema-pg.sql` includes seed INSERT for `company_profile` row (required for setup wizard token generation at boot).
 - **Phase 3 Remaining complete (Mar 10 2026)**: 5 items shipped — mobile/tablet POS layout, IP allowlisting for admin API, JWT token revocation (migrate74), stock shrinkage report, customer-facing display
 - **Roadmap Phase 3 complete (Mar 10 2026)**: 8 of 9 core robustness items shipped (offline queuing deferred) — rate limiter activation, session timeout at POS, idempotency on sales, price change audit log, end-of-day email digest, onboarding checklist, setup wizard, soft deletes
 - **Roadmap Phase 2 complete (Mar 9 2026)**: All 25 remaining roadmap items shipped in 9 parallel sessions — loyalty/wallet frontend, security fixes (SEC6+SEC8), reorder alerts, accounting/HR wire-up, PO edit+approval, orders detail tabs, quotations email, parked sales page, stock/transfer/supplier/category guards, CRM typed activities, backup progress, notifications, serial numbers, gift cards, PO templates, stock-by-outlet popup, action history logging, reports governance UI
@@ -513,8 +513,15 @@ The backend is being migrated from SQLite3 to PostgreSQL on branch `feature/post
 - **Cutover script**: `backend/scripts/sqlite-to-pg.js` — one-time data migration using `better-sqlite3` (sync reads) → Postgres (async writes). FK-ordered table insertion, boolean 0/1→true/false conversion, SERIAL sequence resets. See `docs/POSTGRES-CUTOVER-CHECKLIST.md`.
 - **MT Postgres infra**: `backend/tenant-db-manager-pg.js` (shared pg.Pool + `SET search_path TO tenant_<slug>` per request, 60s tenant cache, same API as SQLite version). `backend/tenant-db-proxy-pg.js` (AsyncLocalStorage proxy for `query`/`transaction`/`getClient`). `index.js` uses `HAS_POSTGRES = !!process.env.DATABASE_URL` to choose PG vs SQLite MT modules.
 
-### CRITICAL: Merge/Deploy Warning
-- `index.js` line 4 unconditionally does `require("./db-pg")` which creates a `pg.Pool` from `DATABASE_URL`
-- Without `DATABASE_URL` set, pool queries fail at boot → app crashes
-- **Before deploying to Railway after merge**: either (a) add a boot guard to conditionally import `db-pg` vs `db`, OR (b) set `DATABASE_URL` on Railway and run the cutover checklist first
-- The SQLite `start.sh` branch still works if `DATABASE_URL` is not set, BUT `index.js` will still fail because it imports `db-pg` at the top level regardless of `start.sh`
+### Boot Guard (index.js line 2)
+- `require("dotenv").config(...)` loads `.env` BEFORE the conditional import on line 5
+- `const db = process.env.DATABASE_URL ? require("./db-pg") : require("./db")` — loads Postgres or SQLite based on env
+- Railway has `DATABASE_URL` set → runs Postgres. Local dev without `.env` → falls back to SQLite.
+- `start.sh` also branches: Postgres mode runs `migrate-pg.js` → `index.js`; SQLite mode runs symlinks + `run_migrations.js` → `index.js`
+
+### Production Deployment (Live Mar 12 2026)
+- **Database**: Supabase Postgres (ap-southeast-1 region)
+- `DATABASE_URL` set on Railway, `DATA_DIR` removed
+- Fresh DB created via setup wizard (no SQLite data migrated — test data was discarded)
+- `schema-pg.sql` seeds a `company_profile` row with `setup_complete = false` for first-run token generation
+- SQLite volume still mounted on Railway as safety net — can be removed after 1 week
