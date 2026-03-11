@@ -437,48 +437,57 @@ function requirePerm(permission) {
   };
 }
 
-// Company profile cache — loaded once on startup and refreshed every 5 minutes.
+// Company profile cache — per-tenant Map (MT-safe). Single-tenant uses "_default" key.
 // Provides req.company.timezone (and other profile fields) to all route handlers.
-let _cachedCompany = { timezone: "UTC" };
-let _companyLastCheck = 0;
+const _companyCache = new Map(); // key: tenantId|"_default", value: { profile, lastCheck }
 const COMPANY_CACHE_MS = 5 * 60 * 1000; // 5 min
 
-// Eager startup load — also generates setup token if first-run
-(async () => {
-  try {
-    const { rows: [row] } = await db.query("SELECT * FROM company_profile WHERE id = 1");
-    if (row) {
-      _cachedCompany = row;
-      // If setup not yet complete, generate a one-time token and log the setup URL
-      if (!row.setup_complete) {
-        const setupToken = crypto.randomBytes(32).toString("hex");
-        await db.query("UPDATE company_profile SET setup_token = $1 WHERE id = 1", [setupToken]);
-        _cachedCompany = { ...row, setup_token: setupToken };
-        const PORT_FOR_LOG = process.env.PORT || 5000;
-        console.log(`\n===== SETUP URL: http://localhost:${PORT_FOR_LOG}/setup?token=${setupToken} =====\n`);
+// Eager startup load — only in single-tenant mode (MT loads lazily per-tenant)
+if (!IS_MULTI_TENANT) {
+  (async () => {
+    try {
+      const { rows: [row] } = await db.query("SELECT * FROM company_profile WHERE id = 1");
+      if (row) {
+        _companyCache.set("_default", { profile: row, lastCheck: Date.now() });
+        // If setup not yet complete, generate a one-time token and log the setup URL
+        if (!row.setup_complete) {
+          const setupToken = crypto.randomBytes(32).toString("hex");
+          await db.query("UPDATE company_profile SET setup_token = $1 WHERE id = 1", [setupToken]);
+          _companyCache.set("_default", { profile: { ...row, setup_token: setupToken }, lastCheck: Date.now() });
+          const PORT_FOR_LOG = process.env.PORT || 5000;
+          console.log(`\n===== SETUP URL: http://localhost:${PORT_FOR_LOG}/setup?token=${setupToken} =====\n`);
+        }
+      } else {
+        _companyCache.set("_default", { profile: { timezone: "UTC" }, lastCheck: Date.now() });
       }
+    } catch (err) {
+      console.error("[loadCompanyProfile startup]", err.message);
+      _companyCache.set("_default", { profile: { timezone: "UTC" }, lastCheck: Date.now() });
     }
-    _companyLastCheck = Date.now();
-  } catch (err) {
-    console.error("[loadCompanyProfile startup]", err.message);
-    _companyLastCheck = Date.now();
-  }
-})();
+  })();
+}
 
 function loadCompanyProfile(req, res, next) {
+  const cacheKey = IS_MULTI_TENANT ? (req.tenantId || "_default") : "_default";
+  const entry = _companyCache.get(cacheKey) || { profile: { timezone: "UTC" }, lastCheck: 0 };
   const now = Date.now();
-  if (now - _companyLastCheck > COMPANY_CACHE_MS) {
-    _companyLastCheck = now; // prevent multiple concurrent refreshes
+
+  if (now - entry.lastCheck > COMPANY_CACHE_MS) {
+    entry.lastCheck = now; // prevent multiple concurrent refreshes
+    _companyCache.set(cacheKey, entry);
     db.query("SELECT * FROM company_profile WHERE id = 1").then(({ rows: [row] }) => {
-      if (row) _cachedCompany = row;
+      if (row) {
+        entry.profile = row;
+        _companyCache.set(cacheKey, entry);
+      }
     }).catch(() => {});
   }
-  req.company = _cachedCompany;
+  req.company = entry.profile;
 
   // Setup gate: if setup_complete = false, block all routes except /api/setup and /api/health
   if (
-    _cachedCompany &&
-    !_cachedCompany.setup_complete &&
+    entry.profile &&
+    !entry.profile.setup_complete &&
     !req.path.startsWith("/api/setup") &&
     !req.path.startsWith("/api/health")
   ) {
