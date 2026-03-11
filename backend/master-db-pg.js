@@ -119,4 +119,11 @@ function _getDb() {
   return _db;
 }
 
-module.exports = { init, createTenant, getTenantBySlug, getTenantById };
+/**
+ * Proxy query() to the underlying db pool (public schema).
+ */
+async function query(sql, params) {
+  return _getDb().query(sql, params);
+}
+
+module.exports = { init, createTenant, getTenantBySlug, getTenantById, query };
