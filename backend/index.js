@@ -12,13 +12,25 @@ const registerAllRoutes = require("./routes/registerAllRoutes");
 
 // Multi-tenant imports (lazy-used when MULTI_TENANT=1)
 const IS_MULTI_TENANT = process.env.MULTI_TENANT === "1";
+const HAS_POSTGRES = !!process.env.DATABASE_URL;
 let asyncStore, createDbProxy, dbProxy, tenantDbManager;
 if (IS_MULTI_TENANT) {
-  const proxy = require("./tenant-db-proxy");
-  asyncStore = proxy.asyncStore;
-  createDbProxy = proxy.createDbProxy;
-  dbProxy = createDbProxy();
-  tenantDbManager = require("./tenant-db-manager");
+  if (HAS_POSTGRES) {
+    // Postgres schema-switching mode
+    const proxyMod = require("./tenant-db-proxy-pg");
+    asyncStore = proxyMod.asyncStore;
+    createDbProxy = proxyMod.createDbProxy;
+    dbProxy = createDbProxy();
+    tenantDbManager = require("./tenant-db-manager-pg");
+    tenantDbManager.init(db);
+  } else {
+    // Legacy SQLite file-pool mode
+    const proxyMod = require("./tenant-db-proxy");
+    asyncStore = proxyMod.asyncStore;
+    createDbProxy = proxyMod.createDbProxy;
+    dbProxy = createDbProxy();
+    tenantDbManager = require("./tenant-db-manager");
+  }
 }
 const {
   verifyConnection,
@@ -381,8 +393,15 @@ async function resolveTenant(req, res, next) {
     const tenantDb = await tenantDbManager.getDb(req.tenantId);
 
     // Look up tenant slug for file paths
-    const { getTenantById } = require("./master-db-pg");
-    const tenant = await getTenantById(req.tenantId);
+    const masterMod = HAS_POSTGRES ? require("./master-db-pg") : require("./master-db");
+    const tenant = HAS_POSTGRES
+      ? await masterMod.getTenantById(req.tenantId)
+      : await new Promise((resolve, reject) => {
+          masterMod.getMasterDb().get("SELECT * FROM tenants WHERE id = ?", [req.tenantId], (err, row) => {
+            if (err) return reject(err);
+            resolve(row || null);
+          });
+        });
     if (!tenant) {
       return res.status(403).json({ error: "Tenant not found.", code: "TENANT_NOT_FOUND" });
     }
