@@ -3,6 +3,7 @@ import { PauseCircle, RefreshCw, Trash2 } from "lucide-react";
 import { API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import { fmtLocalDateTime } from "../../utils/dates";
+import { useCurrency } from "../../contexts/CurrencyContext";
 import {
   Button,
   EmptyState,
@@ -13,6 +14,7 @@ import {
 
 export default function ParkedSalesRedesign() {
   const { authHeaders } = useAuth();
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [outletFilter, setOutletFilter] = useState("");
@@ -147,7 +149,7 @@ export default function ParkedSalesRedesign() {
                       })()}
                     </td>
                     <td className="px-3 py-2 text-right font-semibold text-(--ui-text)">
-                      PKRs {Number(r.total || 0).toFixed(2)}
+                      {fmt(r.total)}
                     </td>
                     <td className="px-3 py-2 text-(--ui-text-muted)">
                       {r.parked_at || r.created_at

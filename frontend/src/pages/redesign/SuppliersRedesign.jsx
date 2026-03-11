@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Search, Trash2, Truck } from "lucide-react";
 import { API_BASE as API } from "../../config";
+import { useCurrency } from "../../contexts/CurrencyContext";
 import {
   Badge,
   Button,
@@ -25,11 +26,8 @@ const EMPTY = {
   credit_limit: 0,
 };
 
-function fmt(v) {
-  return `PKRs ${Number(v || 0).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 export default function SuppliersRedesign() {
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -361,7 +359,7 @@ export default function SuppliersRedesign() {
                       ) : null}
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs text-(--ui-text-muted)">Credit Limit (PKRs)</label>
+                      <label className="mb-1 block text-xs text-(--ui-text-muted)">Credit Limit</label>
                       <Input
                         type="number"
                         min={0}

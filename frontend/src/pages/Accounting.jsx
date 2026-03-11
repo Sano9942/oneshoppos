@@ -3,10 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_BASE as API } from "../config";
 import { useAuth } from "../auth/AuthProvider";
 import { fmtUtcDate } from "../utils/dates";
-
-function fmt(v) {
-  return `PKRs ${Number(v || 0).toFixed(2)}`;
-}
+import { useCurrency } from "../contexts/CurrencyContext";
 
 function exportCSV(rows, filename) {
   if (!rows.length) return;
@@ -31,6 +28,7 @@ const TABS = [
 ];
 
 export default function Accounting() {
+  const { fmt } = useCurrency();
   const { authHeaders } = useAuth();
   const [tab, setTab] = useState("pnl");
   const [from, setFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10));

@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, RefreshCw, X, BookOpen, Ban } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
+import { useCurrency } from "../../contexts/CurrencyContext";
 import { fmtLocalDate as fmtDate } from "../../utils/dates";
 import {
   Badge,
@@ -19,16 +20,13 @@ const STATUS_TONE = {
   unpaid: "danger",
 };
 
-function money(n) {
-  return `PKRs ${Number(n || 0).toFixed(2)}`;
-}
-
 function calcDue(inv) {
   return Number(inv.amount_due ?? Number(inv.amount || 0) - Number(inv.amount_paid || 0));
 }
 
 export default function SupplierPayablesRedesign() {
   const { authHeaders, hasPerm } = useAuth();
+  const { fmt: money } = useCurrency();
   const isAdmin = hasPerm("all_access");
   const [tab, setTab] = useState("aging");
   const [loading, setLoading] = useState(false);

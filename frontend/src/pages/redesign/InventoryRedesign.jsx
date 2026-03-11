@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { BarChart2, CreditCard, Download, Hash, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import { fmtUtcDateTime } from "../../utils/dates";
+import { useCurrency } from "../../contexts/CurrencyContext";
 import {
   Badge,
   BulkActionBar,
@@ -152,6 +153,7 @@ function parseCSV(text) {
 }
 
 export default function InventoryRedesign() {
+  const { fmt } = useCurrency();
   const { authHeaders, hasPerm } = useAuth();
   const navigate = useNavigate();
   const canViewAllLocations = hasPerm("all_access");
@@ -524,7 +526,7 @@ export default function InventoryRedesign() {
           {/* Generate new gift card */}
           <div className="mb-4 flex items-end gap-2 rounded border border-(--ui-border) bg-(--ui-muted-surface) p-3">
             <div>
-              <label className="mb-1 block text-xs text-(--ui-text-muted)">Initial Value (PKRs)</label>
+              <label className="mb-1 block text-xs text-(--ui-text-muted)">Initial Value</label>
               <Input
                 type="number"
                 min="1"
@@ -561,7 +563,7 @@ export default function InventoryRedesign() {
                   <span className="font-mono font-medium text-(--ui-text)">{gcLookupResult.code}</span>
                   {" · "}
                   <span className="text-(--ui-text-muted)">
-                    Balance: PKRs {Number(gcLookupResult.remaining_value ?? gcLookupResult.balance ?? 0).toFixed(2)}
+                    Balance: {fmt(gcLookupResult.remaining_value ?? gcLookupResult.balance ?? 0)}
                   </span>
                   {" · "}
                   <Badge tone={gcLookupResult.status === "active" ? "success" : "default"}>
@@ -589,10 +591,10 @@ export default function InventoryRedesign() {
                   <tr key={gc.id} className="border-t border-(--ui-border)">
                     <td className="px-3 py-2 font-mono text-xs text-(--ui-text)">{gc.code}</td>
                     <td className="px-3 py-2 text-right text-(--ui-text)">
-                      PKRs {Number(gc.initial_value || 0).toFixed(2)}
+                      {fmt(gc.initial_value)}
                     </td>
                     <td className="px-3 py-2 text-right font-medium text-(--ui-text)">
-                      PKRs {Number(gc.remaining_value ?? gc.balance ?? gc.initial_value ?? 0).toFixed(2)}
+                      {fmt(gc.remaining_value ?? gc.balance ?? gc.initial_value ?? 0)}
                     </td>
                     <td className="px-3 py-2">
                       <Badge tone={gc.status === "active" ? "success" : "default"}>{gc.status || "active"}</Badge>
@@ -853,10 +855,10 @@ export default function InventoryRedesign() {
                     {p.sku || "-"}
                   </td>
                   <td className="px-3 py-2 text-right text-(--ui-text)">
-                    PKRs {(Number(p.price || 0)).toFixed(2)}
+                    {fmt(p.price)}
                   </td>
                   <td className="px-3 py-2 text-right text-(--ui-text-muted)">
-                    PKRs {(Number(p.cost_price || 0)).toFixed(2)}
+                    {fmt(p.cost_price)}
                   </td>
                   <td className="px-3 py-2 text-right text-(--ui-text)">
                     {p.total_stock ?? 0}

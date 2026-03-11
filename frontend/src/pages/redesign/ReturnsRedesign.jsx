@@ -14,14 +14,12 @@ import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import { ArrowLeftRight, Plus, Search } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
-
-function money(v) {
-  return `PKRs ${Number(v || 0).toFixed(2)}`;
-}
+import { useCurrency } from "../../contexts/CurrencyContext";
 
 const fmtDate = fmtUtcDateTime;
 
 export default function ReturnsRedesign() {
+  const { fmt: money } = useCurrency();
   const location = useLocation();
   const { authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
@@ -403,7 +401,7 @@ export default function ReturnsRedesign() {
                             onMouseDown={() => addProductToItems(p)}
                           >
                             <p className="font-medium text-(--ui-text)">{p.name}</p>
-                            <p className="text-xs text-(--ui-text-muted)">{p.barcode || p.sku || "-"} | PKRs {Number(p.price || 0).toFixed(2)}</p>
+                            <p className="text-xs text-(--ui-text-muted)">{p.barcode || p.sku || "-"} | {money(p.price)}</p>
                           </button>
                         ))}
                       </div>

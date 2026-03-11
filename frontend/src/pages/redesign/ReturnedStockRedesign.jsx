@@ -14,14 +14,12 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 
 import { fmtUtcDateTime } from "../../utils/dates";
-
-function money(v) {
-  return `PKRs ${Number(v || 0).toFixed(2)}`;
-}
+import { useCurrency } from "../../contexts/CurrencyContext";
 
 const fmtDate = fmtUtcDateTime;
 
 export default function ReturnedStockRedesign() {
+  const { fmt: money } = useCurrency();
   const { employee } = useAuth();
   const [rows, setRows] = useState([]);
   const [suppliers, setSuppliers] = useState([]);

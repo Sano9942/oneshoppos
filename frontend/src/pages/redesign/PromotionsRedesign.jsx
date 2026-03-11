@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Percent, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
+import { useCurrency } from "../../contexts/CurrencyContext";
 import {
   Badge,
   Button,
@@ -60,15 +61,16 @@ function normalizePromoPayload(src, override = {}) {
   };
 }
 
-function describeValue(row) {
+function describeValue(row, fmt) {
   const value = Number(row.value || 0);
   if (row.type === "bxgy") return `Buy ${row.buy_qty || 0} / Get ${row.get_qty || 0}`;
   if (String(row.type || "").includes("percent")) return `${value}%`;
-  return `PKRs ${value.toFixed(2)}`;
+  return fmt(value);
 }
 
 export default function PromotionsRedesign() {
   const { authHeaders } = useAuth();
+  const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -410,10 +412,10 @@ export default function PromotionsRedesign() {
                     <td className="px-3 py-2 font-medium text-(--ui-text)">{row.name}</td>
                     <td className="px-3 py-2 text-(--ui-text-muted)">{TYPE_LABELS[row.type] || row.type}</td>
                     <td className="px-3 py-2 text-(--ui-text)">
-                      {describeValue(row)}
+                      {describeValue(row, fmt)}
                       {(row.type === "threshold_percent" || row.type === "threshold_fixed") &&
                       Number(row.min_order_amount || 0) > 0
-                        ? ` (min PKRs ${Number(row.min_order_amount).toFixed(2)})`
+                        ? ` (min ${fmt(row.min_order_amount)})`
                         : ""}
                     </td>
                     <td className="px-3 py-2 text-(--ui-text-muted)">
@@ -468,7 +470,7 @@ export default function PromotionsRedesign() {
           }
           right={
             <span className="text-xs text-(--ui-text-muted)">
-              Cart Total: PKRs {quoteOrderTotal.toFixed(2)}
+              Cart Total: {fmt(quoteOrderTotal)}
             </span>
           }
         />
@@ -510,10 +512,10 @@ export default function PromotionsRedesign() {
                       <td className="px-3 py-2 text-(--ui-text)">{item.name}</td>
                       <td className="px-3 py-2 text-right text-(--ui-text)">{item.quantity}</td>
                       <td className="px-3 py-2 text-right text-(--ui-text)">
-                        PKRs {Number(item.price || 0).toFixed(2)}
+                        {fmt(item.price)}
                       </td>
                       <td className="px-3 py-2 text-right font-medium text-(--ui-text)">
-                        PKRs {(Number(item.price || 0) * Number(item.quantity || 0)).toFixed(2)}
+                        {fmt(Number(item.price || 0) * Number(item.quantity || 0))}
                       </td>
                       <td className="px-3 py-2 text-right">
                         <Button size="sm" tone="danger" onClick={() => removeQuoteItem(item.product_id)}>
@@ -554,7 +556,7 @@ export default function PromotionsRedesign() {
                 <div className="rounded border border-emerald-200 bg-emerald-50 p-2">
                   <p className="text-xs text-emerald-700">Total Promotion Discount</p>
                   <p className="text-base font-semibold text-emerald-800">
-                    PKRs {Number(quoteResult.total_promotion_discount || 0).toFixed(2)}
+                    {fmt(quoteResult.total_promotion_discount)}
                   </p>
                 </div>
                 <div className="max-h-56 overflow-auto rounded border border-(--ui-border)">
@@ -572,7 +574,7 @@ export default function PromotionsRedesign() {
                           <td className="px-2 py-1 text-(--ui-text)">{ap.name}</td>
                           <td className="px-2 py-1 text-(--ui-text-muted)">{ap.type}</td>
                           <td className="px-2 py-1 text-right text-(--ui-text)">
-                            PKRs {Number(ap.discount || 0).toFixed(2)}
+                            {fmt(ap.discount)}
                           </td>
                         </tr>
                       ))}
@@ -669,7 +671,7 @@ export default function PromotionsRedesign() {
               {form.type === "threshold_percent" || form.type === "threshold_fixed" ? (
                 <div>
                   <label className="mb-1 block text-xs text-(--ui-text-muted)">
-                    Minimum Order Amount (PKRs)
+                    Minimum Order Amount
                   </label>
                   <Input
                     type="number"

@@ -20,7 +20,7 @@ const STATUS_TONE = {
 };
 
 import { fmtLocalDate } from "../../utils/dates";
-const money = (v) => `PKRs ${Number(v || 0).toFixed(2)}`;
+import { useCurrency } from "../../contexts/CurrencyContext";
 const fmtDate = fmtLocalDate;
 
 const EMPTY_FORM = {
@@ -31,6 +31,7 @@ const EMPTY_ITEM = { product_id: "", quantity: 1, unit_price: 0, tax_rate: 0 };
 
 export default function QuotationsRedesign() {
   const { authHeaders } = useAuth();
+  const { fmt: money } = useCurrency();
   const [rows, setRows] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);

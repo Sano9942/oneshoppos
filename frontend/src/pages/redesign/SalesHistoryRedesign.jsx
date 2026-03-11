@@ -14,10 +14,7 @@ import { API_BASE as API } from "../../config";
 import InvoiceView from "../InvoiceView";
 import { Ban, Download, FileText, Printer, RefreshCw, Search } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
-
-function money(n) {
-  return `PKRs ${Number(n || 0).toFixed(2)}`;
-}
+import { useCurrency } from "../../contexts/CurrencyContext";
 
 const formatDate = fmtUtcDateTime;
 
@@ -60,6 +57,7 @@ function exportCsv(rows) {
 }
 
 export default function SalesHistoryRedesign() {
+  const { fmt: money } = useCurrency();
   const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);

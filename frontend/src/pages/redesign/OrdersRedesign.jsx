@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckSquare, Download, Eye, Package, RefreshCw, Save, Search, Truck } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
+import { useCurrency } from "../../contexts/CurrencyContext";
 import { API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import {
@@ -61,6 +62,7 @@ function exportCsv(rows) {
 }
 
 export default function OrdersRedesign() {
+  const { fmt } = useCurrency();
   const { authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -472,7 +474,7 @@ export default function OrdersRedesign() {
                         </Badge>
                       </td>
                       <td className="px-3 py-2 text-right font-semibold text-(--ui-text)">
-                        PKRs {Number(r.grand_total || 0).toFixed(2)}
+                        {fmt(r.grand_total)}
                       </td>
                       <td className="px-3 py-2 text-center">
                         <Button
@@ -607,7 +609,7 @@ export default function OrdersRedesign() {
                       {(detail.items || []).map((i) => (
                         <div key={i.id} className="rounded border border-(--ui-border) p-2 text-xs">
                           <p className="font-medium text-(--ui-text)">{i.title || i.sku || i.barcode || "Item"}</p>
-                          <p className="text-(--ui-text-muted)">Qty {i.qty} | Unit PKRs {Number(i.unit_price || 0).toFixed(2)}</p>
+                          <p className="text-(--ui-text-muted)">Qty {i.qty} | Unit {fmt(i.unit_price)}</p>
                         </div>
                       ))}
                     </>
@@ -631,7 +633,7 @@ export default function OrdersRedesign() {
                             {(detail.transactions || []).map((t) => (
                               <tr key={t.id} className="border-b border-(--ui-border)">
                                 <td className="py-1 pr-2 font-semibold text-(--ui-text)">
-                                  PKRs {Number(t.amount || 0).toFixed(2)}
+                                  {fmt(t.amount)}
                                 </td>
                                 <td className="py-1 pr-2 text-(--ui-text-muted)">{t.method || t.gateway || "-"}</td>
                                 <td className="py-1 text-(--ui-text-muted)">{fmtUtcDateTime(t.created_at || t.timestamp)}</td>

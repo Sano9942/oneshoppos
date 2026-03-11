@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
+import { useCurrency } from "../../contexts/CurrencyContext";
 import {
   Badge,
   Button,
@@ -15,8 +16,6 @@ const LEAVE_TYPES = ["annual", "sick", "casual", "unpaid", "other"];
 const LEAVE_STATUS_TONE = { pending: "warning", approved: "success", rejected: "danger" };
 const PERIOD_STATUS_TONE = { open: "info", draft: "info", generated: "warning", finalized: "success" };
 const fmtDate = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—";
-const money = (v) => `PKRs ${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
 const EMPTY_LEAVE = { employee_id: "", type: "annual", start_date: "", end_date: "", days: 1, reason: "" };
 const EMPTY_PERIOD = { period_name: "", start_date: "", end_date: "" };
 
@@ -50,6 +49,7 @@ function exportCSV(rows, filename) {
 
 export default function HRManagementRedesign() {
   const { authHeaders } = useAuth();
+  const { fmt: money } = useCurrency();
   const [tab, setTab] = useState("leave");
   const [employees, setEmployees] = useState([]);
   const [leaves, setLeaves] = useState([]);

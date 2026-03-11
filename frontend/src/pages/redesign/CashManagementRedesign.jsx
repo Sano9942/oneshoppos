@@ -13,12 +13,7 @@ import { API_BASE as API } from "../../config";
 import { Calculator, Download, RefreshCw } from "lucide-react";
 import { useAuth } from "../../auth/AuthProvider";
 import { fmtUtcDateTime } from "../../utils/dates";
-
-const DENOMS = [5000, 1000, 500, 100, 50, 20, 10];
-
-function money(v) {
-  return `PKRs ${Number(v || 0).toFixed(2)}`;
-}
+import { useCurrency } from "../../contexts/CurrencyContext";
 
 const fmtDate = fmtUtcDateTime;
 
@@ -62,6 +57,7 @@ function exportCsv(rows) {
 
 export default function CashManagementRedesign() {
   const { hasPerm } = useAuth();
+  const { fmt: money, denominations } = useCurrency();
   const canViewAllOutlets = hasPerm("all_access");
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
@@ -74,14 +70,14 @@ export default function CashManagementRedesign() {
   const [openModal, setOpenModal] = useState(false);
   const [openForm, setOpenForm] = useState({ employee_id: "" });
   const [openingDenoms, setOpeningDenoms] = useState(
-    DENOMS.map((d) => ({ denomination: d, count: 0 })),
+    denominations.map((d) => ({ denomination: d, count: 0 })),
   );
 
   const [closeModal, setCloseModal] = useState(false);
   const [closeNotes, setCloseNotes] = useState("");
   const [varianceReason, setVarianceReason] = useState("");
   const [varianceApprovedBy, setVarianceApprovedBy] = useState("");
-  const [denoms, setDenoms] = useState(DENOMS.map((d) => ({ denomination: d, count: 0 })));
+  const [denoms, setDenoms] = useState(denominations.map((d) => ({ denomination: d, count: 0 })));
   const [closeResult, setCloseResult] = useState(null);
   const [denomDetail, setDenomDetail] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -170,7 +166,7 @@ export default function CashManagementRedesign() {
       if (!res.ok) throw new Error(data.error || "Failed to open shift");
       setOpenModal(false);
       setOpenForm({ employee_id: "" });
-      setOpeningDenoms(DENOMS.map((d) => ({ denomination: d, count: 0 })));
+      setOpeningDenoms(denominations.map((d) => ({ denomination: d, count: 0 })));
       await loadData();
     } catch (e2) {
       setError(e2.message || "Failed to open shift");
@@ -368,7 +364,7 @@ export default function CashManagementRedesign() {
                       />
                       <p className="text-right text-sm text-(--ui-text-muted)">
                         {d.denomination * Number(d.count || 0) > 0
-                          ? `PKRs ${(d.denomination * Number(d.count || 0)).toLocaleString()}`
+                          ? money(d.denomination * Number(d.count || 0))
                           : "—"}
                       </p>
                     </div>
@@ -411,7 +407,7 @@ export default function CashManagementRedesign() {
                   onClick={() => {
                     setCloseModal(false);
                     setCloseResult(null);
-                    setDenoms(DENOMS.map((d) => ({ denomination: d, count: 0 })));
+                    setDenoms(denominations.map((d) => ({ denomination: d, count: 0 })));
                     setVarianceReason("");
                     setVarianceApprovedBy("");
                     setCloseNotes("");
@@ -448,7 +444,7 @@ export default function CashManagementRedesign() {
                         />
                         <p className="text-right text-sm text-(--ui-text-muted)">
                           {d.denomination * Number(d.count || 0) > 0
-                            ? `PKRs ${(d.denomination * Number(d.count || 0)).toLocaleString()}`
+                            ? money(d.denomination * Number(d.count || 0))
                             : "—"}
                         </p>
                       </div>

@@ -38,11 +38,12 @@ const EMPTY_FORM = {
 };
 
 import { fmtLocalDateTime } from "../../utils/dates";
-const money = (v) => `PKRs ${Number(v || 0).toFixed(2)}`;
+import { useCurrency } from "../../contexts/CurrencyContext";
 const fmtDate = fmtLocalDateTime;
 
 export default function CRMRedesign() {
   const { authHeaders } = useAuth();
+  const { fmt: money } = useCurrency();
   const [leads, setLeads] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);

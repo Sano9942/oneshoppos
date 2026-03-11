@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Tag, Plus, Edit2, Trash2, X, RefreshCw, Printer, Check } from "lucide-react";
 
 import { API } from '../config';
+import { useCurrency } from '../contexts/CurrencyContext';
 
 // ── Minimal Code128B encoder ─────────────────────────────────────────────────
 const CODE128_TABLE = (() => {
@@ -83,7 +84,7 @@ function buildBarcodeSVG(doc, text, height) {
 }
 
 // Build a label DOM element using safe DOM APIs (no innerHTML)
-function buildLabelEl(doc, template, item) {
+function buildLabelEl(doc, template, item, fmt) {
   const fs = template.font_size || 10;
   const label = doc.createElement("div");
   label.className = "label";
@@ -114,12 +115,12 @@ function buildLabelEl(doc, template, item) {
   }
 
   if (template.show_sku && item.sku) addText("sku", `SKU: ${item.sku}`, fs - 1);
-  if (template.show_price) addText("price", `PKRs ${parseFloat(item.price || 0).toFixed(2)}`, fs + 3);
+  if (template.show_price) addText("price", fmt(item.price), fs + 3);
 
   return label;
 }
 
-function printLabels(template, items) {
+function printLabels(template, items, fmt) {
   const win = window.open("", "_blank");
   if (!win) { alert("Popup blocked. Allow popups for this page."); return; }
 
@@ -166,7 +167,7 @@ function printLabels(template, items) {
   items.forEach((item) => {
     const copies = item.copies || 1;
     for (let i = 0; i < copies; i++) {
-      container.appendChild(buildLabelEl(doc, template, item));
+      container.appendChild(buildLabelEl(doc, template, item, fmt));
     }
   });
 
@@ -184,6 +185,7 @@ const EMPTY = {
 };
 
 export default function BarcodeTemplates() {
+  const { fmt } = useCurrency();
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [modal, setModal] = useState(null);
@@ -284,7 +286,7 @@ export default function BarcodeTemplates() {
     const tpl = templates.find((t) => t.id === parseInt(printTemplate));
     if (!tpl) { alert("Select a template."); return; }
     setPrinting(true);
-    printLabels(tpl, printItems);
+    printLabels(tpl, printItems, fmt);
     try {
       await fetch(`${API}/barcode-print-jobs`, {
         method: "POST", headers: { "Content-Type": "application/json" },

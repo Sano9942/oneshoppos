@@ -4,8 +4,7 @@ import { ChevronDown, ChevronUp, Download, RefreshCw } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import useReportFilters from "../../hooks/useReportFilters";
 import { indentLabel, sortCategories } from "../../utils/categoryTree";
-
-const money = (v) => `PKRs ${Number(v || 0).toFixed(2)}`;
+import { useCurrency } from "../../contexts/CurrencyContext";
 
 function toCsv(filename, rows, columns, meta) {
   const lines = [];
@@ -88,6 +87,7 @@ function Filters({ filters, setFilters, show, categories }) {
 }
 
 export default function ReportsPowerUpPanel({ flags, authHeaders }) {
+  const { fmt: money } = useCurrency();
   const { filters, setFilters, query } = useReportFilters();
   const [isExpanded, setIsExpanded] = useState(false);
   const [exceptionType, setExceptionType] = useState("negative_margin_sales");

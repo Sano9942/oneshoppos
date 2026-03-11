@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
+import { useCurrency } from "../../contexts/CurrencyContext";
 import { fmtDate, fmtDateTime } from "../../utils/dates";
 import {
   Badge,
@@ -28,10 +29,6 @@ import {
   Select,
   TableToolbar,
 } from "../../ui/primitives";
-
-function money(value) {
-  return `PKRs ${Number(value || 0).toFixed(2)}`;
-}
 
 function statusTone(status) {
   if (status === "Received") return "success";
@@ -62,6 +59,7 @@ function exportCSV(rows) {
 
 export default function PurchaseOrdersRedesign() {
   const { authHeaders, employee, hasPerm } = useAuth();
+  const { fmt: money } = useCurrency();
   const [view, setView] = useState("list");
   const [rows, setRows] = useState([]);
   const [suppliers, setSuppliers] = useState([]);

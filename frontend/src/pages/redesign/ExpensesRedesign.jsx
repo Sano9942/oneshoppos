@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, RefreshCw, Tag, Trash2, X } from "lucide-react";
 import { API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
+import { useCurrency } from "../../contexts/CurrencyContext";
 import {
   Button,
   EmptyState,
@@ -30,12 +31,9 @@ function firstOfMonth() {
   return `${today().slice(0, 7)}-01`;
 }
 
-function money(value) {
-  return `PKRs ${Number(value || 0).toFixed(2)}`;
-}
-
 export default function ExpensesRedesign() {
   const { authHeaders } = useAuth();
+  const { fmt: money } = useCurrency();
 
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState([]);
@@ -476,7 +474,7 @@ export default function ExpensesRedesign() {
             <form className="space-y-3" onSubmit={saveExpense}>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Amount (PKRs)</label>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Amount</label>
                   <Input
                     type="number"
                     min="0.01"

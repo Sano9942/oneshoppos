@@ -3,8 +3,8 @@ import { Printer, ArrowLeft, RefreshCw, FileText, Download } from "lucide-react"
 
 import { API_BASE as API } from '../config';
 import { fmtUtcDateTime } from '../utils/dates';
+import { useCurrency } from '../contexts/CurrencyContext';
 
-const fmt = (n) => `PKR ${Number(n || 0).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtDate = fmtUtcDateTime;
 
 // Build a DOM element with optional attrs/text
@@ -16,7 +16,7 @@ function el(doc, tag, opts = {}) {
   return e;
 }
 
-function buildPrintDocument(doc, { sale, items, payments }) {
+function buildPrintDocument(doc, { sale, items, payments }, fmt) {
   const subtotal = items.reduce((s, i) => s + i.price_at_sale * i.quantity, 0);
   const taxTotal = items.reduce((s, i) => {
     return s + (i.price_at_sale * i.quantity * (i.tax_rate || 0)) / 100;
@@ -187,6 +187,7 @@ function buildPrintDocument(doc, { sale, items, payments }) {
 }
 
 export default function InvoiceView({ saleId, onBack }) {
+  const { fmt } = useCurrency();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -225,7 +226,7 @@ export default function InvoiceView({ saleId, onBack }) {
     const win = window.open("", "_blank", "width=900,height=700");
     const doc = win.document;
     doc.title = `Invoice ${data.sale.invoice_number || data.sale.id}`;
-    buildPrintDocument(doc, data);
+    buildPrintDocument(doc, data, fmt);
     setTimeout(() => { win.focus(); win.print(); }, 400);
   };
 

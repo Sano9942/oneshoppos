@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Search, UserRound, Wallet } from "lucide-react";
 import { API_BASE as API_BASE_URL } from "../../config";
 import { fmtDate, fmtUtcDateTime } from "../../utils/dates";
+import { useCurrency } from "../../contexts/CurrencyContext";
 import {
   Badge,
   Button,
@@ -23,10 +24,6 @@ const EMPTY = {
   cnic: "",
   occupation: "",
 };
-
-function money(n) {
-  return `PKRs ${Number(n || 0).toFixed(2)}`;
-}
 
 function exportCsv(rows) {
   if (!rows.length) return;
@@ -65,6 +62,7 @@ function exportCsv(rows) {
 }
 
 export default function CustomersRedesign() {
+  const { fmt: money } = useCurrency();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
