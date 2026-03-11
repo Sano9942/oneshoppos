@@ -34,14 +34,17 @@ const MIGRATIONS = [
       await client.query(sql);
     },
   },
-  // Future migrations go here:
-  // {
-  //   version: 2,
-  //   description: "Add foo column to bar table",
-  //   up: async (client) => {
-  //     await client.query("ALTER TABLE bar ADD COLUMN IF NOT EXISTS foo TEXT");
-  //   },
-  // },
+  {
+    version: 2,
+    description: "Add cash_denominations to company_profile",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE company_profile
+          ADD COLUMN IF NOT EXISTS cash_denominations TEXT DEFAULT '[5000,1000,500,100,50,20,10]'
+      `);
+    },
+  },
+  // Future migrations go here (next: version 3):
 ];
 
 async function migrate(db) {

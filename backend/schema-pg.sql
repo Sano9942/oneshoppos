@@ -639,7 +639,8 @@ CREATE TABLE IF NOT EXISTS company_profile (
   monthly_sales_target NUMERIC(12,2) DEFAULT 0,
   margin_threshold_pct NUMERIC(6,2) DEFAULT 20,
   refund_threshold_pct NUMERIC(6,2) DEFAULT 5,
-  void_threshold_pct NUMERIC(6,2) DEFAULT 3
+  void_threshold_pct NUMERIC(6,2) DEFAULT 3,
+  cash_denominations TEXT DEFAULT '[5000,1000,500,100,50,20,10]'
 );
 
 -- ── Companies (Context Unification) ───────────────────────────────────
