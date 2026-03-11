@@ -14,6 +14,7 @@ export default function AdminTenantDetail() {
   const [actionLoading, setActionLoading] = useState("");
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState({});
+  const [setupInfo, setSetupInfo] = useState(null);
 
   const loadTenant = async () => {
     try {
@@ -44,6 +45,14 @@ export default function AdminTenantDetail() {
         const s = await statsRes.json();
         setStats(s.stats);
       }
+
+      try {
+        const setupRes = await adminFetch(`/api/admin/tenants/${id}/setup-token`);
+        if (setupRes.ok) {
+          const setupData = await setupRes.json();
+          setSetupInfo(setupData);
+        }
+      } catch {}
     } catch (err) {
       setError(err.message);
     } finally {
@@ -203,6 +212,48 @@ export default function AdminTenantDetail() {
               )}
             </div>
           </div>
+
+          {/* Setup Status */}
+          {setupInfo && (
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Setup Status</h2>
+              {setupInfo.setup_complete ? (
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">Setup Complete</span>
+              ) : (
+                <div className="space-y-3">
+                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">Pending Setup</span>
+                  {setupInfo.setup_url && (
+                    <div className="mt-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <input
+                        readOnly
+                        value={setupInfo.setup_url}
+                        className="flex-1 bg-transparent text-xs text-slate-600 outline-none"
+                        onClick={(e) => e.target.select()}
+                      />
+                      <button
+                        onClick={() => navigator.clipboard.writeText(setupInfo.setup_url)}
+                        className="shrink-0 rounded bg-violet-600 px-2 py-1 text-xs font-semibold text-white hover:bg-violet-500"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  )}
+                  <button
+                    onClick={async () => {
+                      const res = await adminFetch(`/api/admin/tenants/${id}/regenerate-setup-token`, { method: "POST" });
+                      if (res.ok) {
+                        const data = await res.json();
+                        setSetupInfo({ setup_complete: false, ...data });
+                      }
+                    }}
+                    className="text-xs font-medium text-violet-600 hover:text-violet-500"
+                  >
+                    Regenerate Token
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Actions */}
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
