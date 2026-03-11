@@ -185,6 +185,11 @@ function isPosBurstPath(pathname) {
   );
 }
 
+function extractTenantKey(req) {
+  if (!IS_MULTI_TENANT) return "st";
+  return req.headers["x-tenant-slug"] || req.tenantSlug || "unknown";
+}
+
 const globalLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
   max: RATE_LIMIT_GLOBAL_MAX,
@@ -192,6 +197,7 @@ const globalLimiter = rateLimit({
   legacyHeaders: false,
   handler: limitExceededHandler,
   skip: (req) => isPosBurstPath(req.path || ""),
+  keyGenerator: (req) => `${extractTenantKey(req)}:${req.ip}`,
 });
 
 const authLimiter = rateLimit({
@@ -201,6 +207,11 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   handler: limitExceededHandler,
   skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => {
+    if (!IS_MULTI_TENANT) return req.ip;
+    const tenantKey = req.body?.store_code || req.headers["x-tenant-slug"] || "unknown";
+    return `${tenantKey}:${req.ip}`;
+  },
 });
 
 const webhookLimiter = rateLimit({
