@@ -4,12 +4,13 @@
 
 A full-stack Point of Sale (POS) system with Shopify integration.
 
-- Backend: Node.js + Express v5 + SQLite3
+- Backend: Node.js + Express v5 + SQLite3 (**migrating to PostgreSQL** — see below)
 - Frontend: React 19 + Vite 7 + Tailwind CSS v4
 
 ## Current Status Snapshot (March 2026)
 
-- Latest migration is `backend/migrate74.js`
+- Latest migration (SQLite) is `backend/migrate74.js`
+- **Postgres migration in progress** on `feature/postgres-migration` branch — Batches 1-4 (43 tasks) complete, 196/196 pg integration tests passing. See "Postgres Migration" section below for details.
 - **Phase 3 Remaining complete (Mar 10 2026)**: 5 items shipped — mobile/tablet POS layout, IP allowlisting for admin API, JWT token revocation (migrate74), stock shrinkage report, customer-facing display
 - **Roadmap Phase 3 complete (Mar 10 2026)**: 8 of 9 core robustness items shipped (offline queuing deferred) — rate limiter activation, session timeout at POS, idempotency on sales, price change audit log, end-of-day email digest, onboarding checklist, setup wizard, soft deletes
 - **Roadmap Phase 2 complete (Mar 9 2026)**: All 25 remaining roadmap items shipped in 9 parallel sessions — loyalty/wallet frontend, security fixes (SEC6+SEC8), reorder alerts, accounting/HR wire-up, PO edit+approval, orders detail tabs, quotations email, parked sales page, stock/transfer/supplier/category guards, CRM typed activities, backup progress, notifications, serial numbers, gift cards, PO templates, stock-by-outlet popup, action history logging, reports governance UI
@@ -437,3 +438,64 @@ Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
 - Mar 2026: Products table improvements — `migrate68.js` removes `UNIQUE` constraint on `products.barcode` (table recreate, duplicate barcodes now allowed); `POST /api/products` validates `price > 0` (400 if missing/zero); bulk-import route adds `sku` field + plain INSERT (removed `ON CONFLICT` upsert which required the now-dropped UNIQUE); `InventoryRedesign.jsx` replaces Min Qty column with SKU + Cost columns; bulk import UI added (CSV Template download + Import CSV button + results modal)
 - Mar 2026: Phase 3 Core Robustness — `migrate71.js` (idempotency_key on sales), `migrate72.js` (setup wizard — setup_complete + setup_token on company_profile), `migrate73.js` (soft deletes — deleted_at on products/customers/employees); rate limiter activated (`skip: () => process.env.NODE_ENV === 'test'`); price change audit log in `products.js` PUT; end-of-day email digest in `reports/governance.js` + `utils/digestEmail.js`; POS session timeout handling (`POSSessionExpiredModal.jsx`); dashboard onboarding checklist (`DashboardOnboarding.jsx`); first-run setup wizard (`routes/setup.js` + `SetupWizard.jsx`); soft deletes on products/customers/employees (DELETE → UPDATE SET deleted_at, frontend "Archive" wording); 3 test files updated; 395/395 tests passing
 - Mar 2026: Phase 3 Remaining — mobile/tablet POS layout (3-tab nav: Cart/Search/Pay, sticky pay button, touch-friendly controls, 2-col mobile grid); IP allowlisting for `/api/admin` (`ADMIN_ALLOWED_IPS` env var, CIDR matching, `requireAllowedIp` middleware in `admin.js`); JWT token revocation (`migrate74.js` — `revoked_tokens` table + `tokens_revoked_before` on employees, `jti` claim in `signAccessToken`, revocation check in `loadTenantAndPerms`, `POST /api/employees/:id/revoke-token` + `revoke-all-tokens` endpoints, Revoke button in `EmployeesRedesign.jsx`); stock shrinkage report (`GET /api/reports/shrinkage` with 6-join SQL in `reports/inventory.js`, `ShrinkageTab` in `ReportsInventory.jsx`); customer-facing display (`backend/routes/customer-display.js` in-memory Map, `CustomerDisplayPage.jsx` dark-theme poll page at `/customer-display`, `POSContext.jsx` debounced cart push)
+- Mar 2026: **Postgres migration in progress** — `feature/postgres-migration` branch; Batches 1-7 (all route files + category-tree.js + shopify/utils.js + order-service.js) converted from SQLite callbacks to Postgres async/await; `schema-pg.sql` (full DDL), `db-pg.js` (pg.Pool wrapper), `tenant-provisioner-pg.js` (schema-based provisioning); 322/322 pg integration tests across 7 test files; Batch 4 added reports/ (11 files) with `TO_CHAR`, `EXTRACT`, `make_interval`, `ROUND::numeric` patterns; Batch 5 added tier4/ (7 files); Batch 6 added shopify/ (8 route files + utils.js + shopify_product_metadata DDL); Batch 7 converted order-service.js to async/await + removed Promise wrappers from callers
+
+## Postgres Migration
+
+### Overview
+The backend is being migrated from SQLite3 to PostgreSQL on branch `feature/postgres-migration`. Each route file is converted from callback-based `db.run/get/all` to async/await `db.query()` with `$1, $2` params.
+
+### Key Files
+- `backend/db-pg.js` — shared `pg.Pool` connection pool (`DATABASE_URL` env var), exports `query()`, `transaction()`, `getPool()`
+- `backend/schema-pg.sql` — full DDL for all tables, indexes, constraints
+- `backend/tenant-provisioner-pg.js` — schema-based multi-tenant provisioning (`CREATE SCHEMA tenant_<slug>`)
+- `backend/tests/helpers/createTestApp-pg.js` — test app factory (isolated schema per test, full seed data)
+- `backend/tests/helpers/seedSchema-pg.js` — runs schema-pg.sql into a test schema
+
+### Conversion Status (322/322 tests passing)
+- **Batch 1** (35 tests, `pg-batch1-crud.test.js`): taxes, suppliers, receipt-templates, parked-sales, shifts, roles, brands
+- **Batch 2** (53 tests, `pg-batch2-medium.test.js`): customers, employees, categories, promotions, attribute-sets, returns, inventory
+- **Batch 3** (48 tests, `pg-batch3-complex.test.js`): auth, setup, grn, purchase-orders, attendance, sales, products, orders, barcode-expenses, admin
+- **Batch 4** (60 tests, `pg-batch4-reports.test.js`): all 11 reports/ files (helpers, index, dashboard, sales, inventory, analytics, finance, purchasing, staff, governance, shifts) + `category-tree.js` Postgres compat
+- **Batch 5** (58 tests, `pg-batch5-tier4.test.js`): all 7 tier4/ files (notifications, company-profile, approvals, hr, crm, accounting, index)
+- **Batch 6** (43 tests, `pg-batch6-shopify.test.js`): all 8 shopify/ route files (config, health, sync, orders, webhooks, import, mappings, reconciliation) + `shopify/utils.js` dual-mode + `shopify_product_metadata` DDL
+- **Batch 7** (25 tests, `pg-batch7-order-service.test.js`): `shopify/order-service.js` fully async — upsert, stock policy, item mapping, outlet resolution, state matrix
+- **Not yet converted**: index.js middleware
+
+### SQLite → Postgres Conversion Patterns
+| SQLite | Postgres |
+|--------|----------|
+| `db.run/get/all` callbacks | `await db.query(sql, params)` → `{ rows, rowCount }` |
+| `?` placeholders | `$1, $2, $3` numbered params |
+| `this.lastID` | `RETURNING id` clause |
+| `this.changes` | `rowCount` from query result |
+| `db.serialize()` + `BEGIN/COMMIT` | `await db.transaction(async (client) => { ... })` |
+| `INSERT OR IGNORE` | `ON CONFLICT DO NOTHING` |
+| `LIKE` | `ILIKE` (case-insensitive) |
+| `datetime('now')` / `datetime('now','localtime')` | `NOW()` |
+| `date(col)` | `col::date` |
+| `json_group_array(json_object(...))` | `json_agg(json_build_object(...))` |
+| `GROUP_CONCAT(...)` | `string_agg(..., ',')` |
+| `printf('%04d', id)` | `LPAD(id::text, 4, '0')` |
+| `COLLATE NOCASE` | `LOWER()` or `ILIKE` |
+| `= 1` / `= 0` (booleans) | `= true` / `= false` |
+| `db.prepare()/stmt.run()/stmt.finalize()` | `for` loop with `await client.query()` |
+| `strftime('%Y-%m', col)` | `TO_CHAR(col, 'YYYY-MM')` |
+| `strftime('%H', col)` | `EXTRACT(HOUR FROM col)::int` |
+| `strftime('%w', col)` | `EXTRACT(DOW FROM col)::int` |
+| `julianday('now') - julianday(col)` | `EXTRACT(EPOCH FROM (NOW() - col)) / 86400.0` |
+| `ROUND(SUM(...), 2)` | `ROUND(SUM(...)::numeric, 2)` (ROUND requires numeric) |
+| `(? \|\| ' minutes')::interval` | `make_interval(mins => $N)` (avoids type ambiguity) |
+
+### Postgres-Specific Gotchas
+- **Boolean columns are strict**: `is_active`, `is_primary`, `is_default`, `voided`, `show_barcode`, `show_logo` — MUST use `= true`/`= false`, never `= 1`/`= 0`
+- **NUMERIC returns strings**: Postgres NUMERIC/DECIMAL columns return JS strings — always wrap with `Number()` before arithmetic (e.g. gift card `remaining_value`)
+- **GROUP BY**: All non-aggregated SELECT columns MUST appear in GROUP BY (Postgres enforces this, SQLite doesn't)
+- **Reserved words**: `read` → `is_read` (in notifications table)
+- **Timezone**: `TIMESTAMPTZ` stores UTC internally. `session_start::date` extracts the UTC date. JS must use `toISOString().slice(0,10)` (UTC date) not `toLocaleDateString()` (local date) for comparisons
+- **HAVING clause**: Postgres does not allow column aliases in HAVING — must repeat the full expression
+- **ROUND()**: Postgres `ROUND()` requires `numeric` type — cast with `::numeric` (e.g. `ROUND(SUM(amount)::numeric, 2)`)
+- **category-tree.js**: Dual-mode detection added — checks `typeof db.query === "function" && typeof db.all !== "function"` to route to Postgres `db.query()` with `.rows` extraction
+- **FK constraints on bulk delete**: SQLite used `PRAGMA foreign_keys = OFF` to bypass FK checks during bulk deletes; Postgres enforces FKs always — must explicitly delete from referencing tables (e.g. `inventory_reconciliation`, `shopify_product_metadata`) before deleting from `products`
+- **shopify/utils.js**: `getActiveShopifyConnection` is now dual-mode — detects Postgres via `typeof db.query === "function" && typeof db.get !== "function"`, returns Promise in Postgres mode, uses callback in SQLite mode
+- **order-service.js**: Fully converted to async/await. Factory signature unchanged: `createOrderService(db, getActiveShopifyConnection)` returns `{ upsertWebOrderFromShopifyPayload, applyWebOrderStockPolicy }` — both async. `stock_applied` uses `true`/`false` (Postgres BOOLEAN). Callers in `shopify/orders.js` and `shopify/webhooks.js` use direct `await` (no more `new Promise()` wrappers). `orders.js` `applyWebOrderStockPolicyAsync` is a thin async wrapper with try/catch.

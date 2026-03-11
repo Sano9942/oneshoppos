@@ -40,13 +40,7 @@ module.exports = function registerShopifyOrderRoutes(app, deps) {
         for (const orderPayload of realOrders) {
           const idemKey = `inbound_order_${String(orderPayload?.id || "")}`;
           try {
-            // upsertWebOrderFromShopifyPayload is still callback-based
-            const result = await new Promise((resolve, reject) => {
-              upsertWebOrderFromShopifyPayload(orderPayload, (err, r) => {
-                if (err) reject(err);
-                else resolve(r);
-              });
-            });
+            const result = await upsertWebOrderFromShopifyPayload(orderPayload);
             await db.query(
               `INSERT INTO external_sync_events (direction, entity_type, idempotency_key, status, error_message, payload, created_at, processed_at)
                VALUES ('inbound', 'order', $1, 'processed', NULL, $2, NOW(), NOW())

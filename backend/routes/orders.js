@@ -621,23 +621,13 @@ module.exports = function registerOrderRoutes(app, deps) {
 
   const { upsertWebOrderFromShopifyPayload, applyWebOrderStockPolicy } = require('../shopify/order-service')(db, getActiveShopifyConnection);
 
-  // Promisified wrapper for the callback-based applyWebOrderStockPolicy
-  // Note: order-service.js still uses SQLite callbacks (db.get/db.run).
-  // Until it's converted to Postgres, this wrapper catches TypeError gracefully.
-  function applyWebOrderStockPolicyAsync(webOrderId) {
-    return new Promise((resolve) => {
-      try {
-        applyWebOrderStockPolicy(webOrderId, (policyErr, policy) => {
-          if (policyErr) {
-            resolve({ error: policyErr.message });
-          } else {
-            resolve(policy || null);
-          }
-        });
-      } catch (err) {
-        resolve({ error: err.message });
-      }
-    });
+  // applyWebOrderStockPolicy is now async — thin wrapper that catches errors gracefully
+  async function applyWebOrderStockPolicyAsync(webOrderId) {
+    try {
+      return await applyWebOrderStockPolicy(webOrderId) || null;
+    } catch (err) {
+      return { error: err.message };
+    }
   }
 
   async function enqueueInventorySyncEvents(changes, context = {}) {

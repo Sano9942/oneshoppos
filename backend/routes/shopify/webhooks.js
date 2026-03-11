@@ -69,16 +69,11 @@ module.exports = function registerShopifyWebhookRoutes(app, deps) {
           return res.json({ success: true, duplicate: true });
         }
 
-        // Process order (callback-based upsert)
+        // Process order
         let orderErr = null;
         let orderResult = null;
         try {
-          orderResult = await new Promise((resolve, reject) => {
-            upsertWebOrderFromShopifyPayload(payload, (err, r) => {
-              if (err) reject(err);
-              else resolve(r);
-            });
-          });
+          orderResult = await upsertWebOrderFromShopifyPayload(payload);
         } catch (e) {
           orderErr = e;
         }
