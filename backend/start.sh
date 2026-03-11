@@ -2,20 +2,24 @@
 # Production startup: run migrations then start server
 set -e
 
-# Set timezone explicitly so SQLite datetime('now','localtime') returns PKT
+# Set timezone explicitly so datetime functions return correct local time
 export TZ="${TZ:-Asia/Karachi}"
 
-# Ensure the data directory exists
-mkdir -p "${DATA_DIR:-/data}"
-
-# Symlink so migrations (which hardcode __dirname/sanopos.db) write
-# to the same persistent volume file as the server reads.
-DB_FILE="${DATA_DIR:-/data}/sanopos.db"
-ln -sf "$DB_FILE" /app/sanopos.db
-
-echo "[startup] DB path: $DB_FILE"
-echo "[startup] Running migrations..."
-node run_migrations.js || echo "[startup] Migrations completed (some may have been already applied)"
-
-echo "[startup] Starting server..."
-exec node index.js
+if [ -n "$DATABASE_URL" ]; then
+  # ── Postgres mode ──
+  echo "[startup] Postgres mode (DATABASE_URL set)"
+  echo "[startup] Running Postgres migrations..."
+  node migrate-pg.js
+  echo "[startup] Starting server..."
+  exec node index.js
+else
+  # ── SQLite mode (legacy) ──
+  mkdir -p "${DATA_DIR:-/data}"
+  DB_FILE="${DATA_DIR:-/data}/sanopos.db"
+  ln -sf "$DB_FILE" /app/sanopos.db
+  echo "[startup] DB path: $DB_FILE"
+  echo "[startup] Running SQLite migrations..."
+  node run_migrations.js || echo "[startup] Migrations completed (some may have been already applied)"
+  echo "[startup] Starting server..."
+  exec node index.js
+fi

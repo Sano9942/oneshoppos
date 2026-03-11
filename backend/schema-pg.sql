@@ -1112,3 +1112,9 @@ CREATE INDEX IF NOT EXISTS idx_products_deleted_at ON products(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_customers_deleted_at ON customers(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_employees_deleted_at ON employees(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_revoked_tokens_jti ON revoked_tokens(token_jti);
+
+-- ── Schema versioning ───────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS schema_version (
+  version    INTEGER PRIMARY KEY,
+  applied_at TIMESTAMPTZ DEFAULT NOW()
+);
