@@ -23,6 +23,26 @@ module.exports = function createCompanyProfileRouter({
     },
   );
 
+  // GET /api/company-profile/currency — public (no auth)
+  // Used by CurrencyProvider on frontend mount
+  router.get("/api/company-profile/currency", async (req, res) => {
+    try {
+      const { rows: [row] } = await db.query(
+        "SELECT currency_symbol, currency_code, cash_denominations FROM company_profile WHERE id = 1"
+      );
+      if (!row) return res.json({ symbol: "$", code: "USD", denominations: [100, 50, 20, 10, 5, 1] });
+      let denominations;
+      try { denominations = JSON.parse(row.cash_denominations || "[]"); } catch { denominations = [100, 50, 20, 10, 5, 1]; }
+      res.json({
+        symbol: row.currency_symbol || "$",
+        code: row.currency_code || "USD",
+        denominations,
+      });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to load currency" });
+    }
+  });
+
   router.put(
     "/api/company-profile",
     requirePerm("all_access"),
@@ -48,6 +68,7 @@ module.exports = function createCompanyProfileRouter({
           margin_threshold_pct,
           refund_threshold_pct,
           void_threshold_pct,
+          cash_denominations,
         } = req.body || {};
 
         await db.query(
@@ -70,6 +91,7 @@ module.exports = function createCompanyProfileRouter({
              margin_threshold_pct = COALESCE($16, margin_threshold_pct),
              refund_threshold_pct = COALESCE($17, refund_threshold_pct),
              void_threshold_pct = COALESCE($18, void_threshold_pct),
+             cash_denominations = COALESCE($19, cash_denominations),
              updated_at = NOW()
          WHERE id = 1`,
           [
@@ -91,6 +113,7 @@ module.exports = function createCompanyProfileRouter({
             margin_threshold_pct != null ? Number(margin_threshold_pct) : null,
             refund_threshold_pct != null ? Number(refund_threshold_pct) : null,
             void_threshold_pct != null ? Number(void_threshold_pct) : null,
+            cash_denominations || null,
           ]
         );
         res.json({ message: "Company profile updated" });
