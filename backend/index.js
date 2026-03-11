@@ -827,8 +827,10 @@ function requireFeature(flagKey) {
   };
 }
 
+const _notifDb = IS_MULTI_TENANT ? dbProxy : db;
+
 function createNotification(type, title, message, link) {
-  db.query(
+  _notifDb.query(
     "INSERT INTO notifications (type, title, message, link) VALUES ($1, $2, $3, $4)",
     [type, title, message, link || null]
   ).catch(() => {});
@@ -844,7 +846,7 @@ function notifyLowStockForSale(cartItems, outletId) {
   ];
   if (!productIds.length || !outletId) return;
   const placeholders = productIds.map((_, i) => "$" + (i + 2)).join(",");
-  db.query(
+  _notifDb.query(
     `SELECT os.product_id, os.quantity, p.name
      FROM outlet_stock os
      JOIN products p ON p.id = os.product_id
