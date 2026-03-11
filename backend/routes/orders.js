@@ -862,7 +862,7 @@ module.exports = function registerOrderRoutes(app, deps) {
                last_attempt_at = NOW(),
                next_retry_at = CASE
                  WHEN $4::boolean THEN NULL
-                 ELSE NOW() + ($5 || ' minutes')::interval
+                 ELSE NOW() + make_interval(mins => $5)
                END,
                processed_at = CASE WHEN $4::boolean THEN NOW() ELSE NULL END
            WHERE id = $6`,
@@ -907,7 +907,7 @@ module.exports = function registerOrderRoutes(app, deps) {
              last_attempt_at = NOW(),
              next_retry_at = CASE
                WHEN $4::boolean THEN NULL
-               ELSE NOW() + ($5 || ' minutes')::interval
+               ELSE NOW() + make_interval(mins => $5)
              END,
              processed_at = CASE WHEN $4::boolean THEN NOW() ELSE NULL END
          WHERE id = $6`,
