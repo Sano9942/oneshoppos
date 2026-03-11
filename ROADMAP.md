@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-*Last updated: March 12 2026 — Currency/timezone centralization complete. All phases shipped.*
+*Last updated: March 12 2026 — MT Phase 1 blockers fixed. Multi-tenant go-live plan finalized. All foundation phases shipped.*
 
 ---
 
@@ -109,17 +109,69 @@ This file tracks everything we want to build, fix, or improve for SanoPOS.
 
 ---
 
-## 📋 Multi-Tenant Go-Live Checklist (before flipping MULTI_TENANT=1)
+## 🚀 Multi-Tenant Go-Live — The Plan
 
-1. **Timezone Phase 2** — ~30 `'localtime'` SQL modifiers in GROUP BY must use tenant timezone; `loadCompanyProfile` cache must be keyed per-tenant
-2. **Tenant isolation testing** — verify no cross-tenant data leakage
-3. **Tenant onboarding flow** — production provisioning from super-admin dashboard (not just CLI)
-4. **Tenant-aware scheduled jobs** — stale session cleanup + report scheduler must iterate all tenant DBs
-5. **Subdomain/slug routing** — frontend tenant resolution from URL
-6. ~~**Railway multi-DB volume strategy**~~ — ✅ **Resolved** (Mar 12 2026). Postgres schema-based multi-tenancy (`SET search_path TO tenant_<slug>`) replaces per-tenant SQLite files.
-7. **Backup/restore per-tenant** — current backup operates on single DB
-8. **Rate limiting** — per-tenant request limits
-9. **Timezone Phase 3** (nice-to-have) — write-path unification
+**Strategy (decided Mar 12 2026):** Multi-tenant is the ONLY mode going forward. Single-tenant was the development foundation. A "single store" customer = MT customer on Starter plan (`max_outlets=1`). No architectural difference — just plan limits.
+
+**Business model:** Super-admin provisions tenant → assigns plan → sends setup token → customer onboards → works within plan limits. Upgrade = bump `max_outlets`/`max_employees`/`max_products` in master DB.
+
+**Database:** Same Supabase Postgres instance. `public` schema = master tables. `tenant_<slug>` schemas = per-tenant business data. Current test data (Hassan, Packages Mall) becomes the first real tenant.
+
+---
+
+### ✅ MT Phase 1 — Fix HIGH Blockers (Mar 12 2026) — All 6 Fixed
+
+Branch: `feature/mt-phase1-blockers` — 4 commits, 4 files modified.
+
+| # | Item | Fix Applied |
+|---|------|------------|
+| 1 | ~~`loadCompanyProfile` per-tenant cache~~ | `_companyCache` Map keyed by `tenantId\|"_default"` replaces global `_cachedCompany` |
+| 2 | ~~Context enforcement flag global~~ | `_contextFlagCache` Map keyed by `tenantId\|"_default"` replaces global `_contextEnforced` |
+| 3 | ~~Boot-time eager load hits wrong DB~~ | Guarded with `if (!IS_MULTI_TENANT)` — MT tenants load lazily on first request |
+| 4 | ~~Setup gate is global~~ | Now checks `entry.profile` from per-tenant cache, not global variable |
+| 5 | ~~`admin.js` auditLog wrong DB~~ | Changed to `masterDb.query()` — `master-db-pg.js` exports `query()` |
+| 6 | ~~Customer display shift ID collision~~ | Keyed by `${tenantSlug}-${shiftId}` — frontend passes `&tenant=` in MT mode |
+
+---
+
+### 🟡 MT Phase 2 — Onboarding & Operations
+
+These enable the core MT workflow: provisioning tenants, managing plans, running background jobs per-tenant.
+
+| # | Item | Description |
+|---|------|-------------|
+| 7 | **Super-admin tenant onboarding UI** | Currently CLI-only (`tenant-provisioner-pg.js`). Add "Create Tenant" flow in `/admin` dashboard — select plan, provision schema, generate setup token, display/copy link |
+| 8 | **Setup wizard MT adaptation** | Current wizard is single-tenant boot. In MT: tenant-scoped token from super-admin, setup writes to tenant schema, no global 503 gate |
+| 9 | **Tenant-aware scheduled jobs** | Stale attendance session cleanup, sync event cleanup, Shopify inventory worker, EOD digest — all currently run on global `db`. Must iterate all active tenants via `tenant-db-manager-pg` |
+| 10 | **Notification helpers use global `db`** | `createNotification()` and `notifyLowStockForSale()` in `index.js:830-864` call global `db` — notifications go to wrong tenant. Must use proxy or pass tenant DB |
+| 11 | **Per-tenant rate limiting** | Current rate limiter is global (20 req/15min). Need per-tenant buckets keyed by `tenantSlug + IP` so one busy tenant doesn't starve others |
+
+---
+
+### 🟢 MT Phase 3 — Production Hardening & Scale
+
+These aren't blockers for initial go-live but needed for production-grade multi-tenant operation.
+
+| # | Item | Description |
+|---|------|-------------|
+| 12 | **Subdomain/slug routing** | Incoming requests resolve to tenant via subdomain (`store1.sanopos.com`) or URL path. Frontend `Login.jsx` already has Store Code field gated by `VITE_MULTI_TENANT` |
+| 13 | **Tenant isolation testing** | Automated tests: provision 2 tenants, verify no cross-tenant data leakage across all major endpoints (sales, products, employees, reports). Run AFTER Phase 1 fixes |
+| 14 | **Backup/restore per-tenant** | Current backup is SQLite-only. Need `pg_dump --schema=tenant_<slug>` scoped to individual tenant schema. Restore = `pg_restore` into same schema |
+| 15 | **Feature flag cache per-tenant** | `getFeatureFlagsMap()` in `index.js:796` queries feature flags but cache isn't tenant-keyed. Low risk (no caching currently) but should be formalized |
+| 16 | **Subscription / billing layer** | Stripe or JazzCash integration for plan billing, trial enforcement, subscription expiry. Build after stable MT operation |
+| 17 | **Tenant health monitoring** | Super-admin visibility: DAU/MAU per tenant, last login, failed jobs, plan limit proximity, schema size |
+
+---
+
+### ✅ MT Prerequisites — Already Done
+
+- ~~SaaS Phases 1-5~~ — master DB, JWT auth, DB proxy, plan limits, super-admin dashboard (built Mar 2026)
+- ~~Timezone Phase 1~~ — UTC vs LOCAL correctness across all routes
+- ~~Timezone Phase 2~~ — **RESOLVED** by Postgres migration (eliminated all SQLite `'localtime'` modifiers)
+- ~~MT Postgres infra~~ — `tenant-db-manager-pg.js`, `tenant-db-proxy-pg.js`, `index.js` branching
+- ~~MT auth routes~~ — `auth.js` fully converted to async/await Postgres (`mt-login`, `refresh`, `kiosk-login`, `update-context`)
+- ~~Railway multi-DB volume~~ — **RESOLVED** by Postgres schema-based multi-tenancy (`SET search_path TO tenant_<slug>`)
+- ~~Plan limits middleware~~ — `plan-limits.js` enforces `max_employees`/`max_products`/`max_outlets` from `tenant_plans`
 
 ---
 
@@ -321,11 +373,13 @@ These items make the product reliable for the current single-tenant production d
 
 ## 📋 Discussed but Deferred
 
+- **Offline sale queuing** — needs full SW rewrite + IndexedDB + Background Sync (3-5 day effort)
 - **Payment gateway integration** (card machines, JazzCash, EasyPaisa)
 - **Profit-sharing / payroll module** — seed data mentions it but no UI
 - **Shopcast / digital signage**
 - **FBR e-invoicing** — placeholder added; needed for Pakistan tax compliance but deferred
 - **Advance / layaway payments** — installment-based sales; common in furniture/electronics retail
+- **Weighing scale integration** — USB scale for weight-based pricing (grocery, pharmacy)
 
 ---
 
@@ -348,3 +402,5 @@ These items make the product reliable for the current single-tenant production d
 | Mar 11 2026 | **Postgres migration — pre-merge tasks** | 4 tasks completed on `feature/postgres-migration`: last SQLite files converted (email.js, printer routes, registerAllRoutes.js), migrate-pg.js migration runner, sqlite-to-pg.js cutover script + checklist, MT Postgres infra (tenant-db-manager-pg, tenant-db-proxy-pg). 340/340 pg tests passing. |
 | Mar 12 2026 | **Postgres migration merged + deployed** | `feature/postgres-migration` merged to `main` (28 commits, 93 files, +23,188/-15,139 lines). Boot guard added (conditional db-pg/db import). dotenv load order fix (must load before boot guard). Supabase Postgres provisioned (ap-southeast-1). `DATABASE_URL` set on Railway, `DATA_DIR` removed. Fresh DB created via setup wizard. `schema-pg.sql` seed row fix for company_profile. Production live on Postgres. |
 | Mar 12 2026 | **Currency/timezone centralization** | `feature/currency-timezone-centralization` (13 commits, ~58 files). All ~58 hardcoded PKR/PKRs/Rs display references replaced. `CurrencyContext` + public `/api/company-profile/currency` endpoint. Schema migration v2 adds `cash_denominations` TEXT to `company_profile`. Setup wizard enhanced with full IANA timezone searchable dropdown + denomination chip editor. Company Settings gains same controls + calls `refresh()` to propagate changes app-wide. Backend email/printer/quotation templates now use `req.company.currency_symbol`. Frontend build clean, zero new test failures. |
+| Mar 12 2026 | **MT go-live plan finalized** | Deep audit of `index.js`, `admin.js`, `auth.js`, `customer-display.js`, `setup.js` for MT readiness. Found 6 HIGH blockers (cross-tenant cache leaks, global setup gate, auditLog wrong DB, shift ID collision), 5 MEDIUM items, 6 LOW/deferred. Decision: multi-tenant is the ONLY mode — single-tenant was dev foundation. "Single store" = Starter plan with `max_outlets=1`. 3-phase plan: Phase 1 fix blockers → Phase 2 onboarding + operations → Phase 3 hardening + scale. |
+| Mar 12 2026 | **MT Phase 1 blockers fixed** | `feature/mt-phase1-blockers` branch (4 commits, 4 files). All 6 HIGH blockers resolved: per-tenant `_companyCache` Map, per-tenant `_contextFlagCache` Map, boot IIFEs guarded with `!IS_MULTI_TENANT`, `auditLog()` uses `masterDb.query()`, `master-db-pg.js` exports `query()`, customer display keyed by `${tenantSlug}-${shiftId}`, `CustomerDisplayPage.jsx` passes `tenant` query param. Frontend build clean. Backend syntax check passed. |
