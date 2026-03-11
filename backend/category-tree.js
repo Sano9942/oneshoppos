@@ -1,4 +1,8 @@
 function dbAllAsync(db, sql, params = []) {
+  // Postgres db.query() returns { rows }
+  if (typeof db.query === "function" && typeof db.all !== "function") {
+    return db.query(sql, params).then((result) => result.rows || []);
+  }
   return new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => {
       if (err) return reject(err);
@@ -8,6 +12,10 @@ function dbAllAsync(db, sql, params = []) {
 }
 
 function dbGetAsync(db, sql, params = []) {
+  // Postgres db.query() returns { rows }
+  if (typeof db.query === "function" && typeof db.get !== "function") {
+    return db.query(sql, params).then((result) => (result.rows && result.rows[0]) || null);
+  }
   return new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => {
       if (err) return reject(err);
@@ -179,10 +187,12 @@ async function fetchCategoryIndexes(db) {
 
 async function getCategoryById(db, categoryId) {
   if (!categoryId) return null;
+  // Use $1 for Postgres, ? for SQLite
+  const placeholder = (typeof db.query === "function" && typeof db.get !== "function") ? "$1" : "?";
   return dbGetAsync(
     db,
     `SELECT id, name, description, parent_id, sort_order, is_active
-     FROM categories WHERE id = ?`,
+     FROM categories WHERE id = ${placeholder}`,
     [Number(categoryId)],
   );
 }

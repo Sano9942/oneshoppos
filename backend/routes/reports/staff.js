@@ -1,32 +1,14 @@
 const { toUtcStart, toUtcEnd } = require("../../utils/tz");
 
-module.exports = function (app, deps) {
+module.exports = function (app, deps, helpers) {
   const { db } = deps;
-
-  function applyOutletFilter(where, params, rawId, col = "s.outlet_id") {
-    if (!rawId) return;
-    const ids = String(rawId).split(",").map(Number).filter(Boolean);
-    if (ids.length === 1) {
-      where.push(`${col} = ?`);
-      params.push(ids[0]);
-    } else if (ids.length > 1) {
-      where.push(`${col} IN (${ids.map(() => "?").join(",")})`);
-      params.push(...ids);
-    }
-  }
 
   app.get("/api/reports/labor-performance", async (req, res) => {
     try {
       const { date_from, date_to, outlet_id } = req.query;
       const tz = req.company?.timezone || "UTC";
-      const getQuery = (query, params = []) =>
-        new Promise((resolve, reject) => {
-          db.all(query, params, (err, rows) =>
-            err ? reject(err) : resolve(rows),
-          );
-        });
 
-      const saleWhere = ["s.voided = 0", "s.employee_id IS NOT NULL"];
+      const saleWhere = ["s.voided = false", "s.employee_id IS NOT NULL"];
       const attendWhere = ["session_type = 'work'"];
       const saleParams = [];
       const attendParams = [];
@@ -34,20 +16,20 @@ module.exports = function (app, deps) {
       if (date_from) {
         saleWhere.push("s.timestamp >= ?");
         saleParams.push(toUtcStart(date_from, tz));
-        attendWhere.push("date(session_start) >= ?");
+        attendWhere.push("session_start::date >= ?::date");
         attendParams.push(date_from);
       } else {
         const thirtyDaysAgoStr = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 30 * 24 * 3600 * 1000));
         saleWhere.push("s.timestamp >= ?");
         saleParams.push(toUtcStart(thirtyDaysAgoStr, tz));
-        attendWhere.push("date(session_start) >= ?");
+        attendWhere.push("session_start::date >= ?::date");
         attendParams.push(thirtyDaysAgoStr);
       }
 
       if (date_to) {
         saleWhere.push("s.timestamp < ?");
         saleParams.push(toUtcEnd(date_to, tz));
-        attendWhere.push("date(session_start) <= ?");
+        attendWhere.push("session_start::date <= ?::date");
         attendParams.push(date_to);
       }
 
@@ -67,17 +49,23 @@ module.exports = function (app, deps) {
         }
       }
 
+      // Build numbered params: sale params first, then attend params
+      const allParams = [...saleParams, ...attendParams];
+      let idx = 1;
+      const saleWhereStr = saleWhere.join(" AND ").replace(/\?/g, () => `$${idx++}`);
+      const attendWhereStr = attendWhere.join(" AND ").replace(/\?/g, () => `$${idx++}`);
+
       const sql = `
         WITH EmployeeSales AS (
           SELECT employee_id, SUM(total_amount) AS total_revenue
           FROM sales s
-          WHERE ${saleWhere.join(" AND ")}
+          WHERE ${saleWhereStr}
           GROUP BY employee_id
         ),
         EmployeeHours AS (
           SELECT employee_id, SUM(duration_hours) AS total_hours
           FROM attendance_sessions
-          WHERE ${attendWhere.join(" AND ")}
+          WHERE ${attendWhereStr}
           GROUP BY employee_id
         )
         SELECT
@@ -97,7 +85,7 @@ module.exports = function (app, deps) {
         ORDER BY revenue_per_hour DESC
       `;
 
-      const rows = await getQuery(sql, [...saleParams, ...attendParams]);
+      const { rows } = await db.query(sql, allParams);
       res.json({ labor_performance: rows });
     } catch (err) {
       console.error("Labor Performance Error:", err);
@@ -109,16 +97,10 @@ module.exports = function (app, deps) {
     try {
       const { date_from, date_to, outlet_id } = req.query;
       const tz = req.company?.timezone || "UTC";
-      const getQuery = (query, params = []) =>
-        new Promise((resolve, reject) => {
-          db.all(query, params, (err, rows) =>
-            err ? reject(err) : resolve(rows),
-          );
-        });
 
-      const voidWhere = ["s.voided = 1", "s.employee_id IS NOT NULL"];
+      const voidWhere = ["s.voided = true", "s.employee_id IS NOT NULL"];
       const refundWhere = ["r.employee_id IS NOT NULL"];
-      const saleWhere = ["s.voided = 0", "s.employee_id IS NOT NULL"];
+      const saleWhere = ["s.voided = false", "s.employee_id IS NOT NULL"];
       const voidParams = [];
       const refundParams = [];
       const saleParams = [];
@@ -170,23 +152,30 @@ module.exports = function (app, deps) {
         }
       }
 
+      // Build numbered params: void params, then refund params, then sale params
+      const allParams = [...voidParams, ...refundParams, ...saleParams];
+      let idx = 1;
+      const voidWhereStr = voidWhere.join(" AND ").replace(/\?/g, () => `$${idx++}`);
+      const refundWhereStr = refundWhere.join(" AND ").replace(/\?/g, () => `$${idx++}`);
+      const saleWhereStr = saleWhere.join(" AND ").replace(/\?/g, () => `$${idx++}`);
+
       const sql = `
         WITH Voids AS (
           SELECT employee_id, COUNT(id) AS void_count, SUM(total_amount) AS void_value
           FROM sales s
-          WHERE ${voidWhere.join(" AND ")}
+          WHERE ${voidWhereStr}
           GROUP BY employee_id
         ),
         Refunds AS (
           SELECT employee_id, COUNT(id) AS refund_count, SUM(total_refund) AS refund_value
           FROM returns r
-          WHERE ${refundWhere.join(" AND ")}
+          WHERE ${refundWhereStr}
           GROUP BY employee_id
         ),
         ValidSales AS (
           SELECT employee_id, COUNT(id) AS sale_count, SUM(total_amount) AS total_revenue
           FROM sales s
-          WHERE ${saleWhere.join(" AND ")}
+          WHERE ${saleWhereStr}
           GROUP BY employee_id
         )
         SELECT
@@ -214,7 +203,7 @@ module.exports = function (app, deps) {
         ORDER BY risk_ratio_pct DESC
       `;
 
-      const rows = await getQuery(sql, [...voidParams, ...refundParams, ...saleParams]);
+      const { rows } = await db.query(sql, allParams);
       res.json({ loss_prevention: rows });
     } catch (err) {
       console.error("Loss Prevention Error:", err);

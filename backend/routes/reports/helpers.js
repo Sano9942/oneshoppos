@@ -5,9 +5,33 @@ const {
 const { toUtcStart, toUtcEnd } = require("../../utils/tz");
 
 /**
- * Shared helpers for report route modules
+ * Shared helpers for report route modules.
+ *
+ * All WHERE-clause builders push plain `?` placeholders so that each
+ * route handler can call `pgWhere(where, params)` once at query time
+ * to renumber them to `$1, $2, …`.
  */
 module.exports = function (db) {
+  /**
+   * Convert an array of WHERE fragments containing `?` placeholders
+   * into a single SQL string with Postgres `$N` numbered params.
+   * Returns the WHERE clause string (without the WHERE keyword).
+   *
+   *   const { where, params } = await buildReportFilterParts(req);
+   *   const { text, values } = pgWhere(where, params);
+   *   db.query(`SELECT ... WHERE ${text}`, values);
+   *
+   * If `startIdx` is provided, numbering starts from that value
+   * (useful when params were prepended before the dynamic filters).
+   */
+  function pgWhere(fragments, params, startIdx = 1) {
+    let idx = startIdx;
+    const text = fragments
+      .join(" AND ")
+      .replace(/\?/g, () => `$${idx++}`);
+    return { text, values: params, nextIdx: idx };
+  }
+
   async function buildCategoryMetaMap() {
     const categories = await fetchEnrichedCategories(db);
     return new Map(categories.map((row) => [Number(row.id), row]));
@@ -40,7 +64,7 @@ module.exports = function (db) {
     const where = [];
     const params = [];
 
-    if (sale) where.push(`${sale}.voided = 0`);
+    if (sale) where.push(`${sale}.voided = false`);
     if (date_from && sale) {
       where.push(`${sale}.timestamp >= ?`);
       params.push(toUtcStart(date_from, tz));
@@ -150,11 +174,12 @@ module.exports = function (db) {
 
   /** For LOCAL-stored columns (expenses.expense_date, grn.received_at, etc.) */
   function applyLocalDateFilter(where, params, { date_from, date_to, column }) {
-    if (date_from) { where.push(`date(${column}) >= ?`); params.push(date_from); }
-    if (date_to)   { where.push(`date(${column}) <= ?`); params.push(date_to); }
+    if (date_from) { where.push(`${column}::date >= ?::date`); params.push(date_from); }
+    if (date_to)   { where.push(`${column}::date <= ?::date`); params.push(date_to); }
   }
 
   return {
+    pgWhere,
     buildCategoryMetaMap,
     withCategoryPaths,
     buildReportFilterParts,

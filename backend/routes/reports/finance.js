@@ -4,21 +4,12 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
   const { db } = deps;
   const { getDescendantLeafIds } = helpers || {};
 
-  const allAsync = (sql, params = []) =>
-    new Promise((resolve, reject) => {
-      db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows || []);
-      });
-    });
-
-  const getAsync = (sql, params = []) =>
-    new Promise((resolve, reject) => {
-      db.get(sql, params, (err, row) => {
-        if (err) reject(err);
-        else resolve(row || null);
-      });
-    });
+  /* ── helper: convert ? placeholders to $1,$2,... ── */
+  function pgify(sql, params) {
+    let idx = 1;
+    const text = sql.replace(/\?/g, () => `$${idx++}`);
+    return { text, values: params };
+  }
 
   function applyRangeFilters(where, params, query, opts = {}, tz = "UTC") {
     const {
@@ -51,7 +42,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
     const isLocal = columnType === "local";
     if (date_from && dateColumn) {
       if (isLocal) {
-        where.push(`date(${dateColumn}) >= ?`);
+        where.push(`${dateColumn}::date >= ?::date`);
         params.push(date_from);
       } else {
         where.push(`${dateColumn} >= ?`);
@@ -60,7 +51,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
     }
     if (date_to && dateColumn) {
       if (isLocal) {
-        where.push(`date(${dateColumn}) <= ?`);
+        where.push(`${dateColumn}::date <= ?::date`);
         params.push(date_to);
       } else {
         where.push(`${dateColumn} < ?`);
@@ -68,19 +59,11 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
       }
     }
     if (time_from && timeColumn) {
-      if (isLocal) {
-        where.push(`time(${timeColumn}) >= time(?)`);
-      } else {
-        where.push(`time(${timeColumn}, 'localtime') >= time(?)`);
-      }
+      where.push(`${timeColumn}::time >= ?::time`);
       params.push(time_from);
     }
     if (time_to && timeColumn) {
-      if (isLocal) {
-        where.push(`time(${timeColumn}) <= time(?)`);
-      } else {
-        where.push(`time(${timeColumn}, 'localtime') <= time(?)`);
-      }
+      where.push(`${timeColumn}::time <= ?::time`);
       params.push(time_to);
     }
     if (outletIds.length && outletColumn) {
@@ -156,7 +139,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
     }
 
     if (search && searchColumns.length) {
-      where.push(`(${searchColumns.map((col) => `${col} LIKE ?`).join(" OR ")})`);
+      where.push(`(${searchColumns.map((col) => `${col} ILIKE ?`).join(" OR ")})`);
       searchColumns.forEach(() => params.push(`%${search}%`));
     }
   }
@@ -164,7 +147,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
   app.get("/api/reports/settlement-overview", async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
-      const salesWhere = ["s.voided = 0"];
+      const salesWhere = ["s.voided = false"];
       const salesParams = [];
       applyRangeFilters(salesWhere, salesParams, req.query, {
         dateColumn: "s.timestamp",
@@ -188,7 +171,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         outletColumn: "COALESCE(grn_direct.outlet_id, grn_po.outlet_id)",
         supplierColumn: "si.supplier_id",
         searchSql:
-          "(s.name LIKE ? OR COALESCE(si.invoice_number, '') LIKE ? OR COALESCE(sp.reference, '') LIKE ?)",
+          "(s.name ILIKE ? OR COALESCE(si.invoice_number, '') ILIKE ? OR COALESCE(sp.reference, '') ILIKE ?)",
         searchParams: [1, 1, 1],
         columnType: "local",
       }, tz);
@@ -200,7 +183,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         outletColumn: "COALESCE(grn_direct.outlet_id, grn_po.outlet_id)",
         supplierColumn: "si.supplier_id",
         searchSql:
-          "(s.name LIKE ? OR COALESCE(si.invoice_number, '') LIKE ?)",
+          "(s.name ILIKE ? OR COALESCE(si.invoice_number, '') ILIKE ?)",
         searchParams: [1, 1],
         columnType: "local",
       }, tz);
@@ -209,7 +192,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
       const customerParams = [];
       if (req.query.search) {
         customerWhere.push(
-          "(c.name LIKE ? OR COALESCE(c.mobile, '') LIKE ? OR CAST(c.id AS TEXT) LIKE ?)",
+          "(c.name ILIKE ? OR COALESCE(c.mobile, '') ILIKE ? OR c.id::text ILIKE ?)",
         );
         customerParams.push(
           `%${req.query.search}%`,
@@ -218,7 +201,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         );
       }
 
-      const paymentMix = await allAsync(
+      const paymentMixQ = pgify(
         `
           SELECT
             COALESCE(sp.payment_method, s.payment_method, 'Unknown') AS payment_method,
@@ -232,8 +215,9 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         `,
         salesParams,
       );
+      const { rows: paymentMix } = await db.query(paymentMixQ.text, paymentMixQ.values);
 
-      const inflowRow = await getAsync(
+      const inflowQ = pgify(
         `
           SELECT ROUND(COALESCE(SUM(sp.amount), 0), 2) AS total_inflows
           FROM sales s
@@ -242,8 +226,10 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         `,
         salesParams,
       );
+      const { rows: inflowRows } = await db.query(inflowQ.text, inflowQ.values);
+      const inflowRow = inflowRows[0] || null;
 
-      const expenseRow = await getAsync(
+      const expenseQ = pgify(
         `
           SELECT ROUND(COALESCE(SUM(e.amount), 0), 2) AS expenses
           FROM expenses e
@@ -251,8 +237,10 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         `,
         expenseParams,
       );
+      const { rows: expenseRows } = await db.query(expenseQ.text, expenseQ.values);
+      const expenseRow = expenseRows[0] || null;
 
-      const supplierPaymentRow = await getAsync(
+      const supplierPaymentQ = pgify(
         `
           SELECT ROUND(COALESCE(SUM(sp.amount), 0), 2) AS supplier_payments
           FROM supplier_payments sp
@@ -268,13 +256,15 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         `,
         supplierPaymentParams,
       );
+      const { rows: supplierPaymentRows } = await db.query(supplierPaymentQ.text, supplierPaymentQ.values);
+      const supplierPaymentRow = supplierPaymentRows[0] || null;
 
-      const invoiceRows = await allAsync(
+      const invoiceQ = pgify(
         `
           SELECT
             si.id,
             s.name AS supplier_name,
-            COALESCE(si.invoice_number, 'INV-' || printf('%04d', si.id)) AS invoice_number,
+            COALESCE(si.invoice_number, 'INV-' || LPAD(si.id::text, 4, '0')) AS invoice_number,
             si.amount,
             COALESCE(pay.paid_amount, 0) AS paid_amount,
             ROUND(COALESCE(si.amount, 0) - COALESCE(pay.paid_amount, 0), 2) AS outstanding,
@@ -297,13 +287,14 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
           ) grn_po ON grn_po.po_id = si.po_id
           LEFT JOIN outlets op ON op.id = grn_po.outlet_id
           WHERE ${invoiceWhere.join(" AND ")}
-          ORDER BY outstanding DESC, date(COALESCE(si.due_date, si.created_at)) ASC
+          ORDER BY outstanding DESC, COALESCE(si.due_date::timestamptz, si.created_at)::date ASC
           LIMIT 10
         `,
         invoiceParams,
       );
+      const { rows: invoiceRows } = await db.query(invoiceQ.text, invoiceQ.values);
 
-      const supplierAging = await allAsync(
+      const supplierAgingQ = pgify(
         `
           SELECT
             s.id,
@@ -326,15 +317,16 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
             GROUP BY po_id
           ) grn_po ON grn_po.po_id = si.po_id
           WHERE ${invoiceWhere.join(" AND ")}
-          GROUP BY s.id
-          HAVING total_invoiced > 0
+          GROUP BY s.id, s.name
+          HAVING COALESCE(SUM(si.amount), 0) > 0
           ORDER BY total_due DESC
           LIMIT 8
         `,
         invoiceParams,
       );
+      const { rows: supplierAging } = await db.query(supplierAgingQ.text, supplierAgingQ.values);
 
-      const recentSupplierPayments = await allAsync(
+      const recentSupplierPaymentsQ = pgify(
         `
           SELECT
             sp.id,
@@ -343,7 +335,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
             sp.payment_method,
             sp.reference,
             s.name AS supplier_name,
-            COALESCE(si.invoice_number, 'INV-' || printf('%04d', si.id)) AS invoice_number,
+            COALESCE(si.invoice_number, 'INV-' || LPAD(si.id::text, 4, '0')) AS invoice_number,
             COALESCE(od.name, op.name, 'Unassigned') AS outlet_name
           FROM supplier_payments sp
           JOIN supplier_invoices si ON si.id = sp.supplier_invoice_id
@@ -362,8 +354,9 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         `,
         supplierPaymentParams,
       );
+      const { rows: recentSupplierPayments } = await db.query(recentSupplierPaymentsQ.text, recentSupplierPaymentsQ.values);
 
-      const customerAr = await allAsync(
+      const customerArQ = pgify(
         `
           SELECT
             c.id,
@@ -376,6 +369,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         `,
         customerParams,
       );
+      const { rows: customerAr } = await db.query(customerArQ.text, customerArQ.values);
 
       const totalInflows = Number(inflowRow?.total_inflows || 0);
       const expenses = Number(expenseRow?.expenses || 0);
@@ -426,7 +420,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         outletColumn: "COALESCE(grn_direct.outlet_id, grn_po.outlet_id)",
         supplierColumn: "si.supplier_id",
         searchSql:
-          "(s.name LIKE ? OR COALESCE(si.invoice_number, '') LIKE ?)",
+          "(s.name ILIKE ? OR COALESCE(si.invoice_number, '') ILIKE ?)",
         searchParams: [1, 1],
       }, tz);
 
@@ -434,7 +428,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
       const customerParams = [];
       if (req.query.search) {
         customerWhere.push(
-          "(c.name LIKE ? OR COALESCE(c.mobile, '') LIKE ? OR CAST(c.id AS TEXT) LIKE ?)",
+          "(c.name ILIKE ? OR COALESCE(c.mobile, '') ILIKE ? OR c.id::text ILIKE ?)",
         );
         customerParams.push(
           `%${req.query.search}%`,
@@ -464,11 +458,11 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         }
       }
 
-      const supplierAp = await allAsync(
+      const supplierApQ = pgify(
         `
           SELECT
             si.id,
-            COALESCE(si.invoice_number, 'INV-' || printf('%04d', si.id)) AS invoice_number,
+            COALESCE(si.invoice_number, 'INV-' || LPAD(si.id::text, 4, '0')) AS invoice_number,
             si.created_at AS invoice_date,
             si.due_date,
             si.amount,
@@ -477,13 +471,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
             si.status,
             s.name AS supplier_name,
             COALESCE(od.name, op.name, 'Unassigned') AS outlet_name,
-            CAST(
-              MAX(
-                0,
-                julianday('now', 'localtime') -
-                  julianday(COALESCE(si.due_date, si.created_at))
-              ) AS INTEGER
-            ) AS days_open
+            GREATEST(0, EXTRACT(EPOCH FROM (NOW() - COALESCE(si.due_date::timestamptz, si.created_at))) / 86400.0)::int AS days_open
           FROM supplier_invoices si
           LEFT JOIN suppliers s ON s.id = si.supplier_id
           LEFT JOIN (
@@ -504,8 +492,9 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         `,
         supplierParams,
       );
+      const { rows: supplierAp } = await db.query(supplierApQ.text, supplierApQ.values);
 
-      const customerAr = await allAsync(
+      const customerArQ = pgify(
         `
           SELECT
             c.id,
@@ -516,7 +505,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
             MAX(s.timestamp) AS last_purchase
           FROM customers c
           LEFT JOIN sales s ON s.customer_id = c.id
-            AND s.voided = 0
+            AND s.voided = false
             ${customerSalesJoin.length ? `AND ${customerSalesJoin.join(" AND ")}` : ""}
           WHERE ${customerWhere.join(" AND ")}
           GROUP BY c.id, c.name, c.mobile, c.balance
@@ -524,6 +513,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         `,
         [...customerSalesParams, ...customerParams],
       );
+      const { rows: customerAr } = await db.query(customerArQ.text, customerArQ.values);
 
       const summary = {
         supplier_invoice_count: supplierAp.length,
@@ -555,7 +545,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         outletColumn: "COALESCE(grn_direct.outlet_id, grn_po.outlet_id)",
         supplierColumn: "si.supplier_id",
         searchSql:
-          "(s.name LIKE ? OR COALESCE(si.invoice_number, '') LIKE ?)",
+          "(s.name ILIKE ? OR COALESCE(si.invoice_number, '') ILIKE ?)",
         searchParams: [1, 1],
         columnType: "local",
       }, tz);
@@ -568,7 +558,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         outletColumn: "COALESCE(grn_direct.outlet_id, grn_po.outlet_id)",
         supplierColumn: "si.supplier_id",
         searchSql:
-          "(s.name LIKE ? OR COALESCE(si.invoice_number, '') LIKE ? OR COALESCE(sp.reference, '') LIKE ?)",
+          "(s.name ILIKE ? OR COALESCE(si.invoice_number, '') ILIKE ? OR COALESCE(sp.reference, '') ILIKE ?)",
         searchParams: [1, 1, 1],
       }, tz);
 
@@ -579,7 +569,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         invoiceParams.push(req.query.status);
       }
 
-      const aging = await allAsync(
+      const agingQ = pgify(
         `
           SELECT
             s.id,
@@ -603,18 +593,19 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
             GROUP BY po_id
           ) grn_po ON grn_po.po_id = si.po_id
           WHERE ${invoiceWhere.join(" AND ")}
-          GROUP BY s.id
-          HAVING total_invoiced > 0
+          GROUP BY s.id, s.name, s.phone
+          HAVING COALESCE(SUM(si.amount), 0) > 0
           ORDER BY total_due DESC, supplier_name ASC
         `,
         invoiceParams,
       );
+      const { rows: aging } = await db.query(agingQ.text, agingQ.values);
 
-      const invoices = await allAsync(
+      const invoicesQ = pgify(
         `
           SELECT
             si.id,
-            COALESCE(si.invoice_number, 'INV-' || printf('%04d', si.id)) AS invoice_number,
+            COALESCE(si.invoice_number, 'INV-' || LPAD(si.id::text, 4, '0')) AS invoice_number,
             si.created_at,
             si.due_date,
             si.amount,
@@ -645,12 +636,13 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
           ) grn_po ON grn_po.po_id = si.po_id
           LEFT JOIN outlets op ON op.id = grn_po.outlet_id
           WHERE ${invoiceWhere.join(" AND ")}
-          ORDER BY date(COALESCE(si.due_date, si.created_at)) ASC, si.id DESC
+          ORDER BY COALESCE(si.due_date::timestamptz, si.created_at)::date ASC, si.id DESC
         `,
         invoiceParams,
       );
+      const { rows: invoices } = await db.query(invoicesQ.text, invoicesQ.values);
 
-      const payments = await allAsync(
+      const paymentsQ = pgify(
         `
           SELECT
             sp.id,
@@ -661,7 +653,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
             sp.paid_by,
             sp.notes,
             s.name AS supplier_name,
-            COALESCE(si.invoice_number, 'INV-' || printf('%04d', si.id)) AS invoice_number,
+            COALESCE(si.invoice_number, 'INV-' || LPAD(si.id::text, 4, '0')) AS invoice_number,
             COALESCE(od.name, op.name, 'Unassigned') AS outlet_name
           FROM supplier_payments sp
           JOIN supplier_invoices si ON si.id = sp.supplier_invoice_id
@@ -680,6 +672,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         `,
         paymentParams,
       );
+      const { rows: payments } = await db.query(paymentsQ.text, paymentsQ.values);
 
       const summary = {
         suppliers_with_due: aging.filter((row) => Number(row.total_due || 0) > 0).length,
@@ -703,7 +696,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
   app.get("/api/reports/finance-payment-mix", async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
-      const salesWhere = ["s.voided = 0"];
+      const salesWhere = ["s.voided = false"];
       const salesParams = [];
       applyRangeFilters(salesWhere, salesParams, req.query, {
         dateColumn: "s.timestamp",
@@ -720,7 +713,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         supplierColumn: "si.supplier_id",
       }, tz);
 
-      const saleMix = await allAsync(
+      const saleMixQ = pgify(
         `
           SELECT
             COALESCE(sp.payment_method, s.payment_method, 'Unknown') AS payment_method,
@@ -734,23 +727,25 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         `,
         salesParams,
       );
+      const { rows: saleMix } = await db.query(saleMixQ.text, saleMixQ.values);
 
-      const dailyInflows = await allAsync(
+      const dailyInflowsQ = pgify(
         `
           SELECT
-            date(s.timestamp, 'localtime') AS business_date,
+            s.timestamp::date AS business_date,
             ROUND(COALESCE(SUM(sp.amount), 0), 2) AS total,
             COUNT(DISTINCT s.id) AS sale_count
           FROM sales s
           JOIN sale_payments sp ON sp.sale_id = s.id
           WHERE ${salesWhere.join(" AND ")}
-          GROUP BY date(s.timestamp, 'localtime')
+          GROUP BY s.timestamp::date
           ORDER BY business_date DESC
         `,
         salesParams,
       );
+      const { rows: dailyInflows } = await db.query(dailyInflowsQ.text, dailyInflowsQ.values);
 
-      const supplierPaymentMix = await allAsync(
+      const supplierPaymentMixQ = pgify(
         `
           SELECT
             COALESCE(sp.payment_method, 'Unknown') AS payment_method,
@@ -770,6 +765,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         `,
         supplierPaymentParams,
       );
+      const { rows: supplierPaymentMix } = await db.query(supplierPaymentMixQ.text, supplierPaymentMixQ.values);
 
       const totalInflows = saleMix.reduce(
         (sum, row) => sum + Number(row.total || 0),
@@ -806,7 +802,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
   app.get("/api/reports/gst-output", async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
-      const where = ["s.voided = 0", "si.quantity > 0"];
+      const where = ["s.voided = false", "si.quantity > 0"];
       const params = [];
       applyRangeFilters(where, params, req.query, {
         dateColumn: "s.timestamp",
@@ -822,7 +818,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
           "COALESCE(p.barcode, '')",
           "COALESCE(p.sku, '')",
           "COALESCE(o.name, '')",
-          "CAST(s.id AS TEXT)",
+          "s.id::text",
         ],
       });
 
@@ -833,7 +829,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         where.push("COALESCE(t.rate, p.gst, 0) <= 0");
       }
 
-      const rows = await allAsync(
+      const q = pgify(
         `
           SELECT
             s.id AS sale_id,
@@ -888,6 +884,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         `,
         params,
       );
+      const { rows } = await db.query(q.text, q.values);
 
       const summaryByTaxMap = new Map();
       rows.forEach((row) => {
@@ -952,7 +949,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
   app.get("/api/reports/gst-type-summary", async (req, res) => {
     try {
       const tz = req.company?.timezone || "UTC";
-      const salesWhere = ["s.voided = 0", "si.quantity > 0"];
+      const salesWhere = ["s.voided = false", "si.quantity > 0"];
       const salesParams = [];
       applyRangeFilters(salesWhere, salesParams, req.query, {
         dateColumn: "s.timestamp",
@@ -992,7 +989,7 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
         searchColumns: ["p.name", "COALESCE(p.barcode, '')", "COALESCE(p.sku, '')"],
       });
 
-      const saleRows = await allAsync(
+      const saleRowsQ = pgify(
         `
           SELECT
             COALESCE(t.name, CASE WHEN COALESCE(t.rate, p.gst, 0) > 0 THEN 'GST' ELSE 'No Tax' END) AS tax_name,
@@ -1016,13 +1013,15 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
           JOIN products p ON p.id = si.product_id
           LEFT JOIN taxes t ON t.id = p.tax_id
           WHERE ${salesWhere.join(" AND ")}
-          GROUP BY tax_name, tax_rate
+          GROUP BY COALESCE(t.name, CASE WHEN COALESCE(t.rate, p.gst, 0) > 0 THEN 'GST' ELSE 'No Tax' END),
+                   ROUND(COALESCE(t.rate, p.gst, 0), 2)
           ORDER BY tax_rate DESC, tax_name ASC
         `,
         salesParams,
       );
+      const { rows: saleRows } = await db.query(saleRowsQ.text, saleRowsQ.values);
 
-      const orderedRows = await allAsync(
+      const orderedRowsQ = pgify(
         `
           SELECT
             COALESCE(t.name, CASE WHEN COALESCE(t.rate, p.gst, 0) > 0 THEN 'GST' ELSE 'No Tax' END) AS tax_name,
@@ -1039,13 +1038,15 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
             GROUP BY po_id
           ) grn_po ON grn_po.po_id = po.id
           WHERE ${purchaseWhere.join(" AND ")}
-          GROUP BY tax_name, tax_rate
+          GROUP BY COALESCE(t.name, CASE WHEN COALESCE(t.rate, p.gst, 0) > 0 THEN 'GST' ELSE 'No Tax' END),
+                   ROUND(COALESCE(t.rate, p.gst, 0), 2)
           ORDER BY tax_rate DESC, tax_name ASC
         `,
         purchaseParams,
       );
+      const { rows: orderedRows } = await db.query(orderedRowsQ.text, orderedRowsQ.values);
 
-      const receivedRows = await allAsync(
+      const receivedRowsQ = pgify(
         `
           SELECT
             COALESCE(t.name, CASE WHEN COALESCE(t.rate, p.gst, 0) > 0 THEN 'GST' ELSE 'No Tax' END) AS tax_name,
@@ -1058,11 +1059,13 @@ module.exports = function registerFinanceReports(app, deps, helpers) {
           JOIN products p ON p.id = gi.product_id
           LEFT JOIN taxes t ON t.id = p.tax_id
           WHERE ${receivedWhere.join(" AND ")}
-          GROUP BY tax_name, tax_rate
+          GROUP BY COALESCE(t.name, CASE WHEN COALESCE(t.rate, p.gst, 0) > 0 THEN 'GST' ELSE 'No Tax' END),
+                   ROUND(COALESCE(t.rate, p.gst, 0), 2)
           ORDER BY tax_rate DESC, tax_name ASC
         `,
         receivedParams,
       );
+      const { rows: receivedRows } = await db.query(receivedRowsQ.text, receivedRowsQ.values);
 
       const rollup = new Map();
       const ensure = (tax_name, tax_rate) => {
