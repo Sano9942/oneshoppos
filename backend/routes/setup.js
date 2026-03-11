@@ -27,13 +27,24 @@ const ROLE_PERMISSIONS = {
   Cashier: ['view_reports', 'pos_discount', 'pos_park'],
 };
 
-module.exports = function createSetupRouter(db) {
+module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManager } = {}) {
   const router = express.Router();
+
+  async function getSetupDb(req) {
+    if (!IS_MULTI_TENANT) return db;
+    const slug = req.query.tenant || req.body?.tenant;
+    if (!slug) throw new Error("tenant slug required in MT mode");
+    const masterDb = require("../master-db-pg");
+    const tenant = await masterDb.getTenantBySlug(slug);
+    if (!tenant) throw new Error(`Tenant "${slug}" not found`);
+    return tenantDbManager.getDb(tenant.id);
+  }
 
   // ── GET /api/setup/status ────────────────────────────────────────────────
   router.get('/status', async (req, res) => {
     try {
-      const { rows: [row] } = await db.query(
+      const setupDb = await getSetupDb(req);
+      const { rows: [row] } = await setupDb.query(
         'SELECT setup_complete FROM company_profile WHERE id = 1',
         []
       );
@@ -75,8 +86,9 @@ module.exports = function createSetupRouter(db) {
     }
 
     try {
+      const setupDb = await getSetupDb(req);
       // Verify token
-      const { rows: [profile] } = await db.query(
+      const { rows: [profile] } = await setupDb.query(
         'SELECT setup_complete, setup_token FROM company_profile WHERE id = 1',
         []
       );
@@ -89,7 +101,7 @@ module.exports = function createSetupRouter(db) {
       }
 
       // All good — run everything in a single transaction
-      await db.transaction(async (client) => {
+      await setupDb.transaction(async (client) => {
         // 1. Update company profile
         await client.query(
           `UPDATE company_profile SET

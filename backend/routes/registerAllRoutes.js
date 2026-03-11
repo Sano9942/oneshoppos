@@ -48,7 +48,12 @@ module.exports = function registerAllRoutes(app, deps) {
 
   // Setup wizard — must be BEFORE auth middleware (no session exists yet)
   const createSetupRouter = require("./setup");
-  app.use("/api/setup", createSetupRouter(db));
+  const IS_MULTI_TENANT = process.env.MULTI_TENANT === "1";
+  let setupTenantDbManager;
+  if (IS_MULTI_TENANT && process.env.DATABASE_URL) {
+    setupTenantDbManager = require("../tenant-db-manager-pg");
+  }
+  app.use("/api/setup", createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManager: setupTenantDbManager }));
 
   // Toggle auth middleware: JWT-based (MULTI_TENANT=1) vs header-based (default)
   app.use(process.env.MULTI_TENANT === "1" ? loadTenantAndPerms : loadEmployeePerms);
