@@ -11,7 +11,7 @@ const fmtDay = (d) => {
 };
 
 export function DashboardTrends({ data }) {
-  const fmt = useCurrency(data);
+  const { fmt } = useCurrency();
   const salesTrend = (data?.salesTrend || []).map((row) => ({
     date: row.day,
     revenue: row.revenue,

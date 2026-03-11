@@ -5,7 +5,7 @@ import { useCurrency } from "./DashboardShared";
 
 export function DashboardRecentSales({ recentSales, data, isSingleBranch, onNavigate }) {
   const navigate = useNavigate();
-  const fmt = useCurrency(data);
+  const { fmt } = useCurrency();
 
   if (!recentSales?.length) {
     return (

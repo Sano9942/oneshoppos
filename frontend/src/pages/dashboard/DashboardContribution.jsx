@@ -19,7 +19,7 @@ function ContributionBar({ label, pct, value, fmt }) {
 }
 
 export function DashboardContribution({ data }) {
-  const fmt = useCurrency(data);
+  const { fmt } = useCurrency();
   const payment = data?.paymentContribution || [];
   const category = data?.categoryContribution || [];
 

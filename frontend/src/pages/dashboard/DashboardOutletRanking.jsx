@@ -2,7 +2,7 @@ import { SectionCard } from "../../ui/primitives";
 import { useCurrency } from "./DashboardShared";
 
 export function DashboardOutletRanking({ data, onNavigate }) {
-  const fmt = useCurrency(data);
+  const { fmt } = useCurrency();
   const outlets = data?.salesByOutlet || [];
   const readiness = data?.operationalReadiness || [];
   const refundPct = data?.refundsToday?.pct_of_sales ?? 0;

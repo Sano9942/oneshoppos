@@ -4,7 +4,7 @@ import { useCurrency } from "./DashboardShared";
 
 export function DashboardInventoryAlerts({ data }) {
   const navigate = useNavigate();
-  const fmt = useCurrency(data);
+  const { fmt } = useCurrency();
   const alerts = data?.lowStock || [];
   const iv = data?.inventoryValue;
 

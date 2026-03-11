@@ -24,7 +24,7 @@ function ExceptionRow({ label, item, fmt, warnPct, dangerPct, onClick }) {
 }
 
 export function DashboardExceptions({ data, onNavigate }) {
-  const fmt = useCurrency(data);
+  const { fmt } = useCurrency();
   const r = data?.refundsToday;
   const v = data?.voidsToday;
   const d = data?.discountsToday;

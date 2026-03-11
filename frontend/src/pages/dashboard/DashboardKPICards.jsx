@@ -41,7 +41,7 @@ function SecondaryKPICard({ label, value, fmt, onClick, colorClass = "text-(--ui
 }
 
 export function DashboardKPICards({ data, isCashier, onNavigate }) {
-  const fmt = useCurrency(data);
+  const { fmt } = useCurrency();
   const totalRevenue = data?.totalRevenueToday ?? 0;
   const allZero = totalRevenue === 0 && !data?.todayProfit && !data?.saleCount;
 
