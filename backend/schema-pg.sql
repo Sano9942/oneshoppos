@@ -1113,6 +1113,11 @@ CREATE INDEX IF NOT EXISTS idx_customers_deleted_at ON customers(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_employees_deleted_at ON employees(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_revoked_tokens_jti ON revoked_tokens(token_jti);
 
+-- ── Seed data ─────────────────────────────────────────────────────
+INSERT INTO company_profile (id, company_name, setup_complete)
+VALUES (1, 'My Store', false)
+ON CONFLICT (id) DO NOTHING;
+
 -- ── Schema versioning ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schema_version (
   version    INTEGER PRIMARY KEY,
