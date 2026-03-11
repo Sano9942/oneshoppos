@@ -333,6 +333,22 @@ CREATE TABLE IF NOT EXISTS purchase_order_items (
   cost_price NUMERIC(12,2) NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS po_templates (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  supplier_id INTEGER REFERENCES suppliers(id),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS po_template_items (
+  id SERIAL PRIMARY KEY,
+  template_id INTEGER NOT NULL REFERENCES po_templates(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  quantity INTEGER NOT NULL DEFAULT 1,
+  unit_cost NUMERIC(12,2)
+);
+
 CREATE TABLE IF NOT EXISTS goods_received_notes (
   id SERIAL PRIMARY KEY,
   grn_number TEXT UNIQUE NOT NULL,
@@ -549,6 +565,30 @@ CREATE TABLE IF NOT EXISTS notifications (
   message TEXT NOT NULL,
   link TEXT,
   is_read BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── Serial Numbers ───────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS product_serial_numbers (
+  id SERIAL PRIMARY KEY,
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  serial_number TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'available',
+  sale_id INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(product_id, serial_number)
+);
+
+-- ── Gift Cards ──────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS gift_cards (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  initial_value NUMERIC(12,2) NOT NULL,
+  remaining_value NUMERIC(12,2) NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  redeemed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

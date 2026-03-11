@@ -1,12 +1,10 @@
 /**
- * backend/routes/admin.js — Super-admin API for tenant management.
+ * backend/routes/admin.js — Super-admin API for tenant management (Postgres).
  *
  * All endpoints live under /api/admin/* and are gated by requireSuperAdmin middleware.
- * Uses master.db directly (not the tenant DB proxy).
+ * Uses master-db-pg (public schema) directly, not the tenant DB proxy.
  */
 const bcrypt = require("bcryptjs");
-const path = require("path");
-const fs = require("fs");
 const net = require("net");
 
 const BCRYPT_ROUNDS = 10;
@@ -46,10 +44,11 @@ function parseAllowedIps() {
 }
 
 module.exports = function registerAdminRoutes(app, { authLimiter }) {
-  const { getMasterDb, initMasterDb } = require("../master-db");
+  const db = require("../db-pg");
+  const masterDb = require("../master-db-pg");
   const jwt = require("jsonwebtoken");
   const { verifyAccessToken, defaults: jwtDefaults } = require("../jwt-auth");
-  const tenantDbManager = require("../tenant-db-manager");
+  const { provision } = require("../tenant-provisioner-pg");
 
   // ── IP Allowlist middleware ──────────────────────────────────────────────
 
@@ -67,51 +66,9 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
   // ── Helpers ─────────────────────────────────────────────────────────────
 
-  function masterGet(sql, params = []) {
-    return new Promise((resolve, reject) => {
-      getMasterDb().get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
-    });
-  }
-
-  function masterAll(sql, params = []) {
-    return new Promise((resolve, reject) => {
-      getMasterDb().all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows || [])));
-    });
-  }
-
-  function masterRun(sql, params = []) {
-    return new Promise((resolve, reject) => {
-      getMasterDb().run(sql, params, function (err) {
-        if (err) return reject(err);
-        resolve({ lastID: this.lastID, changes: this.changes });
-      });
-    });
-  }
-
-  function tenantDbGet(db, sql, params = []) {
-    return new Promise((resolve, reject) => {
-      db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
-    });
-  }
-
-  function tenantDbAll(db, sql, params = []) {
-    return new Promise((resolve, reject) => {
-      db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows || [])));
-    });
-  }
-
-  function tenantDbRun(db, sql, params = []) {
-    return new Promise((resolve, reject) => {
-      db.run(sql, params, function (err) {
-        if (err) return reject(err);
-        resolve({ lastID: this.lastID, changes: this.changes });
-      });
-    });
-  }
-
-  function auditLog(tenantId, action, details, actor) {
-    return masterRun(
-      "INSERT INTO tenant_audit_log (tenant_id, action, details, actor) VALUES (?, ?, ?, ?)",
+  async function auditLog(tenantId, action, details, actor) {
+    await db.query(
+      "INSERT INTO tenant_audit_log (tenant_id, action, details, actor) VALUES ($1, $2, $3, $4)",
       [tenantId, action, details ? JSON.stringify(details) : null, actor]
     );
   }
@@ -146,11 +103,12 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       return res.status(400).json({ error: "email and password are required" });
     }
     try {
-      await initMasterDb();
-      const admin = await masterGet(
-        "SELECT id, email, password_hash, name FROM super_admins WHERE email = ?",
+      await masterDb.init(db);
+      const { rows } = await db.query(
+        "SELECT id, email, password_hash, name FROM super_admins WHERE email = $1",
         [email.toLowerCase().trim()]
       );
+      const admin = rows[0] || null;
       if (!admin) {
         return res.status(401).json({ error: "Invalid email or password" });
       }
@@ -173,7 +131,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
   app.get("/api/admin/tenants", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
-      const tenants = await masterAll(
+      const { rows: tenants } = await db.query(
         `SELECT id, slug, name, owner_email, status, plan, timezone,
                 max_employees, max_outlets, max_products,
                 created_at, updated_at, suspended_at
@@ -199,130 +157,51 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       return res.status(400).json({ error: "pin must be 4-8 digits" });
     }
     try {
-      const existing = await masterGet("SELECT id FROM tenants WHERE slug = ?", [slug]);
-      if (existing) {
+      const { rows: existing } = await db.query("SELECT id FROM tenants WHERE slug = $1", [slug]);
+      if (existing.length > 0) {
         return res.status(409).json({ error: `Tenant "${slug}" already exists` });
       }
 
-      // Inline provisioner logic (avoids shelling out to CLI)
-      const { extractSchema } = require("../schema-full");
-      const sqlite3 = require("sqlite3").verbose();
-
-      const tenantDir = path.join(__dirname, "..", "tenants", `t_${slug}`);
-      const dbPath = path.join(tenantDir, "data.db");
-      const relDbPath = `tenants/t_${slug}/data.db`;
-      const tz = timezone || "UTC";
-
-      // 1. Create directories
-      for (const subdir of ["uploads/products", "uploads/company", "backups", "exports/reports"]) {
-        fs.mkdirSync(path.join(tenantDir, subdir), { recursive: true });
-      }
-
-      // 2. Initialize DB with schema
-      const schema = await extractSchema();
-      const tenantDb = await new Promise((resolve, reject) => {
-        const db = new sqlite3.Database(dbPath, (err) => {
-          if (err) return reject(err);
-          db.exec(schema, (err2) => {
-            if (err2) return reject(err2);
-            resolve(db);
-          });
-        });
+      // Use tenant-provisioner-pg to create schema + seed + register
+      const result = await provision(db, {
+        slug,
+        name,
+        ownerEmail: owner_email || "admin@example.com",
+        timezone: timezone || "UTC",
+        pin: String(pin),
       });
 
-      // 3. Seed data (with bcrypt PIN hashing)
-      const pinHash = await bcrypt.hash(String(pin), BCRYPT_ROUNDS);
-
-      const ALL_PERMISSIONS = [
-        "all_access", "manage_customers", "manage_employees", "manage_inventory",
-        "manage_orders", "pos_discount", "pos_park", "pos_void", "view_reports", "void_sales"
-      ];
-
-      const outletId = (await tenantDbRun(tenantDb,
-        "INSERT INTO outlets (name, address) VALUES (?, '')", [name]
-      )).lastID;
-
-      const roleId = (await tenantDbRun(tenantDb,
-        "INSERT INTO roles (name, description) VALUES ('Admin', 'Full access admin role')"
-      )).lastID;
-
-      for (const perm of ALL_PERMISSIONS) {
-        await tenantDbRun(tenantDb,
-          "INSERT OR IGNORE INTO role_permissions (role_id, permission) VALUES (?, ?)",
-          [roleId, perm]
-        );
+      // Update plan if not default
+      if (plan && plan !== "free") {
+        await db.query("UPDATE tenants SET plan = $1 WHERE id = $2", [plan, result.tenantId]);
       }
 
-      // Check if pin_hash column exists (depends on whether sanopos.db has migrate66 applied)
-      const empCols = await new Promise((resolve, reject) => {
-        tenantDb.all("PRAGMA table_info(employees)", (err, cols) => (err ? reject(err) : resolve(cols)));
-      });
-      const hasPinHash = empCols.some((c) => c.name === "pin_hash");
-      const employeeId = hasPinHash
-        ? (await tenantDbRun(tenantDb,
-            "INSERT INTO employees (name, pin_code, pin_hash, role_id) VALUES ('Admin', ?, ?, ?)",
-            [pin, pinHash, roleId])).lastID
-        : (await tenantDbRun(tenantDb,
-            "INSERT INTO employees (name, pin_code, role_id) VALUES ('Admin', ?, ?)",
-            [pin, roleId])).lastID;
-
-      await tenantDbRun(tenantDb,
-        "INSERT OR IGNORE INTO employee_outlets (employee_id, outlet_id) VALUES (?, ?)",
-        [employeeId, outletId]
-      );
-
-      await tenantDbRun(tenantDb,
-        "INSERT OR IGNORE INTO company_profile (id, company_name, timezone) VALUES (1, ?, ?)",
-        [name, tz]
-      );
-
-      await tenantDbRun(tenantDb,
-        "INSERT INTO taxes (name, rate) VALUES ('Default Tax', 0)"
-      );
-
-      // Stamp schema version (66 includes pin_hash column from migrate66)
-      await tenantDbRun(tenantDb,
-        "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL PRIMARY KEY, applied_at TEXT DEFAULT (datetime('now')))"
-      );
-      await tenantDbRun(tenantDb, "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", [66]);
-
-      await new Promise((resolve) => tenantDb.close(resolve));
-
-      // 4. Register in master.db
-      const result = await masterRun(
-        `INSERT INTO tenants (slug, name, owner_email, status, plan, db_path, timezone)
-         VALUES (?, ?, ?, 'active', ?, ?, ?)`,
-        [slug, name, owner_email || "admin@example.com", plan || "free", relDbPath, tz]
-      );
-
-      await auditLog(result.lastID, "created", { slug, timezone: tz, plan: plan || "free" }, `admin:${req.admin.email}`);
+      await auditLog(result.tenantId, "created", { slug, timezone: timezone || "UTC", plan: plan || "free" }, `admin:${req.admin.email}`);
 
       return res.status(201).json({
         message: "Tenant provisioned",
-        tenant: { id: result.lastID, slug, name, status: "active", plan: plan || "free" },
+        tenant: { id: result.tenantId, slug, name, status: "active", plan: plan || "free" },
       });
     } catch (err) {
-      // Cleanup on failure
-      const tenantDir = path.join(__dirname, "..", "tenants", `t_${slug}`);
-      try { fs.rmSync(tenantDir, { recursive: true, force: true }); } catch {}
       return res.status(500).json({ error: err.message });
     }
   });
 
   app.get("/api/admin/tenants/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
-      const tenant = await masterGet(
-        `SELECT id, slug, name, owner_email, status, plan, db_path, timezone,
+      const { rows } = await db.query(
+        `SELECT id, slug, name, owner_email, status, plan, timezone,
                 max_employees, max_outlets, max_products,
                 stripe_customer_id, stripe_subscription_id, trial_ends_at,
                 created_at, updated_at, suspended_at, deleted_at
-         FROM tenants WHERE id = ?`,
+         FROM tenants WHERE id = $1`,
         [req.params.id]
       );
+      const tenant = rows[0] || null;
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
 
-      const auditEntries = await masterAll(
-        "SELECT action, details, actor, created_at FROM tenant_audit_log WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 20",
+      const { rows: auditEntries } = await db.query(
+        "SELECT action, details, actor, created_at FROM tenant_audit_log WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 20",
         [req.params.id]
       );
 
@@ -335,20 +214,21 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
   app.put("/api/admin/tenants/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     const { name, owner_email, plan, timezone, max_employees, max_outlets, max_products } = req.body || {};
     try {
-      const tenant = await masterGet("SELECT id, plan FROM tenants WHERE id = ?", [req.params.id]);
+      const { rows } = await db.query("SELECT id, plan FROM tenants WHERE id = $1", [req.params.id]);
+      const tenant = rows[0] || null;
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
 
-      await masterRun(
+      await db.query(
         `UPDATE tenants SET
-           name = COALESCE(?, name),
-           owner_email = COALESCE(?, owner_email),
-           plan = COALESCE(?, plan),
-           timezone = COALESCE(?, timezone),
-           max_employees = COALESCE(?, max_employees),
-           max_outlets = COALESCE(?, max_outlets),
-           max_products = COALESCE(?, max_products),
-           updated_at = datetime('now')
-         WHERE id = ?`,
+           name = COALESCE($1, name),
+           owner_email = COALESCE($2, owner_email),
+           plan = COALESCE($3, plan),
+           timezone = COALESCE($4, timezone),
+           max_employees = COALESCE($5, max_employees),
+           max_outlets = COALESCE($6, max_outlets),
+           max_products = COALESCE($7, max_products),
+           updated_at = NOW()
+         WHERE id = $8`,
         [name || null, owner_email || null, plan || null, timezone || null,
          max_employees ?? null, max_outlets ?? null, max_products ?? null, req.params.id]
       );
@@ -367,17 +247,15 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
   app.post("/api/admin/tenants/:id/suspend", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
-      const tenant = await masterGet("SELECT id, slug, status FROM tenants WHERE id = ?", [req.params.id]);
+      const { rows } = await db.query("SELECT id, slug, status FROM tenants WHERE id = $1", [req.params.id]);
+      const tenant = rows[0] || null;
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
       if (tenant.status === "suspended") return res.json({ message: "Already suspended" });
 
-      await masterRun(
-        "UPDATE tenants SET status = 'suspended', suspended_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+      await db.query(
+        "UPDATE tenants SET status = 'suspended', suspended_at = NOW(), updated_at = NOW() WHERE id = $1",
         [req.params.id]
       );
-
-      // Close cached DB connection so future requests fail fast
-      try { await tenantDbManager.closeDb(tenant.id); } catch {}
 
       await auditLog(tenant.id, "suspended", { reason: req.body?.reason }, `admin:${req.admin.email}`);
       return res.json({ message: `Tenant "${tenant.slug}" suspended` });
@@ -388,13 +266,14 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
   app.post("/api/admin/tenants/:id/activate", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
-      const tenant = await masterGet("SELECT id, slug, status FROM tenants WHERE id = ?", [req.params.id]);
+      const { rows } = await db.query("SELECT id, slug, status FROM tenants WHERE id = $1", [req.params.id]);
+      const tenant = rows[0] || null;
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
       if (tenant.status === "active") return res.json({ message: "Already active" });
       if (tenant.status === "deleted") return res.status(400).json({ error: "Cannot reactivate a deleted tenant" });
 
-      await masterRun(
-        "UPDATE tenants SET status = 'active', suspended_at = NULL, updated_at = datetime('now') WHERE id = ?",
+      await db.query(
+        "UPDATE tenants SET status = 'active', suspended_at = NULL, updated_at = NOW() WHERE id = $1",
         [req.params.id]
       );
 
@@ -407,16 +286,15 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
   app.delete("/api/admin/tenants/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
-      const tenant = await masterGet("SELECT id, slug, status FROM tenants WHERE id = ?", [req.params.id]);
+      const { rows } = await db.query("SELECT id, slug, status FROM tenants WHERE id = $1", [req.params.id]);
+      const tenant = rows[0] || null;
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
       if (tenant.status === "deleted") return res.json({ message: "Already deleted" });
 
-      await masterRun(
-        "UPDATE tenants SET status = 'deleted', deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+      await db.query(
+        "UPDATE tenants SET status = 'deleted', deleted_at = NOW(), updated_at = NOW() WHERE id = $1",
         [req.params.id]
       );
-
-      try { await tenantDbManager.closeDb(tenant.id); } catch {}
 
       await auditLog(tenant.id, "deleted", null, `admin:${req.admin.email}`);
       return res.json({ message: `Tenant "${tenant.slug}" soft-deleted` });
@@ -429,28 +307,29 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
   app.get("/api/admin/tenants/:id/stats", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
-      const tenant = await masterGet("SELECT id, slug, db_path, status FROM tenants WHERE id = ?", [req.params.id]);
+      const { rows } = await db.query("SELECT id, slug, status FROM tenants WHERE id = $1", [req.params.id]);
+      const tenant = rows[0] || null;
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
       if (tenant.status !== "active") {
         return res.json({ stats: { status: tenant.status, message: "Tenant is not active" } });
       }
 
-      const tDb = await tenantDbManager.getDb(tenant.id);
+      const schemaName = `tenant_${tenant.slug}`;
       const [employees, products, outlets, sales, customers] = await Promise.all([
-        tenantDbGet(tDb, "SELECT COUNT(*) AS cnt FROM employees"),
-        tenantDbGet(tDb, "SELECT COUNT(*) AS cnt FROM products"),
-        tenantDbGet(tDb, "SELECT COUNT(*) AS cnt FROM outlets"),
-        tenantDbGet(tDb, "SELECT COUNT(*) AS cnt FROM sales"),
-        tenantDbGet(tDb, "SELECT COUNT(*) AS cnt FROM customers"),
+        db.query(`SELECT COUNT(*) AS cnt FROM ${schemaName}.employees`),
+        db.query(`SELECT COUNT(*) AS cnt FROM ${schemaName}.products`),
+        db.query(`SELECT COUNT(*) AS cnt FROM ${schemaName}.outlets`),
+        db.query(`SELECT COUNT(*) AS cnt FROM ${schemaName}.sales`),
+        db.query(`SELECT COUNT(*) AS cnt FROM ${schemaName}.customers`),
       ]);
 
       return res.json({
         stats: {
-          employees: employees.cnt,
-          products: products.cnt,
-          outlets: outlets.cnt,
-          total_sales: sales.cnt,
-          customers: customers.cnt,
+          employees: parseInt(employees.rows[0].cnt, 10),
+          products: parseInt(products.rows[0].cnt, 10),
+          outlets: parseInt(outlets.rows[0].cnt, 10),
+          total_sales: parseInt(sales.rows[0].cnt, 10),
+          customers: parseInt(customers.rows[0].cnt, 10),
         },
       });
     } catch (err) {
@@ -460,7 +339,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
   app.get("/api/admin/stats", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
-      const totals = await masterGet(
+      const { rows: totalsRows } = await db.query(
         `SELECT
            COUNT(*) AS total,
            SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
@@ -470,12 +349,13 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
            SUM(CASE WHEN plan = 'pro' THEN 1 ELSE 0 END) AS pro_plan
          FROM tenants WHERE status != 'deleted'`
       );
+      const totals = totalsRows[0] || {};
 
-      const recentTenants = await masterAll(
+      const { rows: recentTenants } = await db.query(
         "SELECT id, slug, name, plan, status, created_at FROM tenants WHERE status != 'deleted' ORDER BY created_at DESC LIMIT 5"
       );
 
-      const recentAudit = await masterAll(
+      const { rows: recentAudit } = await db.query(
         `SELECT a.action, a.details, a.actor, a.created_at, t.slug AS tenant_slug
          FROM tenant_audit_log a
          LEFT JOIN tenants t ON a.tenant_id = t.id
@@ -492,14 +372,16 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
   app.post("/api/admin/tenants/:id/migrate", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
-      const tenant = await masterGet("SELECT id, slug, db_path, status FROM tenants WHERE id = ?", [req.params.id]);
+      const { rows } = await db.query("SELECT id, slug, status FROM tenants WHERE id = $1", [req.params.id]);
+      const tenant = rows[0] || null;
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
       if (tenant.status !== "active") {
         return res.status(400).json({ error: "Can only migrate active tenants" });
       }
 
-      const { runMigrationsOnTenant } = require("../tenant-migrate");
-      const result = await runMigrationsOnTenant(tenant);
+      // TODO: implement tenant-migrate-pg.js — Postgres tenant migration runner
+      // For now, return a stub response
+      const result = { applied: [], message: "Postgres tenant migration not yet implemented" };
 
       await auditLog(tenant.id, "migrated", { applied: result.applied }, `admin:${req.admin.email}`);
       return res.json(result);
@@ -510,24 +392,16 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
   app.post("/api/admin/migrate-all", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
-      const tenants = await masterAll(
-        "SELECT id, slug, db_path, status FROM tenants WHERE status = 'active'"
+      const { rows: tenants } = await db.query(
+        "SELECT id, slug, status FROM tenants WHERE status = 'active'"
       );
 
-      const { runMigrationsOnTenant } = require("../tenant-migrate");
-      const results = [];
-
-      for (const tenant of tenants) {
-        try {
-          const result = await runMigrationsOnTenant(tenant);
-          results.push({ slug: tenant.slug, ...result });
-          if (result.applied.length > 0) {
-            await auditLog(tenant.id, "migrated", { applied: result.applied }, `admin:${req.admin.email}`);
-          }
-        } catch (err) {
-          results.push({ slug: tenant.slug, error: err.message });
-        }
-      }
+      // TODO: implement tenant-migrate-pg.js — Postgres tenant migration runner
+      const results = tenants.map((t) => ({
+        slug: t.slug,
+        applied: [],
+        message: "Postgres tenant migration not yet implemented",
+      }));
 
       return res.json({ results });
     } catch (err) {
@@ -539,7 +413,8 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
   app.post("/api/admin/tenants/:id/reset-pin", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
-      const tenant = await masterGet("SELECT id, slug, db_path, status FROM tenants WHERE id = ?", [req.params.id]);
+      const { rows } = await db.query("SELECT id, slug, status FROM tenants WHERE id = $1", [req.params.id]);
+      const tenant = rows[0] || null;
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
       if (tenant.status !== "active") {
         return res.status(400).json({ error: "Can only reset PIN for active tenants" });
@@ -548,23 +423,24 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       const newPin = req.body?.pin || "0000";
       const pinHash = await bcrypt.hash(String(newPin), BCRYPT_ROUNDS);
 
-      const tDb = await tenantDbManager.getDb(tenant.id);
+      const schemaName = `tenant_${tenant.slug}`;
 
       // Find the admin employee (first employee with all_access permission)
-      const adminEmp = await tenantDbGet(tDb,
-        `SELECT e.id FROM employees e
-         JOIN roles r ON e.role_id = r.id
-         JOIN role_permissions rp ON rp.role_id = r.id
+      const { rows: adminRows } = await db.query(
+        `SELECT e.id FROM ${schemaName}.employees e
+         JOIN ${schemaName}.roles r ON e.role_id = r.id
+         JOIN ${schemaName}.role_permissions rp ON rp.role_id = r.id
          WHERE rp.permission = 'all_access'
          LIMIT 1`
       );
+      const adminEmp = adminRows[0] || null;
 
       if (!adminEmp) {
         return res.status(404).json({ error: "No admin employee found in tenant" });
       }
 
-      await tenantDbRun(tDb,
-        "UPDATE employees SET pin_code = ?, pin_hash = ? WHERE id = ?",
+      await db.query(
+        `UPDATE ${schemaName}.employees SET pin_code = $1, pin_hash = $2 WHERE id = $3`,
         [newPin, pinHash, adminEmp.id]
       );
 

@@ -241,9 +241,9 @@ async function seedData(db) {
 
   // Employee outlet assignments
   for (const empId of [1, 2, 3]) {
-    await db.query(`INSERT INTO employee_outlets (employee_id, outlet_id) VALUES ($1, 1)`, [empId]);
+    await db.query(`INSERT INTO employee_outlets (employee_id, outlet_id, is_primary) VALUES ($1, 1, true)`, [empId]);
   }
-  await db.query(`INSERT INTO employee_outlets (employee_id, outlet_id) VALUES (1, 2)`);
+  await db.query(`INSERT INTO employee_outlets (employee_id, outlet_id, is_primary) VALUES (1, 2, false)`);
 
   // Category, Tax, Brand
   await db.query(`INSERT INTO categories (id, name, description) VALUES (1, 'Electronics', 'Electronic items')`);

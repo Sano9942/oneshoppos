@@ -1,64 +1,25 @@
 module.exports = function registerBarcodeExpenseRoutes(app, deps) {
-  const { db, requirePerm, requireFeature, sqlite3, multer, path, fs, UPLOADS_DIR, DB_PATH, runtimeState } = deps;
+  const { db, requirePerm, requireFeature, multer, path, fs, runtimeState } = deps;
 
-  // --- NOTIFICATIONS TABLE ---
-  db.run(`CREATE TABLE IF NOT EXISTS notifications (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    message TEXT,
-    type TEXT DEFAULT 'info',
-    read INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`, (err) => {
-    if (!err) {
-      db.get("SELECT COUNT(*) as cnt FROM notifications", (e, r) => {
-        if (!e && r.cnt === 0) {
-          db.run("INSERT INTO notifications (title, message, type) VALUES ('Welcome to SanoPOS', 'Your POS system is ready.', 'info')");
-          db.run("INSERT INTO notifications (title, message, type) VALUES ('Low Stock Alert', '3 products are below reorder level.', 'warning')");
-          db.run("INSERT INTO notifications (title, message, type) VALUES ('Shift Closed', 'Morning shift closed with PKR 0 variance.', 'success')");
-        }
-      });
+  // --- CREATE TABLE statements removed — schema-pg.sql has them ---
+
+  // --- BARCODE TEMPLATES ---
+
+  app.get("/api/barcode-templates", async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        "SELECT * FROM barcode_templates ORDER BY is_default DESC, name ASC"
+      );
+      res.json({ templates: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
-  });
-
-  // --- PRODUCT SERIAL NUMBERS TABLE ---
-  db.run(`CREATE TABLE IF NOT EXISTS product_serial_numbers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    product_id INTEGER NOT NULL,
-    sale_id INTEGER,
-    serial_number TEXT NOT NULL,
-    status TEXT DEFAULT 'available',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  // --- GIFT CARDS TABLE ---
-  db.run(`CREATE TABLE IF NOT EXISTS gift_cards (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    code TEXT UNIQUE NOT NULL,
-    initial_value REAL NOT NULL,
-    remaining_value REAL NOT NULL,
-    status TEXT DEFAULT 'active',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    redeemed_at DATETIME
-  )`);
-
-// --- BARCODE TEMPLATES ---
-
-  app.get("/api/barcode-templates", (req, res) => {
-    db.all(
-      "SELECT * FROM barcode_templates ORDER BY is_default DESC, name ASC",
-      [],
-      (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ templates: rows });
-      },
-    );
   });
 
   app.post(
     "/api/barcode-templates",
     requirePerm("manage_inventory"),
-    (req, res) => {
+    async (req, res) => {
       const {
         name,
         width_mm = 50,
@@ -72,35 +33,40 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
         is_default = 0,
       } = req.body;
       if (!name) return res.status(400).json({ error: "Name required" });
-      db.serialize(() => {
-        if (is_default) db.run("UPDATE barcode_templates SET is_default = 0");
-        db.run(
-          "INSERT INTO barcode_templates (name, width_mm, height_mm, show_name, show_price, show_barcode, show_sku, show_brand, font_size, is_default) VALUES (?,?,?,?,?,?,?,?,?,?)",
-          [
-            name,
-            width_mm,
-            height_mm,
-            show_name ? 1 : 0,
-            show_price ? 1 : 0,
-            show_barcode ? 1 : 0,
-            show_sku ? 1 : 0,
-            show_brand ? 1 : 0,
-            font_size,
-            is_default ? 1 : 0,
-          ],
-          function (err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ id: this.lastID });
-          },
-        );
-      });
+      try {
+        await db.transaction(async (client) => {
+          if (is_default) {
+            await client.query("UPDATE barcode_templates SET is_default = 0");
+          }
+          const { rows } = await client.query(
+            "INSERT INTO barcode_templates (name, width_mm, height_mm, show_name, show_price, show_barcode, show_sku, show_brand, font_size, is_default) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id",
+            [
+              name,
+              width_mm,
+              height_mm,
+              show_name ? 1 : 0,
+              show_price ? 1 : 0,
+              show_barcode ? 1 : 0,
+              show_sku ? 1 : 0,
+              show_brand ? 1 : 0,
+              font_size,
+              is_default ? 1 : 0,
+            ]
+          );
+          return rows[0].id;
+        }).then((id) => {
+          res.json({ id });
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 
   app.put(
     "/api/barcode-templates/:id",
     requirePerm("manage_inventory"),
-    (req, res) => {
+    async (req, res) => {
       const { id } = req.params;
       const {
         name,
@@ -115,175 +81,183 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
         is_default,
       } = req.body;
       if (!name) return res.status(400).json({ error: "Name required" });
-      db.serialize(() => {
-        if (is_default) db.run("UPDATE barcode_templates SET is_default = 0");
-        db.run(
-          "UPDATE barcode_templates SET name=?, width_mm=?, height_mm=?, show_name=?, show_price=?, show_barcode=?, show_sku=?, show_brand=?, font_size=?, is_default=? WHERE id=?",
-          [
-            name,
-            width_mm,
-            height_mm,
-            show_name ? 1 : 0,
-            show_price ? 1 : 0,
-            show_barcode ? 1 : 0,
-            show_sku ? 1 : 0,
-            show_brand ? 1 : 0,
-            font_size,
-            is_default ? 1 : 0,
-            id,
-          ],
-          (err) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ updated: true });
-          },
-        );
-      });
+      try {
+        await db.transaction(async (client) => {
+          if (is_default) {
+            await client.query("UPDATE barcode_templates SET is_default = 0");
+          }
+          await client.query(
+            "UPDATE barcode_templates SET name=$1, width_mm=$2, height_mm=$3, show_name=$4, show_price=$5, show_barcode=$6, show_sku=$7, show_brand=$8, font_size=$9, is_default=$10 WHERE id=$11",
+            [
+              name,
+              width_mm,
+              height_mm,
+              show_name ? 1 : 0,
+              show_price ? 1 : 0,
+              show_barcode ? 1 : 0,
+              show_sku ? 1 : 0,
+              show_brand ? 1 : 0,
+              font_size,
+              is_default ? 1 : 0,
+              id,
+            ]
+          );
+        });
+        res.json({ updated: true });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 
   app.delete(
     "/api/barcode-templates/:id",
     requirePerm("manage_inventory"),
-    (req, res) => {
-      db.run(
-        "DELETE FROM barcode_templates WHERE id = ?",
-        [req.params.id],
-        (err) => {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ deleted: true });
-        },
-      );
+    async (req, res) => {
+      try {
+        await db.query(
+          "DELETE FROM barcode_templates WHERE id = $1",
+          [req.params.id]
+        );
+        res.json({ deleted: true });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 
   // POST /api/barcode-print-jobs — log a batch print event
-  app.post("/api/barcode-print-jobs", (req, res) => {
+  app.post("/api/barcode-print-jobs", async (req, res) => {
     const { template_id, items = [] } = req.body;
     if (!items.length) return res.status(400).json({ error: "No items" });
-    const stmt = db.prepare(
-      "INSERT INTO barcode_print_jobs (template_id, product_id, product_name, barcode, price, copies) VALUES (?,?,?,?,?,?)",
-    );
-    for (const item of items) {
-      stmt.run([
-        template_id || null,
-        item.product_id || null,
-        item.name || "",
-        item.barcode || "",
-        item.price || 0,
-        item.copies || 1,
-      ]);
-    }
-    stmt.finalize((err) => {
-      if (err) return res.status(500).json({ error: err.message });
+    try {
+      for (const item of items) {
+        await db.query(
+          "INSERT INTO barcode_print_jobs (template_id, product_id, product_name, barcode, price, copies) VALUES ($1,$2,$3,$4,$5,$6)",
+          [
+            template_id || null,
+            item.product_id || null,
+            item.name || "",
+            item.barcode || "",
+            item.price || 0,
+            item.copies || 1,
+          ]
+        );
+      }
       res.json({ logged: items.length });
-    });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // --- EXPENSES ---
 
   // Expense categories CRUD
-  app.get("/api/expense-categories", (req, res) => {
-    db.all(
-      "SELECT * FROM expense_categories ORDER BY name ASC",
-      [],
-      (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ categories: rows });
-      },
-    );
+  app.get("/api/expense-categories", async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        "SELECT * FROM expense_categories ORDER BY name ASC"
+      );
+      res.json({ categories: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   app.post(
     "/api/expense-categories",
     requirePerm("manage_inventory"),
-    (req, res) => {
+    async (req, res) => {
       const { name, description } = req.body;
       if (!name) return res.status(400).json({ error: "Name required" });
-      db.run(
-        "INSERT INTO expense_categories (name, description) VALUES (?,?)",
-        [name, description || null],
-        function (err) {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ id: this.lastID });
-        },
-      );
+      try {
+        const { rows } = await db.query(
+          "INSERT INTO expense_categories (name, description) VALUES ($1,$2) RETURNING id",
+          [name, description || null]
+        );
+        res.json({ id: rows[0].id });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 
   app.put(
     "/api/expense-categories/:id",
     requirePerm("manage_inventory"),
-    (req, res) => {
+    async (req, res) => {
       const { name, description } = req.body;
       if (!name) return res.status(400).json({ error: "Name required" });
-      db.run(
-        "UPDATE expense_categories SET name=?, description=? WHERE id=?",
-        [name, description || null, req.params.id],
-        (err) => {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ updated: true });
-        },
-      );
+      try {
+        await db.query(
+          "UPDATE expense_categories SET name=$1, description=$2 WHERE id=$3",
+          [name, description || null, req.params.id]
+        );
+        res.json({ updated: true });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 
   app.delete(
     "/api/expense-categories/:id",
     requirePerm("manage_inventory"),
-    (req, res) => {
-      db.run(
-        "DELETE FROM expense_categories WHERE id=?",
-        [req.params.id],
-        (err) => {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ deleted: true });
-        },
-      );
+    async (req, res) => {
+      try {
+        await db.query(
+          "DELETE FROM expense_categories WHERE id=$1",
+          [req.params.id]
+        );
+        res.json({ deleted: true });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 
   // Expenses CRUD
-  app.get("/api/expenses", (req, res) => {
+  app.get("/api/expenses", async (req, res) => {
     const { outlet_id, category_id, from, to } = req.query;
     let where = "WHERE 1=1";
     const params = [];
+    let idx = 1;
     if (outlet_id) {
-      where += " AND e.outlet_id=?";
+      where += ` AND e.outlet_id=$${idx++}`;
       params.push(outlet_id);
     }
     if (category_id) {
-      where += " AND e.category_id=?";
+      where += ` AND e.category_id=$${idx++}`;
       params.push(category_id);
     }
     if (from) {
-      where += " AND e.expense_date >= ?";
+      where += ` AND e.expense_date >= $${idx++}`;
       params.push(from);
     }
     if (to) {
-      where += " AND e.expense_date <= ?";
+      where += ` AND e.expense_date <= $${idx++}`;
       params.push(to);
     }
 
-    db.all(
-      `
-    SELECT e.*, ec.name as category_name, o.name as outlet_name,
-           emp.name as employee_name
-    FROM expenses e
-    LEFT JOIN expense_categories ec ON e.category_id = ec.id
-    LEFT JOIN outlets o ON e.outlet_id = o.id
-    LEFT JOIN employees emp ON e.employee_id = emp.id
-    ${where}
-    ORDER BY e.expense_date DESC, e.created_at DESC
-  `,
-      params,
-      (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ expenses: rows });
-      },
-    );
+    try {
+      const { rows } = await db.query(
+        `SELECT e.*, ec.name as category_name, o.name as outlet_name,
+                emp.name as employee_name
+         FROM expenses e
+         LEFT JOIN expense_categories ec ON e.category_id = ec.id
+         LEFT JOIN outlets o ON e.outlet_id = o.id
+         LEFT JOIN employees emp ON e.employee_id = emp.id
+         ${where}
+         ORDER BY e.expense_date DESC, e.created_at DESC`,
+        params
+      );
+      res.json({ expenses: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.post("/api/expenses", (req, res) => {
+  app.post("/api/expenses", async (req, res) => {
     const {
       category_id,
       outlet_id,
@@ -296,27 +270,28 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
     } = req.body;
     if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0)
       return res.status(400).json({ error: "Valid amount required" });
-    db.run(
-      `INSERT INTO expenses (category_id, outlet_id, shift_id, employee_id, amount, description, reference, expense_date)
-     VALUES (?,?,?,?,?,?,?,?)`,
-      [
-        category_id || null,
-        outlet_id || null,
-        shift_id || null,
-        employee_id || null,
-        parseFloat(amount),
-        description || null,
-        reference || null,
-        expense_date || new Date().toISOString().slice(0, 10),
-      ],
-      function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ id: this.lastID });
-      },
-    );
+    try {
+      const { rows } = await db.query(
+        `INSERT INTO expenses (category_id, outlet_id, shift_id, employee_id, amount, description, reference, expense_date)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+        [
+          category_id || null,
+          outlet_id || null,
+          shift_id || null,
+          employee_id || null,
+          parseFloat(amount),
+          description || null,
+          reference || null,
+          expense_date || new Date().toISOString().slice(0, 10),
+        ]
+      );
+      res.json({ id: rows[0].id });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.put("/api/expenses/:id", (req, res) => {
+  app.put("/api/expenses/:id", async (req, res) => {
     const {
       category_id,
       outlet_id,
@@ -329,253 +304,96 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
     } = req.body;
     if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0)
       return res.status(400).json({ error: "Valid amount required" });
-    db.run(
-      `UPDATE expenses SET category_id=?, outlet_id=?, shift_id=?, employee_id=?, amount=?,
-     description=?, reference=?, expense_date=? WHERE id=?`,
-      [
-        category_id || null,
-        outlet_id || null,
-        shift_id || null,
-        employee_id || null,
-        parseFloat(amount),
-        description || null,
-        reference || null,
-        expense_date || new Date().toISOString().slice(0, 10),
-        req.params.id,
-      ],
-      (err) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ updated: true });
-      },
-    );
+    try {
+      await db.query(
+        `UPDATE expenses SET category_id=$1, outlet_id=$2, shift_id=$3, employee_id=$4, amount=$5,
+         description=$6, reference=$7, expense_date=$8 WHERE id=$9`,
+        [
+          category_id || null,
+          outlet_id || null,
+          shift_id || null,
+          employee_id || null,
+          parseFloat(amount),
+          description || null,
+          reference || null,
+          expense_date || new Date().toISOString().slice(0, 10),
+          req.params.id,
+        ]
+      );
+      res.json({ updated: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   app.delete(
     "/api/expenses/:id",
     requirePerm("manage_inventory"),
-    (req, res) => {
-      db.run("DELETE FROM expenses WHERE id=?", [req.params.id], (err) => {
-        if (err) return res.status(500).json({ error: err.message });
+    async (req, res) => {
+      try {
+        await db.query("DELETE FROM expenses WHERE id=$1", [req.params.id]);
         res.json({ deleted: true });
-      });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 
   // Summary: expenses by category for a date range (used by reports/dashboard)
-  app.get("/api/expenses/summary", (req, res) => {
+  app.get("/api/expenses/summary", async (req, res) => {
     const { from, to, outlet_id } = req.query;
     let where = "WHERE 1=1";
     const params = [];
+    let idx = 1;
     if (from) {
-      where += " AND e.expense_date >= ?";
+      where += ` AND e.expense_date >= $${idx++}`;
       params.push(from);
     }
     if (to) {
-      where += " AND e.expense_date <= ?";
+      where += ` AND e.expense_date <= $${idx++}`;
       params.push(to);
     }
     if (outlet_id) {
-      where += " AND e.outlet_id = ?";
+      where += ` AND e.outlet_id = $${idx++}`;
       params.push(outlet_id);
     }
 
-    db.all(
-      `
-    SELECT ec.name as category, SUM(e.amount) as total, COUNT(e.id) as count
-    FROM expenses e
-    LEFT JOIN expense_categories ec ON e.category_id = ec.id
-    ${where}
-    GROUP BY e.category_id
-    ORDER BY total DESC
-  `,
-      params,
-      (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        const grandTotal = rows.reduce((s, r) => s + r.total, 0);
-        res.json({ summary: rows, grand_total: grandTotal });
-      },
-    );
+    try {
+      const { rows } = await db.query(
+        `SELECT ec.name as category, SUM(e.amount) as total, COUNT(e.id) as count
+         FROM expenses e
+         LEFT JOIN expense_categories ec ON e.category_id = ec.id
+         ${where}
+         GROUP BY e.category_id, ec.name
+         ORDER BY total DESC`,
+        params
+      );
+      const grandTotal = rows.reduce((s, r) => s + Number(r.total), 0);
+      res.json({ summary: rows, grand_total: grandTotal });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // ─── BACKUP / RESTORE ────────────────────────────────────────────────────────
 
-  const backupUploadDir = UPLOADS_DIR;
-
-  const restoreStorage = multer.diskStorage({
-    destination: (req, file, cb) => {
-      // In multi-tenant mode, write to the tenant's uploads directory
-      const dir = req.tenantDir ? path.join(req.tenantDir, "uploads") : backupUploadDir;
-      fs.mkdirSync(dir, { recursive: true });
-      cb(null, dir);
-    },
-    filename: (req, file, cb) => cb(null, `restore_${Date.now()}.db`),
-  });
-  const restoreUpload = multer({
-    storage: restoreStorage,
-    limits: { fileSize: 500 * 1024 * 1024 },
-  });
-
-  // GET /api/backup/download — stream the SQLite file
+  // GET /api/backup/download — Postgres stub
   app.get(
     "/api/backup/download",
     requirePerm("all_access"),
     requireFeature("backup_restore"),
-    (req, res) => {
-      const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-      // In multi-tenant mode, back up the tenant's DB
-      const dbFilePath = req.tenantDir ? path.join(req.tenantDir, "data.db") : DB_PATH;
-      const filename = `sanopos_backup_${ts}.db`;
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${filename}"`,
-      );
-      res.setHeader("Content-Type", "application/octet-stream");
-      const stream = fs.createReadStream(dbFilePath);
-      stream.on("error", (err) => res.status(500).json({ error: err.message }));
-      stream.pipe(res);
-      // Log the backup event after streaming begins
-      const { performed_by } = req.query;
-      const size = fs.existsSync(dbFilePath) ? fs.statSync(dbFilePath).size : 0;
-      db.run(
-        "INSERT INTO backup_log (action, filename, size_bytes, performed_by) VALUES ('backup', ?, ?, ?)",
-        [filename, size, performed_by || null],
-      );
+    async (req, res) => {
+      res.json({ message: "Postgres backup not yet implemented — use pg_dump" });
     },
   );
 
-  // POST /api/backup/restore — upload a .db file and replace the live DB
+  // POST /api/backup/restore — Postgres stub
   app.post(
     "/api/backup/restore",
     requirePerm("all_access"),
     requireFeature("backup_restore"),
-    restoreUpload.single("backup_file"),
-    (req, res) => {
-      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-      if (runtimeState.isRestoreInProgress) {
-        return res.status(409).json({ error: "Restore already in progress" });
-      }
-      runtimeState.isRestoreInProgress = true;
-
-      const uploadedPath = req.file.path;
-      const { performed_by, note } = req.body;
-
-      const cleanupAndFail = (status, message) => {
-        try {
-          if (fs.existsSync(uploadedPath)) fs.unlinkSync(uploadedPath);
-        } catch (_) {
-          // ignore cleanup errors
-        }
-        runtimeState.isRestoreInProgress = false;
-        return res.status(status).json({ error: message });
-      };
-
-      try {
-        const header = Buffer.alloc(16);
-        const fd = fs.openSync(uploadedPath, "r");
-        fs.readSync(fd, header, 0, 16, 0);
-        fs.closeSync(fd);
-        if (header.toString("ascii", 0, 6) !== "SQLite") {
-          return cleanupAndFail(
-            400,
-            "Uploaded file is not a valid SQLite database",
-          );
-        }
-      } catch (err) {
-        return cleanupAndFail(
-          400,
-          "Failed to read uploaded file: " + err.message,
-        );
-      }
-
-      const verifyDb = new sqlite3.Database(
-        uploadedPath,
-        sqlite3.OPEN_READONLY,
-        (openErr) => {
-          if (openErr) {
-            return cleanupAndFail(
-              400,
-              "Failed to open uploaded database: " + openErr.message,
-            );
-          }
-
-          verifyDb.get("PRAGMA quick_check", [], (qcErr, qcRow) => {
-            verifyDb.close(() => {});
-            if (qcErr)
-              return cleanupAndFail(
-                400,
-                "Failed SQLite integrity check: " + qcErr.message,
-              );
-            const qc = qcRow ? Object.values(qcRow)[0] : null;
-            if (String(qc).toLowerCase() !== "ok") {
-              return cleanupAndFail(
-                400,
-                "Uploaded database failed integrity check",
-              );
-            }
-
-            const ts = new Date()
-              .toISOString()
-              .replace(/[:.]/g, "-")
-              .slice(0, 19);
-            // In multi-tenant mode, resolve paths from tenant directory
-            const restoreUploadsDir = req.tenantDir ? path.join(req.tenantDir, "uploads") : backupUploadDir;
-            const restoreDbPath = req.tenantDir ? path.join(req.tenantDir, "data.db") : DB_PATH;
-            const snapshotPath = path.join(
-              restoreUploadsDir,
-              `sanopos_pre_restore_${ts}.db`,
-            );
-            const stagedPath = path.join(
-              restoreUploadsDir,
-              `sanopos_restore_staged_${Date.now()}.db`,
-            );
-
-            db.run("BEGIN IMMEDIATE", (lockErr) => {
-              if (lockErr)
-                return cleanupAndFail(
-                  503,
-                  "Could not acquire database lock for restore",
-                );
-
-              try {
-                fs.copyFileSync(restoreDbPath, snapshotPath);
-                fs.copyFileSync(uploadedPath, stagedPath);
-                fs.copyFileSync(stagedPath, restoreDbPath);
-                fs.unlinkSync(uploadedPath);
-                fs.unlinkSync(stagedPath);
-              } catch (swapErr) {
-                db.run("ROLLBACK");
-                return cleanupAndFail(
-                  500,
-                  "Failed to replace database: " + swapErr.message,
-                );
-              }
-
-              db.run("ROLLBACK");
-              db.run(
-                "INSERT INTO backup_log (action, filename, size_bytes, performed_by, note) VALUES ('restore', ?, ?, ?, ?)",
-                [
-                  req.file.originalname,
-                  req.file.size,
-                  performed_by || null,
-                  note || null,
-                ],
-                () => {
-                  // best-effort logging
-                },
-              );
-
-              res.json({
-                success: true,
-                message:
-                  "Database restored successfully. Backend will restart now. If not supervised, restart it manually.",
-              });
-              res.on("finish", () => {
-                setTimeout(() => process.exit(0), 300);
-              });
-            });
-          });
-        },
-      );
+    async (req, res) => {
+      res.json({ message: "Postgres restore not yet implemented — use pg_restore" });
     },
   );
 
@@ -584,136 +402,105 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
     "/api/backup/log",
     requirePerm("all_access"),
     requireFeature("backup_restore"),
-    (req, res) => {
-      db.all(
-        "SELECT * FROM backup_log ORDER BY created_at DESC LIMIT 100",
-        [],
-        (err, rows) => {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ log: rows });
-        },
-      );
+    async (req, res) => {
+      try {
+        const { rows } = await db.query(
+          "SELECT * FROM backup_log ORDER BY created_at DESC LIMIT 100"
+        );
+        res.json({ log: rows });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 
   // ─── E-INVOICING ─────────────────────────────────────────────────────────────
 
   // Helper: generate next invoice number atomically (INV-YYYY-00001)
-  function generateInvoiceNumber(cb) {
+  async function generateInvoiceNumber() {
     const year = new Date().getFullYear();
-    db.serialize(() => {
-      db.run(
-        "INSERT INTO invoice_sequences (year, last_seq) VALUES (?, 1) ON CONFLICT(year) DO UPDATE SET last_seq = last_seq + 1",
-        [year],
-        function (err) {
-          if (err) return cb(err);
-          db.get(
-            "SELECT last_seq FROM invoice_sequences WHERE year = ?",
-            [year],
-            (err2, row) => {
-              if (err2) return cb(err2);
-              const seq = String(row.last_seq).padStart(5, "0");
-              cb(null, `INV-${year}-${seq}`);
-            },
-          );
-        },
-      );
-    });
+    await db.query(
+      "INSERT INTO invoice_sequences (year, last_seq) VALUES ($1, 1) ON CONFLICT(year) DO UPDATE SET last_seq = invoice_sequences.last_seq + 1",
+      [year]
+    );
+    const { rows: [row] } = await db.query(
+      "SELECT last_seq FROM invoice_sequences WHERE year = $1",
+      [year]
+    );
+    const seq = String(row.last_seq).padStart(5, "0");
+    return `INV-${year}-${seq}`;
   }
 
-  function assignInvoiceNumberToSale(saleId, retriesLeft, cb) {
-    generateInvoiceNumber((invErr, invoiceNumber) => {
-      if (invErr || !invoiceNumber) {
-        if (retriesLeft > 0)
-          return assignInvoiceNumberToSale(saleId, retriesLeft - 1, cb);
-        return cb(invErr || new Error("Failed to generate invoice number"));
+  async function assignInvoiceNumberToSale(saleId, retriesLeft) {
+    try {
+      const invoiceNumber = await generateInvoiceNumber();
+      if (!invoiceNumber) {
+        if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1);
+        throw new Error("Failed to generate invoice number");
       }
 
-      db.run(
-        "UPDATE sales SET invoice_number = ? WHERE id = ? AND invoice_number IS NULL",
-        [invoiceNumber, saleId],
-        function (updateErr) {
-          if (updateErr) {
-            if (retriesLeft > 0)
-              return assignInvoiceNumberToSale(saleId, retriesLeft - 1, cb);
-            return cb(updateErr);
-          }
-
-          if (this.changes > 0) return cb(null, invoiceNumber);
-
-          db.get(
-            "SELECT invoice_number FROM sales WHERE id = ?",
-            [saleId],
-            (rowErr, row) => {
-              if (rowErr) {
-                if (retriesLeft > 0)
-                  return assignInvoiceNumberToSale(saleId, retriesLeft - 1, cb);
-                return cb(rowErr);
-              }
-              if (row && row.invoice_number)
-                return cb(null, row.invoice_number);
-              if (retriesLeft > 0)
-                return assignInvoiceNumberToSale(saleId, retriesLeft - 1, cb);
-              return cb(new Error("Invoice number update affected zero rows"));
-            },
-          );
-        },
+      const { rowCount } = await db.query(
+        "UPDATE sales SET invoice_number = $1 WHERE id = $2 AND invoice_number IS NULL",
+        [invoiceNumber, saleId]
       );
-    });
+
+      if (rowCount > 0) return invoiceNumber;
+
+      const { rows: [row] } = await db.query(
+        "SELECT invoice_number FROM sales WHERE id = $1",
+        [saleId]
+      );
+      if (row && row.invoice_number) return row.invoice_number;
+      if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1);
+      throw new Error("Invoice number update affected zero rows");
+    } catch (err) {
+      if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1);
+      throw err;
+    }
   }
 
-  function getInvoiceData(saleId, cb) {
-    db.get(
+  async function getInvoiceData(saleId) {
+    const { rows: [sale] } = await db.query(
       `SELECT s.*, o.name as outlet_name, o.address as outlet_address,
-            e.name as employee_name,
-            c.name as customer_name, c.mobile as customer_phone, c.email as customer_email,
-            cp.company_name, cp.trading_name, cp.ntn, cp.strn, cp.phone as company_phone,
-            cp.email as company_email, cp.website as company_website, cp.address as company_address,
-            cp.city as company_city, cp.country as company_country, cp.logo_url as company_logo_url,
-            cp.currency_symbol, cp.currency_code
-     FROM sales s
-     LEFT JOIN outlets o ON s.outlet_id = o.id
-     LEFT JOIN employees e ON s.employee_id = e.id
-     LEFT JOIN customers c ON s.customer_id = c.id
-     LEFT JOIN company_profile cp ON cp.id = 1
-     WHERE s.id = ?`,
-      [saleId],
-      (err, sale) => {
-        if (err) return cb(err);
-        if (!sale) return cb(null, null);
-        db.all(
-          `SELECT si.*, p.name as product_name, p.barcode,
-                t.name as tax_name, t.rate as tax_rate
-         FROM sale_items si
-         JOIN products p ON si.product_id = p.id
-         LEFT JOIN taxes t ON p.tax_id = t.id
-         WHERE si.sale_id = ?`,
-          [saleId],
-          (err2, items) => {
-            if (err2) return cb(err2);
-            db.all(
-              "SELECT * FROM sale_payments WHERE sale_id = ?",
-              [saleId],
-              (err3, payments) => {
-                if (err3) return cb(err3);
-                cb(null, {
-                  sale,
-                  items: items || [],
-                  payments: payments || [],
-                });
-              },
-            );
-          },
-        );
-      },
+              e.name as employee_name,
+              c.name as customer_name, c.mobile as customer_phone, c.email as customer_email,
+              cp.company_name, cp.trading_name, cp.ntn, cp.strn, cp.phone as company_phone,
+              cp.email as company_email, cp.website as company_website, cp.address as company_address,
+              cp.city as company_city, cp.country as company_country, cp.logo_url as company_logo_url,
+              cp.currency_symbol, cp.currency_code
+       FROM sales s
+       LEFT JOIN outlets o ON s.outlet_id = o.id
+       LEFT JOIN employees e ON s.employee_id = e.id
+       LEFT JOIN customers c ON s.customer_id = c.id
+       LEFT JOIN company_profile cp ON cp.id = 1
+       WHERE s.id = $1`,
+      [saleId]
     );
+    if (!sale) return null;
+
+    const { rows: items } = await db.query(
+      `SELECT si.*, p.name as product_name, p.barcode,
+              t.name as tax_name, t.rate as tax_rate
+       FROM sale_items si
+       JOIN products p ON si.product_id = p.id
+       LEFT JOIN taxes t ON p.tax_id = t.id
+       WHERE si.sale_id = $1`,
+      [saleId]
+    );
+
+    const { rows: payments } = await db.query(
+      "SELECT * FROM sale_payments WHERE sale_id = $1",
+      [saleId]
+    );
+
+    return { sale, items: items || [], payments: payments || [] };
   }
 
   // GET /api/sales/:id/invoice — formal invoice data for a sale
-  app.get("/api/sales/:id/invoice", (req, res) => {
+  app.get("/api/sales/:id/invoice", async (req, res) => {
     const { id } = req.params;
-    getInvoiceData(id, (err, payload) => {
-      if (err) return res.status(500).json({ error: err.message });
+    try {
+      const payload = await getInvoiceData(id);
       if (!payload) return res.status(404).json({ error: "Sale not found" });
       return res.json({
         ...payload,
@@ -737,17 +524,19 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
           currency_code: payload.sale.currency_code || "PKR",
         },
       });
-    });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // GET /api/sales/:id/invoice/export - normalized JSON export contract (v1.0)
   app.get(
     "/api/sales/:id/invoice/export",
     requireFeature("e_invoicing_export"),
-    (req, res) => {
+    async (req, res) => {
       const { id } = req.params;
-      getInvoiceData(id, (err, payload) => {
-        if (err) return res.status(500).json({ error: err.message });
+      try {
+        const payload = await getInvoiceData(id);
         if (!payload) return res.status(404).json({ error: "Sale not found" });
 
         const { sale, items, payments } = payload;
@@ -834,7 +623,9 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
             amount: Number(p.amount || 0),
           })),
         });
-      });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 
@@ -842,136 +633,154 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
 
   // --- NOTIFICATIONS ---
 
-  app.get("/api/notifications", requirePerm("view_reports"), (req, res) => {
-    db.all(
-      "SELECT * FROM notifications ORDER BY read ASC, created_at DESC",
-      [],
-      (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ notifications: rows });
-      },
-    );
+  app.get("/api/notifications", requirePerm("view_reports"), async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        "SELECT * FROM notifications ORDER BY is_read ASC, created_at DESC"
+      );
+      res.json({ notifications: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.post("/api/notifications/:id/read", requirePerm("view_reports"), (req, res) => {
+  app.post("/api/notifications/:id/read", requirePerm("view_reports"), async (req, res) => {
     const { id } = req.params;
-    db.run("UPDATE notifications SET read=1 WHERE id=?", [id], function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      if (this.changes === 0) return res.status(404).json({ error: "Notification not found" });
+    try {
+      const { rowCount } = await db.query(
+        "UPDATE notifications SET is_read=true WHERE id=$1",
+        [id]
+      );
+      if (rowCount === 0) return res.status(404).json({ error: "Notification not found" });
       res.json({ updated: true });
-    });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // --- SERIAL NUMBERS ---
 
-  app.get("/api/products/:id/serials", requirePerm("manage_inventory"), (req, res) => {
+  app.get("/api/products/:id/serials", requirePerm("manage_inventory"), async (req, res) => {
     const { id } = req.params;
-    db.all(
-      "SELECT * FROM product_serial_numbers WHERE product_id=? ORDER BY created_at DESC",
-      [id],
-      (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ serials: rows });
-      },
-    );
+    try {
+      const { rows } = await db.query(
+        "SELECT * FROM product_serial_numbers WHERE product_id=$1 ORDER BY created_at DESC",
+        [id]
+      );
+      res.json({ serials: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.post("/api/products/:id/serials", requirePerm("manage_inventory"), (req, res) => {
+  app.post("/api/products/:id/serials", requirePerm("manage_inventory"), async (req, res) => {
     const { id } = req.params;
     const { serial_numbers } = req.body;
     if (!Array.isArray(serial_numbers) || serial_numbers.length === 0)
       return res.status(400).json({ error: "serial_numbers array required" });
-    const stmt = db.prepare(
-      "INSERT INTO product_serial_numbers (product_id, serial_number) VALUES (?, ?)",
-    );
-    let inserted = 0;
-    let failed = 0;
-    serial_numbers.forEach((sn) => {
-      stmt.run([id, sn], (err) => {
-        if (err) failed++;
-        else inserted++;
-      });
-    });
-    stmt.finalize((err) => {
-      if (err) return res.status(500).json({ error: err.message });
+    try {
+      let inserted = 0;
+      let failed = 0;
+      for (const sn of serial_numbers) {
+        try {
+          await db.query(
+            "INSERT INTO product_serial_numbers (product_id, serial_number) VALUES ($1, $2)",
+            [id, sn]
+          );
+          inserted++;
+        } catch (_) {
+          failed++;
+        }
+      }
       res.json({ inserted, failed });
-    });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.post("/api/serials/:id/assign", requirePerm("manage_inventory"), (req, res) => {
+  app.post("/api/serials/:id/assign", requirePerm("manage_inventory"), async (req, res) => {
     const { id } = req.params;
     const { sale_id } = req.body;
     if (!sale_id) return res.status(400).json({ error: "sale_id required" });
-    db.run(
-      "UPDATE product_serial_numbers SET status='sold', sale_id=? WHERE id=?",
-      [sale_id, id],
-      function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (this.changes === 0) return res.status(404).json({ error: "Serial not found" });
-        res.json({ updated: true });
-      },
-    );
+    try {
+      const { rowCount } = await db.query(
+        "UPDATE product_serial_numbers SET status='sold', sale_id=$1 WHERE id=$2",
+        [sale_id, id]
+      );
+      if (rowCount === 0) return res.status(404).json({ error: "Serial not found" });
+      res.json({ updated: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // --- GIFT CARDS ---
 
-  app.get("/api/gift-cards", requirePerm("manage_orders"), (req, res) => {
-    db.all(
-      "SELECT * FROM gift_cards ORDER BY created_at DESC",
-      [],
-      (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ gift_cards: rows });
-      },
-    );
+  app.get("/api/gift-cards", requirePerm("manage_orders"), async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        "SELECT * FROM gift_cards ORDER BY created_at DESC"
+      );
+      res.json({ gift_cards: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.post("/api/gift-cards", requirePerm("manage_orders"), (req, res) => {
+  app.post("/api/gift-cards", requirePerm("manage_orders"), async (req, res) => {
     const { initial_value } = req.body;
     if (!initial_value || Number(initial_value) <= 0)
       return res.status(400).json({ error: "initial_value must be greater than 0" });
     const code = require("crypto").randomBytes(4).toString("hex").toUpperCase();
     const val = Number(initial_value);
-    db.run(
-      "INSERT INTO gift_cards (code, initial_value, remaining_value) VALUES (?, ?, ?)",
-      [code, val, val],
-      function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ id: this.lastID, code });
-      },
-    );
+    try {
+      const { rows } = await db.query(
+        "INSERT INTO gift_cards (code, initial_value, remaining_value) VALUES ($1, $2, $3) RETURNING id",
+        [code, val, val]
+      );
+      res.json({ id: rows[0].id, code });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.get("/api/gift-cards/:code", (req, res) => {
+  app.get("/api/gift-cards/:code", async (req, res) => {
     const { code } = req.params;
-    db.get("SELECT * FROM gift_cards WHERE code=?", [code], (err, row) => {
-      if (err) return res.status(500).json({ error: err.message });
+    try {
+      const { rows: [row] } = await db.query(
+        "SELECT * FROM gift_cards WHERE code=$1",
+        [code]
+      );
       if (!row) return res.status(404).json({ error: "Gift card not found" });
       res.json({ gift_card: row });
-    });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
-  app.post("/api/gift-cards/:code/redeem", requirePerm("manage_orders"), (req, res) => {
+  app.post("/api/gift-cards/:code/redeem", requirePerm("manage_orders"), async (req, res) => {
     const { code } = req.params;
     const { amount } = req.body;
     if (!amount || Number(amount) <= 0)
       return res.status(400).json({ error: "amount must be greater than 0" });
-    db.get("SELECT * FROM gift_cards WHERE code=?", [code], (err, card) => {
-      if (err) return res.status(500).json({ error: err.message });
+    try {
+      const { rows: [card] } = await db.query(
+        "SELECT * FROM gift_cards WHERE code=$1",
+        [code]
+      );
       if (!card) return res.status(404).json({ error: "Gift card not found" });
       if (card.status !== "active") return res.status(400).json({ error: "Gift card is not active" });
-      const deduct = Math.min(Number(amount), card.remaining_value);
-      const newBalance = card.remaining_value - deduct;
+      const deduct = Math.min(Number(amount), Number(card.remaining_value));
+      const newBalance = Number(card.remaining_value) - deduct;
       const newStatus = newBalance <= 0 ? "redeemed" : "active";
       const redeemedAt = newBalance <= 0 ? new Date().toISOString().replace("T", " ").slice(0, 19) : null;
-      db.run(
-        "UPDATE gift_cards SET remaining_value=?, status=?, redeemed_at=COALESCE(redeemed_at, ?) WHERE code=?",
-        [newBalance, newStatus, redeemedAt, code],
-        function (upErr) {
-          if (upErr) return res.status(500).json({ error: upErr.message });
-          res.json({ deducted: deduct, remaining_value: newBalance, status: newStatus });
-        },
+      await db.query(
+        "UPDATE gift_cards SET remaining_value=$1, status=$2, redeemed_at=COALESCE(redeemed_at, $3) WHERE code=$4",
+        [newBalance, newStatus, redeemedAt, code]
       );
-    });
+      res.json({ deducted: deduct, remaining_value: newBalance, status: newStatus });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 };

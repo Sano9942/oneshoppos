@@ -5,55 +5,42 @@ module.exports = function registerSalesRoutes(app, deps) {
 
   // --- HELPERS (inlined because these functions live in other route modules) ---
 
-  function generateInvoiceNumber(cb) {
+  async function generateInvoiceNumber(client) {
     const year = new Date().getFullYear();
-    db.serialize(() => {
-      db.run(
-        "INSERT INTO invoice_sequences (year, last_seq) VALUES (?, 1) ON CONFLICT(year) DO UPDATE SET last_seq = last_seq + 1",
-        [year],
-        function (err) {
-          if (err) return cb(err);
-          db.get(
-            "SELECT last_seq FROM invoice_sequences WHERE year = ?",
-            [year],
-            (err2, row) => {
-              if (err2) return cb(err2);
-              const seq = String(row.last_seq).padStart(5, "0");
-              cb(null, `INV-${year}-${seq}`);
-            },
-          );
-        },
-      );
-    });
+    await client.query(
+      "INSERT INTO invoice_sequences (year, last_seq) VALUES ($1, 1) ON CONFLICT(year) DO UPDATE SET last_seq = invoice_sequences.last_seq + 1",
+      [year]
+    );
+    const { rows: [row] } = await client.query(
+      "SELECT last_seq FROM invoice_sequences WHERE year = $1",
+      [year]
+    );
+    const seq = String(row.last_seq).padStart(5, "0");
+    return `INV-${year}-${seq}`;
   }
 
-  function assignInvoiceNumberToSale(saleId, retriesLeft, cb) {
-    generateInvoiceNumber((invErr, invoiceNumber) => {
-      if (invErr || !invoiceNumber) {
-        if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1, cb);
-        return cb(invErr || new Error("Failed to generate invoice number"));
-      }
-      db.run(
-        "UPDATE sales SET invoice_number = ? WHERE id = ? AND invoice_number IS NULL",
-        [invoiceNumber, saleId],
-        function (updateErr) {
-          if (updateErr) {
-            if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1, cb);
-            return cb(updateErr);
-          }
-          if (this.changes > 0) return cb(null, invoiceNumber);
-          db.get("SELECT invoice_number FROM sales WHERE id = ?", [saleId], (rowErr, row) => {
-            if (rowErr) {
-              if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1, cb);
-              return cb(rowErr);
-            }
-            if (row && row.invoice_number) return cb(null, row.invoice_number);
-            if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1, cb);
-            return cb(new Error("Invoice number update affected zero rows"));
-          });
-        },
-      );
-    });
+  async function assignInvoiceNumberToSale(saleId, retriesLeft) {
+    try {
+      const invoiceNumber = await db.transaction(async (client) => {
+        const invNum = await generateInvoiceNumber(client);
+        const { rowCount } = await client.query(
+          "UPDATE sales SET invoice_number = $1 WHERE id = $2 AND invoice_number IS NULL",
+          [invNum, saleId]
+        );
+        if (rowCount > 0) return invNum;
+        // Another process may have set it already
+        const { rows: [existing] } = await client.query(
+          "SELECT invoice_number FROM sales WHERE id = $1",
+          [saleId]
+        );
+        if (existing && existing.invoice_number) return existing.invoice_number;
+        throw new Error("Invoice number update affected zero rows");
+      });
+      return invoiceNumber;
+    } catch (err) {
+      if (retriesLeft > 0) return assignInvoiceNumberToSale(saleId, retriesLeft - 1);
+      throw err;
+    }
   }
 
   // enqueueInventorySyncEvents is a Shopify sync helper defined in orders.js.
@@ -66,101 +53,88 @@ module.exports = function registerSalesRoutes(app, deps) {
     if (typeof cb === "function") cb(null, { queued: 0, skipped: changes.length });
   }
 
-  function getActiveShiftForOutlet(outletId) {
-    return new Promise((resolve, reject) => {
-      db.get(
-        "SELECT * FROM cash_shifts WHERE outlet_id = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
-        [Number(outletId)],
-        (err, row) => {
-          if (err) return reject(err);
-          resolve(row || null);
-        },
-      );
-    });
+  async function getActiveShiftForOutlet(outletId) {
+    const { rows: [row] } = await db.query(
+      "SELECT * FROM cash_shifts WHERE outlet_id = $1 AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
+      [Number(outletId)]
+    );
+    return row || null;
   }
 
-  function getEmployeeCheckoutStatus(employeeId, outletId) {
-    const today = new Date().toLocaleDateString("sv-SE");
-    return new Promise((resolve, reject) => {
-      db.get(
-        `SELECT * FROM attendance_sessions
-         WHERE employee_id = ? AND outlet_id = ? AND session_end IS NULL
-           AND date(session_start) = ?
-         ORDER BY session_start DESC
-         LIMIT 1`,
-        [Number(employeeId), Number(outletId), today],
-        (err, openSession) => {
-          if (err) return reject(err);
-          if (openSession) {
-            return resolve(
-              openSession.session_type === "work" ? "clocked_in" : "on_break",
-            );
-          }
-          db.get(
-            `SELECT COUNT(*) AS cnt
-             FROM attendance_sessions
-             WHERE employee_id = ? AND outlet_id = ?
-               AND date(session_start) = ?`,
-            [Number(employeeId), Number(outletId), today],
-            (countErr, countRow) => {
-              if (countErr) return reject(countErr);
-              resolve(Number(countRow?.cnt || 0) > 0 ? "clocked_out" : "not_clocked_in");
-            },
-          );
-        },
-      );
-    });
+  async function getEmployeeCheckoutStatus(employeeId, outletId) {
+    const today = new Date().toISOString().slice(0, 10);
+    const { rows: [openSession] } = await db.query(
+      `SELECT * FROM attendance_sessions
+       WHERE employee_id = $1 AND outlet_id = $2 AND session_end IS NULL
+         AND session_start::date = $3::date
+       ORDER BY session_start DESC
+       LIMIT 1`,
+      [Number(employeeId), Number(outletId), today]
+    );
+    if (openSession) {
+      return openSession.session_type === "work" ? "clocked_in" : "on_break";
+    }
+    const { rows: [countRow] } = await db.query(
+      `SELECT COUNT(*) AS cnt
+       FROM attendance_sessions
+       WHERE employee_id = $1 AND outlet_id = $2
+         AND session_start::date = $3::date`,
+      [Number(employeeId), Number(outletId), today]
+    );
+    return Number(countRow?.cnt || 0) > 0 ? "clocked_out" : "not_clocked_in";
   }
 
 // --- SALES HISTORY ROUTES ---
 
   // GET all sales (paginated, filterable)
-  app.get("/api/sales", (req, res) => {
-    const {
-      page = 1,
-      limit = 50,
-      search = "",
-      date_from = "",
-      date_to = "",
-      outlet_id = "",
-    } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+  app.get("/api/sales", async (req, res) => {
+    try {
+      const {
+        page = 1,
+        limit = 50,
+        search = "",
+        date_from = "",
+        date_to = "",
+        outlet_id = "",
+      } = req.query;
+      const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    let conditions = ["s.voided IS NULL OR s.voided = 0"];
-    let params = [];
+      let conditions = ["(s.voided IS NULL OR s.voided = false)"];
+      let params = [];
+      let paramIdx = 1;
 
-    if (search) {
-      conditions.push(
-        "(CAST(s.id AS TEXT) LIKE ? OR e.name LIKE ? OR o.name LIKE ? OR s.invoice_number LIKE ?)",
-      );
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
-    }
-    const tz = req.company?.timezone || "UTC";
-    if (date_from) {
-      conditions.push("s.timestamp >= ?");
-      params.push(toUtcStart(date_from, tz));
-    }
-    if (date_to) {
-      conditions.push("s.timestamp < ?");
-      params.push(toUtcEnd(date_to, tz));
-    }
-    if (outlet_id) {
-      conditions.push("s.outlet_id = ?");
-      params.push(Number(outlet_id));
-    }
+      if (search) {
+        conditions.push(
+          `(CAST(s.id AS TEXT) ILIKE $${paramIdx} OR e.name ILIKE $${paramIdx + 1} OR o.name ILIKE $${paramIdx + 2} OR s.invoice_number ILIKE $${paramIdx + 3})`
+        );
+        params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+        paramIdx += 4;
+      }
+      const tz = req.company?.timezone || "UTC";
+      if (date_from) {
+        conditions.push(`s.timestamp >= $${paramIdx++}`);
+        params.push(toUtcStart(date_from, tz));
+      }
+      if (date_to) {
+        conditions.push(`s.timestamp < $${paramIdx++}`);
+        params.push(toUtcEnd(date_to, tz));
+      }
+      if (outlet_id) {
+        conditions.push(`s.outlet_id = $${paramIdx++}`);
+        params.push(Number(outlet_id));
+      }
 
-    const where = conditions.join(" AND ");
+      const where = conditions.join(" AND ");
 
-    const countQuery = `SELECT COUNT(*) as total FROM sales s
-    LEFT JOIN outlets o ON s.outlet_id = o.id
-    LEFT JOIN employees e ON s.employee_id = e.id
-    LEFT JOIN customers c ON s.customer_id = c.id
-    WHERE ${where}`;
+      const countQuery = `SELECT COUNT(*) as total FROM sales s
+      LEFT JOIN outlets o ON s.outlet_id = o.id
+      LEFT JOIN employees e ON s.employee_id = e.id
+      LEFT JOIN customers c ON s.customer_id = c.id
+      WHERE ${where}`;
 
-    db.get(countQuery, params, (err, countRow) => {
-      if (err) return res.status(500).json({ error: err.message });
+      const { rows: [countRow] } = await db.query(countQuery, params);
+      const total = Number(countRow?.total || 0);
 
-      const total = countRow?.total || 0;
       const listParams = [...params, parseInt(limit), offset];
 
       const listQuery = `
@@ -176,73 +150,71 @@ module.exports = function registerSalesRoutes(app, deps) {
       LEFT JOIN customers c ON s.customer_id = c.id
       LEFT JOIN sale_items si ON s.id = si.sale_id
       WHERE ${where}
-      GROUP BY s.id
+      GROUP BY s.id, s.timestamp, s.total_amount, s.payment_method, s.voided, s.void_reason,
+               s.discount_amount, s.discount_type, s.invoice_number, s.outlet_id,
+               o.name, e.name, c.name, c.email
       ORDER BY s.timestamp DESC
-      LIMIT ? OFFSET ?`;
+      LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
 
-      db.all(listQuery, listParams, (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({
-          sales: rows,
-          total,
-          pages: Math.ceil(total / parseInt(limit)),
-          page: parseInt(page),
-        });
+      const { rows } = await db.query(listQuery, listParams);
+      res.json({
+        sales: rows,
+        total,
+        pages: Math.ceil(total / parseInt(limit)),
+        page: parseInt(page),
       });
-    });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // GET a single sale with full line items and payments
-  app.get("/api/sales/:id", (req, res) => {
+  app.get("/api/sales/:id", async (req, res) => {
     const { id } = req.params;
 
-    db.get(
-      `SELECT s.*, o.name as outlet_name, e.name as employee_name
-     FROM sales s
-     LEFT JOIN outlets o ON s.outlet_id = o.id
-     LEFT JOIN employees e ON s.employee_id = e.id
-     WHERE s.id = ?`,
-      [id],
-      (err, sale) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!sale) return res.status(404).json({ error: "Sale not found" });
+    try {
+      const { rows: [sale] } = await db.query(
+        `SELECT s.*, o.name as outlet_name, e.name as employee_name
+       FROM sales s
+       LEFT JOIN outlets o ON s.outlet_id = o.id
+       LEFT JOIN employees e ON s.employee_id = e.id
+       WHERE s.id = $1`,
+        [id]
+      );
+      if (!sale) return res.status(404).json({ error: "Sale not found" });
 
-        db.all(
-          `SELECT si.*, p.name as product_name, p.barcode
-         FROM sale_items si JOIN products p ON si.product_id = p.id
-         WHERE si.sale_id = ?`,
-          [id],
-          (err, items) => {
-            if (err) return res.status(500).json({ error: err.message });
+      const { rows: items } = await db.query(
+        `SELECT si.*, p.name as product_name, p.barcode
+       FROM sale_items si JOIN products p ON si.product_id = p.id
+       WHERE si.sale_id = $1`,
+        [id]
+      );
 
-            db.all(
-              "SELECT * FROM sale_payments WHERE sale_id = ?",
-              [id],
-              (err, payments) => {
-                if (err) return res.status(500).json({ error: err.message });
-                res.json({ sale, items, payments });
-              },
-            );
-          },
-        );
-      },
-    );
+      const { rows: payments } = await db.query(
+        "SELECT * FROM sale_payments WHERE sale_id = $1",
+        [id]
+      );
+
+      res.json({ sale, items, payments });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // VOID a sale — marks as voided and restores stock to outlet
   app.put(
     "/api/sales/:id/void",
     requireAnyPerm(["void_sales", "pos_void"]),
-    (req, res) => {
+    async (req, res) => {
       const { id } = req.params;
       const { void_reason } = req.body;
 
       if (!void_reason)
         return res.status(400).json({ error: "void_reason is required" });
 
-      // Fetch the sale first to check it exists and isn't already voided
-      db.get("SELECT * FROM sales WHERE id = ?", [id], (err, sale) => {
-        if (err) return res.status(500).json({ error: err.message });
+      try {
+        // Fetch the sale first to check it exists and isn't already voided
+        const { rows: [sale] } = await db.query("SELECT * FROM sales WHERE id = $1", [id]);
         if (!sale) return res.status(404).json({ error: "Sale not found" });
         if (sale.voided)
           return res.status(400).json({ error: "Sale is already voided" });
@@ -252,67 +224,44 @@ module.exports = function registerSalesRoutes(app, deps) {
             .json({ error: "Cannot void sales without outlet attribution" });
 
         // Fetch line items to restore stock
-        db.all(
-          "SELECT * FROM sale_items WHERE sale_id = ?",
-          [id],
-          (err, items) => {
-            if (err) return res.status(500).json({ error: err.message });
-
-            db.serialize(() => {
-              db.run("BEGIN TRANSACTION");
-
-              // Mark the sale as voided
-              db.run(
-                "UPDATE sales SET voided = 1, void_reason = ? WHERE id = ?",
-                [void_reason, id],
-                function (err) {
-                  if (err) {
-                    db.run("ROLLBACK");
-                    return res
-                      .status(500)
-                      .json({ error: "Failed to void sale" });
-                  }
-                },
-              );
-
-              // Restore stock for each item back to the outlet
-              const restoreStmt = db.prepare(
-                `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES (?, ?, ?)
-           ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = quantity + ?`,
-              );
-              items.forEach((item) => {
-                restoreStmt.run(
-                  item.product_id,
-                  sale.outlet_id,
-                  item.quantity,
-                  item.quantity,
-                );
-              });
-              restoreStmt.finalize();
-
-              db.run("COMMIT", (err) => {
-                if (err)
-                  return res
-                    .status(500)
-                    .json({ error: "Failed to commit void transaction" });
-                const syncChanges = items.map((item) => ({
-                  product_id: item.product_id,
-                  variant_id: item.variant_id || null,
-                  outlet_id: sale.outlet_id,
-                  delta: Number(item.quantity || 0),
-                  reason: "void",
-                  reference_type: "sale_void",
-                  reference_id: id,
-                }));
-                enqueueInventorySyncEvents(syncChanges, {}, () => {});
-                res.json({
-                  message: "Sale voided successfully. Stock has been restored.",
-                });
-              });
-            });
-          },
+        const { rows: items } = await db.query(
+          "SELECT * FROM sale_items WHERE sale_id = $1",
+          [id]
         );
-      });
+
+        await db.transaction(async (client) => {
+          // Mark the sale as voided
+          await client.query(
+            "UPDATE sales SET voided = true, void_reason = $1 WHERE id = $2",
+            [void_reason, id]
+          );
+
+          // Restore stock for each item back to the outlet
+          for (const item of items) {
+            await client.query(
+              `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, $2, $3)
+               ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
+              [item.product_id, sale.outlet_id, item.quantity, item.quantity]
+            );
+          }
+        });
+
+        const syncChanges = items.map((item) => ({
+          product_id: item.product_id,
+          variant_id: item.variant_id || null,
+          outlet_id: sale.outlet_id,
+          delta: Number(item.quantity || 0),
+          reason: "void",
+          reference_type: "sale_void",
+          reference_id: id,
+        }));
+        enqueueInventorySyncEvents(syncChanges, {}, () => {});
+        res.json({
+          message: "Sale voided successfully. Stock has been restored.",
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 
@@ -386,43 +335,35 @@ module.exports = function registerSalesRoutes(app, deps) {
     // B2 fix: Check stock availability before starting the transaction
     try {
       const stockChecks = await Promise.all(
-        cartItems.map((item) => {
+        cartItems.map(async (item) => {
           const productId = item.original_product_id || item.id;
           const variantId = item.variant_id || null;
-          return new Promise((resolve, reject) => {
-            if (variantId) {
-              // For variant items: check product_variants.stock (the variant-level pool)
-              db.get(
-                "SELECT COALESCE(stock, 0) AS available FROM product_variants WHERE id = ?",
-                [variantId],
-                (err, row) => {
-                  if (err) return reject(err);
-                  resolve({
-                    productId,
-                    variantId,
-                    name: item.name || `Product #${productId}`,
-                    requested: Number(item.quantity),
-                    available: row ? row.available : 0,
-                  });
-                },
-              );
-            } else {
-              // For non-variant items: check outlet_stock
-              db.get(
-                "SELECT COALESCE(quantity, 0) AS available FROM outlet_stock WHERE product_id = ? AND outlet_id = ?",
-                [productId, outlet_id],
-                (err, row) => {
-                  if (err) return reject(err);
-                  resolve({
-                    productId,
-                    name: item.name || `Product #${productId}`,
-                    requested: Number(item.quantity),
-                    available: row ? row.available : 0,
-                  });
-                },
-              );
-            }
-          });
+          if (variantId) {
+            // For variant items: check product_variants.stock (the variant-level pool)
+            const { rows: [row] } = await db.query(
+              "SELECT COALESCE(stock, 0) AS available FROM product_variants WHERE id = $1",
+              [variantId]
+            );
+            return {
+              productId,
+              variantId,
+              name: item.name || `Product #${productId}`,
+              requested: Number(item.quantity),
+              available: row ? Number(row.available) : 0,
+            };
+          } else {
+            // For non-variant items: check outlet_stock
+            const { rows: [row] } = await db.query(
+              "SELECT COALESCE(quantity, 0) AS available FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2",
+              [productId, outlet_id]
+            );
+            return {
+              productId,
+              name: item.name || `Product #${productId}`,
+              requested: Number(item.quantity),
+              available: row ? Number(row.available) : 0,
+            };
+          }
         }),
       );
       const insufficient = stockChecks.filter((s) => s.requested > s.available);
@@ -474,14 +415,11 @@ module.exports = function registerSalesRoutes(app, deps) {
         0,
       );
       try {
-        const walletRow = await new Promise((resolve, reject) => {
-          db.get(
-            "SELECT COALESCE(balance, 0) AS balance FROM customers WHERE id = ?",
-            [customer_id],
-            (err, row) => (err ? reject(err) : resolve(row)),
-          );
-        });
-        const walletBalance = walletRow ? walletRow.balance : 0;
+        const { rows: [walletRow] } = await db.query(
+          "SELECT COALESCE(balance, 0) AS balance FROM customers WHERE id = $1",
+          [customer_id]
+        );
+        const walletBalance = walletRow ? Number(walletRow.balance) : 0;
         if (walletTotalNeeded > walletBalance) {
           return res.status(400).json({
             error: `Insufficient wallet balance: required ${walletTotalNeeded}, available ${walletBalance}`,
@@ -495,183 +433,141 @@ module.exports = function registerSalesRoutes(app, deps) {
 
     // Idempotency check — return early if this request was already processed
     if (idempotency_key) {
-      const existing = await new Promise((resolve, reject) => {
-        db.get(
-          "SELECT id, invoice_number FROM sales WHERE idempotency_key = ?",
-          [idempotency_key],
-          (err, row) => (err ? reject(err) : resolve(row)),
+      try {
+        const { rows: [existing] } = await db.query(
+          "SELECT id, invoice_number FROM sales WHERE idempotency_key = $1",
+          [idempotency_key]
         );
-      }).catch(() => null);
-      if (existing) {
-        return res.json({ success: true, duplicate: true, saleId: existing.id, invoiceNumber: existing.invoice_number });
-      }
+        if (existing) {
+          return res.json({ success: true, duplicate: true, saleId: existing.id, invoiceNumber: existing.invoice_number });
+        }
+      } catch { /* ignore idempotency check errors */ }
     }
 
     // Start Transaction Logic
-    db.serialize(() => {
-      db.run("BEGIN TRANSACTION");
+    try {
+      const saleId = await db.transaction(async (client) => {
+        // 2. Insert into Sales Table
+        const { rows: [saleRow] } = await client.query(
+          "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
+          [
+            totalAmount,
+            mainPaymentMethod,
+            outlet_id,
+            authenticatedEmployeeId,
+            customer_id || null,
+            discountValue,
+            discount_type,
+            points_earned,
+            points_redeemed,
+            notes || null,
+            activeShift.id,
+            idempotency_key || null,
+          ]
+        );
+        const newSaleId = saleRow.id;
 
-      // 2. Insert into Sales Table (outlet_id + employee_id + customer_id + discount + points + shift_id)
-      db.run(
-        "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [
-          totalAmount,
-          mainPaymentMethod,
-          outlet_id,
-          authenticatedEmployeeId,
-          customer_id || null,
-          discountValue,
-          discount_type,
-          points_earned,
-          points_redeemed,
-          notes || null,
-          activeShift.id,
-          idempotency_key || null,
-        ],
-        function (err) {
-          if (err) {
-            db.run("ROLLBACK");
-            return res
-              .status(500)
-              .json({ error: "Failed to create sale record" });
-          }
-
-          const saleId = this.lastID;
-          const itemsStmt = db.prepare(
-            "INSERT INTO sale_items (sale_id, product_id, variant_id, quantity, price_at_sale, cost_price_at_sale) VALUES (?, ?, ?, ?, ?, ?)",
-          );
-          const stockStmt = db.prepare(`
-                    UPDATE outlet_stock 
-                    SET quantity = quantity - ? 
-                    WHERE product_id = ? AND outlet_id = ?
-                `);
-          const variantStockStmt = db.prepare(`
-                    UPDATE product_variants 
-                    SET stock = stock - ? 
-                    WHERE id = ?
-                `);
-          const paymentsStmt = db.prepare(
-            "INSERT INTO sale_payments (sale_id, payment_method, amount) VALUES (?, ?, ?)",
-          );
-
-          let hasError = false;
-
-          // 3. Loop through cart to insert Line Items AND deduct stock
-          cartItems.forEach((item) => {
-            itemsStmt.run(
-              saleId,
+        // 3. Loop through cart to insert Line Items AND deduct stock
+        for (const item of cartItems) {
+          await client.query(
+            "INSERT INTO sale_items (sale_id, product_id, variant_id, quantity, price_at_sale, cost_price_at_sale) VALUES ($1, $2, $3, $4, $5, $6)",
+            [
+              newSaleId,
               item.original_product_id || item.id,
               item.variant_id || null,
               item.quantity,
               item.price,
               item.cost_price || 0,
-              (err) => {
-                if (err) hasError = true;
-              },
-            );
-
-            if (item.variant_id) {
-              variantStockStmt.run(item.quantity, item.variant_id, (err) => {
-                if (err) hasError = true;
-              });
-              stockStmt.run(item.quantity, item.original_product_id || item.id, outlet_id, (err) => {
-                if (err) hasError = true;
-              });
-            } else {
-              stockStmt.run(item.quantity, item.id, outlet_id, (err) => {
-                if (err) hasError = true;
-              });
-            }
-          });
-
-          // 4. Insert Payments
-          finalPayments.forEach((payment) => {
-            paymentsStmt.run(saleId, payment.method, payment.amount, (err) => {
-              if (err) hasError = true;
-            });
-          });
-
-          itemsStmt.finalize();
-          stockStmt.finalize();
-          variantStockStmt.finalize();
-          paymentsStmt.finalize();
-
-          // Update customer points if applicable
-          if (customer_id && (points_earned > 0 || points_redeemed > 0)) {
-            db.run(
-              "UPDATE customers SET loyalty_points = loyalty_points + ? - ? WHERE id = ?",
-              [points_earned, points_redeemed, customer_id],
-              (err) => {
-                if (err) hasError = true;
-              },
-            );
-          }
-
-          // Debit wallet for any Wallet payments
-          const walletPayments = finalPayments.filter(
-            (p) => p.method === "Wallet",
+            ]
           );
-          if (customer_id && walletPayments.length > 0) {
-            const walletTotal = walletPayments.reduce(
-              (s, p) => s + p.amount,
-              0,
+
+          if (item.variant_id) {
+            await client.query(
+              "UPDATE product_variants SET stock = stock - $1 WHERE id = $2",
+              [item.quantity, item.variant_id]
             );
-            db.run(
-              "UPDATE customers SET balance = COALESCE(balance, 0) - ? WHERE id = ?",
-              [walletTotal, customer_id],
-              (err) => {
-                if (err) hasError = true;
-              },
+            await client.query(
+              "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
+              [item.quantity, item.original_product_id || item.id, outlet_id]
             );
-            db.run(
-              "INSERT INTO customer_wallet_ledger (customer_id, type, amount, reference_type, reference_id, note) VALUES (?, 'debit', ?, 'sale', ?, ?)",
-              [customer_id, walletTotal, saleId, `Debit for Sale #${saleId}`],
-              (err) => {
-                if (err) hasError = true;
-              },
+          } else {
+            await client.query(
+              "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
+              [item.quantity, item.id, outlet_id]
             );
           }
+        }
 
-          // 5. Commit or Rollback
-          if (hasError) {
-            db.run("ROLLBACK");
-            return res.status(500).json({ error: "Transaction failed" });
-          }
+        // 4. Insert Payments
+        for (const payment of finalPayments) {
+          await client.query(
+            "INSERT INTO sale_payments (sale_id, payment_method, amount) VALUES ($1, $2, $3)",
+            [newSaleId, payment.method, payment.amount]
+          );
+        }
 
-          db.run("COMMIT", (err) => {
-            if (err)
-              return res.status(500).json({ error: "Failed to commit sale" });
-            const syncChanges = cartItems.map((item) => ({
-              product_id:
-                item.original_product_id || item.product_id || item.id,
-              variant_id: item.variant_id || null,
-              outlet_id,
-              delta: -1 * Number(item.quantity || 0),
-              reason: "sale",
-              reference_type: "sale",
-              reference_id: saleId,
-            }));
-            enqueueInventorySyncEvents(syncChanges, {}, () => {});
-            notifyLowStockForSale(cartItems, outlet_id);
-            assignInvoiceNumberToSale(saleId, 1, (invErr, invoiceNumber) => {
-              if (invErr) {
-                return res.status(500).json({
-                  error: "Sale committed but invoice finalization failed",
-                  saleId,
-                  details: invErr.message,
-                });
-              }
-              res.json({
-                message: "Sale completed successfully",
-                saleId,
-                totalAmount,
-                invoiceNumber: invoiceNumber || null,
-                payments: finalPayments,
-              });
-            });
-          });
-        },
-      );
-    });
+        // Update customer points if applicable
+        if (customer_id && (points_earned > 0 || points_redeemed > 0)) {
+          await client.query(
+            "UPDATE customers SET loyalty_points = loyalty_points + $1 - $2 WHERE id = $3",
+            [points_earned, points_redeemed, customer_id]
+          );
+        }
+
+        // Debit wallet for any Wallet payments
+        const walletPayments = finalPayments.filter(
+          (p) => p.method === "Wallet",
+        );
+        if (customer_id && walletPayments.length > 0) {
+          const walletTotal = walletPayments.reduce(
+            (s, p) => s + p.amount,
+            0,
+          );
+          await client.query(
+            "UPDATE customers SET balance = COALESCE(balance, 0) - $1 WHERE id = $2",
+            [walletTotal, customer_id]
+          );
+          await client.query(
+            "INSERT INTO customer_wallet_ledger (customer_id, type, amount, reference_type, reference_id, note) VALUES ($1, 'debit', $2, 'sale', $3, $4)",
+            [customer_id, walletTotal, newSaleId, `Debit for Sale #${newSaleId}`]
+          );
+        }
+
+        return newSaleId;
+      });
+
+      // Post-commit: sync events, low stock notification, invoice assignment
+      const syncChanges = cartItems.map((item) => ({
+        product_id:
+          item.original_product_id || item.product_id || item.id,
+        variant_id: item.variant_id || null,
+        outlet_id,
+        delta: -1 * Number(item.quantity || 0),
+        reason: "sale",
+        reference_type: "sale",
+        reference_id: saleId,
+      }));
+      enqueueInventorySyncEvents(syncChanges, {}, () => {});
+      notifyLowStockForSale(cartItems, outlet_id);
+
+      try {
+        const invoiceNumber = await assignInvoiceNumberToSale(saleId, 1);
+        res.json({
+          message: "Sale completed successfully",
+          saleId,
+          totalAmount,
+          invoiceNumber: invoiceNumber || null,
+          payments: finalPayments,
+        });
+      } catch (invErr) {
+        res.status(500).json({
+          error: "Sale committed but invoice finalization failed",
+          saleId,
+          details: invErr.message,
+        });
+      }
+    } catch (err) {
+      res.status(500).json({ error: err.message || "Transaction failed" });
+    }
   });
 };
