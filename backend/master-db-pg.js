@@ -114,9 +114,17 @@ async function getTenantById(id) {
   return rows[0] || null;
 }
 
+/**
+ * Direct query on the master (public schema) pool.
+ * Use this for writes to public-schema tables like tenant_audit_log.
+ */
+function query(sql, params) {
+  return _getDb().query(sql, params);
+}
+
 function _getDb() {
   if (!_db) throw new Error("[master-db-pg] Not initialized — call init(db) first");
   return _db;
 }
 
-module.exports = { init, createTenant, getTenantBySlug, getTenantById };
+module.exports = { init, createTenant, getTenantBySlug, getTenantById, query };

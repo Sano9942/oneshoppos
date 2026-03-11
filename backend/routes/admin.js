@@ -67,7 +67,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
   // ── Helpers ─────────────────────────────────────────────────────────────
 
   async function auditLog(tenantId, action, details, actor) {
-    await db.query(
+    await masterDb.query(
       "INSERT INTO tenant_audit_log (tenant_id, action, details, actor) VALUES ($1, $2, $3, $4)",
       [tenantId, action, details ? JSON.stringify(details) : null, actor]
     );
