@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
-const db = require("./db-pg");
+const db = process.env.DATABASE_URL ? require("./db-pg") : require("./db");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");

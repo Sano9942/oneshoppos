@@ -4,13 +4,15 @@
 
 A full-stack Point of Sale (POS) system with Shopify integration.
 
-- Backend: Node.js + Express v5 + SQLite3 (**migrating to PostgreSQL** — see below)
+- Backend: Node.js + Express v5 + PostgreSQL (via `pg` pool, `backend/db-pg.js`). SQLite legacy code preserved for rollback.
 - Frontend: React 19 + Vite 7 + Tailwind CSS v4
 
 ## Current Status Snapshot (March 2026)
 
 - Latest migration (SQLite) is `backend/migrate74.js`
-- **Postgres migration in progress** on `feature/postgres-migration` branch — Batches 1-4 (43 tasks) complete, 196/196 pg integration tests passing. See "Postgres Migration" section below for details.
+- **Postgres migration COMPLETE** on `feature/postgres-migration` branch — all backend files converted, 340/340 pg integration tests passing (Batches 1-9 + pre-merge tasks). See "Postgres Migration" section below.
+- **Pre-merge tasks COMPLETE** (Mar 11 2026): boolean audit, `migrate-pg.js` migration runner, `sqlite-to-pg.js` cutover script, `tenant-db-manager-pg.js` + `tenant-db-proxy-pg.js` MT infrastructure
+- **CRITICAL: `db-pg.js` requires `DATABASE_URL`** — merging to main without setting this env var on Railway will crash the app at boot. Must either add a boot guard OR set `DATABASE_URL` before deploying.
 - **Phase 3 Remaining complete (Mar 10 2026)**: 5 items shipped — mobile/tablet POS layout, IP allowlisting for admin API, JWT token revocation (migrate74), stock shrinkage report, customer-facing display
 - **Roadmap Phase 3 complete (Mar 10 2026)**: 8 of 9 core robustness items shipped (offline queuing deferred) — rate limiter activation, session timeout at POS, idempotency on sales, price change audit log, end-of-day email digest, onboarding checklist, setup wizard, soft deletes
 - **Roadmap Phase 2 complete (Mar 9 2026)**: All 25 remaining roadmap items shipped in 9 parallel sessions — loyalty/wallet frontend, security fixes (SEC6+SEC8), reorder alerts, accounting/HR wire-up, PO edit+approval, orders detail tabs, quotations email, parked sales page, stock/transfer/supplier/category guards, CRM typed activities, backup progress, notifications, serial numbers, gift cards, PO templates, stock-by-outlet popup, action history logging, reports governance UI
@@ -501,3 +503,18 @@ The backend is being migrated from SQLite3 to PostgreSQL on branch `feature/post
 - **shopify/utils.js**: Postgres-only — `getActiveShopifyConnection` is a simple async function returning `rows[0] || null`
 - **order-service.js**: Fully async/await. Factory: `createOrderService(db, getActiveShopifyConnection)` → `{ upsertWebOrderFromShopifyPayload, applyWebOrderStockPolicy }`. `stock_applied` uses `true`/`false` (BOOLEAN). Callers use direct `await` (no `new Promise()` wrappers)
 - **index.js**: Boot import is `require("./db-pg")`. All middleware (`loadEmployeePerms`, `loadTenantAndPerms`, `resolveTenant`, `loadCompanyProfile`, `resolveContext`) are async. Startup hooks and background workers use async with `.catch()`. `sqlite3` import removed. `runAutoBackup` guarded with `if (!process.env.DATABASE_URL)`
+- **registerAllRoutes.js**: All 4 SQLite calls converted to `await db.query()`. `sqlite_master` → `information_schema.tables` in health endpoint. Feature flags use `true`/`false` booleans. Outlet middleware is `async`.
+- **email.js**: Fully async/await. Nested callback pyramid (config → sale → items → payments → template) flattened to sequential `await` calls.
+- **printer.js** (routes + service): `loadConfig()` is async with `db.query()`. PUT config uses `$1-$8` params with `true`/`false` booleans.
+- **barcode-expenses.js**: All `? 1 : 0` → `? true : false` for 6 boolean columns (`show_name`, `show_price`, `show_barcode`, `show_sku`, `show_brand`, `is_default`). `SET is_default = 0` → `SET is_default = false`.
+
+### Pre-Merge Infrastructure (all complete — Mar 11 2026)
+- **Migration system**: `backend/migrate-pg.js` — ordered migration runner with `schema_version` table tracking. `start.sh` detects `DATABASE_URL` and branches between `migrate-pg.js` (Postgres) and `run_migrations.js` (SQLite).
+- **Cutover script**: `backend/scripts/sqlite-to-pg.js` — one-time data migration using `better-sqlite3` (sync reads) → Postgres (async writes). FK-ordered table insertion, boolean 0/1→true/false conversion, SERIAL sequence resets. See `docs/POSTGRES-CUTOVER-CHECKLIST.md`.
+- **MT Postgres infra**: `backend/tenant-db-manager-pg.js` (shared pg.Pool + `SET search_path TO tenant_<slug>` per request, 60s tenant cache, same API as SQLite version). `backend/tenant-db-proxy-pg.js` (AsyncLocalStorage proxy for `query`/`transaction`/`getClient`). `index.js` uses `HAS_POSTGRES = !!process.env.DATABASE_URL` to choose PG vs SQLite MT modules.
+
+### CRITICAL: Merge/Deploy Warning
+- `index.js` line 4 unconditionally does `require("./db-pg")` which creates a `pg.Pool` from `DATABASE_URL`
+- Without `DATABASE_URL` set, pool queries fail at boot → app crashes
+- **Before deploying to Railway after merge**: either (a) add a boot guard to conditionally import `db-pg` vs `db`, OR (b) set `DATABASE_URL` on Railway and run the cutover checklist first
+- The SQLite `start.sh` branch still works if `DATABASE_URL` is not set, BUT `index.js` will still fail because it imports `db-pg` at the top level regardless of `start.sh`
