@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-*Last updated: March 12 2026 — Postgres migration complete and live on Supabase. All phases shipped.*
+*Last updated: March 12 2026 — Currency/timezone centralization complete. All phases shipped.*
 
 ---
 
@@ -72,6 +72,19 @@ This file tracks everything we want to build, fix, or improve for SanoPOS.
 - **#23 Products Stock by Outlet Popup** — outlet stock breakdown in inventory list
 - **#24 Action History Logging** — expanded logging for sales, returns, adjustments
 - **#25 Reports Governance UI** — schedule manager + saved views UI in Reports
+
+---
+
+## ✅ Currency & Timezone Centralization (Mar 12 2026)
+
+**Branch:** `feature/currency-timezone-centralization` — 13 commits, ~58 files modified.
+
+- **`CurrencyProvider` context** — `frontend/src/contexts/CurrencyContext.jsx` wraps the whole app (outside `AuthProvider`). `useCurrency()` returns `{ symbol, code, denominations, fmt, refresh }`.
+- **Public currency endpoint** — `GET /api/company-profile/currency` (no auth) serves current currency symbol, code, and cash denominations. Works on unauthenticated pages (SetupWizard, CustomerDisplay).
+- **`cash_denominations` column** — Added to `company_profile` (schema migration v2). JSON array string. Configurable per tenant.
+- **All ~58 PKR/PKRs hardcodes removed** — Backend email builders, printer service, quotation emails, GRN error messages all use `req.company.currency_symbol`. Frontend components use `useCurrency()`. Non-component utilities (receipt.js) accept `currencySymbol` as parameter.
+- **Setup wizard** — Full IANA timezone searchable dropdown (`Intl.supportedValuesOf("timeZone")`). Denomination chip editor with per-country presets. Denominations sent to backend on wizard completion.
+- **Company Settings** — Same timezone dropdown + denomination editor. Calls `refresh()` after save so currency changes propagate app-wide immediately.
 
 ---
 
@@ -334,3 +347,4 @@ These items make the product reliable for the current single-tenant production d
 | Mar 10 2026 | **Phase 3 remaining shipped** | 5 items built on `feature/phase3-remaining` (4 commits, 21 files, 1,003 lines): mobile/tablet POS layout (3-tab nav, sticky pay button), IP allowlisting for /api/admin (CIDR matching), token revocation (migrate74, jti claim, revoke endpoints), stock shrinkage report (6-join SQL + ShrinkageTab), customer-facing display (/customer-display page + in-memory cart sync). 395/395 tests passing. Frontend build clean. |
 | Mar 11 2026 | **Postgres migration — pre-merge tasks** | 4 tasks completed on `feature/postgres-migration`: last SQLite files converted (email.js, printer routes, registerAllRoutes.js), migrate-pg.js migration runner, sqlite-to-pg.js cutover script + checklist, MT Postgres infra (tenant-db-manager-pg, tenant-db-proxy-pg). 340/340 pg tests passing. |
 | Mar 12 2026 | **Postgres migration merged + deployed** | `feature/postgres-migration` merged to `main` (28 commits, 93 files, +23,188/-15,139 lines). Boot guard added (conditional db-pg/db import). dotenv load order fix (must load before boot guard). Supabase Postgres provisioned (ap-southeast-1). `DATABASE_URL` set on Railway, `DATA_DIR` removed. Fresh DB created via setup wizard. `schema-pg.sql` seed row fix for company_profile. Production live on Postgres. |
+| Mar 12 2026 | **Currency/timezone centralization** | `feature/currency-timezone-centralization` (13 commits, ~58 files). All ~58 hardcoded PKR/PKRs/Rs display references replaced. `CurrencyContext` + public `/api/company-profile/currency` endpoint. Schema migration v2 adds `cash_denominations` TEXT to `company_profile`. Setup wizard enhanced with full IANA timezone searchable dropdown + denomination chip editor. Company Settings gains same controls + calls `refresh()` to propagate changes app-wide. Backend email/printer/quotation templates now use `req.company.currency_symbol`. Frontend build clean, zero new test failures. |
