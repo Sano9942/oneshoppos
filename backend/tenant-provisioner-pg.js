@@ -92,10 +92,12 @@ async function provision(db, { slug, name, ownerEmail, timezone, pin }) {
       [employeeId, outletId]
     );
 
-    // Company profile
+    // Company profile with setup token
+    const crypto = require("crypto");
+    const setupToken = crypto.randomBytes(32).toString("hex");
     await client.query(
-      "INSERT INTO company_profile (id, company_name, timezone) VALUES (1, $1, $2) ON CONFLICT DO NOTHING",
-      [name, timezone || "UTC"]
+      "INSERT INTO company_profile (id, company_name, timezone, setup_token, setup_complete) VALUES (1, $1, $2, $3, false) ON CONFLICT DO NOTHING",
+      [name, timezone || "UTC", setupToken]
     );
 
     // Default tax
@@ -123,7 +125,7 @@ async function provision(db, { slug, name, ownerEmail, timezone, pin }) {
     );
     await client.query("COMMIT");
 
-    return { tenantId, employeeId, outletId };
+    return { tenantId, employeeId, outletId, setupToken };
   } catch (err) {
     // Attempt to drop the schema on failure
     await client.query("ROLLBACK").catch(() => {});
