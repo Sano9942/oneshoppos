@@ -11,30 +11,9 @@ const {
 module.exports = function registerCategoryRoutes(app, deps) {
   const { db, requirePerm } = deps;
 
-  // Postgres-compatible async helpers that match what category-tree expects
-  // category-tree uses dbAllAsync(db, sql, params) which wraps db.all() callbacks.
-  // Our pg db proxy has db.query() returning { rows }. We create a db-like wrapper
-  // so category-tree functions work transparently.
-  const dbCompat = {
-    all: (sql, params, cb) => {
-      // Convert ? placeholders to $1, $2, ... for Postgres
-      let idx = 0;
-      const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
-      db.query(pgSql, params)
-        .then(({ rows }) => cb(null, rows))
-        .catch((err) => cb(err));
-    },
-    get: (sql, params, cb) => {
-      let idx = 0;
-      const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
-      db.query(pgSql, params)
-        .then(({ rows }) => cb(null, rows[0] || null))
-        .catch((err) => cb(err));
-    },
-  };
 
   async function sendCategories(res) {
-    const categories = await fetchEnrichedCategories(dbCompat);
+    const categories = await fetchEnrichedCategories(db);
     res.json({ categories });
   }
 
@@ -76,7 +55,7 @@ module.exports = function registerCategoryRoutes(app, deps) {
       return "Invalid parent category";
     }
 
-    const indexes = await fetchCategoryIndexes(dbCompat);
+    const indexes = await fetchCategoryIndexes(db);
     if (normalizedParentId != null && !indexes.byId.has(normalizedParentId)) {
       return "Parent category not found";
     }
@@ -199,7 +178,7 @@ module.exports = function registerCategoryRoutes(app, deps) {
       }
 
       const descendantIds = getDescendantIds(
-        (await fetchCategoryIndexes(dbCompat)).childrenByParent,
+        (await fetchCategoryIndexes(db)).childrenByParent,
         Number(id),
       );
       if (descendantIds.length) {
@@ -328,12 +307,12 @@ module.exports = function registerCategoryRoutes(app, deps) {
       const [sourceRows, targetRows, indexes] = await Promise.all([
         db.query("SELECT id, name, description, parent_id, sort_order, is_active FROM categories WHERE id = $1", [sourceId]),
         db.query("SELECT id, name, description, parent_id, sort_order, is_active FROM categories WHERE id = $1", [targetId]),
-        fetchCategoryIndexes(dbCompat),
+        fetchCategoryIndexes(db),
       ]);
       if (!sourceRows.rows.length) return res.status(404).json({ error: "Source category not found" });
       if (!targetRows.rows.length) return res.status(404).json({ error: "Target category not found" });
 
-      const targetLeafIds = await getDescendantLeafIds(dbCompat, targetId);
+      const targetLeafIds = await getDescendantLeafIds(db, targetId);
       if (targetLeafIds.length !== 1 || Number(targetLeafIds[0]) !== Number(targetId)) {
         return res.status(400).json({
           error: "Products can only be moved to a leaf category",

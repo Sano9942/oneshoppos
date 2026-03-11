@@ -3,29 +3,12 @@ const { getCategoryById, getDescendantLeafIds } = require("../category-tree");
 module.exports = function registerPromotionRoutes(app, deps) {
   const { db, requirePerm } = deps;
 
-  // Postgres-compatible db wrapper for category-tree functions
-  const dbCompat = {
-    all: (sql, params, cb) => {
-      let idx = 0;
-      const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
-      db.query(pgSql, params)
-        .then(({ rows }) => cb(null, rows))
-        .catch((err) => cb(err));
-    },
-    get: (sql, params, cb) => {
-      let idx = 0;
-      const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
-      db.query(pgSql, params)
-        .then(({ rows }) => cb(null, rows[0] || null))
-        .catch((err) => cb(err));
-    },
-  };
 
   async function validatePromotionCategory(categoryId) {
     if (!categoryId) return null;
-    const category = await getCategoryById(dbCompat, categoryId);
+    const category = await getCategoryById(db, categoryId);
     if (!category) return "Category not found";
-    const leafIds = await getDescendantLeafIds(dbCompat, category.id);
+    const leafIds = await getDescendantLeafIds(db, category.id);
     if (leafIds.length !== 1 || Number(leafIds[0]) !== Number(category.id)) {
       return "Promotions can only target leaf categories";
     }

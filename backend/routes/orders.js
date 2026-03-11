@@ -598,25 +598,21 @@ module.exports = function registerOrderRoutes(app, deps) {
     }
   }
 
-  async function getActiveShopifyConnection(cb) {
-    try {
-      const { rows: [row] } = await db.query(
-        `SELECT *
+  async function getActiveShopifyConnection() {
+    const { rows: [row] } = await db.query(
+      `SELECT *
        FROM shopify_connections
        WHERE is_active = true
        ORDER BY id DESC
        LIMIT 1`,
-        [],
-      );
-      const result = row
-        ? { ...row, access_token: decryptShopifySecret(row.access_token), webhook_secret: decryptShopifySecret(row.webhook_secret) }
-        : null;
-      if (typeof cb === "function") return cb(null, result);
-      return result;
-    } catch (err) {
-      if (typeof cb === "function") return cb(err);
-      throw err;
-    }
+      [],
+    );
+    if (!row) return null;
+    return {
+      ...row,
+      access_token: decryptShopifySecret(row.access_token),
+      webhook_secret: decryptShopifySecret(row.webhook_secret),
+    };
   }
 
   const { upsertWebOrderFromShopifyPayload, applyWebOrderStockPolicy } = require('../shopify/order-service')(db, getActiveShopifyConnection);

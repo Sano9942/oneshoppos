@@ -7,26 +7,6 @@ const {
 module.exports = function registerProductRoutes(app, deps) {
   const { db, multer, requirePerm, PRODUCT_UPLOADS_DIR, UPLOADS_DIR } = deps;
 
-  // Postgres-compatible async helpers that match what category-tree expects
-  // category-tree uses dbAllAsync(db, sql, params) which wraps db.all() callbacks.
-  // Our pg db proxy has db.query() returning { rows }. We create a db-like wrapper
-  // so category-tree functions work transparently.
-  const dbCompat = {
-    all: (sql, params, cb) => {
-      let idx = 0;
-      const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
-      db.query(pgSql, params)
-        .then(({ rows }) => cb(null, rows))
-        .catch((err) => cb(err));
-    },
-    get: (sql, params, cb) => {
-      let idx = 0;
-      const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
-      db.query(pgSql, params)
-        .then(({ rows }) => cb(null, rows[0] || null))
-        .catch((err) => cb(err));
-    },
-  };
 
 // --- ROUTES: PRODUCTS (INVENTORY) ---
 
@@ -100,9 +80,9 @@ module.exports = function registerProductRoutes(app, deps) {
 
   async function validateLeafCategory(categoryId) {
     if (categoryId == null || categoryId === "") return null;
-    const category = await getCategoryById(dbCompat, categoryId);
+    const category = await getCategoryById(db, categoryId);
     if (!category) return "Category not found";
-    const leafIds = await getDescendantLeafIds(dbCompat, category.id);
+    const leafIds = await getDescendantLeafIds(db, category.id);
     if (leafIds.length !== 1 || Number(leafIds[0]) !== Number(category.id)) {
       return "Products can only be assigned to leaf categories";
     }
@@ -110,7 +90,7 @@ module.exports = function registerProductRoutes(app, deps) {
   }
 
   async function decorateProductsWithCategoryPaths(rows) {
-    const categories = await fetchEnrichedCategories(dbCompat);
+    const categories = await fetchEnrichedCategories(db);
     const byId = new Map(categories.map((row) => [Number(row.id), row]));
     return (rows || []).map((row) => {
       const category = row.category_id ? byId.get(Number(row.category_id)) : null;
@@ -154,7 +134,7 @@ module.exports = function registerProductRoutes(app, deps) {
         conditions.push(`p.status = $${++paramIdx}`);
       }
       if (category_id) {
-        const leafIds = await getDescendantLeafIds(dbCompat, Number(category_id));
+        const leafIds = await getDescendantLeafIds(db, Number(category_id));
         if (!leafIds.length) {
           return res.json({ products: [] });
         }
