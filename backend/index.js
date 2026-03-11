@@ -1,13 +1,12 @@
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
-const db = require("./db");
+const db = require("./db-pg");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const multer = require("multer");
 const rateLimit = require("express-rate-limit");
-const sqlite3 = require("sqlite3").verbose();
 const createTier4Router = require("./routes/tier4");
 const registerAllRoutes = require("./routes/registerAllRoutes");
 
@@ -245,7 +244,7 @@ app.use(globalLimiter);
 // Routes can call requirePerm(perm) to enforce access. No behavior change
 // on routes that don't use it — existing flows are untouched.
 
-function loadEmployeePerms(req, res, next) {
+async function loadEmployeePerms(req, res, next) {
   const employeeId = req.headers["x-employee-id"];
   const parsed = parseInt(employeeId, 10);
   if (employeeId !== undefined && (isNaN(parsed) || parsed <= 0 || parsed > 999999)) {
@@ -255,24 +254,22 @@ function loadEmployeePerms(req, res, next) {
     req.employeePerms = [];
     return next();
   }
-  db.get(
-    "SELECT role_id FROM employees WHERE id = ?",
-    [employeeId],
-    (err, emp) => {
-      if (err || !emp) {
-        req.employeePerms = [];
-        return next();
-      }
-      db.all(
-        "SELECT permission FROM role_permissions WHERE role_id = ?",
-        [emp.role_id],
-        (err2, rows) => {
-          req.employeePerms = err2 ? [] : rows.map((r) => r.permission);
-          next();
-        },
-      );
-    },
-  );
+  try {
+    const { rows: [emp] } = await db.query(
+      "SELECT role_id FROM employees WHERE id = $1", [employeeId]
+    );
+    if (!emp) {
+      req.employeePerms = [];
+      return next();
+    }
+    const { rows } = await db.query(
+      "SELECT permission FROM role_permissions WHERE role_id = $1", [emp.role_id]
+    );
+    req.employeePerms = rows.map((r) => r.permission);
+  } catch {
+    req.employeePerms = [];
+  }
+  next();
 }
 
 // JWT auth middleware (Phase 2) — used when MULTI_TENANT=1.
@@ -284,7 +281,7 @@ const KIOSK_ALLOWED_PATHS = [
   /^\/api\/auth\//,
 ];
 
-function loadTenantAndPerms(req, res, next) {
+async function loadTenantAndPerms(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     req.employeePerms = [];
@@ -318,58 +315,48 @@ function loadTenantAndPerms(req, res, next) {
     }
 
     // Load permissions — in MT mode, query the tenant's DB directly
-    // (resolveTenant hasn't run yet, so the proxy/ALS context is not available)
-    const permDbPromise = IS_MULTI_TENANT
-      ? tenantDbManager.getDb(decoded.tid)
-      : Promise.resolve(db);
+    const permDb = IS_MULTI_TENANT
+      ? await tenantDbManager.getDb(decoded.tid)
+      : db;
 
-    permDbPromise.then((permDb) => {
-      // Token revocation checks (jti-based + blanket revocation)
-      const revocationChecks = [];
-
+    // Token revocation checks (jti-based + blanket revocation)
+    try {
       if (decoded.jti) {
-        revocationChecks.push(
-          new Promise((resolve, reject) => {
-            permDb.get("SELECT 1 FROM revoked_tokens WHERE token_jti = ?", [decoded.jti], (err, row) => {
-              if (err) return resolve(); // table may not exist yet — skip check
-              if (row) return reject({ status: 401, error: "Token revoked", code: "TOKEN_REVOKED" });
-              resolve();
-            });
-          })
+        const { rows: [revoked] } = await permDb.query(
+          "SELECT 1 FROM revoked_tokens WHERE token_jti = $1", [decoded.jti]
         );
-      }
-
-      revocationChecks.push(
-        new Promise((resolve, reject) => {
-          permDb.get("SELECT tokens_revoked_before FROM employees WHERE id = ?", [decoded.eid], (err, row) => {
-            if (err) return resolve(); // column may not exist yet — skip check
-            if (row && row.tokens_revoked_before && decoded.iat < Date.parse(row.tokens_revoked_before) / 1000) {
-              return reject({ status: 401, error: "All sessions revoked", code: "ALL_SESSIONS_REVOKED" });
-            }
-            resolve();
-          });
-        })
-      );
-
-      return Promise.all(revocationChecks).then(() => permDb);
-    }).then((permDb) => {
-      permDb.get("SELECT role_id FROM employees WHERE id = ?", [decoded.eid], (err, emp) => {
-        if (err || !emp) {
-          req.employeePerms = [];
-          return next();
+        if (revoked) {
+          return res.status(401).json({ error: "Token revoked", code: "TOKEN_REVOKED" });
         }
-        permDb.all("SELECT permission FROM role_permissions WHERE role_id = ?", [emp.role_id], (err2, rows) => {
-          req.employeePerms = err2 ? [] : rows.map(r => r.permission);
-          next();
-        });
-      });
-    }).catch((err) => {
-      if (err && err.status === 401) {
-        return res.status(401).json({ error: err.error, code: err.code });
       }
+
+      const { rows: [empRevoke] } = await permDb.query(
+        "SELECT tokens_revoked_before FROM employees WHERE id = $1", [decoded.eid]
+      );
+      if (empRevoke && empRevoke.tokens_revoked_before && decoded.iat < Date.parse(empRevoke.tokens_revoked_before) / 1000) {
+        return res.status(401).json({ error: "All sessions revoked", code: "ALL_SESSIONS_REVOKED" });
+      }
+    } catch {
+      // table/column may not exist yet — skip revocation checks
+    }
+
+    // Load permissions
+    try {
+      const { rows: [emp] } = await permDb.query(
+        "SELECT role_id FROM employees WHERE id = $1", [decoded.eid]
+      );
+      if (!emp) {
+        req.employeePerms = [];
+        return next();
+      }
+      const { rows } = await permDb.query(
+        "SELECT permission FROM role_permissions WHERE role_id = $1", [emp.role_id]
+      );
+      req.employeePerms = rows.map(r => r.permission);
+    } catch {
       req.employeePerms = [];
-      next();
-    });
+    }
+    next();
   } catch (err) {
     if (err.name === "TokenExpiredError") {
       return res.status(401).json({ error: "Token expired", code: "TOKEN_EXPIRED" });
@@ -387,40 +374,35 @@ function loadTenantAndPerms(req, res, next) {
  *
  * Also sets req.tenantDir and req.tenantSlug for upload-aware route handlers.
  */
-function resolveTenant(req, res, next) {
+async function resolveTenant(req, res, next) {
   if (!IS_MULTI_TENANT || !req.tenantId) return next();
 
-  tenantDbManager.getDb(req.tenantId)
-    .then((tenantDb) => {
-      // Look up tenant slug for file paths (cached in the DB manager lookup)
-      const { getMasterDb } = require("./master-db");
-      getMasterDb().get(
-        "SELECT slug, db_path FROM tenants WHERE id = ?",
-        [req.tenantId],
-        (err, tenant) => {
-          if (err || !tenant) {
-            return res.status(403).json({ error: "Tenant not found.", code: "TENANT_NOT_FOUND" });
-          }
+  try {
+    const tenantDb = await tenantDbManager.getDb(req.tenantId);
 
-          req.tenantSlug = tenant.slug;
-          req.tenantDir = path.join(__dirname, "tenants", `t_${tenant.slug}`);
+    // Look up tenant slug for file paths
+    const { getTenantById } = require("./master-db-pg");
+    const tenant = await getTenantById(req.tenantId);
+    if (!tenant) {
+      return res.status(403).json({ error: "Tenant not found.", code: "TENANT_NOT_FOUND" });
+    }
 
-          // Wrap the rest of the request chain in AsyncLocalStorage context
-          asyncStore.run({ db: tenantDb }, () => next());
-        }
-      );
-    })
-    .catch((err) => {
-      // Tenant suspended or DB missing
-      if (err.message && err.message.includes("is suspended")) {
-        return res.status(403).json({ error: "Account suspended. Contact support.", code: "TENANT_SUSPENDED" });
-      }
-      if (err.message && err.message.includes("is deleted")) {
-        return res.status(403).json({ error: "Account not found.", code: "TENANT_DELETED" });
-      }
-      console.error("[resolveTenant]", err.message);
-      return res.status(500).json({ error: "Failed to resolve tenant database" });
-    });
+    req.tenantSlug = tenant.slug;
+    req.tenantDir = path.join(__dirname, "tenants", `t_${tenant.slug}`);
+
+    // Wrap the rest of the request chain in AsyncLocalStorage context
+    asyncStore.run({ db: tenantDb }, () => next());
+  } catch (err) {
+    // Tenant suspended or DB missing
+    if (err.message && err.message.includes("is suspended")) {
+      return res.status(403).json({ error: "Account suspended. Contact support.", code: "TENANT_SUSPENDED" });
+    }
+    if (err.message && err.message.includes("is deleted")) {
+      return res.status(403).json({ error: "Account not found.", code: "TENANT_DELETED" });
+    }
+    console.error("[resolveTenant]", err.message);
+    return res.status(500).json({ error: "Failed to resolve tenant database" });
+  }
 }
 
 function requirePerm(permission) {
@@ -442,39 +424,38 @@ let _companyLastCheck = 0;
 const COMPANY_CACHE_MS = 5 * 60 * 1000; // 5 min
 
 // Eager startup load — also generates setup token if first-run
-db.get("SELECT * FROM company_profile WHERE id = 1", [], (err, row) => {
-  if (!err && row) {
-    _cachedCompany = row;
-    // If setup not yet complete, generate a one-time token and log the setup URL
-    if (!row.setup_complete) {
-      const setupToken = crypto.randomBytes(32).toString("hex");
-      db.run(
-        "UPDATE company_profile SET setup_token = ? WHERE id = 1",
-        [setupToken],
-        (updateErr) => {
-          if (!updateErr) {
-            _cachedCompany = { ...row, setup_token: setupToken };
-            const PORT_FOR_LOG = process.env.PORT || 5000;
-            console.log(`\n===== SETUP URL: http://localhost:${PORT_FOR_LOG}/setup?token=${setupToken} =====\n`);
-          }
-        },
-      );
+(async () => {
+  try {
+    const { rows: [row] } = await db.query("SELECT * FROM company_profile WHERE id = 1");
+    if (row) {
+      _cachedCompany = row;
+      // If setup not yet complete, generate a one-time token and log the setup URL
+      if (!row.setup_complete) {
+        const setupToken = crypto.randomBytes(32).toString("hex");
+        await db.query("UPDATE company_profile SET setup_token = $1 WHERE id = 1", [setupToken]);
+        _cachedCompany = { ...row, setup_token: setupToken };
+        const PORT_FOR_LOG = process.env.PORT || 5000;
+        console.log(`\n===== SETUP URL: http://localhost:${PORT_FOR_LOG}/setup?token=${setupToken} =====\n`);
+      }
     }
+    _companyLastCheck = Date.now();
+  } catch (err) {
+    console.error("[loadCompanyProfile startup]", err.message);
+    _companyLastCheck = Date.now();
   }
-  _companyLastCheck = Date.now();
-});
+})();
 
 function loadCompanyProfile(req, res, next) {
   const now = Date.now();
   if (now - _companyLastCheck > COMPANY_CACHE_MS) {
     _companyLastCheck = now; // prevent multiple concurrent refreshes
-    db.get("SELECT * FROM company_profile WHERE id = 1", [], (err, row) => {
-      if (!err && row) _cachedCompany = row;
-    });
+    db.query("SELECT * FROM company_profile WHERE id = 1").then(({ rows: [row] }) => {
+      if (row) _cachedCompany = row;
+    }).catch(() => {});
   }
   req.company = _cachedCompany;
 
-  // Setup gate: if setup_complete = 0, block all routes except /api/setup and /api/health
+  // Setup gate: if setup_complete = false, block all routes except /api/setup and /api/health
   if (
     _cachedCompany &&
     !_cachedCompany.setup_complete &&
@@ -503,15 +484,16 @@ let _contextFlagLastCheck = 0;
 const CONTEXT_FLAG_CACHE_MS = 30000; // re-check every 30s
 
 // Eagerly load flag on startup
-db.get(
-  "SELECT enabled FROM feature_flags WHERE key = 'context_header_enforced'",
-  [],
-  (err, row) => {
-    if (!err && row) _contextEnforced = Number(row.enabled) === 1;
-    _contextFlagLoaded = true;
-    _contextFlagLastCheck = Date.now();
-  },
-);
+(async () => {
+  try {
+    const { rows: [row] } = await db.query(
+      "SELECT enabled FROM feature_flags WHERE key = 'context_header_enforced'"
+    );
+    if (row) _contextEnforced = row.enabled === true;
+  } catch {}
+  _contextFlagLoaded = true;
+  _contextFlagLastCheck = Date.now();
+})();
 
 function resolveContext(req, res, next) {
   req.context = { companyId: null, outletId: null, scopeMode: null };
@@ -526,13 +508,11 @@ function resolveContext(req, res, next) {
   const now = Date.now();
   if (now - _contextFlagLastCheck > CONTEXT_FLAG_CACHE_MS) {
     _contextFlagLastCheck = now;
-    db.get(
-      "SELECT enabled FROM feature_flags WHERE key = 'context_header_enforced'",
-      [],
-      (err, row) => {
-        if (!err && row) _contextEnforced = Number(row.enabled) === 1;
-      },
-    );
+    db.query("SELECT enabled FROM feature_flags WHERE key = 'context_header_enforced'")
+      .then(({ rows: [row] }) => {
+        if (row) _contextEnforced = row.enabled === true;
+      })
+      .catch(() => {});
   }
 
   // Enforce: reject API requests missing context headers (when flag is on)
@@ -595,27 +575,23 @@ const DEFAULT_ROLE_PERMISSIONS = {
   Cashier: ["view_reports", "pos_discount", "pos_park"],
 };
 
-function ensureDefaultRolePermissions() {
-  db.all("SELECT id, name FROM roles", [], (err, roles) => {
-    if (err || !roles || roles.length === 0) return;
-    const roleIdByName = {};
-    roles.forEach((r) => {
-      roleIdByName[r.name] = r.id;
-    });
-
-    db.serialize(() => {
-      Object.entries(DEFAULT_ROLE_PERMISSIONS).forEach(([roleName, perms]) => {
-        const roleId = roleIdByName[roleName];
-        if (!roleId) return;
-        perms.forEach((perm) => {
-          db.run(
-            "INSERT OR IGNORE INTO role_permissions (role_id, permission) VALUES (?, ?)",
-            [roleId, perm],
-          );
-        });
-      });
-    });
-  });
+async function ensureDefaultRolePermissions() {
+  try {
+    const { rows: roles } = await db.query("SELECT id, name FROM roles");
+    if (!roles?.length) return;
+    for (const [roleName, perms] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
+      const roleId = roles.find(r => r.name === roleName)?.id;
+      if (!roleId) continue;
+      for (const perm of perms) {
+        await db.query(
+          "INSERT INTO role_permissions (role_id, permission) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+          [roleId, perm]
+        );
+      }
+    }
+  } catch (err) {
+    console.error("[ensureDefaultRolePermissions]", err.message);
+  }
 }
 
 const PERMISSION_RULES = [
@@ -797,52 +773,45 @@ const DEFAULT_FEATURE_FLAGS = {
   kiosk_context_locked: false,
 };
 
-function getFeatureFlagsMap(cb) {
-  db.all("SELECT key, enabled FROM feature_flags", [], (err, rows) => {
-    if (err) {
-      // Keep legacy behavior if flags table isn't present yet.
-      if (String(err.message || "").includes("no such table")) {
-        return cb(null, { ...DEFAULT_FEATURE_FLAGS });
-      }
-      return cb(err);
-    }
-
+async function getFeatureFlagsMap() {
+  try {
+    const { rows } = await db.query("SELECT key, enabled FROM feature_flags");
     const merged = { ...DEFAULT_FEATURE_FLAGS };
     for (const row of rows || []) {
-      merged[row.key] = Number(row.enabled || 0) === 1;
+      merged[row.key] = row.enabled === true;
     }
-    cb(null, merged);
-  });
-}
-
-function isFeatureEnabled(flagKey, cb) {
-  getFeatureFlagsMap((err, flags) => {
-    if (err) return cb(err);
-    cb(null, Boolean(flags?.[flagKey]));
-  });
+    return merged;
+  } catch (err) {
+    // Keep legacy behavior if flags table isn't present yet.
+    if (String(err.message || "").includes("does not exist")) {
+      return { ...DEFAULT_FEATURE_FLAGS };
+    }
+    throw err;
+  }
 }
 
 function requireFeature(flagKey) {
-  return (req, res, next) => {
-    isFeatureEnabled(flagKey, (err, enabled) => {
-      if (err) return res.status(500).json({ error: err.message });
-      if (!enabled) {
+  return async (req, res, next) => {
+    try {
+      const flags = await getFeatureFlagsMap();
+      if (!flags[flagKey]) {
         return res.status(503).json({
           error: `Feature disabled: ${flagKey}`,
           flag: flagKey,
         });
       }
       next();
-    });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
   };
 }
 
 function createNotification(type, title, message, link) {
-  db.run(
-    "INSERT INTO notifications (type, title, message, link) VALUES (?, ?, ?, ?)",
-    [type, title, message, link || null],
-    () => {},
-  );
+  db.query(
+    "INSERT INTO notifications (type, title, message, link) VALUES ($1, $2, $3, $4)",
+    [type, title, message, link || null]
+  ).catch(() => {});
 }
 
 function notifyLowStockForSale(cartItems, outletId) {
@@ -854,25 +823,24 @@ function notifyLowStockForSale(cartItems, outletId) {
     ),
   ];
   if (!productIds.length || !outletId) return;
-  const placeholders = productIds.map(() => "?").join(",");
-  db.all(
+  const placeholders = productIds.map((_, i) => "$" + (i + 2)).join(",");
+  db.query(
     `SELECT os.product_id, os.quantity, p.name
      FROM outlet_stock os
      JOIN products p ON p.id = os.product_id
-     WHERE os.outlet_id = ? AND os.product_id IN (${placeholders}) AND COALESCE(os.quantity, 0) <= 10`,
-    [outletId, ...productIds],
-    (err, rows) => {
-      if (err || !rows) return;
-      rows.forEach((row) => {
-        createNotification(
-          "low_stock",
-          "Low Stock Alert",
-          `${row.name} has ${row.quantity} units left`,
-          "/inventory",
-        );
-      });
-    },
-  );
+     WHERE os.outlet_id = $1 AND os.product_id IN (${placeholders}) AND COALESCE(os.quantity, 0) <= 10`,
+    [outletId, ...productIds]
+  ).then(({ rows }) => {
+    if (!rows) return;
+    rows.forEach((row) => {
+      createNotification(
+        "low_stock",
+        "Low Stock Alert",
+        `${row.name} has ${row.quantity} units left`,
+        "/inventory",
+      );
+    });
+  }).catch(() => {});
 }
 
 const runtimeState = { isRestoreInProgress: false };
@@ -889,7 +857,6 @@ const { processPendingShopifyInventoryEvents, processPendingReportSchedules } =
     fs,
     path,
     multer,
-    sqlite3,
     requirePerm,
     requireAnyPerm,
     requireFeature,
@@ -991,20 +958,20 @@ function runAutoBackup() {
 }
 
 // ─── 3.7 Shopify Sync Queue Cleanup (30-day retention) ───────────────────────
-function cleanupSyncEvents() {
-  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  db.run(
-    "DELETE FROM external_sync_events WHERE created_at < ? AND status IN ('success', 'failed')",
-    [cutoff],
-    function (err) {
-      if (err) console.error("[SyncCleanup] Error:", err.message);
-      else if (this.changes > 0)
-        console.log(`[SyncCleanup] Deleted ${this.changes} old sync events`);
-    },
-  );
+async function cleanupSyncEvents() {
+  try {
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { rowCount } = await db.query(
+      "DELETE FROM external_sync_events WHERE created_at < $1 AND status IN ('success', 'failed')",
+      [cutoff]
+    );
+    if (rowCount > 0) console.log(`[SyncCleanup] Deleted ${rowCount} old sync events`);
+  } catch (err) {
+    console.error("[SyncCleanup] Error:", err.message);
+  }
 }
 
-function cleanupReportScheduleArtifacts() {
+async function cleanupReportScheduleArtifacts() {
   const runsRetentionDays = Math.max(
     1,
     Number(process.env.REPORT_RUNS_RETENTION_DAYS || 45),
@@ -1026,32 +993,29 @@ function cleanupReportScheduleArtifacts() {
   const exportsDir = path.resolve(__dirname, "exports", "reports");
   const filesCutoffMs = Date.now() - filesRetentionDays * 24 * 60 * 60 * 1000;
 
-  db.run(
-    "DELETE FROM report_schedule_runs WHERE datetime(COALESCE(run_finished_at, run_started_at)) < datetime(?)",
-    [runsCutoff],
-    function (err) {
-      if (err) console.error("[ReportCleanup] run cleanup error:", err.message);
-      else if (this.changes > 0) {
-        console.log(
-          `[ReportCleanup] Deleted ${this.changes} old schedule runs`,
-        );
-      }
-    },
-  );
+  try {
+    const { rowCount: runsDeleted } = await db.query(
+      "DELETE FROM report_schedule_runs WHERE COALESCE(run_finished_at, run_started_at) < $1::timestamptz",
+      [runsCutoff]
+    );
+    if (runsDeleted > 0) {
+      console.log(`[ReportCleanup] Deleted ${runsDeleted} old schedule runs`);
+    }
+  } catch (err) {
+    console.error("[ReportCleanup] run cleanup error:", err.message);
+  }
 
-  db.run(
-    "DELETE FROM report_delivery_log WHERE datetime(created_at) < datetime(?)",
-    [deliveryCutoff],
-    function (err) {
-      if (err)
-        console.error("[ReportCleanup] delivery cleanup error:", err.message);
-      else if (this.changes > 0) {
-        console.log(
-          `[ReportCleanup] Deleted ${this.changes} old delivery logs`,
-        );
-      }
-    },
-  );
+  try {
+    const { rowCount: deliveryDeleted } = await db.query(
+      "DELETE FROM report_delivery_log WHERE created_at < $1::timestamptz",
+      [deliveryCutoff]
+    );
+    if (deliveryDeleted > 0) {
+      console.log(`[ReportCleanup] Deleted ${deliveryDeleted} old delivery logs`);
+    }
+  } catch (err) {
+    console.error("[ReportCleanup] delivery cleanup error:", err.message);
+  }
 
   if (!fs.existsSync(exportsDir)) return;
   let deleted = 0;
@@ -1073,24 +1037,30 @@ function cleanupReportScheduleArtifacts() {
   }
 }
 
-runAutoBackup();
-cleanupSyncEvents();
-cleanupReportScheduleArtifacts();
-setInterval(runAutoBackup, 24 * 60 * 60 * 1000);
-setInterval(cleanupSyncEvents, 24 * 60 * 60 * 1000);
-setInterval(cleanupReportScheduleArtifacts, 24 * 60 * 60 * 1000);
+// Auto backup only runs in SQLite mode (Postgres uses pg_dump/Supabase backups)
+if (!process.env.DATABASE_URL) {
+  runAutoBackup();
+  setInterval(runAutoBackup, 24 * 60 * 60 * 1000);
+}
+cleanupSyncEvents().catch(e => console.error("[SyncCleanup]", e.message));
+cleanupReportScheduleArtifacts().catch(e => console.error("[ReportCleanup]", e.message));
+setInterval(() => cleanupSyncEvents().catch(e => console.error("[SyncCleanup]", e.message)), 24 * 60 * 60 * 1000);
+setInterval(() => cleanupReportScheduleArtifacts().catch(e => console.error("[ReportCleanup]", e.message)), 24 * 60 * 60 * 1000);
 
 // F2: Close stale attendance sessions from previous days (runs on boot + daily)
-function closeStaleAttendanceSessions() {
-  db.run(
-    `UPDATE attendance_sessions
-     SET session_end = session_start, session_type = 'auto_closed'
-     WHERE session_end IS NULL AND date(session_start) < date('now', 'localtime')`,
-    (err) => { if (err) console.error("Stale session cleanup error:", err.message); }
-  );
+async function closeStaleAttendanceSessions() {
+  try {
+    await db.query(
+      `UPDATE attendance_sessions
+       SET session_end = session_start, session_type = 'auto_closed'
+       WHERE session_end IS NULL AND session_start::date < CURRENT_DATE`
+    );
+  } catch (err) {
+    console.error("Stale session cleanup error:", err.message);
+  }
 }
-closeStaleAttendanceSessions();
-setInterval(closeStaleAttendanceSessions, 24 * 60 * 60 * 1000);
+closeStaleAttendanceSessions().catch(e => console.error("Stale session cleanup error:", e.message));
+setInterval(() => closeStaleAttendanceSessions().catch(e => console.error("Stale session cleanup error:", e.message)), 24 * 60 * 60 * 1000);
 
 // Health check (used by Railway healthcheckPath)
 app.get("/api/health", (req, res) => {

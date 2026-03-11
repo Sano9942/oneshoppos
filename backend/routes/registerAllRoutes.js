@@ -4,7 +4,6 @@ module.exports = function registerAllRoutes(app, deps) {
     fs,
     path,
     multer,
-    sqlite3,
     requirePerm,
     requireAnyPerm,
     requireFeature,
