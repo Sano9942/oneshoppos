@@ -1,10 +1,6 @@
 import { parseDbDate } from "../../utils/dates";
 
-/** Returns a formatter using the currency symbol from dashboard data */
-export function useCurrency(data) {
-  const symbol = data?.currency?.symbol || "PKRs";
-  return (n) => `${symbol} ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+export { useCurrency } from "../../contexts/CurrencyContext";
 
 /** Shows a delta arrow + percentage vs yesterday. green = up, red = down */
 export function DeltaArrow({ today, yesterday, invert = false }) {

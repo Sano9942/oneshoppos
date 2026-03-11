@@ -12,6 +12,7 @@ import { API_BASE as API } from "../../../config";
 import { useAuth } from "../../../auth/AuthProvider";
 import { readContext } from "../../../auth/authStore";
 import { buildReceiptHtml, buildReceiptSections, printToHardware } from "../../../utils/receipt";
+import { useCurrency } from "../../../contexts/CurrencyContext";
 
 const POSContext = createContext();
 const OPENING_DENOMS = [5000, 1000, 500, 100, 50, 20, 10];
@@ -137,12 +138,7 @@ export const POSProvider = ({ children }) => {
     noticeTimer.current = setTimeout(() => setNotice(""), 4000);
   };
 
-  const money = (v) =>
-    new Intl.NumberFormat("en-PK", {
-      style: "currency",
-      currency: "PKR",
-      minimumFractionDigits: 0,
-    }).format(v || 0);
+  const { fmt: money, denominations: currencyDenominations, symbol: currencySymbol } = useCurrency();
 
   const openingFloat = useMemo(
     () =>
@@ -1036,6 +1032,8 @@ export const POSProvider = ({ children }) => {
     success,
     setSuccess,
     money,
+    currencyDenominations,
+    currencySymbol,
     showNotice,
     loadParked,
     triggerSearch,

@@ -3,8 +3,6 @@ import { Download, ClipboardList, Search, X } from "lucide-react";
 import { fmtUtcDate, fmtUtcDateTime } from "../../utils/dates";
 
 // --- Formatters ---------------------------------------------------------------
-export const fmt = (n) => "PKRs " + Number(n || 0).toFixed(2);
-
 export const fmtDate = fmtUtcDate;
 
 export const fmtDateTime = fmtUtcDateTime;
