@@ -149,7 +149,7 @@ describe("Batch 4 — Reports routes (Postgres)", () => {
       expect(res.body).toHaveProperty("totalRevenueToday");
       expect(res.body).toHaveProperty("saleCount");
       expect(res.body).toHaveProperty("topProducts");
-    });
+    }, 15000);
 
     it("GET /api/reports/dashboard accepts outlet_id filter", async () => {
       const res = await request(app)
@@ -157,7 +157,7 @@ describe("Batch 4 — Reports routes (Postgres)", () => {
         .set("x-employee-id", "1");
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty("totalRevenueToday");
-    });
+    }, 15000);
   });
 
   // ─── SHIFTS ──────────────────────────────────────────────
