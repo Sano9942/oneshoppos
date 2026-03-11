@@ -6,69 +6,70 @@ module.exports = function createNotificationsRouter({ db, requireFeature }) {
   router.get(
     "/api/notifications",
     requireFeature("notifications"),
-    (req, res) => {
-      const unreadOnly = Number(req.query.unread_only || 0) === 1;
-      const where = unreadOnly ? "WHERE is_read = 0" : "";
-      db.all(
-        `SELECT * FROM notifications ${where} ORDER BY datetime(created_at) DESC LIMIT 50`,
-        [],
-        (err, rows) => {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ notifications: rows || [] });
-        },
-      );
+    async (req, res) => {
+      try {
+        const unreadOnly = Number(req.query.unread_only || 0) === 1;
+        const where = unreadOnly ? "WHERE is_read = false" : "";
+        const { rows } = await db.query(
+          `SELECT * FROM notifications ${where} ORDER BY created_at DESC LIMIT 50`
+        );
+        res.json({ notifications: rows || [] });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 
   router.get(
     "/api/notifications/count",
     requireFeature("notifications"),
-    (req, res) => {
-      db.get(
-        "SELECT COUNT(*) AS unread FROM notifications WHERE is_read = 0",
-        [],
-        (err, row) => {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ unread: Number(row?.unread || 0) });
-        },
-      );
+    async (req, res) => {
+      try {
+        const { rows } = await db.query(
+          "SELECT COUNT(*) AS unread FROM notifications WHERE is_read = false"
+        );
+        res.json({ unread: Number(rows[0]?.unread || 0) });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 
   router.put(
     "/api/notifications/:id/read",
     requireFeature("notifications"),
-    (req, res) => {
-      const { id } = req.params;
-      db.run(
-        "UPDATE notifications SET is_read = 1 WHERE id = ?",
-        [id],
-        function (err) {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({
-            message: "Notification marked as read",
-            changed: this.changes || 0,
-          });
-        },
-      );
+    async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { rowCount } = await db.query(
+          "UPDATE notifications SET is_read = true WHERE id = $1",
+          [id]
+        );
+        res.json({
+          message: "Notification marked as read",
+          changed: rowCount || 0,
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 
   router.put(
     "/api/notifications/read-all",
     requireFeature("notifications"),
-    (req, res) => {
-      db.run(
-        "UPDATE notifications SET is_read = 1 WHERE is_read = 0",
-        [],
-        function (err) {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({
-            message: "All notifications marked as read",
-            changed: this.changes || 0,
-          });
-        },
-      );
+    async (req, res) => {
+      try {
+        const { rowCount } = await db.query(
+          "UPDATE notifications SET is_read = true WHERE is_read = false"
+        );
+        res.json({
+          message: "All notifications marked as read",
+          changed: rowCount || 0,
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 

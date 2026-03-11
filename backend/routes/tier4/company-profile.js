@@ -13,11 +13,13 @@ module.exports = function createCompanyProfileRouter({
   router.get(
     "/api/company-profile",
     requireFeature("multi_company"),
-    (req, res) => {
-      db.get("SELECT * FROM company_profile WHERE id = 1", [], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ profile: row || null });
-      });
+    async (req, res) => {
+      try {
+        const { rows } = await db.query("SELECT * FROM company_profile WHERE id = 1");
+        res.json({ profile: rows[0] || null });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 
@@ -25,75 +27,76 @@ module.exports = function createCompanyProfileRouter({
     "/api/company-profile",
     requirePerm("all_access"),
     requireFeature("multi_company"),
-    (req, res) => {
-      const {
-        company_name,
-        trading_name,
-        ntn,
-        strn,
-        address,
-        city,
-        country,
-        phone,
-        email,
-        website,
-        currency_symbol,
-        currency_code,
-        fiscal_year_start,
-        timezone,
-        monthly_sales_target,
-        margin_threshold_pct,
-        refund_threshold_pct,
-        void_threshold_pct,
-      } = req.body || {};
+    async (req, res) => {
+      try {
+        const {
+          company_name,
+          trading_name,
+          ntn,
+          strn,
+          address,
+          city,
+          country,
+          phone,
+          email,
+          website,
+          currency_symbol,
+          currency_code,
+          fiscal_year_start,
+          timezone,
+          monthly_sales_target,
+          margin_threshold_pct,
+          refund_threshold_pct,
+          void_threshold_pct,
+        } = req.body || {};
 
-      db.run(
-        `UPDATE company_profile
-       SET company_name = COALESCE(?, company_name),
-           trading_name = ?,
-           ntn = ?,
-           strn = ?,
-           address = ?,
-           city = ?,
-           country = COALESCE(?, country),
-           phone = ?,
-           email = ?,
-           website = ?,
-           currency_symbol = COALESCE(?, currency_symbol),
-           currency_code = COALESCE(?, currency_code),
-           fiscal_year_start = COALESCE(?, fiscal_year_start),
-           timezone = COALESCE(?, timezone),
-           monthly_sales_target = COALESCE(?, monthly_sales_target),
-           margin_threshold_pct = COALESCE(?, margin_threshold_pct),
-           refund_threshold_pct = COALESCE(?, refund_threshold_pct),
-           void_threshold_pct = COALESCE(?, void_threshold_pct),
-           updated_at = datetime('now','localtime')
-       WHERE id = 1`,
-        [
-          company_name || null,
-          trading_name || null,
-          ntn || null,
-          strn || null,
-          address || null,
-          city || null,
-          country || null,
-          phone || null,
-          email || null,
-          website || null,
-          currency_symbol || null,
-          currency_code || null,
-          fiscal_year_start || null,
-          timezone || null,
-          monthly_sales_target != null ? Number(monthly_sales_target) : null,
-          margin_threshold_pct != null ? Number(margin_threshold_pct) : null,
-          refund_threshold_pct != null ? Number(refund_threshold_pct) : null,
-          void_threshold_pct != null ? Number(void_threshold_pct) : null,
-        ],
-        function (err) {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ message: "Company profile updated" });
-        },
-      );
+        await db.query(
+          `UPDATE company_profile
+         SET company_name = COALESCE($1, company_name),
+             trading_name = $2,
+             ntn = $3,
+             strn = $4,
+             address = $5,
+             city = $6,
+             country = COALESCE($7, country),
+             phone = $8,
+             email = $9,
+             website = $10,
+             currency_symbol = COALESCE($11, currency_symbol),
+             currency_code = COALESCE($12, currency_code),
+             fiscal_year_start = COALESCE($13, fiscal_year_start),
+             timezone = COALESCE($14, timezone),
+             monthly_sales_target = COALESCE($15, monthly_sales_target),
+             margin_threshold_pct = COALESCE($16, margin_threshold_pct),
+             refund_threshold_pct = COALESCE($17, refund_threshold_pct),
+             void_threshold_pct = COALESCE($18, void_threshold_pct),
+             updated_at = NOW()
+         WHERE id = 1`,
+          [
+            company_name || null,
+            trading_name || null,
+            ntn || null,
+            strn || null,
+            address || null,
+            city || null,
+            country || null,
+            phone || null,
+            email || null,
+            website || null,
+            currency_symbol || null,
+            currency_code || null,
+            fiscal_year_start || null,
+            timezone || null,
+            monthly_sales_target != null ? Number(monthly_sales_target) : null,
+            margin_threshold_pct != null ? Number(margin_threshold_pct) : null,
+            refund_threshold_pct != null ? Number(refund_threshold_pct) : null,
+            void_threshold_pct != null ? Number(void_threshold_pct) : null,
+          ]
+        );
+        res.json({ message: "Company profile updated" });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 
@@ -117,14 +120,11 @@ module.exports = function createCompanyProfileRouter({
         const filename = `company_logo_${Date.now()}${ext}`;
         const key = `company/${filename}`;
         const logoUrl = await uploadToR2(req.file.buffer, key, req.file.mimetype);
-        db.run(
-          "UPDATE company_profile SET logo_url = ?, updated_at = datetime('now','localtime') WHERE id = 1",
-          [logoUrl],
-          (err) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: "Company logo updated", logo_url: logoUrl });
-          },
+        await db.query(
+          "UPDATE company_profile SET logo_url = $1, updated_at = NOW() WHERE id = 1",
+          [logoUrl]
         );
+        res.json({ message: "Company logo updated", logo_url: logoUrl });
       } catch (err) {
         res.status(500).json({ error: "Upload failed: " + err.message });
       }

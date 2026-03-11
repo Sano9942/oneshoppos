@@ -766,6 +766,18 @@ CREATE TABLE IF NOT EXISTS payroll_lines (
   UNIQUE(period_id, employee_id)
 );
 
+CREATE TABLE IF NOT EXISTS hr_payroll_lines (
+  id SERIAL PRIMARY KEY,
+  period_id INTEGER NOT NULL REFERENCES payroll_periods(id) ON DELETE CASCADE,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  base_salary NUMERIC(12,2) DEFAULT 0,
+  deductions NUMERIC(12,2) DEFAULT 0,
+  net_pay NUMERIC(12,2) DEFAULT 0,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(period_id, employee_id)
+);
+
 -- ── Accounting ────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS accounting_periods (
