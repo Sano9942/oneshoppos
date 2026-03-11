@@ -2,12 +2,10 @@ import React, { useState, useEffect, useCallback } from "react";
 import { X, Search, Plus, Minus, RotateCcw, ShoppingCart } from "lucide-react";
 import { API_BASE as API } from "../../../config";
 import { usePOS } from "./POSContext";
-
-function money(n) {
-  return `PKRs ${Number(n || 0).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+import { useCurrency } from "../../../contexts/CurrencyContext";
 
 export default function POSReturnExchangeModal() {
+  const { fmt: money } = useCurrency();
   const {
     returnModalOpen,
     setReturnModalOpen,
@@ -524,7 +522,7 @@ export default function POSReturnExchangeModal() {
                   {balance > 0 ? "Customer pays" : balance < 0 ? "Refund to customer" : "Even exchange"}
                 </span>
                 <span className={balance > 0 ? "text-emerald-600" : balance < 0 ? "text-rose-600" : "text-slate-400"}>
-                  {balance === 0 ? "PKRs 0.00" : money(Math.abs(balance))}
+                  {balance === 0 ? money(0) : money(Math.abs(balance))}
                 </span>
               </div>
 

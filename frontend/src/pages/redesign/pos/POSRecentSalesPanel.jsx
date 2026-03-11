@@ -3,13 +3,11 @@ import { X, Printer, RotateCcw, Search, Mail } from "lucide-react";
 import POSEmailReceiptModal from "./POSEmailReceiptModal";
 import { API_BASE as API } from "../../../config";
 import { usePOS } from "./POSContext";
+import { useCurrency } from "../../../contexts/CurrencyContext";
 import { fmtDateTime, fmtTime } from "../../../utils/dates";
 
-function money(n) {
-  return `PKRs ${Number(n || 0).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 export default function POSRecentSalesPanel() {
+  const { fmt: money } = useCurrency();
   const {
     recentSalesOpen,
     setRecentSalesOpen,

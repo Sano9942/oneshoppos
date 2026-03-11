@@ -1,8 +1,10 @@
 import React from "react";
 import { Search, User, ShoppingCart, Tag, FileText } from "lucide-react";
 import { usePOS } from "./POSContext";
+import { useCurrency } from "../../../contexts/CurrencyContext";
 
 export default function POSSidebar({ mobile }) {
+  const { symbol: currencySymbol } = useCurrency();
   const {
     customerSearch,
     setCustomerSearch,
@@ -124,7 +126,7 @@ export default function POSSidebar({ mobile }) {
         >
           <Tag size={12} className="text-[#8066FF]" />
           {discountInput
-            ? `Disc. (${discountType === "percent" ? discountInput + "%" : "PKR " + discountInput})`
+            ? `Disc. (${discountType === "percent" ? discountInput + "%" : currencySymbol + " " + discountInput})`
             : "Add Discount"}
         </button>
         <button

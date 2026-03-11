@@ -2,10 +2,10 @@ import React, { useMemo, useState } from "react";
 import { Calculator, X } from "lucide-react";
 import { API_BASE as API } from "../../../config";
 import { usePOS } from "./POSContext";
-
-const DENOMS = [5000, 1000, 500, 100, 50, 20, 10];
+import { useCurrency } from "../../../contexts/CurrencyContext";
 
 export default function POSCloseShiftModal() {
+  const { fmt: money, denominations, symbol } = useCurrency();
   const {
     closeShiftOpen,
     setCloseShiftOpen,
@@ -22,7 +22,7 @@ export default function POSCloseShiftModal() {
   const [notes, setNotes] = useState("");
   const [result, setResult] = useState(null);
   const [denoms, setDenoms] = useState(
-    DENOMS.map((value) => ({ denomination: value, count: 0 })),
+    denominations.map((value) => ({ denomination: value, count: 0 })),
   );
 
   const closingCash = useMemo(
@@ -43,7 +43,7 @@ export default function POSCloseShiftModal() {
     setApprovedBy("");
     setNotes("");
     setResult(null);
-    setDenoms(DENOMS.map((value) => ({ denomination: value, count: 0 })));
+    setDenoms(denominations.map((value) => ({ denomination: value, count: 0 })));
   };
 
   const closeShift = async (e) => {
@@ -103,9 +103,9 @@ export default function POSCloseShiftModal() {
         <div className="space-y-4 px-6 py-5">
           {result ? (
             <div className="space-y-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm">
-              <p className="font-bold text-slate-900">Expected: PKR {Number(result.expected_cash || 0).toFixed(2)}</p>
-              <p className="font-bold text-slate-900">Counted: PKR {Number(result.closing_cash || 0).toFixed(2)}</p>
-              <p className="font-black text-slate-900">Variance: PKR {Number(result.variance || 0).toFixed(2)}</p>
+              <p className="font-bold text-slate-900">Expected: {money(result.expected_cash)}</p>
+              <p className="font-bold text-slate-900">Counted: {money(result.closing_cash)}</p>
+              <p className="font-black text-slate-900">Variance: {money(result.variance)}</p>
               <button
                 type="button"
                 onClick={reset}
@@ -125,7 +125,7 @@ export default function POSCloseShiftModal() {
                   {denoms.map((row, index) => (
                     <label key={row.denomination} className="rounded-xl border border-slate-200 bg-white p-3">
                       <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
-                        Rs {row.denomination}
+                        {symbol} {row.denomination}
                       </span>
                       <input
                         type="number"
@@ -146,7 +146,7 @@ export default function POSCloseShiftModal() {
                   ))}
                 </div>
                 <p className="mt-4 text-base font-black text-slate-900">
-                  Counted Total: PKR {closingCash.toFixed(2)}
+                  Counted Total: {money(closingCash)}
                 </p>
               </div>
 

@@ -1,6 +1,7 @@
 import React from "react";
 import { Building2, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
 import { usePOS } from "./POSContext";
+import { useCurrency } from "../../../contexts/CurrencyContext";
 
 function shiftMessage(attendanceCode) {
   if (attendanceCode === "on_break") {
@@ -16,6 +17,7 @@ function shiftMessage(attendanceCode) {
 }
 
 export default function POSOpeningGateModal() {
+  const { fmt: money, symbol } = useCurrency();
   const {
     outlets,
     selectedOutletId,
@@ -123,7 +125,7 @@ export default function POSOpeningGateModal() {
                     {openingDenoms.map((row, index) => (
                       <label key={row.denomination} className="rounded-xl border border-amber-200 bg-white p-3">
                         <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
-                          Rs {row.denomination}
+                          {symbol} {row.denomination}
                         </span>
                         <input
                           type="number"
@@ -158,7 +160,7 @@ export default function POSOpeningGateModal() {
                         Opening Float
                       </p>
                       <p className="text-xl font-black text-slate-900">
-                        PKR {openingFloat.toFixed(2)}
+                        {money(openingFloat)}
                       </p>
                     </div>
                   </div>
