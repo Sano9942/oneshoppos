@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { API_BASE } from "../config";
+import { API_BASE, IS_MULTI_TENANT } from "../config";
 import { useCurrency } from "../contexts/CurrencyContext";
 
 /**
@@ -22,8 +22,10 @@ export default function CustomerDisplayPage() {
   const prevItemCountRef = useRef(0);
   const [animateIdx, setAnimateIdx] = useState(-1);
 
-  // Read shift_id from URL query params
-  const shiftId = new URLSearchParams(window.location.search).get("shift_id");
+  // Read shift_id and tenant from URL query params
+  const params = new URLSearchParams(window.location.search);
+  const shiftId = params.get("shift_id");
+  const tenantSlug = params.get("tenant");
 
   // Fetch store name once
   useEffect(() => {
@@ -39,7 +41,8 @@ export default function CustomerDisplayPage() {
     if (!shiftId) return;
 
     const poll = () => {
-      fetch(`${API_BASE}/api/pos/customer-display?shift_id=${shiftId}`)
+      const tenantParam = IS_MULTI_TENANT && tenantSlug ? `&tenant=${tenantSlug}` : "";
+      fetch(`${API_BASE}/api/pos/customer-display?shift_id=${shiftId}${tenantParam}`)
         .then((r) => r.json())
         .then((d) => {
           setData((prev) => {

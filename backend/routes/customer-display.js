@@ -8,8 +8,15 @@
  */
 
 module.exports = function customerDisplayRoutes(app, deps) {
-  // In-memory store: Map<shift_id, { items, subtotal, tax, total, status, updatedAt }>
+  // In-memory store: Map<compositeKey, { items, subtotal, tax, total, status, updatedAt }>
+  // Key: "${tenantSlug}-${shiftId}" in MT mode, "_st-${shiftId}" in single-tenant
   const displayStore = new Map();
+
+  // Build composite key — tenant-scoped to prevent cross-tenant collision
+  function displayKey(req, shiftId) {
+    const prefix = req.tenantSlug || req.query.tenant || "_st";
+    return `${prefix}-${shiftId}`;
+  }
 
   // Cleanup entries older than 8 hours
   function cleanup() {
@@ -28,7 +35,7 @@ module.exports = function customerDisplayRoutes(app, deps) {
     const { shift_id, items, subtotal, tax, total, status } = req.body;
     if (!shift_id) return res.status(400).json({ error: "shift_id required" });
 
-    displayStore.set(String(shift_id), {
+    displayStore.set(displayKey(req, shift_id), {
       items: (items || []).map((i) => ({
         name: i.name,
         qty: i.quantity || i.qty,
@@ -45,11 +52,12 @@ module.exports = function customerDisplayRoutes(app, deps) {
   });
 
   // GET /api/pos/customer-display — display polls (NO auth — public-facing screen)
+  // In MT mode, pass ?tenant=<slug>&shift_id=<id> to scope the lookup
   app.get("/api/pos/customer-display", (req, res) => {
     const { shift_id } = req.query;
     if (!shift_id) return res.status(400).json({ error: "shift_id required" });
 
-    const data = displayStore.get(String(shift_id));
+    const data = displayStore.get(displayKey(req, shift_id));
     if (!data) {
       return res.json({
         items: [],
