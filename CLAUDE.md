@@ -12,6 +12,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - Latest migration (SQLite) is `backend/migrate74.js`
 - **Postgres migration COMPLETE and LIVE** (Mar 12 2026) — merged to `main`, production running on Supabase Postgres. Boot guard in `index.js` conditionally loads `db-pg` (Postgres) or `db` (SQLite) based on `DATABASE_URL`. 340/340 pg integration tests passing.
 - **Production database: Supabase Postgres** — `DATABASE_URL` set on Railway, `DATA_DIR` removed. Fresh DB via setup wizard (no SQLite data migrated). SQLite volume still mounted on Railway as safety net.
+- **Currency/timezone centralization complete (Mar 12 2026)** — `CurrencyProvider` context live; all ~58 PKR/PKRs hardcodes replaced; `cash_denominations` column added (schema migration v2); setup wizard and company settings have full IANA timezone dropdown + denomination chip editor.
 - `schema-pg.sql` includes seed INSERT for `company_profile` row (required for setup wizard token generation at boot).
 - **Phase 3 Remaining complete (Mar 10 2026)**: 5 items shipped — mobile/tablet POS layout, IP allowlisting for admin API, JWT token revocation (migrate74), stock shrinkage report, customer-facing display
 - **Roadmap Phase 3 complete (Mar 10 2026)**: 8 of 9 core robustness items shipped (offline queuing deferred) — rate limiter activation, session timeout at POS, idempotency on sales, price change audit log, end-of-day email digest, onboarding checklist, setup wizard, soft deletes
@@ -338,6 +339,19 @@ oneshoppos/
 - `npm test` in `backend/` runs vitest — only works for files using vitest import syntax
 - 10+ test files use vitest `import` syntax (attendance, customers, promotions, etc.) — these FAIL under Jest; pre-existing and expected
 - Confirmed passing baseline: 283 Jest integration tests, 2 pre-existing failures (concurrency.test.js vitest format)
+- `smoke-gate.test.js` has **22/25 pre-existing failures on main** — do NOT investigate unless you changed auth/session code
+- `pg-batch*.test.js` require a live Postgres `DATABASE_URL` — always fail locally without it; run only in CI/Railway
+
+## Currency System (live — Mar 12 2026)
+
+- `frontend/src/contexts/CurrencyContext.jsx` — `useCurrency()` returns `{ symbol, code, denominations, fmt, refresh }`
+- `GET /api/company-profile/currency` — public endpoint (no auth), fetched by `CurrencyProvider` on mount
+- `cash_denominations` column on `company_profile` — JSON array string; added in schema migration v2
+- **NEVER hardcode `PKR`/`PKRs`/`Rs` in display code** — use `const { fmt } = useCurrency()` in React components
+- Non-component utilities (e.g. `frontend/src/utils/receipt.js`) accept `currencySymbol` as a parameter from the calling component
+- `CurrencyProvider` wraps OUTSIDE `AuthProvider` in `main.jsx` — so unauthenticated pages (SetupWizard, CustomerDisplay) can format currency
+- After saving company profile, call `refresh()` from `useCurrency()` to propagate currency changes across the app immediately
+- POS context exports `currencyDenominations` and `currencySymbol` from `useCurrency()` — use these in POS shift modals instead of hardcoded arrays
 
 ## Common Gotchas
 
