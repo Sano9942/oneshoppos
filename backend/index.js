@@ -507,22 +507,27 @@ const CONTEXT_EXEMPT_PATHS = [
   /^\/api\/roles\/\d+\/permissions/,
   /^\/api\/outlets$/,
 ];
-let _contextEnforced = false;
-let _contextFlagLoaded = false;
-let _contextFlagLastCheck = 0;
+// Context enforcement flag cache — per-tenant Map (MT-safe). Single-tenant uses "_default" key.
+const _contextFlagCache = new Map(); // key: tenantId|"_default", value: { enforced, loaded, lastCheck }
 const CONTEXT_FLAG_CACHE_MS = 30000; // re-check every 30s
 
-// Eagerly load flag on startup
-(async () => {
-  try {
-    const { rows: [row] } = await db.query(
-      "SELECT enabled FROM feature_flags WHERE key = 'context_header_enforced'"
-    );
-    if (row) _contextEnforced = row.enabled === true;
-  } catch {}
-  _contextFlagLoaded = true;
-  _contextFlagLastCheck = Date.now();
-})();
+// Eagerly load flag on startup — only in single-tenant mode
+if (!IS_MULTI_TENANT) {
+  (async () => {
+    try {
+      const { rows: [row] } = await db.query(
+        "SELECT enabled FROM feature_flags WHERE key = 'context_header_enforced'"
+      );
+      _contextFlagCache.set("_default", {
+        enforced: row ? row.enabled === true : false,
+        loaded: true,
+        lastCheck: Date.now(),
+      });
+    } catch {
+      _contextFlagCache.set("_default", { enforced: false, loaded: true, lastCheck: Date.now() });
+    }
+  })();
+}
 
 function resolveContext(req, res, next) {
   req.context = { companyId: null, outletId: null, scopeMode: null };
@@ -533,19 +538,26 @@ function resolveContext(req, res, next) {
   if (outletId) req.context.outletId = Number(outletId);
   if (scopeMode) req.context.scopeMode = scopeMode;
 
-  // Refresh cached flag value periodically
+  // Per-tenant flag lookup
+  const cacheKey = IS_MULTI_TENANT ? (req.tenantId || "_default") : "_default";
+  let flagEntry = _contextFlagCache.get(cacheKey);
   const now = Date.now();
-  if (now - _contextFlagLastCheck > CONTEXT_FLAG_CACHE_MS) {
-    _contextFlagLastCheck = now;
+
+  if (!flagEntry || (now - flagEntry.lastCheck > CONTEXT_FLAG_CACHE_MS)) {
+    const newEntry = flagEntry || { enforced: false, loaded: false, lastCheck: now };
+    newEntry.lastCheck = now;
+    _contextFlagCache.set(cacheKey, newEntry);
     db.query("SELECT enabled FROM feature_flags WHERE key = 'context_header_enforced'")
       .then(({ rows: [row] }) => {
-        if (row) _contextEnforced = row.enabled === true;
+        if (row) newEntry.enforced = row.enabled === true;
+        newEntry.loaded = true;
       })
-      .catch(() => {});
+      .catch(() => { newEntry.loaded = true; });
+    flagEntry = newEntry;
   }
 
   // Enforce: reject API requests missing context headers (when flag is on)
-  if (_contextFlagLoaded && _contextEnforced && req.path.startsWith("/api/")) {
+  if (flagEntry.loaded && flagEntry.enforced && req.path.startsWith("/api/")) {
     const exempt = CONTEXT_EXEMPT_PATHS.some((rx) => rx.test(req.path));
     const employeeId = Number(req.headers["x-employee-id"] || 0);
     // If no employee identity is attached yet, defer context enforcement to
