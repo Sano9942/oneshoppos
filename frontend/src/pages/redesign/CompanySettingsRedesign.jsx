@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Building2, CheckCircle, Globe, Target, Upload, X } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
+import { useCurrency } from "../../contexts/CurrencyContext";
 import {
   Button,
   Input,
@@ -9,10 +10,12 @@ import {
   SectionCard,
 } from "../../ui/primitives";
 
+const ALL_TIMEZONES = Intl.supportedValuesOf("timeZone");
+
 const DEFAULT_FORM = {
   company_name: "", trading_name: "", ntn: "", strn: "", address: "",
   city: "", country: "Pakistan", phone: "", email: "", website: "",
-  currency_symbol: "PKRs", currency_code: "PKR",
+  currency_symbol: "$", currency_code: "USD",
   fiscal_year_start: "01-01", timezone: "Asia/Karachi", logo_url: "",
   monthly_sales_target: 0, margin_threshold_pct: 20,
   refund_threshold_pct: 5, void_threshold_pct: 3,
@@ -29,10 +32,31 @@ function FormField({ label, children }) {
 
 export default function CompanySettingsRedesign() {
   const { authHeaders } = useAuth();
+  const { refresh } = useCurrency();
   const [form, setForm] = useState(DEFAULT_FORM);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null); // { type: 'success'|'error', text }
   const [logoFile, setLogoFile] = useState(null);
+  const [tzSearch, setTzSearch] = useState("");
+  const [denomInput, setDenomInput] = useState("");
+
+  const denoms = useMemo(() => {
+    try {
+      const raw = form.cash_denominations;
+      return Array.isArray(raw) ? raw : JSON.parse(raw || "[]");
+    } catch { return []; }
+  }, [form.cash_denominations]);
+
+  const addDenomination = () => {
+    const v = parseInt(denomInput, 10);
+    if (v > 0 && !denoms.includes(v)) {
+      upd("cash_denominations", JSON.stringify([...denoms, v].sort((a, b) => b - a)));
+    }
+    setDenomInput("");
+  };
+  const removeDenom = (d) => {
+    upd("cash_denominations", JSON.stringify(denoms.filter(x => x !== d)));
+  };
 
   const load = useCallback(async () => {
     try {
@@ -62,6 +86,7 @@ export default function CompanySettingsRedesign() {
       if (!res.ok) throw new Error(data.error || "Failed to save profile");
       showMsg("success", "Company profile saved.");
       load();
+      refresh();
     } catch (err) {
       showMsg("error", err.message || "Save failed");
     } finally {
@@ -211,18 +236,44 @@ export default function CompanySettingsRedesign() {
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <FormField label="Currency Symbol">
               <Input
-                placeholder="PKRs"
+                placeholder="$"
                 value={form.currency_symbol || ""}
                 onChange={(e) => upd("currency_symbol", e.target.value)}
               />
             </FormField>
             <FormField label="Currency Code">
               <Input
-                placeholder="PKR"
+                placeholder="USD"
                 value={form.currency_code || ""}
                 onChange={(e) => upd("currency_code", e.target.value)}
               />
             </FormField>
+          </div>
+
+          {/* Cash Denominations */}
+          <div className="mt-3 space-y-1">
+            <label className="text-xs font-medium text-(--ui-text-muted)">Cash Denominations</label>
+            <div className="flex flex-wrap gap-2">
+              {denoms
+                .sort((a, b) => b - a)
+                .map((d) => (
+                  <span key={d} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-sm">
+                    {d}
+                    <button type="button" onClick={() => removeDenom(d)} className="text-blue-400 hover:text-red-500">&times;</button>
+                  </span>
+                ))}
+            </div>
+            <div className="flex gap-2 mt-2">
+              <input
+                type="number"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                placeholder="Add denomination"
+                value={denomInput}
+                onChange={(e) => setDenomInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDenomination(); } }}
+              />
+              <button type="button" onClick={addDenomination} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">Add</button>
+            </div>
           </div>
 
           {/* Logo upload */}
@@ -267,13 +318,25 @@ export default function CompanySettingsRedesign() {
                 onChange={(e) => upd("fiscal_year_start", e.target.value)}
               />
             </FormField>
-            <FormField label="Timezone">
-              <Input
-                placeholder="Asia/Karachi"
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-(--ui-text-muted)">Timezone</label>
+              <input
+                placeholder="Search timezones..."
+                value={tzSearch}
+                onChange={(e) => setTzSearch(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+              />
+              <select
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                 value={form.timezone || ""}
                 onChange={(e) => upd("timezone", e.target.value)}
-              />
-            </FormField>
+              >
+                <option value="">Select timezone</option>
+                {ALL_TIMEZONES
+                  .filter(tz => tz.toLowerCase().includes(tzSearch.toLowerCase()))
+                  .map(tz => <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>)}
+              </select>
+            </div>
           </div>
         </SectionCard>
 
