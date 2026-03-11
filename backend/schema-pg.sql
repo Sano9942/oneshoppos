@@ -929,6 +929,22 @@ CREATE TABLE IF NOT EXISTS shopify_product_map (
   UNIQUE(shopify_product_id, shopify_variant_id)
 );
 
+CREATE TABLE IF NOT EXISTS shopify_product_metadata (
+  id SERIAL PRIMARY KEY,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  shopify_product_id TEXT NOT NULL,
+  shopify_handle TEXT,
+  shopify_status TEXT,
+  shopify_product_type TEXT,
+  shopify_vendor TEXT,
+  shopify_tags TEXT,
+  shopify_published_at TIMESTAMPTZ,
+  shopify_updated_at TIMESTAMPTZ,
+  last_imported_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(product_id)
+);
+
 CREATE TABLE IF NOT EXISTS shopify_location_map (
   id SERIAL PRIMARY KEY,
   outlet_id INTEGER NOT NULL REFERENCES outlets(id),

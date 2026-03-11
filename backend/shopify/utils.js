@@ -103,19 +103,41 @@ function maskSecret(secret, decryptFn) {
 
 // Fetches the single active Shopify connection row and decrypts secrets.
 // db and decryptFn are injected to keep this module free of direct DB imports.
+// Supports both Postgres (async, db.query) and SQLite (callback, db.get) modes.
+// If cb is provided, uses callback style; otherwise returns a Promise.
 function getActiveShopifyConnection(db, decryptFn, cb) {
+  const hydrate = (row) => {
+    if (!row) return null;
+    return {
+      ...row,
+      access_token: decryptFn(row.access_token),
+      webhook_secret: decryptFn(row.webhook_secret),
+    };
+  };
+
+  // Postgres mode: db.query exists and db.get does not
+  if (typeof db.query === "function" && typeof db.get !== "function") {
+    const promise = db
+      .query(
+        "SELECT * FROM shopify_connections WHERE is_active = true ORDER BY id DESC LIMIT 1"
+      )
+      .then((result) => hydrate(result.rows[0] || null));
+
+    if (typeof cb === "function") {
+      promise.then((conn) => cb(null, conn)).catch((err) => cb(err));
+      return;
+    }
+    return promise;
+  }
+
+  // SQLite mode (legacy callback)
   db.get(
     `SELECT * FROM shopify_connections WHERE is_active = 1 ORDER BY id DESC LIMIT 1`,
     [],
     (err, row) => {
       if (err || !row) return cb(err, row);
       try {
-        const hydrated = {
-          ...row,
-          access_token: decryptFn(row.access_token),
-          webhook_secret: decryptFn(row.webhook_secret),
-        };
-        return cb(null, hydrated);
+        return cb(null, hydrate(row));
       } catch (e) {
         return cb(e);
       }

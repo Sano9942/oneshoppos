@@ -8,32 +8,29 @@ module.exports = function registerShopifyRoutes(app, deps) {
   function maskSecret(secret) {
     return _maskSecret(secret, deps.decryptShopifySecret);
   }
-  function getActiveShopifyConnection(cb) {
-    return _getActiveShopifyConnection(deps.db, deps.decryptShopifySecret, cb);
+
+  // Postgres async version — returns a Promise
+  async function getActiveShopifyConnection() {
+    return _getActiveShopifyConnection(deps.db, deps.decryptShopifySecret);
   }
 
-  function resolveImportCategoryId(productTypeName, cb) {
+  async function resolveImportCategoryId(productTypeName) {
     const normalized = String(productTypeName || "").trim();
-    if (!normalized) return cb(null, null);
+    if (!normalized) return null;
 
-    deps.db.all(
+    const { rows } = await deps.db.query(
       `SELECT c.id, COUNT(ch.id) AS child_count
        FROM categories c
        LEFT JOIN categories ch ON ch.parent_id = c.id
-       WHERE lower(c.name) = lower(?)
+       WHERE LOWER(c.name) = LOWER($1)
        GROUP BY c.id`,
-      [normalized],
-      (err, rows) => {
-        if (err) return cb(err);
-        const leafMatches = (rows || []).filter(
-          (row) => Number(row.child_count || 0) === 0,
-        );
-        if (leafMatches.length !== 1) {
-          return cb(null, null);
-        }
-        return cb(null, Number(leafMatches[0].id));
-      },
+      [normalized]
     );
+    const leafMatches = (rows || []).filter(
+      (row) => Number(row.child_count || 0) === 0
+    );
+    if (leafMatches.length !== 1) return null;
+    return Number(leafMatches[0].id);
   }
 
   // Augmented deps shared by all sub-modules
