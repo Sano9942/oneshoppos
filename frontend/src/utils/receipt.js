@@ -6,7 +6,7 @@
  * @param {object|null} template - Active receipt template from /api/receipt-templates/active
  * @returns {object} All receipt sections as plain values
  */
-export function buildReceiptSections(slip, template) {
+export function buildReceiptSections(slip, template, currencySymbol = "$") {
   const subtotal = (slip.cart || []).reduce(
     (s, i) => s + Number(i.price || 0) * Number(i.quantity || 0),
     0,
@@ -61,12 +61,8 @@ export function buildReceiptSections(slip, template) {
   };
 }
 
-function fmt(n) {
-  return new Intl.NumberFormat("en-PK", {
-    style: "currency",
-    currency: "PKR",
-    minimumFractionDigits: 0,
-  }).format(n || 0);
+function makeFmt(symbol = "$") {
+  return (n) => `${symbol} ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 /**
@@ -76,8 +72,9 @@ function fmt(n) {
  * @param {object} slip     - The sale slip object
  * @param {object|null} template - Active receipt template (null = use defaults)
  */
-export function buildReceiptHtml(slip, template) {
-  const s = buildReceiptSections(slip, template);
+export function buildReceiptHtml(slip, template, currencySymbol = "$") {
+  const fmt = makeFmt(currencySymbol);
+  const s = buildReceiptSections(slip, template, currencySymbol);
 
   const w = window.open("", "_blank", "width=360,height=620");
   if (!w) {

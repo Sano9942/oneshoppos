@@ -5,11 +5,11 @@ import { buildReceiptSections } from "../../../utils/receipt";
 import POSEmailReceiptModal from "./POSEmailReceiptModal";
 
 export default function POSReceiptModal() {
-  const { slipOpen, setSlipOpen, slip, money, printSlip, receiptTemplate } = usePOS();
+  const { slipOpen, setSlipOpen, slip, money, printSlip, receiptTemplate, currencySymbol } = usePOS();
 
   const [showEmailModal, setShowEmailModal] = useState(false);
 
-  const sections = slip ? buildReceiptSections(slip, receiptTemplate) : null;
+  const sections = slip ? buildReceiptSections(slip, receiptTemplate, currencySymbol) : null;
 
   if (!slipOpen || !slip) return null;
 

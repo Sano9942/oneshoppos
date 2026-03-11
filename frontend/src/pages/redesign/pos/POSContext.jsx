@@ -704,7 +704,7 @@ export const POSProvider = ({ children }) => {
     const result = await printToHardware(s, receiptTemplate);
     if (result.fallback) {
       // Printer offline or not configured — fall back to browser popup
-      buildReceiptHtml(s, receiptTemplate);
+      buildReceiptHtml(s, receiptTemplate, currencySymbol);
     }
     // If result.ok: silent hardware print succeeded, no browser popup needed
   };
