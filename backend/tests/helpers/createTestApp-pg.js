@@ -299,9 +299,9 @@ async function seedData(db) {
     );
   }
 
-  // Company profile
+  // Company profile (ON CONFLICT because schema-pg.sql seeds this row)
   await db.query(
-    `INSERT INTO company_profile (id, company_name) VALUES (1, 'Test Store')`
+    `INSERT INTO company_profile (id, company_name) VALUES (1, 'Test Store') ON CONFLICT (id) DO UPDATE SET company_name = EXCLUDED.company_name`
   );
 
   // Reset sequences to avoid id conflicts after explicit id inserts
