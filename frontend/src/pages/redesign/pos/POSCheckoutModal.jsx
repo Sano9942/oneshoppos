@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   Banknote,
   X,
@@ -59,6 +59,21 @@ export default function POSCheckoutModal() {
     pointsDiscount,
     total,
   } = usePOS();
+
+  const isOffline = !navigator.onLine;
+
+  // Force-disable wallet and points when going offline
+  useEffect(() => {
+    const handleOffline = () => {
+      setRedeemPointsOn(false);
+      if (payWithWalletOn) {
+        setPayWithWalletOn(false);
+        setPayments((prev) => prev.filter((p) => p.method !== "Wallet"));
+      }
+    };
+    window.addEventListener("offline", handleOffline);
+    return () => window.removeEventListener("offline", handleOffline);
+  }, [payWithWalletOn]);
 
   // Toggle wallet payment — adds/removes a Wallet entry in the payments array
   const handleWalletToggle = () => {
@@ -300,11 +315,15 @@ export default function POSCheckoutModal() {
               {checkoutCustomerPoints >= 100 && (
                 <button
                   type="button"
-                  onClick={() => setRedeemPointsOn((v) => !v)}
+                  disabled={isOffline}
+                  onClick={() => !isOffline && setRedeemPointsOn((v) => !v)}
+                  title={isOffline ? "Points redemption requires connectivity" : ""}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border-2 transition font-semibold text-sm ${
-                    redeemPointsOn
-                      ? "border-amber-400 bg-amber-50 text-amber-800"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                    isOffline
+                      ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
+                      : redeemPointsOn
+                        ? "border-amber-400 bg-amber-50 text-amber-800"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
                   }`}
                 >
                   <span className="flex items-center gap-2">
@@ -326,11 +345,15 @@ export default function POSCheckoutModal() {
               {checkoutWalletBalance > 0 && (
                 <button
                   type="button"
-                  onClick={handleWalletToggle}
+                  disabled={isOffline}
+                  onClick={() => !isOffline && handleWalletToggle()}
+                  title={isOffline ? "Wallet payment requires connectivity" : ""}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border-2 transition font-semibold text-sm ${
-                    payWithWalletOn
-                      ? "border-emerald-400 bg-emerald-50 text-emerald-800"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                    isOffline
+                      ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
+                      : payWithWalletOn
+                        ? "border-emerald-400 bg-emerald-50 text-emerald-800"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
                   }`}
                 >
                   <span className="flex items-center gap-2">
