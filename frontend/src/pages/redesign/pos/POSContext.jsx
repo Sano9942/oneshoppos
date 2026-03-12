@@ -751,6 +751,53 @@ export const POSProvider = ({ children }) => {
       points_redeemed: checkoutCustomerId ? pointsRedeemed : 0,
       idempotency_key: crypto.randomUUID(),
     };
+
+    const queueSaleOffline = () => {
+      try {
+        const count = enqueue(employee.id, salePayload);
+        setOfflineQueueCount(count);
+        const custObj = checkoutCustomerId
+          ? customers.find((c) => String(c.id) === String(checkoutCustomerId))
+          : null;
+        setSlip({
+          saleId: null,
+          invoiceNumber: "PENDING",
+          cart: [...cart],
+          payments: [...payments],
+          total,
+          change,
+          customer: custObj || null,
+          outlet: outlets.find((o) => String(o.id) === String(selectedOutletId)),
+          employee: employee,
+          discountAmount: discountValue,
+          discountInput: Number(discountInput || 0),
+          discountType,
+          taxAmount: taxInclusive && taxTotal > 0 ? taxTotal : 0,
+          taxInclusive,
+          orderNote: orderNote || null,
+          timestamp: new Date().toLocaleString(),
+          offline: true,
+        });
+        setSlipOpen(true);
+        setCart([]);
+        setDiscountInput("");
+        setOrderNote("");
+        setSelectedCustomerId("");
+        setCheckoutOpen(false);
+        setPayments([]);
+        showNotice(`Sale queued offline (${count} pending). Will sync when online.`);
+      } catch (queueErr) {
+        setError(queueErr.message);
+      }
+    };
+
+    // If offline, queue immediately without attempting fetch
+    if (!navigator.onLine) {
+      queueSaleOffline();
+      setSubmitting(false);
+      return;
+    }
+
     try {
       const res = await fetch(`${API}/api/sales`, {
         method: "POST",
@@ -816,7 +863,12 @@ export const POSProvider = ({ children }) => {
       );
       await loadParked(selectedOutletId);
     } catch (e) {
-      setError(e.message || "Failed to complete sale");
+      // Network error — queue offline
+      if (e instanceof TypeError || !navigator.onLine) {
+        queueSaleOffline();
+      } else {
+        setError(e.message || "Failed to complete sale");
+      }
     } finally {
       setSubmitting(false);
     }
