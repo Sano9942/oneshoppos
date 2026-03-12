@@ -24,7 +24,8 @@ export function CurrencyProvider({ children }) {
       if (IS_MULTI_TENANT) {
         const raw = localStorage.getItem("authSession");
         const slug = raw ? JSON.parse(raw)?.tenant_slug : null;
-        if (slug) url += `?tenant=${encodeURIComponent(slug)}`;
+        if (!slug) return; // No tenant context yet (pre-login) — skip, use defaults
+        url += `?tenant=${encodeURIComponent(slug)}`;
       }
       const res = await fetch(url);
       if (res.ok) {

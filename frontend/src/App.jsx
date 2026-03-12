@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useRef } from "react";
 import { BrowserRouter as Router, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth/AuthProvider";
+import { IS_MULTI_TENANT } from "./config";
 import RequireAuth from "./components/RequireAuth";
 import RequireContext from "./components/RequireContext";
 import RequirePerm from "./components/RequirePerm";
@@ -81,7 +82,7 @@ function HomeRedirect() {
   const checkedRef = useRef(false);
 
   useEffect(() => {
-    if (isBootstrapping || checkedRef.current) return;
+    if (isBootstrapping || checkedRef.current || IS_MULTI_TENANT) return;
     checkedRef.current = true;
     const apiBase = import.meta.env.VITE_API_BASE || "http://localhost:5000";
     fetch(`${apiBase}/api/setup/status`)
