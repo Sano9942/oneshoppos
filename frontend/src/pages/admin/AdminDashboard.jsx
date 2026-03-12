@@ -23,15 +23,15 @@ function StatCard({ icon: Icon, label, value, color }) {
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
+  const [attention, setAttention] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const token = getAdminToken();
     if (!token) return;
-    fetch(`${API_BASE}/api/admin/stats`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const headers = { Authorization: `Bearer ${token}` };
+    fetch(`${API_BASE}/api/admin/stats`, { headers })
       .then((r) => {
         if (r.status === 401) { navigate("/admin/login", { replace: true }); return null; }
         if (!r.ok) throw new Error("Failed to load stats");
@@ -40,6 +40,10 @@ export default function AdminDashboard() {
       .then((data) => { if (data) setStats(data); })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+    fetch(`${API_BASE}/api/admin/attention`, { headers })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setAttention(data); })
+      .catch(() => {});
   }, []);
 
   if (loading) {
@@ -90,6 +94,53 @@ export default function AdminDashboard() {
             <p className="text-xs text-slate-500">Pro</p>
           </div>
         </div>
+      </div>
+
+      {/* Needs Attention */}
+      <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold text-slate-800">Needs Attention</h2>
+        {!attention ? (
+          <p className="text-sm text-slate-400">Loading...</p>
+        ) : attention.approaching_limits.length === 0 && attention.dormant.length === 0 && attention.setup_pending.length === 0 ? (
+          <p className="text-sm font-medium text-emerald-600">All tenants healthy</p>
+        ) : (
+          <div className="space-y-3">
+            {attention.approaching_limits.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-amber-600">
+                  {attention.approaching_limits.length} approaching plan limits
+                </p>
+                {attention.approaching_limits.map((a) => (
+                  <p key={`${a.id}-${a.dimension}`} className="ml-2 text-xs text-slate-500">
+                    {a.name}: {a.used}/{a.max} {a.dimension}
+                  </p>
+                ))}
+              </div>
+            )}
+            {attention.dormant.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-red-600">
+                  {attention.dormant.length} dormant tenants
+                </p>
+                {attention.dormant.map((d) => (
+                  <p key={d.id} className="ml-2 text-xs text-slate-500">
+                    {d.name}: {d.days_inactive ? `${d.days_inactive}d inactive` : "Never logged in"}
+                  </p>
+                ))}
+              </div>
+            )}
+            {attention.setup_pending.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-slate-600">
+                  {attention.setup_pending.length} setup pending
+                </p>
+                {attention.setup_pending.map((s) => (
+                  <p key={s.id} className="ml-2 text-xs text-slate-500">{s.name}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Recent tenants */}
