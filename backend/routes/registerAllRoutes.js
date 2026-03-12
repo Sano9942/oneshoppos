@@ -44,6 +44,7 @@ module.exports = function registerAllRoutes(app, deps) {
     encryptShopifySecret,
     decryptShopifySecret,
     logShopifyEvent,
+    invalidateFeatureFlagCache,
   } = deps;
 
   // Setup wizard — must be BEFORE auth middleware (no session exists yet)
@@ -251,6 +252,10 @@ module.exports = function registerAllRoutes(app, deps) {
        updated_at = NOW()`,
           [key, enabledVal, description || null, updated_by || null],
         );
+        // Invalidate per-tenant feature flag cache
+        if (typeof invalidateFeatureFlagCache === "function") {
+          invalidateFeatureFlagCache(req.tenantId);
+        }
         res.json({
           message: "Feature flag updated",
           key,

@@ -804,16 +804,26 @@ const DEFAULT_FEATURE_FLAGS = {
   kiosk_context_locked: false,
 };
 
-async function getFeatureFlagsMap() {
+// Per-tenant feature flag cache: Map<tenantId|"_default", { flags, timestamp }>
+const _featureFlagCache = new Map();
+const FEATURE_FLAG_CACHE_MS = 60_000; // 60s TTL
+
+async function getFeatureFlagsMap(tenantId) {
+  const cacheKey = tenantId || "_default";
+  const cached = _featureFlagCache.get(cacheKey);
+  const now = Date.now();
+  if (cached && (now - cached.timestamp) < FEATURE_FLAG_CACHE_MS) {
+    return { ...cached.flags };
+  }
   try {
     const { rows } = await db.query("SELECT key, enabled FROM feature_flags");
     const merged = { ...DEFAULT_FEATURE_FLAGS };
     for (const row of rows || []) {
       merged[row.key] = row.enabled === true;
     }
+    _featureFlagCache.set(cacheKey, { flags: merged, timestamp: now });
     return merged;
   } catch (err) {
-    // Keep legacy behavior if flags table isn't present yet.
     if (String(err.message || "").includes("does not exist")) {
       return { ...DEFAULT_FEATURE_FLAGS };
     }
@@ -821,10 +831,18 @@ async function getFeatureFlagsMap() {
   }
 }
 
+function invalidateFeatureFlagCache(tenantId) {
+  if (tenantId) {
+    _featureFlagCache.delete(tenantId);
+  } else {
+    _featureFlagCache.clear();
+  }
+}
+
 function requireFeature(flagKey) {
   return async (req, res, next) => {
     try {
-      const flags = await getFeatureFlagsMap();
+      const flags = await getFeatureFlagsMap(req.tenantId);
       if (!flags[flagKey]) {
         return res.status(503).json({
           error: `Feature disabled: ${flagKey}`,
@@ -889,6 +907,7 @@ const { processPendingShopifyInventoryEvents, processPendingReportSchedules } =
     db: IS_MULTI_TENANT ? dbProxy : db,
     fs,
     path,
+    invalidateFeatureFlagCache,
     multer,
     requirePerm,
     requireAnyPerm,
