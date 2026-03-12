@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ShoppingCart, Search as SearchIcon, CreditCard } from "lucide-react";
+import { ShoppingCart, Search as SearchIcon, CreditCard, WifiOff, RefreshCw } from "lucide-react";
 import { POSProvider, usePOS } from "./pos/POSContext";
 import POSHeader from "./pos/POSHeader";
 import POSSubHeader from "./pos/POSSubHeader";
@@ -25,7 +25,7 @@ const MOBILE_TABS = [
 ];
 
 function POSContent() {
-  const { isLocked, notice, error, cart, total, money, openCheckout } = usePOS();
+  const { isLocked, notice, error, cart, total, money, openCheckout, offlineQueueCount, offlineSyncing, offlineSyncResult, syncQueue } = usePOS();
   const [activeTab, setActiveTab] = useState("cart");
 
   if (isLocked) {
@@ -34,6 +34,29 @@ function POSContent() {
 
   return (
     <div className="flex flex-col h-screen bg-[#F8FAFC] overflow-hidden font-sans">
+      {/* Offline queue banner */}
+      {offlineQueueCount > 0 && (
+        <div className="fixed top-0 left-0 right-0 z-60 flex items-center justify-between px-4 py-2.5 bg-amber-500 text-white text-sm font-medium shadow-lg animate-in fade-in slide-in-from-top-4 duration-300">
+          <span className="flex items-center gap-2">
+            <WifiOff size={16} />
+            {offlineQueueCount} sale(s) queued offline — will sync automatically
+          </span>
+          <button
+            onClick={syncQueue}
+            disabled={offlineSyncing}
+            className="flex items-center gap-1.5 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-semibold transition disabled:opacity-50"
+          >
+            <RefreshCw size={12} className={offlineSyncing ? "animate-spin" : ""} />
+            {offlineSyncing ? "Syncing..." : "Sync now"}
+          </button>
+        </div>
+      )}
+      {/* Sync success banner */}
+      {offlineSyncResult && (
+        <div className="fixed top-0 left-0 right-0 z-60 flex items-center justify-center px-4 py-2.5 bg-emerald-500 text-white text-sm font-medium shadow-lg animate-in fade-in slide-in-from-top-4 duration-300">
+          {offlineSyncResult.synced} sale(s) synced successfully
+        </div>
+      )}
       {/* Notifications */}
       {notice && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-60 bg-slate-900/90 text-white px-6 py-3 rounded-2xl shadow-2xl backdrop-blur-md border border-white/10 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
