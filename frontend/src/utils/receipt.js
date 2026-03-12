@@ -32,7 +32,7 @@ export function buildReceiptSections(slip, template, currencySymbol = "$") {
     // slip.timestamp must already be a display string (e.g. new Date().toLocaleString())
     // Do NOT pass a raw SQLite UTC string — use fmtDateTime() from utils/dates.js first
     timestamp: slip.timestamp || "",
-    invoiceNumber: slip.invoiceNumber || "-",
+    invoiceNumber: slip.offline ? "PENDING (offline)" : (slip.invoiceNumber || "-"),
     returnedFrom: slip.returnedFrom || null,
     employee: slip.employee || null,
     customer: slip.customer || null,
@@ -58,6 +58,7 @@ export function buildReceiptSections(slip, template, currencySymbol = "$") {
 
     // Footer
     orderNote: slip.orderNote || null,
+    offlineNote: slip.offline ? "Sale queued offline — final receipt available after sync" : null,
   };
 }
 
@@ -178,6 +179,14 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$") {
     bc.style.cssText = "text-align:center;font-size:10px;letter-spacing:3px;color:#555";
     bc.textContent = s.invoiceNumber;
     b.appendChild(bc);
+  }
+
+  // Offline notice
+  if (s.offlineNote) {
+    b.appendChild(hr());
+    const note = txt("div", s.offlineNote, "c");
+    note.style.cssText = "font-style:italic;color:#c0392b;font-size:11px";
+    b.appendChild(note);
   }
 
   // Footer
