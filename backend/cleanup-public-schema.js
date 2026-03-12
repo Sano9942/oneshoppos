@@ -16,6 +16,7 @@ const MASTER_TABLES = new Set([
   "tenant_audit_log",
   "schema_migrations",
   "tenant_refresh_tokens",
+  "company_profile",
 ]);
 
 async function main() {
@@ -59,7 +60,7 @@ async function main() {
     .map(s => s.sequencename)
     .filter(s => !s.startsWith("tenants_") && !s.startsWith("super_admins_") &&
                  !s.startsWith("tenant_audit_log_") && !s.startsWith("schema_migrations_") &&
-                 !s.startsWith("tenant_refresh_tokens_"));
+                 !s.startsWith("tenant_refresh_tokens_") && !s.startsWith("company_profile_"));
 
   if (seqsToDrop.length > 0) {
     const seqSql = `DROP SEQUENCE IF EXISTS ${seqsToDrop.map(s => `public."${s}"`).join(", ")} CASCADE`;

@@ -3,9 +3,16 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Database, Pause, Play, RotateCcw, Trash2 } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
 
+function safeDateParse(ts) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function timeAgo(ts) {
-  if (!ts) return "Never";
-  const diff = Date.now() - new Date(ts).getTime();
+  const d = safeDateParse(ts);
+  if (!d) return "Never";
+  const diff = Date.now() - d.getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "Just now";
   if (mins < 60) return `${mins}m ago`;
@@ -230,7 +237,7 @@ export default function AdminTenantDetail() {
                   <div><p className="text-xs text-slate-400">Max Employees</p><p className="font-medium text-slate-700">{tenant.max_employees}</p></div>
                   <div><p className="text-xs text-slate-400">Max Products</p><p className="font-medium text-slate-700">{tenant.max_products}</p></div>
                   <div><p className="text-xs text-slate-400">Max Outlets</p><p className="font-medium text-slate-700">{tenant.max_outlets}</p></div>
-                  <div><p className="text-xs text-slate-400">Created</p><p className="font-medium text-slate-700">{tenant.created_at ? new Date(tenant.created_at + "Z").toLocaleString() : "—"}</p></div>
+                  <div><p className="text-xs text-slate-400">Created</p><p className="font-medium text-slate-700">{safeDateParse(tenant.created_at)?.toLocaleString() ?? "\u2014"}</p></div>
                 </>
               )}
             </div>
@@ -338,7 +345,7 @@ export default function AdminTenantDetail() {
                       {entry.actor && <span className="ml-2 text-xs text-slate-400">by {entry.actor}</span>}
                     </div>
                     <span className="text-xs text-slate-400">
-                      {entry.created_at ? new Date(entry.created_at + "Z").toLocaleString() : "—"}
+                      {safeDateParse(entry.created_at)?.toLocaleString() ?? "\u2014"}
                     </span>
                   </div>
                 ))}

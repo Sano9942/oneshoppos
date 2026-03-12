@@ -32,7 +32,7 @@ const ALL_PERMISSIONS = [
  *
  * @param {object} db - The db-pg pool wrapper
  * @param {object} opts
- * @param {string} opts.slug - Tenant slug (3-40 chars, lowercase+numbers+hyphens)
+ * @param {string} opts.slug - Tenant slug (3-40 chars, lowercase+numbers+underscores, no hyphens)
  * @param {string} opts.name - Store display name
  * @param {string} opts.ownerEmail - Owner email
  * @param {string} opts.timezone - IANA timezone (default "UTC")
@@ -44,7 +44,9 @@ async function provision(db, { slug, name, ownerEmail, timezone, pin }) {
   if (!name) throw new Error("name is required");
   if (!pin || !/^\d{4,8}$/.test(pin)) throw new Error("pin must be 4-8 digits");
 
-  const schemaName = `tenant_${slug}`;
+  // Defense-in-depth: convert any hyphens to underscores for Postgres schema name safety
+  const safeSlug = slug.replace(/-/g, "_");
+  const schemaName = `tenant_${safeSlug}`;
 
   // Step 1: Create schema
   await db.query(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
@@ -140,8 +142,8 @@ async function provision(db, { slug, name, ownerEmail, timezone, pin }) {
 
 function validateSlug(slug) {
   if (!slug) throw new Error("slug is required");
-  if (!/^[a-z0-9_-]{3,40}$/.test(slug)) {
-    throw new Error("slug must be 3-40 chars, lowercase letters, numbers, underscores, and hyphens only");
+  if (!/^[a-z0-9_]{3,40}$/.test(slug)) {
+    throw new Error("slug must be 3-40 chars, lowercase letters, numbers, and underscores only (no hyphens)");
   }
 }
 

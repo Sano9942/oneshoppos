@@ -3,18 +3,26 @@ import { useNavigate } from "react-router-dom";
 import { Plus, Search, Server } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
 
+function safeDateParse(ts) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function healthDot(t) {
   if (!t.setup_complete) return { color: "bg-slate-400", label: "Setup pending" };
-  if (!t.last_login) return { color: "bg-red-500", label: "Never logged in" };
-  const days = (Date.now() - new Date(t.last_login).getTime()) / 86400000;
+  const lastLogin = safeDateParse(t.last_login);
+  if (!lastLogin) return { color: "bg-red-500", label: "Never logged in" };
+  const days = (Date.now() - lastLogin.getTime()) / 86400000;
   if (days < 1) return { color: "bg-emerald-500", label: "Active today" };
   if (days < 7) return { color: "bg-amber-500", label: `${Math.floor(days)}d ago` };
   return { color: "bg-red-500", label: `${Math.floor(days)}d ago` };
 }
 
 function timeAgo(ts) {
-  if (!ts) return "\u2014";
-  const diff = Date.now() - new Date(ts).getTime();
+  const d = safeDateParse(ts);
+  if (!d) return "\u2014";
+  const diff = Date.now() - d.getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "Just now";
   if (mins < 60) return `${mins}m ago`;
@@ -165,7 +173,7 @@ export default function AdminTenantList() {
                   </td>
                   <td className="px-4 py-3 text-slate-500">{timeAgo(t.last_login)}</td>
                   <td className="px-4 py-3 text-slate-500">
-                    {t.created_at ? new Date(t.created_at + "Z").toLocaleDateString() : "—"}
+                    {safeDateParse(t.created_at)?.toLocaleDateString() ?? "\u2014"}
                   </td>
                 </tr>
               ))}
@@ -185,11 +193,14 @@ export default function AdminTenantList() {
                   <span className="text-xs font-bold uppercase text-slate-500">Slug *</span>
                   <input
                     value={form.slug}
-                    onChange={(e) => setForm({ ...form, slug: e.target.value })}
-                    placeholder="my-shop"
+                    onChange={(e) => setForm({ ...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "") })}
+                    placeholder="my_shop"
+                    pattern="^[a-z0-9_]{3,40}$"
+                    title="3-40 characters: lowercase letters, numbers, underscores only"
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none"
                     required
                   />
+                  <span className="mt-1 block text-xs text-slate-400">Lowercase letters, numbers, underscores only (3-40 chars)</span>
                 </label>
                 <label className="block">
                   <span className="text-xs font-bold uppercase text-slate-500">Name *</span>
