@@ -1154,10 +1154,7 @@ setInterval(() => cleanupReportScheduleArtifacts().catch(e => console.error("[Re
 closeStaleAttendanceSessions().catch(e => console.error("Stale session cleanup error:", e.message));
 setInterval(() => closeStaleAttendanceSessions().catch(e => console.error("Stale session cleanup error:", e.message)), 24 * 60 * 60 * 1000);
 
-// Health check (used by Railway healthcheckPath)
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
-});
+// Health check is now registered early in registerAllRoutes.js (before auth middleware)
 
 
 // Start server

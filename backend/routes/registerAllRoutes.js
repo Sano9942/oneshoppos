@@ -47,6 +47,11 @@ module.exports = function registerAllRoutes(app, deps) {
     invalidateFeatureFlagCache,
   } = deps;
 
+  // Health check — registered BEFORE all auth/tenant middleware so Railway healthcheck always responds
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   // Setup wizard — must be BEFORE auth middleware (no session exists yet)
   const createSetupRouter = require("./setup");
   const IS_MULTI_TENANT = process.env.MULTI_TENANT === "1";
