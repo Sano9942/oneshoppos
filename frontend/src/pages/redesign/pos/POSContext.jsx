@@ -13,6 +13,7 @@ import { useAuth } from "../../../auth/AuthProvider";
 import { readContext } from "../../../auth/authStore";
 import { buildReceiptHtml, buildReceiptSections, printToHardware } from "../../../utils/receipt";
 import { useCurrency } from "../../../contexts/CurrencyContext";
+import { getQueue, enqueue, dequeue, WARN_THRESHOLD } from "../../../utils/offlineQueue";
 
 const POSContext = createContext();
 const OPENING_DENOMS = [5000, 1000, 500, 100, 50, 20, 10];
@@ -124,6 +125,11 @@ export const POSProvider = ({ children }) => {
   const [sessionExpired, setSessionExpired] = useState(false);
   const pendingSaleRef = useRef(null);
 
+  // ── Offline queue ───────────────────────────────────────────────────────
+  const [offlineQueueCount, setOfflineQueueCount] = useState(0);
+  const [offlineSyncing, setOfflineSyncing] = useState(false);
+  const [offlineSyncResult, setOfflineSyncResult] = useState(null);
+
   // ── Notices ───────────────────────────────────────────────────────────────
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -186,6 +192,13 @@ export const POSProvider = ({ children }) => {
       .then((d) => { if (d.template) setReceiptTemplate(d.template); })
       .catch(() => {}); // silently fall back to defaults if no template
   }, []);
+
+  // ── Offline queue count init ────────────────────────────────────────────
+  useEffect(() => {
+    if (employee?.id) {
+      setOfflineQueueCount(getQueue(employee.id).length);
+    }
+  }, [employee?.id]);
 
   useEffect(() => {
     if (selectedOutletId) {
