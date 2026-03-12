@@ -506,12 +506,15 @@ function loadCompanyProfile(req, res, next) {
   }
   req.company = entry.profile;
 
-  // Setup gate: if setup_complete = false, block all routes except /api/setup and /api/health
+  // Setup gate: if setup_complete = false, block all routes except /api/setup and /api/health.
+  // In MT mode, only apply the gate when a tenant context is established (req.tenantId set).
+  // Pre-auth requests (login, refresh) have no tenant context yet and must not be blocked.
   if (
     entry.profile &&
     !entry.profile.setup_complete &&
     !req.path.startsWith("/api/setup") &&
-    !req.path.startsWith("/api/health")
+    !req.path.startsWith("/api/health") &&
+    (!IS_MULTI_TENANT || req.tenantId)
   ) {
     return res.status(503).json({ error: "Setup required", code: "SETUP_REQUIRED" });
   }
