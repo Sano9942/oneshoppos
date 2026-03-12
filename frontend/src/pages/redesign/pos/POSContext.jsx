@@ -927,6 +927,61 @@ export const POSProvider = ({ children }) => {
     }
   };
 
+  const syncQueue = useCallback(async () => {
+    if (!employee?.id) return;
+    const queue = getQueue(employee.id);
+    if (!queue.length) return;
+    if (offlineSyncing) return;
+    setOfflineSyncing(true);
+    let synced = 0;
+    for (const sale of queue) {
+      try {
+        const res = await fetch(`${API}/api/sales`, {
+          method: "POST",
+          headers: authHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify(sale),
+        });
+        if (res.ok) {
+          dequeue(employee.id, sale.idempotency_key);
+          synced++;
+        } else {
+          const data = await res.json().catch(() => ({}));
+          if (data.duplicate) {
+            dequeue(employee.id, sale.idempotency_key);
+            synced++;
+          } else {
+            break;
+          }
+        }
+      } catch {
+        break;
+      }
+    }
+    const remaining = getQueue(employee.id).length;
+    setOfflineQueueCount(remaining);
+    setOfflineSyncing(false);
+    if (synced > 0) {
+      setOfflineSyncResult({ synced });
+      showNotice(`${synced} offline sale(s) synced successfully.`);
+      setTimeout(() => setOfflineSyncResult(null), 5000);
+    }
+  }, [employee?.id, offlineSyncing]);
+
+  useEffect(() => {
+    const handleOnline = () => { syncQueue(); };
+    const handleStorage = (e) => {
+      if (e.key?.startsWith("pos_offline_queue_") && employee?.id) {
+        setOfflineQueueCount(getQueue(employee.id).length);
+      }
+    };
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [syncQueue, employee?.id]);
+
   const handleLock = () => {
     sessionStorage.setItem("posLocked", "1");
     setIsLocked(true);
@@ -1153,6 +1208,11 @@ export const POSProvider = ({ children }) => {
     sessionExpired,
     setSessionExpired,
     retryPendingSale,
+    // Offline queue
+    offlineQueueCount,
+    offlineSyncing,
+    offlineSyncResult,
+    syncQueue,
   };
 
   return <POSContext.Provider value={value}>{children}</POSContext.Provider>;
