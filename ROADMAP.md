@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-*Last updated: March 12 2026 — MT Phase 3 hardening complete. Postgres live on Supabase. All phases shipped.*
+*Last updated: March 12 2026 — Offline sale queuing + tenant health monitoring shipped. MT Phase 3 hardening complete. Postgres live on Supabase. All phases shipped.*
 
 ---
 
@@ -176,187 +176,60 @@ This file tracks everything we want to build, fix, or improve for SanoPOS.
 | `backend/master-db-pg.js` | Postgres master DB for tenant registry |
 | `docker-compose.yml` | Local Postgres for testing |
 
-### SQLite Cleanup (deferred)
-- `backend/db.js` (SQLite module) still exists — boot guard falls back to it without `DATABASE_URL`
-- SQLite volume still mounted on Railway as safety net
-- After 1 week with no issues: remove volume, remove `db.js`, remove `better-sqlite3` from package.json
-
 ---
 
 ## ✅ First-Run Setup Wizard (Built Mar 10 2026)
 
-`migrate72.js` + `backend/routes/setup.js` + `frontend/src/pages/SetupWizard.jsx` — token-gated 4-step wizard.
-
-### The Problem It Solves
-1. Fresh database has no employees — nobody can log in to configure the store
-2. Default timezone (`Asia/Karachi`) is wrong for any non-Pakistan deployment
-3. Default currency (`PKR`) is wrong for international stores
-4. Previously required a temporary `SETUP_SECRET` endpoint hack to bootstrap the first admin
-5. Users who never visit Company Settings run with incorrect defaults forever
-
-### Design: Invitation Link (One-Time Token)
-
-**Single-tenant mode (`MULTI_TENANT=0`):**
-- Server boots, sees `setup_complete = 0`, generates a random setup token
-- Token stored in `company_profile.setup_token`
-- Server logs a setup URL to console: `https://your-app.com/setup?token=a8f3c9...`
-- Deployer clicks the link or sends it to the store owner
-- Wizard validates token → runs setup → deletes token → sets `setup_complete = 1`
-- Link is dead forever after first use
-
-**Multi-tenant mode (`MULTI_TENANT=1`):**
-- No public wizard — tenants are provisioned by super-admin
-- Super-admin provisions tenant → gets a setup link from Admin Dashboard
-- Tenant owner clicks link → same wizard → configures their own store
-- Same token mechanism, same wizard code — works identically for both modes
-
-**Server restart safety:** If `setup_complete = 0`, server regenerates and logs a new token on every boot (in case the deployer lost the original).
-
-### Wizard Screens (4 steps, cannot be skipped)
-
-**Screen 1 — Store Identity**
-- Store name (required)
-- Country (dropdown — auto-suggests timezone + currency on next screen)
-- City
-- Phone / Email
-
-**Screen 2 — Time, Location & Currency**
-- Timezone — searchable dropdown, pre-filtered by country from screen 1
-- **Live clock preview:** "Current time in Asia/Karachi: 11:42 PM, Mar 9" — user sees immediately if it's correct
-- Currency symbol + currency code (auto-filled from country, can override)
-- Fiscal year start month
-- Primary tax name + rate (optional — "Skip, I'll add later" button)
-
-**Screen 3 — First Outlet**
-- Outlet name (default: "Main Store")
-- Outlet address (optional — appears on receipts)
-
-**Screen 4 — Administrator Account**
-- Your name (required)
-- Choose PIN — 4-6 digits, with confirm field
-- Auto-assigned: Administrator role + assigned to outlet from screen 3
-
-### What `POST /api/setup/complete` Creates (in one transaction)
-
-1. Updates `company_profile` — store name, country, city, timezone, currency, fiscal year, tax
-2. Creates first outlet (or updates existing if seed created one)
-3. Creates default roles: Administrator, Manager, Cashier + permission sets
-4. Creates first employee (Administrator) with chosen PIN + assigns to outlet
-5. Creates default receipt template (so POS print works on day one)
-6. Seeds feature flags with sane defaults
-7. Sets `setup_complete = 1`, deletes `setup_token`
-8. Returns `{ success: true }` → frontend redirects to `/login`
-
-### Security
-
-- Wizard endpoint only works when `setup_complete = 0` AND token matches
-- Once used, token is deleted — endpoint permanently rejects all future calls
-- No env var secrets needed — token is auto-generated
-- Backend rejects ALL other API calls with `503 Setup required` until wizard completes
-
-### Backend middleware check
-
-```
-if (!MULTI_TENANT && !company.setup_complete) {
-  // Only allow /api/setup/* endpoints
-  // Everything else → 503 "Setup required"
-}
-```
-
-### Important: server TZ env var still needed
-
-The wizard sets `company_profile.timezone` which fixes all report date filters. But `attendance_sessions` uses SQLite `datetime('now','localtime')` which reads the **server OS timezone**. The wizard should display a reminder on the final screen:
-
-> "For attendance times to be stored correctly, ensure your server's `TZ` environment variable is set to `Asia/Karachi`."
-
-In multi-tenant mode, Timezone Phase 2 (GROUP BY localtime → tenant tz) must also be completed.
-
-### Files to Create/Modify
-
-| File | Action |
-|------|--------|
-| `backend/migrate71.js` | Add `setup_complete INTEGER DEFAULT 0` + `setup_token TEXT` to `company_profile`; existing deployments auto-set `setup_complete = 1` |
-| `backend/routes/setup.js` | `GET /api/setup/status`, `POST /api/setup/complete` (token-gated, creates all seed data) |
-| `backend/index.js` | Middleware: if `!setup_complete`, block all routes except `/api/setup/*` with 503; on boot if `setup_complete = 0`, generate token + log URL |
-| `frontend/src/pages/SetupWizard.jsx` | 4-step wizard with live timezone preview |
-| `frontend/src/App.jsx` | Add `/setup` route (unauthenticated, before `RequireAuth`) |
-| `backend/run_migrations.js` | Add `migrate71.js` to migration array |
-| `backend/tenant-provisioner.js` | Generate setup token for new tenants, return it to super-admin |
-| `frontend/src/pages/admin/AdminTenantDetail.jsx` | Show/regenerate setup link for provisioned tenants |
-
-### How existing deployments are handled
-
-`migrate71.js` should:
-```sql
-ALTER TABLE company_profile ADD COLUMN setup_complete INTEGER DEFAULT 0;
-ALTER TABLE company_profile ADD COLUMN setup_token TEXT;
--- Auto-complete for existing stores (they're already configured)
-UPDATE company_profile SET setup_complete = 1 WHERE company_name != 'My Store' OR timezone != 'Asia/Karachi';
--- Safety: if ANY employees exist, store is already set up
-UPDATE company_profile SET setup_complete = 1 WHERE (SELECT COUNT(*) FROM employees) > 0;
-```
+Token-gated 4-step wizard: Store Identity → Time & Currency → First Outlet → Admin Account. `backend/routes/setup.js` + `frontend/src/pages/SetupWizard.jsx`. Works in both single-tenant (server logs setup URL on boot) and multi-tenant (super-admin provisions tenant → sends setup link from Admin Dashboard) modes. One-time token, 503 gate until complete.
 
 ---
 
-## 🐛 Known Live Bugs (Production)
+## ✅ Phase 3 — Core Robustness (Mar 10 2026) — 13/14 items shipped
 
-### ~~BUG-1~~: `ContextSwitcher` calls `/api/context/bootstrap` without auth headers — ✅ FIXED Mar 9 2026
-**File:** `frontend/src/components/ContextSwitcher.jsx`
-**Root cause:** Missing `{ headers: authHeaders() }` — caused POS Opening Gate to show empty branch dropdown, blocking the entire POS flow including product search
-**Fix applied:** Added `authHeaders` from `useAuth()` and passed it to the fetch call
+Split payment, brute-force throttling, soft deletes, idempotency on sales, end-of-day email digest, price change audit log, onboarding checklist, session timeout at POS, mobile/tablet POS layout, IP allowlisting, shrinkage report, customer-facing display, API key revocation — all built and live.
 
-### ~~BUG-2~~: Dashboard KPIs show "No sales yet today" despite recent sales existing — ✅ RESOLVED (auto-fixed by BUG-1)
-**Root cause:** Caused by BUG-1 — no outlet context stored after login so `/api/reports/dashboard` had no `x-outlet-id`; resolved automatically when BUG-1 (ContextSwitcher auth headers) was fixed.
+### Still Not Built
 
-### ~~BUG-3~~: `ReportsSales.jsx` calls report endpoints without explicit auth headers — ✅ FIXED Mar 10 2026
-**Fix applied:** Added `import { useAuth }` and `const { authHeaders } = useAuth()` to all 10 tab components; each `fetch()` call now passes `{ headers: authHeaders() }` explicitly. No longer dependent solely on the `window.fetch` patch race condition.
+- **Subscription / billing layer** — Stripe or JazzCash for plan billing, trial enforcement, subscription expiry.
+- **Weighing scale integration** — USB scale for weight-based pricing (grocery, pharmacy niche).
 
 ---
 
-## ✅ Phase 3 — Core Robustness (Mar 10 2026) — 8/9 items shipped
+## ✅ Offline Sale Queuing (Mar 12 2026)
 
-These items make the product reliable for the current single-tenant production deployment. Built on `feature/phase3-robustness` branch (8 commits, 27 files, 1,824 lines).
+**Branch:** `feature/offline-queuing-health-monitoring`
 
-### P0 — Do First (Highest Impact)
+- **localStorage queue** — `pos_offline_queue_${employeeId}` key, 50-sale cap, JSON array of sale payloads
+- **completeSale offline path** — `navigator.onLine` check + TypeError catch → queues sale with provisional receipt (`invoiceNumber: "PENDING"`, `offline: true`)
+- **Auto-sync** — `window.addEventListener('online', syncQueue)` iterates queue, POSTs each sale sequentially, dequeues on success or idempotency duplicate
+- **Multi-tab sync** — `storage` event listener keeps banner in sync across tabs
+- **POS banner** — amber "X sale(s) queued offline" banner with "Sync now" button + green success banner after sync
+- **Wallet/points blocked offline** — both toggles disabled with tooltip when `!navigator.onLine`; `offline` event force-disables active toggles
+- **Backend shift relaxation** — `POST /api/sales` accepts closed shifts when `idempotency_key` present (finds most recent shift for outlet); attendance check skipped for offline replays
+- **Receipt offline indicator** — `buildReceiptSections` shows "PENDING (offline)" for invoice number + footer note
 
-- ~~**Split payment at POS**~~ — ✅ **Already built** (verified Mar 10 2026). `POST /api/sales` accepts `payments[]` array, `sale_payments` table stores each tender, frontend `POSCheckoutModal.jsx` has full multi-tender UI, receipts show breakdown, reports aggregate by method. Minor gap: returns only support single `refund_method` (no split refunds).
-- ~~**Login brute-force throttling**~~ — ✅ **Fixed** (Mar 10 2026). Changed `skip: () => true` → `skip: () => process.env.NODE_ENV === 'test'` — rate limiter now active in production (429 after 20 req/15min), disabled during test runs.
-- **Offline sale queuing** — ⏳ **Deferred** (3-5 day effort). Service worker only handles GET, no IndexedDB queue, no Background Sync. Needs full SW rewrite + reconnect sync + offline indicator UI.
-- ~~**Soft deletes on core tables**~~ — ✅ **Built** (Mar 10 2026). `migrate73.js` adds `deleted_at DATETIME DEFAULT NULL` to products, customers, employees. DELETE endpoints → UPDATE SET deleted_at. Listings filter `WHERE deleted_at IS NULL`. Frontend "Delete" → "Archive" wording. Report JOINs untouched (historical data preserved). 3 test files updated.
-- ~~**Idempotency on POST /api/sales**~~ — ✅ **Built** (Mar 10 2026). `migrate71.js` adds `idempotency_key TEXT` + unique index on `sales`. Frontend generates `crypto.randomUUID()` per sale. Backend checks for duplicate before insert, returns `{ duplicate: true }` if found.
+---
 
-### P1 — High Value, Low Effort (all done)
+## ✅ Tenant Health Monitoring (Mar 12 2026)
 
-- ~~**End-of-day email digest**~~ — ✅ **Built** (Mar 10 2026). `backend/utils/digestEmail.js` builds HTML email; `reports/governance.js` sends via nodemailer when `schedule.recipient` is email + `report_key = "eod-digest"`.
-- ~~**Price change audit log**~~ — ✅ **Built** (Mar 10 2026). `products.js` PUT compares old/new price+cost, inserts into `action_history` with `action_type = "price_change"`.
-- ~~**In-app onboarding checklist**~~ — ✅ **Built** (Mar 10 2026). `DashboardOnboarding.jsx` — 5-step checklist, progress bar, dismiss via localStorage, auto-dismiss after 3s when all complete.
-- ~~**Session timeout handling at POS**~~ — ✅ **Built** (Mar 10 2026). `POSSessionExpiredModal.jsx` — PIN re-login auto-retries pending sale; "Park sale & go to login" option.
+**Branch:** `feature/offline-queuing-health-monitoring`
 
-### P2 — Important But Can Wait
-
-- **Subscription / billing layer** — Stripe or JazzCash integration for plan billing, trial enforcement, subscription expiry. Build after tenant isolation is complete.
-- **Tenant health monitoring** — Super-admin visibility into tenant DAU/MAU, last login, failed jobs, plan limit proximity, DB size. Build after stable multi-tenant infrastructure.
-- ~~**Mobile / tablet POS layout**~~ — ✅ **Built** (Mar 10 2026). 3-tab nav (Cart/Search/Pay) on `<768px`, sticky pay button, touch-friendly qty controls, 2-col mobile grid; desktop unchanged.
-- ~~**IP allowlisting for /api/admin**~~ — ✅ **Built** (Mar 10 2026). `ADMIN_ALLOWED_IPS` env var (comma-separated IPs/CIDR), `requireAllowedIp` middleware in `admin.js`, backward compatible (empty = allow all).
-- ~~**Stock discrepancy / shrinkage report**~~ — ✅ **Built** (Mar 10 2026). `GET /api/reports/shrinkage` (6-join SQL), `ShrinkageTab` in `ReportsInventory.jsx`, color-coded variance + CSV export.
-
-### P3 — Nice to Have
-
-- ~~**Customer-facing display**~~ — ✅ **Built** (Mar 10 2026). `backend/routes/customer-display.js` (in-memory Map, 8h auto-cleanup), `CustomerDisplayPage.jsx` dark-theme at `/customer-display`, `POSContext.jsx` debounced (500ms) cart push.
-- **Weighing scale integration** — USB scale support for weight-based pricing. Niche (grocery, pharmacy) but expands addressable market.
-- ~~**API key revocation**~~ — ✅ **Built** (Mar 10 2026). `migrate74.js` (`revoked_tokens` table + `tokens_revoked_before`), `jti` claim in `signAccessToken`, revocation check in `loadTenantAndPerms`, revoke endpoints in `employees.js`, Revoke button in `EmployeesRedesign.jsx`.
+- **Expanded per-tenant stats** — `GET /api/admin/tenants/:id/stats` returns activity (last_login, last_sale, last_shift_opened, active_employees 7d/30d), revenue (today/week/month), capacity (employees/products/outlets vs plan limits), schema size (MB)
+- **Needs Attention endpoint** — `GET /api/admin/attention` returns approaching_limits (>85%), dormant (14+ days), setup_pending across all tenants
+- **Enriched tenant list** — `GET /api/admin/tenants` now includes last_login, revenue_this_month, setup_complete per tenant
+- **AdminTenantDetail health dashboard** — 3-section UI: Activity (relative times + sales/revenue), Plan Usage (color-coded progress bars: green <70%, amber 70-90%, red >90%), Storage & Totals
+- **AdminTenantList health columns** — health dot (green/amber/red/grey), revenue column, last activity column
+- **AdminDashboard Needs Attention card** — approaching limits + dormant tenants + setup pending with counts and details
 
 ---
 
 ## 📋 Discussed but Deferred
 
-- **Offline sale queuing** — needs full SW rewrite + IndexedDB + Background Sync (3-5 day effort)
 - **Payment gateway integration** (card machines, JazzCash, EasyPaisa)
+- **FBR e-invoicing** — needed for Pakistan tax compliance
+- **Advance / layaway payments** — installment-based sales; common in furniture/electronics retail
 - **Profit-sharing / payroll module** — seed data mentions it but no UI
 - **Shopcast / digital signage**
-- **FBR e-invoicing** — placeholder added; needed for Pakistan tax compliance but deferred
-- **Advance / layaway payments** — installment-based sales; common in furniture/electronics retail
-- **Weighing scale integration** — USB scale for weight-based pricing (grocery, pharmacy)
 
 ---
 
