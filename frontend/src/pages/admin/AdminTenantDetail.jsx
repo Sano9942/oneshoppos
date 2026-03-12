@@ -3,6 +3,29 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Database, Pause, Play, RotateCcw, Trash2 } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
 
+function timeAgo(ts) {
+  if (!ts) return "Never";
+  const diff = Date.now() - new Date(ts).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+function usagePct(used, max) {
+  if (!max) return 0;
+  return Math.round((used / max) * 100);
+}
+
+function usageColor(pct) {
+  if (pct >= 90) return "bg-red-500";
+  if (pct >= 70) return "bg-amber-500";
+  return "bg-emerald-500";
+}
+
 export default function AdminTenantDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -324,27 +347,89 @@ export default function AdminTenantDetail() {
           )}
         </div>
 
-        {/* Right: Stats */}
+        {/* Right: Health Dashboard */}
         <div>
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Usage Stats</h2>
+            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Health Dashboard</h2>
             {stats && !stats.message ? (
-              <div className="space-y-3">
-                {[
-                  { label: "Employees", value: stats.employees, limit: tenant.max_employees },
-                  { label: "Products", value: stats.products, limit: tenant.max_products },
-                  { label: "Outlets", value: stats.outlets, limit: tenant.max_outlets },
-                  { label: "Total Sales", value: stats.total_sales },
-                  { label: "Customers", value: stats.customers },
-                ].map((s) => (
-                  <div key={s.label} className="flex items-center justify-between border-b border-slate-50 pb-2 last:border-0">
-                    <span className="text-sm text-slate-500">{s.label}</span>
-                    <span className="text-sm font-semibold text-slate-700">
-                      {s.value}
-                      {s.limit != null && <span className="text-slate-400"> / {s.limit}</span>}
-                    </span>
+              <div className="space-y-6">
+                {/* Activity */}
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Activity</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-slate-50 rounded-lg p-3">
+                      <p className="text-xs text-slate-500">Last Login</p>
+                      <p className="text-sm font-semibold">{timeAgo(stats.last_login)}</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-3">
+                      <p className="text-xs text-slate-500">Last Sale</p>
+                      <p className="text-sm font-semibold">{timeAgo(stats.last_sale)}</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-3">
+                      <p className="text-xs text-slate-500">Last Shift</p>
+                      <p className="text-sm font-semibold">{timeAgo(stats.last_shift_opened)}</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-3">
+                      <p className="text-xs text-slate-500">Active Staff (7d / 30d)</p>
+                      <p className="text-sm font-semibold">{stats.active_employees_7d} / {stats.active_employees_30d}</p>
+                    </div>
                   </div>
-                ))}
+                  <div className="grid grid-cols-3 gap-3 mt-3">
+                    {[
+                      { label: "Today", sales: stats.sales_today, rev: stats.revenue_today },
+                      { label: "This Week", sales: stats.sales_this_week, rev: stats.revenue_this_week },
+                      { label: "This Month", sales: stats.sales_this_month, rev: stats.revenue_this_month },
+                    ].map((p) => (
+                      <div key={p.label} className="bg-slate-50 rounded-lg p-3">
+                        <p className="text-xs text-slate-500">{p.label}</p>
+                        <p className="text-sm font-bold">{p.sales} sales</p>
+                        <p className="text-xs text-slate-400">{p.rev?.toLocaleString()}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Plan Usage */}
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Plan Usage</h3>
+                  {[
+                    { label: "Employees", used: stats.employees, max: stats.max_employees },
+                    { label: "Products", used: stats.products, max: stats.max_products },
+                    { label: "Outlets", used: stats.outlets, max: stats.max_outlets },
+                  ].map((d) => {
+                    const pct = usagePct(d.used, d.max);
+                    return (
+                      <div key={d.label} className="mb-3">
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-slate-600">{d.label}</span>
+                          <span className="font-semibold">{d.used} / {d.max || "\u221E"} ({pct}%)</span>
+                        </div>
+                        <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${usageColor(pct)} transition-all`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Storage & Totals */}
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Storage & Totals</h3>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-slate-50 rounded-lg p-3">
+                      <p className="text-xs text-slate-500">Schema Size</p>
+                      <p className="text-sm font-bold">{stats.schema_size_mb} MB</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-3">
+                      <p className="text-xs text-slate-500">Total Sales</p>
+                      <p className="text-sm font-bold">{stats.total_sales?.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-3">
+                      <p className="text-xs text-slate-500">Customers</p>
+                      <p className="text-sm font-bold">{stats.customers?.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : (
               <p className="text-sm text-slate-400">{stats?.message || "Stats unavailable"}</p>
