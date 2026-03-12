@@ -6,11 +6,11 @@ import useReportFilters from "../../hooks/useReportFilters";
 import { indentLabel, sortCategories } from "../../utils/categoryTree";
 import { useCurrency } from "../../contexts/CurrencyContext";
 
-function toCsv(filename, rows, columns, meta) {
+function toCsv(filename, rows, columns, meta, currencyCode = "USD") {
   const lines = [];
   lines.push(`# generated_at: ${new Date().toISOString()}`);
   lines.push(`# data_as_of: ${new Date().toISOString()}`);
-  lines.push(`# currency: PKR`);
+  lines.push(`# currency: ${currencyCode}`);
   lines.push(`# filters_applied: ${JSON.stringify(meta || {})}`);
   lines.push(columns.map((c) => c.header).join(","));
   rows.forEach((row) => {
@@ -87,7 +87,7 @@ function Filters({ filters, setFilters, show, categories }) {
 }
 
 export default function ReportsPowerUpPanel({ flags, authHeaders }) {
-  const { fmt: money } = useCurrency();
+  const { fmt: money, code: currencyCode } = useCurrency();
   const { filters, setFilters, query } = useReportFilters();
   const [isExpanded, setIsExpanded] = useState(false);
   const [exceptionType, setExceptionType] = useState("negative_margin_sales");
@@ -294,6 +294,7 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
                         { header: "Margin %", key: "margin_pct" },
                       ],
                       filters,
+                      currencyCode,
                     )
                   }
                   className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600"

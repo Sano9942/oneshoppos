@@ -3,9 +3,11 @@ import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Lock, Store, User } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
 import { IS_MULTI_TENANT } from "../config";
+import { useCurrency } from "../contexts/CurrencyContext";
 
 export default function Login() {
   const { isAuthenticated, login } = useAuth();
+  const { refresh: refreshCurrency } = useCurrency();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [storeCode, setStoreCode] = useState(searchParams.get("store") || "");
@@ -30,6 +32,7 @@ export default function Login() {
     setError("");
     try {
       await login(username.trim(), pin.trim(), IS_MULTI_TENANT ? storeCode.trim() : undefined);
+      refreshCurrency(); // hydrate currency now that tenant slug is in localStorage
       navigate("/context-select", { replace: true });
     } catch (err) {
       setError(err.message || "Invalid credentials");
