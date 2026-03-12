@@ -11,6 +11,7 @@
  */
 
 const express = require('express');
+const bcrypt = require('bcryptjs');
 
 const ROLE_PERMISSIONS = {
   Administrator: ['all_access'],
@@ -183,19 +184,20 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
           "SELECT id FROM employees WHERE role_id = 1 LIMIT 1"
         );
         let empId;
+        const pinHash = await bcrypt.hash(String(admin_pin), 10);
         if (existingEmp) {
           await client.query(
-            "UPDATE employees SET name = $1, pin_code = $2 WHERE id = $3",
-            [admin_name, String(admin_pin), existingEmp.id]
+            "UPDATE employees SET name = $1, pin_code = $2, pin_hash = $3 WHERE id = $4",
+            [admin_name, String(admin_pin), pinHash, existingEmp.id]
           );
           empId = existingEmp.id;
         } else {
           const { rows: [newEmp] } = await client.query(
             `INSERT INTO employees
-               (name, pin_code, role, role_id, salary_type, work_hours_per_day)
-             VALUES ($1, $2, 'Administrator', 1, 'monthly', 8)
+               (name, pin_code, pin_hash, role, role_id, salary_type, work_hours_per_day)
+             VALUES ($1, $2, $3, 'Administrator', 1, 'monthly', 8)
              RETURNING id`,
-            [admin_name, String(admin_pin)]
+            [admin_name, String(admin_pin), pinHash]
           );
           empId = newEmp.id;
         }

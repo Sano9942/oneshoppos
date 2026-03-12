@@ -189,7 +189,7 @@ module.exports = function registerAuthRoutes(app, deps) {
         // 2. Find employee in tenant DB by username (manual resolution — no ALS context yet)
         const tenantDb = await tenantDbMgr.getDb(tenant.id);
         const { rows: [employee] } = await tenantDb.query(
-          `SELECT e.id, e.name, e.role_id, e.pin_hash
+          `SELECT e.id, e.name, e.role_id, e.pin_hash, e.pin_code
            FROM employees e
            WHERE LOWER(e.name) = LOWER($1)`,
           [String(username).trim()]
@@ -198,10 +198,12 @@ module.exports = function registerAuthRoutes(app, deps) {
           return res.status(401).json({ error: "Invalid username or PIN" });
         }
 
-        // 3. Verify PIN via bcrypt
+        // 3. Verify PIN via bcrypt (prefer pin_hash, fall back to plaintext pin_code)
         let pinValid = false;
         if (employee.pin_hash) {
           pinValid = await bcrypt.compare(String(pin).trim(), employee.pin_hash);
+        } else if (employee.pin_code) {
+          pinValid = String(pin).trim() === String(employee.pin_code).trim();
         }
         if (!pinValid) {
           return res.status(401).json({ error: "Invalid username or PIN" });
@@ -238,6 +240,14 @@ module.exports = function registerAuthRoutes(app, deps) {
           path: "/api/auth",
           maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
+
+        // Log login to action_history for tenant health tracking
+        try {
+          await tenantDb.query(
+            "INSERT INTO action_history (action_type, description, employee_id) VALUES ('login', $1, $2)",
+            [`${employee.name} logged in`, employee.id]
+          );
+        } catch { /* best-effort — don't block login */ }
 
         return res.json({
           token: accessToken,

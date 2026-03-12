@@ -4,6 +4,12 @@ import { Activity, Building2, Server, Users } from "lucide-react";
 import { API_BASE } from "../../config";
 import { getAdminToken } from "./AdminLogin";
 
+function safeDateParse(ts) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function StatCard({ icon: Icon, label, value, color }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -192,7 +198,7 @@ export default function AdminDashboard() {
                   )}
                 </div>
                 <span className="text-xs text-slate-400">
-                  {entry.created_at ? new Date(entry.created_at + "Z").toLocaleString() : "—"}
+                  {safeDateParse(entry.created_at)?.toLocaleString() ?? "—"}
                 </span>
               </div>
             ))}
