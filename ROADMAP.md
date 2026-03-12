@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-*Last updated: March 12 2026 — Postgres migration complete and live on Supabase. All phases shipped.*
+*Last updated: March 12 2026 — MT Phase 3 hardening complete. Postgres live on Supabase. All phases shipped.*
 
 ---
 
@@ -98,15 +98,36 @@ This file tracks everything we want to build, fix, or improve for SanoPOS.
 
 ## 📋 Multi-Tenant Go-Live Checklist (before flipping MULTI_TENANT=1)
 
-1. **Timezone Phase 2** — ~30 `'localtime'` SQL modifiers in GROUP BY must use tenant timezone; `loadCompanyProfile` cache must be keyed per-tenant
-2. **Tenant isolation testing** — verify no cross-tenant data leakage
-3. **Tenant onboarding flow** — production provisioning from super-admin dashboard (not just CLI)
-4. **Tenant-aware scheduled jobs** — stale session cleanup + report scheduler must iterate all tenant DBs
-5. **Subdomain/slug routing** — frontend tenant resolution from URL
+1. ~~**Timezone Phase 2**~~ — ✅ **Resolved** (Mar 12 2026). Postgres migration eliminated all `'localtime'` modifiers. `loadCompanyProfile` cache keyed per-tenant (MT Phase 1).
+2. ~~**Tenant isolation testing**~~ — ✅ **Done** (Mar 12 2026, MT Phase 3). 7 API-level + DB-level + concurrency isolation tests in `pg-tenant-isolation.test.js`.
+3. ~~**Tenant onboarding flow**~~ — ✅ **Done** (Mar 12 2026, MT Phase 2). Admin API returns `setup_url` on provision; GET/POST endpoints for setup token; AdminTenantList + AdminTenantDetail UI show/copy/regenerate setup links; setup wizard accepts `?tenant=` param.
+4. ~~**Tenant-aware scheduled jobs**~~ — ✅ **Done** (Mar 12 2026, MT Phase 2). `forEachActiveTenant` helper iterates active tenants from master DB; 3 cleanup workers + Shopify/report workers wrapped with `asyncStore.run()`.
+5. ~~**Subdomain/slug routing**~~ — **Deferred** (Mar 12 2026). Store Code login already works (Notion/Linear/Stripe model). Subdomain routing is a future enhancement — see "Future: Subdomain Routing" section below.
 6. ~~**Railway multi-DB volume strategy**~~ — ✅ **Resolved** (Mar 12 2026). Postgres schema-based multi-tenancy (`SET search_path TO tenant_<slug>`) replaces per-tenant SQLite files.
-7. **Backup/restore per-tenant** — current backup operates on single DB
-8. **Rate limiting** — per-tenant request limits
-9. **Timezone Phase 3** (nice-to-have) — write-path unification
+7. ~~**Backup/restore per-tenant**~~ — ✅ **Done** (Mar 12 2026, MT Phase 3). pg_dump/pg_restore per schema; `GET /api/backup/download` streams .dump; `POST /api/backup/restore` accepts upload; `isPgDumpAvailable()` runtime check.
+8. ~~**Rate limiting**~~ — ✅ **Done** (Mar 12 2026, MT Phase 2). Per-tenant rate limiting via `extractTenantKey` + `keyGenerator` on both limiters; keyed by `tenantSlug:IP`.
+9. ~~**Feature flag cache per-tenant**~~ — ✅ **Done** (Mar 12 2026, MT Phase 3). `getFeatureFlagsMap()` cached per tenantId with 60s TTL; invalidated on `PUT /api/feature-flags/:key`.
+10. **Timezone Phase 3** (nice-to-have) — write-path unification
+
+---
+
+## 🔮 Future: Subdomain Routing (post-go-live enhancement)
+
+**Decision (Mar 12 2026):** Deferred. Store Code login (Notion/Linear/Stripe model) is sufficient for an internal POS tool. Employees don't share URLs externally.
+
+**When to build:** After `MULTI_TENANT=1` is live and you have 5+ tenants requesting branded URLs.
+
+**Approach:** Subdomain-based (`aces-hardware.sanopos.com`)
+- Wildcard DNS: `*.sanopos.com` → Cloudflare (free)
+- Wildcard SSL: Cloudflare auto-cert (free)
+- Vercel: Needs Pro plan ($20/mo) or Cloudflare proxy
+- Frontend: Parse `window.location.hostname.split('.')[0]` → auto-fill Store Code on login page (~10 lines)
+- Backend: No changes needed — tenant resolution already works via JWT `tenant_id` claim
+- CORS: Add `*.sanopos.com` to allowed origins
+
+**Why not URL path (`/store/:slug`):** Requires re-nesting all frontend routes, longer URLs, harder to add custom domains later.
+
+**Why not now:** Zero infra changes needed for Store Code login. Subdomain adds DNS/SSL/Vercel complexity with no functional benefit until tenants request it.
 
 ---
 
@@ -334,3 +355,7 @@ These items make the product reliable for the current single-tenant production d
 | Mar 10 2026 | **Phase 3 remaining shipped** | 5 items built on `feature/phase3-remaining` (4 commits, 21 files, 1,003 lines): mobile/tablet POS layout (3-tab nav, sticky pay button), IP allowlisting for /api/admin (CIDR matching), token revocation (migrate74, jti claim, revoke endpoints), stock shrinkage report (6-join SQL + ShrinkageTab), customer-facing display (/customer-display page + in-memory cart sync). 395/395 tests passing. Frontend build clean. |
 | Mar 11 2026 | **Postgres migration — pre-merge tasks** | 4 tasks completed on `feature/postgres-migration`: last SQLite files converted (email.js, printer routes, registerAllRoutes.js), migrate-pg.js migration runner, sqlite-to-pg.js cutover script + checklist, MT Postgres infra (tenant-db-manager-pg, tenant-db-proxy-pg). 340/340 pg tests passing. |
 | Mar 12 2026 | **Postgres migration merged + deployed** | `feature/postgres-migration` merged to `main` (28 commits, 93 files, +23,188/-15,139 lines). Boot guard added (conditional db-pg/db import). dotenv load order fix (must load before boot guard). Supabase Postgres provisioned (ap-southeast-1). `DATABASE_URL` set on Railway, `DATA_DIR` removed. Fresh DB created via setup wizard. `schema-pg.sql` seed row fix for company_profile. Production live on Postgres. |
+| Mar 12 2026 | **Currency/timezone centralization** | `feature/currency-timezone-centralization` branch (13 commits, ~58 files). CurrencyProvider context, all PKR hardcodes replaced, cash_denominations column (schema migration v2), IANA timezone dropdown, denomination chip editor. |
+| Mar 12 2026 | **MT Phase 1 blocker fixes** | `feature/mt-phase1-blockers` branch (4 commits, 4 files). 6 cross-tenant data leak / broken-functionality blockers resolved: per-tenant `_companyCache` Map, per-tenant `_contextFlagCache` Map, boot IIFE guards, `auditLog()` uses masterDb, customer display keyed by `${tenantSlug}-${shiftId}`. |
+| Mar 12 2026 | **MT Phase 2 operations** | `feature/mt-phase2-operations` branch (9 commits, ~10 files). Setup token generation in tenant provisioner; admin API setup URL endpoints (get/regenerate); admin dashboard setup URL UI; setup wizard MT adaptation (tenant-scoped DB via URL param); tenant-scoped notification helpers; tenant-aware scheduled jobs (`forEachActiveTenant` helper); per-tenant rate limiting (`tenantSlug:IP`). pg-batch3 test fix (ON CONFLICT for company_profile seed). 55/55 pg-batch3 tests passing. |
+| Mar 12 2026 | **MT Phase 3 hardening** | `feature/mt-phase3-hardening` branch. Per-tenant feature flag cache (60s TTL Map, invalidated on PUT). pg_dump/pg_restore backup/restore (replaces stubs, runtime availability check). 7 tenant isolation tests (API + DB + concurrent request safety). Only subdomain/slug routing remains before MULTI_TENANT=1. |
