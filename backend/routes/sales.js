@@ -307,26 +307,42 @@ module.exports = function registerSalesRoutes(app, deps) {
     try {
       activeShift = await getActiveShiftForOutlet(outlet_id);
       if (!activeShift) {
-        return res.status(400).json({
-          error: "Cannot checkout because no open shift exists for this outlet",
-          code: "shift_not_open",
-        });
+        if (idempotency_key) {
+          // Offline-queued sale: shift may have closed. Use most recent shift for this outlet.
+          const { rows: [closedShift] } = await db.query(
+            "SELECT id FROM cash_shifts WHERE outlet_id = $1 ORDER BY opened_at DESC LIMIT 1",
+            [outlet_id]
+          );
+          if (closedShift) {
+            activeShift = closedShift;
+          } else {
+            return res.status(400).json({ error: "No shift found for this outlet", code: "shift_not_open" });
+          }
+        } else {
+          return res.status(400).json({
+            error: "Cannot checkout because no open shift exists for this outlet",
+            code: "shift_not_open",
+          });
+        }
       }
 
-      const attendanceStatus = await getEmployeeCheckoutStatus(
-        authenticatedEmployeeId,
-        outlet_id,
-      );
-      if (attendanceStatus !== "clocked_in") {
-        const message =
-          attendanceStatus === "on_break"
-            ? "Cannot checkout while on break. Clock back in first."
-            : "Cannot checkout because the employee is not clocked in for this outlet";
-        return res.status(400).json({
-          error: message,
-          code: "employee_not_clocked_in",
-          attendance_status: attendanceStatus,
-        });
+      if (!idempotency_key || activeShift.status === "open") {
+        // Only check attendance for real-time sales (not offline replays)
+        const attendanceStatus = await getEmployeeCheckoutStatus(
+          authenticatedEmployeeId,
+          outlet_id,
+        );
+        if (attendanceStatus !== "clocked_in") {
+          const message =
+            attendanceStatus === "on_break"
+              ? "Cannot checkout while on break. Clock back in first."
+              : "Cannot checkout because the employee is not clocked in for this outlet";
+          return res.status(400).json({
+            error: message,
+            code: "employee_not_clocked_in",
+            attendance_status: attendanceStatus,
+          });
+        }
       }
     } catch (validationErr) {
       return res.status(500).json({ error: validationErr.message });
