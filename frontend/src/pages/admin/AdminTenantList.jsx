@@ -3,6 +3,27 @@ import { useNavigate } from "react-router-dom";
 import { Plus, Search, Server } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
 
+function healthDot(t) {
+  if (!t.setup_complete) return { color: "bg-slate-400", label: "Setup pending" };
+  if (!t.last_login) return { color: "bg-red-500", label: "Never logged in" };
+  const days = (Date.now() - new Date(t.last_login).getTime()) / 86400000;
+  if (days < 1) return { color: "bg-emerald-500", label: "Active today" };
+  if (days < 7) return { color: "bg-amber-500", label: `${Math.floor(days)}d ago` };
+  return { color: "bg-red-500", label: `${Math.floor(days)}d ago` };
+}
+
+function timeAgo(ts) {
+  if (!ts) return "\u2014";
+  const diff = Date.now() - new Date(ts).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
 export default function AdminTenantList() {
   const navigate = useNavigate();
   const [tenants, setTenants] = useState([]);
@@ -104,8 +125,11 @@ export default function AdminTenantList() {
               <tr className="border-b border-slate-100 bg-slate-50 text-left">
                 <th className="px-4 py-3 font-semibold text-slate-500">Name</th>
                 <th className="px-4 py-3 font-semibold text-slate-500">Slug</th>
+                <th className="px-4 py-3 font-semibold text-slate-500">Health</th>
                 <th className="px-4 py-3 font-semibold text-slate-500">Plan</th>
+                <th className="px-4 py-3 font-semibold text-slate-500">Revenue</th>
                 <th className="px-4 py-3 font-semibold text-slate-500">Status</th>
+                <th className="px-4 py-3 font-semibold text-slate-500">Last Activity</th>
                 <th className="px-4 py-3 font-semibold text-slate-500">Created</th>
               </tr>
             </thead>
@@ -119,9 +143,18 @@ export default function AdminTenantList() {
                   <td className="px-4 py-3 font-medium text-slate-700">{t.name}</td>
                   <td className="px-4 py-3 text-slate-500">{t.slug}</td>
                   <td className="px-4 py-3">
+                    <span className="flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full ${healthDot(t).color}`} title={healthDot(t).label} />
+                      <span className="text-xs text-slate-500">{healthDot(t).label}</span>
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
                       {t.plan}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {t.revenue_this_month != null ? Number(t.revenue_this_month).toLocaleString() : "\u2014"}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
@@ -130,6 +163,7 @@ export default function AdminTenantList() {
                       "bg-slate-100 text-slate-500"
                     }`}>{t.status}</span>
                   </td>
+                  <td className="px-4 py-3 text-slate-500">{timeAgo(t.last_login)}</td>
                   <td className="px-4 py-3 text-slate-500">
                     {t.created_at ? new Date(t.created_at + "Z").toLocaleDateString() : "—"}
                   </td>
