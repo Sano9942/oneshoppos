@@ -49,6 +49,8 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
   const jwt = require("jsonwebtoken");
   const { verifyAccessToken, defaults: jwtDefaults } = require("../jwt-auth");
   const { provision } = require("../tenant-provisioner-pg");
+  const tenantDbManager = require("../tenant-db-manager-pg");
+  tenantDbManager.init(db);
 
   // ── IP Allowlist middleware ──────────────────────────────────────────────
 
@@ -178,9 +180,12 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
       await auditLog(result.tenantId, "created", { slug, timezone: timezone || "UTC", plan: plan || "free" }, `admin:${req.admin.email}`);
 
+      const frontendUrl = process.env.FRONTEND_URL || "https://sanopos.vercel.app";
       return res.status(201).json({
         message: "Tenant provisioned",
         tenant: { id: result.tenantId, slug, name, status: "active", plan: plan || "free" },
+        setup_token: result.setupToken,
+        setup_url: `${frontendUrl}/setup?tenant=${slug}&token=${result.setupToken}`,
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -331,6 +336,58 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
           total_sales: parseInt(sales.rows[0].cnt, 10),
           customers: parseInt(customers.rows[0].cnt, 10),
         },
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Setup Token ─────────────────────────────────────────────────────────
+
+  app.get("/api/admin/tenants/:id/setup-token", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const tenant = await masterDb.getTenantById(req.params.id);
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+      const tenantDb = await tenantDbManager.getDb(tenant.id);
+      const { rows: [profile] } = await tenantDb.query(
+        "SELECT setup_token, setup_complete FROM company_profile WHERE id = 1"
+      );
+
+      if (!profile || profile.setup_complete) {
+        return res.json({ setup_complete: true, setup_token: null, setup_url: null });
+      }
+
+      const frontendUrl = process.env.FRONTEND_URL || "https://sanopos.vercel.app";
+      res.json({
+        setup_complete: false,
+        setup_token: profile.setup_token,
+        setup_url: `${frontendUrl}/setup?tenant=${tenant.slug}&token=${profile.setup_token}`,
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/tenants/:id/regenerate-setup-token", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const tenant = await masterDb.getTenantById(req.params.id);
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+      const tenantDb = await tenantDbManager.getDb(tenant.id);
+      const crypto = require("crypto");
+      const newToken = crypto.randomBytes(32).toString("hex");
+      await tenantDb.query(
+        "UPDATE company_profile SET setup_token = $1, setup_complete = false WHERE id = 1",
+        [newToken]
+      );
+
+      await auditLog(tenant.id, "setup_token_regenerated", { slug: tenant.slug }, `admin:${req.admin.email}`);
+
+      const frontendUrl = process.env.FRONTEND_URL || "https://sanopos.vercel.app";
+      res.json({
+        setup_token: newToken,
+        setup_url: `${frontendUrl}/setup?tenant=${tenant.slug}&token=${newToken}`,
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });

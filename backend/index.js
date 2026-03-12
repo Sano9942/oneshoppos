@@ -185,6 +185,11 @@ function isPosBurstPath(pathname) {
   );
 }
 
+function extractTenantKey(req) {
+  if (!IS_MULTI_TENANT) return "st";
+  return req.headers["x-tenant-slug"] || req.tenantSlug || "unknown";
+}
+
 const globalLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
   max: RATE_LIMIT_GLOBAL_MAX,
@@ -192,6 +197,7 @@ const globalLimiter = rateLimit({
   legacyHeaders: false,
   handler: limitExceededHandler,
   skip: (req) => isPosBurstPath(req.path || ""),
+  keyGenerator: (req) => `${extractTenantKey(req)}:${req.ip}`,
 });
 
 const authLimiter = rateLimit({
@@ -201,6 +207,11 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   handler: limitExceededHandler,
   skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => {
+    if (!IS_MULTI_TENANT) return req.ip;
+    const tenantKey = req.body?.store_code || req.headers["x-tenant-slug"] || "unknown";
+    return `${tenantKey}:${req.ip}`;
+  },
 });
 
 const webhookLimiter = rateLimit({
@@ -848,8 +859,10 @@ function requireFeature(flagKey) {
   };
 }
 
+const _notifDb = IS_MULTI_TENANT ? dbProxy : db;
+
 function createNotification(type, title, message, link) {
-  db.query(
+  _notifDb.query(
     "INSERT INTO notifications (type, title, message, link) VALUES ($1, $2, $3, $4)",
     [type, title, message, link || null]
   ).catch(() => {});
@@ -865,7 +878,7 @@ function notifyLowStockForSale(cartItems, outletId) {
   ];
   if (!productIds.length || !outletId) return;
   const placeholders = productIds.map((_, i) => "$" + (i + 2)).join(",");
-  db.query(
+  _notifDb.query(
     `SELECT os.product_id, os.quantity, p.name
      FROM outlet_stock os
      JOIN products p ON p.id = os.product_id
@@ -998,66 +1011,77 @@ function runAutoBackup() {
   }
 }
 
+// Helper: run a function for each active tenant (or once for single-tenant)
+async function forEachActiveTenant(label, fn) {
+  if (!IS_MULTI_TENANT || !tenantDbManager) {
+    try {
+      await fn(db, null);
+    } catch (err) {
+      console.error(`[${label}]`, err.message);
+    }
+    return;
+  }
+  try {
+    const masterMod = require("./master-db-pg");
+    const { rows: tenants } = await masterMod.query(
+      "SELECT id, slug FROM tenants WHERE status = 'active'"
+    );
+    for (const tenant of tenants) {
+      try {
+        const tenantDb = await tenantDbManager.getDb(tenant.id);
+        await fn(tenantDb, tenant);
+      } catch (err) {
+        console.error(`[${label}] tenant ${tenant.slug}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error(`[${label}] Error loading tenants:`, err.message);
+  }
+}
+
 // ─── 3.7 Shopify Sync Queue Cleanup (30-day retention) ───────────────────────
 async function cleanupSyncEvents() {
-  try {
+  await forEachActiveTenant("SyncCleanup", async (tenantDb) => {
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { rowCount } = await db.query(
+    const { rowCount } = await tenantDb.query(
       "DELETE FROM external_sync_events WHERE created_at < $1 AND status IN ('success', 'failed')",
       [cutoff]
     );
     if (rowCount > 0) console.log(`[SyncCleanup] Deleted ${rowCount} old sync events`);
-  } catch (err) {
-    console.error("[SyncCleanup] Error:", err.message);
-  }
+  });
 }
 
 async function cleanupReportScheduleArtifacts() {
-  const runsRetentionDays = Math.max(
-    1,
-    Number(process.env.REPORT_RUNS_RETENTION_DAYS || 45),
-  );
-  const deliveryRetentionDays = Math.max(
-    1,
-    Number(process.env.REPORT_DELIVERY_RETENTION_DAYS || 60),
-  );
-  const filesRetentionDays = Math.max(
-    1,
-    Number(process.env.REPORT_EXPORT_FILES_RETENTION_DAYS || 30),
-  );
-  const runsCutoff = new Date(
-    Date.now() - runsRetentionDays * 24 * 60 * 60 * 1000,
-  ).toISOString();
-  const deliveryCutoff = new Date(
-    Date.now() - deliveryRetentionDays * 24 * 60 * 60 * 1000,
-  ).toISOString();
+  const runsRetentionDays = Math.max(1, Number(process.env.REPORT_RUNS_RETENTION_DAYS || 45));
+  const deliveryRetentionDays = Math.max(1, Number(process.env.REPORT_DELIVERY_RETENTION_DAYS || 60));
+  const filesRetentionDays = Math.max(1, Number(process.env.REPORT_EXPORT_FILES_RETENTION_DAYS || 30));
+  const runsCutoff = new Date(Date.now() - runsRetentionDays * 24 * 60 * 60 * 1000).toISOString();
+  const deliveryCutoff = new Date(Date.now() - deliveryRetentionDays * 24 * 60 * 60 * 1000).toISOString();
+
+  await forEachActiveTenant("ReportCleanup", async (tenantDb) => {
+    try {
+      const { rowCount: runsDeleted } = await tenantDb.query(
+        "DELETE FROM report_schedule_runs WHERE COALESCE(run_finished_at, run_started_at) < $1::timestamptz",
+        [runsCutoff]
+      );
+      if (runsDeleted > 0) console.log(`[ReportCleanup] Deleted ${runsDeleted} old schedule runs`);
+    } catch (err) {
+      console.error("[ReportCleanup] run cleanup error:", err.message);
+    }
+    try {
+      const { rowCount: deliveryDeleted } = await tenantDb.query(
+        "DELETE FROM report_delivery_log WHERE created_at < $1::timestamptz",
+        [deliveryCutoff]
+      );
+      if (deliveryDeleted > 0) console.log(`[ReportCleanup] Deleted ${deliveryDeleted} old delivery logs`);
+    } catch (err) {
+      console.error("[ReportCleanup] delivery cleanup error:", err.message);
+    }
+  });
+
+  // File cleanup is global (export files are not tenant-scoped)
   const exportsDir = path.resolve(__dirname, "exports", "reports");
   const filesCutoffMs = Date.now() - filesRetentionDays * 24 * 60 * 60 * 1000;
-
-  try {
-    const { rowCount: runsDeleted } = await db.query(
-      "DELETE FROM report_schedule_runs WHERE COALESCE(run_finished_at, run_started_at) < $1::timestamptz",
-      [runsCutoff]
-    );
-    if (runsDeleted > 0) {
-      console.log(`[ReportCleanup] Deleted ${runsDeleted} old schedule runs`);
-    }
-  } catch (err) {
-    console.error("[ReportCleanup] run cleanup error:", err.message);
-  }
-
-  try {
-    const { rowCount: deliveryDeleted } = await db.query(
-      "DELETE FROM report_delivery_log WHERE created_at < $1::timestamptz",
-      [deliveryCutoff]
-    );
-    if (deliveryDeleted > 0) {
-      console.log(`[ReportCleanup] Deleted ${deliveryDeleted} old delivery logs`);
-    }
-  } catch (err) {
-    console.error("[ReportCleanup] delivery cleanup error:", err.message);
-  }
-
   if (!fs.existsSync(exportsDir)) return;
   let deleted = 0;
   for (const fileName of fs.readdirSync(exportsDir)) {
@@ -1065,17 +1089,23 @@ async function cleanupReportScheduleArtifacts() {
     try {
       const st = fs.statSync(filePath);
       if (!st.isFile()) continue;
-      if (st.mtimeMs < filesCutoffMs) {
-        fs.unlinkSync(filePath);
-        deleted += 1;
-      }
+      if (st.mtimeMs < filesCutoffMs) { fs.unlinkSync(filePath); deleted += 1; }
     } catch (e) {
       console.error("[ReportCleanup] file cleanup error:", e.message);
     }
   }
-  if (deleted > 0) {
-    console.log(`[ReportCleanup] Deleted ${deleted} old export files`);
-  }
+  if (deleted > 0) console.log(`[ReportCleanup] Deleted ${deleted} old export files`);
+}
+
+// F2: Close stale attendance sessions from previous days (runs on boot + daily)
+async function closeStaleAttendanceSessions() {
+  await forEachActiveTenant("StaleSessionCleanup", async (tenantDb) => {
+    await tenantDb.query(
+      `UPDATE attendance_sessions
+       SET session_end = session_start, session_type = 'auto_closed'
+       WHERE session_end IS NULL AND session_start::date < CURRENT_DATE`
+    );
+  });
 }
 
 // Auto backup only runs in SQLite mode (Postgres uses pg_dump/Supabase backups)
@@ -1087,19 +1117,6 @@ cleanupSyncEvents().catch(e => console.error("[SyncCleanup]", e.message));
 cleanupReportScheduleArtifacts().catch(e => console.error("[ReportCleanup]", e.message));
 setInterval(() => cleanupSyncEvents().catch(e => console.error("[SyncCleanup]", e.message)), 24 * 60 * 60 * 1000);
 setInterval(() => cleanupReportScheduleArtifacts().catch(e => console.error("[ReportCleanup]", e.message)), 24 * 60 * 60 * 1000);
-
-// F2: Close stale attendance sessions from previous days (runs on boot + daily)
-async function closeStaleAttendanceSessions() {
-  try {
-    await db.query(
-      `UPDATE attendance_sessions
-       SET session_end = session_start, session_type = 'auto_closed'
-       WHERE session_end IS NULL AND session_start::date < CURRENT_DATE`
-    );
-  } catch (err) {
-    console.error("Stale session cleanup error:", err.message);
-  }
-}
 closeStaleAttendanceSessions().catch(e => console.error("Stale session cleanup error:", e.message));
 setInterval(() => closeStaleAttendanceSessions().catch(e => console.error("Stale session cleanup error:", e.message)), 24 * 60 * 60 * 1000);
 
@@ -1117,15 +1134,53 @@ app.listen(PORT, () => {
 const SHOPIFY_WORKER_DISABLED =
   String(process.env.SHOPIFY_SYNC_WORKER_DISABLED || "0") === "1";
 if (!SHOPIFY_WORKER_DISABLED) {
-  setInterval(() => {
-    processPendingShopifyInventoryEvents(20, () => {});
+  setInterval(async () => {
+    if (!IS_MULTI_TENANT || !tenantDbManager) {
+      processPendingShopifyInventoryEvents(20, () => {});
+      return;
+    }
+    try {
+      const masterMod = require("./master-db-pg");
+      const { rows: tenants } = await masterMod.query("SELECT id, slug FROM tenants WHERE status = 'active'");
+      for (const tenant of tenants) {
+        try {
+          const tenantDb = await tenantDbManager.getDb(tenant.id);
+          await asyncStore.run({ db: tenantDb }, async () => {
+            await processPendingShopifyInventoryEvents(20, () => {});
+          });
+        } catch (err) {
+          console.error(`[ShopifyWorker] tenant ${tenant.slug}:`, err.message);
+        }
+      }
+    } catch (err) {
+      console.error("[ShopifyWorker] Error loading tenants:", err.message);
+    }
   }, 30000);
 }
 
 const REPORT_SCHEDULE_WORKER_DISABLED =
   String(process.env.REPORT_SCHEDULE_WORKER_DISABLED || "0") === "1";
 if (!REPORT_SCHEDULE_WORKER_DISABLED) {
-  setInterval(() => {
-    processPendingReportSchedules(5, () => {});
+  setInterval(async () => {
+    if (!IS_MULTI_TENANT || !tenantDbManager) {
+      processPendingReportSchedules(5, () => {});
+      return;
+    }
+    try {
+      const masterMod = require("./master-db-pg");
+      const { rows: tenants } = await masterMod.query("SELECT id, slug FROM tenants WHERE status = 'active'");
+      for (const tenant of tenants) {
+        try {
+          const tenantDb = await tenantDbManager.getDb(tenant.id);
+          await asyncStore.run({ db: tenantDb }, async () => {
+            await processPendingReportSchedules(5, () => {});
+          });
+        } catch (err) {
+          console.error(`[ReportScheduler] tenant ${tenant.slug}:`, err.message);
+        }
+      }
+    } catch (err) {
+      console.error("[ReportScheduler] Error loading tenants:", err.message);
+    }
   }, 60000);
 }

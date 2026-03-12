@@ -13,6 +13,7 @@ export default function AdminTenantList() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [form, setForm] = useState({ slug: "", name: "", owner_email: "", timezone: "UTC", pin: "", plan: "free" });
+  const [createdSetupUrl, setCreatedSetupUrl] = useState("");
 
   const loadTenants = () => {
     adminFetch("/api/admin/tenants")
@@ -45,6 +46,7 @@ export default function AdminTenantList() {
       if (!res.ok) throw new Error(data.error || "Failed to create tenant");
       setShowCreate(false);
       setForm({ slug: "", name: "", owner_email: "", timezone: "UTC", pin: "", plan: "free" });
+      if (data.setup_url) setCreatedSetupUrl(data.setup_url);
       loadTenants();
     } catch (err) {
       setCreateError(err.message);
@@ -233,6 +235,36 @@ export default function AdminTenantList() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {createdSetupUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setCreatedSetupUrl("")}>
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="mb-2 text-lg font-bold text-emerald-700">Tenant Created!</h2>
+            <p className="mb-3 text-sm text-slate-600">Send this setup URL to the tenant owner so they can configure their store:</p>
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <input
+                readOnly
+                value={createdSetupUrl}
+                className="flex-1 bg-transparent text-sm text-slate-700 outline-none"
+                onClick={(e) => e.target.select()}
+              />
+              <button
+                onClick={() => { navigator.clipboard.writeText(createdSetupUrl); }}
+                className="shrink-0 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-500"
+              >
+                Copy
+              </button>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setCreatedSetupUrl("")}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
