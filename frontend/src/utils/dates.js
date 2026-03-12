@@ -7,8 +7,13 @@
  */
 export function parseDbDate(str) {
   if (!str) return null;
-  // "2026-03-06 08:56:04" → "2026-03-06T08:56:04Z"
-  return new Date(String(str).replace(' ', 'T') + 'Z');
+  // Postgres pg driver returns TIMESTAMPTZ as native Date objects
+  if (str instanceof Date) return isNaN(str.getTime()) ? null : str;
+  // ISO 8601 strings (e.g. "2026-03-06T08:56:04.000Z") — parse directly
+  const s = String(str);
+  if (s.includes('T') || s.includes('Z')) return new Date(s);
+  // SQLite legacy: "2026-03-06 08:56:04" → "2026-03-06T08:56:04Z"
+  return new Date(s.replace(' ', 'T') + 'Z');
 }
 
 /**
@@ -17,7 +22,12 @@ export function parseDbDate(str) {
  */
 export function parseLocalDate(str) {
   if (!str) return null;
-  return new Date(String(str).replace(' ', 'T'));
+  // Postgres pg driver returns TIMESTAMP as native Date objects
+  if (str instanceof Date) return isNaN(str.getTime()) ? null : str;
+  const s = String(str);
+  if (s.includes('T')) return new Date(s);
+  // SQLite legacy: "2026-03-06 13:56:04" → "2026-03-06T13:56:04"
+  return new Date(s.replace(' ', 'T'));
 }
 
 // ── UTC column formatters (sales.timestamp, returns.timestamp, etc.) ──
