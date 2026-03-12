@@ -177,18 +177,32 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
           }
         }
 
-        // 5. Create first admin employee
-        const { rows: [newEmp] } = await client.query(
-          `INSERT INTO employees
-             (name, pin_code, role, role_id, salary_type, work_hours_per_day)
-           VALUES ($1, $2, 'Administrator', 1, 'monthly', 8)
-           RETURNING id`,
-          [admin_name, String(admin_pin)]
+        // 5. Create or update first admin employee
+        // The provisioner may have already created an employee — update if exists
+        const { rows: [existingEmp] } = await client.query(
+          "SELECT id FROM employees WHERE role_id = 1 LIMIT 1"
         );
-        if (newEmp) {
+        let empId;
+        if (existingEmp) {
+          await client.query(
+            "UPDATE employees SET name = $1, pin_code = $2 WHERE id = $3",
+            [admin_name, String(admin_pin), existingEmp.id]
+          );
+          empId = existingEmp.id;
+        } else {
+          const { rows: [newEmp] } = await client.query(
+            `INSERT INTO employees
+               (name, pin_code, role, role_id, salary_type, work_hours_per_day)
+             VALUES ($1, $2, 'Administrator', 1, 'monthly', 8)
+             RETURNING id`,
+            [admin_name, String(admin_pin)]
+          );
+          empId = newEmp.id;
+        }
+        if (empId) {
           await client.query(
             'INSERT INTO employee_outlets (employee_id, outlet_id, is_primary) VALUES ($1, 1, true) ON CONFLICT DO NOTHING',
-            [newEmp.id]
+            [empId]
           );
         }
 
