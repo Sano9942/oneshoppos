@@ -377,23 +377,95 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
 
   // ─── BACKUP / RESTORE ────────────────────────────────────────────────────────
 
-  // GET /api/backup/download — Postgres stub
+  // GET /api/backup/download — pg_dump backup
   app.get(
     "/api/backup/download",
     requirePerm("all_access"),
     requireFeature("backup_restore"),
     async (req, res) => {
-      res.json({ message: "Postgres backup not yet implemented — use pg_dump" });
+      try {
+        const { backupSchema, getSchemaName, isPgDumpAvailable } = require("../utils/backup-pg");
+
+        if (!(await isPgDumpAvailable())) {
+          return res.status(503).json({ error: "pg_dump is not available on this server" });
+        }
+
+        const schemaName = getSchemaName(req.tenantSlug);
+        const filename = `backup-${schemaName}-${new Date().toISOString().slice(0, 10)}.dump`;
+
+        res.setHeader("Content-Type", "application/octet-stream");
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+        const { stream, process: proc } = backupSchema(schemaName);
+
+        let size = 0;
+        stream.on("data", (chunk) => { size += chunk.length; });
+        stream.pipe(res);
+
+        proc.on("close", async (code) => {
+          if (code === 0) {
+            await db.query(
+              "INSERT INTO backup_log (action, filename, size_bytes, status) VALUES ($1, $2, $3, $4)",
+              ["backup", filename, size, "success"]
+            ).catch(() => {});
+          }
+        });
+
+        proc.on("error", (err) => {
+          if (!res.headersSent) {
+            res.status(500).json({ error: `Backup failed: ${err.message}` });
+          }
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   );
 
-  // POST /api/backup/restore — Postgres stub
+  // POST /api/backup/restore — pg_restore
+  const restoreUpload = multer({
+    dest: path.join(__dirname, "../uploads_tmp"),
+    limits: { fileSize: 50 * 1024 * 1024 },
+  }).single("backup_file");
+
   app.post(
     "/api/backup/restore",
     requirePerm("all_access"),
     requireFeature("backup_restore"),
+    (req, res, next) => {
+      restoreUpload(req, res, (err) => {
+        if (err) return res.status(400).json({ error: `Upload error: ${err.message}` });
+        next();
+      });
+    },
     async (req, res) => {
-      res.json({ message: "Postgres restore not yet implemented — use pg_restore" });
+      if (!req.file) {
+        return res.status(400).json({ error: "backup_file is required" });
+      }
+      try {
+        const { restoreSchema, getSchemaName } = require("../utils/backup-pg");
+        const schemaName = getSchemaName(req.tenantSlug);
+
+        runtimeState.isRestoreInProgress = true;
+        const result = await restoreSchema(schemaName, req.file.path);
+        runtimeState.isRestoreInProgress = false;
+
+        await db.query(
+          "INSERT INTO backup_log (action, filename, size_bytes, status, notes) VALUES ($1, $2, $3, $4, $5)",
+          ["restore", req.file.originalname, req.file.size, "success", result.stderr || null]
+        ).catch(() => {});
+
+        res.json({ success: true, message: "Restore complete" });
+      } catch (err) {
+        runtimeState.isRestoreInProgress = false;
+        await db.query(
+          "INSERT INTO backup_log (action, filename, size_bytes, status, notes) VALUES ($1, $2, $3, $4, $5)",
+          ["restore", req.file?.originalname || "unknown", req.file?.size || 0, "failed", err.message]
+        ).catch(() => {});
+        res.status(500).json({ error: err.message });
+      } finally {
+        if (req.file?.path) fs.unlink(req.file.path, () => {});
+      }
     },
   );
 
