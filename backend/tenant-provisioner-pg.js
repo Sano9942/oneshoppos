@@ -96,7 +96,9 @@ async function provision(db, { slug, name, ownerEmail, timezone, pin }) {
     const crypto = require("crypto");
     const setupToken = crypto.randomBytes(32).toString("hex");
     await client.query(
-      "INSERT INTO company_profile (id, company_name, timezone, setup_token, setup_complete) VALUES (1, $1, $2, $3, false) ON CONFLICT DO NOTHING",
+      `INSERT INTO company_profile (id, company_name, timezone, setup_token, setup_complete)
+       VALUES (1, $1, $2, $3, false)
+       ON CONFLICT (id) DO UPDATE SET setup_token = $3, company_name = $1, timezone = $2`,
       [name, timezone || "UTC", setupToken]
     );
 
