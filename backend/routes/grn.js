@@ -282,7 +282,7 @@ module.exports = function registerGRNRoutes(app, deps) {
         let newStatus;
         await db.transaction(async (client) => {
           await client.query(
-            "UPDATE supplier_payments SET voided = 1, void_reason = $1 WHERE id = $2",
+            "UPDATE supplier_payments SET voided = true, void_reason = $1 WHERE id = $2",
             [reason || null, id],
           );
 
@@ -295,7 +295,7 @@ module.exports = function registerGRNRoutes(app, deps) {
           // Recalculate invoice status based on new payment totals
           const { rows: [row] } = await client.query(
             `SELECT si.amount,
-                    COALESCE(SUM(CASE WHEN sp.voided = 0 OR sp.voided IS NULL THEN sp.amount ELSE 0 END), 0) AS total_paid
+                    COALESCE(SUM(CASE WHEN sp.voided = false OR sp.voided IS NULL THEN sp.amount ELSE 0 END), 0) AS total_paid
              FROM supplier_invoices si
              LEFT JOIN supplier_payments sp ON sp.supplier_invoice_id = si.id
              WHERE si.id = $1
