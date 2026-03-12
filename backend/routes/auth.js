@@ -244,8 +244,8 @@ module.exports = function registerAuthRoutes(app, deps) {
         // Log login to action_history for tenant health tracking
         try {
           await tenantDb.query(
-            "INSERT INTO action_history (action_type, description, employee_id) VALUES ('login', $1, $2)",
-            [`${employee.name} logged in`, employee.id]
+            "INSERT INTO action_history (action_type, description, user_name) VALUES ('login', $1, $2)",
+            [`${employee.name} logged in`, employee.name]
           );
         } catch { /* best-effort — don't block login */ }
 

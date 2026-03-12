@@ -362,9 +362,9 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
         db.query(`SELECT MAX(timestamp) AS ts FROM ${s}.action_history WHERE action_type = 'login'`),
         db.query(`SELECT MAX(timestamp) AS ts FROM ${s}.sales`),
         db.query(`SELECT MAX(opened_at) AS ts FROM ${s}.cash_shifts`),
-        db.query(`SELECT COUNT(DISTINCT employee_id) AS cnt FROM ${s}.action_history WHERE timestamp >= NOW() - INTERVAL '7 days'`),
-        db.query(`SELECT COUNT(DISTINCT employee_id) AS cnt FROM ${s}.action_history WHERE timestamp >= NOW() - INTERVAL '30 days'`),
-        db.query(`SELECT COALESCE(SUM(pg_total_relation_size(schemaname || '.' || tablename)), 0) AS bytes FROM pg_tables WHERE schemaname = $1`, [`tenant_${tenant.slug}`]),
+        db.query(`SELECT COUNT(DISTINCT user_name) AS cnt FROM ${s}.action_history WHERE timestamp >= NOW() - INTERVAL '7 days'`),
+        db.query(`SELECT COUNT(DISTINCT user_name) AS cnt FROM ${s}.action_history WHERE timestamp >= NOW() - INTERVAL '30 days'`),
+        db.query(`SELECT COALESCE(SUM(pg_total_relation_size(quote_ident(schemaname) || '.' || quote_ident(tablename))), 0) AS bytes FROM pg_tables WHERE schemaname = $1`, [`tenant_${tenant.slug}`]),
       ]);
 
       return res.json({
