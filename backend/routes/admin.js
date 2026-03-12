@@ -312,29 +312,62 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
   app.get("/api/admin/tenants/:id/stats", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
-      const { rows } = await db.query("SELECT id, slug, status FROM tenants WHERE id = $1", [req.params.id]);
+      const { rows } = await db.query(
+        "SELECT id, slug, status, max_employees, max_products, max_outlets FROM tenants WHERE id = $1",
+        [req.params.id]
+      );
       const tenant = rows[0] || null;
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
       if (tenant.status !== "active") {
         return res.json({ stats: { status: tenant.status, message: "Tenant is not active" } });
       }
 
-      const schemaName = `tenant_${tenant.slug}`;
-      const [employees, products, outlets, sales, customers] = await Promise.all([
-        db.query(`SELECT COUNT(*) AS cnt FROM ${schemaName}.employees`),
-        db.query(`SELECT COUNT(*) AS cnt FROM ${schemaName}.products`),
-        db.query(`SELECT COUNT(*) AS cnt FROM ${schemaName}.outlets`),
-        db.query(`SELECT COUNT(*) AS cnt FROM ${schemaName}.sales`),
-        db.query(`SELECT COUNT(*) AS cnt FROM ${schemaName}.customers`),
+      const s = `tenant_${tenant.slug}`;
+      const [
+        employees, products, outlets, sales, customers,
+        salesToday, salesWeek, salesMonth,
+        lastLogin, lastSale, lastShift,
+        activeEmp7d, activeEmp30d,
+        schemaSize
+      ] = await Promise.all([
+        db.query(`SELECT COUNT(*) AS cnt FROM ${s}.employees WHERE deleted_at IS NULL`),
+        db.query(`SELECT COUNT(*) AS cnt FROM ${s}.products WHERE deleted_at IS NULL`),
+        db.query(`SELECT COUNT(*) AS cnt FROM ${s}.outlets`),
+        db.query(`SELECT COUNT(*) AS cnt FROM ${s}.sales`),
+        db.query(`SELECT COUNT(*) AS cnt FROM ${s}.customers WHERE deleted_at IS NULL`),
+        db.query(`SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amount), 0)::numeric AS rev FROM ${s}.sales WHERE timestamp::date = CURRENT_DATE`),
+        db.query(`SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amount), 0)::numeric AS rev FROM ${s}.sales WHERE timestamp >= date_trunc('week', NOW())`),
+        db.query(`SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amount), 0)::numeric AS rev FROM ${s}.sales WHERE timestamp >= date_trunc('month', NOW())`),
+        db.query(`SELECT MAX(timestamp) AS ts FROM ${s}.action_history WHERE action_type = 'login'`),
+        db.query(`SELECT MAX(timestamp) AS ts FROM ${s}.sales`),
+        db.query(`SELECT MAX(opened_at) AS ts FROM ${s}.cash_shifts`),
+        db.query(`SELECT COUNT(DISTINCT employee_id) AS cnt FROM ${s}.action_history WHERE timestamp >= NOW() - INTERVAL '7 days'`),
+        db.query(`SELECT COUNT(DISTINCT employee_id) AS cnt FROM ${s}.action_history WHERE timestamp >= NOW() - INTERVAL '30 days'`),
+        db.query(`SELECT COALESCE(SUM(pg_total_relation_size(schemaname || '.' || tablename)), 0) AS bytes FROM pg_tables WHERE schemaname = $1`, [`tenant_${tenant.slug}`]),
       ]);
 
       return res.json({
         stats: {
           employees: parseInt(employees.rows[0].cnt, 10),
+          max_employees: tenant.max_employees,
           products: parseInt(products.rows[0].cnt, 10),
+          max_products: tenant.max_products,
           outlets: parseInt(outlets.rows[0].cnt, 10),
+          max_outlets: tenant.max_outlets,
           total_sales: parseInt(sales.rows[0].cnt, 10),
           customers: parseInt(customers.rows[0].cnt, 10),
+          sales_today: parseInt(salesToday.rows[0].cnt, 10),
+          revenue_today: Number(salesToday.rows[0].rev),
+          sales_this_week: parseInt(salesWeek.rows[0].cnt, 10),
+          revenue_this_week: Number(salesWeek.rows[0].rev),
+          sales_this_month: parseInt(salesMonth.rows[0].cnt, 10),
+          revenue_this_month: Number(salesMonth.rows[0].rev),
+          last_login: lastLogin.rows[0].ts || null,
+          last_sale: lastSale.rows[0].ts || null,
+          last_shift_opened: lastShift.rows[0].ts || null,
+          active_employees_7d: parseInt(activeEmp7d.rows[0].cnt, 10),
+          active_employees_30d: parseInt(activeEmp30d.rows[0].cnt, 10),
+          schema_size_mb: Math.round(Number(schemaSize.rows[0].bytes) / 1048576 * 10) / 10,
         },
       });
     } catch (err) {
