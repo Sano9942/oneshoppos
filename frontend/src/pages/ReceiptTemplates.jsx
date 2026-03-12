@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { FileText, Plus, Edit2, Trash2, X, CheckCircle2, Star } from "lucide-react";
 
 import { API_BASE as API } from '../config';
+import { useCurrency } from '../contexts/CurrencyContext';
 
 
 const EMPTY = {
@@ -14,7 +15,8 @@ const EMPTY = {
 };
 
 // Live receipt preview using template values
-function ReceiptPreview({ template }) {
+function ReceiptPreview({ template, symbol }) {
+  const s = symbol || "$";
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 font-mono text-xs text-slate-800 w-full max-w-[260px] shadow-sm">
       <div className="text-center border-b border-dashed border-slate-300 pb-3 mb-3">
@@ -22,15 +24,15 @@ function ReceiptPreview({ template }) {
         <div className="text-slate-500 text-[11px] mt-1">Receipt #1042</div>
       </div>
       <div className="space-y-1 mb-3">
-        <div className="flex justify-between"><span>2x Sample Item</span><span>$40.00</span></div>
-        <div className="flex justify-between"><span>1x Another Item</span><span>$15.00</span></div>
+        <div className="flex justify-between"><span>2x Sample Item</span><span>{s} 40.00</span></div>
+        <div className="flex justify-between"><span>1x Another Item</span><span>{s} 15.00</span></div>
       </div>
       <div className="border-t border-dashed border-slate-300 pt-2 mb-3 space-y-1">
-        <div className="flex justify-between text-slate-500"><span>Subtotal</span><span>$55.00</span></div>
-        <div className="flex justify-between text-slate-500"><span>Tax</span><span>$2.75</span></div>
-        <div className="flex justify-between font-bold"><span>TOTAL</span><span>$57.75</span></div>
-        <div className="flex justify-between text-slate-500"><span>Cash</span><span>$60.00</span></div>
-        <div className="flex justify-between font-bold"><span>CHANGE</span><span>$2.25</span></div>
+        <div className="flex justify-between text-slate-500"><span>Subtotal</span><span>{s} 55.00</span></div>
+        <div className="flex justify-between text-slate-500"><span>Tax</span><span>{s} 2.75</span></div>
+        <div className="flex justify-between font-bold"><span>TOTAL</span><span>{s} 57.75</span></div>
+        <div className="flex justify-between text-slate-500"><span>Cash</span><span>{s} 60.00</span></div>
+        <div className="flex justify-between font-bold"><span>CHANGE</span><span>{s} 2.25</span></div>
       </div>
       {template.show_barcode && (
         <div className="border-t border-dashed border-slate-300 pt-2 mb-2 text-center">
@@ -46,6 +48,7 @@ function ReceiptPreview({ template }) {
 }
 
 export default function ReceiptTemplates() {
+  const { symbol } = useCurrency();
   const [templates, setTemplates] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -226,7 +229,7 @@ export default function ReceiptTemplates() {
 
                 {/* Mini receipt preview */}
                 <div className="p-4 flex justify-center bg-slate-50 flex-1">
-                  <ReceiptPreview template={t} />
+                  <ReceiptPreview template={t} symbol={symbol} />
                 </div>
               </div>
             ))}
@@ -352,7 +355,7 @@ export default function ReceiptTemplates() {
               {/* Live preview panel */}
               <div className="w-56 border-l border-slate-100 bg-slate-50 flex flex-col items-center p-5 gap-4 shrink-0">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Live Preview</span>
-                <ReceiptPreview template={form} />
+                <ReceiptPreview template={form} symbol={symbol} />
               </div>
             </div>
           </div>

@@ -380,7 +380,6 @@ module.exports = function registerProductRoutes(app, deps) {
       category_id,
       tax_id,
       brand_id,
-      outlet_id,
       initial_stock: _initial_stock,
       has_variants,
       attribute_set_id,
@@ -398,6 +397,7 @@ module.exports = function registerProductRoutes(app, deps) {
       image_urls,
       supplier_id,
     } = req.body;
+    const outlet_id = req.body.outlet_id || req.headers["x-outlet-id"];
     try {
       const categoryError = await validateLeafCategory(category_id);
       if (categoryError) {
