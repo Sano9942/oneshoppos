@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { IS_MULTI_TENANT } from "../config";
 
-const API = import.meta.env.VITE_API_URL || "";
+const API = import.meta.env.VITE_API_BASE || "";
 
 const CurrencyContext = createContext({
   symbol: "$",
@@ -19,7 +20,13 @@ export function CurrencyProvider({ children }) {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/company-profile/currency`);
+      let url = `${API}/api/company-profile/currency`;
+      if (IS_MULTI_TENANT) {
+        const raw = localStorage.getItem("authSession");
+        const slug = raw ? JSON.parse(raw)?.tenant_slug : null;
+        if (slug) url += `?tenant=${encodeURIComponent(slug)}`;
+      }
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setCurrency({

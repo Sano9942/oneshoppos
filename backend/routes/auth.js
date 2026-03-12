@@ -160,6 +160,9 @@ module.exports = function registerAuthRoutes(app, deps) {
     const { signAccessToken, signRefreshToken, verifyRefreshToken, verifyAccessToken, hashToken } = require("../jwt-auth");
     const jwtLib = require("jsonwebtoken");
     const masterDb = require("../master-db-pg");
+    const tenantDbMgr = process.env.DATABASE_URL
+      ? require("../tenant-db-manager-pg")
+      : require("../tenant-db-manager");
 
     // POST /api/auth/mt-login — standard login with tenant slug + username + PIN
     app.post("/api/auth/mt-login", authLimiter, async (req, res) => {
@@ -183,8 +186,9 @@ module.exports = function registerAuthRoutes(app, deps) {
           return res.status(401).json({ error: "Invalid store code" });
         }
 
-        // 2. Find employee in tenant DB by username
-        const { rows: [employee] } = await db.query(
+        // 2. Find employee in tenant DB by username (manual resolution — no ALS context yet)
+        const tenantDb = await tenantDbMgr.getDb(tenant.id);
+        const { rows: [employee] } = await tenantDb.query(
           `SELECT e.id, e.name, e.role_id, e.pin_hash
            FROM employees e
            WHERE LOWER(e.name) = LOWER($1)`,
@@ -204,7 +208,7 @@ module.exports = function registerAuthRoutes(app, deps) {
         }
 
         // 4. Load permissions
-        const { rows: permRows } = await db.query(
+        const { rows: permRows } = await tenantDb.query(
           "SELECT permission FROM role_permissions WHERE role_id = $1",
           [employee.role_id || 3]
         );
@@ -285,8 +289,9 @@ module.exports = function registerAuthRoutes(app, deps) {
           return res.status(403).json({ error: "Account suspended. Contact support." });
         }
 
-        // 4. Load employee role for new token
-        const { rows: [employee] } = await db.query(
+        // 4. Load employee role for new token (manual resolution — no ALS context)
+        const tenantDb = await tenantDbMgr.getDb(decoded.tid);
+        const { rows: [employee] } = await tenantDb.query(
           "SELECT id, role_id FROM employees WHERE id = $1",
           [decoded.eid]
         );
@@ -366,8 +371,9 @@ module.exports = function registerAuthRoutes(app, deps) {
           return res.status(401).json({ error: "Invalid store code" });
         }
 
-        // 2. Scan all employees, compare PIN via bcrypt
-        const { rows: employees } = await db.query(
+        // 2. Scan all employees, compare PIN via bcrypt (manual resolution — no ALS context)
+        const tenantDb = await tenantDbMgr.getDb(tenant.id);
+        const { rows: employees } = await tenantDb.query(
           "SELECT id, name, role_id, pin_hash FROM employees",
           []
         );

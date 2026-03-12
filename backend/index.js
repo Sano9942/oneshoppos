@@ -24,6 +24,9 @@ if (IS_MULTI_TENANT) {
     dbProxy = createDbProxy();
     tenantDbManager = require("./tenant-db-manager-pg");
     tenantDbManager.init(db);
+    // Initialize master DB so getTenantBySlug/query work globally
+    const masterDbPgBoot = require("./master-db-pg");
+    masterDbPgBoot.init(db);
   } else {
     // Legacy SQLite file-pool mode
     const proxyMod = require("./tenant-db-proxy");
@@ -448,6 +451,10 @@ function requirePerm(permission) {
   };
 }
 
+// In MT mode, queries for company_profile / feature_flags must go through the ALS proxy
+// so they hit the correct tenant schema. In single-tenant mode, use the raw db pool.
+const _companyDb = IS_MULTI_TENANT ? dbProxy : db;
+
 // Company profile cache — per-tenant Map (MT-safe). Single-tenant uses "_default" key.
 // Provides req.company.timezone (and other profile fields) to all route handlers.
 const _companyCache = new Map(); // key: tenantId|"_default", value: { profile, lastCheck }
@@ -486,7 +493,7 @@ function loadCompanyProfile(req, res, next) {
   if (now - entry.lastCheck > COMPANY_CACHE_MS) {
     entry.lastCheck = now; // prevent multiple concurrent refreshes
     _companyCache.set(cacheKey, entry);
-    db.query("SELECT * FROM company_profile WHERE id = 1").then(({ rows: [row] }) => {
+    _companyDb.query("SELECT * FROM company_profile WHERE id = 1").then(({ rows: [row] }) => {
       if (row) {
         entry.profile = row;
         _companyCache.set(cacheKey, entry);
@@ -558,7 +565,7 @@ function resolveContext(req, res, next) {
     const newEntry = flagEntry || { enforced: false, loaded: false, lastCheck: now };
     newEntry.lastCheck = now;
     _contextFlagCache.set(cacheKey, newEntry);
-    db.query("SELECT enabled FROM feature_flags WHERE key = 'context_header_enforced'")
+    _companyDb.query("SELECT enabled FROM feature_flags WHERE key = 'context_header_enforced'")
       .then(({ rows: [row] }) => {
         if (row) newEntry.enforced = row.enabled === true;
         newEntry.loaded = true;
@@ -837,7 +844,7 @@ async function getFeatureFlagsMap(tenantId) {
     return { ...cached.flags };
   }
   try {
-    const { rows } = await db.query("SELECT key, enabled FROM feature_flags");
+    const { rows } = await _companyDb.query("SELECT key, enabled FROM feature_flags");
     const merged = { ...DEFAULT_FEATURE_FLAGS };
     for (const row of rows || []) {
       merged[row.key] = row.enabled === true;

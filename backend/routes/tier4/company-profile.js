@@ -25,9 +25,18 @@ module.exports = function createCompanyProfileRouter({
 
   // GET /api/company-profile/currency — public (no auth)
   // Used by CurrencyProvider on frontend mount
+  // In MT mode, requires ?tenant=<slug> to resolve correct schema
   router.get("/api/company-profile/currency", async (req, res) => {
     try {
-      const { rows: [row] } = await db.query(
+      let queryDb = db;
+      if (process.env.MULTI_TENANT === "1" && req.query.tenant) {
+        const masterDb = require("../../master-db-pg");
+        const tenantDbMgr = require("../../tenant-db-manager-pg");
+        const tenant = await masterDb.getTenantBySlug(req.query.tenant);
+        if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+        queryDb = await tenantDbMgr.getDb(tenant.id);
+      }
+      const { rows: [row] } = await queryDb.query(
         "SELECT currency_symbol, currency_code, cash_denominations FROM company_profile WHERE id = 1"
       );
       if (!row) return res.json({ symbol: "$", code: "USD", denominations: [100, 50, 20, 10, 5, 1] });
