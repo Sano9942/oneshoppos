@@ -10,14 +10,13 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 ## Current Status Snapshot (March 2026)
 
 - Latest migration (SQLite) is `backend/migrate74.js`
+- **MULTI-TENANT IS LIVE** (Mar 13 2026) — `MULTI_TENANT=1` on Railway, `VITE_MULTI_TENANT=1` on Vercel. First tenant (`packagesmall` / Packages Mall) provisioned and verified end-to-end.
 - **Postgres migration COMPLETE and LIVE** (Mar 12 2026) — merged to `main`, production running on Supabase Postgres. Boot guard in `index.js` conditionally loads `db-pg` (Postgres) or `db` (SQLite) based on `DATABASE_URL`. 340/340 pg integration tests passing.
-- **Production database: Supabase Postgres** — `DATABASE_URL` set on Railway, `DATA_DIR` removed. Fresh DB via setup wizard (no SQLite data migrated). SQLite volume still mounted on Railway as safety net.
+- **Production database: Supabase Postgres** — `DATABASE_URL` set on Railway. `public` schema = 6 master tables only (89 stale single-tenant tables cleaned up). Tenant data in `tenant_<slug>` schemas.
 - **Currency/timezone centralization complete (Mar 12 2026)** — `CurrencyProvider` context live; all ~58 PKR/PKRs hardcodes replaced; `cash_denominations` column added (schema migration v2); setup wizard and company settings have full IANA timezone dropdown + denomination chip editor.
 - **Offline sale queuing complete (Mar 12 2026)** — localStorage queue (50-sale cap), `completeSale` offline path with provisional receipts, auto-sync on reconnect via `online` event, multi-tab sync via `storage` event, amber POS banner with Sync Now button, wallet/points blocked offline, backend shift/attendance relaxation for offline replays, receipt shows "PENDING (offline)".
 - **Tenant health monitoring complete (Mar 12 2026)** — expanded `GET /api/admin/tenants/:id/stats` (activity, revenue, capacity, schema size), new `GET /api/admin/attention` (approaching limits, dormant, setup pending), enriched tenant list (last_login, revenue_this_month), AdminTenantDetail 3-section health dashboard (activity + plan usage bars + storage), AdminTenantList health dot/revenue/last activity columns, AdminDashboard "Needs Attention" card.
-- **MT Phase 1 blockers fixed (Mar 12 2026)** — 6 cross-tenant data leak / broken-functionality blockers resolved: per-tenant `_companyCache` Map (replaces global `_cachedCompany`), per-tenant `_contextFlagCache` Map (replaces global `_contextEnforced`), boot IIFEs guarded with `!IS_MULTI_TENANT`, `auditLog()` uses `masterDb.query()`, customer display keyed by `${tenantSlug}-${shiftId}`.
-- **MT Phase 2 operations complete (Mar 12 2026)** — 9 tasks across ~10 files: setup token generation in tenant provisioner, admin API setup URL endpoints (get/regenerate), admin dashboard setup URL UI, setup wizard MT adaptation (tenant-scoped DB via URL param), tenant-scoped notification helpers, tenant-aware scheduled jobs (`forEachActiveTenant` helper), per-tenant rate limiting (`tenantSlug:IP` key generator). 55/55 pg-batch3 tests passing.
-- **MT Phase 3 hardening complete (Mar 12 2026)** — per-tenant feature flag cache (60s TTL, invalidated on PUT), pg_dump/pg_restore backup/restore (replaces stubs), 7 tenant isolation integration tests (API isolation, DB isolation, concurrent request safety). Only subdomain/slug routing remains before MULTI_TENANT=1 can be flipped.
+- **MT Go-Live complete (Mar 13 2026)** — 10 plan tasks + 3 bonus fixes: master-db-pg init at boot, auth.js tenant DB resolution, loadCompanyProfile dynamic DB, plan-limits.js Postgres conversion, currency endpoint MT mode, seed-admin-pg.js, cleanup-public-schema.js, frontend env flip, slug validation fix (no hyphens), Invalid Date fix in admin pages, public schema cleanup (89 tables dropped).
 - `schema-pg.sql` includes seed INSERT for `company_profile` row (required for setup wizard token generation at boot).
 - **Phase 3 Remaining complete (Mar 10 2026)**: 5 items shipped — mobile/tablet POS layout, IP allowlisting for admin API, JWT token revocation (migrate74), stock shrinkage report, customer-facing display
 - **Roadmap Phase 3 complete (Mar 10 2026)**: 8 of 9 core robustness items shipped (offline queuing deferred) — rate limiter activation, session timeout at POS, idempotency on sales, price change audit log, end-of-day email digest, onboarding checklist, setup wizard, soft deletes
@@ -72,7 +71,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - Attendance UTC-boundary bug fixed (Mar 2026): `GET /api/attendance`, `GET /api/attendance/sessions` (both in `backend/routes/attendance.js`) and dashboard `attendanceToday` + `operationalReadiness` staffCounts (in `backend/routes/reports/dashboard.js`) were incorrectly filtering local-time columns using `toUtcStart/toUtcEnd` UTC boundaries — sessions after local 19:00 in `Asia/Karachi` were excluded. Fixed to use `date(col) = ?` / `date(col) >= ?` / `date(col) <= ?` with plain YYYY-MM-DD strings. RULE: **never use `toUtcStart/toUtcEnd` on `session_start` or `check_in` — those columns are local time**
 - Dashboard auto-refresh (Mar 2026): `DashboardRedesign.jsx` now silently re-fetches every 60 seconds via `refreshKey` state + `setInterval`; manual refresh button in subtitle with spinning icon + last-updated timestamp
 - Timezone Phase 1 complete (Mar 2026): All single-tenant timezone correctness bugs fixed (Sections A-F + J from `TIMEZONE-AUDIT.md`): backend UTC/LOCAL query fixes across 10 route files, `dates.js` dual-parser rewrite (UTC+LOCAL formatters), 13 frontend display fixes (C1-C5), stale attendance session auto-close (F1+F2), shared `applyUtcDateFilter`/`applyLocalDateFilter` helpers in `reports/helpers.js`; 292/298 tests passing (zero new regressions). **Sections J1/J2 + 2 additional files were missed in the original commit and fixed separately (Mar 9 2026):** `Attendance.jsx`, `KioskRedesign.jsx`, `ReportsStaff.jsx` all had `new Date(dt)` on LOCAL-time columns — Chrome parses space-separated SQLite strings as UTC causing -5h display shift; fixed by importing `parseLocalDate`/`fmtLocalTime`/`fmtLocalDate` from `dates.js`. `HRManagementRedesign.jsx` and `DashboardTrends.jsx` use `new Date(d + "T00:00:00")` which is correct for date-only strings — left unchanged.
-- Multi-tenant readiness: Before flipping `MULTI_TENANT=1` in production, the following are still needed: (1) ~~Timezone Phase 2~~ RESOLVED by Postgres migration; (2) ~~`loadCompanyProfile` cache per-tenant~~ FIXED (Mar 12 2026); (3) ~~tenant onboarding from super-admin dashboard~~ DONE (Mar 12 2026, MT Phase 2); (4) ~~tenant-aware scheduled jobs~~ DONE (Mar 12 2026, MT Phase 2); (5) subdomain/slug routing; (6) ~~Railway multi-DB volume~~ RESOLVED by Postgres schema-based multi-tenancy; (7) ~~backup/restore per-tenant~~ DONE (Mar 12 2026, MT Phase 3); (8) ~~per-tenant rate limiting~~ DONE (Mar 12 2026, MT Phase 2); (9) ~~feature flag cache per-tenant~~ DONE (Mar 12 2026, MT Phase 3); (10) ~~tenant isolation testing~~ DONE (Mar 12 2026, MT Phase 3)
+- **Multi-tenant is LIVE** (Mar 13 2026): `MULTI_TENANT=1` flipped on Railway + `VITE_MULTI_TENANT=1` on Vercel. All blockers resolved. Store Code login model (no subdomain routing). Subdomain routing deferred as future enhancement. First tenant `packagesmall` (Packages Mall) provisioned and verified end-to-end (super-admin → provision → setup wizard → POS login → dashboard).
 - MT Phase 1 blocker fixes (Mar 2026): `_companyCache` Map replaces `_cachedCompany` (keyed by `tenantId`); `_contextFlagCache` Map replaces `_contextEnforced`/`_contextFlagLoaded`/`_contextFlagLastCheck`; boot IIFEs guarded with `if (!IS_MULTI_TENANT)`; `auditLog()` in `admin.js` uses `masterDb.query()` (public schema); `master-db-pg.js` exports `query()`; customer display `displayStore` keyed by `${tenantSlug}-${shiftId}` (was bare `shift_id`); `CustomerDisplayPage.jsx` passes `&tenant=<slug>` in MT mode
 - **New pages/routes added in Phase 2** (all wired in `App.jsx`, all have nav entries):
   - `/reorder-alerts` — `ReorderAlertsRedesign.jsx` (Stock Control section)
@@ -304,7 +303,9 @@ oneshoppos/
 - Server middleware/config → `backend/index.js`
 - Super-admin API → `backend/routes/admin.js` (13 endpoints, uses master.db directly)
 - Tenant migration runner → `backend/tenant-migrate.js` (CLI + programmatic)
-- Super-admin seeder → `backend/seed-admin.js`
+- Super-admin seeder (Postgres) → `backend/seed-admin-pg.js`
+- Super-admin seeder (SQLite legacy) → `backend/seed-admin.js`
+- Public schema cleanup → `backend/cleanup-public-schema.js` (one-time, already run)
 - Multi-tenant DB proxy → `backend/tenant-db-proxy.js` (AsyncLocalStorage + Proxy)
 - Tenant-aware uploads → `backend/tenant-multer.js` (storage factories)
 - Plan limit enforcement → `backend/middleware/plan-limits.js`
@@ -423,15 +424,21 @@ The DB has two timestamp storage systems. You MUST use the matching formatter or
 ## Production Deployment (Railway + Vercel)
 
 ### Live URLs
-- Frontend: `https://oneshoppos.vercel.app` (Vercel, root dir: `frontend`)
+- Frontend: `https://sanopos.vercel.app` (Vercel, root dir: `frontend`)
 - Backend: `https://oneshoppos-production.up.railway.app` (Railway, root dir: `/backend`)
+- Super-admin: `https://sanopos.vercel.app/admin`
+
+### Railway env vars (MT mode)
+- `MULTI_TENANT=1` — enables multi-tenant mode
+- `DATABASE_URL` — Supabase Postgres connection string
+- `JWT_SECRET` / `JWT_REFRESH_SECRET` — JWT signing keys
+- `CORS_ORIGIN=https://sanopos.vercel.app` — frontend origin
+- `TZ=Asia/Karachi` — server timezone
 
 ### Railway gotchas
-- Volume must be created manually in Railway UI (project canvas → Add → Volume, mount `/data`) — `railway.toml` `[[volumes]]` alone does NOT provision it
-- All 66 migration files hardcode `path.resolve(__dirname, "oneshop.db")` — `start.sh` symlinks `/app/oneshop.db` and `/app/sanopos.db` → `$DATA_DIR/sanopos.db` before migrations run
 - Railway's `PORT` env var overrides the app's PORT — server will bind to 8080 even if `PORT=5000` is set; this is fine
-- Employee API (`PUT /api/employees/:id`, `DELETE`) requires Administrator session token — cannot be called unauthenticated even from curl
-- To bootstrap a first Administrator when locked out: add a temp `POST /api/setup/owner` endpoint gated by `SETUP_SECRET` env var, deploy, call it, then remove the endpoint
+- To seed a super-admin: `railway run node backend/seed-admin-pg.js --email <email> --password <password> --name <name>`
+- To provision a tenant: use super-admin dashboard at `/admin` (preferred) or `railway run node backend/tenant-provisioner-pg.js --slug <slug> --name <name> --pin <pin>`
 
 ## Refactor History
 
@@ -464,6 +471,7 @@ Full changelog: see `REFACTOR_NOTES.md`. Key milestones:
 - Mar 2026: **MT Phase 1 blocker fixes** — `feature/mt-phase1-blockers` branch (4 commits, 4 files); per-tenant `_companyCache` Map + `_contextFlagCache` Map replace module-level globals; boot IIFEs guarded with `!IS_MULTI_TENANT`; `auditLog()` uses `masterDb.query()`; `master-db-pg.js` exports `query()`; customer display `displayStore` keyed by `${tenantSlug}-${shiftId}` (was bare `shift_id`); `CustomerDisplayPage.jsx` passes `&tenant=<slug>` in MT mode
 - Mar 2026: **MT Phase 2 operations** — `feature/mt-phase2-operations` branch (9 commits, ~10 files); `tenant-provisioner-pg.js` generates setup token during provisioning; `admin.js` gains 3 new endpoints (POST returns setup_url, GET setup-token, POST regenerate-setup-token); `AdminTenantList.jsx` shows setup URL modal after provisioning; `AdminTenantDetail.jsx` shows setup status card with copy/regenerate; `setup.js` gains `getSetupDb()` helper for MT mode (resolves tenant DB from `?tenant=` param); `SetupWizard.jsx` passes tenant slug to API calls; `index.js` notification helpers use `_notifDb` (proxy in MT, direct in ST); 3 scheduled workers wrapped with `forEachActiveTenant` + `asyncStore.run()`; rate limiters keyed by `tenantSlug:IP` via `extractTenantKey`; `createTestApp-pg.js` uses `ON CONFLICT` for company_profile seed (fixes pre-existing pg-batch3 failures); 55/55 pg-batch3 tests passing
 - Mar 2026: **MT Phase 3 hardening** — `feature/mt-phase3-hardening` branch. Per-tenant feature flag cache (`getFeatureFlagsMap` + 60s TTL Map, invalidated on PUT); pg_dump/pg_restore backup/restore (`backend/utils/backup-pg.js`, replaces stubs in `barcode-expenses.js`, runtime `isPgDumpAvailable()` check); tenant isolation integration tests (7 tests in `pg-tenant-isolation.test.js` — API isolation, direct DB isolation, concurrent request safety).
+- Mar 2026: **MT Go-Live** — `feature/multi-tenant-golive` + `fix/mt-golive-polish` branches. 10 plan tasks: master-db-pg init at boot, auth.js tenant DB resolution (mt-login/refresh/kiosk-login use `tenantDbMgr.getDb()`), loadCompanyProfile dynamic `_getCompanyDb(req)`, plan-limits.js Postgres conversion, currency endpoint `?tenant=` param, seed-admin-pg.js, cleanup-public-schema.js, frontend `VITE_MULTI_TENANT=1`, slug validation (no hyphens), Invalid Date fix in admin pages. Production: `MULTI_TENANT=1` flipped on Railway, super-admin seeded, first tenant `packagesmall` provisioned and verified. 89 stale tables dropped from `public` schema.
 
 ## Postgres Migration
 
@@ -542,9 +550,10 @@ The backend is being migrated from SQLite3 to PostgreSQL on branch `feature/post
 - Railway has `DATABASE_URL` set → runs Postgres. Local dev without `.env` → falls back to SQLite.
 - `start.sh` also branches: Postgres mode runs `migrate-pg.js` → `index.js`; SQLite mode runs symlinks + `run_migrations.js` → `index.js`
 
-### Production Deployment (Live Mar 12 2026)
+### Production Deployment (Live Mar 12 2026, MT flipped Mar 13 2026)
 - **Database**: Supabase Postgres (ap-southeast-1 region)
 - `DATABASE_URL` set on Railway, `DATA_DIR` removed
-- Fresh DB created via setup wizard (no SQLite data migrated — test data was discarded)
+- `MULTI_TENANT=1` on Railway, `VITE_MULTI_TENANT=1` on Vercel (flipped Mar 13 2026)
+- `public` schema: 6 master tables only (tenants, super_admins, tenant_audit_log, schema_migrations, tenant_refresh_tokens, company_profile). 89 stale tables cleaned up via `cleanup-public-schema.js`.
 - `schema-pg.sql` seeds a `company_profile` row with `setup_complete = false` for first-run token generation
-- SQLite volume still mounted on Railway as safety net — can be removed after 1 week
+- First tenant: `tenant_packagesmall` schema (Packages Mall)

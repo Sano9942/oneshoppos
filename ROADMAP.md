@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-*Last updated: March 12 2026 — Offline sale queuing + tenant health monitoring shipped. MT Phase 3 hardening complete. Postgres live on Supabase. All phases shipped.*
+*Last updated: March 13 2026 — **MULTI-TENANT IS LIVE.** `MULTI_TENANT=1` flipped on Railway + Vercel. First tenant (Packages Mall) provisioned and verified. Public schema cleaned (89 tables dropped). All phases shipped.*
 
 ---
 
@@ -109,25 +109,30 @@ This file tracks everything we want to build, fix, or improve for SanoPOS.
 
 ---
 
-## 🚀 Multi-Tenant Go-Live — The Plan
+## ✅ Multi-Tenant Go-Live — COMPLETE (Mar 13 2026)
 
-**Strategy (decided Mar 12 2026):** Multi-tenant is the ONLY mode going forward. Single-tenant was the development foundation. A "single store" customer = MT customer on Starter plan (`max_outlets=1`). No architectural difference — just plan limits.
+**Strategy:** Multi-tenant is the ONLY mode going forward. Single-tenant was the development foundation. A "single store" customer = MT customer on Starter plan (`max_outlets=1`). No architectural difference — just plan limits.
 
 **Business model:** Super-admin provisions tenant → assigns plan → sends setup token → customer onboards → works within plan limits. Upgrade = bump `max_outlets`/`max_employees`/`max_products` in master DB.
 
-**Database:** Same Supabase Postgres instance. `public` schema = master tables. `tenant_<slug>` schemas = per-tenant business data.
+**Database:** Same Supabase Postgres instance. `public` schema = 6 master tables. `tenant_<slug>` schemas = per-tenant business data.
 
----
+**Go-live completed Mar 13 2026:**
+- 10 plan tasks executed (master-db-pg init, auth.js tenant DB resolution, loadCompanyProfile dynamic DB, plan-limits Postgres conversion, currency endpoint MT, seed-admin-pg, cleanup-public-schema, frontend env flip, smoke test, deploy)
+- 3 bonus fixes (slug validation — no hyphens, Invalid Date in admin pages, public schema cleanup — 89 tables dropped)
+- 4 production issues discovered and fixed during deployment (ALS proxy on health check, health endpoint ordering, provisioner token ON CONFLICT, setup wizard duplicate employee)
+- First tenant: `packagesmall` (Packages Mall) — provisioned, setup wizard completed, POS login verified
 
-1. ~~**Timezone Phase 2**~~ — ✅ **Resolved** (Mar 12 2026). Postgres migration eliminated all `'localtime'` modifiers. `loadCompanyProfile` cache keyed per-tenant (MT Phase 1).
-2. ~~**Tenant isolation testing**~~ — ✅ **Done** (Mar 12 2026, MT Phase 3). 7 API-level + DB-level + concurrency isolation tests in `pg-tenant-isolation.test.js`.
-3. ~~**Tenant onboarding flow**~~ — ✅ **Done** (Mar 12 2026, MT Phase 2). Admin API returns `setup_url` on provision; GET/POST endpoints for setup token; AdminTenantList + AdminTenantDetail UI show/copy/regenerate setup links; setup wizard accepts `?tenant=` param.
-4. ~~**Tenant-aware scheduled jobs**~~ — ✅ **Done** (Mar 12 2026, MT Phase 2). `forEachActiveTenant` helper iterates active tenants from master DB; 3 cleanup workers + Shopify/report workers wrapped with `asyncStore.run()`.
-5. ~~**Subdomain/slug routing**~~ — **Deferred** (Mar 12 2026). Store Code login already works (Notion/Linear/Stripe model). Subdomain routing is a future enhancement — see "Future: Subdomain Routing" section below.
-6. ~~**Railway multi-DB volume strategy**~~ — ✅ **Resolved** (Mar 12 2026). Postgres schema-based multi-tenancy (`SET search_path TO tenant_<slug>`) replaces per-tenant SQLite files.
-7. ~~**Backup/restore per-tenant**~~ — ✅ **Done** (Mar 12 2026, MT Phase 3). pg_dump/pg_restore per schema; `GET /api/backup/download` streams .dump; `POST /api/backup/restore` accepts upload; `isPgDumpAvailable()` runtime check.
-8. ~~**Rate limiting**~~ — ✅ **Done** (Mar 12 2026, MT Phase 2). Per-tenant rate limiting via `extractTenantKey` + `keyGenerator` on both limiters; keyed by `tenantSlug:IP`.
-9. ~~**Feature flag cache per-tenant**~~ — ✅ **Done** (Mar 12 2026, MT Phase 3). `getFeatureFlagsMap()` cached per tenantId with 60s TTL; invalidated on `PUT /api/feature-flags/:key`.
+All previous blockers resolved:
+1. ~~Timezone Phase 2~~ — Resolved by Postgres migration
+2. ~~Tenant isolation testing~~ — 7 integration tests
+3. ~~Tenant onboarding flow~~ — Admin API setup URLs
+4. ~~Tenant-aware scheduled jobs~~ — `forEachActiveTenant` helper
+5. ~~Subdomain/slug routing~~ — Deferred; Store Code login sufficient
+6. ~~Railway multi-DB volume~~ — Postgres schema-based
+7. ~~Backup/restore per-tenant~~ — pg_dump/pg_restore
+8. ~~Rate limiting~~ — Per-tenant keyed by `tenantSlug:IP`
+9. ~~Feature flag cache per-tenant~~ — 60s TTL Map
 10. **Timezone Phase 3** (nice-to-have) — write-path unification
 
 ---
@@ -255,3 +260,4 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 | Mar 12 2026 | **MT Phase 1 blocker fixes** | `feature/mt-phase1-blockers` branch (4 commits, 4 files). 6 cross-tenant data leak / broken-functionality blockers resolved: per-tenant `_companyCache` Map, per-tenant `_contextFlagCache` Map, boot IIFE guards, `auditLog()` uses masterDb, customer display keyed by `${tenantSlug}-${shiftId}`. |
 | Mar 12 2026 | **MT Phase 2 operations** | `feature/mt-phase2-operations` branch (9 commits, ~10 files). Setup token generation in tenant provisioner; admin API setup URL endpoints (get/regenerate); admin dashboard setup URL UI; setup wizard MT adaptation (tenant-scoped DB via URL param); tenant-scoped notification helpers; tenant-aware scheduled jobs (`forEachActiveTenant` helper); per-tenant rate limiting (`tenantSlug:IP`). pg-batch3 test fix (ON CONFLICT for company_profile seed). 55/55 pg-batch3 tests passing. |
 | Mar 12 2026 | **MT Phase 3 hardening** | `feature/mt-phase3-hardening` branch. Per-tenant feature flag cache (60s TTL Map, invalidated on PUT). pg_dump/pg_restore backup/restore (replaces stubs, runtime availability check). 7 tenant isolation tests (API + DB + concurrent request safety). Only subdomain/slug routing remains before MULTI_TENANT=1. |
+| Mar 13 2026 | **MT Go-Live — MULTI_TENANT=1 flipped** | `feature/multi-tenant-golive` + `fix/mt-golive-polish` branches merged to `main`. 10 plan tasks + 3 bonus fixes + 4 production hotfixes. Super-admin seeded via Railway CLI. First tenant `packagesmall` (Packages Mall) provisioned, setup wizard completed, POS login verified. Public schema cleaned (89 stale tables dropped). `MULTI_TENANT=1` on Railway, `VITE_MULTI_TENANT=1` on Vercel. |
