@@ -141,7 +141,28 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
          WHERE status != 'deleted'
          ORDER BY created_at DESC`
       );
-      return res.json({ tenants });
+
+      const enriched = await Promise.all(tenants.map(async (t) => {
+        if (t.status !== "active") return { ...t, last_login: null, revenue_this_month: 0, setup_complete: true };
+        const s = `tenant_${t.slug}`;
+        try {
+          const [loginR, revR, setupR] = await Promise.all([
+            db.query(`SELECT MAX(timestamp) AS ts FROM ${s}.action_history WHERE action_type = 'login'`),
+            db.query(`SELECT COALESCE(SUM(total_amount), 0)::numeric AS rev FROM ${s}.sales WHERE timestamp >= date_trunc('month', NOW())`),
+            db.query(`SELECT setup_complete FROM ${s}.company_profile WHERE id = 1`),
+          ]);
+          return {
+            ...t,
+            last_login: loginR.rows[0].ts || null,
+            revenue_this_month: Number(revR.rows[0].rev),
+            setup_complete: setupR.rows[0]?.setup_complete ?? true,
+          };
+        } catch {
+          return { ...t, last_login: null, revenue_this_month: 0, setup_complete: true };
+        }
+      }));
+
+      return res.json({ tenants: enriched });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -453,6 +474,66 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       );
 
       return res.json({ totals, recent_tenants: recentTenants, recent_audit: recentAudit });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/attention", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { rows: tenants } = await db.query(
+        "SELECT id, slug, name, plan, max_employees, max_products, max_outlets FROM tenants WHERE status = 'active'"
+      );
+
+      const approaching = [];
+      const dormant = [];
+      const setupPending = [];
+
+      for (const t of tenants) {
+        const s = `tenant_${t.slug}`;
+        try {
+          const [empR, prodR, outR, loginR, setupR] = await Promise.all([
+            db.query(`SELECT COUNT(*) AS cnt FROM ${s}.employees WHERE deleted_at IS NULL`),
+            db.query(`SELECT COUNT(*) AS cnt FROM ${s}.products WHERE deleted_at IS NULL`),
+            db.query(`SELECT COUNT(*) AS cnt FROM ${s}.outlets`),
+            db.query(`SELECT MAX(timestamp) AS ts FROM ${s}.action_history WHERE action_type = 'login'`),
+            db.query(`SELECT setup_complete FROM ${s}.company_profile WHERE id = 1`),
+          ]);
+
+          const emp = parseInt(empR.rows[0].cnt, 10);
+          const prod = parseInt(prodR.rows[0].cnt, 10);
+          const out = parseInt(outR.rows[0].cnt, 10);
+          const lastLogin = loginR.rows[0].ts;
+          const setupComplete = setupR.rows[0]?.setup_complete;
+
+          if (t.max_employees && emp / t.max_employees > 0.85) {
+            approaching.push({ id: t.id, slug: t.slug, name: t.name, dimension: "employees", used: emp, max: t.max_employees });
+          }
+          if (t.max_products && prod / t.max_products > 0.85) {
+            approaching.push({ id: t.id, slug: t.slug, name: t.name, dimension: "products", used: prod, max: t.max_products });
+          }
+          if (t.max_outlets && out / t.max_outlets > 0.85) {
+            approaching.push({ id: t.id, slug: t.slug, name: t.name, dimension: "outlets", used: out, max: t.max_outlets });
+          }
+
+          if (lastLogin) {
+            const daysSince = (Date.now() - new Date(lastLogin).getTime()) / 86400000;
+            if (daysSince >= 14) {
+              dormant.push({ id: t.id, slug: t.slug, name: t.name, last_login: lastLogin, days_inactive: Math.floor(daysSince) });
+            }
+          } else if (setupComplete) {
+            dormant.push({ id: t.id, slug: t.slug, name: t.name, last_login: null, days_inactive: null });
+          }
+
+          if (!setupComplete) {
+            setupPending.push({ id: t.id, slug: t.slug, name: t.name });
+          }
+        } catch {
+          // Skip tenants with missing schemas
+        }
+      }
+
+      return res.json({ approaching_limits: approaching, dormant, setup_pending: setupPending });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
