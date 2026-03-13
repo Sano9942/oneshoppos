@@ -17,6 +17,10 @@ tests/live/live-auth.json
 tests/live/live-token.json
 tests/live/state.json
 playwright-report-live/
+test-results/
+playwright.config.live.js
+.playwright-mcp/
+.last-run.json
 
 # Editor directories and files
 .vscode/*
