@@ -402,15 +402,30 @@ async function loadTenantAndPerms(req, res, next) {
  * Also sets req.tenantDir and req.tenantSlug for upload-aware route handlers.
  */
 async function resolveTenant(req, res, next) {
-  if (!IS_MULTI_TENANT || !req.tenantId) return next();
+  if (!IS_MULTI_TENANT) return next();
+
+  // For unauthenticated requests (no JWT → no tenantId), allow resolution via
+  // ?tenant=<slug> query param — used by kiosk and other pre-auth pages.
+  let resolvedTenantId = req.tenantId;
+  if (!resolvedTenantId && HAS_POSTGRES && req.query.tenant) {
+    try {
+      const masterMod = require("./master-db-pg");
+      const tenant = await masterMod.getTenantBySlug(req.query.tenant);
+      if (tenant) resolvedTenantId = tenant.id;
+    } catch {
+      // ignore — will fall through to next() below
+    }
+  }
+
+  if (!resolvedTenantId) return next();
 
   try {
-    const tenantDb = await tenantDbManager.getDb(req.tenantId);
+    const tenantDb = await tenantDbManager.getDb(resolvedTenantId);
 
     // Look up tenant slug for file paths
     const masterMod = HAS_POSTGRES ? require("./master-db-pg") : require("./master-db");
     const tenant = HAS_POSTGRES
-      ? await masterMod.getTenantById(req.tenantId)
+      ? await masterMod.getTenantById(resolvedTenantId)
       : await new Promise((resolve, reject) => {
           masterMod.getMasterDb().get("SELECT * FROM tenants WHERE id = ?", [req.tenantId], (err, row) => {
             if (err) return reject(err);
