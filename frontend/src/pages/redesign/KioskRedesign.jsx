@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { API_BASE } from "../../config";
-import { readContext } from "../../auth/authStore";
+import { readContext, readTenantSlug } from "../../auth/authStore";
 import { parseLocalDate, fmtLocalTime } from "../../utils/dates";
 
 const API = `${API_BASE}/api`;
@@ -62,9 +62,11 @@ export default function KioskRedesign() {
   }, []);
 
   useEffect(() => {
+    const tenantSlug = searchParams.get("tenant") || readTenantSlug();
+    const outletsUrl = tenantSlug ? `${API}/outlets?tenant=${tenantSlug}` : `${API}/outlets`;
     Promise.all([
-      fetch(`${API}/outlets`).then((r) => r.json()),
-      fetch(`${API}/feature-flags`).then((r) => r.json()).catch(() => ({ flags: [] })),
+      fetch(outletsUrl).then((r) => r.json()),
+      fetch(tenantSlug ? `${API}/feature-flags?tenant=${tenantSlug}` : `${API}/feature-flags`).then((r) => r.json()).catch(() => ({ flags: [] })),
     ]).then(([outData, flagsData]) => {
       const outList = outData.outlets || [];
       setOutlets(outList);

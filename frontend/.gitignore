@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Live test generated files
+tests/live/live-auth.json
+tests/live/live-token.json
+tests/live/state.json
+playwright-report-live/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
