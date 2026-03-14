@@ -145,64 +145,37 @@ module.exports = function registerOrderRoutes(app, deps) {
 
         await db.query("DELETE FROM product_media WHERE id = $1", [mediaId]);
 
+        // Clean up the underlying file (R2, local fallback, or legacy disk upload)
         const url = String(row.url || "");
-        if (url.startsWith("/uploads/products/")) {
-          const filename = path.basename(url);
-          // In multi-tenant mode, resolve from tenant's uploads directory
-          const uploadsDir = req.tenantDir
-            ? path.join(req.tenantDir, "uploads", "products")
-            : deps.PRODUCT_UPLOADS_DIR;
-          const filePath = path.join(uploadsDir, filename);
-          if (fs.existsSync(filePath)) {
-            try {
-              fs.unlinkSync(filePath);
-            } catch (_) {
-              /* ignore file cleanup errors */
-            }
+        try {
+          if (url.startsWith("/r2/")) {
+            // R2 proxy URL: /r2/products/filename.webp → key = "products/filename.webp"
+            const { deleteFromR2 } = require("../utils/r2");
+            await deleteFromR2(url.slice(4));
+          } else if (process.env.R2_PUBLIC_URL && url.startsWith(process.env.R2_PUBLIC_URL)) {
+            // R2 public CDN URL
+            const { deleteFromR2 } = require("../utils/r2");
+            const key = url.slice(process.env.R2_PUBLIC_URL.replace(/\/$/, "").length + 1);
+            await deleteFromR2(key);
+          } else if (url.startsWith("exports/")) {
+            // Local R2 fallback path
+            const localPath = path.join(__dirname, "..", url);
+            if (fs.existsSync(localPath)) fs.unlinkSync(localPath);
+          } else if (url.startsWith("/uploads/products/")) {
+            // Legacy local disk upload
+            const filename = path.basename(url);
+            const uploadsDir = req.tenantDir
+              ? path.join(req.tenantDir, "uploads", "products")
+              : deps.PRODUCT_UPLOADS_DIR;
+            const filePath = path.join(uploadsDir, filename);
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
           }
+        } catch (_) {
+          /* ignore file cleanup errors */
         }
         res.json({ deleted: true });
       } catch (err) {
         res.status(500).json({ error: err.message });
-      }
-    },
-  );
-
-  // Upload a product image file to R2 — resized to 800x800 WebP before upload
-  const { uploadToR2 } = require("../utils/r2");
-  const sharp = require("sharp");
-
-  const productImageUpload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB raw upload limit
-    fileFilter: (req, file, cb) => {
-      if (!file || !file.mimetype) return cb(new Error("Invalid file"));
-      if (!file.mimetype.startsWith("image/")) {
-        return cb(new Error("Only image uploads are allowed"));
-      }
-      cb(null, true);
-    },
-  });
-
-  app.post(
-    "/api/uploads/product-image",
-    requirePerm("manage_inventory"),
-    productImageUpload.single("image"),
-    async (req, res) => {
-      if (!req.file)
-        return res.status(400).json({ error: "No image uploaded" });
-      try {
-        // Resize to max 800x800, convert to WebP (~50-150KB output)
-        const resized = await sharp(req.file.buffer)
-          .resize(800, 800, { fit: "inside", withoutEnlargement: true })
-          .webp({ quality: 82 })
-          .toBuffer();
-        const filename = `product_${Date.now()}_${Math.round(Math.random() * 1e6)}.webp`;
-        const key = `products/${filename}`;
-        const url = await uploadToR2(resized, key, "image/webp");
-        res.json({ url, filename, original_name: req.file.originalname, size: resized.length });
-      } catch (err) {
-        res.status(500).json({ error: "Upload failed: " + err.message });
       }
     },
   );

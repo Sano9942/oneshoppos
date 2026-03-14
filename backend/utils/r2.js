@@ -11,7 +11,7 @@
  */
 const path = require("path");
 const fs = require("fs");
-const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 
 const accountId = process.env.R2_ACCOUNT_ID;
 const bucket = process.env.R2_BUCKET || "sanopos-uploads";
@@ -66,4 +66,16 @@ async function uploadToR2(buffer, key, contentType) {
   return `/r2/${key}`;
 }
 
-module.exports = { uploadToR2, r2, bucket };
+/**
+ * Delete an object from R2 by key.
+ * No-op when R2 credentials are not configured (local fallback files
+ * are left on disk — they'll be cleaned up by the local unlink path).
+ *
+ * @param {string} key - Object key, e.g. "products/product_123.webp"
+ */
+async function deleteFromR2(key) {
+  if (!r2) return;
+  await r2.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+}
+
+module.exports = { uploadToR2, deleteFromR2, r2, bucket };

@@ -888,23 +888,40 @@ module.exports = function registerProductRoutes(app, deps) {
     },
   );
 
-  // Upload a product image — returns { url: "/uploads/products/<filename>" }
+  // Upload a product image — resized to 800x800 WebP, uploaded to R2 (or local fallback)
+  const { uploadToR2 } = require("../utils/r2");
+  const sharp = require("sharp");
+
   const productImageUpload = multer({
-    storage: multer.diskStorage({
-      destination: (req, file, cb) => cb(null, PRODUCT_UPLOADS_DIR),
-      filename: (req, file, cb) =>
-        cb(null, Date.now() + require("path").extname(file.originalname)),
-    }),
+    storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      if (!file || !file.mimetype) return cb(new Error("Invalid file"));
+      if (!file.mimetype.startsWith("image/")) {
+        return cb(new Error("Only image uploads are allowed"));
+      }
+      cb(null, true);
+    },
   });
 
   app.post(
     "/api/uploads/product-image",
     requirePerm("manage_inventory"),
     productImageUpload.single("image"),
-    (req, res) => {
+    async (req, res) => {
       if (!req.file) return res.status(400).json({ error: "Image file is required" });
-      res.json({ url: `/uploads/products/${req.file.filename}` });
+      try {
+        const resized = await sharp(req.file.buffer)
+          .resize(800, 800, { fit: "inside", withoutEnlargement: true })
+          .webp({ quality: 82 })
+          .toBuffer();
+        const filename = `product_${Date.now()}_${Math.round(Math.random() * 1e6)}.webp`;
+        const key = `products/${filename}`;
+        const url = await uploadToR2(resized, key, "image/webp");
+        res.json({ url, filename, original_name: req.file.originalname, size: resized.length });
+      } catch (err) {
+        res.status(500).json({ error: "Upload failed: " + err.message });
+      }
     },
   );
 
