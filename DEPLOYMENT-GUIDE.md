@@ -4,22 +4,23 @@
 
 ```
 YOUR COMPUTER (Development)          INTERNET (Production)
-┌─────────────────────────┐         ┌──────────────────────────────┐
-│                         │         │                              │
-│  Frontend (localhost:   │         │  Vercel (oneshoppos.        │
-│    5173)                │         │    vercel.app)               │
-│    React app            │         │    Same React app            │
-│         │               │         │         │                    │
-│         ▼               │         │         ▼                    │
-│  Backend (localhost:    │  push   │  Railway (oneshoppos-        │
-│    5000)                │ ──────► │    production.up.railway.app)│
-│    Express server       │  code   │    Same Express server       │
-│         │               │  only   │         │                    │
-│         ▼               │         │         ▼                    │
-│  sanopos.db             │         │  /data/sanopos.db            │
-│  (YOUR local data)      │         │  (SEPARATE production data)  │
-│                         │         │                              │
-└─────────────────────────┘         └──────────────────────────────┘
+┌─────────────────────────┐         ┌──────────────────────────────────┐
+│                         │         │                                  │
+│  Frontend (localhost:   │         │  Vercel (sanopos.vercel.app)     │
+│    5173)                │         │    Same React app                │
+│    React app            │         │         │                        │
+│         │               │         │         ▼                        │
+│         ▼               │  push   │  Railway (oneshoppos-            │
+│  Backend (localhost:    │ ──────► │    production.up.railway.app)    │
+│    5000)                │  code   │    Same Express server           │
+│    Express server       │  only   │         │                        │
+│         │               │         │         ▼                        │
+│         ▼               │         │  Supabase Postgres               │
+│  Local Postgres or      │         │    public schema → master tables │
+│  SQLite fallback        │         │    tenant_<slug> schemas →       │
+│  (YOUR local data)      │         │    per-tenant business data      │
+│                         │         │                                  │
+└─────────────────────────┘         └──────────────────────────────────┘
 ```
 
 ## Key Concepts
@@ -29,7 +30,7 @@ YOUR COMPUTER (Development)          INTERNET (Production)
 | | Code | Data |
 |---|---|---|
 | **What** | Routes, UI, logic, migrations | Categories, products, sales, employees |
-| **Stored in** | GitHub repo | SQLite database files |
+| **Stored in** | GitHub repo | Supabase Postgres (production) |
 | **Deployed by** | `git push` | NOT deployed — each environment has its own DB |
 | **Shared?** | Yes — same everywhere | No — local and production are separate |
 
@@ -47,7 +48,7 @@ This is the most important section. When you make a change, ask yourself which r
 |---|---|---|---|
 | Fix a bug in a route/component | `git push` | No (code only) | No |
 | Add a new UI page or component | `git push` | No (code only) | No |
-| Add a new DB column (migration) | Write `migrateN.js` + add to `run_migrations.js` + `git push` | **Yes — on next Railway restart** | Only if you run the migration locally too |
+| Add a new DB column (migration) | Update `schema-pg.sql` + write Postgres migration + `git push` | **Yes — on next Railway restart** | Only if you run the migration locally too |
 | Add products/categories/employees | Use the app UI | No | Yes (local only) |
 | Fix a data problem (wrong records) | Run a script against the target DB | Only if you run it on Railway | Only if you run it locally |
 | Change an environment variable | Change it in Railway/Vercel dashboard | Yes — takes effect on next deploy | No — edit your local `.env` file |
@@ -56,27 +57,32 @@ This is the most important section. When you make a change, ask yourself which r
 
 ---
 
-### 2. Three Databases
+### 2. Databases
 
 | Database | Location | Purpose |
 |---|---|---|
-| `backend/sanopos.db` | Your computer | Local development & testing |
-| `/data/sanopos.db` | Railway volume | Production (live app) |
-| `backend/master.db` | Your computer | Super-admin & tenant registry (SaaS mode only) |
+| Supabase Postgres `public` schema | Supabase cloud (ap-southeast-1) | Master tables — tenant registry, super-admins, audit log, schema_migrations |
+| Supabase Postgres `tenant_<slug>` schema | Same Supabase instance | Per-tenant business data — fully isolated per customer |
+| Local Postgres (docker-compose) or SQLite fallback | Your computer | Local development & testing |
 
 These are completely independent. Adding a category locally does NOT add it to production.
+
+**The `public` schema contains only 6 master tables:**
+`tenants`, `super_admins`, `tenant_audit_log`, `schema_migrations`, `tenant_refresh_tokens`, `company_profile`
+
+**Each tenant gets their own schema** (e.g. `tenant_packagesmall`) with the full set of business tables. One tenant can never see another's data.
 
 ### 3. Vercel vs Railway
 
 | | Vercel | Railway |
 |---|---|---|
 | **Hosts** | Frontend (React app) | Backend (Express server) |
-| **Database** | None | sanopos.db on a persistent volume |
-| **URL** | oneshoppos.vercel.app | oneshoppos-production.up.railway.app |
+| **Database** | None | Connects to Supabase Postgres via `DATABASE_URL` |
+| **URL** | sanopos.vercel.app | oneshoppos-production.up.railway.app |
 | **Auto-deploys** | Yes, on git push | Yes, on git push |
 | **What it does** | Serves the UI to browsers | Handles API requests, reads/writes DB |
 
-Vercel is just a screen. Railway is the brain + memory.
+Vercel is just a screen. Railway is the brain. Supabase is the memory.
 
 ### 4. Cloudflare R2 (File Storage)
 
@@ -98,76 +104,127 @@ R2 is Cloudflare's file storage (like AWS S3). Unlike the database, **R2 is shar
 
 Migrations create/modify **database structure** (tables, columns), NOT data.
 
-### How migrations work
+### How Postgres migrations work
 
-1. You write `backend/migrateN.js` (replace N with the next number)
-2. **You must also add it to `backend/run_migrations.js`** — if you forget this, Railway never runs it
-3. `git push` — Railway restarts, `start.sh` calls `run_migrations.js`, new migration runs
-4. Locally, run it manually: `cd backend && node migrateN.js`
+1. Update `backend/schema-pg.sql` with the structural changes
+2. `backend/migrate-pg.js` is the version-tracked migration runner — it reads from the `schema_migrations` table to know what has already run
+3. `git push` — Railway restarts, `start.sh` detects `DATABASE_URL` and runs `migrate-pg.js` automatically
+4. Locally, run it manually: `cd backend && node migrate-pg.js`
 
-### Important: always register new migrations
+### The two migration systems
 
-```js
-// backend/run_migrations.js — add your new file at the bottom of the array
-const migrations = [
-  ...
-  "migrate68.js",
-  "migrate69.js",   // ← add here
-  "migrate70.js",   // ← and here
-];
-```
+| System | File | When used |
+|---|---|---|
+| **Postgres** (production) | `backend/migrate-pg.js` | Active — used on Railway (has `DATABASE_URL`) |
+| **SQLite** (legacy) | `backend/run_migrations.js` + `backend/migrate*.js` files | Legacy only — local fallback if no `DATABASE_URL` |
 
-Forgetting to add it = the column/table never gets created on Railway = API errors on production.
+`start.sh` automatically detects which system to use based on whether `DATABASE_URL` is set.
+
+### Latest schema
+
+The canonical schema is `backend/schema-pg.sql`. For individual migration history, check `backend/migrate74.js` (the highest-numbered SQLite migration, for reference) or the `schema_migrations` table in Supabase.
 
 ### Migrations are idempotent
 
-Safe to run multiple times. They use `IF NOT EXISTS` and `ADD COLUMN` with duplicate-column checks, so re-running them won't break anything.
-
-### Latest migration
-
-Always check `backend/migrate70.js` (or the highest number) for the current DB schema.
+Safe to run multiple times. They use `IF NOT EXISTS` and `ON CONFLICT DO NOTHING`, so re-running them won't break anything.
 
 ---
 
-## Single-Tenant vs Multi-Tenant
+## Multi-Tenant Mode — LIVE (Mar 13 2026)
 
-### Current mode: Single-Tenant (`MULTI_TENANT=0`)
+**`MULTI_TENANT=1` is active on both Railway and Vercel.** This is the only supported production mode.
 
-- **One shop**, one database (`sanopos.db`)
-- Login with username + PIN (no store code)
-- All users share the same data
-- Can have multiple outlets/branches within that one shop
-- Railway env: `MULTI_TENANT=0` (or unset)
+### What multi-tenant means
 
-### Future mode: Multi-Tenant (`MULTI_TENANT=1`)
+- **Every customer gets their own isolated Postgres schema** (`tenant_packagesmall`, `tenant_acme`, etc.)
+- **Login requires a Store Code** (slug) in addition to username + PIN
+- **Super-admin dashboard** at `/admin` manages all tenants
+- **Plan limits** enforced per tenant (`max_employees`, `max_products`, `max_outlets`)
 
-- **Unlimited shops**, each with its own isolated database
-- Login with username + PIN + **Store Code**
-- Each shop's data is at `/data/tenants/<slug>/sanopos.db`
-- Super-admin dashboard at `/admin` to manage all shops
-- Plan limits (max employees/products/outlets per shop)
+### How requests are routed to the right tenant
 
-### The MULTI_TENANT flag is a runtime switch, NOT separate codebases
+```
+Request from "packagesmall" customer
+    │
+    ▼
+loadTenantAndPerms  →  verify JWT, extract tenant_id
+    │
+    ▼
+resolveTenant  →  look up Supabase public.tenants → get tenant slug
+    │
+    ▼
+tenant-db-proxy-pg.js (AsyncLocalStorage)
+    →  SET search_path TO tenant_packagesmall
+    │
+    ▼
+Route handler  →  calls db.query() → hits tenant_packagesmall schema
+```
 
-The same code runs in both modes. Setting `MULTI_TENANT=1` just activates different middleware paths:
+Each tenant's data is completely isolated — one customer can never see another's data.
 
-| What changes | Single-tenant | Multi-tenant |
-|---|---|---|
-| Auth | Session-based (cookie) | JWT Bearer token |
-| DB routing | Direct `sanopos.db` | Per-request via AsyncLocalStorage → tenant DB |
-| Login form | Username + PIN | Username + PIN + Store Code |
-| DB file location | `backend/sanopos.db` | `/data/tenants/<slug>/sanopos.db` |
+### The MULTI_TENANT flag
 
-**All bug fixes and features you push apply to BOTH modes.** The flag only controls which auth/DB path activates at runtime.
+The same codebase runs in multi-tenant mode. The flag controls which middleware paths activate:
 
-### DO NOT flip MULTI_TENANT=1 without a proper cutover
+| What changes | Multi-tenant (production) |
+|---|---|
+| Auth | JWT Bearer token (access + httpOnly refresh cookie) |
+| DB routing | Per-request via AsyncLocalStorage → SET search_path → tenant schema |
+| Login form | Username + PIN + Store Code |
+| Admin panel | `/admin/*` — separate JWT, separate auth session |
 
-Flipping it on Railway right now would break everything immediately:
-1. Your existing data is at `/data/sanopos.db` — multi-tenant looks in `/data/tenants/<slug>/sanopos.db`
-2. No tenant is registered in `master.db` — every request would fail with "Tenant not found"
-3. The frontend build on Vercel has `VITE_MULTI_TENANT=false` baked in — login form won't show Store Code field
+### Railway environment variables (required)
 
-To switch properly you need to: provision a tenant, migrate existing data into the tenant directory, set JWT secrets, rebuild frontend with `VITE_MULTI_TENANT=1`, then flip the flag.
+```
+MULTI_TENANT=1
+DATABASE_URL=<supabase postgres connection string>
+JWT_SECRET=<64-byte hex>
+JWT_REFRESH_SECRET=<64-byte hex>
+CORS_ORIGIN=https://sanopos.vercel.app
+TZ=Asia/Karachi
+```
+
+### Vercel environment variables (required)
+
+```
+VITE_MULTI_TENANT=1
+VITE_API_BASE=https://oneshoppos-production.up.railway.app
+```
+
+---
+
+## Provisioning a New Tenant
+
+When a new customer signs up, here is what happens:
+
+### Option A — Super-admin dashboard (preferred)
+
+1. Log in to `https://sanopos.vercel.app/admin`
+2. Click "Provision New Tenant" — enter slug (only `[a-z0-9_]` allowed, **no hyphens**), company name, plan
+3. Dashboard shows the setup URL — send it to the customer
+4. Customer completes the 4-step setup wizard (store info, timezone/currency, outlet, admin account)
+
+### Option B — Railway CLI
+
+```bash
+railway run node backend/tenant-provisioner-pg.js --slug acme --name "Acme Store" --plan starter
+```
+
+### What provisioning does
+
+1. **Creates a Postgres schema**: `CREATE SCHEMA tenant_acme`
+2. **Runs `schema-pg.sql`** into that schema — full table set, always on latest schema
+3. **Seeds default data**: roles, permissions, feature flags
+4. **Registers in `public.tenants`**: slug, company name, plan limits, created date
+5. **Generates a setup token**: one-time token for the customer to complete the setup wizard
+
+From that point on, every API request from that tenant is automatically routed to `tenant_acme` schema via `SET search_path`.
+
+### Seeding a super-admin (first time only)
+
+```bash
+railway run node backend/seed-admin-pg.js --email admin@example.com --password <password> --name "Admin Name"
+```
 
 ---
 
@@ -177,27 +234,33 @@ To switch properly you need to: provision a tenant, migrate existing data into t
 → `git push` — both Vercel and Railway auto-deploy
 
 ### "I added a new database column (migration)"
-→ Write `migrateN.js`, add it to `run_migrations.js`, then `git push`
-→ Railway runs it automatically on next startup
-→ Run it locally too: `cd backend && node migrateN.js`
+→ Update `backend/schema-pg.sql` with the new column
+→ Add a migration entry to `backend/migrate-pg.js`
+→ `git push` — Railway runs it automatically on next startup
+→ Run locally too: `cd backend && node migrate-pg.js`
 
 ### "I fixed a data problem locally (bad records, stale data)"
 → The fix only applies to your local DB
 → If production has the same bad data, you need to either:
   - Write a migration that cleans it up (runs on Railway automatically), or
-  - Run a fix script directly against production (connect to Railway shell)
-
-### "I added categories/products locally and want them on production"
-→ Upload your local `sanopos.db` to Railway's volume (replaces ALL production data — be careful)
+  - Run a fix script via Railway shell: `railway run node scripts/fix-something.js`
 
 ### "I want to add data to the live app"
-→ Use the live app directly at oneshoppos.vercel.app — enter data through the UI
+→ Use the live app directly at sanopos.vercel.app — enter data through the UI
 
 ### "The live app shows an error"
 → Check Railway logs in the Railway dashboard
 
-### "I want to start fresh on production"
-→ Delete Railway volume, recreate it, redeploy — DB will be recreated from migrations
+### "I need to run a one-off script against production"
+→ `railway run node backend/scripts/your-script.js`
+
+### "A tenant needs their admin PIN reset"
+→ Super-admin dashboard → Tenant Detail → Reset PIN
+
+### "I want to check tenant health / usage"
+→ Super-admin dashboard → Tenant List (health dots, revenue, last activity)
+→ Tenant Detail → Activity + Plan Usage + Storage sections
+→ Dashboard → "Needs Attention" card (approaching limits, dormant, setup pending)
 
 ---
 
@@ -205,24 +268,34 @@ To switch properly you need to: provision a tenant, migrate existing data into t
 
 ### attendance_sessions and employee_attendance store LOCAL time
 All other tables (sales, returns, shifts) store UTC. But `attendance_sessions.session_start`
-and `employee_attendance.check_in` default to `datetime('now','localtime')` — already local.
+and `employee_attendance.check_in` default to `NOW()` on the server's local clock (Railway `TZ=Asia/Karachi`).
 
-**Never write** `date(session_start, 'localtime')` in queries — that applies a UTC→local
-conversion on a value that is already local, shifting dates forward by your UTC offset.
-Always write `date(session_start)` with no modifier.
+**In queries**, always use `col::date` with NO timezone conversion. Writing `AT TIME ZONE` on an already-local value shifts dates forward by your UTC offset.
+Always write `date(session_start)` (SQLite) or `session_start::date` (Postgres) with no modifier.
 
 ### All other timestamps are UTC
-`sales.timestamp`, `returns.timestamp`, `cash_shifts.*` are all UTC via `CURRENT_TIMESTAMP`.
+`sales.timestamp`, `returns.timestamp`, `cash_shifts.*` are all UTC via `CURRENT_TIMESTAMP` / `NOW()`.
 Use `backend/utils/tz.js` → `toUtcStart(dateStr, tz)` / `toUtcEnd(dateStr, tz)` for date filters.
-Never use `date(col, 'localtime')` on these columns.
 
-### Railway volume must be created manually
-`railway.toml` alone does NOT provision the volume. You must go to Railway UI → project canvas
-→ Add → Volume → mount at `/data`. Without this, the DB file is lost on every redeploy.
+### Frontend timestamp display
+- **UTC columns** (sales, returns, cash_shifts, stock_adjustments, transfers, action_history): use `fmtUtcDateTime` / `fmtUtcDate` / `fmtUtcTime` from `frontend/src/utils/dates.js`
+- **LOCAL columns** (attendance, expenses, GRN, parked_sales): use `fmtLocalDateTime` / `fmtLocalDate` / `fmtLocalTime` from `frontend/src/utils/dates.js`
+- **NEVER** use raw `new Date(dt)` on any DB value — SQLite/Postgres timestamp strings without a `Z` suffix are parsed as local time by Chrome, causing wrong display
 
-### The two DB name symlinks (oneshop.db / sanopos.db)
-Old migrations hardcoded `oneshop.db`. `start.sh` symlinks both names to `/data/sanopos.db`
-so both point to the same physical file. Locally only `sanopos.db` exists — the old name is gone.
+### Slug validation — no hyphens
+Tenant slugs must match `[a-z0-9_]` only. Hyphens are NOT allowed because slugs become Postgres schema names (`tenant_<slug>`) and Postgres schema names cannot contain hyphens without quoting everywhere.
+
+### Postgres NUMERIC returns strings
+Postgres `NUMERIC`/`DECIMAL` columns return JS strings. Always wrap with `Number()` before arithmetic (e.g. gift card `remaining_value`, prices, totals).
+
+### Postgres booleans are strict
+Boolean columns (`is_active`, `voided`, `show_barcode`, etc.) require `= true` / `= false`. Never use `= 1` / `= 0`.
+
+### dotenv must load before boot guard
+`require("dotenv").config(...)` is line 1 of `index.js` — before the conditional `require("./db-pg")` on line 5. Without this, `DATABASE_URL` isn't in `process.env` yet and the app falls back to SQLite.
+
+### Railway volume (SQLite legacy)
+If you ever need to run in SQLite fallback mode locally, `railway.toml` alone does NOT provision a volume. You must go to Railway UI → project canvas → Add → Volume → mount at `/data`. (Not needed for Postgres production mode.)
 
 ---
 
@@ -230,13 +303,21 @@ so both point to the same physical file. Locally only `sanopos.db` exists — th
 
 | File | What it does |
 |---|---|
-| `backend/index.js` | Main server — starts Express, connects to DB |
-| `backend/start.sh` | Production startup — symlinks DB, runs migrations, starts server |
-| `backend/run_migrations.js` | Runs all migration files in order — **must register new migrations here** |
-| `backend/sanopos.db` | Local SQLite database (YOUR data) |
-| `backend/master.db` | Super-admin database (multi-tenant mode only) |
-| `frontend/.env.production` | Vercel config — sets API URL, MULTI_TENANT flag |
-| `backend/.env.example` | Template for backend environment variables |
+| `backend/index.js` | Main server — loads dotenv, boots db-pg or db based on DATABASE_URL, mounts middleware + routes |
+| `backend/db-pg.js` | Postgres pool wrapper — `query()`, `transaction()`, `getPool()` |
+| `backend/schema-pg.sql` | Full DDL for all tables + indexes + seed data — canonical schema reference |
+| `backend/migrate-pg.js` | Version-tracked Postgres migration runner — reads `schema_migrations` table |
+| `backend/master-db-pg.js` | Master DB wrapper — tenant registry in `public` schema |
+| `backend/tenant-db-manager-pg.js` | Shared pg.Pool + `SET search_path TO tenant_<slug>` per request, 60s tenant cache |
+| `backend/tenant-db-proxy-pg.js` | AsyncLocalStorage proxy — transparently routes `db.query()` to current tenant schema |
+| `backend/tenant-provisioner-pg.js` | CLI — provisions new tenant (schema, seed data, master DB registration, setup token) |
+| `backend/seed-admin-pg.js` | CLI — creates first super-admin in Postgres |
+| `backend/cleanup-public-schema.js` | One-time script — dropped 89 stale single-tenant tables (already run Mar 13 2026) |
+| `backend/start.sh` | Production startup — detects DATABASE_URL, runs migrate-pg.js or run_migrations.js, starts server |
+| `backend/run_migrations.js` | SQLite legacy migration runner — only runs when DATABASE_URL is not set |
+| `frontend/.env.production` | Vercel config — sets VITE_API_BASE (Railway URL) and VITE_MULTI_TENANT=1 |
+| `frontend/.env.development` | Local dev config — sets VITE_API_BASE to localhost:5000 |
+| `backend/.env.example` | Template for all backend environment variables |
 | `railway.toml` | Railway build/deploy config |
 
 ---
@@ -248,10 +329,10 @@ Think of it like a restaurant franchise:
 - **Code** = the recipe book (same for every restaurant, updated by `git push`)
 - **Data** = the actual food, customers, and sales (different at each location, never synced)
 - **Migrations** = adding a new section to the recipe book (structure change, applied everywhere on next startup)
-- **Single-tenant** = one restaurant
-- **Multi-tenant** = a franchise with many restaurants, each independent
+- **Multi-tenant** = a franchise with many restaurants, each with their own section of the kitchen (Postgres schemas)
 - **`git push`** = sending updated recipes to all locations
-- **Uploading the DB** = physically moving all the food and records from one location to another
+- **Provisioning a tenant** = opening a new franchise location (schema + seed data + registration)
+- **`SET search_path`** = walking into the right restaurant's kitchen for each order
 
 ---
 
@@ -263,7 +344,7 @@ Think of it like a restaurant franchise:
 Your laptop
 ├── frontend/    ← React app, Vite dev server at localhost:5173
 ├── backend/     ← Express server at localhost:5000
-└── backend/sanopos.db  ← YOUR local database (test data, not real)
+└── Local Postgres (docker-compose) or SQLite fallback (YOUR local database)
 ```
 
 You make changes — fix a bug, add a feature, add a new DB column.
@@ -281,12 +362,11 @@ git push
 
 **What goes up:**
 - All `.js`, `.jsx`, `.json`, `.css`, `.md` files you changed
-- Migration files (e.g. `backend/migrate71.js`) — the *instructions* for schema changes
-- `run_migrations.js` — the list that tells Railway which migrations to run
+- `backend/schema-pg.sql` (schema changes)
+- `backend/migrate-pg.js` (migration runner updates)
 
 **What NEVER goes up:**
-- `backend/sanopos.db` — gitignored, your local data stays local
-- `backend/master.db` — gitignored
+- Your local database — gitignored, your local data stays local
 - `backend/.env` — gitignored, your JWT secrets and ports stay local
 - `backend/uploads/` — gitignored
 - `backend/exports/` — gitignored
@@ -300,18 +380,18 @@ Railway detects the push automatically and:
 1. Pulls the new code from GitHub
 2. Runs `npm install` (installs any new packages)
 3. Runs `start.sh` which does:
-   - Symlinks `/app/sanopos.db` and `/app/oneshop.db` → `/data/sanopos.db` (the volume)
-   - Runs `node run_migrations.js` — applies any new migration files against Railway's DB
+   - Detects `DATABASE_URL` is set → runs `node migrate-pg.js`
+   - `migrate-pg.js` checks `schema_migrations` table, runs any new migrations against Supabase
    - Starts the Express server
 
-**What changes in Railway's DB after a migration:**
+**What changes in Supabase after a migration:**
 - New tables are created (`IF NOT EXISTS` — safe if they already exist)
 - New columns are added (`ADD COLUMN IF NOT EXISTS` — safe to re-run)
 - No data is touched — migrations only change structure, never rows
 
-**What does NOT change in Railway's DB:**
+**What does NOT change in Supabase:**
 - Existing rows (products, employees, sales, feature flags, outlets, etc.)
-- Any data you entered directly through the live app
+- Any data entered directly through the live app
 
 ---
 
@@ -320,7 +400,7 @@ Railway detects the push automatically and:
 Vercel detects the same push and:
 
 1. Runs `npm run build` inside `frontend/`
-2. Reads `frontend/.env.production` — this bakes `VITE_API_BASE` (Railway URL) into the build
+2. Reads `frontend/.env.production` — this bakes `VITE_API_BASE` (Railway URL) and `VITE_MULTI_TENANT=1` into the build
 3. Serves the compiled static files globally via CDN
 
 The frontend build is a snapshot — environment variables are burned in at build time, not runtime.
@@ -334,80 +414,83 @@ The frontend build is a snapshot — environment variables are burned in at buil
 | New feature flag row in DB | No | Add it through the app UI on live, or write a migration that inserts it |
 | New outlet/branch | No | Add it through the live app UI |
 | New employee | No | Add it through the live app UI |
-| Products, categories | No | Add through live app UI, or upload your local DB (replaces all production data) |
-| Fixed bad data rows locally | No | Write a migration or run a fix script on Railway shell |
+| Products, categories | No | Add through live app UI |
+| Fixed bad data rows locally | No | Write a migration or run a fix script via `railway run` |
 | `backend/.env` changes | No | Update environment variables in Railway dashboard |
 
 ---
 
-### Stage 6: How a customer gets their own database (Multi-Tenant mode)
+### Stage 6: How a customer gets their own database (Multi-Tenant)
 
-This is the SaaS path — currently built but not activated on Railway (`MULTI_TENANT=0`).
+Multi-tenant is **active on production** (`MULTI_TENANT=1`). Here is the provisioning flow:
 
-When a new customer signs up, here is what happens:
+**Via super-admin dashboard (preferred):**
+1. Log in to `/admin`
+2. Fill in tenant slug (e.g. `acme`), company name, plan
+3. Click "Provision" — backend runs provisioner automatically
+4. Copy the setup URL and send it to the customer
+
+**What the provisioner does:**
 
 ```
-Super-Admin runs: node tenant-provisioner.js --slug acme --name "Acme Store" --plan starter
+POST /api/admin/tenants  (super-admin API)
+    │
+    ▼
+tenant-provisioner-pg.js
+    │
+    ├── CREATE SCHEMA tenant_acme
+    ├── Run schema-pg.sql into tenant_acme (full table set, latest schema)
+    ├── Seed default roles, permissions, feature flags
+    ├── INSERT INTO public.tenants (slug, name, plan, ...)
+    └── Generate setup_token → store in tenant_acme.company_profile
 ```
-
-The provisioner does this automatically:
-
-1. **Creates a directory**: `/data/tenants/acme/`
-2. **Creates a fresh database**: `/data/tenants/acme/sanopos.db`
-   - Schema is extracted from the live `sanopos.db` via `backend/schema-full.js` (reads `sqlite_master`)
-   - This means the new tenant DB always has the latest schema — no migrations needed
-3. **Seeds default data**: inserts default roles, permissions, feature flags into their DB
-4. **Registers in master.db**: adds a row to the `tenants` table in `backend/master.db`
-   - Stores: slug, company name, plan, DB path, created date
 
 From that point on, every API request from that customer:
-
-1. Frontend sends `Authorization: Bearer <JWT>` — the JWT contains the tenant slug
-2. `loadTenantAndPerms` middleware verifies the JWT, extracts the slug
-3. `resolveTenant` middleware looks up the slug in `master.db`, gets the DB path
-4. Sets the AsyncLocalStorage context to that tenant's DB connection
-5. All route handlers transparently read/write that tenant's DB — no code changes needed
 
 ```
 Request from "acme" customer
     │
     ▼
-loadTenantAndPerms  →  verify JWT, extract slug="acme"
+loadTenantAndPerms  →  verify JWT Bearer token, extract tenant_id
     │
     ▼
-resolveTenant  →  look up master.db → path="/data/tenants/acme/sanopos.db"
+resolveTenant  →  look up public.tenants → get tenant slug = "acme"
     │
     ▼
-AsyncLocalStorage  →  set db context = acme's connection pool
+tenant-db-proxy-pg.js (AsyncLocalStorage)
+    →  SET search_path TO tenant_acme
     │
     ▼
-Route handler  →  calls db.get() / db.run() → hits /data/tenants/acme/sanopos.db
+Route handler  →  calls db.query() → reads/writes tenant_acme schema
 ```
-
-Each customer's data is completely isolated — one customer can never see another's data.
 
 ---
 
 ### Full Cycle Summary (one diagram)
 
 ```
-YOUR LAPTOP                     GITHUB                    RAILWAY                   CUSTOMER
-─────────────────               ──────                    ───────                   ────────
+YOUR LAPTOP                     GITHUB                    RAILWAY + SUPABASE        CUSTOMER
+─────────────────               ──────                    ──────────────────────    ────────
 Write code          git push →  Stores code  auto-deploy→ Pulls code
 Fix bug                                                    npm install
-Add migration                                              run_migrations.js
-                                                           ↓
-                                                           Railway DB schema updated
+Add migration                                              migrate-pg.js
+(schema-pg.sql)                                            ↓
+                                                           Supabase schema updated
                                                            (structure only, no data)
                                                            ↓
                                                            Express server running
-                                                                                    Signs up
-                                                           tenant-provisioner.js  ←
+                                                                                    New customer
+                                                           POST /api/admin/tenants ←
                                                            ↓
-                                                           /data/tenants/slug/sanopos.db created
-                                                           master.db row inserted
-                                                                                    Logs in
-                                                           JWT issued with slug    ←
-                                                           resolveTenant routes    →
-                                                           to their DB                Their data
+                                                           CREATE SCHEMA tenant_acme
+                                                           Schema + seed data loaded
+                                                           Setup token generated
+                                                                                    Setup wizard
+                                                           Setup wizard completes  ←
+                                                           (store info, outlet,
+                                                            admin account created)
+                                                                                    Logs in daily
+                                                           JWT issued with tenant  →
+                                                           SET search_path = acme  →
+                                                           Routes to their schema     Their data
 ```

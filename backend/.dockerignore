@@ -1,12 +1,52 @@
+# Dependencies (rebuilt in Docker)
 node_modules
+
+# Database files
 *.db
 *.db-shm
 *.db-wal
+*.db-journal
+
+# Data directories
 tenants/
 backups/
 uploads/
+uploads_test/
+uploads_tmp/
+exports/
+archive/
+
+# Environment (injected at runtime)
 .env
 .env.*
 !.env.example
 !.env.shopify.example
+
+# Tests (not needed in production image)
 tests/
+vitest.config.js
+
+# Legacy SQLite files (production is Postgres-only)
+db.js
+run_migrations.js
+migrate.js
+migrate[0-9].js
+migrate[0-9][0-9].js
+master-db.js
+tenant-db-manager.js
+tenant-db-proxy.js
+tenant-provisioner.js
+tenant-migrate.js
+schema-full.js
+seed-admin.js
+cleanup-public-schema.js
+seed_e2e.js
+seed-60days.js
+
+# Documentation
+*.md
+_endpoint_list.txt
+
+# Git
+.git
+.gitignore

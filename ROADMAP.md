@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-*Last updated: March 14 2026 — **LIVE E2E TEST SUITE COMPLETE.** 20 Playwright specs (00–19) run against production (`sanopos.vercel.app`, tenant `packagesmall`). All ~120 individual tests passed. System confirmed production-ready for onboarding real customers.*
+_Last updated: March 14 2026 — **LIVE E2E TEST SUITE COMPLETE.** 20 Playwright specs (00–19) run against production (`sanopos.vercel.app`, tenant `packagesmall`). All ~120 individual tests passed. System confirmed production-ready for onboarding real customers._
 
 ---
 
@@ -43,11 +43,13 @@ This file tracks everything we want to build, fix, or improve for SanoPOS.
 ## ✅ Roadmap Phase 2 — All 25 Items Complete (Mar 9 2026)
 
 ### 🔴 High Priority (all done)
+
 - **#1 Loyalty & Wallet Frontend** — POS checkout shows points + wallet balance, redeem toggle, Customers loyalty/wallet tab
 - **#2 Security Fixes** — SEC6 (x-employee-id header injection) + SEC8 (feature-flags requires auth) — all 8 security tests pass
 - **#3 Reorder Alerts Page** — sidebar entry under Stock Control, lists products with <14 days stock, Create PO button
 
 ### 🟡 Medium Priority (all done)
+
 - **#4 Accounting Cashflow + AP/AR** — `Accounting.jsx` Cashflow + AP/AR tabs now fetch from live backend endpoints
 - **#5 HR Leave Balance + Payroll Lines** — `HRManagementRedesign.jsx` Leave Balance + Payroll tabs wired to live endpoints
 - **#6 FBR Integration** — placeholder comment added, deferred for future implementation
@@ -57,6 +59,7 @@ This file tracks everything we want to build, fix, or improve for SanoPOS.
 - **#10 Quotations Email Send** — `POST /api/quotations/:id/send` backend + Send button in UI using nodemailer
 
 ### 🟢 Low Priority (all done)
+
 - **#11 Parked Sales Management Page** — standalone admin page at `/parked-sales`, view/delete across outlets
 - **#12 Stock Adjustments Delete** — admin delete action with confirmation
 - **#13 Transfers Reverse** — Reverse Transfer action moves stock back
@@ -90,14 +93,15 @@ This file tracks everything we want to build, fix, or improve for SanoPOS.
 
 ## 🔵 Competitor Gap Analysis (vs XStak ShopDesk)
 
-| Feature | Priority | Status |
-|---------|----------|--------|
-| FBR e-invoicing | 🔴 High | Placeholder added, deferred |
-| Advance/layaway payments | 🟡 Medium | Deferred |
-| Serial number per sale | 🟢 Low | Built (Mar 9 2026) |
-| Shopcast digital signage | 🟢 Low | Not built |
+| Feature                  | Priority  | Status                      |
+| ------------------------ | --------- | --------------------------- |
+| FBR e-invoicing          | 🔴 High   | Placeholder added, deferred |
+| Advance/layaway payments | 🟡 Medium | Deferred                    |
+| Serial number per sale   | 🟢 Low    | Built (Mar 9 2026)          |
+| Shopcast digital signage | 🟢 Low    | Not built                   |
 
 **We have that XStak doesn't:**
+
 - Supplier Payables with aging + ledger
 - Multi-level Approvals workflow
 - Attendance + Kiosk terminal
@@ -118,12 +122,14 @@ This file tracks everything we want to build, fix, or improve for SanoPOS.
 **Database:** Same Supabase Postgres instance. `public` schema = 6 master tables. `tenant_<slug>` schemas = per-tenant business data.
 
 **Go-live completed Mar 13 2026:**
+
 - 10 plan tasks executed (master-db-pg init, auth.js tenant DB resolution, loadCompanyProfile dynamic DB, plan-limits Postgres conversion, currency endpoint MT, seed-admin-pg, cleanup-public-schema, frontend env flip, smoke test, deploy)
 - 3 bonus fixes (slug validation — no hyphens, Invalid Date in admin pages, public schema cleanup — 89 tables dropped)
 - 4 production issues discovered and fixed during deployment (ALS proxy on health check, health endpoint ordering, provisioner token ON CONFLICT, setup wizard duplicate employee)
 - First tenant: `packagesmall` (Packages Mall) — provisioned, setup wizard completed, POS login verified
 
 All previous blockers resolved:
+
 1. ~~Timezone Phase 2~~ — Resolved by Postgres migration
 2. ~~Tenant isolation testing~~ — 7 integration tests
 3. ~~Tenant onboarding flow~~ — Admin API setup URLs
@@ -144,6 +150,7 @@ All previous blockers resolved:
 **When to build:** After `MULTI_TENANT=1` is live and you have 5+ tenants requesting branded URLs.
 
 **Approach:** Subdomain-based (`aces-hardware.sanopos.com`)
+
 - Wildcard DNS: `*.sanopos.com` → Cloudflare (free)
 - Wildcard SSL: Cloudflare auto-cert (free)
 - Vercel: Needs Pro plan ($20/mo) or Cloudflare proxy
@@ -164,22 +171,24 @@ All previous blockers resolved:
 **Production:** Railway backend now runs on Supabase Postgres (ap-southeast-1). Fresh DB created via setup wizard.
 
 ### What Was Done
+
 - **Batches 1-9**: All backend route files converted from SQLite callbacks (`db.run/get/all`) to Postgres async/await (`db.query()` with `$1,$2` params). 340/340 pg tests passing.
 - **Pre-merge tasks**: `migrate-pg.js` (migration runner), `scripts/sqlite-to-pg.js` (data migration), `tenant-db-manager-pg.js` + `tenant-db-proxy-pg.js` (MT Postgres infra), boolean audit across all files.
 - **Boot guard**: `index.js` conditionally loads `db-pg` or `db` based on `DATABASE_URL`. `dotenv` loaded first (line 1) to ensure env vars are available.
 - **Cutover**: `DATABASE_URL` set on Railway, `DATA_DIR` removed. Setup wizard created store, outlet, admin account.
 
 ### Key New Files
-| File | Purpose |
-|------|---------|
-| `backend/db-pg.js` | pg.Pool wrapper — `query()`, `transaction()`, `getClient()` |
-| `backend/schema-pg.sql` | Full DDL + seed data + schema_version table |
-| `backend/migrate-pg.js` | Version-tracked migration runner |
-| `backend/scripts/sqlite-to-pg.js` | One-time SQLite→Postgres data migration |
-| `backend/tenant-db-manager-pg.js` | Schema-switching multi-tenant |
-| `backend/tenant-db-proxy-pg.js` | AsyncLocalStorage proxy for per-request DB routing |
-| `backend/master-db-pg.js` | Postgres master DB for tenant registry |
-| `docker-compose.yml` | Local Postgres for testing |
+
+| File                              | Purpose                                                     |
+| --------------------------------- | ----------------------------------------------------------- |
+| `backend/db-pg.js`                | pg.Pool wrapper — `query()`, `transaction()`, `getClient()` |
+| `backend/schema-pg.sql`           | Full DDL + seed data + schema_version table                 |
+| `backend/migrate-pg.js`           | Version-tracked migration runner                            |
+| `backend/scripts/sqlite-to-pg.js` | One-time SQLite→Postgres data migration                     |
+| `backend/tenant-db-manager-pg.js` | Schema-switching multi-tenant                               |
+| `backend/tenant-db-proxy-pg.js`   | AsyncLocalStorage proxy for per-request DB routing          |
+| `backend/master-db-pg.js`         | Postgres master DB for tenant registry                      |
+| `docker-compose.yml`              | Local Postgres for testing                                  |
 
 ---
 
@@ -240,25 +249,25 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 
 ## 🔍 Audit History
 
-| Date | What | Result |
-|------|------|--------|
-| Mar 9 2026 | Full 38-area backend↔frontend audit | 25+ gaps found, documented |
-| Mar 9 2026 | 6 parallel fix sessions | 11 gaps fixed, 18 files changed, 1,410 lines, zero regressions |
-| Mar 9 2026 | Merged + pushed to main | Live on Vercel + Railway |
-| Mar 9 2026 | Roadmap Phase 2 — 9 parallel sessions | All 25 remaining items complete, 28 files changed, 2,936 lines, 395/395 tests passing |
-| Mar 9 2026 | Merged feature/roadmap-phase2 → main | Live on Vercel + Railway |
-| Mar 9 2026 | **BUG FIX — POS product search broken** | `POSContext.jsx` `triggerSearch()` called `fetch()` without `authHeaders()` → backend rejected with "Not found"; fixed in PR #3, merged + deployed |
-| Mar 9 2026 | **BUG FIX — POS Opening Gate empty branch dropdown** | `ContextSwitcher.jsx` called `/api/context/bootstrap` without `authHeaders()` → 401, no outlet stored in context → POS gate never cleared; fixed + pushed to main, deployed |
-| Mar 9 2026 | **Railway 502** | Backend went down (unrelated to code); redeployed via Railway GraphQL API from CLI, back up within ~35 seconds |
-| Mar 10 2026 | Phase 3 robustness backlog added | 14 items across P0–P3: offline queuing, split payment, brute-force throttling, soft deletes, idempotency, end-of-day digest, price audit log, onboarding checklist, session timeout, billing layer, tenant health monitoring, mobile layout, IP allowlisting, shrinkage report |
-| Mar 10 2026 | Phase 3 P0 deep audit | Split payment confirmed fully built (moved to shipped). Rate limiter found DISABLED (`skip: () => true` in index.js:191) — 1-line fix needed. Soft deletes, idempotency, offline queuing confirmed not built. Offline queuing worse than estimated — SW only handles GET, AuthProvider blocks POST with 503, no IndexedDB/queue/retry exists. |
-| Mar 10 2026 | **Phase 3 shipped** | 8/9 items built on `feature/phase3-robustness` (8 commits, 27 files, 1,824 lines): rate limiter fix, idempotency on sales (migrate71), price audit log, email digest, session timeout at POS, onboarding checklist, setup wizard (migrate72), soft deletes (migrate73). Offline queuing deferred. 395/395 tests passing. Locally tested via Playwright. |
-| Mar 10 2026 | **Phase 3 remaining shipped** | 5 items built on `feature/phase3-remaining` (4 commits, 21 files, 1,003 lines): mobile/tablet POS layout (3-tab nav, sticky pay button), IP allowlisting for /api/admin (CIDR matching), token revocation (migrate74, jti claim, revoke endpoints), stock shrinkage report (6-join SQL + ShrinkageTab), customer-facing display (/customer-display page + in-memory cart sync). 395/395 tests passing. Frontend build clean. |
-| Mar 11 2026 | **Postgres migration — pre-merge tasks** | 4 tasks completed on `feature/postgres-migration`: last SQLite files converted (email.js, printer routes, registerAllRoutes.js), migrate-pg.js migration runner, sqlite-to-pg.js cutover script + checklist, MT Postgres infra (tenant-db-manager-pg, tenant-db-proxy-pg). 340/340 pg tests passing. |
-| Mar 12 2026 | **Postgres migration merged + deployed** | `feature/postgres-migration` merged to `main` (28 commits, 93 files, +23,188/-15,139 lines). Boot guard added (conditional db-pg/db import). dotenv load order fix (must load before boot guard). Supabase Postgres provisioned (ap-southeast-1). `DATABASE_URL` set on Railway, `DATA_DIR` removed. Fresh DB created via setup wizard. `schema-pg.sql` seed row fix for company_profile. Production live on Postgres. |
-| Mar 12 2026 | **Currency/timezone centralization** | `feature/currency-timezone-centralization` branch (13 commits, ~58 files). CurrencyProvider context, all PKR hardcodes replaced, cash_denominations column (schema migration v2), IANA timezone dropdown, denomination chip editor. |
-| Mar 12 2026 | **MT Phase 1 blocker fixes** | `feature/mt-phase1-blockers` branch (4 commits, 4 files). 6 cross-tenant data leak / broken-functionality blockers resolved: per-tenant `_companyCache` Map, per-tenant `_contextFlagCache` Map, boot IIFE guards, `auditLog()` uses masterDb, customer display keyed by `${tenantSlug}-${shiftId}`. |
-| Mar 12 2026 | **MT Phase 2 operations** | `feature/mt-phase2-operations` branch (9 commits, ~10 files). Setup token generation in tenant provisioner; admin API setup URL endpoints (get/regenerate); admin dashboard setup URL UI; setup wizard MT adaptation (tenant-scoped DB via URL param); tenant-scoped notification helpers; tenant-aware scheduled jobs (`forEachActiveTenant` helper); per-tenant rate limiting (`tenantSlug:IP`). pg-batch3 test fix (ON CONFLICT for company_profile seed). 55/55 pg-batch3 tests passing. |
-| Mar 12 2026 | **MT Phase 3 hardening** | `feature/mt-phase3-hardening` branch. Per-tenant feature flag cache (60s TTL Map, invalidated on PUT). pg_dump/pg_restore backup/restore (replaces stubs, runtime availability check). 7 tenant isolation tests (API + DB + concurrent request safety). Only subdomain/slug routing remains before MULTI_TENANT=1. |
-| Mar 13 2026 | **MT Go-Live — MULTI_TENANT=1 flipped** | `feature/multi-tenant-golive` + `fix/mt-golive-polish` branches merged to `main`. 10 plan tasks + 3 bonus fixes + 4 production hotfixes. Super-admin seeded via Railway CLI. First tenant `packagesmall` (Packages Mall) provisioned, setup wizard completed, POS login verified. Public schema cleaned (89 stale tables dropped). `MULTI_TENANT=1` on Railway, `VITE_MULTI_TENANT=1` on Vercel. |
-| Mar 14 2026 | **Live E2E test suite — all 20 specs passed** | 20 Playwright specs (00–19) run sequentially against live production (`sanopos.vercel.app`, tenant `packagesmall`). ~120 individual tests, all passing. Covered: full POS day (shift open→sale→return→close), inventory, purchasing/GRN, customers/loyalty, gift cards, CRM, HR/payroll, attendance/kiosk, approvals, notifications, reports (dashboard/sales/inventory/P&L), audit log. One real bug found and fixed: kiosk `?tenant=` param needed in MT mode for unauthenticated PIN endpoint (`backend/index.js` resolveTenant + `KioskRedesign.jsx`). All other fixes were test files only — adapting specs to match actual API contracts. |
+| Date        | What                                                 | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mar 9 2026  | Full 38-area backend↔frontend audit                  | 25+ gaps found, documented                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Mar 9 2026  | 6 parallel fix sessions                              | 11 gaps fixed, 18 files changed, 1,410 lines, zero regressions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Mar 9 2026  | Merged + pushed to main                              | Live on Vercel + Railway                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Mar 9 2026  | Roadmap Phase 2 — 9 parallel sessions                | All 25 remaining items complete, 28 files changed, 2,936 lines, 395/395 tests passing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Mar 9 2026  | Merged feature/roadmap-phase2 → main                 | Live on Vercel + Railway                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Mar 9 2026  | **BUG FIX — POS product search broken**              | `POSContext.jsx` `triggerSearch()` called `fetch()` without `authHeaders()` → backend rejected with "Not found"; fixed in PR #3, merged + deployed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Mar 9 2026  | **BUG FIX — POS Opening Gate empty branch dropdown** | `ContextSwitcher.jsx` called `/api/context/bootstrap` without `authHeaders()` → 401, no outlet stored in context → POS gate never cleared; fixed + pushed to main, deployed                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Mar 9 2026  | **Railway 502**                                      | Backend went down (unrelated to code); redeployed via Railway GraphQL API from CLI, back up within ~35 seconds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Mar 10 2026 | Phase 3 robustness backlog added                     | 14 items across P0–P3: offline queuing, split payment, brute-force throttling, soft deletes, idempotency, end-of-day digest, price audit log, onboarding checklist, session timeout, billing layer, tenant health monitoring, mobile layout, IP allowlisting, shrinkage report                                                                                                                                                                                                                                                                                                                                                                  |
+| Mar 10 2026 | Phase 3 P0 deep audit                                | Split payment confirmed fully built (moved to shipped). Rate limiter found DISABLED (`skip: () => true` in index.js:191) — 1-line fix needed. Soft deletes, idempotency, offline queuing confirmed not built. Offline queuing worse than estimated — SW only handles GET, AuthProvider blocks POST with 503, no IndexedDB/queue/retry exists.                                                                                                                                                                                                                                                                                                   |
+| Mar 10 2026 | **Phase 3 shipped**                                  | 8/9 items built on `feature/phase3-robustness` (8 commits, 27 files, 1,824 lines): rate limiter fix, idempotency on sales (migrate71), price audit log, email digest, session timeout at POS, onboarding checklist, setup wizard (migrate72), soft deletes (migrate73). Offline queuing deferred. 395/395 tests passing. Locally tested via Playwright.                                                                                                                                                                                                                                                                                         |
+| Mar 10 2026 | **Phase 3 remaining shipped**                        | 5 items built on `feature/phase3-remaining` (4 commits, 21 files, 1,003 lines): mobile/tablet POS layout (3-tab nav, sticky pay button), IP allowlisting for /api/admin (CIDR matching), token revocation (migrate74, jti claim, revoke endpoints), stock shrinkage report (6-join SQL + ShrinkageTab), customer-facing display (/customer-display page + in-memory cart sync). 395/395 tests passing. Frontend build clean.                                                                                                                                                                                                                    |
+| Mar 11 2026 | **Postgres migration — pre-merge tasks**             | 4 tasks completed on `feature/postgres-migration`: last SQLite files converted (email.js, printer routes, registerAllRoutes.js), migrate-pg.js migration runner, sqlite-to-pg.js cutover script + checklist, MT Postgres infra (tenant-db-manager-pg, tenant-db-proxy-pg). 340/340 pg tests passing.                                                                                                                                                                                                                                                                                                                                            |
+| Mar 12 2026 | **Postgres migration merged + deployed**             | `feature/postgres-migration` merged to `main` (28 commits, 93 files, +23,188/-15,139 lines). Boot guard added (conditional db-pg/db import). dotenv load order fix (must load before boot guard). Supabase Postgres provisioned (ap-southeast-1). `DATABASE_URL` set on Railway, `DATA_DIR` removed. Fresh DB created via setup wizard. `schema-pg.sql` seed row fix for company_profile. Production live on Postgres.                                                                                                                                                                                                                          |
+| Mar 12 2026 | **Currency/timezone centralization**                 | `feature/currency-timezone-centralization` branch (13 commits, ~58 files). CurrencyProvider context, all PKR hardcodes replaced, cash_denominations column (schema migration v2), IANA timezone dropdown, denomination chip editor.                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Mar 12 2026 | **MT Phase 1 blocker fixes**                         | `feature/mt-phase1-blockers` branch (4 commits, 4 files). 6 cross-tenant data leak / broken-functionality blockers resolved: per-tenant `_companyCache` Map, per-tenant `_contextFlagCache` Map, boot IIFE guards, `auditLog()` uses masterDb, customer display keyed by `${tenantSlug}-${shiftId}`.                                                                                                                                                                                                                                                                                                                                            |
+| Mar 12 2026 | **MT Phase 2 operations**                            | `feature/mt-phase2-operations` branch (9 commits, ~10 files). Setup token generation in tenant provisioner; admin API setup URL endpoints (get/regenerate); admin dashboard setup URL UI; setup wizard MT adaptation (tenant-scoped DB via URL param); tenant-scoped notification helpers; tenant-aware scheduled jobs (`forEachActiveTenant` helper); per-tenant rate limiting (`tenantSlug:IP`). pg-batch3 test fix (ON CONFLICT for company_profile seed). 55/55 pg-batch3 tests passing.                                                                                                                                                    |
+| Mar 12 2026 | **MT Phase 3 hardening**                             | `feature/mt-phase3-hardening` branch. Per-tenant feature flag cache (60s TTL Map, invalidated on PUT). pg_dump/pg_restore backup/restore (replaces stubs, runtime availability check). 7 tenant isolation tests (API + DB + concurrent request safety). Only subdomain/slug routing remains before MULTI_TENANT=1.                                                                                                                                                                                                                                                                                                                              |
+| Mar 13 2026 | **MT Go-Live — MULTI_TENANT=1 flipped**              | `feature/multi-tenant-golive` + `fix/mt-golive-polish` branches merged to `main`. 10 plan tasks + 3 bonus fixes + 4 production hotfixes. Super-admin seeded via Railway CLI. First tenant `packagesmall` (Packages Mall) provisioned, setup wizard completed, POS login verified. Public schema cleaned (89 stale tables dropped). `MULTI_TENANT=1` on Railway, `VITE_MULTI_TENANT=1` on Vercel.                                                                                                                                                                                                                                                |
+| Mar 14 2026 | **Live E2E test suite — all 20 specs passed**        | 20 Playwright specs (00–19) run sequentially against live production (`sanopos.vercel.app`, tenant `packagesmall`). ~120 individual tests, all passing. Covered: full POS day (shift open→sale→return→close), inventory, purchasing/GRN, customers/loyalty, gift cards, CRM, HR/payroll, attendance/kiosk, approvals, notifications, reports (dashboard/sales/inventory/P&L), audit log. One real bug found and fixed: kiosk `?tenant=` param needed in MT mode for unauthenticated PIN endpoint (`backend/index.js` resolveTenant + `KioskRedesign.jsx`). All other fixes were test files only — adapting specs to match actual API contracts. |

@@ -1,51 +1,94 @@
-# Dependencies - never read these
+# ===== DEPENDENCIES =====
 node_modules/
 backend/node_modules/
 frontend/node_modules/
 
-# Built output - generated, not source
+# ===== BUILD OUTPUT =====
 frontend/dist/
+frontend/dist-ssr/
 
-# Archived docs - completed plans, not active
-docs/archive/
-
-# Database files - binary, not readable
-backend/backups/
-*.db
-*.db-shm
-*.db-wal
-
-# Generated report exports - not source code
-backend/exports/
-
-# Lock files - too large, not useful to Claude
+# ===== LOCK FILES (too large, not useful) =====
 backend/package-lock.json
 frontend/package-lock.json
 
-# Old migration files — only read migrate61.js (the latest)
+# ===== DATABASE FILES (binary) =====
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+backend/backups/
+backend/archive/
+
+# ===== GENERATED / TEMP =====
+backend/exports/
+backend/uploads/
+backend/uploads_test/
+backend/uploads_tmp/
+backend/test_results*.json
+backend/schema_dump.json
+backend/_endpoint_list.txt
+tmp/
+
+# ===== LEGACY SQLITE FILES (not used in production — Postgres only) =====
+# 74 migration files — production uses migrate-pg.js
 backend/migrate.js
 backend/migrate[0-9].js
-backend/migrate[1-5][0-9].js
-backend/migrate60.js
+backend/migrate[0-9][0-9].js
+# SQLite infrastructure — replaced by *-pg.js equivalents
+backend/db.js
+backend/run_migrations.js
+backend/master-db.js
+backend/tenant-db-manager.js
+backend/tenant-db-proxy.js
+backend/tenant-provisioner.js
+backend/tenant-migrate.js
+backend/schema-full.js
+backend/seed-admin.js
+# One-off scripts (already executed)
+backend/cleanup-public-schema.js
+backend/seed_e2e.js
 
-# Test files - not needed for development tasks
+# ===== FRONTEND ROUTE WRAPPERS (5-line pass-throughs, zero logic) =====
+frontend/src/pages/AccountingRoute.jsx
+frontend/src/pages/ActionHistoryRoute.jsx
+frontend/src/pages/AdministratorRoute.jsx
+frontend/src/pages/AttributeSetsRoute.jsx
+frontend/src/pages/BackupRestoreRoute.jsx
+frontend/src/pages/BrandsRoute.jsx
+frontend/src/pages/CRMRoute.jsx
+frontend/src/pages/CashManagementRoute.jsx
+frontend/src/pages/CategoriesRoute.jsx
+frontend/src/pages/CompanySettingsRoute.jsx
+frontend/src/pages/CustomersRoute.jsx
+frontend/src/pages/DashboardRoute.jsx
+frontend/src/pages/EmployeesRoute.jsx
+frontend/src/pages/ExpensesRoute.jsx
+frontend/src/pages/HRManagementRoute.jsx
+frontend/src/pages/InventoryRoute.jsx
+frontend/src/pages/OrdersRoute.jsx
+frontend/src/pages/OutletsRoute.jsx
+frontend/src/pages/POSRoute.jsx
+frontend/src/pages/PromotionsRoute.jsx
+frontend/src/pages/PurchaseOrdersRoute.jsx
+frontend/src/pages/QuotationsRoute.jsx
+frontend/src/pages/ReturnedStockRoute.jsx
+frontend/src/pages/ReturnsRoute.jsx
+frontend/src/pages/SalesHistoryRoute.jsx
+frontend/src/pages/ShopifyIntegrationRoute.jsx
+frontend/src/pages/StockAdjustmentsRoute.jsx
+frontend/src/pages/SupplierPayablesRoute.jsx
+frontend/src/pages/SuppliersRoute.jsx
+frontend/src/pages/TaxesRoute.jsx
+frontend/src/pages/TransfersRoute.jsx
+
+# ===== TEST FILES (read only when working on tests) =====
 frontend/tests/
-backend/e2e_full_test.js
-backend/e2e_test.js
-backend/api_test.js
-backend/reports_phase2_test.js
-backend/shopify_mock_integration_test.js
-backend/tier4_smoke_test.js
+backend/tests/
 
-# Diagnostic / utility scripts - one-off tools, not source code
-backend/check_counts_v3.js
-backend/check_sync.js
-backend/diagnose_routes.js
-backend/dumpDb.js
-backend/dumpDb2.js
-backend/health_check.js
-backend/inspect_schema.js
-backend/preflight.js
+# ===== DOCS (archived plans, not active code) =====
+docs/archive/
+docs/plans/
 
-# Temp / scratch folders
-tmp/
+# ===== AUDIT FILES (reference only, not code) =====
+backend/BACKEND-AUDIT.md
+frontend/FRONTEND-AUDIT.md

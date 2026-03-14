@@ -1,0 +1,95 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - img [ref=e7]
+      - generic [ref=e11]: POS
+    - generic [ref=e12]:
+      - generic [ref=e13]: hassan
+      - combobox [ref=e109] [cursor=pointer]:
+        - option "Select Branch"
+        - option "Packages Mall" [selected]
+      - link "Dashboard" [ref=e14] [cursor=pointer]:
+        - /url: /dashboard
+        - img [ref=e15]
+        - generic [ref=e17]: Dashboard
+      - button "Recent Sales" [ref=e110]:
+        - img [ref=e111]
+        - generic [ref=e115]: Recent Sales
+      - button "Return" [ref=e116]:
+        - img [ref=e117]
+        - generic [ref=e120]: Return
+      - button "Lock" [ref=e18]:
+        - img [ref=e19]
+        - generic [ref=e22]: Lock
+      - button "Logout" [ref=e23]:
+        - img [ref=e24]
+        - generic [ref=e27]: Logout
+  - generic [ref=e28]:
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - generic [ref=e31]:
+          - heading "Sell" [level=2] [ref=e32]
+          - generic [ref=e33]:
+            - generic [ref=e34]:
+              - img [ref=e35]
+              - text: 14/03/2026
+            - button "Tax Inclusive" [ref=e37]: Tax Inclusive
+        - generic [ref=e40]:
+          - button "Park Sale" [disabled] [ref=e41]:
+            - img [ref=e42]
+            - text: Park Sale
+          - button "Parked" [ref=e45]:
+            - img [ref=e46]
+            - text: Parked
+      - generic [ref=e48]:
+        - generic [ref=e49]:
+          - textbox "Search by Barcode" [ref=e50]
+          - textbox "Search by SKU" [ref=e51]
+          - textbox "Search by Price" [ref=e52]
+        - generic [ref=e53]:
+          - img
+          - textbox "Search by Name, Barcode, SKU… (F2)" [active] [ref=e54]
+      - generic [ref=e55]:
+        - generic [ref=e57]: Products List
+        - generic [ref=e58]:
+          - img [ref=e59]
+          - paragraph [ref=e63]: Cart is empty
+          - paragraph [ref=e64]: Search items above to start a new sale.
+    - generic [ref=e65]:
+      - generic [ref=e66]:
+        - img
+        - textbox "Search customer…" [ref=e67]
+      - generic [ref=e69]:
+        - img [ref=e70]
+        - generic [ref=e74]: Walk-in Customer
+      - generic [ref=e75]:
+        - button "Add Discount" [ref=e76]:
+          - img [ref=e77]
+          - text: Add Discount
+        - button "Add Note" [ref=e80]:
+          - img [ref=e81]
+          - text: Add Note
+      - generic [ref=e84]:
+        - generic [ref=e85]:
+          - generic [ref=e86]: Subtotal
+          - generic [ref=e87]: Rs 0.00
+        - generic [ref=e88]:
+          - generic [ref=e89]: Total
+          - generic [ref=e90]: Rs 0.00
+      - button "Pay Rs 0.00" [disabled] [ref=e91]:
+        - generic [ref=e92]: Pay
+        - generic [ref=e93]: Rs 0.00
+  - generic [ref=e95]:
+    - generic [ref=e96]:
+      - paragraph [ref=e97]: Opening Flow
+      - heading "Prepare POS Before Selling" [level=2] [ref=e98]
+      - paragraph [ref=e99]: Select the branch, confirm the shift is open, and make sure the logged-in employee is clocked in.
+    - generic [ref=e100]:
+      - generic [ref=e101]:
+        - generic [ref=e102]: Branch
+        - generic [ref=e103]:
+          - img [ref=e104]
+          - combobox [ref=e108]:
+            - option "Select branch..."
+            - option "Packages Mall" [selected]
+      - generic [ref=e121]: Checking shift and attendance status...

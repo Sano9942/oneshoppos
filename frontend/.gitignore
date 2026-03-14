@@ -1,3 +1,13 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+dist-ssr
+
+# Environment
+*.local
+
 # Logs
 logs
 *.log
@@ -7,18 +17,13 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
 # Live test generated files
 tests/live/live-auth.json
 tests/live/live-token.json
 tests/live/state.json
 playwright-report-live/
+playwright-report/
 test-results/
-playwright.config.live.js
 .playwright-mcp/
 .last-run.json
 
@@ -26,9 +31,12 @@ playwright.config.live.js
 .vscode/*
 !.vscode/extensions.json
 .idea
-.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# OS
+.DS_Store
+Thumbs.db

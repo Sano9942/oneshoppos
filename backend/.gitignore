@@ -8,18 +8,27 @@ node_modules/
 !.env.example
 
 # Database files
-sanopos.db
-sanopos.db-journal
-sanopos.db-wal
-sanopos.db-shm
 *.db
+*.db-journal
+*.db-wal
+*.db-shm
 
 # App Data and Generated Content
 backups/
 exports/
 uploads/
+uploads_test/
+uploads_tmp/
+tenants/
+archive/
+
+# Generated artifacts
+test_results*.json
+schema_dump.json
+_endpoint_list.txt
 
 # OS and Log files
 .DS_Store
+Thumbs.db
 *.log
 npm-debug.log*
