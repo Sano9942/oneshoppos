@@ -621,4 +621,147 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       return res.status(500).json({ error: err.message });
     }
   });
+
+  // ── Infrastructure Monitoring ─────────────────────────────────────────
+
+  app.get("/api/admin/infra", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const [
+        connResult,
+        maxConnResult,
+        dbSizeResult,
+        slowNowResult,
+        cacheResult,
+        tableHealthResult,
+        schemaSizeResult,
+      ] = await Promise.all([
+        // 1. Connection stats
+        db.query(`
+          SELECT
+            COUNT(*) FILTER (WHERE state = 'active') AS active,
+            COUNT(*) FILTER (WHERE state = 'idle') AS idle,
+            COUNT(*) FILTER (WHERE state = 'idle in transaction') AS idle_in_tx,
+            COUNT(*) AS total
+          FROM pg_stat_activity
+          WHERE backend_type = 'client backend'
+        `),
+        // 2. Max connections
+        db.query("SELECT setting::int AS max FROM pg_settings WHERE name = 'max_connections'"),
+        // 3. Database size
+        db.query("SELECT pg_database_size(current_database()) AS bytes, current_database() AS name"),
+        // 4. Currently slow queries (running > 1 second)
+        db.query(`
+          SELECT
+            pid,
+            EXTRACT(EPOCH FROM (now() - query_start))::numeric AS duration_s,
+            LEFT(query, 200) AS query,
+            state,
+            usename AS username,
+            application_name AS app
+          FROM pg_stat_activity
+          WHERE state = 'active'
+            AND query NOT ILIKE '%pg_stat_activity%'
+            AND query_start < now() - interval '1 second'
+          ORDER BY query_start ASC
+          LIMIT 10
+        `),
+        // 5. Cache hit ratio
+        db.query(`
+          SELECT
+            CASE WHEN (sum(heap_blks_hit) + sum(heap_blks_read)) = 0 THEN 100
+            ELSE ROUND(sum(heap_blks_hit)::numeric / (sum(heap_blks_hit) + sum(heap_blks_read)) * 100, 2)
+            END AS hit_ratio
+          FROM pg_statio_user_tables
+        `),
+        // 6. Table health — worst by dead tuples
+        db.query(`
+          SELECT
+            schemaname AS schema,
+            relname AS "table",
+            n_dead_tup AS dead_tuples,
+            n_live_tup AS live_tuples,
+            last_autovacuum
+          FROM pg_stat_user_tables
+          WHERE n_dead_tup > 0
+          ORDER BY n_dead_tup DESC
+          LIMIT 15
+        `),
+        // 7. Per-schema sizes
+        db.query(`
+          SELECT
+            schemaname AS schema,
+            ROUND(SUM(pg_total_relation_size(quote_ident(schemaname) || '.' || quote_ident(tablename)))::numeric / 1048576, 2) AS size_mb
+          FROM pg_tables
+          WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+          GROUP BY schemaname
+          ORDER BY size_mb DESC
+        `),
+      ]);
+
+      const conn = connResult.rows[0];
+      const maxConn = maxConnResult.rows[0]?.max || 100;
+
+      const totalDeadTuples = tableHealthResult.rows.reduce((sum, r) => sum + parseInt(r.dead_tuples, 10), 0);
+      const tablesNeedingVacuum = tableHealthResult.rows.filter((r) => parseInt(r.dead_tuples, 10) > 1000).length;
+
+      // Try pg_stat_statements for historical slow queries (graceful skip if extension unavailable)
+      let slowHistorical = [];
+      try {
+        const stmtResult = await db.query(`
+          SELECT
+            LEFT(query, 200) AS query,
+            calls,
+            ROUND(mean_exec_time::numeric, 2) AS mean_time_ms,
+            ROUND(total_exec_time::numeric, 0) AS total_time_ms
+          FROM pg_stat_statements
+          WHERE calls > 5
+            AND query NOT ILIKE '%pg_stat%'
+          ORDER BY mean_exec_time DESC
+          LIMIT 10
+        `);
+        slowHistorical = stmtResult.rows;
+      } catch {
+        // pg_stat_statements not enabled — skip silently
+      }
+
+      return res.json({
+        connections: {
+          active: parseInt(conn.active, 10),
+          idle: parseInt(conn.idle, 10),
+          idle_in_tx: parseInt(conn.idle_in_tx, 10),
+          total: parseInt(conn.total, 10),
+          max: maxConn,
+        },
+        database: {
+          size_mb: Math.round(Number(dbSizeResult.rows[0].bytes) / 1048576 * 10) / 10,
+          name: dbSizeResult.rows[0].name,
+        },
+        cache: {
+          hit_ratio: Number(cacheResult.rows[0].hit_ratio),
+        },
+        slow_queries_now: slowNowResult.rows.map((r) => ({
+          ...r,
+          duration_s: Math.round(Number(r.duration_s) * 10) / 10,
+        })),
+        table_health: {
+          total_dead_tuples: totalDeadTuples,
+          tables_needing_vacuum: tablesNeedingVacuum,
+          worst_tables: tableHealthResult.rows.map((r) => ({
+            schema: r.schema,
+            table: r.table,
+            dead_tuples: parseInt(r.dead_tuples, 10),
+            live_tuples: parseInt(r.live_tuples, 10),
+            last_autovacuum: r.last_autovacuum,
+          })),
+        },
+        schema_sizes: schemaSizeResult.rows.map((r) => ({
+          schema: r.schema,
+          size_mb: Number(r.size_mb),
+        })),
+        slow_queries_historical: slowHistorical,
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
 };
