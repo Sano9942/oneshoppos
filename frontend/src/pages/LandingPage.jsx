@@ -1,0 +1,554 @@
+import { useState, useEffect, useRef } from "react";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import {
+  Lock,
+  Store,
+  User,
+  ShoppingCart,
+  Package,
+  Users,
+  BarChart3,
+  Clock,
+  Building2,
+  Heart,
+  RefreshCw,
+  ChevronDown,
+  ArrowRight,
+  Zap,
+  Shield,
+  Wifi,
+  WifiOff,
+  ArrowUp,
+} from "lucide-react";
+import { useAuth } from "../auth/AuthProvider";
+import { IS_MULTI_TENANT } from "../config";
+import { useCurrency } from "../contexts/CurrencyContext";
+
+/* ─── Login Form (extracted from Login.jsx logic) ─────────── */
+
+function LoginForm() {
+  const { login } = useAuth();
+  const { refresh: refreshCurrency } = useCurrency();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [storeCode, setStoreCode] = useState(searchParams.get("store") || "");
+  const [username, setUsername] = useState("");
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const canSubmit =
+    username.trim() && pin.trim() && (!IS_MULTI_TENANT || storeCode.trim());
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setLoading(true);
+    setError("");
+    try {
+      await login(
+        username.trim(),
+        pin.trim(),
+        IS_MULTI_TENANT ? storeCode.trim() : undefined,
+      );
+      refreshCurrency();
+      navigate("/context-select", { replace: true });
+    } catch (err) {
+      setError(err.message || "Invalid credentials");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form className="space-y-4" onSubmit={onSubmit} id="login-form">
+      {IS_MULTI_TENANT && (
+        <label className="block">
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+            Store Code
+          </span>
+          <div className="mt-1.5 relative">
+            <Store
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              value={storeCode}
+              onChange={(e) => setStoreCode(e.target.value)}
+              className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition"
+              placeholder="e.g. aceshardware"
+              autoFocus
+            />
+          </div>
+        </label>
+      )}
+
+      <label className="block">
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          Username
+        </span>
+        <div className="mt-1.5 relative">
+          <User
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+          />
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition"
+            placeholder="Employee name"
+            autoFocus={!IS_MULTI_TENANT}
+          />
+        </div>
+      </label>
+
+      <label className="block">
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          PIN
+        </span>
+        <div className="mt-1.5 relative">
+          <Lock
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+          />
+          <input
+            type="password"
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition"
+            placeholder="PIN code"
+            maxLength={10}
+          />
+        </div>
+      </label>
+
+      {error && <p className="text-sm text-red-600 font-medium">{error}</p>}
+
+      <button
+        type="submit"
+        disabled={loading || !canSubmit}
+        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2.5 font-semibold disabled:opacity-50 transition-colors cursor-pointer"
+      >
+        {loading ? "Signing in..." : "Sign In"}
+      </button>
+    </form>
+  );
+}
+
+/* ─── Features Data ───────────────────────────────────────── */
+
+const FEATURES = [
+  {
+    icon: ShoppingCart,
+    title: "Point of Sale",
+    desc: "Fast checkout with barcode scanning, split payments, and thermal receipt printing.",
+  },
+  {
+    icon: Package,
+    title: "Inventory",
+    desc: "Stock levels, transfers, and adjustments across all your outlets in real time.",
+  },
+  {
+    icon: Users,
+    title: "Staff Management",
+    desc: "Employee accounts, role permissions, attendance tracking, and kiosk PIN clock-in.",
+  },
+  {
+    icon: BarChart3,
+    title: "67+ Reports",
+    desc: "Sales, inventory, financial, and operational reports with date filters and exports.",
+  },
+  {
+    icon: Clock,
+    title: "Cash Shifts",
+    desc: "Denomination-based open and close with automatic variance tracking per shift.",
+  },
+  {
+    icon: Building2,
+    title: "Multi-Store",
+    desc: "Manage multiple outlets from a single dashboard. Transfer stock between locations.",
+  },
+  {
+    icon: Heart,
+    title: "Customer Loyalty",
+    desc: "Wallet top-ups, loyalty points earn and redeem, and full customer purchase history.",
+  },
+  {
+    icon: RefreshCw,
+    title: "Shopify Sync",
+    desc: "Import products, sync inventory, and receive order webhooks from your Shopify store.",
+  },
+];
+
+/* ─── How It Works Steps ──────────────────────────────────── */
+
+const STEPS = [
+  {
+    num: "01",
+    title: "Get Provisioned",
+    desc: "Our team creates your store account and assigns a plan that fits your business.",
+  },
+  {
+    num: "02",
+    title: "Setup Wizard",
+    desc: "Configure your store name, currency, timezone, and create your first outlet and admin account.",
+  },
+  {
+    num: "03",
+    title: "Start Selling",
+    desc: "Add products, open a cash shift, and ring up your first sale. You're live.",
+  },
+];
+
+/* ─── Setup Guide Data ────────────────────────────────────── */
+
+const SETUP_GUIDE = [
+  {
+    q: "What happens after your store is provisioned?",
+    a: "You'll receive a setup link with a one-time token. Open the link, and it takes you straight to the Setup Wizard. The token can only be used once — once setup is complete, the link expires and you log in normally with your admin credentials.",
+  },
+  {
+    q: "Completing the Setup Wizard",
+    a: "The wizard walks you through four steps: (1) Store identity — your store name and contact info. (2) Time & currency — select your timezone and currency with cash denominations. (3) First outlet — name and address of your first store location. (4) Admin account — create your admin username and PIN. After this, you're dropped into the dashboard ready to go.",
+  },
+  {
+    q: "Adding your first products",
+    a: "Go to Inventory from the sidebar. Click 'Add Product' and fill in the name, SKU, price, and opening stock. You can also import from Shopify if you already have an online store. Products support variants (size, color), barcode scanning, and category assignment.",
+  },
+  {
+    q: "Inviting employees and setting permissions",
+    a: "Navigate to Employees in the sidebar. Add each employee with a username and PIN. Assign them a role — roles control what they can access (POS only, inventory management, reports, full admin). Employees log in with their own PIN at the POS.",
+  },
+  {
+    q: "Opening your first cash shift",
+    a: "Go to the POS screen. You'll be prompted to open a shift before making any sales. Count your starting cash by denomination, confirm, and the shift is open. At end of day, close the shift by counting again — the system calculates any variance automatically.",
+  },
+];
+
+/* ─── User Guide Data ─────────────────────────────────────── */
+
+const USER_GUIDE = [
+  {
+    q: "Making a sale (POS screen)",
+    a: `Open the POS from the sidebar. Search for products by name or scan a barcode. Tap a product to add it to the cart. Adjust quantity if needed. When ready, tap "Pay" — choose the payment method (cash, card, split), enter the amount tendered, and confirm. A receipt prints automatically if you have a thermal printer connected, or you can email it.`,
+  },
+  {
+    q: "Processing returns and exchanges",
+    a: "Go to Sales History, find the original sale, and tap 'Return'. Select which items are being returned and the refund method. For exchanges, process the return first, then ring up the new items as a fresh sale. The system tracks all returns linked to the original invoice.",
+  },
+  {
+    q: "Managing inventory and stock transfers",
+    a: "The Inventory page shows all products with current stock levels per outlet. Use Stock Adjustments to correct counts (damaged goods, miscounts). Use Transfers to move stock between outlets — the sending outlet's stock decreases and the receiving outlet's stock increases once confirmed.",
+  },
+  {
+    q: "Running reports",
+    a: "The Reports section has 67+ tabs organized by category: Sales (summary, detail, item-wise), Inventory (on-hand, movement, dead stock), Financial (P&L, cashflow, AP/AR), and Operations (shift summary, shrinkage). Every report supports date range filtering. Use the Dashboard for a quick overview of today's KPIs.",
+  },
+  {
+    q: "Cash shifts and end-of-day closing",
+    a: "At the end of the day, go to Cash Management and close your active shift. Count each denomination in the drawer. The system compares your count against expected totals (opening cash + sales - refunds) and flags any variance. You can add notes explaining discrepancies. The shift report is saved for auditing.",
+  },
+  {
+    q: "Using the kiosk for attendance",
+    a: "The Kiosk is a dedicated screen (accessible at /kiosk) where employees clock in and out using their PIN. It supports breaks — clock in at shift start, break out for lunch, break in when back, clock out at shift end. Managers can view attendance records in the Attendance section with hours calculated automatically.",
+  },
+];
+
+/* ─── Accordion Item ──────────────────────────────────────── */
+
+function AccordionItem({ question, answer }) {
+  return (
+    <details className="group border-b border-slate-200 last:border-0">
+      <summary className="flex items-center justify-between cursor-pointer py-4 px-1 text-left text-[15px] font-medium text-slate-800 hover:text-emerald-700 transition-colors list-none [&::-webkit-details-marker]:hidden">
+        <span>{question}</span>
+        <ChevronDown
+          size={18}
+          className="shrink-0 ml-3 text-slate-400 transition-transform group-open:rotate-180"
+        />
+      </summary>
+      <div className="pb-4 px-1 text-sm leading-relaxed text-slate-600">
+        {answer}
+      </div>
+    </details>
+  );
+}
+
+/* ─── Main Landing Page ───────────────────────────────────── */
+
+export default function LandingPage() {
+  const { isAuthenticated, isBootstrapping } = useAuth();
+  const [scrolled, setScrolled] = useState(false);
+  const heroRef = useRef(null);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  if (isBootstrapping) return null;
+  if (isAuthenticated) return <Navigate to="/context-select" replace />;
+
+  return (
+    <div className="min-h-screen bg-white" style={{ scrollBehavior: "smooth" }}>
+      {/* ── Sticky Nav ──────────────────────────────────── */}
+      <nav
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+          scrolled
+            ? "bg-white/95 backdrop-blur-sm shadow-sm border-b border-slate-100"
+            : "bg-transparent"
+        }`}
+      >
+        <div className="max-w-6xl mx-auto flex items-center justify-between px-5 py-3.5">
+          <a
+            href="#top"
+            className="flex items-center gap-2 text-lg font-bold tracking-tight text-slate-900"
+          >
+            <div className="w-7 h-7 rounded-lg bg-emerald-600 flex items-center justify-center">
+              <Zap size={15} className="text-white" />
+            </div>
+            SanoPOS
+          </a>
+
+          <div className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
+            <a href="#features" className="hover:text-emerald-700 transition-colors">
+              Features
+            </a>
+            <a href="#setup-guide" className="hover:text-emerald-700 transition-colors">
+              Setup Guide
+            </a>
+            <a href="#user-guide" className="hover:text-emerald-700 transition-colors">
+              User Guide
+            </a>
+            <a
+              href="#top"
+              className="ml-2 inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
+            >
+              Sign In
+              <ArrowRight size={14} />
+            </a>
+          </div>
+
+          {/* Mobile: just the sign-in button */}
+          <a
+            href="#top"
+            className="md:hidden inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-lg transition-colors text-sm font-semibold"
+          >
+            Sign In
+          </a>
+        </div>
+      </nav>
+
+      {/* ── Hero ────────────────────────────────────────── */}
+      <section
+        id="top"
+        ref={heroRef}
+        className="relative overflow-hidden pt-24 pb-16 md:pt-28 md:pb-24"
+      >
+        {/* Subtle background pattern */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{
+          backgroundImage: `radial-gradient(circle at 1px 1px, #008060 1px, transparent 0)`,
+          backgroundSize: "32px 32px",
+        }} />
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-emerald-50 rounded-full -translate-y-1/2 translate-x-1/3 blur-3xl opacity-60" />
+
+        <div className="relative max-w-6xl mx-auto px-5 grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+          {/* Left — copy */}
+          <div>
+            <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-6 border border-emerald-100">
+              <Shield size={13} />
+              Trusted by retail businesses
+            </div>
+
+            <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 leading-tight tracking-tight">
+              The Complete POS
+              <br />
+              <span className="text-emerald-600">for Modern Retail</span>
+            </h1>
+
+            <p className="mt-5 text-lg text-slate-600 leading-relaxed max-w-lg">
+              Manage sales, inventory, staff, and reports — all in one place.
+              Built for multi-store retailers who need reliability and speed.
+            </p>
+
+            <div className="mt-8 flex flex-col gap-3">
+              {[
+                { icon: Building2, text: "Multi-store ready out of the box" },
+                { icon: WifiOff, text: "Works offline — syncs when you reconnect" },
+                { icon: RefreshCw, text: "Syncs with your Shopify store" },
+              ].map(({ icon: Icon, text }) => (
+                <div key={text} className="flex items-center gap-3 text-sm text-slate-700">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
+                    <Icon size={16} className="text-emerald-600" />
+                  </div>
+                  {text}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right — login card */}
+          <div className="w-full max-w-md mx-auto lg:mx-0 lg:ml-auto">
+            <div className="bg-white border border-slate-200 rounded-2xl shadow-lg shadow-slate-200/50 p-7">
+              <div className="mb-5 text-center">
+                <h2 className="text-xl font-bold text-slate-800">
+                  Sign in to your store
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  {IS_MULTI_TENANT
+                    ? "Enter your store code, username, and PIN"
+                    : "Enter your username and PIN"}
+                </p>
+              </div>
+              <LoginForm />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Features Grid ───────────────────────────────── */}
+      <section id="features" className="py-16 md:py-24 bg-slate-50">
+        <div className="max-w-6xl mx-auto px-5">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              Everything you need to run your store
+            </h2>
+            <p className="mt-3 text-slate-600 max-w-xl mx-auto">
+              From checkout to closing, SanoPOS covers every part of your daily
+              retail operations.
+            </p>
+          </div>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {FEATURES.map(({ icon: Icon, title, desc }) => (
+              <div
+                key={title}
+                className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md hover:border-slate-300 transition-all group"
+              >
+                <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center mb-4 group-hover:bg-emerald-100 transition-colors">
+                  <Icon size={20} className="text-emerald-600" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 mb-1.5">
+                  {title}
+                </h3>
+                <p className="text-sm text-slate-500 leading-relaxed">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── How It Works ────────────────────────────────── */}
+      <section className="py-16 md:py-24 bg-white">
+        <div className="max-w-6xl mx-auto px-5">
+          <div className="text-center mb-14">
+            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              Up and running in three steps
+            </h2>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8 md:gap-6 relative">
+            {/* Connecting line (desktop only) */}
+            <div className="hidden md:block absolute top-8 left-[calc(16.67%+20px)] right-[calc(16.67%+20px)] h-px bg-slate-200" />
+
+            {STEPS.map(({ num, title, desc }) => (
+              <div key={num} className="relative text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-600 text-white text-xl font-bold mb-5 relative z-10 shadow-lg shadow-emerald-200">
+                  {num}
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 mb-2">
+                  {title}
+                </h3>
+                <p className="text-sm text-slate-500 leading-relaxed max-w-xs mx-auto">
+                  {desc}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Setup Guide ─────────────────────────────────── */}
+      <section id="setup-guide" className="py-16 md:py-24 bg-slate-50">
+        <div className="max-w-3xl mx-auto px-5">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-4 border border-emerald-100">
+              <Zap size={13} />
+              New to SanoPOS?
+            </div>
+            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              Setup Guide
+            </h2>
+            <p className="mt-3 text-slate-600">
+              Everything you need to know after your store is provisioned.
+            </p>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden px-5">
+            {SETUP_GUIDE.map(({ q, a }) => (
+              <AccordionItem key={q} question={q} answer={a} />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── User Guide ──────────────────────────────────── */}
+      <section id="user-guide" className="py-16 md:py-24 bg-white">
+        <div className="max-w-3xl mx-auto px-5">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center gap-2 bg-slate-100 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-4 border border-slate-200">
+              <BarChart3 size={13} />
+              Day-to-day operations
+            </div>
+            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              User Guide
+            </h2>
+            <p className="mt-3 text-slate-600">
+              How to use each part of SanoPOS in your daily workflow.
+            </p>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden px-5">
+            {USER_GUIDE.map(({ q, a }) => (
+              <AccordionItem key={q} question={q} answer={a} />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Footer ──────────────────────────────────────── */}
+      <footer className="bg-slate-900 text-slate-400 py-10">
+        <div className="max-w-6xl mx-auto px-5 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-white font-bold tracking-tight">
+            <div className="w-6 h-6 rounded-md bg-emerald-600 flex items-center justify-center">
+              <Zap size={13} className="text-white" />
+            </div>
+            SanoPOS
+          </div>
+
+          <div className="flex items-center gap-5 text-sm">
+            <a href="#features" className="hover:text-white transition-colors">
+              Features
+            </a>
+            <a href="#setup-guide" className="hover:text-white transition-colors">
+              Setup Guide
+            </a>
+            <a href="#user-guide" className="hover:text-white transition-colors">
+              User Guide
+            </a>
+            <a
+              href="#top"
+              className="hover:text-white transition-colors inline-flex items-center gap-1"
+            >
+              Top <ArrowUp size={13} />
+            </a>
+          </div>
+
+          <p className="text-xs text-slate-500">
+            &copy; {new Date().getFullYear()} SanoPOS. All rights reserved.
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
+}

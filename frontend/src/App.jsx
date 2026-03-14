@@ -23,6 +23,7 @@ import ExpensesRoute from "./pages/ExpensesRoute";
 import InventoryRoute from "./pages/InventoryRoute";
 import ProductFormPage from "./pages/redesign/ProductFormPage";
 import Login from "./pages/Login";
+import LandingPage from "./pages/LandingPage";
 import SetupWizard from "./pages/SetupWizard";
 import OutletsRoute from "./pages/OutletsRoute";
 import PlaceholderPage from "./pages/PlaceholderPage";
@@ -94,7 +95,8 @@ function HomeRedirect() {
   }, [isBootstrapping, navigate]);
 
   if (isBootstrapping) return null;
-  return <Navigate to={isAuthenticated ? "/context-select" : "/login"} replace />;
+  if (isAuthenticated) return <Navigate to="/context-select" replace />;
+  return <LandingPage />;
 }
 
 function App() {
@@ -103,7 +105,7 @@ function App() {
       <Routes>
         <Route path="/" element={<HomeRedirect />} />
         <Route path="/setup" element={<SetupWizard />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<LandingPage />} />
         <Route path="/access-denied" element={<AccessDenied />} />
         <Route
           path="/context-select"
