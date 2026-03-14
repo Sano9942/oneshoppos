@@ -1,5 +1,6 @@
 require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
 const express = require("express");
+const compression = require("compression");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const db = process.env.DATABASE_URL ? require("./db-pg") : require("./db");
@@ -263,6 +264,7 @@ if (!process.env.R2_PUBLIC_URL) {
     }
   });
 }
+app.use(compression());   // Gzip/deflate API responses (~70% smaller)
 app.use(cookieParser()); // Parse cookies (needed for JWT refresh token httpOnly cookie)
 app.use(globalLimiter);
 
