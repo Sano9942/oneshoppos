@@ -5,7 +5,7 @@
  */
 import { test, expect } from "@playwright/test";
 import { readState, writeState } from "./helpers/state.js";
-import { post, get } from "./helpers/api.js";
+import { post, put, get } from "./helpers/api.js";
 
 test.describe("09 — Quotations: Create and convert to sale", () => {
   test("create quotation for Ali Khan", async ({ page }) => {
@@ -22,7 +22,7 @@ test.describe("09 — Quotations: Create and convert to sale", () => {
       ],
     });
 
-    expect(res.status, `Quotation failed: ${JSON.stringify(res.data)}`).toBe(201);
+    expect(res.ok, `Quotation failed: ${JSON.stringify(res.data)}`).toBe(true);
     const quoteId = res.data.quotation?.id || res.data.id;
     expect(quoteId).toBeTruthy();
     writeState({ quoteId });
@@ -31,45 +31,24 @@ test.describe("09 — Quotations: Create and convert to sale", () => {
 
   test("quotations page shows the new quote", async ({ page }) => {
     await page.goto("/quotations");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
+    await page.waitForTimeout(2000);
     await expect(page.getByText(/quotation/i).first()).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText(/Ali Khan/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/Ali Khan/i).first()).toBeVisible({ timeout: 10000 });
     console.log("✅ Quotations page shows Ali Khan quote");
   });
 
-  test("convert quotation to sale", async ({ page }) => {
+  test("convert quotation to sale via API", async ({ page }) => {
     const { quoteId } = readState();
+    expect(quoteId).toBeTruthy();
 
-    await page.goto("/quotations");
-    await page.waitForLoadState("networkidle");
+    // Must accept the quotation before converting
+    const acceptRes = await put(page, `/api/quotations/${quoteId}/status`, { status: "accepted" });
+    expect(acceptRes.ok, `Accept failed: ${JSON.stringify(acceptRes.data)}`).toBe(true);
 
-    // Find convert button
-    const convertBtn = page
-      .getByRole("button", { name: /convert/i })
-      .or(page.getByRole("button", { name: /to sale/i }))
-      .first();
-
-    if (await convertBtn.isVisible({ timeout: 6000 }).catch(() => false)) {
-      await convertBtn.click();
-      await page.waitForTimeout(1000);
-
-      // Confirm conversion if dialog
-      const confirmBtn = page
-        .getByRole("button", { name: /confirm|convert/i })
-        .last();
-      if (await confirmBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await confirmBtn.click();
-      }
-
-      await expect(
-        page.getByText(/converted|sale created/i)
-      ).toBeVisible({ timeout: 10000 });
-    } else {
-      // Try via API
-      const res = await post(page, `/api/quotations/${quoteId}/convert`, {});
-      expect([200, 201]).toContain(res.status);
-      console.log("Quotation converted via API:", res.data);
-    }
+    const res = await post(page, `/api/quotations/${quoteId}/convert`, {});
+    expect(res.ok, `Quotation convert failed: ${JSON.stringify(res.data)}`).toBe(true);
+    console.log("Quotation converted:", res.data);
 
     const salesRes = await get(page, "/api/sales?limit=1");
     writeState({ quoteSaleId: salesRes.data.sales?.[0]?.id });

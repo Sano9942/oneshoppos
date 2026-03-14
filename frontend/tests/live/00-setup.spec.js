@@ -186,7 +186,7 @@ test.describe("00 — Setup: Seed toy shop data", () => {
     if (!employeeAsadId) {
       const res = await post(page, "/api/employees", {
         name: "Asad Test",
-        pin_code: "5555",
+        pin_code: "7777",
         role_id: cashierRole.id,
         salary_type: "monthly",
         monthly_salary: 25000,

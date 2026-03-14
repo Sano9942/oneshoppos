@@ -9,12 +9,22 @@ import { post, get } from "./helpers/api.js";
 
 async function navigateToPOS(page) {
   await page.goto("/pos");
-  await page.waitForLoadState("networkidle");
-  const clockedInBtn = page.getByRole("button", { name: /i have clocked in/i });
-  if (await clockedInBtn.isVisible({ timeout: 4000 }).catch(() => false)) {
-    await clockedInBtn.click();
+  await page.waitForLoadState("domcontentloaded");
+  await page.waitForTimeout(2000);
+
+  const gateOverlay = page.locator('[class*="z-70"]');
+  if (await gateOverlay.isVisible({ timeout: 5000 }).catch(() => false)) {
+    const branchSelect = page.locator('[class*="z-70"] select');
+    if (await branchSelect.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await branchSelect.selectOption("1");
+      await page.waitForFunction(
+        () => !document.querySelector('[class*="z-70"]'),
+        { timeout: 30000 }
+      ).catch(() => {});
+    }
   }
-  await expect(page.getByPlaceholder(/search by name/i)).toBeVisible({ timeout: 20000 });
+
+  await expect(page.getByPlaceholder(/Search by Name/i)).toBeVisible({ timeout: 25000 });
 }
 
 test.describe("06 — POS: Promotion + Park Sale + Resume", () => {
@@ -36,7 +46,7 @@ test.describe("06 — POS: Promotion + Park Sale + Resume", () => {
       active: true,
     });
 
-    expect(res.status, `Promotion creation failed: ${JSON.stringify(res.data)}`).toBe(201);
+    expect(res.ok, `Promotion creation failed: ${JSON.stringify(res.data)}`).toBe(true);
     const promoId = res.data.promotion?.id || res.data.id;
     writeState({ promoId });
     console.log("Promotion created:", promoId);
@@ -45,13 +55,13 @@ test.describe("06 — POS: Promotion + Park Sale + Resume", () => {
   test("add Play-Doh Kit to cart, park sale mid-checkout", async ({ page }) => {
     await navigateToPOS(page);
 
-    const searchInput = page.getByPlaceholder(/search by name/i);
+    const searchInput = page.getByPlaceholder(/Search by Name/i);
     await searchInput.fill("Play-Doh Kit");
     await page.waitForTimeout(800);
     await page.getByText(/Play-Doh Kit/i).first().click();
     await page.waitForTimeout(500);
 
-    await expect(page.getByText(/Play-Doh Kit/i)).toBeVisible();
+    await expect(page.getByText(/Play-Doh Kit/i).first()).toBeVisible();
 
     // Park the sale before paying
     const parkBtn = page
@@ -69,7 +79,7 @@ test.describe("06 — POS: Promotion + Park Sale + Resume", () => {
         await confirmPark.click();
       }
 
-      await expect(page.getByText(/cart is empty/i)).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText(/cart is empty/i).first()).toBeVisible({ timeout: 10000 });
       console.log("✅ Sale parked");
     } else {
       // If park button not visible at cart level, try after opening checkout
@@ -79,7 +89,7 @@ test.describe("06 — POS: Promotion + Park Sale + Resume", () => {
       const parkFromCheckout = page.getByRole("button", { name: /park/i }).first();
       if (await parkFromCheckout.isVisible({ timeout: 3000 }).catch(() => false)) {
         await parkFromCheckout.click();
-        await expect(page.getByText(/cart is empty/i)).toBeVisible({ timeout: 10000 });
+        await expect(page.getByText(/cart is empty/i).first()).toBeVisible({ timeout: 10000 });
       }
       console.log("✅ Sale parked from checkout");
     }
@@ -88,7 +98,7 @@ test.describe("06 — POS: Promotion + Park Sale + Resume", () => {
   test("resume parked sale and complete it", async ({ page }) => {
     await navigateToPOS(page);
 
-    // Open parked sales — look for Recent Sales panel or Parked button
+    // Open parked sales — look for Parked button
     const parkedBtn = page
       .getByRole("button", { name: /parked/i })
       .or(page.getByText(/parked sale/i).first())
@@ -98,15 +108,15 @@ test.describe("06 — POS: Promotion + Park Sale + Resume", () => {
       await parkedBtn.click();
       await page.waitForTimeout(800);
 
-      // Resume the parked sale
-      const resumeBtn = page.getByRole("button", { name: /resume/i }).first();
+      // Restore the parked sale
+      const resumeBtn = page.getByRole("button", { name: /restore/i }).first();
       await expect(resumeBtn).toBeVisible({ timeout: 8000 });
       await resumeBtn.click();
       await page.waitForTimeout(500);
     }
 
     // Verify Play-Doh is back in cart
-    await expect(page.getByText(/Play-Doh Kit/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/Play-Doh Kit/i).first()).toBeVisible({ timeout: 10000 });
 
     // Complete payment
     await page.getByRole("button", { name: /pay/i }).click();
@@ -123,13 +133,15 @@ test.describe("06 — POS: Promotion + Park Sale + Resume", () => {
     const salesRes = await get(page, "/api/sales?limit=1");
     writeState({ discountSaleId: salesRes.data.sales?.[0]?.id });
 
-    await page.getByRole("button", { name: /close/i, exact: true }).click();
+    const closeBtns = page.getByRole("button", { name: "Close", exact: true });
+    await closeBtns.last().click();
     console.log("✅ Parked sale resumed and completed");
   });
 
   test("parked sales page is accessible", async ({ page }) => {
     await page.goto("/parked-sales");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
+    await page.waitForTimeout(2000);
     await expect(page.getByText(/parked/i).first()).toBeVisible({ timeout: 15000 });
     console.log("✅ Parked sales page loaded");
   });

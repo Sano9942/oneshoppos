@@ -19,7 +19,7 @@ test.describe("12 — CRM: Lead → Activity → Stage", () => {
       value: 50000,
     });
 
-    expect(res.status, `CRM lead failed: ${JSON.stringify(res.data)}`).toBe(201);
+    expect(res.ok, `CRM lead failed: ${JSON.stringify(res.data)}`).toBe(true);
     const leadId = res.data.lead?.id || res.data.id;
     expect(leadId).toBeTruthy();
     writeState({ crmLeadId: leadId });
@@ -35,7 +35,7 @@ test.describe("12 — CRM: Lead → Activity → Stage", () => {
       activity_date: new Date().toISOString().slice(0, 10),
     });
 
-    expect([200, 201]).toContain(res.status);
+    expect(res.ok, JSON.stringify(res.data)).toBe(true);
     console.log("Activity added:", res.data);
   });
 
@@ -46,15 +46,16 @@ test.describe("12 — CRM: Lead → Activity → Stage", () => {
       stage: "qualified",
     });
 
-    expect([200, 201]).toContain(res.status);
+    expect(res.ok, JSON.stringify(res.data)).toBe(true);
     console.log("Lead moved to qualified");
   });
 
   test("CRM page loads and shows Sunshine School lead", async ({ page }) => {
     await page.goto("/crm");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
+    await page.waitForTimeout(2000);
     await expect(page.getByText(/crm|lead/i).first()).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText(/Sunshine School/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/Sunshine School/i).first()).toBeVisible({ timeout: 10000 });
     console.log("✅ CRM page shows lead");
   });
 

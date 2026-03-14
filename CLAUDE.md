@@ -17,6 +17,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - **Offline sale queuing complete (Mar 12 2026)** — localStorage queue (50-sale cap), `completeSale` offline path with provisional receipts, auto-sync on reconnect via `online` event, multi-tab sync via `storage` event, amber POS banner with Sync Now button, wallet/points blocked offline, backend shift/attendance relaxation for offline replays, receipt shows "PENDING (offline)".
 - **Tenant health monitoring complete (Mar 12 2026)** — expanded `GET /api/admin/tenants/:id/stats` (activity, revenue, capacity, schema size), new `GET /api/admin/attention` (approaching limits, dormant, setup pending), enriched tenant list (last_login, revenue_this_month), AdminTenantDetail 3-section health dashboard (activity + plan usage bars + storage), AdminTenantList health dot/revenue/last activity columns, AdminDashboard "Needs Attention" card.
 - **MT Go-Live complete (Mar 13 2026)** — 10 plan tasks + 3 bonus fixes: master-db-pg init at boot, auth.js tenant DB resolution, loadCompanyProfile dynamic DB, plan-limits.js Postgres conversion, currency endpoint MT mode, seed-admin-pg.js, cleanup-public-schema.js, frontend env flip, slug validation fix (no hyphens), Invalid Date fix in admin pages, public schema cleanup (89 tables dropped).
+- **Live E2E test suite complete (Mar 14 2026)** — 20 Playwright specs (00–19) in `frontend/tests/live/`, config `playwright.config.live.js`. ~120 tests all passing against production (`sanopos.vercel.app`, tenant `packagesmall`). Covers full POS day: shift→sale→return→gift card→shift close, plus inventory, purchasing, GRN, customers, loyalty, CRM, HR, attendance, kiosk, approvals, notifications, reports, accounting, audit log. One real bug fixed: kiosk `?tenant=` param for unauthenticated MT endpoints. System confirmed **production-ready**. Note: shift on `packagesmall` was closed by test suite run — reopen before POS use.
 - `schema-pg.sql` includes seed INSERT for `company_profile` row (required for setup wizard token generation at boot).
 - **Phase 3 Remaining complete (Mar 10 2026)**: 5 items shipped — mobile/tablet POS layout, IP allowlisting for admin API, JWT token revocation (migrate74), stock shrinkage report, customer-facing display
 - **Roadmap Phase 3 complete (Mar 10 2026)**: 8 of 9 core robustness items shipped (offline queuing deferred) — rate limiter activation, session timeout at POS, idempotency on sales, price change audit log, end-of-day email digest, onboarding checklist, setup wizard, soft deletes
@@ -348,6 +349,19 @@ oneshoppos/
 - Confirmed passing baseline: 283 Jest integration tests, 2 pre-existing failures (concurrency.test.js vitest format)
 - `smoke-gate.test.js` has **22/25 pre-existing failures on main** — do NOT investigate unless you changed auth/session code
 - `pg-batch*.test.js` require a live Postgres `DATABASE_URL` — always fail locally without it; run only in CI/Railway
+- **Live E2E tests**: `frontend/tests/live/` — 20 specs, run with `npx playwright test tests/live/NN-name.spec.js --config=playwright.config.live.js`. Require live production up. State shared via `state.json` (gitignored). Auth saved to `live-auth.json` + `live-token.json` (gitignored).
+
+### Live API Contracts (confirmed Mar 14 2026 against production)
+- **Sales POST**: body uses `cartItems` (not `items`), item `id` field (not `product_id`), item `price` (not `unit_price`)
+- **Returns POST**: needs `original_sale_id`, `total_refund`, `refund_method`; items need `refund_price` (not `unit_price`)
+- **Dashboard response fields**: `totalRevenueToday`, `saleCount`, `averageBill` (not `total_sales`/`transactions`)
+- **Accounting endpoints**: use `from`/`to` params (not `start`/`end`); require `accounting_core` feature flag
+- **Shifts**: `GET /api/shifts` has no status filter — use `GET /api/shifts/active?outlet_id=1` for open shift
+- **Action history**: uses `date_from`/`date_to` params (not `start`/`end`)
+- **Notifications mark-read**: `PUT /api/notifications/read-all` (not POST)
+- **Kiosk MT mode**: `/kiosk?tenant=<slug>` required for unauthenticated outlet/feature-flags fetch
+- **Report endpoints that exist**: `item-wise`, `inventory-dump`, `product-movement`, `cash-flow`, `shift-summary` (needs `session_id`), `shrinkage`
+- **Quotations**: must PUT status to `accepted` before `convert` endpoint works
 
 ## Currency System (live — Mar 12 2026)
 

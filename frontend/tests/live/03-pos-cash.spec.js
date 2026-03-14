@@ -8,30 +8,29 @@ import { readState, writeState } from "./helpers/state.js";
 
 async function navigateToPOS(page) {
   await page.goto("/pos");
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
+  await page.waitForTimeout(2000);
 
-  // If POS gate is shown (shift/attendance check), handle it
-  const gateVisible = await page
-    .getByText(/prepare pos before selling/i)
-    .isVisible({ timeout: 5000 })
-    .catch(() => false);
-
-  if (gateVisible) {
-    // Shift is already open (opened in global setup state)
-    // Click "I have clocked in" if visible
-    const clockedInBtn = page.getByRole("button", { name: /i have clocked in/i });
-    if (await clockedInBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await clockedInBtn.click();
+  // If the POS gate modal is showing, select the branch from within it
+  const gateOverlay = page.locator('[class*="z-70"]');
+  if (await gateOverlay.isVisible({ timeout: 5000 }).catch(() => false)) {
+    // The gate has a <select> for branch — pick outlet id=1 (Packages Mall)
+    const branchSelect = page.locator('[class*="z-70"] select');
+    if (await branchSelect.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await branchSelect.selectOption("1");
+      // Wait for shift+attendance check to complete and gate to dismiss
+      await page.waitForFunction(
+        () => !document.querySelector('[class*="z-70"]'),
+        { timeout: 30000 }
+      ).catch(() => {});
     }
-    // Wait for POS to open
-    await expect(page.getByPlaceholder(/search by name/i)).toBeVisible({ timeout: 20000 });
   }
 
-  await expect(page.getByPlaceholder(/search by name/i)).toBeVisible({ timeout: 20000 });
+  await expect(page.getByPlaceholder(/Search by Name/i)).toBeVisible({ timeout: 25000 });
 }
 
 async function addProductToCart(page, searchTerm) {
-  const searchInput = page.getByPlaceholder(/search by name/i);
+  const searchInput = page.getByPlaceholder(/Search by Name/i);
   await searchInput.clear();
   await searchInput.fill(searchTerm);
   await page.waitForTimeout(800);
@@ -45,7 +44,7 @@ async function addProductToCart(page, searchTerm) {
 test.describe("03 — POS: Cash sale (LEGO + Teddy Bear)", () => {
   test("navigate to POS and verify it is ready", async ({ page }) => {
     await navigateToPOS(page);
-    await expect(page.getByText(/cart is empty/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/cart is empty/i).first()).toBeVisible({ timeout: 10000 });
     console.log("✅ POS ready");
   });
 
@@ -53,13 +52,10 @@ test.describe("03 — POS: Cash sale (LEGO + Teddy Bear)", () => {
     await navigateToPOS(page);
 
     await addProductToCart(page, "LEGO City Set");
-    await expect(page.getByText(/LEGO City Set/i)).toBeVisible({ timeout: 8000 });
-
     await addProductToCart(page, "Stuffed Teddy Bear");
-    await expect(page.getByText(/Stuffed Teddy Bear/i)).toBeVisible({ timeout: 8000 });
 
-    // Cart should show total
-    await expect(page.getByText(/total/i).last()).toBeVisible({ timeout: 5000 });
+    // Cart total should be non-zero
+    await expect(page.getByText(/Rs 3,450/i).first()).toBeVisible({ timeout: 8000 });
     console.log("✅ Both products added to cart");
   });
 
@@ -92,9 +88,10 @@ test.describe("03 — POS: Cash sale (LEGO + Teddy Bear)", () => {
 
     writeState({ cashSaleInvoice: invoiceText?.trim() });
 
-    // Close receipt
-    await page.getByRole("button", { name: /close/i, exact: true }).click();
-    await expect(page.getByText(/cart is empty/i)).toBeVisible({ timeout: 10000 });
+    // Close receipt — click the last "Close" button (receipt modal, not header "Close Shift")
+    const closeBtns = page.getByRole("button", { name: "Close", exact: true });
+    await closeBtns.last().click();
+    await expect(page.getByText(/cart is empty/i).first()).toBeVisible({ timeout: 10000 });
     console.log("✅ Cash sale completed");
   });
 

@@ -1,6 +1,6 @@
 import { chromium } from "@playwright/test";
 import { loginMT } from "./helpers/auth.js";
-import { writeFileSync, existsSync, unlinkSync } from "fs";
+import { writeFileSync, existsSync } from "fs";
 import { resolve } from "path";
 
 const STATE_FILE = resolve(import.meta.dirname, "state.json");
@@ -8,9 +8,11 @@ const AUTH_FILE = resolve(import.meta.dirname, "live-auth.json");
 const TOKEN_FILE = resolve(import.meta.dirname, "live-token.json");
 
 export default async function globalSetup() {
-  // Reset state.json at the start of every run
-  if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
-  writeFileSync(STATE_FILE, JSON.stringify({}, null, 2));
+  // Only initialise state.json if it doesn't exist yet — preserve state written
+  // by earlier specs so sequential runs (01, 02, …) can read what 00-setup wrote.
+  if (!existsSync(STATE_FILE)) {
+    writeFileSync(STATE_FILE, JSON.stringify({}, null, 2));
+  }
 
   const browser = await chromium.launch();
   const context = await browser.newContext({ baseURL: "https://sanopos.vercel.app" });

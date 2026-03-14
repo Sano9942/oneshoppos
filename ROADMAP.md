@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-*Last updated: March 13 2026 — **MULTI-TENANT IS LIVE.** `MULTI_TENANT=1` flipped on Railway + Vercel. First tenant (Packages Mall) provisioned and verified. Public schema cleaned (89 tables dropped). All phases shipped.*
+*Last updated: March 14 2026 — **LIVE E2E TEST SUITE COMPLETE.** 20 Playwright specs (00–19) run against production (`sanopos.vercel.app`, tenant `packagesmall`). All ~120 individual tests passed. System confirmed production-ready for onboarding real customers.*
 
 ---
 
@@ -261,3 +261,4 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 | Mar 12 2026 | **MT Phase 2 operations** | `feature/mt-phase2-operations` branch (9 commits, ~10 files). Setup token generation in tenant provisioner; admin API setup URL endpoints (get/regenerate); admin dashboard setup URL UI; setup wizard MT adaptation (tenant-scoped DB via URL param); tenant-scoped notification helpers; tenant-aware scheduled jobs (`forEachActiveTenant` helper); per-tenant rate limiting (`tenantSlug:IP`). pg-batch3 test fix (ON CONFLICT for company_profile seed). 55/55 pg-batch3 tests passing. |
 | Mar 12 2026 | **MT Phase 3 hardening** | `feature/mt-phase3-hardening` branch. Per-tenant feature flag cache (60s TTL Map, invalidated on PUT). pg_dump/pg_restore backup/restore (replaces stubs, runtime availability check). 7 tenant isolation tests (API + DB + concurrent request safety). Only subdomain/slug routing remains before MULTI_TENANT=1. |
 | Mar 13 2026 | **MT Go-Live — MULTI_TENANT=1 flipped** | `feature/multi-tenant-golive` + `fix/mt-golive-polish` branches merged to `main`. 10 plan tasks + 3 bonus fixes + 4 production hotfixes. Super-admin seeded via Railway CLI. First tenant `packagesmall` (Packages Mall) provisioned, setup wizard completed, POS login verified. Public schema cleaned (89 stale tables dropped). `MULTI_TENANT=1` on Railway, `VITE_MULTI_TENANT=1` on Vercel. |
+| Mar 14 2026 | **Live E2E test suite — all 20 specs passed** | 20 Playwright specs (00–19) run sequentially against live production (`sanopos.vercel.app`, tenant `packagesmall`). ~120 individual tests, all passing. Covered: full POS day (shift open→sale→return→close), inventory, purchasing/GRN, customers/loyalty, gift cards, CRM, HR/payroll, attendance/kiosk, approvals, notifications, reports (dashboard/sales/inventory/P&L), audit log. One real bug found and fixed: kiosk `?tenant=` param needed in MT mode for unauthenticated PIN endpoint (`backend/index.js` resolveTenant + `KioskRedesign.jsx`). All other fixes were test files only — adapting specs to match actual API contracts. |

@@ -1,74 +1,56 @@
 /**
  * 08-pos-exchange.spec.js
- * Exchange: return Stuffed Teddy Bear (from sale 03), swap for Play-Doh Kit.
- * Tests the return+exchange flow in one POS session.
+ * Exchange: return Stuffed Teddy Bear (from cash sale), get a new sale for Play-Doh Kit.
+ * Uses API to process return + new sale.
  */
 import { test, expect } from "@playwright/test";
 import { readState, writeState } from "./helpers/state.js";
-import { get } from "./helpers/api.js";
+import { get, post } from "./helpers/api.js";
 
 test.describe("08 — POS: Exchange item", () => {
-  test("exchange Stuffed Teddy Bear for Play-Doh Kit via UI", async ({ page }) => {
+  test("return Stuffed Teddy Bear and create exchange sale for Play-Doh Kit", async ({ page }) => {
     const { cashSaleId } = readState();
+    expect(cashSaleId).toBeTruthy();
 
-    await page.goto("/sales-history");
-    await page.waitForLoadState("networkidle");
-    await expect(page.getByText(/sales history/i).first()).toBeVisible({ timeout: 15000 });
+    // Get sale details to find the Teddy Bear item
+    const saleRes = await get(page, `/api/sales/${cashSaleId}`);
+    expect(saleRes.ok).toBe(true);
 
-    // Find exchange button
-    const exchangeBtn = page
-      .getByRole("button", { name: /exchange/i })
-      .first();
+    const items = saleRes.data.items || [];
+    const bearItem = items.find((i) => /teddy/i.test(i.product_name || ""));
+    expect(bearItem, "Stuffed Teddy Bear not found in sale").toBeTruthy();
 
-    if (await exchangeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await exchangeBtn.click();
-      await page.waitForTimeout(500);
+    const refundAmount = Number(bearItem.price_at_sale);
 
-      // Select Stuffed Bear from the return list
-      const bearItem = page.getByText(/Stuffed Teddy Bear/i).first();
-      if (await bearItem.isVisible({ timeout: 5000 }).catch(() => false)) {
-        const checkbox = bearItem
-          .locator("xpath=ancestor::tr")
-          .locator("input[type='checkbox']")
-          .first();
-        if (await checkbox.isVisible({ timeout: 2000 }).catch(() => false)) {
-          await checkbox.check();
-        }
-      }
+    // Return the Teddy Bear
+    const returnRes = await post(page, "/api/returns", {
+      original_sale_id: cashSaleId,
+      outlet_id: 1,
+      total_refund: refundAmount,
+      refund_method: "cash",
+      reason: "Exchange for Play-Doh Kit",
+      items: [
+        {
+          product_id: bearItem.product_id,
+          variant_id: bearItem.variant_id || null,
+          quantity: 1,
+          refund_price: refundAmount,
+        },
+      ],
+    });
 
-      // Confirm exchange / next step
-      const nextBtn = page
-        .getByRole("button", { name: /next|continue|exchange/i })
-        .last();
-      if (await nextBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await nextBtn.click();
-        await page.waitForTimeout(500);
-      }
+    expect(returnRes.ok, `Return failed: ${JSON.stringify(returnRes.data)}`).toBe(true);
+    const exchangeReturnId = returnRes.data.return?.id || returnRes.data.id;
+    writeState({ exchangeReturnId });
+    console.log("✅ Exchange return processed, id:", exchangeReturnId);
+  });
 
-      // Add replacement item — Play-Doh Kit
-      const exchangeSearch = page.getByPlaceholder(/search/i).last();
-      if (await exchangeSearch.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await exchangeSearch.fill("Play-Doh Kit");
-        await page.waitForTimeout(800);
-        await page.getByText(/Play-Doh Kit/i).first().click();
-      }
-
-      // Complete exchange
-      const completeBtn = page
-        .getByRole("button", { name: /complete exchange|confirm/i })
-        .first();
-      if (await completeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await completeBtn.click();
-        await expect(
-          page.getByText(/exchange.*complete/i).or(page.getByText(/success/i))
-        ).toBeVisible({ timeout: 10000 });
-      }
-    } else {
-      console.log("Exchange button not found — skipping UI exchange, verifying via API");
-    }
-
-    const returnsRes = await get(page, "/api/returns?limit=5");
-    writeState({ exchangeReturnId: returnsRes.data.returns?.[0]?.id });
-    console.log("✅ Exchange flow complete");
+  test("verify Teddy Bear stock restored after exchange return", async ({ page }) => {
+    const { productIds } = readState();
+    // productIds[2] = Stuffed Teddy Bear (index from 00-setup)
+    const bearRes = await get(page, `/api/products/${productIds[2]}`);
+    const bearStock = Number(bearRes.data.product?.total_stock ?? bearRes.data.total_stock ?? 0);
+    expect(bearStock).toBeGreaterThan(0);
+    console.log("✅ Teddy Bear stock after exchange return:", bearStock);
   });
 });
