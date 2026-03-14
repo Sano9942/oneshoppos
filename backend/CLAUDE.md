@@ -43,6 +43,7 @@ The following files are **legacy SQLite code** — never executed in production 
 | Server entry + middleware | `index.js` |
 | Route registration | `routes/registerAllRoutes.js` (orchestrator only — no route logic here) |
 | Route logic for a domain | `routes/<domain>.js` (e.g., `routes/sales.js`, `routes/products.js`) |
+| Super-admin + infra monitoring | `routes/admin.js` — includes `GET /api/admin/infra` (Postgres system stats) |
 | Report endpoints | `routes/reports/` (11 files, modular) |
 | Shopify integration | `routes/shopify/` (9 files) + `shopify/` (3 files) |
 | Tier4 features | `routes/tier4/` (7 files) |
@@ -109,6 +110,11 @@ The following files are **legacy SQLite code** — never executed in production 
 - **Reserved words**: `read` → `is_read` (in notifications table)
 - **HAVING clause**: Postgres does not allow column aliases in HAVING — must repeat the full expression
 - **FK constraints on bulk delete**: Must explicitly delete from referencing tables before deleting from parent tables
+
+### Infrastructure Monitoring Endpoint
+- `GET /api/admin/infra` — gated by `requireAllowedIp` + `requireSuperAdmin`
+- Queries: `pg_stat_activity` (connections), `pg_database_size` (DB size), `pg_statio_user_tables` (cache hit ratio), `pg_stat_user_tables` (dead tuples/vacuum), schema sizes, active slow queries (>1s)
+- Optional: `pg_stat_statements` (historical slow queries) — try/catch, skipped if extension unavailable
 
 ### Boot Guard (index.js line 2)
 - `require("dotenv").config(...)` loads `.env` BEFORE the conditional import on line 5

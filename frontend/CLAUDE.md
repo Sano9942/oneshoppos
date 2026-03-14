@@ -4,6 +4,7 @@
 
 - **Stack**: React 19 + Vite 7 + Tailwind CSS v4
 - **All pages** are in `src/pages/redesign/` — always edit `*Redesign.jsx` files
+- **Landing page**: `src/pages/LandingPage.jsx` — public one-pager with login, product info, setup/user guide
 - **Route files** (`*Route.jsx` in `pages/`) are 5-line thin wrappers — never edit these
 - **App.jsx** is the route orchestrator — read this to understand routing
 - **AuthProvider.jsx** patches `window.fetch` globally — all `/api/` calls get auth headers automatically
@@ -35,6 +36,7 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 | Receipt rendering | `utils/receipt.js` |
 | Category tree UI | `utils/categoryTree.js` |
 | Offline queue | `utils/offlineQueue.js` |
+| CSV export | `utils/csvExport.js` — `downloadCsv(headers, rows, filename)` |
 | API base URL | `config.js` |
 | POS state & logic | `pages/redesign/pos/POSContext.jsx` |
 | Dashboard modules | `pages/dashboard/*.jsx` |
@@ -82,10 +84,17 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 - POS Recent Sales + Return/Exchange: `POSRecentSalesPanel.jsx` + `POSReturnExchangeModal.jsx`
 - POS Session Expired: `POSSessionExpiredModal.jsx` — shown on 401 during checkout; PIN re-login auto-retries pending sale
 
+### CSV Export
+- Shared utility: `utils/csvExport.js` — `downloadCsv(headers, rows, filename)`
+- Every table page has an "Export CSV" button using `<Download>` icon from lucide-react
+- New pages MUST use the shared utility, not inline blob code
+- Exports visible/filtered rows (respects user's current search/filter)
+
 ### Admin Panel (separate auth system)
 - Uses `adminFetch` from `AdminLogin.jsx` — NOT the global fetch interceptor
 - Session stored in `localStorage["adminSession"]` — NOT `"authSession"`
 - Routes at `/admin/*` bypass `RequireAuth`/`RequireContext`
+- `AdminDashboard.jsx` includes `InfrastructurePanel` — DB connections, cache hit ratio, table health, slow queries (30s auto-refresh)
 
 ## Test Suites
 

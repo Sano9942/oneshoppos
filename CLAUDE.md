@@ -63,7 +63,8 @@ oneshoppos/
     │   ├── dates.js              # UTC + LOCAL timestamp formatters
     │   ├── receipt.js            # Receipt rendering (buildReceiptSections, buildReceiptHtml)
     │   ├── categoryTree.js       # Category tree UI helpers
-    │   └── offlineQueue.js       # Offline sale queue
+    │   ├── offlineQueue.js       # Offline sale queue
+    │   └── csvExport.js          # Shared CSV download utility (downloadCsv)
     └── pages/
         ├── redesign/             # ALL active pages live here (*Redesign.jsx)
         │   ├── POSRedesign.jsx
@@ -72,7 +73,8 @@ oneshoppos/
         ├── reports/              # Report domain modules
         ├── dashboard/            # Dashboard components (12 files)
         ├── shopify/              # Shopify tab modules
-        ├── admin/                # Super-admin panel (separate auth)
+        ├── admin/                # Super-admin panel (separate auth, infra monitoring)
+        ├── LandingPage.jsx       # Public landing page (product info, setup/user guide, login)
         ├── Reports.jsx           # Reports orchestrator (NOT legacy)
         └── [*Route.jsx]          # 31 thin wrappers — never edit
 ```
@@ -111,6 +113,7 @@ oneshoppos/
 - **Kiosk MT mode**: `/kiosk?tenant=<slug>` required for unauthenticated endpoints
 - **Reports that exist**: `item-wise`, `inventory-dump`, `product-movement`, `cash-flow`, `shift-summary` (needs `session_id`), `shrinkage`
 - **Quotations**: must PUT status to `accepted` before `convert` works
+- **Infra monitoring**: `GET /api/admin/infra` — super-admin only, Postgres system stats
 
 ## Production Deployment
 
