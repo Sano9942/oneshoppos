@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import * as XLSX from "xlsx";
 import { useNavigate } from "react-router-dom";
 import { BarChart2, CreditCard, Download, Hash, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { API_BASE as API } from "../../config";
@@ -68,7 +67,8 @@ const TEXT_COL_INDICES = CSV_IMPORT_HEADERS.reduce((acc, h, i) => {
   return acc;
 }, []);
 
-function downloadImportTemplate(outlets = []) {
+async function downloadImportTemplate(outlets = []) {
+  const XLSX = await import("xlsx");
   const wb = XLSX.utils.book_new();
   const sampleRow = {
     name: "Sample Product",
@@ -417,6 +417,7 @@ export default function InventoryRedesign() {
     const isXlsx = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
     if (isXlsx) {
       // Parse xlsx using SheetJS — values are already typed correctly (no leading-zero loss)
+      const XLSX = await import("xlsx");
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array", cellText: true, cellDates: false });
       const ws = wb.Sheets[wb.SheetNames[0]];

@@ -12,16 +12,16 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes("node_modules/recharts")) {
+          if (id.includes("node_modules/recharts") || id.includes("node_modules/d3-")) {
             return "recharts";
+          }
+          if (id.includes("node_modules/xlsx") || id.includes("node_modules/codepage")) {
+            return "xlsx";
           }
           if (id.includes("/src/pages/reports/") || id.includes("/src/pages/Reports")) {
             return "reports";
           }
-          if (id.includes("node_modules")) {
-            return "vendor";
-          }
-          return undefined;
+          // Let Vite auto-split app code via lazy() — no catch-all vendor chunk
         },
       },
     },

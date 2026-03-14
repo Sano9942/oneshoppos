@@ -8,57 +8,57 @@ import RequirePerm from "./components/RequirePerm";
 import AppLayoutRedesign from "./components/AppLayoutRedesign";
 import ContextSelect from "./pages/ContextSelect";
 import AccessDenied from "./pages/AccessDenied";
-import AdministratorRoute from "./pages/AdministratorRoute";
-import ApprovalsRedesign from "./pages/redesign/ApprovalsRedesign";
-import AttendanceRedesign from "./pages/redesign/AttendanceRedesign";
-import AttributeSetsRoute from "./pages/AttributeSetsRoute";
-import BackupRestoreRoute from "./pages/BackupRestoreRoute";
-import BarcodeTemplatesRedesign from "./pages/redesign/BarcodeTemplatesRedesign";
-import PrinterSettingsRedesign from "./pages/redesign/PrinterSettingsRedesign";
-import BrandsRoute from "./pages/BrandsRoute";
-import CategoriesRoute from "./pages/CategoriesRoute";
-import DashboardRoute from "./pages/DashboardRoute";
-import EmployeesRoute from "./pages/EmployeesRoute";
-import ExpensesRoute from "./pages/ExpensesRoute";
-import InventoryRoute from "./pages/InventoryRoute";
-import ProductFormPage from "./pages/redesign/ProductFormPage";
-import Login from "./pages/Login";
 import LandingPage from "./pages/LandingPage";
 import SetupWizard from "./pages/SetupWizard";
-import OutletsRoute from "./pages/OutletsRoute";
 import PlaceholderPage from "./pages/PlaceholderPage";
-import PromotionsRoute from "./pages/PromotionsRoute";
-import PurchaseOrdersRoute from "./pages/PurchaseOrdersRoute";
-import ReceiptTemplatesRedesign from "./pages/redesign/ReceiptTemplatesRedesign";
-import ReturnedStockRoute from "./pages/ReturnedStockRoute";
-import ActionHistoryRoute from "./pages/ActionHistoryRoute";
-import AccountingRoute from "./pages/AccountingRoute";
-import StockAdjustmentsRoute from "./pages/StockAdjustmentsRoute";
-import SupplierPayablesRoute from "./pages/SupplierPayablesRoute";
-import SuppliersRoute from "./pages/SuppliersRoute";
-import ShopifyIntegrationRoute from "./pages/ShopifyIntegrationRoute";
-import TaxesRoute from "./pages/TaxesRoute";
-import TransfersRoute from "./pages/TransfersRoute";
-import CRMRoute from "./pages/CRMRoute";
-import QuotationsRoute from "./pages/QuotationsRoute";
-import HRManagementRoute from "./pages/HRManagementRoute";
-import CompanySettingsRoute from "./pages/CompanySettingsRoute";
-import POSRoute from "./pages/POSRoute";
-import KioskRedesign from "./pages/redesign/KioskRedesign";
-import AdminLogin from "./pages/admin/AdminLogin";
-import AdminLayout from "./pages/admin/AdminLayout";
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import AdminTenantList from "./pages/admin/AdminTenantList";
-import AdminTenantDetail from "./pages/admin/AdminTenantDetail";
-import OrdersRoute from "./pages/OrdersRoute";
-import CustomersRoute from "./pages/CustomersRoute";
-import SalesHistoryRoute from "./pages/SalesHistoryRoute";
-import CashManagementRoute from "./pages/CashManagementRoute";
-import ReturnsRoute from "./pages/ReturnsRoute";
-import ParkedSalesRedesign from "./pages/redesign/ParkedSalesRedesign";
-import ReorderAlertsRedesign from "./pages/redesign/ReorderAlertsRedesign";
-import NotificationsRedesign from "./pages/redesign/NotificationsRedesign";
 
+/* ── Lazy-loaded route pages (code-split into separate chunks) ── */
+const AdministratorRoute = lazy(() => import("./pages/AdministratorRoute"));
+const ApprovalsRedesign = lazy(() => import("./pages/redesign/ApprovalsRedesign"));
+const AttendanceRedesign = lazy(() => import("./pages/redesign/AttendanceRedesign"));
+const AttributeSetsRoute = lazy(() => import("./pages/AttributeSetsRoute"));
+const BackupRestoreRoute = lazy(() => import("./pages/BackupRestoreRoute"));
+const BarcodeTemplatesRedesign = lazy(() => import("./pages/redesign/BarcodeTemplatesRedesign"));
+const PrinterSettingsRedesign = lazy(() => import("./pages/redesign/PrinterSettingsRedesign"));
+const BrandsRoute = lazy(() => import("./pages/BrandsRoute"));
+const CategoriesRoute = lazy(() => import("./pages/CategoriesRoute"));
+const DashboardRoute = lazy(() => import("./pages/DashboardRoute"));
+const EmployeesRoute = lazy(() => import("./pages/EmployeesRoute"));
+const ExpensesRoute = lazy(() => import("./pages/ExpensesRoute"));
+const InventoryRoute = lazy(() => import("./pages/InventoryRoute"));
+const ProductFormPage = lazy(() => import("./pages/redesign/ProductFormPage"));
+const OutletsRoute = lazy(() => import("./pages/OutletsRoute"));
+const PromotionsRoute = lazy(() => import("./pages/PromotionsRoute"));
+const PurchaseOrdersRoute = lazy(() => import("./pages/PurchaseOrdersRoute"));
+const ReceiptTemplatesRedesign = lazy(() => import("./pages/redesign/ReceiptTemplatesRedesign"));
+const ReturnedStockRoute = lazy(() => import("./pages/ReturnedStockRoute"));
+const ActionHistoryRoute = lazy(() => import("./pages/ActionHistoryRoute"));
+const AccountingRoute = lazy(() => import("./pages/AccountingRoute"));
+const StockAdjustmentsRoute = lazy(() => import("./pages/StockAdjustmentsRoute"));
+const SupplierPayablesRoute = lazy(() => import("./pages/SupplierPayablesRoute"));
+const SuppliersRoute = lazy(() => import("./pages/SuppliersRoute"));
+const ShopifyIntegrationRoute = lazy(() => import("./pages/ShopifyIntegrationRoute"));
+const TaxesRoute = lazy(() => import("./pages/TaxesRoute"));
+const TransfersRoute = lazy(() => import("./pages/TransfersRoute"));
+const CRMRoute = lazy(() => import("./pages/CRMRoute"));
+const QuotationsRoute = lazy(() => import("./pages/QuotationsRoute"));
+const HRManagementRoute = lazy(() => import("./pages/HRManagementRoute"));
+const CompanySettingsRoute = lazy(() => import("./pages/CompanySettingsRoute"));
+const POSRoute = lazy(() => import("./pages/POSRoute"));
+const KioskRedesign = lazy(() => import("./pages/redesign/KioskRedesign"));
+const AdminLogin = lazy(() => import("./pages/admin/AdminLogin"));
+const AdminLayout = lazy(() => import("./pages/admin/AdminLayout"));
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminTenantList = lazy(() => import("./pages/admin/AdminTenantList"));
+const AdminTenantDetail = lazy(() => import("./pages/admin/AdminTenantDetail"));
+const OrdersRoute = lazy(() => import("./pages/OrdersRoute"));
+const CustomersRoute = lazy(() => import("./pages/CustomersRoute"));
+const SalesHistoryRoute = lazy(() => import("./pages/SalesHistoryRoute"));
+const CashManagementRoute = lazy(() => import("./pages/CashManagementRoute"));
+const ReturnsRoute = lazy(() => import("./pages/ReturnsRoute"));
+const ParkedSalesRedesign = lazy(() => import("./pages/redesign/ParkedSalesRedesign"));
+const ReorderAlertsRedesign = lazy(() => import("./pages/redesign/ReorderAlertsRedesign"));
+const NotificationsRedesign = lazy(() => import("./pages/redesign/NotificationsRedesign"));
 const CustomerDisplayPage = lazy(() => import("./pages/CustomerDisplayPage"));
 const ReportsRoute = lazy(() => import("./pages/ReportsRoute"));
 const ReportTabStandaloneRoute = lazy(() =>
@@ -118,17 +118,21 @@ function App() {
         <Route
           path="/pos"
           element={
+            <Suspense fallback={<RouteLoading />}>
               <RequireAuth>
-              <POSRoute />
-            </RequireAuth>
+                <POSRoute />
+              </RequireAuth>
+            </Suspense>
           }
         />
         <Route
           path="/kiosk"
           element={
-            <RequireAuth>
-              <KioskRedesign />
-            </RequireAuth>
+            <Suspense fallback={<RouteLoading />}>
+              <RequireAuth>
+                <KioskRedesign />
+              </RequireAuth>
+            </Suspense>
           }
         />
 
@@ -143,11 +147,11 @@ function App() {
         />
 
         {/* Super-Admin Dashboard — separate auth, no POS guards */}
-        <Route path="/admin/login" element={<AdminLogin />} />
-        <Route path="/admin" element={<AdminLayout />}>
-          <Route index element={<AdminDashboard />} />
-          <Route path="tenants" element={<AdminTenantList />} />
-          <Route path="tenants/:id" element={<AdminTenantDetail />} />
+        <Route path="/admin/login" element={<Suspense fallback={<RouteLoading />}><AdminLogin /></Suspense>} />
+        <Route path="/admin" element={<Suspense fallback={<RouteLoading />}><AdminLayout /></Suspense>}>
+          <Route index element={<Suspense fallback={<RouteLoading />}><AdminDashboard /></Suspense>} />
+          <Route path="tenants" element={<Suspense fallback={<RouteLoading />}><AdminTenantList /></Suspense>} />
+          <Route path="tenants/:id" element={<Suspense fallback={<RouteLoading />}><AdminTenantDetail /></Suspense>} />
         </Route>
 
         <Route

@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Search, User } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { SHOPIFY_NAV_GROUPS } from "../ui/nav-config";
 import { Input } from "../ui/primitives";
@@ -126,7 +126,9 @@ export default function AppLayoutRedesign() {
           </div>
         </header>
         <main className="min-h-0 flex-1 overflow-auto p-4">
-          <Outlet />
+          <Suspense fallback={<div className="flex min-h-[40vh] items-center justify-center"><div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-500 shadow-sm">Loading...</div></div>}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>
