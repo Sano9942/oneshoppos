@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-_Last updated: March 14 2026 — **LIVE E2E TEST SUITE COMPLETE.** 20 Playwright specs (00–19) run against production (`sanopos.vercel.app`, tenant `packagesmall`). All ~120 individual tests passed. System confirmed production-ready for onboarding real customers._
+_Last updated: March 15 2026 — **Performance optimization sprint complete.** Code splitting (84% initial JS reduction), backend compression, DB cleanup, landing page shipped._
 
 ---
 
@@ -237,6 +237,70 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 
 ---
 
+## ✅ Landing Page (Mar 15 2026)
+
+**Branch:** `feature/landing-page` — merged to `main`.
+
+- **`LandingPage.jsx`** — public one-pager replacing the bare login form at `/` and `/login`
+- Sections: hero + login card, 8-feature grid, 3-step "How It Works", Setup Guide accordion (5 items), User Guide accordion (6 items), footer with nav links
+- Login form extracted from `Login.jsx` logic — supports multi-tenant Store Code field
+- Native `<details>/<summary>` for accordions (zero JS overhead)
+- Responsive: grid collapses on mobile, sticky nav with scroll-aware background
+- Cosmetic fix: reduced section padding, fixed browser `:visited` pseudo-class overriding accordion text color
+
+---
+
+## ✅ Infrastructure Monitoring (Mar 15 2026)
+
+**Branch:** `feature/infra-monitoring` — merged to `main`.
+
+- **`GET /api/admin/infra`** — gated by `requireAllowedIp` + `requireSuperAdmin`
+- Queries: `pg_stat_activity` (connections by state), `pg_database_size`, `pg_statio_user_tables` (cache hit ratio), `pg_stat_user_tables` (dead tuples/vacuum), per-tenant schema sizes, active slow queries (>1s)
+- Optional: `pg_stat_statements` (historical slow queries) — try/catch, skipped if extension unavailable
+- **`InfrastructurePanel`** in `AdminDashboard.jsx` — 6 sections: DB connections (active/idle/max), DB size, per-tenant schema sizes, cache hit ratio, table health (dead tuples), slow queries
+- Auto-refreshes every 30 seconds
+
+---
+
+## ✅ CSV Export (Mar 15 2026)
+
+**Branch:** `feature/csv-export` — merged to `main`.
+
+- **Shared utility**: `frontend/src/utils/csvExport.js` — `downloadCsv(headers, rows, filename)` with proper CSV escaping and timestamped filenames
+- **Added to 16 pages**: Returns, Stock Adjustments, Transfers, Supplier Payables, Expenses, Action History, Employees, Quotations, Suppliers, Brands, Taxes, Categories, Outlets, Promotions, Parked Sales, Returned Stock
+- Context-aware exports: Supplier Payables exports aging/invoices/ledger tabs, Expenses exports expenses/summary tabs
+- Uses `<Download>` icon from lucide-react in `PageShell` `right` prop
+- Exports visible/filtered rows (respects user's current search/filter)
+
+---
+
+## ✅ Performance Optimization (Mar 15 2026)
+
+### Code Splitting
+**Branch:** `perf/code-splitting` — merged to `main`.
+
+- Converted ~50 static page imports in `App.jsx` to `React.lazy()` with dynamic `import()`
+- `AppLayoutRedesign` `<Outlet>` wrapped in `<Suspense>` — covers all child routes with single fallback
+- `xlsx` library (429 KB) dynamically imported in `InventoryRedesign.jsx` — only loads when user imports products or downloads template
+- Vite `manualChunks` updated: recharts+d3 and xlsx+codepage in isolated chunks, removed catch-all vendor chunk
+- **Result: initial JS load 1,574 KB → 253 KB (84% reduction)**
+
+### Backend Compression
+**Branch:** `perf/backend-compression` — merged to `main`.
+
+- Added `compression()` middleware to Express — gzip/deflate on all API responses (~70% smaller payloads)
+
+### Database Cleanup
+- Dropped 27 orphaned `test_*` and `tenant_test_prov_*` schemas from Supabase
+- **Result: DB size 146 MB → 77 MB (47% reduction)**
+
+### Dead Workflow Removal
+**Branch:** `chore/remove-api-parity-workflow` — merged to `main`.
+
+- Removed `.github/workflows/api-parity.yml` — the `tools/api-parity-audit.js` script it referenced was deleted in a prior cleanup, causing every push to fail and generate email spam
+
+---
+
 ## 📋 Discussed but Deferred
 
 - **Payment gateway integration** (card machines, JazzCash, EasyPaisa)
@@ -270,4 +334,9 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 | Mar 12 2026 | **MT Phase 2 operations**                            | `feature/mt-phase2-operations` branch (9 commits, ~10 files). Setup token generation in tenant provisioner; admin API setup URL endpoints (get/regenerate); admin dashboard setup URL UI; setup wizard MT adaptation (tenant-scoped DB via URL param); tenant-scoped notification helpers; tenant-aware scheduled jobs (`forEachActiveTenant` helper); per-tenant rate limiting (`tenantSlug:IP`). pg-batch3 test fix (ON CONFLICT for company_profile seed). 55/55 pg-batch3 tests passing.                                                                                                                                                    |
 | Mar 12 2026 | **MT Phase 3 hardening**                             | `feature/mt-phase3-hardening` branch. Per-tenant feature flag cache (60s TTL Map, invalidated on PUT). pg_dump/pg_restore backup/restore (replaces stubs, runtime availability check). 7 tenant isolation tests (API + DB + concurrent request safety). Only subdomain/slug routing remains before MULTI_TENANT=1.                                                                                                                                                                                                                                                                                                                              |
 | Mar 13 2026 | **MT Go-Live — MULTI_TENANT=1 flipped**              | `feature/multi-tenant-golive` + `fix/mt-golive-polish` branches merged to `main`. 10 plan tasks + 3 bonus fixes + 4 production hotfixes. Super-admin seeded via Railway CLI. First tenant `packagesmall` (Packages Mall) provisioned, setup wizard completed, POS login verified. Public schema cleaned (89 stale tables dropped). `MULTI_TENANT=1` on Railway, `VITE_MULTI_TENANT=1` on Vercel.                                                                                                                                                                                                                                                |
+| Mar 15 2026 | **Landing page shipped**                              | `LandingPage.jsx` — public one-pager with hero, features grid, setup/user guide accordions, login form. Replaced bare login page. |
+| Mar 15 2026 | **Infrastructure monitoring**                         | `GET /api/admin/infra` endpoint + `InfrastructurePanel` in admin dashboard. DB connections, cache ratio, dead tuples, slow queries, schema sizes. |
+| Mar 15 2026 | **CSV export added to 16 pages**                      | Shared `downloadCsv()` utility + Export CSV button on all table pages missing it. Context-aware for multi-tab pages. |
+| Mar 15 2026 | **Performance: code splitting + compression**         | React.lazy on ~50 routes (1.6 MB → 253 KB initial JS, -84%). Dynamic xlsx import. Backend gzip compression. Dead workflow removed. |
+| Mar 15 2026 | **DB cleanup**                                        | 27 orphaned test schemas dropped from Supabase (146 MB → 77 MB, -47%). |
 | Mar 14 2026 | **Live E2E test suite — all 20 specs passed**        | 20 Playwright specs (00–19) run sequentially against live production (`sanopos.vercel.app`, tenant `packagesmall`). ~120 individual tests, all passing. Covered: full POS day (shift open→sale→return→close), inventory, purchasing/GRN, customers/loyalty, gift cards, CRM, HR/payroll, attendance/kiosk, approvals, notifications, reports (dashboard/sales/inventory/P&L), audit log. One real bug found and fixed: kiosk `?tenant=` param needed in MT mode for unauthenticated PIN endpoint (`backend/index.js` resolveTenant + `KioskRedesign.jsx`). All other fixes were test files only — adapting specs to match actual API contracts. |
