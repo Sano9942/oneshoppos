@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRightLeft, FolderPlus, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowRightLeft, Download, FolderPlus, Plus, Search, Trash2 } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   Badge,
@@ -17,6 +17,7 @@ import {
   parentOptions,
   sortCategories,
 } from "../../utils/categoryTree";
+import { downloadCsv } from "../../utils/csvExport";
 
 const EMPTY = {
   id: null,
@@ -239,10 +240,13 @@ export default function CategoriesRedesign() {
       title="Categories"
       subtitle="Hierarchical internal category tree for product organization and reporting."
       right={
-        <Button tone="primary" onClick={openCreate}>
-          <Plus size={14} className="mr-1 inline" />
-          Add Category
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => downloadCsv(["id","name","parent_id","type","product_count","active"], visibleRows.map(r => [r.id, r.name||"", r.parent_id||"", r.type||"", r.product_count||0, r.active !== false ? "Yes" : "No"]), "categories")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
+          <Button tone="primary" onClick={openCreate}>
+            <Plus size={14} className="mr-1 inline" />
+            Add Category
+          </Button>
+        </div>
       }
     >
       {error ? (

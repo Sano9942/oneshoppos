@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Download, Plus, Search } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   Badge,
@@ -13,6 +13,7 @@ import {
 } from "../../ui/primitives";
 import { useAuth } from "../../auth/AuthProvider";
 import { fmtUtcDateTime } from "../../utils/dates";
+import { downloadCsv } from "../../utils/csvExport";
 
 const fmtDate = fmtUtcDateTime;
 
@@ -132,7 +133,12 @@ export default function TransfersRedesign() {
     <PageShell
       title="Transfers"
       subtitle="stock movement between outlets with full traceability."
-      right={<Button tone="primary" onClick={openCreate}><Plus size={14} className="mr-1 inline" />New Transfer</Button>}
+      right={
+        <div className="flex gap-2">
+          <Button onClick={() => downloadCsv(["date","product","barcode","from_outlet","to_outlet","quantity","note","employee"], visibleRows.map(r => [r.created_at, r.product_name||"", r.barcode||"", r.from_outlet_name||"", r.to_outlet_name||"", r.quantity||0, r.note||"", r.employee_name||""]), "transfers")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
+          <Button tone="primary" onClick={openCreate}><Plus size={14} className="mr-1 inline" />New Transfer</Button>
+        </div>
+      }
     >
       {error ? <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</SectionCard> : null}
 

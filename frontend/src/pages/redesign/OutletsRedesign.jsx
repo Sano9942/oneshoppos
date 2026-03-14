@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { MapPin, Phone, Plus, Search, Trash2 } from "lucide-react";
+import { Download, MapPin, Phone, Plus, Search, Trash2 } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   Button,
@@ -9,6 +9,7 @@ import {
   SectionCard,
   TableToolbar,
 } from "../../ui/primitives";
+import { downloadCsv } from "../../utils/csvExport";
 
 const EMPTY = { name: "", address: "", phone: "" };
 
@@ -109,9 +110,12 @@ export default function OutletsRedesign() {
       title="Outlets"
       subtitle="Manage store locations and branches."
       right={
-        <Button tone="primary" onClick={openCreate}>
-          <Plus size={14} className="mr-1 inline" /> Add Outlet
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => downloadCsv(["id","name","address","phone"], visible.map(o => [o.id, o.name||"", o.address||"", o.phone||""]), "outlets")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
+          <Button tone="primary" onClick={openCreate}>
+            <Plus size={14} className="mr-1 inline" /> Add Outlet
+          </Button>
+        </div>
       }
     >
       {error ? (

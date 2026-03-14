@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, Trash2, Truck } from "lucide-react";
+import { Download, Plus, Search, Trash2, Truck } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import {
@@ -11,6 +11,7 @@ import {
   SectionCard,
   TableToolbar,
 } from "../../ui/primitives";
+import { downloadCsv } from "../../utils/csvExport";
 
 const CREDIT_DAY_OPTIONS = [0, 7, 14, 30, 45, 60, 90];
 
@@ -136,10 +137,13 @@ export default function SuppliersRedesign() {
       title="Suppliers"
       subtitle="Manage supplier accounts, credit terms, and outstanding balances."
       right={
-        <Button tone="primary" onClick={openCreate}>
-          <Plus size={14} className="mr-1 inline" />
-          Add Supplier
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => downloadCsv(["id","name","contact_person","phone","email","credit_days","outstanding"], visibleRows.map(r => [r.id, r.name||"", r.contact_person||"", r.phone||"", r.email||"", r.credit_days||0, r.outstanding_balance||0]), "suppliers")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
+          <Button tone="primary" onClick={openCreate}>
+            <Plus size={14} className="mr-1 inline" />
+            Add Supplier
+          </Button>
+        </div>
       }
     >
       {error ? (

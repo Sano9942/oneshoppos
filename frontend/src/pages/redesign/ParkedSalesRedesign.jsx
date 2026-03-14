@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { PauseCircle, RefreshCw, Trash2 } from "lucide-react";
+import { Download, PauseCircle, RefreshCw, Trash2 } from "lucide-react";
 import { API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import { fmtLocalDateTime } from "../../utils/dates";
@@ -11,6 +11,7 @@ import {
   SectionCard,
   Select,
 } from "../../ui/primitives";
+import { downloadCsv } from "../../utils/csvExport";
 
 export default function ParkedSalesRedesign() {
   const { authHeaders } = useAuth();
@@ -82,6 +83,7 @@ export default function ParkedSalesRedesign() {
       subtitle="View and manage sales parked mid-transaction."
       right={
         <div className="flex gap-2">
+          <Button onClick={() => downloadCsv(["id","customer","items","total","parked_at","outlet"], filtered.map(r => [r.id, r.customer_name||"Walk-in", r.items?.length||0, r.total||0, r.parked_at||r.created_at||"", r.outlet_name||""]), "parked_sales")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
           <Select
             value={outletFilter}
             onChange={(e) => setOutletFilter(e.target.value)}

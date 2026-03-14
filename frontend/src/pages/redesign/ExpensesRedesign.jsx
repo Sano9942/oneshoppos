@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, RefreshCw, Tag, Trash2, X } from "lucide-react";
+import { Download, Plus, RefreshCw, Tag, Trash2, X } from "lucide-react";
 import { API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -12,6 +12,7 @@ import {
   Select,
   TableToolbar,
 } from "../../ui/primitives";
+import { downloadCsv } from "../../utils/csvExport";
 
 const EMPTY_FORM = {
   category_id: "",
@@ -257,6 +258,10 @@ export default function ExpensesRedesign() {
       subtitle="operating expense tracking with filterable list, category summary, and maintenance tools."
       right={
         <div className="flex items-center gap-2">
+          <Button onClick={() => {
+            if (activeTab === "expenses") downloadCsv(["date","category","description","outlet","employee","amount","reference"], rows.map(r => [r.expense_date||"", r.category_name||"", r.description||"", r.outlet_name||"", r.employee_name||"", r.amount||0, r.reference||""]), "expenses");
+            else downloadCsv(["category","transactions","total","percent"], summary.map(s => [s.category_name||"", s.count||0, s.total||0, s.pct||0]), "expenses_summary");
+          }}><Download size={13} className="mr-1 inline" />Export CSV</Button>
           <Button onClick={() => setCatPanelOpen(true)}>
             <Tag size={13} className="mr-1 inline" />
             Categories

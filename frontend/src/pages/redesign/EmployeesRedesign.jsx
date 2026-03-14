@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { KeyRound, Lock, MapPin, Plus, Search, Shield, Star, Trash2, User } from "lucide-react";
+import { Download, KeyRound, Lock, MapPin, Plus, Search, Shield, Star, Trash2, User } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   Badge,
@@ -11,6 +11,7 @@ import {
   Select,
   TableToolbar,
 } from "../../ui/primitives";
+import { downloadCsv } from "../../utils/csvExport";
 
 const EMPTY_FORM = { name: "", role_id: 3, pin_code: "", salary_type: "monthly", monthly_salary: "", hourly_rate: "", daily_rate: "" };
 const EMPTY_ATT = { work_hours_per_day: 8, monthly_leave_allowance: 2 };
@@ -205,9 +206,12 @@ export default function EmployeesRedesign() {
       title="Employees"
       subtitle="Manage staff accounts, roles and PIN codes."
       right={
-        <Button tone="primary" onClick={openCreate}>
-          <Plus size={14} className="mr-1 inline" /> Add Employee
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => downloadCsv(["id","name","role","salary_type","monthly_salary","hourly_rate"], visible.map(e => [e.id, e.name||"", roles.find(r=>r.id===e.role_id)?.name||"", e.salary_type||"", e.monthly_salary||"", e.hourly_rate||""]), "employees")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
+          <Button tone="primary" onClick={openCreate}>
+            <Plus size={14} className="mr-1 inline" /> Add Employee
+          </Button>
+        </div>
       }
     >
       {error ? (

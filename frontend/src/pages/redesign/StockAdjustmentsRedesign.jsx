@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { Download, Plus, Search, Trash2 } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   Badge,
@@ -14,6 +14,7 @@ import {
 import { useAuth } from "../../auth/AuthProvider";
 
 import { fmtUtcDateTime } from "../../utils/dates";
+import { downloadCsv } from "../../utils/csvExport";
 
 const REASONS = ["Damaged", "Expired", "Lost/Stolen", "Found", "Counting Error", "Other"];
 
@@ -139,10 +140,13 @@ export default function StockAdjustmentsRedesign() {
       title="Stock Adjustments"
       subtitle="auditable shrink/gain adjustments per outlet."
       right={
-        <Button tone="primary" onClick={openCreate}>
-          <Plus size={14} className="mr-1 inline" />
-          New Adjustment
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => downloadCsv(["date","product","outlet","reason","quantity","employee"], visibleRows.map(r => [r.created_at, r.product_name||"", r.outlet_name||"", r.reason||"", r.quantity||0, r.employee_name||""]), "stock_adjustments")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
+          <Button tone="primary" onClick={openCreate}>
+            <Plus size={14} className="mr-1 inline" />
+            New Adjustment
+          </Button>
+        </div>
       }
     >
       {error ? <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</SectionCard> : null}

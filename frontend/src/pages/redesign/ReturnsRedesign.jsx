@@ -12,9 +12,10 @@ import {
 } from "../../ui/primitives";
 import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
-import { ArrowLeftRight, Plus, Search } from "lucide-react";
+import { ArrowLeftRight, Download, Plus, Search } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { downloadCsv } from "../../utils/csvExport";
 
 const fmtDate = fmtUtcDateTime;
 
@@ -262,10 +263,13 @@ export default function ReturnsRedesign() {
       title="Returns"
       subtitle="Process customer returns and restock inventory."
       right={
-        <Button tone="primary" onClick={() => setModalOpen(true)}>
-          <Plus size={14} className="mr-1 inline" />
-          Process Return
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => downloadCsv(["id","timestamp","outlet","employee","items","refund_amount","refund_method"], visibleRows.map(r => [r.id, r.timestamp, r.outlet_name||"", r.employee_name||"", r.items?.length||0, r.total_refund||0, r.refund_method||""]), "returns")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
+          <Button tone="primary" onClick={() => setModalOpen(true)}>
+            <Plus size={14} className="mr-1 inline" />
+            Process Return
+          </Button>
+        </div>
       }
     >
       {error ? (

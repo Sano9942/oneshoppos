@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, RefreshCw, X, BookOpen, Ban } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, RefreshCw, X, BookOpen, Ban } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -13,6 +13,7 @@ import {
   SectionCard,
   TableToolbar,
 } from "../../ui/primitives";
+import { downloadCsv } from "../../utils/csvExport";
 
 const STATUS_TONE = {
   paid: "success",
@@ -251,10 +252,17 @@ export default function SupplierPayablesRedesign() {
       title="Supplier Payables"
       subtitle="monitor supplier outstanding balances and record invoice payments."
       right={
-        <Button onClick={refreshCurrent}>
-          <RefreshCw size={13} className="mr-1 inline" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => {
+            if (tab === "aging") downloadCsv(["supplier","0_30","31_60","61_90","over_90","total"], aging.map(a => [a.supplier_name||"", a.days_0_30||0, a.days_31_60||0, a.days_61_90||0, a.over_90||0, a.total_outstanding||0]), "supplier_aging");
+            else if (tab === "invoices") downloadCsv(["invoice","supplier","date","reference","amount","paid","balance","status"], invoices.map(i => [i.invoice_number||i.id, i.supplier_name||"", i.invoice_date||"", i.reference_number||"", i.amount||0, i.amount_paid||0, calcDue(i), i.status||""]), "supplier_invoices");
+            else downloadCsv(["date","invoice","supplier","description","debit","credit","balance"], (ledger?.entries||[]).map(l => [l.date||"", l.invoice_number||"", l.supplier_name||"", l.description||"", l.debit||0, l.credit||0, l.balance||0]), "supplier_ledger");
+          }}><Download size={13} className="mr-1 inline" />Export CSV</Button>
+          <Button onClick={refreshCurrent}>
+            <RefreshCw size={13} className="mr-1 inline" />
+            Refresh
+          </Button>
+        </div>
       }
     >
       {error ? (

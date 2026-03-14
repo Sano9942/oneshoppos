@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, Plus, Search, Trash2 } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import {
@@ -22,6 +22,7 @@ const STATUS_TONE = {
 import { fmtLocalDate } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 const fmtDate = fmtLocalDate;
+import { downloadCsv } from "../../utils/csvExport";
 
 const EMPTY_FORM = {
   customer_id: "", outlet_id: "", employee_id: "",
@@ -375,9 +376,12 @@ export default function QuotationsRedesign() {
       title="Quotations"
       subtitle="Create and manage price quotations for customers."
       right={
-        <Button tone="primary" onClick={openNew}>
-          <Plus size={14} className="mr-1 inline" /> New Quotation
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => downloadCsv(["id","customer","status","valid_until","total"], visible.map(q => [q.id, q.customer_name||"", q.status||"", q.valid_until||"", q.grand_total||q.total||0]), "quotations")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
+          <Button tone="primary" onClick={openNew}>
+            <Plus size={14} className="mr-1 inline" /> New Quotation
+          </Button>
+        </div>
       }
     >
       {error && (

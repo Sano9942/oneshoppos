@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Download, Plus, Search } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   Badge,
@@ -15,6 +15,7 @@ import { useAuth } from "../../auth/AuthProvider";
 
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { downloadCsv } from "../../utils/csvExport";
 
 const fmtDate = fmtUtcDateTime;
 
@@ -183,7 +184,7 @@ export default function ReturnedStockRedesign() {
     <PageShell
       title="Returned Stock"
       subtitle="supplier return (RMA) workflow and stock-out tracking."
-      right={<Button tone="primary" onClick={openCreate}><Plus size={14} className="mr-1 inline" />New Supplier Return</Button>}
+      right={<div className="flex gap-2"><Button onClick={() => downloadCsv(["id","reference","supplier","outlet","items","value","date","status"], visibleRows.map(r => [r.id, r.reference_number||"", r.supplier_name||"", r.outlet_name||"", r.items?.length||0, r.total_value||0, r.created_at||"", r.status||""]), "returned_stock")}><Download size={14} className="mr-1 inline" />Export CSV</Button><Button tone="primary" onClick={openCreate}><Plus size={14} className="mr-1 inline" />New Supplier Return</Button></div>}
     >
       {error ? <SectionCard className="mb-3 border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</SectionCard> : null}
 

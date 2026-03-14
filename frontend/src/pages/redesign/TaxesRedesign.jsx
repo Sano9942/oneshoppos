@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { Download, Plus, Search, Trash2 } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   Badge,
@@ -10,6 +10,7 @@ import {
   SectionCard,
   TableToolbar,
 } from "../../ui/primitives";
+import { downloadCsv } from "../../utils/csvExport";
 
 const EMPTY = { id: null, name: "", rate: "", is_default: false };
 
@@ -108,10 +109,13 @@ export default function TaxesRedesign() {
       title="Taxes"
       subtitle="tax profiles with default control and fast editing."
       right={
-        <Button tone="primary" onClick={openCreate}>
-          <Plus size={14} className="mr-1 inline" />
-          Add Tax Rule
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => downloadCsv(["id","name","rate","is_default"], visibleRows.map(r => [r.id, r.name||"", r.rate||0, r.is_default?"Yes":"No"]), "taxes")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
+          <Button tone="primary" onClick={openCreate}>
+            <Plus size={14} className="mr-1 inline" />
+            Add Tax Rule
+          </Button>
+        </div>
       }
     >
       {error ? (

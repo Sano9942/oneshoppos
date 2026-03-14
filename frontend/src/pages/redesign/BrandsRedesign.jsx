@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, Tag, Trash2 } from "lucide-react";
+import { Download, Plus, Search, Tag, Trash2 } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   Button,
@@ -9,6 +9,7 @@ import {
   SectionCard,
   TableToolbar,
 } from "../../ui/primitives";
+import { downloadCsv } from "../../utils/csvExport";
 
 const EMPTY = { id: null, name: "", description: "" };
 
@@ -106,10 +107,13 @@ export default function BrandsRedesign() {
       title="Brands"
       subtitle="brand taxonomy with consistent CRUD and search behavior."
       right={
-        <Button tone="primary" onClick={openCreate}>
-          <Plus size={14} className="mr-1 inline" />
-          Add Brand
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => downloadCsv(["id","name","description"], visibleRows.map(r => [r.id, r.name||"", r.description||""]), "brands")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
+          <Button tone="primary" onClick={openCreate}>
+            <Plus size={14} className="mr-1 inline" />
+            Add Brand
+          </Button>
+        </div>
       }
     >
       {error ? (

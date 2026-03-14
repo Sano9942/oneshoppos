@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Percent, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { Download, Percent, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -14,6 +14,7 @@ import {
   TableToolbar,
 } from "../../ui/primitives";
 import { indentLabel, leafCategories, sortCategories } from "../../utils/categoryTree";
+import { downloadCsv } from "../../utils/csvExport";
 
 const TYPE_LABELS = {
   percent: "% Off (matched items)",
@@ -337,6 +338,7 @@ export default function PromotionsRedesign() {
       subtitle="manage discount rules and test promotion outcomes on sample carts."
       right={
         <div className="flex items-center gap-2">
+          <Button onClick={() => downloadCsv(["id","name","type","value","start_date","end_date","active"], visibleRows.map(r => [r.id, r.name||"", r.type||"", r.discount_value||0, r.start_date||"", r.end_date||"", r.active?"Yes":"No"]), "promotions")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
           <Button onClick={loadPromotions}>
             <RefreshCw size={13} className="mr-1 inline" />
             Refresh

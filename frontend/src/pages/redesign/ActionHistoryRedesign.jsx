@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RefreshCcw, Search } from "lucide-react";
+import { Download, RefreshCcw, Search } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   Button,
@@ -11,6 +11,7 @@ import {
 } from "../../ui/primitives";
 
 import { fmtUtcDateTime } from "../../utils/dates";
+import { downloadCsv } from "../../utils/csvExport";
 
 const fmtDate = fmtUtcDateTime;
 
@@ -72,9 +73,12 @@ export default function ActionHistoryRedesign() {
       title="Action History"
       subtitle="Audit log of all system actions and events."
       right={
-        <Button onClick={() => fetchLogs()}>
-          <RefreshCcw size={14} className="mr-1 inline" /> Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => downloadCsv(["timestamp","employee","action","entity","details"], logs.map(l => [l.created_at||l.timestamp, l.employee_name||l.performed_by||"System", l.action||"", l.entity_type||"", l.details||l.description||""]), "action_history")}><Download size={14} className="mr-1 inline" />Export CSV</Button>
+          <Button onClick={() => fetchLogs()}>
+            <RefreshCcw size={14} className="mr-1 inline" /> Refresh
+          </Button>
+        </div>
       }
     >
       {error ? (
