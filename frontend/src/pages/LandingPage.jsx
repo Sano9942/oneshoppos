@@ -259,7 +259,7 @@ const USER_GUIDE = [
 function AccordionItem({ question, answer }) {
   return (
     <details className="group border-b border-slate-200 last:border-0">
-      <summary className="flex items-center justify-between cursor-pointer py-4 px-1 text-left text-[15px] font-medium text-slate-800 hover:text-emerald-700 transition-colors list-none [&::-webkit-details-marker]:hidden">
+      <summary className="flex items-center justify-between cursor-pointer py-4 px-1 text-left text-[15px] font-medium text-slate-800 hover:text-emerald-700 transition-colors list-none [&::-webkit-details-marker]:hidden" style={{ color: "inherit" }}>
         <span>{question}</span>
         <ChevronDown
           size={18}
@@ -407,7 +407,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Features Grid ───────────────────────────────── */}
-      <section id="features" className="py-16 md:py-24 bg-slate-50">
+      <section id="features" className="py-12 md:py-16 bg-slate-50">
         <div className="max-w-6xl mx-auto px-5">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
@@ -439,7 +439,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── How It Works ────────────────────────────────── */}
-      <section className="py-16 md:py-24 bg-white">
+      <section className="py-12 md:py-16 bg-white">
         <div className="max-w-6xl mx-auto px-5">
           <div className="text-center mb-14">
             <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
@@ -469,7 +469,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Setup Guide ─────────────────────────────────── */}
-      <section id="setup-guide" className="py-16 md:py-24 bg-slate-50">
+      <section id="setup-guide" className="py-12 md:py-16 bg-slate-50">
         <div className="max-w-3xl mx-auto px-5">
           <div className="text-center mb-10">
             <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-4 border border-emerald-100">
@@ -493,7 +493,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── User Guide ──────────────────────────────────── */}
-      <section id="user-guide" className="py-16 md:py-24 bg-white">
+      <section id="user-guide" className="py-12 md:py-16 bg-white">
         <div className="max-w-3xl mx-auto px-5">
           <div className="text-center mb-10">
             <div className="inline-flex items-center gap-2 bg-slate-100 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-4 border border-slate-200">
