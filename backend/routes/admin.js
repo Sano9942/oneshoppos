@@ -49,6 +49,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
   const jwt = require("jsonwebtoken");
   const { verifyAccessToken, defaults: jwtDefaults } = require("../jwt-auth");
   const { provision } = require("../tenant-provisioner-pg");
+  const { PLAN_DEFAULTS } = require("../middleware/plan-limits");
   const tenantDbManager = require("../tenant-db-manager-pg");
   tenantDbManager.init(db);
 
@@ -194,10 +195,14 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
         pin: String(pin),
       });
 
-      // Update plan if not default
-      if (plan && plan !== "free") {
-        await db.query("UPDATE tenants SET plan = $1 WHERE id = $2", [plan, result.tenantId]);
-      }
+      // Apply plan + its default limits
+      const effectivePlan = plan || "free";
+      const limits = PLAN_DEFAULTS[effectivePlan] || PLAN_DEFAULTS.free;
+      await db.query(
+        `UPDATE tenants SET plan = $1, max_outlets = $2, max_employees = $3, max_products = $4
+         WHERE id = $5`,
+        [effectivePlan, limits.max_outlets, limits.max_employees, limits.max_products, result.tenantId]
+      );
 
       await auditLog(result.tenantId, "created", { slug, timezone: timezone || "UTC", plan: plan || "free" }, `admin:${req.admin.email}`);
 
@@ -244,6 +249,13 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       const tenant = rows[0] || null;
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
 
+      // When plan changes and no explicit limits are sent, auto-apply plan defaults
+      const planChanged = plan && plan !== tenant.plan;
+      const defaults = planChanged ? (PLAN_DEFAULTS[plan] || {}) : {};
+      const effEmployees = max_employees ?? (planChanged ? defaults.max_employees : null) ?? null;
+      const effOutlets   = max_outlets   ?? (planChanged ? defaults.max_outlets   : null) ?? null;
+      const effProducts  = max_products  ?? (planChanged ? defaults.max_products  : null) ?? null;
+
       await db.query(
         `UPDATE tenants SET
            name = COALESCE($1, name),
@@ -256,11 +268,11 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
            updated_at = NOW()
          WHERE id = $8`,
         [name || null, owner_email || null, plan || null, timezone || null,
-         max_employees ?? null, max_outlets ?? null, max_products ?? null, req.params.id]
+         effEmployees, effOutlets, effProducts, req.params.id]
       );
 
       const changes = {};
-      if (plan && plan !== tenant.plan) changes.plan = { from: tenant.plan, to: plan };
+      if (planChanged) changes.plan = { from: tenant.plan, to: plan };
       if (Object.keys(changes).length) {
         await auditLog(tenant.id, "updated", changes, `admin:${req.admin.email}`);
       }
@@ -446,6 +458,11 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
+  });
+
+  // ── Plan defaults (read-only) ──────────────────────────────────────────
+  app.get("/api/admin/plan-defaults", requireAllowedIp, requireSuperAdmin, (req, res) => {
+    res.json({ plans: PLAN_DEFAULTS });
   });
 
   app.get("/api/admin/stats", requireAllowedIp, requireSuperAdmin, async (req, res) => {

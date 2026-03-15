@@ -11,6 +11,14 @@
  *   app.post("/api/employees", requirePlanLimit("employees"), ...)
  */
 
+// ── Plan defaults ────────────────────────────────────────────────────────
+// 0 = unlimited.  These are auto-applied on provision and plan change.
+const PLAN_DEFAULTS = {
+  free:    { max_outlets: 1,  max_employees: 3,  max_products: 500  },
+  starter: { max_outlets: 3,  max_employees: 10, max_products: 2000 },
+  pro:     { max_outlets: 10, max_employees: 50, max_products: 0    },
+};
+
 const RESOURCE_CONFIG = {
   employees: {
     limitColumn: "max_employees",
@@ -80,4 +88,4 @@ function requirePlanLimit(resource) {
   };
 }
 
-module.exports = { requirePlanLimit };
+module.exports = { requirePlanLimit, PLAN_DEFAULTS };
