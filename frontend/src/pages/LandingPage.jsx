@@ -19,6 +19,8 @@ import {
   Wifi,
   WifiOff,
   ArrowUp,
+  Check,
+  Star,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
 import { IS_MULTI_TENANT } from "../config";
@@ -200,6 +202,53 @@ const STEPS = [
   },
 ];
 
+/* ─── Plans Data ─────────────────────────────────────────── */
+
+const PLANS = [
+  {
+    name: "Free",
+    price: "Free",
+    subtitle: "For trying out SanoPOS",
+    featured: false,
+    limits: { outlets: 1, employees: 3, products: "500" },
+    features: [
+      "Full POS with barcode scanning",
+      "Cash shift management",
+      "Sales & inventory reports",
+      "Customer loyalty & wallet",
+      "Thermal receipt printing",
+    ],
+  },
+  {
+    name: "Starter",
+    price: "Contact Us",
+    subtitle: "For growing businesses",
+    featured: false,
+    limits: { outlets: 3, employees: 10, products: "2,000" },
+    features: [
+      "Everything in Free",
+      "Multi-store management",
+      "Stock transfers between outlets",
+      "Purchase orders & GRN",
+      "Shopify sync",
+    ],
+  },
+  {
+    name: "Pro",
+    price: "Contact Us",
+    subtitle: "For established retailers",
+    featured: true,
+    limits: { outlets: 10, employees: 50, products: "Unlimited" },
+    features: [
+      "Everything in Starter",
+      "67+ advanced reports",
+      "Accounting (P&L, cashflow)",
+      "HR & payroll management",
+      "Priority support",
+    ],
+  },
+];
+
 /* ─── Setup Guide Data ────────────────────────────────────── */
 
 const SETUP_GUIDE = [
@@ -314,6 +363,9 @@ export default function LandingPage() {
             <a href="#features" className="hover:text-emerald-700 transition-colors">
               Features
             </a>
+            <a href="#pricing" className="hover:text-emerald-700 transition-colors">
+              Pricing
+            </a>
             <a href="#setup-guide" className="hover:text-emerald-700 transition-colors">
               Setup Guide
             </a>
@@ -350,7 +402,7 @@ export default function LandingPage() {
           backgroundImage: `radial-gradient(circle at 1px 1px, #008060 1px, transparent 0)`,
           backgroundSize: "32px 32px",
         }} />
-        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-emerald-50 rounded-full -translate-y-1/2 translate-x-1/3 blur-3xl opacity-60" />
+        <div className="absolute top-0 right-0 w-150 h-150 bg-emerald-50 rounded-full -translate-y-1/2 translate-x-1/3 blur-3xl opacity-60" />
 
         <div className="relative max-w-6xl mx-auto px-5 grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
           {/* Left — copy */}
@@ -468,8 +520,88 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── Pricing ─────────────────────────────────────── */}
+      <section id="pricing" className="py-12 md:py-16 bg-slate-50">
+        <div className="max-w-6xl mx-auto px-5">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              Simple, transparent plans
+            </h2>
+            <p className="mt-3 text-slate-600 max-w-xl mx-auto">
+              Start free and upgrade as your business grows. No hidden fees.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {PLANS.map(({ name, price, subtitle, featured, limits, features }) => (
+              <div
+                key={name}
+                className={`relative rounded-2xl border p-6 flex flex-col ${
+                  featured
+                    ? "border-emerald-500 bg-white shadow-lg shadow-emerald-100 ring-1 ring-emerald-500"
+                    : "border-slate-200 bg-white"
+                }`}
+              >
+                {featured && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 bg-emerald-600 text-white text-xs font-bold px-3 py-1 rounded-full">
+                    <Star size={11} fill="currentColor" />
+                    Most Popular
+                  </div>
+                )}
+
+                <div className="mb-5">
+                  <h3 className="text-lg font-bold text-slate-900">{name}</h3>
+                  <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>
+                </div>
+
+                <div className="mb-6">
+                  <span className="text-3xl font-extrabold text-slate-900">{price}</span>
+                </div>
+
+                {/* Limits */}
+                <div className="grid grid-cols-3 gap-3 mb-6 bg-slate-50 rounded-lg p-3">
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-slate-900">{limits.outlets}</p>
+                    <p className="text-xs text-slate-500">Outlets</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-slate-900">{limits.employees}</p>
+                    <p className="text-xs text-slate-500">Employees</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-slate-900">{limits.products}</p>
+                    <p className="text-xs text-slate-500">Products</p>
+                  </div>
+                </div>
+
+                {/* Features */}
+                <ul className="space-y-2.5 mb-6 grow">
+                  {features.map((f) => (
+                    <li key={f} className="flex items-start gap-2 text-sm text-slate-600">
+                      <Check size={15} className="text-emerald-500 shrink-0 mt-0.5" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+
+                <a
+                  href="#top"
+                  className={`block text-center py-2.5 rounded-lg font-semibold text-sm transition-colors ${
+                    featured
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-800"
+                  }`}
+                >
+                  {price === "Free" ? "Get Started" : "Contact Us"}
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── Setup Guide ─────────────────────────────────── */}
-      <section id="setup-guide" className="py-12 md:py-16 bg-slate-50">
+      <section id="setup-guide" className="py-12 md:py-16 bg-white">
         <div className="max-w-3xl mx-auto px-5">
           <div className="text-center mb-10">
             <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-4 border border-emerald-100">
@@ -493,7 +625,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── User Guide ──────────────────────────────────── */}
-      <section id="user-guide" className="py-12 md:py-16 bg-white">
+      <section id="user-guide" className="py-12 md:py-16 bg-slate-50">
         <div className="max-w-3xl mx-auto px-5">
           <div className="text-center mb-10">
             <div className="inline-flex items-center gap-2 bg-slate-100 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-4 border border-slate-200">
@@ -529,6 +661,9 @@ export default function LandingPage() {
           <div className="flex items-center gap-5 text-sm">
             <a href="#features" className="hover:text-white transition-colors">
               Features
+            </a>
+            <a href="#pricing" className="hover:text-white transition-colors">
+              Pricing
             </a>
             <a href="#setup-guide" className="hover:text-white transition-colors">
               Setup Guide
