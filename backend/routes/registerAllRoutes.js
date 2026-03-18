@@ -415,6 +415,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ATTENDANCE ---
   require("./attendance")(app, deps);
 
+  // --- BULK IMPORT ---
+  require("./import")(app, deps);
+
   return {
     processPendingShopifyInventoryEvents:
       typeof processPendingShopifyInventoryEvents === "function"
