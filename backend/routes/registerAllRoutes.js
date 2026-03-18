@@ -52,6 +52,9 @@ module.exports = function registerAllRoutes(app, deps) {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
+  // Public receipt endpoint — no auth required, manually resolves tenant DB
+  require("./receipts")(app, deps);
+
   // Setup wizard — must be BEFORE auth middleware (no session exists yet)
   const createSetupRouter = require("./setup");
   const IS_MULTI_TENANT = process.env.MULTI_TENANT === "1";
