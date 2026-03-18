@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { CheckCircle2, Circle, X, PartyPopper } from "lucide-react";
 import { SectionCard } from "../../ui/primitives";
+import { API_BASE as API } from "../../config";
+import { useAuth } from "../../auth/AuthProvider";
 
 const STORAGE_KEY = "onboarding_dismissed";
 
@@ -43,10 +45,27 @@ function buildSteps(data, onNavigate) {
 }
 
 export function DashboardOnboarding({ data, onNavigate }) {
+  const { authHeaders } = useAuth();
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem(STORAGE_KEY) === "1"
   );
+  const [serverChecked, setServerChecked] = useState(false);
   const [autoDismissed, setAutoDismissed] = useState(false);
+
+  // Check server-side dismissal status on mount
+  useEffect(() => {
+    if (dismissed) { setServerChecked(true); return; }
+    fetch(`${API}/api/company-profile`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.profile?.onboarding_dismissed) {
+          localStorage.setItem(STORAGE_KEY, "1");
+          setDismissed(true);
+        }
+        setServerChecked(true);
+      })
+      .catch(() => setServerChecked(true));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const steps = buildSteps(data, onNavigate);
   const doneCount = steps.filter((s) => s.done).length;
@@ -57,16 +76,24 @@ export function DashboardOnboarding({ data, onNavigate }) {
     if (!allDone || autoDismissed) return;
     const timer = setTimeout(() => {
       setAutoDismissed(true);
-      localStorage.setItem(STORAGE_KEY, "1");
+      persistDismiss();
     }, 3000);
     return () => clearTimeout(timer);
-  }, [allDone, autoDismissed]);
+  }, [allDone, autoDismissed]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (dismissed || autoDismissed) return null;
+  const persistDismiss = () => {
+    localStorage.setItem(STORAGE_KEY, "1");
+    fetch(`${API}/api/company-profile/onboarding-dismiss`, {
+      method: "PUT",
+      headers: authHeaders(),
+    }).catch(() => {});
+  };
+
+  if (dismissed || autoDismissed || !serverChecked) return null;
 
   const dismiss = () => {
-    localStorage.setItem(STORAGE_KEY, "1");
     setDismissed(true);
+    persistDismiss();
   };
 
   return (
