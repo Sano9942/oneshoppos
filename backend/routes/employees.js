@@ -42,7 +42,11 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   app.get("/api/employees", async (req, res) => {
     try {
       const { rows } = await db.query(
-        "SELECT e.id, e.name, e.pin_code, e.salary_type, e.monthly_salary, e.hourly_rate, e.daily_rate, e.work_hours_per_day, r.name as role, e.role_id FROM employees e LEFT JOIN roles r ON e.role_id = r.id WHERE e.deleted_at IS NULL ORDER BY e.name ASC",
+        `SELECT e.id, e.name, e.pin_code, e.email, e.password_hash IS NOT NULL as has_password,
+                e.salary_type, e.monthly_salary, e.hourly_rate, e.daily_rate, e.work_hours_per_day,
+                r.name as role, e.role_id
+         FROM employees e LEFT JOIN roles r ON e.role_id = r.id
+         WHERE e.deleted_at IS NULL ORDER BY e.name ASC`,
       );
       res.json({ employees: rows });
     } catch (err) {
@@ -79,12 +83,13 @@ module.exports = function registerEmployeeRoutes(app, deps) {
 
   // Add a new employee
   app.post("/api/employees", requirePerm("all_access"), async (req, res) => {
-    const { name, role_id, pin_code, salary_type, monthly_salary, hourly_rate, daily_rate } = req.body;
+    const { name, role_id, pin_code, salary_type, monthly_salary, hourly_rate, daily_rate, email, password } = req.body;
     try {
       const pin_hash = pin_code ? await bcrypt.hash(String(pin_code), 10) : null;
+      const password_hash = password ? await bcrypt.hash(String(password), 10) : null;
       const { rows } = await db.query(
-        "INSERT INTO employees (name, role_id, pin_code, pin_hash, salary_type, monthly_salary, hourly_rate, daily_rate) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
-        [name, role_id || 3, pin_code, pin_hash, salary_type || "monthly", Number(monthly_salary || 0), Number(hourly_rate || 0), Number(daily_rate || 0)],
+        "INSERT INTO employees (name, role_id, pin_code, pin_hash, salary_type, monthly_salary, hourly_rate, daily_rate, email, password_hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
+        [name, role_id || 3, pin_code, pin_hash, salary_type || "monthly", Number(monthly_salary || 0), Number(hourly_rate || 0), Number(daily_rate || 0), email || null, password_hash],
       );
       const newId = rows[0].id;
       // Auto-assign new employee to all active outlets
@@ -107,7 +112,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   // Update an employee
   app.put("/api/employees/:id", requirePerm("all_access"), async (req, res) => {
     const { id } = req.params;
-    const { name, role_id, pin_code, salary_type, monthly_salary, hourly_rate, daily_rate } = req.body;
+    const { name, role_id, pin_code, salary_type, monthly_salary, hourly_rate, daily_rate, email } = req.body;
     const perms = req.employeePerms || [];
     const isAdmin = perms.includes("all_access");
 
@@ -131,6 +136,11 @@ module.exports = function registerEmployeeRoutes(app, deps) {
         const pin_hash = await bcrypt.hash(String(pin_code), 10);
         query += `, pin_code = $${paramIdx++}, pin_hash = $${paramIdx++}`;
         params.push(pin_code, pin_hash);
+      }
+
+      if (email !== undefined) {
+        query += `, email = $${paramIdx++}`;
+        params.push(email === "" ? null : email);
       }
 
       query += ` WHERE id = $${paramIdx++}`;
@@ -290,6 +300,145 @@ module.exports = function registerEmployeeRoutes(app, deps) {
       } catch { /* ignore if table doesn't exist */ }
 
       res.json({ message: "All tokens revoked for employee" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PUT /api/employees/:id/set-password — admin sets password for an employee
+  app.put("/api/employees/:id/set-password", requirePerm("all_access"), async (req, res) => {
+    const { id } = req.params;
+    const { password } = req.body || {};
+    if (!password || password.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
+    }
+
+    try {
+      const password_hash = await bcrypt.hash(String(password), 10);
+      const { rowCount } = await db.query(
+        "UPDATE employees SET password_hash = $1 WHERE id = $2 AND deleted_at IS NULL",
+        [password_hash, Number(id)]
+      );
+      if (rowCount === 0) return res.status(404).json({ error: "Employee not found" });
+
+      const actorId = Number(req.headers["x-employee-id"] || 0);
+      try {
+        await db.query(
+          `INSERT INTO action_history (action_type, entity_type, entity_id, employee_id, description)
+           VALUES ('password_set', 'employee', $1, $2, $3)`,
+          [Number(id), actorId, `Password set for employee #${id}`]
+        );
+      } catch { /* best-effort */ }
+
+      res.json({ message: "Password set successfully" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PUT /api/employees/:id/change-password — employee changes own password
+  app.put("/api/employees/:id/change-password", async (req, res) => {
+    const { id } = req.params;
+    const actorId = Number(req.headers["x-employee-id"] || 0);
+
+    if (actorId !== Number(id)) {
+      return res.status(403).json({ error: "You can only change your own password" });
+    }
+
+    const { current_password, pin, new_password } = req.body || {};
+    if (!new_password || new_password.length < 8) {
+      return res.status(400).json({ error: "New password must be at least 8 characters" });
+    }
+    if (!current_password && !pin) {
+      return res.status(400).json({ error: "current_password or pin is required for verification" });
+    }
+
+    try {
+      const { rows: [employee] } = await db.query(
+        "SELECT id, password_hash, pin_hash, pin_code FROM employees WHERE id = $1 AND deleted_at IS NULL",
+        [Number(id)]
+      );
+      if (!employee) return res.status(404).json({ error: "Employee not found" });
+
+      let verified = false;
+      if (current_password && employee.password_hash) {
+        verified = await bcrypt.compare(String(current_password), employee.password_hash);
+      } else if (pin) {
+        if (employee.pin_hash) {
+          verified = await bcrypt.compare(String(pin), employee.pin_hash);
+        } else if (employee.pin_code) {
+          verified = String(pin).trim() === String(employee.pin_code).trim();
+        }
+      }
+      if (!verified) {
+        return res.status(401).json({ error: "Current credentials are incorrect" });
+      }
+
+      const password_hash = await bcrypt.hash(String(new_password), 10);
+      await db.query(
+        "UPDATE employees SET password_hash = $1 WHERE id = $2",
+        [password_hash, Number(id)]
+      );
+
+      res.json({ message: "Password changed successfully" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/employees/:id/send-reset — admin sends password reset email
+  app.post("/api/employees/:id/send-reset", requirePerm("all_access"), async (req, res) => {
+    const { id } = req.params;
+    const crypto = require("crypto");
+
+    try {
+      const { rows: [employee] } = await db.query(
+        "SELECT id, name, email FROM employees WHERE id = $1 AND deleted_at IS NULL",
+        [Number(id)]
+      );
+      if (!employee) return res.status(404).json({ error: "Employee not found" });
+      if (!employee.email) return res.status(400).json({ error: "Employee has no email address set" });
+
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = await bcrypt.hash(rawToken, 10);
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+      await db.query(
+        "INSERT INTO password_reset_tokens (employee_id, token_hash, expires_at) VALUES ($1, $2, $3)",
+        [employee.id, tokenHash, expiresAt]
+      );
+
+      const frontendUrl = process.env.CORS_ORIGIN || "http://localhost:5173";
+      let resetLink = `${frontendUrl}/reset-password?token=${rawToken}`;
+
+      let storeName = "SanoPOS";
+      try {
+        const { rows: [co] } = await db.query("SELECT name FROM company_profile WHERE id = 1");
+        if (co?.name) storeName = co.name;
+      } catch { /* best-effort */ }
+
+      if (process.env.MULTI_TENANT === "1" && req.tenantSlug) {
+        resetLink += `&tenant=${req.tenantSlug}`;
+      }
+
+      const { sendPasswordResetEmail } = require("../utils/resendEmail");
+      await sendPasswordResetEmail({
+        toEmail: employee.email,
+        employeeName: employee.name,
+        resetLink,
+        storeName,
+      });
+
+      const actorId = Number(req.headers["x-employee-id"] || 0);
+      try {
+        await db.query(
+          `INSERT INTO action_history (action_type, entity_type, entity_id, employee_id, description)
+           VALUES ('password_reset_sent', 'employee', $1, $2, $3)`,
+          [Number(id), actorId, `Password reset email sent to ${employee.email}`]
+        );
+      } catch { /* best-effort */ }
+
+      res.json({ message: `Password reset email sent to ${employee.email}` });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
