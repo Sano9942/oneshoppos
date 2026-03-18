@@ -50,7 +50,7 @@ oneshoppos/
 │   ├── master-db-pg.js           # Master tenant registry
 │   ├── tenant-provisioner-pg.js  # Schema-based provisioning
 │   ├── services/printer.js       # ESC/POS thermal printer
-│   └── utils/                    # tz.js, receiptEmail.js, digestEmail.js, backup-pg.js
+│   └── utils/                    # tz.js, receiptEmail.js, digestEmail.js, backup-pg.js, resendEmail.js
 └── frontend/src/
     ├── App.jsx                   # Route orchestrator
     ├── auth/AuthProvider.jsx     # Global fetch interceptor + JWT auth
@@ -75,6 +75,7 @@ oneshoppos/
         ├── shopify/              # Shopify tab modules
         ├── admin/                # Super-admin panel (separate auth, infra monitoring)
         ├── LandingPage.jsx       # Public landing page (product info, setup/user guide, login)
+        ├── ResetPassword.jsx     # Public password reset page (/reset-password?token=xxx)
         ├── Reports.jsx           # Reports orchestrator (NOT legacy)
         └── [*Route.jsx]          # 31 thin wrappers — never edit
 ```
@@ -101,6 +102,32 @@ oneshoppos/
 ### Legacy SQLite Tests (do not use unless explicitly asked)
 - `smoke-gate.test.js` has **22/25 pre-existing failures on main** — do NOT investigate
 
+## Authentication System
+
+- **Dashboard login**: password-based (`POST /api/auth/login` or `/api/auth/mt-login` with `{ username, password }`)
+- **Graceful fallback**: if no `password_hash` set, the password field is treated as a PIN (transition period)
+- **Kiosk login**: PIN-only (`POST /api/auth/kiosk-login`) — unchanged, never uses passwords
+- **POS session re-auth**: PIN-only via `/api/employees/validate-pin` — NOT `/api/auth/login`
+- **Forgot password**: `POST /api/auth/forgot-password` → sends Resend email → `POST /api/auth/reset-password`
+- **Reset page**: `/reset-password?token=xxx&tenant=slug` (public, no auth)
+- **Resend email service**: system-level transactional emails (`RESEND_API_KEY` env var on Railway)
+- **Nodemailer/SMTP**: tenant-level emails (receipts, digest, CRM) — uses `email_config` table per tenant
+
+## Permission System
+
+- **Roles**: Administrator (`all_access`), Manager (8 permissions), Cashier (3 permissions)
+- **Middleware**: `requirePerm("perm")` and `requireAnyPerm(["perm1", "perm2"])` in route handlers
+- **Frontend**: `hasPerm("perm")` from `useAuth()` — returns true if `all_access` or specific permission
+- **Admin-only routes**: employees CRUD, outlets, email config, printer config, roles, action-history logging
+- **Manager+Admin routes**: products (write), orders, purchase orders, inventory, attribute sets, barcode print jobs
+- **All authenticated**: view reports, read-only data, send receipts, POS operations
+
+## Migrations
+
+- **Current version**: 3 (password_hash, email on employees + password_reset_tokens table)
+- **migrate-pg.js CLI**: `node backend/migrate-pg.js` — migrates public schema AND all active tenant schemas
+- **Tenant migration gotcha**: existing tenants need `schema_version` table seeded with previous versions before first run
+
 ## Live API Contracts (confirmed Mar 14 2026)
 
 - **Sales POST**: body uses `cartItems` (not `items`), item `id` (not `product_id`), item `price` (not `unit_price`)
@@ -121,4 +148,5 @@ oneshoppos/
 - **Backend**: `https://oneshoppos-production.up.railway.app` (Railway)
 - **Super-admin**: `https://sanopos.vercel.app/admin`
 - **Database**: Supabase Postgres, `public` schema = 6 master tables, tenant data in `tenant_<slug>` schemas
+- **Resend**: `RESEND_API_KEY` env var on Railway for system emails (password reset)
 - See `backend/CLAUDE.md` for Railway env vars and deployment gotchas
