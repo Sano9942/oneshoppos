@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, KeyRound, Lock, MapPin, Plus, Search, Shield, Star, Trash2, User } from "lucide-react";
+import { Download, KeyRound, Lock, Mail, MapPin, Plus, Search, Shield, Star, Trash2, User } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import {
   Badge,
@@ -13,7 +13,7 @@ import {
 } from "../../ui/primitives";
 import { downloadCsv } from "../../utils/csvExport";
 
-const EMPTY_FORM = { name: "", role_id: 3, pin_code: "", salary_type: "monthly", monthly_salary: "", hourly_rate: "", daily_rate: "" };
+const EMPTY_FORM = { name: "", role_id: 3, pin_code: "", email: "", salary_type: "monthly", monthly_salary: "", hourly_rate: "", daily_rate: "" };
 const EMPTY_ATT = { work_hours_per_day: 8, monthly_leave_allowance: 2 };
 
 export default function EmployeesRedesign() {
@@ -36,6 +36,12 @@ export default function EmployeesRedesign() {
   const [revokeTarget, setRevokeTarget] = useState(null);
   const [revokeReason, setRevokeReason] = useState("");
   const [revoking, setRevoking] = useState(false);
+
+  // Password management
+  const [passwordTarget, setPasswordTarget] = useState(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [settingPassword, setSettingPassword] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -81,7 +87,7 @@ export default function EmployeesRedesign() {
 
   const openEdit = async (emp) => {
     setEditing(emp);
-    setForm({ name: emp.name, role_id: emp.role_id, pin_code: "", salary_type: emp.salary_type || "monthly", monthly_salary: emp.monthly_salary || "", hourly_rate: emp.hourly_rate || "", daily_rate: emp.daily_rate || "" });
+    setForm({ name: emp.name, role_id: emp.role_id, pin_code: "", email: emp.email || "", salary_type: emp.salary_type || "monthly", monthly_salary: emp.monthly_salary || "", hourly_rate: emp.hourly_rate || "", daily_rate: emp.daily_rate || "" });
     setAttConfig(EMPTY_ATT);
     setAssignedOutletIds([]);
     setPrimaryOutletId(null);
@@ -125,6 +131,7 @@ export default function EmployeesRedesign() {
         daily_rate: Number(form.daily_rate || 0),
       };
       if (form.pin_code) body.pin_code = form.pin_code;
+      if (form.email !== undefined) body.email = form.email;
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
@@ -199,6 +206,50 @@ export default function EmployeesRedesign() {
     }
   };
 
+  const setPasswordForEmployee = async () => {
+    if (!passwordTarget || newPassword.length < 8 || newPassword !== confirmPassword) return;
+    setSettingPassword(true);
+    setError("");
+    try {
+      const res = await fetch(`${API}/api/employees/${passwordTarget.id}/set-password`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to set password");
+      setPasswordTarget(null);
+      setNewPassword("");
+      setConfirmPassword("");
+      await load();
+      alert(`Password set for ${passwordTarget.name}`);
+    } catch (e) {
+      setError(e.message || "Failed to set password");
+    } finally {
+      setSettingPassword(false);
+    }
+  };
+
+  const sendPasswordReset = async (emp) => {
+    if (!emp.email) {
+      alert("This employee has no email address set. Edit the employee to add one first.");
+      return;
+    }
+    if (!window.confirm(`Send password reset email to ${emp.email}?`)) return;
+    setError("");
+    try {
+      const res = await fetch(`${API}/api/employees/${emp.id}/send-reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to send reset email");
+      alert(data.message || "Reset email sent");
+    } catch (e) {
+      setError(e.message || "Failed to send reset email");
+    }
+  };
+
   const roleLabel = (id) => roles.find((r) => r.id === id)?.name || `Role ${id}`;
 
   return (
@@ -262,7 +313,8 @@ export default function EmployeesRedesign() {
               <tr>
                 <th className="px-3 py-2 text-left">Employee</th>
                 <th className="px-3 py-2 text-left">Role</th>
-                <th className="px-3 py-2 text-left">PIN</th>
+                <th className="px-3 py-2 text-left">Email</th>
+                <th className="px-3 py-2 text-left">Auth</th>
                 <th className="px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
@@ -284,13 +336,26 @@ export default function EmployeesRedesign() {
                         {emp.role_name || roleLabel(emp.role_id)}
                       </Badge>
                     </td>
-                    <td className="px-3 py-2 text-(--ui-text-muted)">
-                      <Lock size={12} className="mr-1 inline" />
-                      ••••
+                    <td className="px-3 py-2 text-(--ui-text-muted) text-sm">
+                      {emp.email || <span className="text-xs italic">No email</span>}
+                    </td>
+                    <td className="px-3 py-2">
+                      {emp.has_password ? (
+                        <Badge tone="default"><Lock size={10} className="mr-1 inline" />Password</Badge>
+                      ) : (
+                        <Badge tone="warning"><Lock size={10} className="mr-1 inline" />PIN only</Badge>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex gap-2">
                         <Button size="sm" onClick={() => openEdit(emp)}>Edit</Button>
+                        <Button size="sm" onClick={() => { setPasswordTarget(emp); setNewPassword(""); setConfirmPassword(""); }}>
+                          <Lock size={12} className="mr-1 inline" />Password
+                        </Button>
+                        <Button size="sm" onClick={() => sendPasswordReset(emp)}
+                          title={emp.email ? `Send reset to ${emp.email}` : "No email set"}>
+                          <Mail size={12} className="mr-1 inline" />Reset
+                        </Button>
                         <Button size="sm" tone="danger" onClick={() => { setRevokeTarget(emp); setRevokeReason(""); }}>
                           <KeyRound size={12} className="mr-1 inline" />Revoke
                         </Button>
@@ -339,6 +404,12 @@ export default function EmployeesRedesign() {
                 value={form.pin_code}
                 onChange={(e) => setForm((p) => ({ ...p, pin_code: e.target.value }))}
                 required={!editing}
+              />
+              <Input
+                type="email"
+                placeholder="Email address (for password resets)"
+                value={form.email}
+                onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
               />
               {/* Salary Config */}
               <div className="border-t border-(--ui-border) pt-3 mt-1 space-y-2">
@@ -499,6 +570,46 @@ export default function EmployeesRedesign() {
               <Button type="button" onClick={() => setRevokeTarget(null)} disabled={revoking}>Cancel</Button>
               <Button tone="danger" onClick={revokeAllSessions} disabled={revoking}>
                 {revoking ? "Revoking..." : "Revoke All Sessions"}
+              </Button>
+            </div>
+          </SectionCard>
+        </div>
+      )}
+      {passwordTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
+          <SectionCard className="w-full max-w-sm p-5">
+            <h3 className="mb-2 text-lg font-semibold text-(--ui-text)">Set Password</h3>
+            <p className="mb-3 text-sm text-(--ui-text-muted)">
+              Set a dashboard login password for <strong>{passwordTarget.name}</strong>.
+            </p>
+            <div className="space-y-2 mb-3">
+              <Input
+                type="password"
+                placeholder="New password (min 8 chars)"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+              <Input
+                type="password"
+                placeholder="Confirm password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+              {newPassword && confirmPassword && newPassword !== confirmPassword && (
+                <p className="text-xs text-red-600">Passwords do not match</p>
+              )}
+              {newPassword && newPassword.length < 8 && (
+                <p className="text-xs text-red-600">Min 8 characters</p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" onClick={() => setPasswordTarget(null)} disabled={settingPassword}>Cancel</Button>
+              <Button
+                tone="primary"
+                onClick={setPasswordForEmployee}
+                disabled={settingPassword || newPassword.length < 8 || newPassword !== confirmPassword}
+              >
+                {settingPassword ? "Setting..." : "Set Password"}
               </Button>
             </div>
           </SectionCard>
