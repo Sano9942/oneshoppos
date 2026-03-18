@@ -66,7 +66,27 @@ const MIGRATIONS = [
       `);
     },
   },
-  // Future migrations go here (next: version 4):
+  {
+    version: 4,
+    description: "Add onboarding_dismissed to company_profile + backup_log table",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE company_profile
+          ADD COLUMN IF NOT EXISTS onboarding_dismissed BOOLEAN DEFAULT false;
+
+        CREATE TABLE IF NOT EXISTS backup_log (
+          id SERIAL PRIMARY KEY,
+          schema_name TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'success',
+          size_bytes BIGINT DEFAULT 0,
+          duration_ms INTEGER DEFAULT 0,
+          error_message TEXT,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    },
+  },
+  // Future migrations go here (next: version 5):
 ];
 
 async function migrate(db) {

@@ -610,12 +610,12 @@ CREATE TABLE IF NOT EXISTS feature_flags (
 
 CREATE TABLE IF NOT EXISTS backup_log (
   id SERIAL PRIMARY KEY,
-  action TEXT NOT NULL,
-  filename TEXT,
-  size_bytes BIGINT,
-  performed_by TEXT,
-  note TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  schema_name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'success',
+  size_bytes BIGINT DEFAULT 0,
+  duration_ms INTEGER DEFAULT 0,
+  error_message TEXT,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ── Company Profile ───────────────────────────────────────────────────
@@ -644,7 +644,8 @@ CREATE TABLE IF NOT EXISTS company_profile (
   margin_threshold_pct NUMERIC(6,2) DEFAULT 20,
   refund_threshold_pct NUMERIC(6,2) DEFAULT 5,
   void_threshold_pct NUMERIC(6,2) DEFAULT 3,
-  cash_denominations TEXT DEFAULT '[5000,1000,500,100,50,20,10]'
+  cash_denominations TEXT DEFAULT '[5000,1000,500,100,50,20,10]',
+  onboarding_dismissed BOOLEAN DEFAULT false
 );
 
 -- ── Companies (Context Unification) ───────────────────────────────────
