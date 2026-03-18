@@ -3,34 +3,43 @@ module.exports = function registerAuthRoutes(app, deps) {
   const bcrypt = require("bcryptjs");
 
   app.post("/api/auth/login", authLimiter, async (req, res) => {
-    const { username, pin } = req.body || {};
-    if (!username || !pin) {
-      return res.status(400).json({ error: "username and pin are required" });
+    const { username, password, pin } = req.body || {};
+    if (!username || (!password && !pin)) {
+      return res.status(400).json({ error: "username and password (or pin) are required" });
     }
 
     try {
       const { rows: [employee] } = await db.query(
-        `SELECT e.id, e.name, e.role_id, e.pin_code, e.pin_hash, r.name as role, NULL as outlet_id
+        `SELECT e.id, e.name, e.role_id, e.pin_code, e.pin_hash, e.password_hash, r.name as role, NULL as outlet_id
          FROM employees e
          LEFT JOIN roles r ON e.role_id = r.id
-         WHERE LOWER(e.name) = LOWER($1)`,
+         WHERE LOWER(e.name) = LOWER($1) AND e.deleted_at IS NULL`,
         [String(username).trim()]
       );
 
       if (!employee) {
-        return res.status(401).json({ error: "Invalid username or PIN" });
+        return res.status(401).json({ error: "Invalid credentials" });
       }
 
-      // Verify PIN: prefer pin_hash (bcrypt), fall back to plaintext pin_code
-      let pinValid = false;
-      if (employee.pin_hash) {
-        pinValid = await bcrypt.compare(String(pin).trim(), employee.pin_hash);
-      } else if (employee.pin_code) {
-        pinValid = String(pin).trim() === String(employee.pin_code).trim();
+      // Dual auth: password takes priority, PIN as fallback for legacy accounts
+      let credValid = false;
+      if (password) {
+        if (employee.password_hash) {
+          credValid = await bcrypt.compare(String(password), employee.password_hash);
+        }
+      } else if (pin) {
+        if (employee.password_hash) {
+          return res.status(401).json({ error: "Please use your password to log in" });
+        }
+        if (employee.pin_hash) {
+          credValid = await bcrypt.compare(String(pin).trim(), employee.pin_hash);
+        } else if (employee.pin_code) {
+          credValid = String(pin).trim() === String(employee.pin_code).trim();
+        }
       }
 
-      if (!pinValid) {
-        return res.status(401).json({ error: "Invalid username or PIN" });
+      if (!credValid) {
+        return res.status(401).json({ error: "Invalid credentials" });
       }
 
       const { rows: permRows } = await db.query(
@@ -164,11 +173,11 @@ module.exports = function registerAuthRoutes(app, deps) {
       ? require("../tenant-db-manager-pg")
       : require("../tenant-db-manager");
 
-    // POST /api/auth/mt-login — standard login with tenant slug + username + PIN
+    // POST /api/auth/mt-login — standard login with tenant slug + username + password/PIN
     app.post("/api/auth/mt-login", authLimiter, async (req, res) => {
-      const { tenant_slug, username, pin } = req.body || {};
-      if (!tenant_slug || !username || !pin) {
-        return res.status(400).json({ error: "tenant_slug, username, and pin are required" });
+      const { tenant_slug, username, password, pin } = req.body || {};
+      if (!tenant_slug || !username || (!password && !pin)) {
+        return res.status(400).json({ error: "tenant_slug, username, and password (or pin) are required" });
       }
       const JWT_SECRET = process.env.JWT_SECRET;
       const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
@@ -189,24 +198,33 @@ module.exports = function registerAuthRoutes(app, deps) {
         // 2. Find employee in tenant DB by username (manual resolution — no ALS context yet)
         const tenantDb = await tenantDbMgr.getDb(tenant.id);
         const { rows: [employee] } = await tenantDb.query(
-          `SELECT e.id, e.name, e.role_id, e.pin_hash, e.pin_code
+          `SELECT e.id, e.name, e.role_id, e.pin_hash, e.pin_code, e.password_hash
            FROM employees e
-           WHERE LOWER(e.name) = LOWER($1)`,
+           WHERE LOWER(e.name) = LOWER($1) AND e.deleted_at IS NULL`,
           [String(username).trim()]
         );
         if (!employee) {
-          return res.status(401).json({ error: "Invalid username or PIN" });
+          return res.status(401).json({ error: "Invalid credentials" });
         }
 
-        // 3. Verify PIN via bcrypt (prefer pin_hash, fall back to plaintext pin_code)
-        let pinValid = false;
-        if (employee.pin_hash) {
-          pinValid = await bcrypt.compare(String(pin).trim(), employee.pin_hash);
-        } else if (employee.pin_code) {
-          pinValid = String(pin).trim() === String(employee.pin_code).trim();
+        // 3. Dual auth: password takes priority, PIN as fallback for legacy accounts
+        let credValid = false;
+        if (password) {
+          if (employee.password_hash) {
+            credValid = await bcrypt.compare(String(password), employee.password_hash);
+          }
+        } else if (pin) {
+          if (employee.password_hash) {
+            return res.status(401).json({ error: "Please use your password to log in" });
+          }
+          if (employee.pin_hash) {
+            credValid = await bcrypt.compare(String(pin).trim(), employee.pin_hash);
+          } else if (employee.pin_code) {
+            credValid = String(pin).trim() === String(employee.pin_code).trim();
+          }
         }
-        if (!pinValid) {
-          return res.status(401).json({ error: "Invalid username or PIN" });
+        if (!credValid) {
+          return res.status(401).json({ error: "Invalid credentials" });
         }
 
         // 4. Load permissions
@@ -415,6 +433,134 @@ module.exports = function registerAuthRoutes(app, deps) {
       }
     });
   }
+
+  const crypto = require("crypto");
+
+  // POST /api/auth/forgot-password — request password reset email
+  app.post("/api/auth/forgot-password", authLimiter, async (req, res) => {
+    const { username, store_code } = req.body || {};
+    if (!username) {
+      return res.status(400).json({ error: "username is required" });
+    }
+
+    const okMsg = { message: "If an account with that username exists and has an email address, a reset link has been sent." };
+
+    try {
+      let tenantDb = db;
+      let tenantSlug = null;
+      let storeName = "SanoPOS";
+
+      if (process.env.MULTI_TENANT === "1") {
+        if (!store_code) return res.json(okMsg);
+        const masterDb = require("../master-db-pg");
+        const tenantDbMgr = require("../tenant-db-manager-pg");
+        const { rows: [tenant] } = await masterDb.query(
+          "SELECT id, slug, name FROM tenants WHERE slug = $1 AND status = 'active'",
+          [String(store_code).trim()]
+        );
+        if (!tenant) return res.json(okMsg);
+        tenantDb = await tenantDbMgr.getDb(tenant.id);
+        tenantSlug = tenant.slug;
+        storeName = tenant.name || "SanoPOS";
+      }
+
+      const { rows: [employee] } = await tenantDb.query(
+        "SELECT id, name, email FROM employees WHERE LOWER(name) = LOWER($1) AND deleted_at IS NULL",
+        [String(username).trim()]
+      );
+
+      if (!employee || !employee.email) return res.json(okMsg);
+
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = await bcrypt.hash(rawToken, 10);
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+      await tenantDb.query(
+        "INSERT INTO password_reset_tokens (employee_id, token_hash, expires_at) VALUES ($1, $2, $3)",
+        [employee.id, tokenHash, expiresAt]
+      );
+
+      const frontendUrl = process.env.CORS_ORIGIN || "http://localhost:5173";
+      let resetLink = `${frontendUrl}/reset-password?token=${rawToken}`;
+      if (tenantSlug) resetLink += `&tenant=${tenantSlug}`;
+
+      const { sendPasswordResetEmail } = require("../utils/resendEmail");
+      await sendPasswordResetEmail({
+        toEmail: employee.email,
+        employeeName: employee.name,
+        resetLink,
+        storeName,
+      });
+
+      return res.json(okMsg);
+    } catch (err) {
+      console.error("[forgot-password]", err.message);
+      return res.json(okMsg);
+    }
+  });
+
+  // POST /api/auth/reset-password — consume token, set new password
+  app.post("/api/auth/reset-password", async (req, res) => {
+    const { token, new_password, store_code } = req.body || {};
+    if (!token || !new_password) {
+      return res.status(400).json({ error: "token and new_password are required" });
+    }
+    if (new_password.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
+    }
+
+    try {
+      let tenantDb = db;
+
+      if (process.env.MULTI_TENANT === "1") {
+        if (!store_code) return res.status(400).json({ error: "store_code is required" });
+        const masterDb = require("../master-db-pg");
+        const tenantDbMgr = require("../tenant-db-manager-pg");
+        const { rows: [tenant] } = await masterDb.query(
+          "SELECT id FROM tenants WHERE slug = $1 AND status = 'active'",
+          [String(store_code).trim()]
+        );
+        if (!tenant) return res.status(400).json({ error: "Invalid store code" });
+        tenantDb = await tenantDbMgr.getDb(tenant.id);
+      }
+
+      const { rows: tokens } = await tenantDb.query(
+        "SELECT id, employee_id, token_hash FROM password_reset_tokens WHERE used_at IS NULL AND expires_at > NOW()"
+      );
+
+      let matchedToken = null;
+      for (const t of tokens) {
+        if (await bcrypt.compare(token, t.token_hash)) {
+          matchedToken = t;
+          break;
+        }
+      }
+
+      if (!matchedToken) {
+        return res.status(400).json({ error: "Invalid or expired reset token" });
+      }
+
+      const passwordHash = await bcrypt.hash(new_password, 10);
+      await tenantDb.query(
+        "UPDATE employees SET password_hash = $1 WHERE id = $2",
+        [passwordHash, matchedToken.employee_id]
+      );
+
+      await tenantDb.query(
+        "UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1",
+        [matchedToken.id]
+      );
+
+      await tenantDb.query(
+        "UPDATE employees SET tokens_revoked_before = NOW() WHERE id = $1",
+        [matchedToken.employee_id]
+      );
+
+      return res.json({ message: "Password has been reset successfully. Please log in with your new password." });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
 
   app.get("/api/auth/me", async (req, res) => {
     const employeeId = req.headers["x-employee-id"];
