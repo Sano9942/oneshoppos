@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-_Last updated: March 15 2026 — **Performance optimization sprint complete.** Code splitting (84% initial JS reduction), backend compression, DB cleanup, landing page shipped._
+_Last updated: March 19 2026 — **Password auth + Resend email shipped.** Dashboard login now uses passwords (PIN fallback for existing employees). Forgot-password flow via Resend. Admin can set/reset passwords on Employees page._
 
 ---
 
@@ -301,10 +301,101 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 
 ---
 
+## ✅ Plan Defaults & Auto-Apply (Mar 15 2026)
+
+**Branch:** `feature/plan-defaults` — merged to `main`.
+
+- **`PLAN_DEFAULTS` config** in `middleware/plan-limits.js` — single source of truth for plan limits:
+  | | Free | Starter | Pro |
+  |---|---|---|---|
+  | Outlets | 1 | 3 | 10 |
+  | Employees | 3 | 10 | 50 |
+  | Products | 500 | 2,000 | Unlimited |
+- **Auto-apply on provision** — `POST /api/admin/tenants` sets plan limits automatically based on selected plan
+- **Auto-apply on plan change** — `PUT /api/admin/tenants/:id` applies new plan defaults when plan changes; explicit limits in the same request take precedence
+- **`GET /api/admin/plan-defaults`** — read-only endpoint returning plan config for frontend display
+
+---
+
+## ✅ Password Auth + Resend Email (Mar 19 2026)
+
+**Branch:** `feature/password-auth-resend` — merged to `main`.
+
+- **Password login for web dashboard** — `password_hash` (bcrypt, nullable) column on employees table; dashboard login accepts password with graceful PIN fallback (if no password set yet, PIN still works); "Set Password" button + modal on Employees page; POS session-expired re-login and kiosk PIN login stay PIN-based via `/api/employees/validate-pin`
+- **Admin password management** — admin can set password for any employee, or trigger password reset email via Resend
+- **Resend email service** — system-level transactional emails via Resend API (`RESEND_API_KEY` env var); nodemailer/SMTP stays for tenant-level emails (receipts, digest, CRM). Default sender: `onboarding@resend.dev` (swap to custom domain later)
+- **Forgot password flow** — `POST /api/auth/forgot-password` generates bcrypt-hashed reset token (1h TTL), sends email via Resend; `POST /api/auth/reset-password` consumes token, sets password, revokes existing sessions. Generic response on forgot-password prevents user enumeration
+- **Employee email column** — nullable, unique (partial index); used for password reset delivery; admin sets via Employees page
+- **Reset password page** — `/reset-password?token=xxx&tenant=slug` public page, no auth required
+- **Employee change-password** — employees can change their own password via `PUT /api/employees/:id/change-password` (requires current password or PIN for verification)
+- **Migration v3** — `ALTER TABLE employees ADD email, password_hash` + `password_reset_tokens` table
+
+### Still Deferred
+
+- **Self-service signup** _(requires email verification flow)_ — public tenant registration
+- **Onboarding email** _(future Resend use)_ — welcome email with setup link after tenant provisioning
+
+---
+
+## 🔲 UX & Onboarding Improvements
+
+- **Onboarding walkthrough / checklist** — first-time tooltip tour or in-app checklist after setup wizard ("Add your first product → Create an outlet → Open a shift") to reduce support burden
+- **Employee self-service PIN change** — let employees change their own PIN from a profile page without needing an admin
+- **Keyboard shortcuts on POS** — scan → quantity → Enter flow; optimized for speed cashiers working long shifts
+- **Dark mode** — toggle for reduced eye strain during long shifts
+
+## 🔲 Customer Communication
+
+- **Receipt email/SMS to customers** — after a sale, option to email or text the receipt instead of (or in addition to) thermal print
+- **Shareable receipt URL** — public page like `/receipt/ABC123` that customers can bookmark or share
+- **WhatsApp integration** — receipt sharing, low-stock alerts, order updates via WhatsApp (high impact for Pakistan market)
+
+## 🔲 Operational
+
+- **Bulk data import** — import existing products, customers, suppliers from CSV/Excel when switching from another POS (products Excel template already exists)
+- **Backup status notifications** — surface last backup time and success/failure status in the dashboard so users know their data is safe
+- **Multi-language support** — Urdu translation for Pakistan market; i18n framework for future languages
+
+## 🔲 Integrations — Tier 1 (expected by most users)
+
+- **Email service (Resend)** — transactional email foundation; unblocks password reset, receipt email, onboarding email, daily digest reports, self-service signup. Free tier: 3,000 emails/month.
+- **Payment gateway (Stripe)** — card payments at checkout; starting point for international support. Later add JazzCash/EasyPaisa via their APIs for Pakistan market.
+- **Receipt email/SMS** — after a sale, option to email or text the receipt instead of (or in addition to) thermal print _(depends on email service)_
+- **Accounting software sync** — export sales/expenses to QuickBooks, Xero, or Zoho Books; CSV export first, then API sync. Eliminates double-entry for store owners.
+- **FBR e-invoicing** — Pakistan tax authority integration; legal requirement for registered businesses
+
+## 🔲 Integrations — Tier 2 (high value)
+
+- **WhatsApp Business API** — receipt sharing, low-stock alerts, order updates via WhatsApp; #1 messaging app in Pakistan/India/Middle East
+- **Cloud printing** — print receipts from any device to any network printer (Star CloudPRNT, Epson ePOS); removes USB cable dependency
+- **Payroll export** — sync attendance data to payroll software; closes the loop on the existing attendance/HR module
+
+## 🔲 Integrations — Tier 3 (differentiators)
+
+- **Delivery service dispatch** — rider integration (Bykea, Foodpanda, in-house) for restaurants, grocery, dark stores
+- **CRM / marketing sync** — sync customers to Mailchimp, HubSpot for email campaigns
+- **Inventory marketplace listing** — auto-list products on Daraz, Facebook Marketplace for multi-channel sellers
+- **Weighing scale integration** — direct scale → POS for produce/bulk items (grocery, hardware stores)
+- **CCTV / loss prevention** — link sale transactions to camera timestamps for high-shrinkage retail
+
+## 🔲 Customer & Supplier Portals
+
+- **Customer self-service portal** — customers log in (separate auth flow), view purchase history, loyalty points, wallet balance. Read-only on existing data. Builds trust and reduces support queries.
+- **Supplier portal** — suppliers log in, view open POs, confirm/reject POs, submit invoices directly. Streamlines procurement flow, reduces WhatsApp/email back-and-forth.
+
+## 🔲 AI & Analytics
+
+- **AI-powered insights layer** — natural language querying on top of existing 67+ reports ("show me best-selling items this month in Lahore"). Claude API integration. Huge differentiator vs XStak.
+- **Mobile manager app (PWA)** — lightweight PWA for owners: dashboard, approve transfers, view alerts on phone. Frontend already responsive — mainly needs offline manifest + install prompt.
+
+## 🔲 Multi-Channel E-commerce
+
+- **E-commerce sync beyond Shopify** — WooCommerce, TikTok Shop, Instagram Shopping. Existing Shopify module (9 files) is a proven template for replication.
+
 ## 📋 Discussed but Deferred
 
-- **Payment gateway integration** (card machines, JazzCash, EasyPaisa)
-- **FBR e-invoicing** — needed for Pakistan tax compliance
+- **Payment gateway integration** (card machines, JazzCash, EasyPaisa) — see Tier 1 integrations above
+- **FBR e-invoicing** — see Tier 1 integrations above
 - **Advance / layaway payments** — installment-based sales; common in furniture/electronics retail
 - **Profit-sharing / payroll module** — seed data mentions it but no UI
 - **Shopcast / digital signage**
@@ -339,4 +430,6 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 | Mar 15 2026 | **CSV export added to 16 pages**                      | Shared `downloadCsv()` utility + Export CSV button on all table pages missing it. Context-aware for multi-tab pages. |
 | Mar 15 2026 | **Performance: code splitting + compression**         | React.lazy on ~50 routes (1.6 MB → 253 KB initial JS, -84%). Dynamic xlsx import. Backend gzip compression. Dead workflow removed. |
 | Mar 15 2026 | **DB cleanup**                                        | 27 orphaned test schemas dropped from Supabase (146 MB → 77 MB, -47%). |
+| Mar 15 2026 | **Plan defaults auto-apply**                          | `PLAN_DEFAULTS` config in `plan-limits.js`. Auto-applied on provision (POST) and plan change (PUT). New `GET /api/admin/plan-defaults` endpoint. Free (1/3/500), Starter (3/10/2000), Pro (10/50/unlimited). |
 | Mar 14 2026 | **Live E2E test suite — all 20 specs passed**        | 20 Playwright specs (00–19) run sequentially against live production (`sanopos.vercel.app`, tenant `packagesmall`). ~120 individual tests, all passing. Covered: full POS day (shift open→sale→return→close), inventory, purchasing/GRN, customers/loyalty, gift cards, CRM, HR/payroll, attendance/kiosk, approvals, notifications, reports (dashboard/sales/inventory/P&L), audit log. One real bug found and fixed: kiosk `?tenant=` param needed in MT mode for unauthenticated PIN endpoint (`backend/index.js` resolveTenant + `KioskRedesign.jsx`). All other fixes were test files only — adapting specs to match actual API contracts. |
+| Mar 19 2026 | **Password auth + Resend email shipped**              | `feature/password-auth-resend` branch. Migration v3 (email, password_hash, password_reset_tokens). Resend utility for system emails. Dashboard login accepts password (PIN fallback). Forgot-password + reset-password flow. Admin set-password/send-reset on Employees page. POS re-auth fixed to use validate-pin. |
