@@ -1,4 +1,6 @@
 import { Suspense, lazy, useEffect, useRef } from "react";
+import { initTheme } from "./utils/theme";
+initTheme();
 import { BrowserRouter as Router, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth/AuthProvider";
 import { IS_MULTI_TENANT } from "./config";

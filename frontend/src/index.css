@@ -9,6 +9,9 @@ body,
   height: 100%;
 }
 
+/* Prevent flash of wrong theme */
+html { background: var(--ui-bg); }
+
 body {
   margin: 0;
   min-width: 320px;

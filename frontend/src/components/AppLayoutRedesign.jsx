@@ -31,10 +31,10 @@ export default function AppLayoutRedesign() {
   return (
     <div className="flex h-screen overflow-hidden bg-(--ui-bg)">
       <aside
-        className={`${collapsed ? "w-20" : "w-72"} relative flex h-full flex-col border-r border-(--ui-border) bg-white transition-all`}
+        className={`${collapsed ? "w-20" : "w-72"} relative flex h-full flex-col border-r border-(--ui-border) bg-(--ui-surface) transition-all`}
       >
         <button
-          className="ui-focus-ring absolute -right-3 top-5 rounded-full border border-(--ui-border) bg-white p-1 text-(--ui-text-muted) shadow"
+          className="ui-focus-ring absolute -right-3 top-5 rounded-full border border-(--ui-border) bg-(--ui-surface) p-1 text-(--ui-text-muted) shadow"
           onClick={() => setCollapsed((v) => !v)}
         >
           {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
@@ -94,7 +94,7 @@ export default function AppLayoutRedesign() {
         </nav>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 items-center justify-between border-b border-(--ui-border) bg-white px-5">
+        <header className="flex h-16 items-center justify-between border-b border-(--ui-border) bg-(--ui-surface) px-5">
           <div className="w-full max-w-xl">
             <div className="relative">
               <Search
