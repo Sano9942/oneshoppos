@@ -26,10 +26,12 @@ export default function POSSessionExpiredModal() {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/auth/login`, {
+      // Use validate-pin (not /auth/login) — POS re-auth is always PIN-based,
+      // even after employee has a password set for dashboard login.
+      const res = await fetch(`${API}/api/employees/validate-pin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: employee?.name || "", pin }),
+        body: JSON.stringify({ pin_code: pin }),
       });
       const data = await res.json();
       if (!res.ok || !data.employee) {
