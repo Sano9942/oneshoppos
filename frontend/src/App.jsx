@@ -65,6 +65,7 @@ const CustomerDisplayPage = lazy(() => import("./pages/CustomerDisplayPage"));
 const ProfileRedesign = lazy(() => import("./pages/redesign/ProfileRedesign"));
 const ReceiptPublicPage = lazy(() => import("./pages/ReceiptPublicPage"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const ImportRedesign = lazy(() => import("./pages/redesign/ImportRedesign"));
 const ReportsRoute = lazy(() => import("./pages/ReportsRoute"));
 const ReportTabStandaloneRoute = lazy(() =>
   import("./pages/ReportsRoute").then((mod) => ({
@@ -397,6 +398,14 @@ function App() {
             element={
               <RequirePerm perm="all_access">
                 <ActionHistoryRoute />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/import"
+            element={
+              <RequirePerm perm="all_access">
+                <ImportRedesign />
               </RequirePerm>
             }
           />
