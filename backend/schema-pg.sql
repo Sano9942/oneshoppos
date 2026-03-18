@@ -79,8 +79,12 @@ CREATE TABLE IF NOT EXISTS employees (
   work_hours_per_day NUMERIC(4,1) DEFAULT 8,
   monthly_leave_allowance INTEGER DEFAULT 2,
   deleted_at TIMESTAMPTZ DEFAULT NULL,
-  tokens_revoked_before TIMESTAMPTZ DEFAULT NULL
+  tokens_revoked_before TIMESTAMPTZ DEFAULT NULL,
+  email TEXT,
+  password_hash TEXT
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS employees_email_unique ON employees (email) WHERE email IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS attribute_sets (
   id SERIAL PRIMARY KEY,
@@ -1113,6 +1117,15 @@ CREATE INDEX IF NOT EXISTS idx_products_deleted_at ON products(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_customers_deleted_at ON customers(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_employees_deleted_at ON employees(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_revoked_tokens_jti ON revoked_tokens(token_jti);
+
+-- ── Password Reset Tokens ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id          SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  token_hash  TEXT NOT NULL,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  used_at     TIMESTAMPTZ
+);
 
 -- ── Seed data ─────────────────────────────────────────────────────
 INSERT INTO company_profile (id, company_name, setup_complete)

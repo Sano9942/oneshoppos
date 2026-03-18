@@ -44,7 +44,29 @@ const MIGRATIONS = [
       `);
     },
   },
-  // Future migrations go here (next: version 3):
+  {
+    version: 3,
+    description: "Add password_hash, email to employees + password_reset_tokens table",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE employees ADD COLUMN IF NOT EXISTS email TEXT;
+        ALTER TABLE employees ADD COLUMN IF NOT EXISTS password_hash TEXT;
+
+        -- email unique index (partial — only non-null values)
+        CREATE UNIQUE INDEX IF NOT EXISTS employees_email_unique
+          ON employees (email) WHERE email IS NOT NULL;
+
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+          id          SERIAL PRIMARY KEY,
+          employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+          token_hash  TEXT NOT NULL,
+          expires_at  TIMESTAMPTZ NOT NULL,
+          used_at     TIMESTAMPTZ
+        );
+      `);
+    },
+  },
+  // Future migrations go here (next: version 4):
 ];
 
 async function migrate(db) {
