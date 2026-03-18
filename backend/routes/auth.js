@@ -23,19 +23,19 @@ module.exports = function registerAuthRoutes(app, deps) {
 
       // Dual auth: password takes priority, PIN as fallback for legacy accounts
       let credValid = false;
-      if (password) {
-        if (employee.password_hash) {
-          credValid = await bcrypt.compare(String(password), employee.password_hash);
+      if (password && employee.password_hash) {
+        credValid = await bcrypt.compare(String(password), employee.password_hash);
+      } else if (!employee.password_hash) {
+        const pinInput = pin || password;
+        if (pinInput) {
+          if (employee.pin_hash) {
+            credValid = await bcrypt.compare(String(pinInput).trim(), employee.pin_hash);
+          } else if (employee.pin_code) {
+            credValid = String(pinInput).trim() === String(employee.pin_code).trim();
+          }
         }
       } else if (pin) {
-        if (employee.password_hash) {
-          return res.status(401).json({ error: "Please use your password to log in" });
-        }
-        if (employee.pin_hash) {
-          credValid = await bcrypt.compare(String(pin).trim(), employee.pin_hash);
-        } else if (employee.pin_code) {
-          credValid = String(pin).trim() === String(employee.pin_code).trim();
-        }
+        return res.status(401).json({ error: "Please use your password to log in" });
       }
 
       if (!credValid) {
@@ -209,19 +209,23 @@ module.exports = function registerAuthRoutes(app, deps) {
 
         // 3. Dual auth: password takes priority, PIN as fallback for legacy accounts
         let credValid = false;
-        if (password) {
-          if (employee.password_hash) {
-            credValid = await bcrypt.compare(String(password), employee.password_hash);
+        if (password && employee.password_hash) {
+          // Employee has a password set — verify it
+          credValid = await bcrypt.compare(String(password), employee.password_hash);
+        } else if (!employee.password_hash) {
+          // No password set yet — fall back to PIN verification
+          // The "password" field may contain a PIN during transition period
+          const pinInput = pin || password;
+          if (pinInput) {
+            if (employee.pin_hash) {
+              credValid = await bcrypt.compare(String(pinInput).trim(), employee.pin_hash);
+            } else if (employee.pin_code) {
+              credValid = String(pinInput).trim() === String(employee.pin_code).trim();
+            }
           }
         } else if (pin) {
-          if (employee.password_hash) {
-            return res.status(401).json({ error: "Please use your password to log in" });
-          }
-          if (employee.pin_hash) {
-            credValid = await bcrypt.compare(String(pin).trim(), employee.pin_hash);
-          } else if (employee.pin_code) {
-            credValid = String(pin).trim() === String(employee.pin_code).trim();
-          }
+          // password_hash exists but only PIN sent — reject
+          return res.status(401).json({ error: "Please use your password to log in" });
         }
         if (!credValid) {
           return res.status(401).json({ error: "Invalid credentials" });
