@@ -60,6 +60,7 @@ const ParkedSalesRedesign = lazy(() => import("./pages/redesign/ParkedSalesRedes
 const ReorderAlertsRedesign = lazy(() => import("./pages/redesign/ReorderAlertsRedesign"));
 const NotificationsRedesign = lazy(() => import("./pages/redesign/NotificationsRedesign"));
 const CustomerDisplayPage = lazy(() => import("./pages/CustomerDisplayPage"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const ReportsRoute = lazy(() => import("./pages/ReportsRoute"));
 const ReportTabStandaloneRoute = lazy(() =>
   import("./pages/ReportsRoute").then((mod) => ({
@@ -106,6 +107,7 @@ function App() {
         <Route path="/" element={<HomeRedirect />} />
         <Route path="/setup" element={<SetupWizard />} />
         <Route path="/login" element={<LandingPage />} />
+        <Route path="/reset-password" element={<Suspense fallback={<RouteLoading />}><ResetPassword /></Suspense>} />
         <Route path="/access-denied" element={<AccessDenied />} />
         <Route
           path="/context-select"
