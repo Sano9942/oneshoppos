@@ -13,7 +13,7 @@ const nodemailer = require("nodemailer");
 const { buildReceiptEmailHtml } = require("../utils/receiptEmail");
 
 module.exports = function emailRoutes(app, deps) {
-  const { db } = deps;
+  const { db, requirePerm } = deps;
 
   function authGuard(req, res) {
     const employeeId = Number(req.headers["x-employee-id"] || 0);
@@ -53,7 +53,7 @@ module.exports = function emailRoutes(app, deps) {
   });
 
   // PUT /api/email/config
-  app.put("/api/email/config", async (req, res) => {
+  app.put("/api/email/config", requirePerm("all_access"), async (req, res) => {
     if (!authGuard(req, res)) return;
     try {
       const { smtp_host, smtp_port, smtp_user, smtp_pass, from_name, enabled } =
@@ -98,7 +98,7 @@ module.exports = function emailRoutes(app, deps) {
   });
 
   // POST /api/email/test
-  app.post("/api/email/test", async (req, res) => {
+  app.post("/api/email/test", requirePerm("all_access"), async (req, res) => {
     if (!authGuard(req, res)) return;
     try {
       const cfg = await getConfig();

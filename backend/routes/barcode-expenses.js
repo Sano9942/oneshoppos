@@ -127,7 +127,7 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
   );
 
   // POST /api/barcode-print-jobs — log a batch print event
-  app.post("/api/barcode-print-jobs", async (req, res) => {
+  app.post("/api/barcode-print-jobs", requirePerm("manage_inventory"), async (req, res) => {
     const { template_id, items = [] } = req.body;
     if (!items.length) return res.status(400).json({ error: "No items" });
     try {

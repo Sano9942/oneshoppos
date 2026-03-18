@@ -1,5 +1,5 @@
 module.exports = function registerReceiptTemplateRoutes(app, deps) {
-  const { db, requirePerm } = deps;
+  const { db, requirePerm, requireAnyPerm } = deps;
 
   // Best-effort column additions (idempotent — Postgres will error if exists, which we ignore)
   (async () => {
@@ -94,7 +94,7 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
     }
   });
 
-  app.post("/api/action-history/log", requirePerm("view_reports"), async (req, res) => {
+  app.post("/api/action-history/log", requirePerm("all_access"), async (req, res) => {
     const { action_type, description, entity_id, entity_type } = req.body;
     if (!action_type || !description) {
       return res.status(400).json({ error: "action_type and description are required" });
@@ -112,7 +112,7 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
     }
   });
 
-  app.get("/api/action-history", async (req, res) => {
+  app.get("/api/action-history", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
     const { search, date_from, date_to, action_type } = req.query;
     const conditions = [];
     const params = [];

@@ -11,7 +11,7 @@
  */
 
 module.exports = function printerRoutes(app, deps) {
-  const { db } = deps;
+  const { db, requirePerm } = deps;
   const { printReceipt, printerStatus } = require("../services/printer")(db);
 
   // POST /api/print/receipt
@@ -52,7 +52,7 @@ module.exports = function printerRoutes(app, deps) {
   });
 
   // PUT /api/print/config — save printer_config row
-  app.put("/api/print/config", async (req, res) => {
+  app.put("/api/print/config", requirePerm("all_access"), async (req, res) => {
     const employeeId = Number(req.headers["x-employee-id"] || 0);
     if (!employeeId) return res.status(401).json({ error: "Unauthorized" });
     const {

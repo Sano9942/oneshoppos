@@ -1,5 +1,5 @@
 module.exports = function registerAttributeSetRoutes(app, deps) {
-  const { db } = deps;
+  const { db, requirePerm } = deps;
 
 // --- ROUTES: ATTRIBUTE SETS ---
 
@@ -35,7 +35,7 @@ module.exports = function registerAttributeSetRoutes(app, deps) {
   });
 
   // Create an attribute set with its attributes and options
-  app.post("/api/attribute-sets", async (req, res) => {
+  app.post("/api/attribute-sets", requirePerm("manage_inventory"), async (req, res) => {
     const { name, description, attributes } = req.body;
 
     try {
@@ -76,7 +76,7 @@ module.exports = function registerAttributeSetRoutes(app, deps) {
   });
 
   // Update attribute set (full replace of attributes + options)
-  app.put("/api/attribute-sets/:id", async (req, res) => {
+  app.put("/api/attribute-sets/:id", requirePerm("manage_inventory"), async (req, res) => {
     const { id } = req.params;
     const { name, description, attributes } = req.body;
 
@@ -128,7 +128,7 @@ module.exports = function registerAttributeSetRoutes(app, deps) {
   });
 
   // Delete attribute set
-  app.delete("/api/attribute-sets/:id", async (req, res) => {
+  app.delete("/api/attribute-sets/:id", requirePerm("manage_inventory"), async (req, res) => {
     const { id } = req.params;
     try {
       const { rowCount } = await db.query("DELETE FROM attribute_sets WHERE id = $1", [id]);
