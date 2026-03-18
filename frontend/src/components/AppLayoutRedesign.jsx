@@ -1,12 +1,70 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Search, User } from "lucide-react";
-import { Suspense, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, LogOut, Moon, Search, Sun, User, UserCircle } from "lucide-react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { SHOPIFY_NAV_GROUPS } from "../ui/nav-config";
 import { Input } from "../ui/primitives";
+import { getTheme, toggleTheme } from "../utils/theme";
 import useFeatureFlags from "../hooks/useFeatureFlags";
 import ContextSwitcher from "./ContextSwitcher";
 import NotificationBell from "./NotificationBell";
+
+function ProfileDropdown({ employee, logout, navigate }) {
+  const [open, setOpen] = useState(false);
+  const [theme, setThemeState] = useState(getTheme());
+  const ref = useRef(null);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="ui-focus-ring flex items-center gap-2 rounded-lg border border-(--ui-border) px-2.5 py-1.5 text-xs font-medium text-(--ui-text) hover:bg-(--ui-muted-surface) transition cursor-pointer"
+      >
+        <UserCircle size={16} />
+        <span>{employee?.name || "Employee"}</span>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-52 rounded-lg border border-(--ui-border) bg-(--ui-surface) py-1 shadow-lg z-50">
+          <div className="px-3 py-2 border-b border-(--ui-border)">
+            <p className="text-sm font-semibold text-(--ui-text)">{employee?.name}</p>
+            <p className="text-xs text-(--ui-text-muted)">
+              {employee?.role_id === 1 ? "Administrator" : employee?.role_id === 2 ? "Manager" : "Cashier"}
+            </p>
+          </div>
+          <button
+            onClick={() => { setOpen(false); navigate("/profile"); }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-(--ui-text) hover:bg-(--ui-muted-surface) cursor-pointer"
+          >
+            <User size={14} /> My Profile
+          </button>
+          <button
+            onClick={() => { const next = toggleTheme(); setThemeState(next); }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-(--ui-text) hover:bg-(--ui-muted-surface) cursor-pointer"
+          >
+            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+            {theme === "dark" ? "Light Mode" : "Dark Mode"}
+          </button>
+          <div className="border-t border-(--ui-border) mt-1 pt-1">
+            <button
+              onClick={async () => { setOpen(false); await logout(); navigate("/login", { replace: true }); }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-(--ui-muted-surface) cursor-pointer"
+            >
+              <LogOut size={14} /> Logout
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AppLayoutRedesign() {
   const location = useLocation();
@@ -110,19 +168,7 @@ export default function AppLayoutRedesign() {
           <div className="ml-4 flex items-center gap-4">
             <ContextSwitcher />
             <NotificationBell />
-            <button
-              className="ui-focus-ring rounded-md px-2 py-1 text-xs text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
-              onClick={async () => {
-                await logout();
-                navigate("/login", { replace: true });
-              }}
-            >
-              Logout
-            </button>
-            <div className="flex items-center gap-2 rounded-md border border-(--ui-border) px-2 py-1.5 text-xs">
-              <User size={14} />
-              <span>{employee?.name || "Employee"}</span>
-            </div>
+            <ProfileDropdown employee={employee} logout={logout} navigate={navigate} />
           </div>
         </header>
         <main className="min-h-0 flex-1 overflow-auto p-4">
