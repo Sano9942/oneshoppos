@@ -77,6 +77,7 @@ export const POSProvider = ({ children }) => {
   // ── Parked sales ──────────────────────────────────────────────────────────
   const [parkedSales, setParkedSales] = useState([]);
   const [showParked, setShowParked] = useState(false);
+  const [showShortcutsOverlay, setShowShortcutsOverlay] = useState(false);
 
   // ── Checkout ──────────────────────────────────────────────────────────────
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -386,10 +387,29 @@ export const POSProvider = ({ children }) => {
   // Barcode scanner — rapid keystroke detection (scanners type ~50ms between chars)
   useEffect(() => {
     function handleKeyDown(e) {
+      // F-key shortcuts — work even when focus is in an input
+      const fkeys = {
+        F1: () => { e.preventDefault(); setShowShortcutsOverlay((v) => !v); },
+        F2: () => { e.preventDefault(); if (cart.length) setShowDiscountModal(true); },
+        F3: () => { e.preventDefault(); if (cart.length) parkSale(); },
+        F4: () => { e.preventDefault(); const el = document.querySelector('[data-pos-customer-search]'); if (el) el.focus(); },
+        F5: () => { e.preventDefault(); setShowParked(true); },
+        F8: () => { e.preventDefault(); if (cart.length) removeFromCart(cart[cart.length - 1].id); },
+        F9: () => { e.preventDefault(); if (cart.length) openCheckout(); },
+        F10: () => { e.preventDefault(); if (cart.length && window.confirm("Clear entire cart?")) setCart([]); },
+        Escape: () => { setShowDiscountModal(false); setShowParked(false); setShowShortcutsOverlay(false); },
+      };
+
+      if (fkeys[e.key]) {
+        fkeys[e.key]();
+        return;
+      }
+
       // Ignore keypresses when user is typing in an input, textarea, or select
       const tag = document.activeElement?.tagName?.toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") return;
 
+      // Barcode scanner logic (existing)
       if (e.key === "Enter") {
         const code = barcodeBuffer.current.trim();
         barcodeBuffer.current = "";
@@ -403,7 +423,6 @@ export const POSProvider = ({ children }) => {
       if (e.key.length === 1) {
         barcodeBuffer.current += e.key;
         clearTimeout(barcodeTimer.current);
-        // Reset buffer if no new char within 100ms — not a scanner, just keyboard
         barcodeTimer.current = setTimeout(() => {
           barcodeBuffer.current = "";
         }, 100);
@@ -412,7 +431,7 @@ export const POSProvider = ({ children }) => {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleBarcodeScanned]);
+  }, [handleBarcodeScanned, cart, parkSale, openCheckout, removeFromCart, setCart]);
 
   // Fetch wallet balance when a customer is selected at checkout
   useEffect(() => {
@@ -1213,6 +1232,8 @@ export const POSProvider = ({ children }) => {
     offlineSyncing,
     offlineSyncResult,
     syncQueue,
+    showShortcutsOverlay,
+    setShowShortcutsOverlay,
   };
 
   return <POSContext.Provider value={value}>{children}</POSContext.Provider>;

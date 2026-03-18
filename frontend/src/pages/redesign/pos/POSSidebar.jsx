@@ -39,6 +39,7 @@ export default function POSSidebar({ mobile }) {
         <input
           type="text"
           placeholder="Search customer…"
+          data-pos-customer-search
           value={customerSearch}
           onFocus={() => setShowCustomerDD(true)}
           onBlur={() => setTimeout(() => setShowCustomerDD(false), 180)}
