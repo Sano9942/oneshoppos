@@ -566,6 +566,78 @@ module.exports = function registerAuthRoutes(app, deps) {
     }
   });
 
+  // POST /api/auth/signup — self-service tenant signup (MT only, opt-in)
+  app.post("/api/auth/signup", async (req, res) => {
+    if (process.env.MULTI_TENANT !== "1") {
+      return res.status(400).json({ error: "Signup is only available in multi-tenant mode" });
+    }
+    if (process.env.SELF_SERVICE_SIGNUP !== "1") {
+      return res.status(400).json({ error: "Self-service signup is not enabled" });
+    }
+
+    const { store_name, owner_name, email, password, plan } = req.body || {};
+    if (!store_name || !owner_name || !email || !password) {
+      return res.status(400).json({ error: "All fields required" });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
+    }
+
+    const slug = store_name
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "")
+      .substring(0, 30);
+
+    if (slug.length < 3) {
+      return res.status(400).json({ error: "Store name too short (need at least 3 valid characters)" });
+    }
+
+    try {
+      const masterDb = require("../master-db-pg");
+      const { rows: existing } = await masterDb.query("SELECT id FROM tenants WHERE slug = $1", [slug]);
+      if (existing.length) return res.status(409).json({ error: "Store name already taken" });
+
+      // Provision tenant using shared db pool
+      const dbPg = require("../db-pg");
+      const { provision } = require("../tenant-provisioner-pg");
+      const result = await provision(dbPg, { slug, name: store_name, ownerEmail: email, pin: "0000", timezone: "UTC" });
+
+      // Update the admin employee with password and email
+      const tenantDbManager = require("../tenant-db-manager-pg");
+      const tenantDb = await tenantDbManager.getDb(result.tenantId);
+      const passwordHash = await bcrypt.hash(password, 10);
+      await tenantDb.query(
+        "UPDATE employees SET name = $1, username = $2, email = $3, password_hash = $4 WHERE id = $5",
+        [owner_name, email, email, passwordHash, result.employeeId]
+      );
+
+      // Attempt welcome email via Resend
+      if (process.env.RESEND_API_KEY) {
+        try {
+          const { Resend } = require("resend");
+          const resend = new Resend(process.env.RESEND_API_KEY);
+          const corsOrigin = process.env.CORS_ORIGIN || "https://sanopos.vercel.app";
+          const setupUrl = `${corsOrigin}/setup?token=${result.setupToken}&tenant=${slug}`;
+          await resend.emails.send({
+            from: process.env.RESEND_FROM_EMAIL || "SanoPOS <onboarding@resend.dev>",
+            to: email,
+            subject: `Welcome to SanoPOS - Set up ${store_name}`,
+            html: `<h2>Welcome, ${owner_name}!</h2><p>Your store <strong>${store_name}</strong> is ready.</p><p><a href="${setupUrl}" style="background:#10b981;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">Complete Setup</a></p><p style="color:#666;font-size:12px">Or copy: ${setupUrl}</p>`,
+          });
+        } catch (emailErr) {
+          console.error("Welcome email failed:", emailErr.message);
+        }
+      }
+
+      res.json({ ok: true, slug, message: "Store created! Check your email." });
+    } catch (err) {
+      console.error("[signup]", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/auth/me", async (req, res) => {
     const employeeId = req.headers["x-employee-id"];
     if (!employeeId) return res.status(401).json({ error: "Unauthorized" });

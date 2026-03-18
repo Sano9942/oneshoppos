@@ -65,6 +65,7 @@ const CustomerDisplayPage = lazy(() => import("./pages/CustomerDisplayPage"));
 const ProfileRedesign = lazy(() => import("./pages/redesign/ProfileRedesign"));
 const ReceiptPublicPage = lazy(() => import("./pages/ReceiptPublicPage"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const SignupPage = lazy(() => import("./pages/SignupPage"));
 const ImportRedesign = lazy(() => import("./pages/redesign/ImportRedesign"));
 const ReportsRoute = lazy(() => import("./pages/ReportsRoute"));
 const ReportTabStandaloneRoute = lazy(() =>
@@ -113,6 +114,7 @@ function App() {
         <Route path="/setup" element={<SetupWizard />} />
         <Route path="/login" element={<LandingPage />} />
         <Route path="/reset-password" element={<Suspense fallback={<RouteLoading />}><ResetPassword /></Suspense>} />
+        <Route path="/signup" element={<Suspense fallback={<RouteLoading />}><SignupPage /></Suspense>} />
         <Route path="/receipt/:invoiceNumber" element={<Suspense fallback={<RouteLoading />}><ReceiptPublicPage /></Suspense>} />
         <Route path="/access-denied" element={<AccessDenied />} />
         <Route
