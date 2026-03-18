@@ -62,6 +62,7 @@ const ParkedSalesRedesign = lazy(() => import("./pages/redesign/ParkedSalesRedes
 const ReorderAlertsRedesign = lazy(() => import("./pages/redesign/ReorderAlertsRedesign"));
 const NotificationsRedesign = lazy(() => import("./pages/redesign/NotificationsRedesign"));
 const CustomerDisplayPage = lazy(() => import("./pages/CustomerDisplayPage"));
+const ProfileRedesign = lazy(() => import("./pages/redesign/ProfileRedesign"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const ReportsRoute = lazy(() => import("./pages/ReportsRoute"));
 const ReportTabStandaloneRoute = lazy(() =>
@@ -168,6 +169,7 @@ function App() {
           }
         >
           <Route path="/dashboard" element={<DashboardRoute />} />
+          <Route path="/profile" element={<ProfileRedesign />} />
           <Route path="/sales-history" element={<SalesHistoryRoute />} />
           <Route path="/cash-management" element={<CashManagementRoute />} />
           <Route path="/customers" element={<CustomersRoute />} />

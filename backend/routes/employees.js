@@ -390,6 +390,51 @@ module.exports = function registerEmployeeRoutes(app, deps) {
     }
   });
 
+  // PUT /api/employees/:id/change-pin — employee changes own PIN
+  app.put("/api/employees/:id/change-pin", async (req, res) => {
+    const { id } = req.params;
+    const actorId = Number(req.headers["x-employee-id"] || 0);
+    if (actorId !== Number(id)) {
+      return res.status(403).json({ error: "You can only change your own PIN" });
+    }
+
+    const { current_pin, new_pin } = req.body || {};
+    if (!new_pin || new_pin.length < 4 || new_pin.length > 10) {
+      return res.status(400).json({ error: "New PIN must be 4-10 digits" });
+    }
+    if (!current_pin) {
+      return res.status(400).json({ error: "current_pin is required" });
+    }
+
+    try {
+      const { rows: [employee] } = await db.query(
+        "SELECT id, pin_hash, pin_code FROM employees WHERE id = $1 AND deleted_at IS NULL",
+        [Number(id)]
+      );
+      if (!employee) return res.status(404).json({ error: "Employee not found" });
+
+      let verified = false;
+      if (employee.pin_hash) {
+        verified = await bcrypt.compare(String(current_pin), employee.pin_hash);
+      } else if (employee.pin_code) {
+        verified = String(current_pin).trim() === String(employee.pin_code).trim();
+      }
+      if (!verified) {
+        return res.status(401).json({ error: "Current PIN is incorrect" });
+      }
+
+      const pin_hash = await bcrypt.hash(String(new_pin), 10);
+      await db.query(
+        "UPDATE employees SET pin_code = $1, pin_hash = $2 WHERE id = $3",
+        [new_pin, pin_hash, Number(id)]
+      );
+
+      res.json({ message: "PIN changed successfully" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // POST /api/employees/:id/send-reset — admin sends password reset email
   app.post("/api/employees/:id/send-reset", requirePerm("all_access"), async (req, res) => {
     const { id } = req.params;
