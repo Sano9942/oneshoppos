@@ -112,10 +112,71 @@ async function migrate(db) {
   return finalVersion;
 }
 
+/**
+ * Run migrations against all active tenant schemas.
+ * Each tenant schema has its own schema_version table.
+ */
+async function migrateAllTenants(db) {
+  // Migrate public schema first
+  await migrate(db);
+
+  // Check if multi-tenant mode — look for tenants table
+  try {
+    const { rows: tenants } = await db.query(
+      "SELECT id, slug FROM tenants WHERE status = 'active'"
+    );
+    if (!tenants.length) {
+      console.log("[migrate-pg] No active tenants to migrate.");
+      return;
+    }
+    for (const tenant of tenants) {
+      const schema = `tenant_${tenant.slug}`;
+      console.log(`[migrate-pg] Migrating tenant: ${tenant.slug} (${schema})`);
+      // Create a scoped wrapper that sets search_path per query
+      const scopedDb = {
+        query: async (sql, params) => {
+          const client = await db.pool.connect();
+          try {
+            await client.query(`SET search_path TO ${schema}, public`);
+            return await client.query(sql, params);
+          } finally {
+            client.release();
+          }
+        },
+        transaction: async (fn) => {
+          const client = await db.pool.connect();
+          try {
+            await client.query(`SET search_path TO ${schema}, public`);
+            await client.query("BEGIN");
+            const wrappedClient = {
+              query: (sql, params) => client.query(sql, params),
+            };
+            await fn(wrappedClient);
+            await client.query("COMMIT");
+          } catch (err) {
+            await client.query("ROLLBACK");
+            throw err;
+          } finally {
+            client.release();
+          }
+        },
+      };
+      try {
+        await migrate(scopedDb);
+      } catch (err) {
+        console.error(`[migrate-pg] tenant ${tenant.slug} FAILED:`, err.message);
+      }
+    }
+  } catch {
+    // tenants table doesn't exist — single-tenant mode, skip
+    console.log("[migrate-pg] No tenants table found — single-tenant mode.");
+  }
+}
+
 // CLI entry point
 if (require.main === module) {
   const db = require("./db-pg");
-  migrate(db)
+  migrateAllTenants(db)
     .then(() => db.end())
     .catch((err) => {
       console.error("[migrate-pg] FATAL:", err.message);
