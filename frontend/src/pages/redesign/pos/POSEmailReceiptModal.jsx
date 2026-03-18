@@ -26,7 +26,7 @@ export default function POSEmailReceiptModal({ saleId, customerEmail, onClose })
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/email/send-receipt`, {
+      const res = await fetch(`${API}/api/email/send-receipt-v2`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ saleId, toEmail: email }),

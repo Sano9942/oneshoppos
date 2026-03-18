@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { CheckCircle2, Mail, X } from "lucide-react";
+import { CheckCircle2, Mail, MessageCircle, X } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { buildReceiptSections } from "../../../utils/receipt";
 import POSEmailReceiptModal from "./POSEmailReceiptModal";
@@ -10,6 +10,18 @@ export default function POSReceiptModal() {
   const [showEmailModal, setShowEmailModal] = useState(false);
 
   const sections = slip ? buildReceiptSections(slip, receiptTemplate, currencySymbol) : null;
+
+  function shareWhatsApp() {
+    const total = money(slip.balanceDue != null ? Math.max(0, slip.balanceDue) : slip.total);
+    const receiptUrl = `${window.location.origin}/receipt/${slip.invoiceNumber}`;
+    const text = [
+      `Receipt from ${sections.storeName}`,
+      `Invoice: ${slip.invoiceNumber}`,
+      `Total: ${total}`,
+      `View: ${receiptUrl}`,
+    ].join("\n");
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+  }
 
   if (!slipOpen || !slip) return null;
 
@@ -179,13 +191,19 @@ export default function POSReceiptModal() {
             onClick={() => setShowEmailModal(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-300 text-blue-700 hover:bg-blue-50 text-sm font-medium"
           >
-            <Mail size={14} /> Email Receipt
+            <Mail size={14} /> Email
+          </button>
+          <button
+            onClick={shareWhatsApp}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-green-300 text-green-700 hover:bg-green-50 text-sm font-medium"
+          >
+            <MessageCircle size={14} /> WhatsApp
           </button>
           <button
             onClick={() => printSlip(slip)}
             className="flex-1 py-2.5 bg-[#8066FF] hover:bg-[#7055E6] text-white rounded-xl text-sm font-bold shadow transition"
           >
-            Print Receipt
+            Print
           </button>
         </div>
       </div>
