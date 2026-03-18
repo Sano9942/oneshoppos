@@ -5,6 +5,7 @@
  * PUT  /api/email/config        — save email_config
  * POST /api/email/test          — send test email to smtp_user
  * POST /api/email/send-receipt  — send HTML receipt to toEmail for a given saleId
+ * POST /api/email/send-receipt-v2 — send receipt via SMTP (preferred) or Resend fallback
  *
  * All endpoints require x-employee-id header (authenticated employee).
  */
@@ -186,6 +187,104 @@ module.exports = function emailRoutes(app, deps) {
         html,
       });
       res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/email/send-receipt-v2
+  // Tries tenant SMTP first, falls back to Resend API
+  app.post("/api/email/send-receipt-v2", async (req, res) => {
+    if (!authGuard(req, res)) return;
+    const { saleId, toEmail } = req.body || {};
+
+    if (!toEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail)) {
+      return res.status(400).json({ error: "Valid email address is required." });
+    }
+    if (!saleId) return res.status(400).json({ error: "saleId is required." });
+
+    try {
+      // Fetch sale + items + payments
+      const { rows: saleRows } = await db.query(
+        `SELECT s.*, o.name as outlet_name, e.name as employee_name,
+                c.name as customer_name
+         FROM sales s
+         LEFT JOIN outlets o ON s.outlet_id = o.id
+         LEFT JOIN employees e ON s.employee_id = e.id
+         LEFT JOIN customers c ON s.customer_id = c.id
+         WHERE s.id = $1`,
+        [saleId]
+      );
+      const sale = saleRows[0];
+      if (!sale) return res.status(404).json({ error: "Sale not found." });
+
+      const { rows: items } = await db.query(
+        `SELECT si.*, p.name as product_name FROM sale_items si
+         JOIN products p ON si.product_id = p.id WHERE si.sale_id = $1`,
+        [saleId]
+      );
+
+      const { rows: payments } = await db.query(
+        "SELECT * FROM sale_payments WHERE sale_id = $1",
+        [saleId]
+      );
+
+      // Fetch active receipt template (optional)
+      let template = null;
+      try {
+        const { rows: tplRows } = await db.query(
+          "SELECT * FROM receipt_templates WHERE is_active = true LIMIT 1"
+        );
+        template = tplRows[0] || null;
+      } catch (_) {
+        // template errors are non-fatal — proceed without it
+      }
+
+      const currencySymbol = req.company?.currency_symbol || "PKRs";
+      const storeName = req.company?.company_name || "Store";
+
+      const html = buildReceiptEmailHtml(
+        sale,
+        items || [],
+        payments || [],
+        template,
+        currencySymbol
+      );
+
+      const subject = `Receipt #${sale.invoice_number || sale.id} from ${storeName}`;
+
+      // Try tenant SMTP first
+      const cfg = await getConfig();
+      if (cfg && cfg.smtp_host && cfg.smtp_user && cfg.smtp_pass) {
+        const transport = makeTransport(cfg);
+        await transport.sendMail({
+          from: `"${cfg.from_name || storeName}" <${cfg.smtp_user}>`,
+          to: toEmail,
+          subject,
+          html,
+        });
+        return res.json({ ok: true, via: "smtp" });
+      }
+
+      // Fall back to Resend
+      if (process.env.RESEND_API_KEY) {
+        const { Resend } = require("resend");
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        const fromEmail =
+          process.env.RESEND_FROM_EMAIL ||
+          `${storeName} <onboarding@resend.dev>`;
+        const { error } = await resend.emails.send({
+          from: fromEmail,
+          to: toEmail,
+          subject,
+          html,
+        });
+        if (error) throw new Error(`Resend error: ${error.message}`);
+        return res.json({ ok: true, via: "resend" });
+      }
+
+      // Neither transport available
+      return res.status(503).json({ error: "No email service configured" });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
