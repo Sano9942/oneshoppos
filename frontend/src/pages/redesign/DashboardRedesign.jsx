@@ -19,6 +19,7 @@ import { DashboardRecentSales } from "../dashboard/DashboardRecentSales";
 import { DashboardAttention } from "../dashboard/DashboardAttention";
 import { DashboardTopProducts } from "../dashboard/DashboardTopProducts";
 import { DashboardOnboarding } from "../dashboard/DashboardOnboarding";
+import { BackupStatusCard } from "../dashboard/BackupStatusCard";
 
 export default function DashboardRedesign() {
   const navigate = useNavigate();
@@ -198,6 +199,13 @@ export default function DashboardRedesign() {
           currentEmployeeId={currentEmployeeId}
         />
       </div>
+
+      {/* Backup status — admin only */}
+      {isAdmin && (
+        <div className="mb-4">
+          <BackupStatusCard />
+        </div>
+      )}
 
       {/* Recent sales */}
       <div className="mb-4">

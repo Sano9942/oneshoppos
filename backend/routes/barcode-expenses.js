@@ -392,6 +392,7 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
 
         const schemaName = getSchemaName(req.tenantSlug);
         const filename = `backup-${schemaName}-${new Date().toISOString().slice(0, 10)}.dump`;
+        const startTime = Date.now();
 
         res.setHeader("Content-Type", "application/octet-stream");
         res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
@@ -403,15 +404,26 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
         stream.pipe(res);
 
         proc.on("close", async (code) => {
+          const durationMs = Date.now() - startTime;
           if (code === 0) {
             await db.query(
-              "INSERT INTO backup_log (action, filename, size_bytes, status) VALUES ($1, $2, $3, $4)",
-              ["backup", filename, size, "success"]
+              "INSERT INTO backup_log (schema_name, status, size_bytes, duration_ms) VALUES ($1, $2, $3, $4)",
+              [schemaName, "success", size, durationMs]
+            ).catch(() => {});
+          } else {
+            await db.query(
+              "INSERT INTO backup_log (schema_name, status, size_bytes, duration_ms, error_message) VALUES ($1, $2, $3, $4, $5)",
+              [schemaName, "failed", size, durationMs, `pg_dump exited with code ${code}`]
             ).catch(() => {});
           }
         });
 
         proc.on("error", (err) => {
+          const durationMs = Date.now() - startTime;
+          db.query(
+            "INSERT INTO backup_log (schema_name, status, duration_ms, error_message) VALUES ($1, $2, $3, $4)",
+            [getSchemaName(req.tenantSlug), "failed", durationMs, err.message]
+          ).catch(() => {});
           if (!res.headersSent) {
             res.status(500).json({ error: `Backup failed: ${err.message}` });
           }
@@ -442,6 +454,7 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
       if (!req.file) {
         return res.status(400).json({ error: "backup_file is required" });
       }
+      const startTime = Date.now();
       try {
         const { restoreSchema, getSchemaName } = require("../utils/backup-pg");
         const schemaName = getSchemaName(req.tenantSlug);
@@ -449,18 +462,21 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
         runtimeState.isRestoreInProgress = true;
         const result = await restoreSchema(schemaName, req.file.path);
         runtimeState.isRestoreInProgress = false;
+        const durationMs = Date.now() - startTime;
 
         await db.query(
-          "INSERT INTO backup_log (action, filename, size_bytes, status, notes) VALUES ($1, $2, $3, $4, $5)",
-          ["restore", req.file.originalname, req.file.size, "success", result.stderr || null]
+          "INSERT INTO backup_log (schema_name, status, size_bytes, duration_ms, error_message) VALUES ($1, $2, $3, $4, $5)",
+          [schemaName, "success", req.file.size, durationMs, result.stderr || null]
         ).catch(() => {});
 
         res.json({ success: true, message: "Restore complete" });
       } catch (err) {
         runtimeState.isRestoreInProgress = false;
+        const durationMs = Date.now() - startTime;
+        const { getSchemaName } = require("../utils/backup-pg");
         await db.query(
-          "INSERT INTO backup_log (action, filename, size_bytes, status, notes) VALUES ($1, $2, $3, $4, $5)",
-          ["restore", req.file?.originalname || "unknown", req.file?.size || 0, "failed", err.message]
+          "INSERT INTO backup_log (schema_name, status, size_bytes, duration_ms, error_message) VALUES ($1, $2, $3, $4, $5)",
+          [getSchemaName(req.tenantSlug), "failed", req.file?.size || 0, durationMs, err.message]
         ).catch(() => {});
         res.status(500).json({ error: err.message });
       } finally {
@@ -480,6 +496,22 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
           "SELECT * FROM backup_log ORDER BY created_at DESC LIMIT 100"
         );
         res.json({ log: rows });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
+  // GET /api/backup-status — latest backup record for dashboard card
+  app.get(
+    "/api/backup-status",
+    requirePerm("all_access"),
+    async (req, res) => {
+      try {
+        const { rows } = await db.query(
+          "SELECT * FROM backup_log ORDER BY created_at DESC LIMIT 1"
+        );
+        res.json({ backup: rows[0] || null });
       } catch (err) {
         res.status(500).json({ error: err.message });
       }
