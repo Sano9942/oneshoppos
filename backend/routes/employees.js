@@ -116,9 +116,13 @@ module.exports = function registerEmployeeRoutes(app, deps) {
     const perms = req.employeePerms || [];
     const isAdmin = perms.includes("all_access");
 
-    // Block self-role changes
+    // Block self-role changes (only if actually changing the role, not re-sending same value)
     if (role_id !== undefined && String(id) === String(req.headers["x-employee-id"])) {
-      return res.status(403).json({ error: "You cannot change your own role." });
+      // Look up current role to see if it's actually changing
+      const { rows: [current] } = await db.query("SELECT role_id FROM employees WHERE id = $1", [id]);
+      if (current && Number(role_id) !== Number(current.role_id)) {
+        return res.status(403).json({ error: "You cannot change your own role." });
+      }
     }
 
     // Only admin can assign the Administrator role (role_id 1)
