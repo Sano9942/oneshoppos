@@ -17,6 +17,7 @@ import POSCloseShiftModal from "./pos/POSCloseShiftModal";
 import POSRecentSalesPanel from "./pos/POSRecentSalesPanel";
 import POSReturnExchangeModal from "./pos/POSReturnExchangeModal";
 import POSSessionExpiredModal from "./pos/POSSessionExpiredModal";
+import POSShortcutsOverlay from "./pos/POSShortcutsOverlay";
 
 const MOBILE_TABS = [
   { key: "cart", label: "Cart", icon: ShoppingCart },
@@ -151,6 +152,7 @@ function POSContent() {
       <POSRecentSalesPanel />
       <POSReturnExchangeModal />
       <POSSessionExpiredModal />
+      <POSShortcutsOverlay />
     </div>
   );
 }

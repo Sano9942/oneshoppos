@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Store, ArrowLeft, FileText, Lock, LogOut, History, RotateCcw } from "lucide-react";
+import { Store, ArrowLeft, FileText, HelpCircle, Lock, LogOut, History, RotateCcw } from "lucide-react";
 import { usePOS } from "./POSContext";
 
 export default function POSHeader() {
@@ -22,6 +22,7 @@ export default function POSHeader() {
     loadRecentSales,
     setReturnModalOpen,
     setReturnSourceSale,
+    setShowShortcutsOverlay,
   } = usePOS();
 
   return (
@@ -93,6 +94,13 @@ export default function POSHeader() {
             <Lock size={14} /> <span className="hidden sm:inline">Close Shift</span>
           </button>
         )}
+        <button
+          onClick={() => setShowShortcutsOverlay(true)}
+          className="flex items-center gap-1 text-slate-500 hover:text-violet-600 font-medium transition"
+          title="Keyboard shortcuts (F1)"
+        >
+          <HelpCircle size={14} /> <span className="hidden sm:inline">Help</span>
+        </button>
         <button
           onClick={handleLock}
           className="flex items-center gap-1 text-slate-500 hover:text-red-600 font-medium transition"
