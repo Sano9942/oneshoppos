@@ -81,18 +81,18 @@ export function AuthProvider({ children }) {
     return result;
   };
 
-  const login = async (username, pin, tenantSlug) => {
+  const login = async (username, password, tenantSlug) => {
     if (IS_MULTI_TENANT && tenantSlug) {
       // Multi-tenant login
       const res = await fetch(`${API}/api/auth/mt-login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include", // receive httpOnly refresh cookie
-        body: JSON.stringify({ tenant_slug: tenantSlug, username, pin }),
+        body: JSON.stringify({ tenant_slug: tenantSlug, username, password }),
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Invalid store code, username, or PIN");
+        throw new Error(data.error || "Invalid credentials");
       }
       const next = {
         employee: data.employee,
@@ -111,11 +111,11 @@ export function AuthProvider({ children }) {
     const res = await fetch(`${API}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, pin }),
+      body: JSON.stringify({ username, password }),
     });
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.error || "Invalid username or PIN");
+      throw new Error(data.error || "Invalid credentials");
     }
     const next = {
       employee: data.employee,

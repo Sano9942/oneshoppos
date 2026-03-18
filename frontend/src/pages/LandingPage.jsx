@@ -23,8 +23,84 @@ import {
   Star,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
-import { IS_MULTI_TENANT } from "../config";
+import { API_BASE, IS_MULTI_TENANT } from "../config";
 import { useCurrency } from "../contexts/CurrencyContext";
+
+/* ─── Forgot Password Modal ───────────────────────────────── */
+
+function ForgotPasswordModal({ storeCode, onClose }) {
+  const [username, setUsername] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    if (!username.trim()) return;
+    setLoading(true);
+    try {
+      await fetch(`${API_BASE}/api/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: username.trim(),
+          store_code: IS_MULTI_TENANT ? storeCode : undefined,
+        }),
+      });
+    } catch { /* always show success */ }
+    setSubmitted(true);
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+        <h3 className="text-lg font-semibold text-slate-900 mb-2">Reset Password</h3>
+        {submitted ? (
+          <>
+            <p className="text-sm text-slate-600 mb-4">
+              If an account with that username exists and has an email address, a reset link has been sent.
+            </p>
+            <button
+              onClick={onClose}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2.5 font-semibold transition-colors cursor-pointer"
+            >
+              Back to Login
+            </button>
+          </>
+        ) : (
+          <form onSubmit={onSubmit} className="space-y-3">
+            <p className="text-sm text-slate-600">
+              Enter your username and we'll send a reset link to your email.
+            </p>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition"
+              placeholder="Username"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 border border-slate-200 rounded-lg py-2.5 font-medium text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !username.trim()}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2.5 font-semibold disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                {loading ? "Sending..." : "Send Reset Link"}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /* ─── Login Form (extracted from Login.jsx logic) ─────────── */
 
@@ -35,12 +111,13 @@ function LoginForm() {
   const [searchParams] = useSearchParams();
   const [storeCode, setStoreCode] = useState(searchParams.get("store") || "");
   const [username, setUsername] = useState("");
-  const [pin, setPin] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
 
   const canSubmit =
-    username.trim() && pin.trim() && (!IS_MULTI_TENANT || storeCode.trim());
+    username.trim() && password.trim() && (!IS_MULTI_TENANT || storeCode.trim());
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -50,7 +127,7 @@ function LoginForm() {
     try {
       await login(
         username.trim(),
-        pin.trim(),
+        password.trim(),
         IS_MULTI_TENANT ? storeCode.trim() : undefined,
       );
       refreshCurrency();
@@ -63,6 +140,7 @@ function LoginForm() {
   };
 
   return (
+    <>
     <form className="space-y-4" onSubmit={onSubmit} id="login-form">
       {IS_MULTI_TENANT && (
         <label className="block">
@@ -106,7 +184,7 @@ function LoginForm() {
 
       <label className="block">
         <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-          PIN
+          Password
         </span>
         <div className="mt-1.5 relative">
           <Lock
@@ -115,14 +193,23 @@ function LoginForm() {
           />
           <input
             type="password"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition"
-            placeholder="PIN code"
-            maxLength={10}
+            placeholder="Enter your password"
           />
         </div>
       </label>
+
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setShowForgot(true)}
+          className="text-xs text-emerald-600 hover:text-emerald-700 font-medium cursor-pointer"
+        >
+          Forgot password?
+        </button>
+      </div>
 
       {error && <p className="text-sm text-red-600 font-medium">{error}</p>}
 
@@ -134,6 +221,13 @@ function LoginForm() {
         {loading ? "Signing in..." : "Sign In"}
       </button>
     </form>
+    {showForgot && (
+      <ForgotPasswordModal
+        storeCode={storeCode}
+        onClose={() => setShowForgot(false)}
+      />
+    )}
+    </>
   );
 }
 
@@ -448,8 +542,8 @@ export default function LandingPage() {
                 </h2>
                 <p className="text-sm text-slate-500 mt-1">
                   {IS_MULTI_TENANT
-                    ? "Enter your store code, username, and PIN"
-                    : "Enter your username and PIN"}
+                    ? "Enter your store code, username, and password"
+                    : "Enter your username and password"}
                 </p>
               </div>
               <LoginForm />
