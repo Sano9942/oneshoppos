@@ -26,6 +26,9 @@ module.exports = function registerReportsRoutes(app, deps) {
   shifts(app, deps, helpers);
   const governanceModule = governance(app, deps, helpers);
 
+  // FBR e-invoicing export
+  require("./fbr-export")(app, deps);
+
   // Return the processPendingReportSchedules function required by registerAllRoutes.js
   return {
     processPendingReportSchedules:
