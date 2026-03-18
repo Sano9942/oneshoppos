@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-_Last updated: March 19 2026 — **Password auth + Resend email shipped.** Dashboard login now uses passwords (PIN fallback for existing employees). Forgot-password flow via Resend. Admin can set/reset passwords on Employees page._
+_Last updated: March 19 2026 — **UX & onboarding improvements shipped.** Dark mode, global toast system, profile dropdown, employee profile page (self-service PIN/password change), POS keyboard shortcuts (F1-F10), help overlay, breadcrumb navigation._
 
 ---
 
@@ -337,12 +337,23 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 
 ---
 
-## 🔲 UX & Onboarding Improvements
+## ✅ UX & Onboarding Improvements (Mar 19 2026)
 
-- **Onboarding walkthrough / checklist** — first-time tooltip tour or in-app checklist after setup wizard ("Add your first product → Create an outlet → Open a shift") to reduce support burden
-- **Employee self-service PIN change** — let employees change their own PIN from a profile page without needing an admin
-- **Keyboard shortcuts on POS** — scan → quantity → Enter flow; optimized for speed cashiers working long shifts
-- **Dark mode** — toggle for reduced eye strain during long shifts
+**Branch:** `feature/ux-onboarding` — merged to `main` (7 commits, 15 files, +535 lines).
+
+- **Dark mode** — CSS variable theming via `[data-theme="dark"]` on `<html>`. Toggle in profile dropdown. `utils/theme.js` for get/set/toggle/init. Persisted in localStorage.
+- **Global toast system** — `useToast()` context with success/error/warning/info types. Max 3 visible, 4s auto-dismiss. Replaces per-page alert patterns.
+- **Profile dropdown** — replaces logout button + employee badge in header. Shows employee name/role, links to profile page, dark mode toggle, logout.
+- **Employee profile page** — `/profile` route with account info, self-service PIN change (`PUT /api/employees/:id/change-pin`), password change. No admin permission required.
+- **POS keyboard shortcuts** — F1=help, F2=discount, F3=park, F4=customer search, F5=parked sales, F8=remove last, F9=checkout, F10=clear cart, Esc=close modal. Work even when focus is in an input.
+- **POS help overlay** — `POSShortcutsOverlay.jsx` modal showing all shortcuts. Triggered by F1 or Help button in POS header.
+- **Breadcrumb navigation** — auto-derived from `useLocation().pathname`. Shows Home → current path. Skipped on dashboard, POS, kiosk, customer-display.
+
+### Still Not Built (deferred)
+
+- **Onboarding walkthrough / checklist** — first-time tooltip tour or in-app checklist after setup wizard
+
+---
 
 ## 🔲 Customer Communication
 
@@ -434,3 +445,4 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 | Mar 14 2026 | **Live E2E test suite — all 20 specs passed**        | 20 Playwright specs (00–19) run sequentially against live production (`sanopos.vercel.app`, tenant `packagesmall`). ~120 individual tests, all passing. Covered: full POS day (shift open→sale→return→close), inventory, purchasing/GRN, customers/loyalty, gift cards, CRM, HR/payroll, attendance/kiosk, approvals, notifications, reports (dashboard/sales/inventory/P&L), audit log. One real bug found and fixed: kiosk `?tenant=` param needed in MT mode for unauthenticated PIN endpoint (`backend/index.js` resolveTenant + `KioskRedesign.jsx`). All other fixes were test files only — adapting specs to match actual API contracts. |
 | Mar 19 2026 | **Password auth + Resend email shipped**              | `feature/password-auth-resend` branch. Migration v3 (email, password_hash, password_reset_tokens). Resend utility for system emails. Dashboard login accepts password (PIN fallback). Forgot-password + reset-password flow. Admin set-password/send-reset on Employees page. POS re-auth fixed to use validate-pin. |
 | Mar 19 2026 | **Permission guards hardened**                         | Full RBAC audit. Added `requirePerm` to: email config (PUT/test → `all_access`), printer config (PUT → `all_access`), attribute sets (POST/PUT/DELETE → `manage_inventory`), barcode print jobs (POST → `manage_inventory`), action history (GET → `view_reports`, POST log → `all_access`). Roles CRUD confirmed admin-only. Self-role-change guard fixed to allow non-role edits on own profile. |
+| Mar 19 2026 | **UX & onboarding improvements shipped**               | `feature/ux-onboarding` branch (7 commits, 15 files, +535 lines). Dark mode (CSS variable theming), global toast system, profile dropdown (replaces logout button), employee profile page (self-service PIN/password change), POS keyboard shortcuts (F1-F10 + Esc), POS help overlay, breadcrumb navigation. |

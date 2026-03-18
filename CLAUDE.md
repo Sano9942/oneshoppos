@@ -57,18 +57,23 @@ oneshoppos/
     ├── auth/authStore.js         # Token storage helpers
     ├── config.js                 # API base URL, IS_MULTI_TENANT
     ├── contexts/CurrencyContext.jsx  # useCurrency() → { symbol, code, fmt, refresh }
+    ├── contexts/ToastContext.jsx    # useToast() → { toast, success, error, warning }
     ├── ui/primitives.jsx         # Design system (PageShell, Button, Input, etc.)
+    ├── ui/Breadcrumbs.jsx        # Route-based breadcrumb nav (auto-derived from pathname)
     ├── ui/nav-config.js          # Sidebar nav entries
     ├── utils/
     │   ├── dates.js              # UTC + LOCAL timestamp formatters
     │   ├── receipt.js            # Receipt rendering (buildReceiptSections, buildReceiptHtml)
     │   ├── categoryTree.js       # Category tree UI helpers
     │   ├── offlineQueue.js       # Offline sale queue
-    │   └── csvExport.js          # Shared CSV download utility (downloadCsv)
+    │   ├── csvExport.js          # Shared CSV download utility (downloadCsv)
+    │   └── theme.js              # Dark mode: getTheme, setTheme, toggleTheme, initTheme
     └── pages/
         ├── redesign/             # ALL active pages live here (*Redesign.jsx)
         │   ├── POSRedesign.jsx
-        │   ├── pos/POSContext.jsx # 128+ exports — all POS state
+        │   ├── pos/POSContext.jsx # 130+ exports — all POS state + keyboard shortcuts
+        │   ├── pos/POSShortcutsOverlay.jsx # F-key help modal
+        │   ├── ProfileRedesign.jsx  # Employee profile page (PIN/password change)
         │   └── [all other *Redesign.jsx]
         ├── reports/              # Report domain modules
         ├── dashboard/            # Dashboard components (12 files)
@@ -88,6 +93,15 @@ oneshoppos/
 - **Multi-tenant DB routing**: `deps.db` is a Proxy that delegates to tenant DB via AsyncLocalStorage. Middleware order: `loadTenantAndPerms` → `resolveTenant` → tenant `/uploads` → `loadCompanyProfile` → `resolveContext`
 - Internal product categories are hierarchical; leaf-only assignment
 - Frontend: port 5173 (Vite dev), Backend: port 5000
+
+## UX Features
+
+- **Dark mode**: CSS variable theming via `[data-theme="dark"]` on `<html>`. Toggle in profile dropdown. `utils/theme.js` for get/set/toggle/init. Persisted in `localStorage("sanopos_theme")`.
+- **Toast notifications**: `useToast()` from `contexts/ToastContext.jsx` → `{ success, error, warning, toast }`. Max 3 visible, 4s auto-dismiss. Provider wraps inside `CurrencyProvider`, outside `AuthProvider`.
+- **Profile dropdown**: Replaces old logout button + employee badge in header. Shows role, links to `/profile`, dark mode toggle, logout.
+- **Employee profile page**: `/profile` route — account info, change PIN (`PUT /api/employees/:id/change-pin`), change password. Self-service, no admin perm required.
+- **POS keyboard shortcuts**: F1=help, F2=discount, F3=park, F4=customer search, F5=parked sales, F8=remove last, F9=checkout, F10=clear cart, Esc=close modal. Work even when focus is in an input.
+- **Breadcrumbs**: Auto-derived from `useLocation().pathname` via label map in `ui/Breadcrumbs.jsx`. Skipped on dashboard, POS, kiosk, customer-display.
 
 ## Running Tests
 
