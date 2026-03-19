@@ -342,6 +342,51 @@ module.exports = function createHRRouter({
     },
   );
 
+  // ── Payroll Export (CSV-ready JSON) ──────────────────────────────────────
+  router.get(
+    "/api/hr/payroll-export",
+    requirePerm("all_access"),
+    requireFeature("advanced_hr"),
+    async (req, res) => {
+      try {
+        const { period_id } = req.query;
+        if (!period_id) {
+          return res.status(400).json({ error: "period_id query param is required" });
+        }
+        const { rows: periodRows } = await db.query(
+          "SELECT * FROM payroll_periods WHERE id = $1", [period_id]
+        );
+        if (!periodRows[0]) {
+          return res.status(404).json({ error: "Payroll period not found" });
+        }
+        const { rows } = await db.query(
+          `SELECT e.name AS employee_name,
+                  pl.salary_type AS department,
+                  pl.total_days AS days_worked,
+                  pl.total_hours AS hours_total,
+                  CASE WHEN pl.total_hours > (pl.total_days * COALESCE(e.work_hours_per_day, 8))
+                       THEN ROUND((pl.total_hours - pl.total_days * COALESCE(e.work_hours_per_day, 8))::numeric, 2)
+                       ELSE 0 END AS overtime_hours,
+                  pl.leave_days AS leave_days_taken,
+                  pl.gross_pay,
+                  pl.deductions,
+                  pl.net_pay
+           FROM payroll_lines pl
+           JOIN employees e ON e.id = pl.employee_id
+           WHERE pl.period_id = $1
+           ORDER BY e.name ASC`,
+          [period_id]
+        );
+        res.json({
+          period: periodRows[0],
+          rows: rows || [],
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
   // ── HR Payroll Lines (manual overrides in hr_payroll_lines) ───────────────
   router.post(
     "/api/hr/payroll/periods/:id/lines",

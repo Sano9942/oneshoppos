@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import { Download } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import { useAuth } from "../../auth/AuthProvider";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { downloadCsv } from "../../utils/csvExport";
 import {
   Badge,
   Button,
@@ -25,27 +27,6 @@ const TABS = [
   { id: "payroll", label: "Payroll" },
   { id: "attendance", label: "Attendance Summary" },
 ];
-
-function exportCSV(rows, filename) {
-  if (!rows.length) return;
-  const headers = Object.keys(rows[0]);
-  const lines = [
-    headers.join(","),
-    ...rows.map((r) =>
-      headers.map((h) => {
-        const v = r[h] ?? "";
-        return typeof v === "string" && v.includes(",") ? `"${v}"` : v;
-      }).join(",")
-    ),
-  ];
-  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 export default function HRManagementRedesign() {
   const { authHeaders } = useAuth();
@@ -71,6 +52,9 @@ export default function HRManagementRedesign() {
   // Add payroll line form
   const [lineForm, setLineForm] = useState({ employee_id: "", type: "Basic", amount: "" });
   const [savingLine, setSavingLine] = useState(false);
+
+  // Payroll export
+  const [exportingPayroll, setExportingPayroll] = useState(false);
 
   // Attendance summary state
   const [attMonth, setAttMonth] = useState(() => new Date().toISOString().slice(0, 7));
@@ -227,6 +211,37 @@ export default function HRManagementRedesign() {
       setError(e2.message || "Failed to save line");
     } finally {
       setSavingLine(false);
+    }
+  };
+
+  const exportPayroll = async () => {
+    if (!selectedPeriod) return;
+    setExportingPayroll(true);
+    try {
+      const res = await fetch(`${API}/api/hr/payroll-export?period_id=${selectedPeriod}`, { headers: authHeaders() });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Export failed");
+      const rows = (data.rows || []).map((r) => [
+        r.employee_name,
+        r.department,
+        r.days_worked ?? "",
+        r.hours_total ?? "",
+        r.overtime_hours ?? "",
+        r.leave_days_taken ?? "",
+        r.gross_pay,
+        r.deductions,
+        r.net_pay,
+      ]);
+      const periodName = data.period?.period_name || `period-${selectedPeriod}`;
+      downloadCsv(
+        ["Employee", "Department", "Days Worked", "Hours Total", "Overtime Hours", "Leave Days Taken", "Gross Pay", "Deductions", "Net Pay"],
+        rows,
+        `payroll-export-${periodName.replace(/\s+/g, "-")}`
+      );
+    } catch (e2) {
+      setError(e2.message || "Payroll export failed");
+    } finally {
+      setExportingPayroll(false);
     }
   };
 
@@ -450,30 +465,39 @@ export default function HRManagementRedesign() {
                   </span>
                 )}
               </p>
-              {lines.length > 0 && (
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    exportCSV(
-                      lines.map((l) => ({
-                        Employee: l.employee_name,
-                        Type: l.salary_type,
-                        "Base Rate": l.base_rate,
-                        Hours: l.total_hours ?? "",
-                        Days: l.total_days ?? "",
-                        "Leave Days": l.leave_days ?? "",
-                        "Gross Pay": l.gross_pay,
-                        Deductions: l.deductions,
-                        "Net Pay": l.net_pay,
-                        Notes: l.notes ?? "",
-                      })),
-                      `payroll-${selectedPeriod}.csv`
-                    )
-                  }
-                >
-                  Export CSV
-                </Button>
-              )}
+              <div className="flex gap-2">
+                {selectedPeriod && (
+                  <Button size="sm" disabled={exportingPayroll} onClick={exportPayroll}>
+                    <Download className="mr-1 inline-block h-3.5 w-3.5" />
+                    {exportingPayroll ? "Exporting..." : "Export Payroll"}
+                  </Button>
+                )}
+                {lines.length > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      downloadCsv(
+                        ["Employee", "Type", "Base Rate", "Hours", "Days", "Leave Days", "Gross Pay", "Deductions", "Net Pay", "Notes"],
+                        lines.map((l) => [
+                          l.employee_name,
+                          l.salary_type,
+                          l.base_rate,
+                          l.total_hours ?? "",
+                          l.total_days ?? "",
+                          l.leave_days ?? "",
+                          l.gross_pay,
+                          l.deductions,
+                          l.net_pay,
+                          l.notes ?? "",
+                        ]),
+                        `payroll-${selectedPeriod}`
+                      )
+                    }
+                  >
+                    Export CSV
+                  </Button>
+                )}
+              </div>
             </div>
             <div className="overflow-auto">
               <table className="min-w-full text-sm">
@@ -594,14 +618,15 @@ export default function HRManagementRedesign() {
                 <Button
                   size="sm"
                   onClick={() =>
-                    exportCSV(
-                      attSummary.map((r) => ({
-                        Employee: r.name,
-                        "Days Worked": r.days,
-                        "Total Hours": r.total_hours.toFixed(1),
-                        "Avg Hours/Day": r.days > 0 ? (r.total_hours / r.days).toFixed(1) : "0",
-                      })),
-                      `attendance-${attMonth}.csv`
+                    downloadCsv(
+                      ["Employee", "Days Worked", "Total Hours", "Avg Hours/Day"],
+                      attSummary.map((r) => [
+                        r.name,
+                        r.days,
+                        r.total_hours.toFixed(1),
+                        r.days > 0 ? (r.total_hours / r.days).toFixed(1) : "0",
+                      ]),
+                      `attendance-${attMonth}`
                     )
                   }
                 >
