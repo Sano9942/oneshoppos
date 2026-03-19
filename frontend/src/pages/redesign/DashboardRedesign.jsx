@@ -19,6 +19,7 @@ import { DashboardRecentSales } from "../dashboard/DashboardRecentSales";
 import { DashboardAttention } from "../dashboard/DashboardAttention";
 import { DashboardTopProducts } from "../dashboard/DashboardTopProducts";
 import { DashboardOnboarding } from "../dashboard/DashboardOnboarding";
+import { InsightCards } from "../dashboard/InsightCards";
 import { BackupStatusCard } from "../dashboard/BackupStatusCard";
 
 export default function DashboardRedesign() {
@@ -128,6 +129,9 @@ export default function DashboardRedesign() {
       {(isAdmin || isManager) && (
         <DashboardOnboarding data={data} onNavigate={onNavigate} />
       )}
+
+      {/* AI Insight cards — pre-built analytics */}
+      {!isCashier && <InsightCards />}
 
       {/* Quick actions — role-aware horizontal button bar */}
       <div className="mb-4">

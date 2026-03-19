@@ -409,6 +409,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: SHOPIFY ---
   require("./shopify")(app, shopifyDeps);
 
+  // --- INSIGHTS (pre-built analytical cards) ---
+  require("./insights")(app, deps);
+
   // --- BARCODE TEMPLATES & EXPENSES ---
   require("./barcode-expenses")(app, deps);
 
