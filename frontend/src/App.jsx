@@ -68,6 +68,7 @@ const ReceiptPublicPage = lazy(() => import("./pages/ReceiptPublicPage"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const SignupPage = lazy(() => import("./pages/SignupPage"));
 const ImportRedesign = lazy(() => import("./pages/redesign/ImportRedesign"));
+const CourierSettingsRedesign = lazy(() => import("./pages/redesign/CourierSettingsRedesign"));
 const ReportsRoute = lazy(() => import("./pages/ReportsRoute"));
 const ReportTabStandaloneRoute = lazy(() =>
   import("./pages/ReportsRoute").then((mod) => ({
@@ -605,6 +606,14 @@ function App() {
             element={
               <RequirePerm perm="all_access">
                 <PrinterSettingsRedesign />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/courier-settings"
+            element={
+              <RequirePerm perm="all_access">
+                <CourierSettingsRedesign />
               </RequirePerm>
             }
           />

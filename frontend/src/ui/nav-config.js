@@ -114,6 +114,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Barcode Templates", path: "/barcode-templates", icon: Printer, requiredPerm: "manage_inventory" },
       { name: "Receipt Templates", path: "/receipt-templates", icon: FileText, requiredPerm: "manage_inventory" },
       { name: "Printer Settings", path: "/printer-settings", icon: Printer, requiredPerm: "all_access" },
+      { name: "Delivery Couriers", path: "/courier-settings", icon: Truck, requiredPerm: "all_access" },
       { name: "Import Data", path: "/import", icon: Upload, requiredPerm: "all_access" },
       { name: "Backup & Restore", path: "/backup-restore", icon: DatabaseBackup, requiredPerm: "all_access", requiredFlag: "backup_restore" },
     ],

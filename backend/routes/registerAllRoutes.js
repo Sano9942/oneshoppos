@@ -422,6 +422,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ATTENDANCE ---
   require("./attendance")(app, deps);
 
+  // --- COURIERS ---
+  require("./couriers")(app, deps);
+
   // --- BULK IMPORT ---
   require("./import")(app, deps);
 
