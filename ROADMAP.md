@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-_Last updated: March 19 2026 — **UX & onboarding improvements shipped.** Dark mode, global toast system, profile dropdown, employee profile page (self-service PIN/password change), POS keyboard shortcuts (F1-F10), help overlay, breadcrumb navigation._
+_Last updated: March 19 2026 — **Roadmap Waves 1-3 shipped.** 15 features: receipt email, shareable receipts, WhatsApp sharing, bulk import, backup notifications, FBR export, onboarding checklist, self-service signup, cloud printing, payroll export, AI insights + Claude chat, PWA, WooCommerce sync, courier dispatch with Leopards adapter._
 
 ---
 
@@ -349,67 +349,52 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 - **POS help overlay** — `POSShortcutsOverlay.jsx` modal showing all shortcuts. Triggered by F1 or Help button in POS header.
 - **Breadcrumb navigation** — auto-derived from `useLocation().pathname`. Shows Home → current path. Skipped on dashboard, POS, kiosk, customer-display.
 
-### Still Not Built (deferred)
-
-- **Onboarding walkthrough / checklist** — first-time tooltip tour or in-app checklist after setup wizard
-
 ---
 
-## 🔲 Customer Communication
+## ✅ Roadmap Waves 1-3 (Mar 19 2026)
 
-- **Receipt email/SMS to customers** — after a sale, option to email or text the receipt instead of (or in addition to) thermal print
-- **Shareable receipt URL** — public page like `/receipt/ABC123` that customers can bookmark or share
-- **WhatsApp integration** — receipt sharing, low-stock alerts, order updates via WhatsApp (high impact for Pakistan market)
+**Branch:** `feature/roadmap-waves` — merged to `main` (19 commits, ~40 files).
 
-## 🔲 Operational
+### Wave 1: Customer Communication + Operational Foundation
+- **Receipt email** — `POST /api/email/send-receipt-v2` with SMTP first, Resend fallback. Reuses `buildReceiptEmailHtml()`.
+- **Shareable receipt URL** — `/receipt/:invoiceNumber` public page, no auth. Backend: `GET /api/receipts/:invoiceNumber/public?tenant=slug`.
+- **WhatsApp sharing** — `wa.me/?text=` link in POS receipt modal. Zero infrastructure.
+- **Bulk data import** — `/import` page (admin-only). CSV/XLSX upload with preview, error highlighting, downloadable templates. Products, customers, suppliers.
+- **Backup status notifications** — `backup_log` table, dashboard card with amber/red warnings for stale backups.
+- **FBR e-invoicing export** — `GET /api/reports/fbr-export?from=X&to=Y` with FBR-compliant CSV. Reports page tab.
+- **Onboarding walkthrough** — dismissible checklist on dashboard (add product, set up outlet, open shift, make sale). Persisted via `company_profile.onboarding_dismissed`.
+- **Self-service signup** — `POST /api/auth/signup` with tenant provisioning + welcome email via Resend. Gated by `SELF_SERVICE_SIGNUP=1`.
 
-- **Bulk data import** — import existing products, customers, suppliers from CSV/Excel when switching from another POS (products Excel template already exists)
-- **Backup status notifications** — surface last backup time and success/failure status in the dashboard so users know their data is safe
-- **Multi-language support** — Urdu translation for Pakistan market; i18n framework for future languages
+### Wave 2: Integrations
+- **Cloud printing** — network TCP/IP via raw socket in `services/printer.js`. `POST /api/print/test` endpoint.
+- **Payroll export** — `GET /api/hr/payroll-export?period_id=X` CSV download from HR page.
+- **AI insight cards** — `GET /api/insights/auto` returns 5 pre-built analytics cards (revenue trend, top products, low stock, busiest hour, avg transaction).
+- **AI chat panel** — `POST /api/insights/ask` proxies to Claude API. Feature-flagged `ai_insights`, rate-limited 20/day. Floating chat widget on dashboard.
 
-## 🔲 Integrations — Tier 1 (expected by most users)
+### Wave 3: Multi-Channel & Advanced
+- **PWA shell** — `manifest.webmanifest` + service worker. App is installable on mobile.
+- **WooCommerce sync** — `routes/woocommerce.js` with connect, import products, sync stock. WooCommerce REST API v3.
+- **Courier dispatch** — `courier_integrations` table with 10 pre-seeded Pakistan couriers. Adapter pattern (`services/couriers/`). Generic + Leopards adapters built. Tenants configure own couriers + API keys.
 
-- **Email service (Resend)** — transactional email foundation; unblocks password reset, receipt email, onboarding email, daily digest reports, self-service signup. Free tier: 3,000 emails/month.
-- **Payment gateway (Stripe)** — card payments at checkout; starting point for international support. Later add JazzCash/EasyPaisa via their APIs for Pakistan market.
-- **Receipt email/SMS** — after a sale, option to email or text the receipt instead of (or in addition to) thermal print _(depends on email service)_
-- **Accounting software sync** — export sales/expenses to QuickBooks, Xero, or Zoho Books; CSV export first, then API sync. Eliminates double-entry for store owners.
-- **FBR e-invoicing** — Pakistan tax authority integration; legal requirement for registered businesses
-
-## 🔲 Integrations — Tier 2 (high value)
-
-- **WhatsApp Business API** — receipt sharing, low-stock alerts, order updates via WhatsApp; #1 messaging app in Pakistan/India/Middle East
-- **Cloud printing** — print receipts from any device to any network printer (Star CloudPRNT, Epson ePOS); removes USB cable dependency
-- **Payroll export** — sync attendance data to payroll software; closes the loop on the existing attendance/HR module
-
-## 🔲 Integrations — Tier 3 (differentiators)
-
-- **Delivery service dispatch** — rider integration (Bykea, Foodpanda, in-house) for restaurants, grocery, dark stores
-- **CRM / marketing sync** — sync customers to Mailchimp, HubSpot for email campaigns
-- **Inventory marketplace listing** — auto-list products on Daraz, Facebook Marketplace for multi-channel sellers
-- **Weighing scale integration** — direct scale → POS for produce/bulk items (grocery, hardware stores)
-- **CCTV / loss prevention** — link sale transactions to camera timestamps for high-shrinkage retail
-
-## 🔲 Customer & Supplier Portals
-
-- **Customer self-service portal** — customers log in (separate auth flow), view purchase history, loyalty points, wallet balance. Read-only on existing data. Builds trust and reduces support queries.
-- **Supplier portal** — suppliers log in, view open POs, confirm/reject POs, submit invoices directly. Streamlines procurement flow, reduces WhatsApp/email back-and-forth.
-
-## 🔲 AI & Analytics
-
-- **AI-powered insights layer** — natural language querying on top of existing 67+ reports ("show me best-selling items this month in Lahore"). Claude API integration. Huge differentiator vs XStak.
-- **Mobile manager app (PWA)** — lightweight PWA for owners: dashboard, approve transfers, view alerts on phone. Frontend already responsive — mainly needs offline manifest + install prompt.
-
-## 🔲 Multi-Channel E-commerce
-
-- **E-commerce sync beyond Shopify** — WooCommerce, TikTok Shop, Instagram Shopping. Existing Shopify module (9 files) is a proven template for replication.
+### Still Not Built (deferred)
+- **WhatsApp Business API** — official API for automated alerts (wa.me links ship now)
+- **FBR real-time API** — export file covers compliance for now
+- **TikTok Shop / Instagram Shopping** — WooCommerce first, add others on demand
+- **CRM/marketing sync** (Mailchimp, HubSpot) — deferred to tenant demand
+- **Inventory marketplace listing** (Daraz, Facebook) — deferred
+- **Dedicated mobile manager views** — PWA shell ships now, views later based on feedback
+- **Multi-language support** (Urdu) — deferred
+- **Payment gateway** (Stripe, JazzCash) — deferred
+- **Accounting software sync** (QuickBooks, Xero) — deferred
+- **Weighing scale integration** — deferred
+- **Customer/Supplier portals** — deferred
 
 ## 📋 Discussed but Deferred
 
-- **Payment gateway integration** (card machines, JazzCash, EasyPaisa) — see Tier 1 integrations above
-- **FBR e-invoicing** — see Tier 1 integrations above
-- **Advance / layaway payments** — installment-based sales; common in furniture/electronics retail
-- **Profit-sharing / payroll module** — seed data mentions it but no UI
+- **Payment gateway integration** (card machines, JazzCash, EasyPaisa)
+- **Advance / layaway payments** — installment-based sales
 - **Shopcast / digital signage**
+- **CCTV / loss prevention**
 
 ---
 
@@ -446,3 +431,4 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 | Mar 19 2026 | **Password auth + Resend email shipped**              | `feature/password-auth-resend` branch. Migration v3 (email, password_hash, password_reset_tokens). Resend utility for system emails. Dashboard login accepts password (PIN fallback). Forgot-password + reset-password flow. Admin set-password/send-reset on Employees page. POS re-auth fixed to use validate-pin. |
 | Mar 19 2026 | **Permission guards hardened**                         | Full RBAC audit. Added `requirePerm` to: email config (PUT/test → `all_access`), printer config (PUT → `all_access`), attribute sets (POST/PUT/DELETE → `manage_inventory`), barcode print jobs (POST → `manage_inventory`), action history (GET → `view_reports`, POST log → `all_access`). Roles CRUD confirmed admin-only. Self-role-change guard fixed to allow non-role edits on own profile. |
 | Mar 19 2026 | **UX & onboarding improvements shipped**               | `feature/ux-onboarding` branch (7 commits, 15 files, +535 lines). Dark mode (CSS variable theming), global toast system, profile dropdown (replaces logout button), employee profile page (self-service PIN/password change), POS keyboard shortcuts (F1-F10 + Esc), POS help overlay, breadcrumb navigation. |
+| Mar 19 2026 | **Roadmap Waves 1-3 shipped**                          | `feature/roadmap-waves` branch (19 commits, ~40 files). Wave 1: receipt email (SMTP+Resend), shareable receipt URL, WhatsApp sharing, bulk import (products/customers/suppliers with xlsx templates), backup notifications, FBR export, onboarding checklist, self-service signup. Wave 2: cloud printing (TCP/IP), payroll export, AI insight cards, Claude AI chat. Wave 3: PWA shell, WooCommerce sync, courier dispatch (10 Pakistan couriers + Leopards adapter). Migrations v4+v5. |

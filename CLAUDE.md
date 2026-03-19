@@ -40,7 +40,13 @@ oneshoppos/
 │   │   ├── purchase-orders.js    # /api/purchase-orders
 │   │   ├── grn.js                # GRN + supplier payables
 │   │   ├── setup.js              # /api/setup/* (first-run wizard)
-│   │   ├── reports/              # /api/reports/* (11 files, modular)
+│   │   ├── receipts.js           # /api/receipts (public shareable receipt)
+│   │   ├── import.js             # /api/import (bulk CSV/XLSX import)
+│   │   ├── couriers.js           # /api/couriers (delivery dispatch)
+│   │   ├── woocommerce.js        # /api/integrations/woocommerce
+│   │   ├── insights.js           # /api/insights/auto (pre-built analytics cards)
+│   │   ├── insights-ai.js        # /api/insights/ask (Claude AI chat)
+│   │   ├── reports/              # /api/reports/* (12 files, modular — includes fbr-export)
 │   │   ├── shopify/              # /api/integrations/shopify* (9 files, modular)
 │   │   ├── tier4/                # Tier 4 features (7 files, modular)
 │   │   └── [other domain files]  # taxes, categories, outlets, roles, brands, suppliers, promotions, orders, etc.
@@ -49,7 +55,8 @@ oneshoppos/
 │   ├── tenant-db-manager-pg.js   # Shared pg.Pool + per-request search_path
 │   ├── master-db-pg.js           # Master tenant registry
 │   ├── tenant-provisioner-pg.js  # Schema-based provisioning
-│   ├── services/printer.js       # ESC/POS thermal printer
+│   ├── services/printer.js       # ESC/POS thermal + network TCP/IP printer
+│   ├── services/couriers/        # Courier adapter pattern (base, generic, leopards)
 │   └── utils/                    # tz.js, receiptEmail.js, digestEmail.js, backup-pg.js, resendEmail.js
 └── frontend/src/
     ├── App.jsx                   # Route orchestrator
@@ -74,13 +81,18 @@ oneshoppos/
         │   ├── pos/POSContext.jsx # 130+ exports — all POS state + keyboard shortcuts
         │   ├── pos/POSShortcutsOverlay.jsx # F-key help modal
         │   ├── ProfileRedesign.jsx  # Employee profile page (PIN/password change)
+        │   ├── ImportRedesign.jsx   # Bulk CSV/XLSX import (products, customers, suppliers)
+        │   ├── CourierSettingsRedesign.jsx # Delivery courier configuration
+        │   ├── WooCommerceIntegrationRedesign.jsx # WooCommerce sync
         │   └── [all other *Redesign.jsx]
-        ├── reports/              # Report domain modules
-        ├── dashboard/            # Dashboard components (12 files)
+        ├── reports/              # Report domain modules (includes FBRExportTab)
+        ├── dashboard/            # Dashboard components (15 files — includes InsightCards, AIChatPanel, BackupStatusCard)
         ├── shopify/              # Shopify tab modules
         ├── admin/                # Super-admin panel (separate auth, infra monitoring)
         ├── LandingPage.jsx       # Public landing page (product info, setup/user guide, login)
         ├── ResetPassword.jsx     # Public password reset page (/reset-password?token=xxx)
+        ├── ReceiptPublicPage.jsx # Public shareable receipt (/receipt/:invoiceNumber)
+        ├── SignupPage.jsx        # Public self-service signup (/signup)
         ├── Reports.jsx           # Reports orchestrator (NOT legacy)
         └── [*Route.jsx]          # 31 thin wrappers — never edit
 ```
@@ -102,6 +114,23 @@ oneshoppos/
 - **Employee profile page**: `/profile` route — account info, change PIN (`PUT /api/employees/:id/change-pin`), change password. Self-service, no admin perm required.
 - **POS keyboard shortcuts**: F1=help, F2=discount, F3=park, F4=customer search, F5=parked sales, F8=remove last, F9=checkout, F10=clear cart, Esc=close modal. Work even when focus is in an input.
 - **Breadcrumbs**: Auto-derived from `useLocation().pathname` via label map in `ui/Breadcrumbs.jsx`. Skipped on dashboard, POS, kiosk, customer-display.
+
+## Customer Communication
+
+- **Receipt email**: `POST /api/email/send-receipt-v2` — SMTP first (tenant `email_config`), Resend fallback. Reuses `buildReceiptEmailHtml()`.
+- **Shareable receipt URL**: `/receipt/:invoiceNumber` public page. Backend: `GET /api/receipts/:invoiceNumber/public?tenant=slug`. No auth.
+- **WhatsApp sharing**: `wa.me/?text=` link in POS receipt modal. Zero infrastructure — pure frontend link builder.
+
+## Integrations
+
+- **Bulk import**: `/import` page (admin-only). `POST /api/import/{products,customers,suppliers}` with `?preview=1` support. `GET /api/import/template/:entity` downloads .xlsx template.
+- **WooCommerce**: `routes/woocommerce.js` — connect, import products, sync stock. Uses WooCommerce REST API v3 with consumer key/secret.
+- **Cloud printing**: `services/printer.js` has `printToNetwork(host, port, buffer)` via raw TCP socket. `POST /api/print/test` for testing.
+- **Courier dispatch**: `routes/couriers.js` — CRUD couriers, ship orders, get tracking. `services/couriers/` adapter pattern (base → generic → leopards). `courier_integrations` table with 10 pre-seeded Pakistan couriers.
+- **FBR export**: `GET /api/reports/fbr-export?from=X&to=Y` — generates FBR-compliant CSV data.
+- **AI insights**: `GET /api/insights/auto` (5 pre-built analytics cards). `POST /api/insights/ask` (Claude AI chat, feature-flagged `ai_insights`, requires `ANTHROPIC_API_KEY`).
+- **Self-service signup**: `POST /api/auth/signup` — creates tenant + admin employee + welcome email. Gated by `SELF_SERVICE_SIGNUP=1` env var.
+- **PWA**: `manifest.webmanifest` + service worker for installable app.
 
 ## Running Tests
 
@@ -138,7 +167,7 @@ oneshoppos/
 
 ## Migrations
 
-- **Current version**: 3 (password_hash, email on employees + password_reset_tokens table)
+- **Current version**: 5 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns)
 - **migrate-pg.js CLI**: `node backend/migrate-pg.js` — migrates public schema AND all active tenant schemas
 - **Tenant migration gotcha**: existing tenants need `schema_version` table seeded with previous versions before first run
 
