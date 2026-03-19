@@ -252,5 +252,77 @@ module.exports = function makePrinterService(db) {
     });
   }
 
-  return { printReceipt, printerStatus };
+  /**
+   * Send raw ESC/POS buffer to a network printer via TCP.
+   * Resolves { ok: true } on success, rejects on error/timeout.
+   */
+  function printToNetwork(host, port, buffer) {
+    return new Promise((resolve, reject) => {
+      const client = net.createConnection({ host, port }, () => {
+        client.write(buffer, () => {
+          client.end();
+          resolve({ ok: true });
+        });
+      });
+      client.setTimeout(5000);
+      client.on("timeout", () => { client.destroy(); reject(new Error("Connection timeout")); });
+      client.on("error", (err) => reject(err));
+    });
+  }
+
+  /**
+   * Print a test receipt to the configured printer.
+   * Uses the same formatReceipt pipeline with sample data.
+   */
+  async function printTest() {
+    let cfg;
+    try {
+      cfg = await loadConfig();
+    } catch (err) {
+      return { error: `DB error: ${err.message}`, fallback: true };
+    }
+
+    if (!cfg || !cfg.is_active) {
+      return { error: "Printer not configured or inactive.", fallback: true };
+    }
+
+    let printer;
+    try {
+      printer = buildPrinter(cfg);
+    } catch (err) {
+      return { error: `Printer init error: ${err.message}`, fallback: true };
+    }
+
+    try {
+      const testSlip = {
+        invoiceNumber: "TEST-001",
+        timestamp: new Date().toLocaleString(),
+        cart: [
+          { name: "Test Item A", quantity: 2, price: 250 },
+          { name: "Test Item B", quantity: 1, price: 500 },
+        ],
+        payments: [{ method: "Cash", amount: 1000 }],
+        total: 1000,
+        change: 0,
+        outlet: { name: "Test Store" },
+        employee: { name: "Test Cashier" },
+        taxAmount: 0,
+        discountAmount: 0,
+      };
+      const testTemplate = { header_text: "SanoPOS Test Print", footer_text: "Printer is working correctly!", show_barcode: false };
+
+      await formatReceipt(printer, testSlip, testTemplate, cfg, "$");
+
+      if (cfg.cash_drawer) {
+        printer.openCashDrawer();
+      }
+
+      await printer.execute();
+      return { ok: true, message: "Test receipt printed successfully!" };
+    } catch (err) {
+      return { error: `Print failed: ${err.message}`, fallback: true };
+    }
+  }
+
+  return { printReceipt, printerStatus, printTest, printToNetwork };
 };

@@ -183,41 +183,18 @@ export default function PrinterSettingsRedesign() {
     setTesting(true);
     setTestResult(null);
     try {
-      const statusRes = await fetch(`${API}/api/print/status`, {
-        headers: { "x-employee-id": localStorage.getItem("employeeId") || "1" },
-      });
-      const status = await statusRes.json();
-      if (!status.reachable && status.reachable !== null) {
-        setTestResult({ ok: false, message: status.error || "Printer unreachable" });
-        return;
-      }
-      const printRes = await fetch(`${API}/api/print/receipt`, {
+      const res = await fetch(`${API}/api/print/test`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-employee-id": localStorage.getItem("employeeId") || "1",
         },
-        body: JSON.stringify({
-          slip: {
-            invoiceNumber: "TEST-001",
-            timestamp: new Date().toLocaleString(),
-            cart: [{ name: "Test Item", quantity: 1, price: 100 }],
-            payments: [{ method: "Cash", amount: 100 }],
-            total: 100,
-            change: 0,
-            outlet: { name: "Test Store" },
-            employee: { name: "Test Cashier" },
-            taxAmount: 0,
-            discountAmount: 0,
-          },
-          template: null,
-        }),
       });
-      const printData = await printRes.json();
-      if (printData.ok) {
-        setTestResult({ ok: true, message: "Printer OK — test receipt printed!" });
+      const data = await res.json();
+      if (data.ok) {
+        setTestResult({ ok: true, message: data.message || "Printer OK — test receipt printed!" });
       } else {
-        setTestResult({ ok: false, message: printData.error || "Print failed" });
+        setTestResult({ ok: false, message: data.error || "Print failed" });
       }
     } catch (err) {
       setTestResult({ ok: false, message: err.message });
