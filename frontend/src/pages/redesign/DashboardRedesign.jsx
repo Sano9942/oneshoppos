@@ -20,7 +20,9 @@ import { DashboardAttention } from "../dashboard/DashboardAttention";
 import { DashboardTopProducts } from "../dashboard/DashboardTopProducts";
 import { DashboardOnboarding } from "../dashboard/DashboardOnboarding";
 import { InsightCards } from "../dashboard/InsightCards";
+import { AIChatPanel } from "../dashboard/AIChatPanel";
 import { BackupStatusCard } from "../dashboard/BackupStatusCard";
+import useFeatureFlags from "../../hooks/useFeatureFlags";
 
 export default function DashboardRedesign() {
   const navigate = useNavigate();
@@ -44,6 +46,9 @@ export default function DashboardRedesign() {
 
   // Current employee id (for cashier attendance filtering)
   const currentEmployeeId = readSession()?.employee?.id;
+
+  // Feature flags (for AI chat panel)
+  const { flags } = useFeatureFlags(authHeaders);
 
   const fetchDashboard = useCallback((silent = false) => {
     let mounted = true;
@@ -220,6 +225,9 @@ export default function DashboardRedesign() {
           onNavigate={onNavigate}
         />
       </div>
+
+      {/* AI Chat Panel — floating widget, feature-flag gated */}
+      <AIChatPanel flagEnabled={!!flags.ai_insights} />
     </PageShell>
   );
 }
