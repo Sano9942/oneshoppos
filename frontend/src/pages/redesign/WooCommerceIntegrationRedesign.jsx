@@ -1,0 +1,425 @@
+import { useState, useEffect, useCallback } from "react";
+import { PageShell } from "../../ui/primitives";
+import { API_BASE as API } from "../../config";
+import {
+  Link2,
+  Unplug,
+  Download,
+  Upload,
+  CheckCircle2,
+  AlertTriangle,
+  Loader2,
+} from "lucide-react";
+
+const TABS = [
+  { id: "connection", label: "Connection" },
+  { id: "products", label: "Products" },
+  { id: "stock", label: "Stock Sync" },
+];
+
+export default function WooCommerceIntegrationRedesign() {
+  const [tab, setTab] = useState("connection");
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/integrations/woocommerce/status`);
+      const data = await res.json();
+      setStatus(data);
+    } catch {
+      setStatus({ connected: false });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStatus();
+  }, [loadStatus]);
+
+  if (loading) {
+    return (
+      <PageShell title="WooCommerce Integration">
+        <div className="flex min-h-[30vh] items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+        </div>
+      </PageShell>
+    );
+  }
+
+  return (
+    <PageShell
+      title="WooCommerce Integration"
+      subtitle={
+        status?.connected
+          ? `Connected to ${status.store_url}`
+          : "Not connected"
+      }
+    >
+      {/* Tabs */}
+      <div className="mb-6 flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              tab === t.id
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "connection" && (
+        <ConnectionTab status={status} onRefresh={loadStatus} />
+      )}
+      {tab === "products" && <ProductsTab connected={status?.connected} />}
+      {tab === "stock" && <StockTab connected={status?.connected} />}
+    </PageShell>
+  );
+}
+
+/* ── Connection Tab ──────────────────────────────────────────────── */
+
+function ConnectionTab({ status, onRefresh }) {
+  const [storeUrl, setStoreUrl] = useState("");
+  const [consumerKey, setConsumerKey] = useState("");
+  const [consumerSecret, setConsumerSecret] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const connect = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setMsg(null);
+    try {
+      const res = await fetch(
+        `${API}/api/integrations/woocommerce/connect`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            store_url: storeUrl,
+            consumer_key: consumerKey,
+            consumer_secret: consumerSecret,
+          }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Connection failed");
+      setMsg({ type: "success", text: "Connected successfully!" });
+      setStoreUrl("");
+      setConsumerKey("");
+      setConsumerSecret("");
+      onRefresh();
+    } catch (err) {
+      setMsg({ type: "error", text: err.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const disconnect = async () => {
+    if (!window.confirm("Disconnect WooCommerce? This will clear credentials."))
+      return;
+    try {
+      const res = await fetch(
+        `${API}/api/integrations/woocommerce/disconnect`,
+        { method: "POST" },
+      );
+      if (!res.ok) throw new Error("Failed to disconnect");
+      setMsg({ type: "success", text: "Disconnected." });
+      onRefresh();
+    } catch (err) {
+      setMsg({ type: "error", text: err.message });
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-xl space-y-6">
+      {msg && (
+        <div
+          className={`flex items-center gap-2 rounded-lg px-4 py-3 text-sm ${
+            msg.type === "success"
+              ? "bg-emerald-50 text-emerald-700"
+              : "bg-red-50 text-red-700"
+          }`}
+        >
+          {msg.type === "success" ? (
+            <CheckCircle2 className="h-4 w-4" />
+          ) : (
+            <AlertTriangle className="h-4 w-4" />
+          )}
+          {msg.text}
+        </div>
+      )}
+
+      {status?.connected ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
+              <Link2 className="h-5 w-5 text-emerald-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-slate-900">Connected</p>
+              <p className="text-sm text-slate-500">{status.store_url}</p>
+            </div>
+          </div>
+          <button
+            onClick={disconnect}
+            className="flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+          >
+            <Unplug className="h-4 w-4" />
+            Disconnect
+          </button>
+        </div>
+      ) : (
+        <form
+          onSubmit={connect}
+          className="space-y-4 rounded-xl border border-slate-200 bg-white p-6"
+        >
+          <h3 className="text-base font-semibold text-slate-900">
+            Connect WooCommerce Store
+          </h3>
+          <p className="text-sm text-slate-500">
+            Enter your WooCommerce store URL and REST API credentials. You can
+            generate API keys in WooCommerce &rarr; Settings &rarr; Advanced
+            &rarr; REST API.
+          </p>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Store URL
+            </label>
+            <input
+              type="url"
+              required
+              placeholder="https://yourstore.com"
+              value={storeUrl}
+              onChange={(e) => setStoreUrl(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Consumer Key
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="ck_..."
+              value={consumerKey}
+              onChange={(e) => setConsumerKey(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Consumer Secret
+            </label>
+            <input
+              type="password"
+              required
+              placeholder="cs_..."
+              value={consumerSecret}
+              onChange={(e) => setConsumerSecret(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Link2 className="h-4 w-4" />
+            )}
+            {saving ? "Connecting..." : "Connect"}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+/* ── Products Tab ────────────────────────────────────────────────── */
+
+function ProductsTab({ connected }) {
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+
+  const importProducts = async () => {
+    setImporting(true);
+    setResult(null);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${API}/api/integrations/woocommerce/import-products`,
+        { method: "POST" },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Import failed");
+      setResult(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  if (!connected) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
+        <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-amber-500" />
+        <p className="font-medium text-amber-800">
+          Connect your WooCommerce store first
+        </p>
+        <p className="mt-1 text-sm text-amber-600">
+          Go to the Connection tab to set up your store credentials.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-xl space-y-6">
+      <div className="rounded-xl border border-slate-200 bg-white p-6">
+        <h3 className="mb-2 text-base font-semibold text-slate-900">
+          Import Products
+        </h3>
+        <p className="mb-4 text-sm text-slate-500">
+          Pull all products from your WooCommerce store. Existing products
+          (matched by SKU) will be updated; new products will be created.
+        </p>
+        <button
+          onClick={importProducts}
+          disabled={importing}
+          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {importing ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4" />
+          )}
+          {importing ? "Importing..." : "Import Products"}
+        </button>
+      </div>
+
+      {result && (
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+          <div>
+            <p className="font-medium text-emerald-800">Import complete</p>
+            <p className="text-sm text-emerald-600">
+              {result.imported} new products imported, {result.updated} existing
+              products updated.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+          <AlertTriangle className="h-5 w-5 text-red-600" />
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Stock Sync Tab ──────────────────────────────────────────────── */
+
+function StockTab({ connected }) {
+  const [syncing, setSyncing] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+
+  const syncStock = async () => {
+    setSyncing(true);
+    setResult(null);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${API}/api/integrations/woocommerce/sync-stock`,
+        { method: "POST" },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Sync failed");
+      setResult(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  if (!connected) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
+        <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-amber-500" />
+        <p className="font-medium text-amber-800">
+          Connect your WooCommerce store first
+        </p>
+        <p className="mt-1 text-sm text-amber-600">
+          Go to the Connection tab to set up your store credentials.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-xl space-y-6">
+      <div className="rounded-xl border border-slate-200 bg-white p-6">
+        <h3 className="mb-2 text-base font-semibold text-slate-900">
+          Sync Stock to WooCommerce
+        </h3>
+        <p className="mb-4 text-sm text-slate-500">
+          Push your current stock levels to WooCommerce. Products are matched by
+          SKU. Only products with a matching SKU in WooCommerce will be updated.
+        </p>
+        <button
+          onClick={syncStock}
+          disabled={syncing}
+          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {syncing ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Upload className="h-4 w-4" />
+          )}
+          {syncing ? "Syncing..." : "Sync Stock"}
+        </button>
+      </div>
+
+      {result && (
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+          <div>
+            <p className="font-medium text-emerald-800">Sync complete</p>
+            <p className="text-sm text-emerald-600">
+              {result.synced} product stock levels pushed to WooCommerce.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+          <AlertTriangle className="h-5 w-5 text-red-600" />
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+    </div>
+  );
+}

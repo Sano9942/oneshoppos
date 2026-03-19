@@ -40,6 +40,7 @@ const StockAdjustmentsRoute = lazy(() => import("./pages/StockAdjustmentsRoute")
 const SupplierPayablesRoute = lazy(() => import("./pages/SupplierPayablesRoute"));
 const SuppliersRoute = lazy(() => import("./pages/SuppliersRoute"));
 const ShopifyIntegrationRoute = lazy(() => import("./pages/ShopifyIntegrationRoute"));
+const WooCommerceIntegrationRedesign = lazy(() => import("./pages/redesign/WooCommerceIntegrationRedesign"));
 const TaxesRoute = lazy(() => import("./pages/TaxesRoute"));
 const TransfersRoute = lazy(() => import("./pages/TransfersRoute"));
 const CRMRoute = lazy(() => import("./pages/CRMRoute"));
@@ -424,6 +425,14 @@ function App() {
             element={
               <RequirePerm perm="manage_inventory">
                 <ShopifyIntegrationRoute />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/integrations/woocommerce"
+            element={
+              <RequirePerm perm="manage_inventory">
+                <WooCommerceIntegrationRedesign />
               </RequirePerm>
             }
           />

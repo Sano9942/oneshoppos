@@ -35,6 +35,7 @@ import {
   Bell,
   PauseCircle,
   Upload,
+  ShoppingBag,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -109,6 +110,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Outlets", path: "/outlets", icon: Building2, requiredPerm: "all_access" },
       { name: "Company Profile", path: "/company-settings", icon: Settings, requiredPerm: "all_access", requiredFlag: "multi_company" },
       { name: "Shopify Integration", path: "/integrations/shopify", icon: Plug, requiredPerm: "manage_inventory" },
+      { name: "WooCommerce", path: "/integrations/woocommerce", icon: ShoppingBag, requiredPerm: "manage_inventory" },
       { name: "Barcode Templates", path: "/barcode-templates", icon: Printer, requiredPerm: "manage_inventory" },
       { name: "Receipt Templates", path: "/receipt-templates", icon: FileText, requiredPerm: "manage_inventory" },
       { name: "Printer Settings", path: "/printer-settings", icon: Printer, requiredPerm: "all_access" },

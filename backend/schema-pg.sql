@@ -1095,6 +1095,18 @@ CREATE TABLE IF NOT EXISTS email_config (
   enabled BOOLEAN DEFAULT FALSE
 );
 
+-- ── Integration Settings (WooCommerce, etc.) ────────────────────────
+
+CREATE TABLE IF NOT EXISTS integration_settings (
+  id SERIAL PRIMARY KEY,
+  provider TEXT NOT NULL UNIQUE,
+  store_url TEXT,
+  api_key TEXT,
+  api_secret TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ── Token Revocation ──────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS revoked_tokens (

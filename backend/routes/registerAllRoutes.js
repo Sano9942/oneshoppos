@@ -409,6 +409,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: SHOPIFY ---
   require("./shopify")(app, shopifyDeps);
 
+  // --- ROUTES: WOOCOMMERCE ---
+  require("./woocommerce")(app, deps);
+
   // --- INSIGHTS (pre-built analytical cards + AI chat) ---
   require("./insights")(app, deps);
   require("./insights-ai")(app, deps);
