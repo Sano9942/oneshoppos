@@ -384,6 +384,11 @@ export const POSProvider = ({ children }) => {
     }
   }, [employee?.id, addToCart]);
 
+  // Refs for functions declared later — avoids TDZ in the keyboard useEffect
+  const parkSaleRef = useRef(null);
+  const openCheckoutRef = useRef(null);
+  const removeFromCartRef = useRef(null);
+
   // Barcode scanner — rapid keystroke detection (scanners type ~50ms between chars)
   useEffect(() => {
     function handleKeyDown(e) {
@@ -391,11 +396,11 @@ export const POSProvider = ({ children }) => {
       const fkeys = {
         F1: () => { e.preventDefault(); setShowShortcutsOverlay((v) => !v); },
         F2: () => { e.preventDefault(); if (cart.length) setShowDiscountModal(true); },
-        F3: () => { e.preventDefault(); if (cart.length) parkSale(); },
+        F3: () => { e.preventDefault(); if (cart.length) parkSaleRef.current?.(); },
         F4: () => { e.preventDefault(); const el = document.querySelector('[data-pos-customer-search]'); if (el) el.focus(); },
         F5: () => { e.preventDefault(); setShowParked(true); },
-        F8: () => { e.preventDefault(); if (cart.length) removeFromCart(cart[cart.length - 1].id); },
-        F9: () => { e.preventDefault(); if (cart.length) openCheckout(); },
+        F8: () => { e.preventDefault(); if (cart.length) removeFromCartRef.current?.(cart[cart.length - 1].id); },
+        F9: () => { e.preventDefault(); if (cart.length) openCheckoutRef.current?.(); },
         F10: () => { e.preventDefault(); if (cart.length && window.confirm("Clear entire cart?")) setCart([]); },
         Escape: () => { setShowDiscountModal(false); setShowParked(false); setShowShortcutsOverlay(false); },
       };
@@ -431,7 +436,7 @@ export const POSProvider = ({ children }) => {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleBarcodeScanned, cart, parkSale, openCheckout, removeFromCart, setCart]);
+  }, [handleBarcodeScanned, cart, setCart]);
 
   // Fetch wallet balance when a customer is selected at checkout
   useEffect(() => {
@@ -468,6 +473,7 @@ export const POSProvider = ({ children }) => {
 
   const removeFromCart = (id) =>
     setCart((prev) => prev.filter((x) => x.id !== id));
+  removeFromCartRef.current = removeFromCart;
 
   const grossTotal = useMemo(
     () => cart.reduce((s, i) => s + Number(i.price || 0) * i.quantity, 0),
@@ -582,6 +588,7 @@ export const POSProvider = ({ children }) => {
       setError(e.message || "Failed to park sale");
     }
   };
+  parkSaleRef.current = parkSale;
 
   const restoreParked = async (row) => {
     try {
@@ -651,6 +658,7 @@ export const POSProvider = ({ children }) => {
     setPayWithWalletOn(false);
     setCheckoutOpen(true);
   };
+  openCheckoutRef.current = openCheckout;
 
   const handleQuickCreateCustomer = async () => {
     if (!newCustName.trim()) {
