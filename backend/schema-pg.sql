@@ -838,6 +838,34 @@ CREATE TABLE IF NOT EXISTS inventory_reconciliation (
   resolved_at TIMESTAMPTZ
 );
 
+-- ── Courier Integrations ──────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS courier_integrations (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  adapter_key TEXT NOT NULL DEFAULT 'generic',
+  api_base_url TEXT,
+  api_key TEXT,
+  api_secret TEXT,
+  tracking_url_template TEXT,
+  enabled BOOLEAN DEFAULT false,
+  config_json TEXT DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO courier_integrations (name, adapter_key, tracking_url_template) VALUES
+  ('Leopards Courier', 'leopards', 'https://leopardscourier.com/tracking/track-your-order?id={tracking}'),
+  ('TCS', 'tcs', 'https://www.tcsexpress.com/tracking?code={tracking}'),
+  ('BlueEx', 'blueex', 'https://blue-ex.com/tracking/{tracking}'),
+  ('Trax', 'trax', 'https://trax.pk/tracking/{tracking}'),
+  ('PostEx', 'postex', 'https://postex.pk/tracking/{tracking}'),
+  ('Rider', 'rider', 'https://rider.pk/tracking/{tracking}'),
+  ('Call Courier', 'callcourier', 'https://callcourier.com.pk/tracking/{tracking}'),
+  ('M&P', 'mnp', 'https://www.mulphico.com/tracking/{tracking}'),
+  ('Bykea', 'bykea', ''),
+  ('Swyft', 'swyft', 'https://swyft.pk/tracking/{tracking}')
+ON CONFLICT DO NOTHING;
+
 -- ── Web Orders ────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS web_orders (
