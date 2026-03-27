@@ -1272,3 +1272,9 @@ if (!REPORT_SCHEDULE_WORKER_DISABLED) {
     }
   }, 60000);
 }
+
+// FBR Worker — inline mode (runs in same process as Express)
+if (String(process.env.FBR_WORKER_ENABLED || "0") === "1") {
+  const { startFbrWorker } = require("./workers/fbr-worker");
+  startFbrWorker(db);
+}
