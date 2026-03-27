@@ -102,6 +102,16 @@ CREATE TABLE IF NOT EXISTS upgrade_requests (
   resolved_at     TIMESTAMPTZ,
   resolved_by     TEXT
 );
+
+CREATE TABLE IF NOT EXISTS impersonation_sessions (
+  id              SERIAL PRIMARY KEY,
+  super_admin_id  INTEGER NOT NULL,
+  tenant_id       INTEGER NOT NULL REFERENCES tenants(id),
+  started_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  ended_at        TIMESTAMPTZ,
+  pages_visited   JSONB DEFAULT '[]',
+  actions_taken   INTEGER DEFAULT 0
+);
 `;
 
 let _db = null;
