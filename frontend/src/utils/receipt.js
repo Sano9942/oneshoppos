@@ -181,6 +181,17 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$") {
     b.appendChild(bc);
   }
 
+  // FBR Digital Invoice reference
+  if (slip.fbr_irn) {
+    b.appendChild(hr());
+    b.appendChild(txt("div", `FBR Ref: ${slip.fbr_irn}`, "c"));
+  } else if (slip.fbr_status === "pending") {
+    b.appendChild(hr());
+    const fbrNote = txt("div", "FBR: Processing...", "c");
+    fbrNote.style.cssText = "font-size:11px;color:#888";
+    b.appendChild(fbrNote);
+  }
+
   // Offline notice
   if (s.offlineNote) {
     b.appendChild(hr());

@@ -298,6 +298,7 @@ export default function SalesHistoryRedesign() {
                   <th className="px-3 py-2 text-center">Items</th>
                   <th className="px-3 py-2 text-right">Total</th>
                   <th className="px-3 py-2 text-left">Status</th>
+                  <th className="px-3 py-2 text-center">FBR</th>
                 </tr>
               </thead>
               <tbody>
@@ -318,6 +319,17 @@ export default function SalesHistoryRedesign() {
                         <Badge tone={Number(r.voided || 0) ? "danger" : "success"}>
                           {Number(r.voided || 0) ? "voided" : "active"}
                         </Badge>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {r.fbr_status === "posted" ? (
+                          <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" title="Posted" />
+                        ) : r.fbr_status === "pending" ? (
+                          <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-500" title="Pending" />
+                        ) : r.fbr_status === "failed" ? (
+                          <span className="inline-block h-2.5 w-2.5 rounded-full bg-rose-500" title="Failed" />
+                        ) : (
+                          <span className="inline-block h-2.5 w-2.5 rounded-full bg-gray-300" title="N/A" />
+                        )}
                       </td>
                     </tr>
                   ))}
