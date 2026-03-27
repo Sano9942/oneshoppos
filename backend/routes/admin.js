@@ -1038,4 +1038,125 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       return res.status(500).json({ error: err.message });
     }
   });
+
+  // ── Support Tickets (cross-tenant) ──────────────────────────────────
+
+  app.get("/api/admin/support-tickets", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const status = req.query.status || null;
+      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+
+      const { rows: tenants } = await db.query(
+        "SELECT id, slug, name FROM tenants WHERE status = 'active' ORDER BY id"
+      );
+
+      const allTickets = [];
+      for (const tenant of tenants) {
+        try {
+          const tenantDb = await tenantDbManager.getDb(tenant.id);
+          let sql = `SELECT id, type, message, page_url, browser, employee_id, screenshots, last_req_id, status, created_at, resolved_at
+                     FROM support_tickets`;
+          const params = [];
+          if (status) {
+            sql += " WHERE status = $1";
+            params.push(status);
+          }
+          sql += " ORDER BY created_at DESC LIMIT $" + (params.length + 1);
+          params.push(limit);
+
+          const { rows } = await tenantDb.query(sql, params);
+          for (const row of rows) {
+            allTickets.push({ ...row, tenant_id: tenant.id, tenant_slug: tenant.slug, tenant_name: tenant.name });
+          }
+        } catch {
+          // Table may not exist for this tenant — skip silently
+        }
+      }
+
+      // Sort aggregated results by created_at DESC, then trim to limit
+      allTickets.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      return res.json({ tickets: allTickets.slice(0, limit) });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/admin/support-tickets/:tenantId/:ticketId", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { status } = req.body || {};
+      if (!status || !["open", "acknowledged", "resolved"].includes(status)) {
+        return res.status(400).json({ error: "status must be one of: open, acknowledged, resolved" });
+      }
+
+      const tenantDb = await tenantDbManager.getDb(parseInt(req.params.tenantId, 10));
+      const resolvedAt = status === "resolved" ? "NOW()" : "NULL";
+      const { rows } = await tenantDb.query(
+        `UPDATE support_tickets SET status = $1, resolved_at = ${resolvedAt} WHERE id = $2 RETURNING *`,
+        [status, req.params.ticketId]
+      );
+
+      if (rows.length === 0) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+
+      return res.json({ ticket: rows[0] });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Dead Letter Queue (cross-tenant) ────────────────────────────────
+
+  app.get("/api/admin/dead-letters", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+
+      const { rows: tenants } = await db.query(
+        "SELECT id, slug, name FROM tenants WHERE status = 'active' ORDER BY id"
+      );
+
+      const allEvents = [];
+      for (const tenant of tenants) {
+        try {
+          const tenantDb = await tenantDbManager.getDb(tenant.id);
+          const { rows } = await tenantDb.query(
+            `SELECT id, topic, status, payload, error, retries, created_at, updated_at
+             FROM shopify_webhook_events
+             WHERE status IN ('dead_letter', 'failed')
+             ORDER BY created_at DESC
+             LIMIT $1`,
+            [limit]
+          );
+          for (const row of rows) {
+            allEvents.push({ ...row, tenant_id: tenant.id, tenant_slug: tenant.slug, tenant_name: tenant.name });
+          }
+        } catch {
+          // Table may not exist — skip silently
+        }
+      }
+
+      allEvents.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      return res.json({ events: allEvents.slice(0, limit) });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/dead-letters/:tenantId/:id/retry", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const tenantDb = await tenantDbManager.getDb(parseInt(req.params.tenantId, 10));
+      const { rows } = await tenantDb.query(
+        `UPDATE shopify_webhook_events SET status = 'pending', updated_at = NOW() WHERE id = $1 RETURNING *`,
+        [req.params.id]
+      );
+
+      if (rows.length === 0) {
+        return res.status(404).json({ error: "Event not found" });
+      }
+
+      return res.json({ event: rows[0] });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
 };

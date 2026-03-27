@@ -56,6 +56,8 @@ const AdminLayout = lazy(() => import("./pages/admin/AdminLayout"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminTenantList = lazy(() => import("./pages/admin/AdminTenantList"));
 const AdminTenantDetail = lazy(() => import("./pages/admin/AdminTenantDetail"));
+const AdminSupportTickets = lazy(() => import("./pages/admin/AdminSupportTickets"));
+const AdminDeadLetters = lazy(() => import("./pages/admin/AdminDeadLetters"));
 const OrdersRoute = lazy(() => import("./pages/OrdersRoute"));
 const CustomersRoute = lazy(() => import("./pages/CustomersRoute"));
 const SalesHistoryRoute = lazy(() => import("./pages/SalesHistoryRoute"));
@@ -170,6 +172,8 @@ function App() {
           <Route index element={<Suspense fallback={<RouteLoading />}><AdminDashboard /></Suspense>} />
           <Route path="tenants" element={<Suspense fallback={<RouteLoading />}><AdminTenantList /></Suspense>} />
           <Route path="tenants/:id" element={<Suspense fallback={<RouteLoading />}><AdminTenantDetail /></Suspense>} />
+          <Route path="support" element={<Suspense fallback={<RouteLoading />}><AdminSupportTickets /></Suspense>} />
+          <Route path="dead-letters" element={<Suspense fallback={<RouteLoading />}><AdminDeadLetters /></Suspense>} />
         </Route>
 
         <Route
