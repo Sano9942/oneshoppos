@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-_Last updated: March 19 2026 — **Roadmap Waves 1-3 shipped.** 15 features: receipt email, shareable receipts, WhatsApp sharing, bulk import, backup notifications, FBR export, onboarding checklist, self-service signup, cloud printing, payroll export, AI insights + Claude chat, PWA, WooCommerce sync, courier dispatch with Leopards adapter._
+_Last updated: March 28 2026 — **Reliability & support tooling shipped.** Sentry error tracking, Pino structured logging, in-house alerting, support widget + tickets, dead letter queue UI, tenant impersonation. Also: onboarding polish + subscription billing layer._
 
 ---
 
@@ -389,6 +389,46 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 - **Weighing scale integration** — deferred
 - **Customer/Supplier portals** — deferred
 
+## ✅ Onboarding Polish (Mar 27 2026)
+
+**Branch:** `feature/onboarding-polish` — merged to `main`.
+
+- **Self-service signup improvements** — rate limiting on signup endpoint, welcome email via Resend, dead tenant cleanup job (`backend/jobs/cleanup-dead-tenants.js`)
+- **Subscription billing layer** — manual payment recording, plan management, tenant billing page. `payment_records` + `upgrade_requests` + `plan_pricing` tables (migration v7). `POST /api/admin/payments/:tenantId`, `PUT /api/admin/tenants/:id` plan/billing fields, `GET /api/billing/pricing` public endpoint. Frontend: `BillingRedesign.jsx` + admin payment/billing UI in `AdminTenantDetail.jsx`.
+
+---
+
+## ✅ Reliability & Support Tooling (Mar 28 2026)
+
+**Branch:** `feature/reliability-support-tooling` — merged to `main` (15 commits, 26 files, ~3,000 lines).
+
+**Goal:** Error tracking, structured logging, alerting, support tickets, and tenant impersonation — all at zero monthly cost.
+
+### Infrastructure Layer
+- **Request ID + Pino structured logging** — `backend/middleware/request-id.js` + `backend/services/logger.js`. Every request gets a UUID (`X-Request-Id` header), JSON logs in production, pretty-print in dev. Slow requests (>2s) logged at warn level. Tenant/employee context enriched after auth via `enrichReqLog` middleware.
+- **Sentry integration** — `@sentry/node` (backend) + `@sentry/react` (frontend). Error capture only (no tracing/replay). No-op without `SENTRY_DSN`/`VITE_SENTRY_DSN`. Errors tagged with tenant slug + request ID.
+- **Frontend ErrorBoundary** — `frontend/src/ui/ErrorBoundary.jsx`. Global (full-page) + page-level (compact card). Catches crashes, reports to Sentry, shows user-friendly fallback. Dark mode aware.
+- **In-house alert system** — `backend/services/alerting.js` + `backend/utils/alertEmail.js`. In-memory sliding window counters. Alerts via Resend email on: error spikes (10+ in 5 min), DB connection pressure (>80%), health check failures. Cooldown prevents flooding.
+- **Deep health check** — `GET /api/health?deep=true` checks Postgres + Resend with per-check timeouts via `Promise.allSettled`. Returns `ok`/`degraded`/`down` with latency per dependency.
+
+### Support & Debugging
+- **Support widget** — `frontend/src/ui/SupportWidget.jsx`. Floating button (bottom-right) on all authenticated pages. Bug/feature/question form with screenshot upload (R2), auto-captures page URL, browser info, last failed request ID.
+- **Support ticket system** — `backend/routes/support.js` + `support_tickets` table (migration v8). `POST /api/support/tickets`, `POST /api/support/upload` (R2), `GET /api/support/tickets`. Alert email to `ALERT_EMAIL` on new tickets.
+- **Admin ticket viewer** — `frontend/src/pages/admin/AdminSupportTickets.jsx`. Cross-tenant ticket list with status management (open → acknowledged → resolved), inline screenshots, quick-impersonate button.
+- **Dead letter queue UI** — `frontend/src/pages/admin/AdminDeadLetters.jsx`. Failed webhook events table with retry/retry-all/dismiss actions.
+- **Tenant impersonation** — `POST /api/admin/impersonate/:tenantId` creates 1-hour JWT. Opens tenant dashboard in new tab with amber warning banner (`ImpersonationBanner.jsx`). All actions tagged "(impersonated by Super-Admin)" in action_history. Full audit trail via `impersonation_sessions` table in master DB.
+
+### External Services (all free tier)
+- **Sentry** — sanopos.sentry.io, 2 projects (node-express + sanopos-frontend), 5K errors/month free
+- **UptimeRobot** — monitors `https://oneshoppos-production.up.railway.app/api/health` every 5 min, email alerts on downtime
+- **Resend** — existing service, now also used for alert emails (`ALERT_EMAIL` env var)
+
+### DB Migration v8
+- `support_tickets` table in tenant schemas
+- `impersonation_sessions` table in public/master schema
+
+---
+
 ## 📋 Discussed but Deferred
 
 - **Payment gateway integration** (card machines, JazzCash, EasyPaisa)
@@ -432,3 +472,5 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 | Mar 19 2026 | **Permission guards hardened**                         | Full RBAC audit. Added `requirePerm` to: email config (PUT/test → `all_access`), printer config (PUT → `all_access`), attribute sets (POST/PUT/DELETE → `manage_inventory`), barcode print jobs (POST → `manage_inventory`), action history (GET → `view_reports`, POST log → `all_access`). Roles CRUD confirmed admin-only. Self-role-change guard fixed to allow non-role edits on own profile. |
 | Mar 19 2026 | **UX & onboarding improvements shipped**               | `feature/ux-onboarding` branch (7 commits, 15 files, +535 lines). Dark mode (CSS variable theming), global toast system, profile dropdown (replaces logout button), employee profile page (self-service PIN/password change), POS keyboard shortcuts (F1-F10 + Esc), POS help overlay, breadcrumb navigation. |
 | Mar 19 2026 | **Roadmap Waves 1-3 shipped**                          | `feature/roadmap-waves` branch (19 commits, ~40 files). Wave 1: receipt email (SMTP+Resend), shareable receipt URL, WhatsApp sharing, bulk import (products/customers/suppliers with xlsx templates), backup notifications, FBR export, onboarding checklist, self-service signup. Wave 2: cloud printing (TCP/IP), payroll export, AI insight cards, Claude AI chat. Wave 3: PWA shell, WooCommerce sync, courier dispatch (10 Pakistan couriers + Leopards adapter). Migrations v4+v5. |
+| Mar 27 2026 | **Onboarding polish shipped**                          | `feature/onboarding-polish` branch. Self-service signup improvements (rate limiting, welcome email, dead tenant cleanup). Subscription billing layer (manual payments, plan management, tenant billing page). Migrations v6+v7. |
+| Mar 28 2026 | **Reliability & support tooling shipped**               | `feature/reliability-support-tooling` branch (15 commits, 26 files, ~3,000 lines). Request ID + Pino logging, Sentry (backend+frontend), ErrorBoundary, in-house alerting (error spikes, DB pressure), deep health checks, support widget + ticket system, dead letter queue UI, tenant impersonation with audit trail. Migration v8. External: Sentry (free), UptimeRobot (free). |

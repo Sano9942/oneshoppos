@@ -52,6 +52,12 @@ The following files are **legacy SQLite code** — never executed in production 
 | Postgres backup/restore | `utils/backup-pg.js` |
 | Category tree logic | `category-tree.js` |
 | Printer service | `services/printer.js` |
+| Structured logging | `services/logger.js` (Pino) |
+| Alert system | `services/alerting.js` (error spikes, DB pressure) |
+| Request ID middleware | `middleware/request-id.js` (UUID + Pino per-request) |
+| Alert emails | `utils/alertEmail.js` (Resend-based) |
+| Support tickets | `routes/support.js` |
+| Billing routes | `routes/billing.js` |
 
 ## Database is Postgres
 
@@ -128,7 +134,7 @@ The following files are **legacy SQLite code** — never executed in production 
 - **Boot**: `index.js` line 5 loads `db-pg` (Postgres)
 - **Frontend**: Vercel at `sanopos.vercel.app`
 - **Backend**: Railway at `oneshoppos-production.up.railway.app`
-- **Railway env vars**: `MULTI_TENANT=1`, `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `CORS_ORIGIN=https://sanopos.vercel.app`, `TZ=Asia/Karachi`
+- **Railway env vars**: `MULTI_TENANT=1`, `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `CORS_ORIGIN=https://sanopos.vercel.app`, `TZ=Asia/Karachi`, `RESEND_API_KEY`, `SENTRY_DSN`, `ALERT_EMAIL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`
 - **Railway gotchas**: `PORT` env var is overridden by Railway (binds to 8080); this is fine
 - To seed super-admin: `railway run node backend/seed-admin-pg.js --email <email> --password <password> --name <name>`
 - To provision tenant: use super-admin dashboard at `/admin` or `railway run node backend/tenant-provisioner-pg.js --slug <slug> --name <name> --pin <pin>`

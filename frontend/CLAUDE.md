@@ -43,6 +43,9 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 | Report modules | `pages/reports/*.jsx` |
 | Shopify modules | `pages/shopify/*.jsx` |
 | Admin panel | `pages/admin/*.jsx` |
+| Error boundary | `ui/ErrorBoundary.jsx` — global + page-level |
+| Support widget | `ui/SupportWidget.jsx` — floating ticket form |
+| Impersonation banner | `ui/ImpersonationBanner.jsx` — amber bar during impersonation |
 
 ## Key Conventions
 
@@ -95,6 +98,9 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 - Session stored in `localStorage["adminSession"]` — NOT `"authSession"`
 - Routes at `/admin/*` bypass `RequireAuth`/`RequireContext`
 - `AdminDashboard.jsx` includes `InfrastructurePanel` — DB connections, cache hit ratio, table health, slow queries (30s auto-refresh)
+- `AdminSupportTickets.jsx` — cross-tenant support ticket viewer with status management + quick-impersonate
+- `AdminDeadLetters.jsx` — failed webhook events with retry/dismiss actions
+- `AdminTenantDetail.jsx` — includes "Log in as tenant" impersonation button + payment recording + billing management
 
 ## Test Suites
 

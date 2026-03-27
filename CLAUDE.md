@@ -46,18 +46,23 @@ oneshoppos/
 │   │   ├── woocommerce.js        # /api/integrations/woocommerce
 │   │   ├── insights.js           # /api/insights/auto (pre-built analytics cards)
 │   │   ├── insights-ai.js        # /api/insights/ask (Claude AI chat)
+│   │   ├── support.js            # /api/support/* (tickets + screenshot upload)
+│   │   ├── billing.js            # /api/billing/* (subscription billing)
 │   │   ├── reports/              # /api/reports/* (12 files, modular — includes fbr-export)
 │   │   ├── shopify/              # /api/integrations/shopify* (9 files, modular)
 │   │   ├── tier4/                # Tier 4 features (7 files, modular)
 │   │   └── [other domain files]  # taxes, categories, outlets, roles, brands, suppliers, promotions, orders, etc.
 │   ├── middleware/plan-limits.js  # Tenant plan cap enforcement
+│   ├── middleware/request-id.js   # Request ID + Pino logging middleware
 │   ├── tenant-db-proxy-pg.js     # AsyncLocalStorage + Proxy for MT DB routing
 │   ├── tenant-db-manager-pg.js   # Shared pg.Pool + per-request search_path
 │   ├── master-db-pg.js           # Master tenant registry
 │   ├── tenant-provisioner-pg.js  # Schema-based provisioning
 │   ├── services/printer.js       # ESC/POS thermal + network TCP/IP printer
 │   ├── services/couriers/        # Courier adapter pattern (base, generic, leopards)
-│   └── utils/                    # tz.js, receiptEmail.js, digestEmail.js, backup-pg.js, resendEmail.js
+│   ├── services/logger.js        # Pino logger instance
+│   ├── services/alerting.js      # In-house alert system (error spikes, DB pressure)
+│   └── utils/                    # tz.js, receiptEmail.js, digestEmail.js, backup-pg.js, resendEmail.js, alertEmail.js
 └── frontend/src/
     ├── App.jsx                   # Route orchestrator
     ├── auth/AuthProvider.jsx     # Global fetch interceptor + JWT auth
@@ -67,6 +72,9 @@ oneshoppos/
     ├── contexts/ToastContext.jsx    # useToast() → { toast, success, error, warning }
     ├── ui/primitives.jsx         # Design system (PageShell, Button, Input, etc.)
     ├── ui/Breadcrumbs.jsx        # Route-based breadcrumb nav (auto-derived from pathname)
+    ├── ui/ErrorBoundary.jsx      # React error boundary (global + page-level)
+    ├── ui/SupportWidget.jsx      # Floating support ticket widget
+    ├── ui/ImpersonationBanner.jsx # Amber banner during tenant impersonation
     ├── ui/nav-config.js          # Sidebar nav entries
     ├── utils/
     │   ├── dates.js              # UTC + LOCAL timestamp formatters
@@ -132,6 +140,18 @@ oneshoppos/
 - **Self-service signup**: `POST /api/auth/signup` — creates tenant + admin employee + welcome email. Gated by `SELF_SERVICE_SIGNUP=1` env var.
 - **PWA**: `manifest.webmanifest` + service worker for installable app.
 
+## Reliability & Monitoring
+
+- **Structured logging**: Pino via `services/logger.js` + `middleware/request-id.js`. Every request gets UUID (`X-Request-Id` header). JSON in prod, pretty-print in dev. Tenant/employee context enriched after auth.
+- **Error tracking**: Sentry (`@sentry/node` + `@sentry/react`). No-op without `SENTRY_DSN`/`VITE_SENTRY_DSN`. Errors tagged with tenant slug + request ID.
+- **ErrorBoundary**: `ui/ErrorBoundary.jsx` — global (full-page) + page-level (compact card). Reports to Sentry.
+- **Alerting**: `services/alerting.js` — in-memory sliding window counters. Emails via Resend on error spikes (10+/5min), DB pressure (>80%), health check failures. `ALERT_EMAIL` env var.
+- **Health checks**: `GET /api/health` (quick), `GET /api/health?deep=true` (checks Postgres + Resend with timeouts).
+- **Uptime monitoring**: UptimeRobot pings `/api/health` every 5 min, emails on downtime.
+- **Support tickets**: `POST /api/support/tickets` + `POST /api/support/upload` (R2). Floating widget on all authenticated pages. Admin viewer at `/admin/support`.
+- **Dead letter queue**: `/admin/dead-letters` — failed webhook events with retry/dismiss actions.
+- **Tenant impersonation**: `POST /api/admin/impersonate/:tenantId` — 1-hour JWT, amber banner, audit trail in `impersonation_sessions` table. Actions tagged "(impersonated by Super-Admin)".
+
 ## Running Tests
 
 ### Postgres Integration Tests (primary — 340 tests)
@@ -167,7 +187,7 @@ oneshoppos/
 
 ## Migrations
 
-- **Current version**: 5 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns)
+- **Current version**: 8 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns, v6: setup_token_expires_at, v7: billing tables, v8: support_tickets/impersonation_sessions)
 - **migrate-pg.js CLI**: `node backend/migrate-pg.js` — migrates public schema AND all active tenant schemas
 - **Tenant migration gotcha**: existing tenants need `schema_version` table seeded with previous versions before first run
 
@@ -191,5 +211,8 @@ oneshoppos/
 - **Backend**: `https://oneshoppos-production.up.railway.app` (Railway)
 - **Super-admin**: `https://sanopos.vercel.app/admin`
 - **Database**: Supabase Postgres, `public` schema = 6 master tables, tenant data in `tenant_<slug>` schemas
-- **Resend**: `RESEND_API_KEY` env var on Railway for system emails (password reset)
+- **Resend**: `RESEND_API_KEY` env var on Railway for system emails (password reset, alerts)
+- **Sentry**: `SENTRY_DSN` on Railway (backend), `VITE_SENTRY_DSN` on Vercel (frontend) — sanopos.sentry.io
+- **Alerts**: `ALERT_EMAIL` env var on Railway — receives error spike / DB pressure / support ticket notifications
+- **Uptime**: UptimeRobot monitors `/api/health` every 5 min
 - See `backend/CLAUDE.md` for Railway env vars and deployment gotchas
