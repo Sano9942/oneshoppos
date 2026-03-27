@@ -566,6 +566,19 @@ module.exports = function registerAuthRoutes(app, deps) {
     }
   });
 
+  const signupLimits = new Map(); // ip -> { count, resetAt }
+  function checkSignupRate(ip) {
+    const now = Date.now();
+    const entry = signupLimits.get(ip);
+    if (!entry || now > entry.resetAt) {
+      signupLimits.set(ip, { count: 1, resetAt: now + 3600000 }); // 1 hour window
+      return true;
+    }
+    if (entry.count >= 5) return false;
+    entry.count += 1;
+    return true;
+  }
+
   // POST /api/auth/signup — self-service tenant signup (MT only, opt-in)
   app.post("/api/auth/signup", async (req, res) => {
     if (process.env.MULTI_TENANT !== "1") {
@@ -573,6 +586,11 @@ module.exports = function registerAuthRoutes(app, deps) {
     }
     if (process.env.SELF_SERVICE_SIGNUP !== "1") {
       return res.status(400).json({ error: "Self-service signup is not enabled" });
+    }
+
+    const clientIp = req.ip || req.headers["x-forwarded-for"] || "unknown";
+    if (!checkSignupRate(clientIp)) {
+      return res.status(429).json({ error: "Too many signup attempts. Please try again in an hour." });
     }
 
     const { store_name, owner_name, email, password, plan } = req.body || {};
@@ -616,22 +634,22 @@ module.exports = function registerAuthRoutes(app, deps) {
       // Attempt welcome email via Resend
       if (process.env.RESEND_API_KEY) {
         try {
-          const { Resend } = require("resend");
-          const resend = new Resend(process.env.RESEND_API_KEY);
+          const { sendWelcomeEmail } = require("../utils/resendEmail");
           const corsOrigin = process.env.CORS_ORIGIN || "https://sanopos.vercel.app";
           const setupUrl = `${corsOrigin}/setup?token=${result.setupToken}&tenant=${slug}`;
-          await resend.emails.send({
-            from: process.env.RESEND_FROM_EMAIL || "SanoPOS <onboarding@resend.dev>",
-            to: email,
-            subject: `Welcome to SanoPOS - Set up ${store_name}`,
-            html: `<h2>Welcome, ${owner_name}!</h2><p>Your store <strong>${store_name}</strong> is ready.</p><p><a href="${setupUrl}" style="background:#10b981;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">Complete Setup</a></p><p style="color:#666;font-size:12px">Or copy: ${setupUrl}</p>`,
+          await sendWelcomeEmail({
+            toEmail: email,
+            ownerName: owner_name,
+            storeName: store_name,
+            slug,
+            setupUrl,
           });
         } catch (emailErr) {
           console.error("Welcome email failed:", emailErr.message);
         }
       }
 
-      res.json({ ok: true, slug, message: "Store created! Check your email." });
+      res.json({ ok: true, slug, setupToken: result.setupToken, message: "Store created! Redirecting to setup..." });
     } catch (err) {
       console.error("[signup]", err.message);
       res.status(500).json({ error: err.message });

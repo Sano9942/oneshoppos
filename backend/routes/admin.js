@@ -444,7 +444,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       const crypto = require("crypto");
       const newToken = crypto.randomBytes(32).toString("hex");
       await tenantDb.query(
-        "UPDATE company_profile SET setup_token = $1, setup_complete = false WHERE id = 1",
+        "UPDATE company_profile SET setup_token = $1, setup_token_expires_at = NOW() + INTERVAL '48 hours', setup_complete = false WHERE id = 1",
         [newToken]
       );
 
@@ -499,7 +499,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
   app.get("/api/admin/attention", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const { rows: tenants } = await db.query(
-        "SELECT id, slug, name, plan, max_employees, max_products, max_outlets FROM tenants WHERE status = 'active'"
+        "SELECT id, slug, name, plan, max_employees, max_products, max_outlets, created_at FROM tenants WHERE status = 'active'"
       );
 
       const approaching = [];
@@ -543,16 +543,40 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
           }
 
           if (!setupComplete) {
-            setupPending.push({ id: t.id, slug: t.slug, name: t.name });
+            setupPending.push({ id: t.id, slug: t.slug, name: t.name, created_at: t.created_at });
           }
         } catch {
           // Skip tenants with missing schemas
         }
       }
 
-      return res.json({ approaching_limits: approaching, dormant, setup_pending: setupPending });
+      const dead_tenants = setupPending.filter(
+        (t) => new Date(t.created_at) < new Date(Date.now() - 7 * 86400000)
+      );
+      return res.json({ approaching_limits: approaching, dormant, setup_pending: setupPending, dead_tenants });
     } catch (err) {
       return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Dead Tenant Cleanup ─────────────────────────────────────────────────
+  app.get("/api/admin/cleanup-preview", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { cleanupDeadTenants } = require("../jobs/cleanup-dead-tenants");
+      const results = await cleanupDeadTenants({ dryRun: true });
+      res.json(results);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/cleanup-run", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { cleanupDeadTenants } = require("../jobs/cleanup-dead-tenants");
+      const results = await cleanupDeadTenants({ dryRun: false });
+      res.json(results);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
   });
 

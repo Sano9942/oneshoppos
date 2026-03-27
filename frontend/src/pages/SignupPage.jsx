@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Store, CheckCircle, XCircle } from "lucide-react";
 import { API_BASE } from "../config";
@@ -21,6 +21,15 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
 
+  // Pre-select plan from URL param
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const planParam = params.get("plan");
+    if (planParam && ["free", "starter", "pro"].includes(planParam)) {
+      setForm((f) => ({ ...f, plan: planParam }));
+    }
+  }, []);
+
   const valid =
     form.store_name.trim().length >= 3 &&
     form.owner_name.trim() &&
@@ -39,6 +48,12 @@ export default function SignupPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Signup failed");
+      // Redirect immediately to setup wizard
+      if (data.setupToken && data.slug) {
+        window.location.href = `/setup?token=${data.setupToken}&tenant=${data.slug}`;
+        return;
+      }
+      // Fallback: show success screen (if token not returned)
       setResult({ success: true, slug: data.slug, message: data.message });
     } catch (err) {
       setResult({ success: false, message: err.message });

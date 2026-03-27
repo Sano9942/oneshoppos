@@ -124,7 +124,17 @@ const MIGRATIONS = [
       `);
     },
   },
-  // Future migrations go here (next: version 6):
+  {
+    version: 6,
+    description: "Add setup_token_expires_at to company_profile",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE company_profile
+          ADD COLUMN IF NOT EXISTS setup_token_expires_at TIMESTAMPTZ
+      `);
+    },
+  },
+  // Future migrations go here (next: version 7):
 ];
 
 async function migrate(db) {

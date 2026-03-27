@@ -91,7 +91,7 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
       const setupDb = await getSetupDb(req);
       // Verify token
       const { rows: [profile] } = await setupDb.query(
-        'SELECT setup_complete, setup_token FROM company_profile WHERE id = 1',
+        'SELECT setup_complete, setup_token, setup_token_expires_at FROM company_profile WHERE id = 1',
         []
       );
       if (!profile) return res.status(503).json({ error: 'Setup not initialised' });
@@ -99,7 +99,10 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
         return res.status(403).json({ error: 'Setup already complete' });
       }
       if (!profile.setup_token || profile.setup_token !== token) {
-        return res.status(403).json({ error: 'Invalid or expired setup token' });
+        return res.status(403).json({ error: 'Invalid setup token' });
+      }
+      if (profile.setup_token_expires_at && new Date(profile.setup_token_expires_at) < new Date()) {
+        return res.status(403).json({ error: 'Setup link has expired. Please contact support or request a new setup link.' });
       }
 
       // All good — run everything in a single transaction

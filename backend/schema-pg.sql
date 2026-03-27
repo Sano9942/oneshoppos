@@ -640,6 +640,7 @@ CREATE TABLE IF NOT EXISTS company_profile (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   setup_complete BOOLEAN DEFAULT TRUE,
   setup_token TEXT,
+  setup_token_expires_at TIMESTAMPTZ,
   monthly_sales_target NUMERIC(12,2) DEFAULT 0,
   margin_threshold_pct NUMERIC(6,2) DEFAULT 20,
   refund_threshold_pct NUMERIC(6,2) DEFAULT 5,

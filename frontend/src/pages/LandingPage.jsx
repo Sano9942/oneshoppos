@@ -548,6 +548,12 @@ export default function LandingPage() {
               </div>
               <LoginForm />
             </div>
+            <p className="mt-4 text-center text-sm text-slate-500">
+              Don't have an account?{" "}
+              <a href="/signup" className="font-semibold text-emerald-600 hover:underline">
+                Create Free Account
+              </a>
+            </p>
           </div>
         </div>
       </section>
@@ -679,14 +685,14 @@ export default function LandingPage() {
                 </ul>
 
                 <a
-                  href="#top"
+                  href={`/signup?plan=${name.toLowerCase()}`}
                   className={`block text-center py-2.5 rounded-lg font-semibold text-sm transition-colors ${
                     featured
                       ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                       : "bg-slate-100 hover:bg-slate-200 text-slate-800"
                   }`}
                 >
-                  {price === "Free" ? "Get Started" : "Contact Us"}
+                  {price === "Free" ? "Get Started Free" : "Get Started"}
                 </a>
               </div>
             ))}
