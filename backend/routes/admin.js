@@ -1105,6 +1105,80 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
     }
   });
 
+  // ── Impersonation ──────────────────────────────────────────────────
+
+  app.post("/api/admin/impersonate/:tenantId", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const tenantId = parseInt(req.params.tenantId, 10);
+
+      // 1. Get tenant from master DB
+      const { rows: tenantRows } = await db.query(
+        "SELECT id, slug, name, status FROM tenants WHERE id = $1",
+        [tenantId]
+      );
+      const tenant = tenantRows[0];
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+      if (tenant.status !== "active") return res.status(400).json({ error: "Can only impersonate active tenants" });
+
+      // 2. Get tenant DB and find admin employee (role_id = 1)
+      const tenantDb = await tenantDbManager.getDb(tenantId);
+      const { rows: empRows } = await tenantDb.query(
+        "SELECT id, name, role_id FROM employees WHERE role_id = 1 LIMIT 1"
+      );
+      const adminEmployee = empRows[0];
+      if (!adminEmployee) return res.status(404).json({ error: "No admin employee found in tenant" });
+
+      // 3. Get super-admin name for audit
+      const { rows: saRows } = await db.query(
+        "SELECT name FROM super_admins WHERE id = $1",
+        [req.admin.id]
+      );
+      const adminName = saRows[0]?.name || req.admin.email;
+
+      // 4. Create short-lived JWT (1 hour) — sign directly to include impersonation fields
+      const token = jwt.sign(
+        {
+          tid: tenant.id,
+          eid: adminEmployee.id,
+          rid: 1,
+          oid: null,
+          scope: "full",
+          impersonating: true,
+          realIdentity: { id: req.admin.id, name: adminName, email: req.admin.email },
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "1h" }
+      );
+
+      // 5. Create impersonation_sessions row
+      const { rows: sessionRows } = await masterDb.query(
+        "INSERT INTO impersonation_sessions (super_admin_id, tenant_id) VALUES ($1, $2) RETURNING id",
+        [req.admin.id, tenantId]
+      );
+      const sessionId = sessionRows[0].id;
+
+      // 6. Audit log
+      await auditLog(tenantId, "impersonated", { session_id: sessionId, admin_name: adminName }, `admin:${req.admin.email}`);
+
+      return res.json({ token, tenantSlug: tenant.slug, tenantName: tenant.name, sessionId });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/impersonate/:sessionId/end", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const sessionId = parseInt(req.params.sessionId, 10);
+      await masterDb.query(
+        "UPDATE impersonation_sessions SET ended_at = NOW() WHERE id = $1",
+        [sessionId]
+      );
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Dead Letter Queue (cross-tenant) ────────────────────────────────
 
   app.get("/api/admin/dead-letters", requireAllowedIp, requireSuperAdmin, async (req, res) => {

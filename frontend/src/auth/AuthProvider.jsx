@@ -28,6 +28,9 @@ let _refreshPromise = null;
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [isImpersonating, setIsImpersonating] = useState(false);
+  const [impersonationTenantName, setImpersonationTenantName] = useState(null);
+  const [impersonationSessionId, setImpersonationSessionId] = useState(null);
 
   const employee = session?.employee || null;
   const permissions = session?.permissions || EMPTY_PERMISSIONS;
@@ -169,7 +172,60 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let isMounted = true;
     const boot = async () => {
+      // ── Impersonation detection ──────────────────────────────────
+      const params = new URLSearchParams(window.location.search);
+      const impToken = params.get("impersonate_token");
+      const impSession = params.get("impersonate_session");
+
+      if (impToken && impSession) {
+        try {
+          // Decode JWT payload (no verification — backend already signed it)
+          const payload = JSON.parse(atob(impToken.split(".")[1]));
+          const tenantSlug = params.get("tenant_slug") || "";
+
+          // Build a session from the impersonation token
+          const impSessionData = {
+            employee: { id: payload.eid, role_id: payload.rid, name: "Admin (Impersonation)" },
+            permissions: ["all_access"],
+            token: impToken,
+            tenant_slug: tenantSlug,
+            loadedAt: Date.now(),
+            isImpersonation: true,
+          };
+          writeSession(impSessionData);
+
+          if (isMounted) {
+            setSession(impSessionData);
+            setIsImpersonating(true);
+            setImpersonationTenantName(params.get("tenant_name") || "Tenant");
+            setImpersonationSessionId(impSession);
+          }
+
+          // Clean URL params
+          const url = new URL(window.location.href);
+          url.searchParams.delete("impersonate_token");
+          url.searchParams.delete("impersonate_session");
+          url.searchParams.delete("tenant_slug");
+          url.searchParams.delete("tenant_name");
+          window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+        } catch {
+          // Bad token — fall through to normal boot
+        }
+        if (isMounted) setIsBootstrapping(false);
+        return;
+      }
+
+      // Check if existing session is an impersonation
       const existing = readSession();
+      if (existing?.isImpersonation) {
+        if (isMounted) {
+          setSession(existing);
+          setIsImpersonating(true);
+          setIsBootstrapping(false);
+        }
+        return;
+      }
+
       if (!existing) {
         if (isMounted) {
           setSession(null);
@@ -331,6 +387,9 @@ export function AuthProvider({ children }) {
       hasPerm,
       authHeaders,
       token,
+      isImpersonating,
+      impersonationTenantName,
+      impersonationSessionId,
     }),
     [
       session,
@@ -341,6 +400,9 @@ export function AuthProvider({ children }) {
       hasPerm,
       authHeaders,
       token,
+      isImpersonating,
+      impersonationTenantName,
+      impersonationSessionId,
     ],
   );
 

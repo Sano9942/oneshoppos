@@ -4,6 +4,7 @@ import { initTheme } from "./utils/theme";
 initTheme();
 import { BrowserRouter as Router, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth/AuthProvider";
+import ImpersonationBanner from "./ui/ImpersonationBanner";
 import { IS_MULTI_TENANT } from "./config";
 import RequireAuth from "./components/RequireAuth";
 import RequireContext from "./components/RequireContext";
@@ -113,7 +114,11 @@ function HomeRedirect() {
 }
 
 function App() {
+  const { isImpersonating } = useAuth();
+
   return (
+    <>
+    {isImpersonating && <ImpersonationBanner />}
     <Router>
       <Routes>
         <Route path="/" element={<HomeRedirect />} />
@@ -640,6 +645,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
+    </>
   );
 }
 
