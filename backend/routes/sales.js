@@ -1,4 +1,5 @@
 const { toUtcStart, toUtcEnd } = require("../utils/tz");
+const logger = require("../services/logger");
 
 module.exports = function registerSalesRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale, path, fs, UPLOADS_DIR } = deps;
@@ -140,7 +141,7 @@ module.exports = function registerSalesRoutes(app, deps) {
       const listQuery = `
       SELECT s.id, s.timestamp, s.total_amount, s.payment_method, s.voided, s.void_reason,
              COALESCE(s.discount_amount, 0) as discount_amount, s.discount_type,
-             s.invoice_number, s.outlet_id,
+             s.invoice_number, s.outlet_id, s.fbr_status,
              o.name as outlet_name, e.name as employee_name,
              c.name as customer_name, c.email as customer_email,
              COUNT(si.id) as item_count
@@ -151,7 +152,7 @@ module.exports = function registerSalesRoutes(app, deps) {
       LEFT JOIN sale_items si ON s.id = si.sale_id
       WHERE ${where}
       GROUP BY s.id, s.timestamp, s.total_amount, s.payment_method, s.voided, s.void_reason,
-               s.discount_amount, s.discount_type, s.invoice_number, s.outlet_id,
+               s.discount_amount, s.discount_type, s.invoice_number, s.outlet_id, s.fbr_status,
                o.name, e.name, c.name, c.email
       ORDER BY s.timestamp DESC
       LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
@@ -256,6 +257,18 @@ module.exports = function registerSalesRoutes(app, deps) {
           reference_id: id,
         }));
         enqueueInventorySyncEvents(syncChanges, {}, () => {});
+
+        // FBR: queue debit note if sale was posted to FBR
+        try {
+          if (sale.fbr_status === "posted") {
+            const { buildDebitNotePayload, enqueueFbrInvoice } = require("../services/fbr");
+            const payload = buildDebitNotePayload(sale, req.company);
+            await enqueueFbrInvoice(db, { saleId: Number(id), invoiceType: "debit_note", payload });
+          }
+        } catch (fbrErr) {
+          logger.error({ err: fbrErr, saleId: id }, "FBR void enqueue failed (non-blocking)");
+        }
+
         res.json({
           message: "Sale voided successfully. Stock has been restored.",
         });
@@ -568,6 +581,35 @@ module.exports = function registerSalesRoutes(app, deps) {
 
       try {
         const invoiceNumber = await assignInvoiceNumberToSale(saleId, 1);
+
+        // FBR Digital Invoicing — enqueue if enabled
+        try {
+          const { rows: [ff] } = await db.query(
+            "SELECT enabled FROM feature_flags WHERE key = 'fbr_integration'"
+          );
+          if (ff?.enabled) {
+            const { buildInvoicePayload, enqueueFbrInvoice } = require("../services/fbr");
+            const { fetchCategoryIndexes } = require("../category-tree");
+            const categoryTree = await fetchCategoryIndexes(db);
+            const { rows: saleItems } = await db.query(
+              `SELECT si.*, p.name as product_name, p.category_id
+               FROM sale_items si LEFT JOIN products p ON si.product_id = p.id
+               WHERE si.sale_id = $1`, [saleId]
+            );
+            const { rows: [cust] } = customer_id
+              ? await db.query("SELECT name, ntn_cnic FROM customers WHERE id = $1", [customer_id])
+              : { rows: [null] };
+            const payload = buildInvoicePayload(
+              { timestamp: new Date(), invoice_number: invoiceNumber },
+              saleItems, req.company, cust, categoryTree
+            );
+            await enqueueFbrInvoice(db, { saleId, invoiceType: "sale", payload });
+            await db.query("UPDATE sales SET fbr_status = 'pending' WHERE id = $1", [saleId]);
+          }
+        } catch (fbrErr) {
+          logger.error({ err: fbrErr, saleId }, "FBR enqueue failed (non-blocking)");
+        }
+
         res.json({
           message: "Sale completed successfully",
           saleId,

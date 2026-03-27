@@ -1,4 +1,5 @@
 const { toUtcStart, toUtcEnd } = require("../utils/tz");
+const logger = require("../services/logger");
 
 module.exports = function registerReturnsRoutes(app, deps) {
   const { db, requirePerm, createNotification, notifyLowStockForSale } = deps;
@@ -121,6 +122,35 @@ module.exports = function registerReturnsRoutes(app, deps) {
         reference_id: returnId,
       }));
       enqueueInventorySyncEvents(syncChanges, {}, () => {});
+
+      // FBR Digital Invoicing — enqueue credit note if enabled
+      try {
+        const { rows: [ff] } = await db.query(
+          "SELECT enabled FROM feature_flags WHERE key = 'fbr_integration'"
+        );
+        if (ff?.enabled) {
+          const { buildCreditNotePayload, enqueueFbrInvoice } = require("../services/fbr");
+          const { fetchCategoryIndexes } = require("../category-tree");
+          const categoryTree = await fetchCategoryIndexes(db);
+          const { rows: returnItems } = await db.query(
+            `SELECT ri.*, p.name as product_name, p.category_id
+             FROM return_items ri LEFT JOIN products p ON ri.product_id = p.id
+             WHERE ri.return_id = $1`, [returnId]
+          );
+          const { rows: [cust] } = customer_id
+            ? await db.query("SELECT name, ntn_cnic FROM customers WHERE id = $1", [customer_id])
+            : { rows: [null] };
+          const payload = buildCreditNotePayload(
+            { id: returnId, timestamp: new Date() },
+            returnItems, req.company, cust, categoryTree
+          );
+          await enqueueFbrInvoice(db, { returnId, invoiceType: "credit_note", payload });
+          await db.query("UPDATE returns SET fbr_status = 'pending' WHERE id = $1", [returnId]);
+        }
+      } catch (fbrErr) {
+        logger.error({ err: fbrErr, returnId }, "FBR return enqueue failed (non-blocking)");
+      }
+
       res.json({
         message: "Return processed successfully",
         id: returnId,
