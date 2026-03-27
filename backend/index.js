@@ -18,6 +18,7 @@ const crypto = require("crypto");
 const multer = require("multer");
 const rateLimit = require("express-rate-limit");
 const requestId = require("./middleware/request-id");
+const alerting = require("./services/alerting");
 const createTier4Router = require("./routes/tier4");
 const registerAllRoutes = require("./routes/registerAllRoutes");
 
@@ -1031,6 +1032,7 @@ app.use((err, req, res, _next) => {
       user: { id: req.employee?.id, username: req.employee?.name },
     });
   }
+  alerting.recordError({ tenant: req.tenantSlug, message: err.message, reqId }).catch(() => {});
   res.status(err.status || 500).json({ error: err.message || "Internal server error", reqId });
 });
 
