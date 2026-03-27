@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useRef } from "react";
+import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { initTheme } from "./utils/theme";
 initTheme();
 import { BrowserRouter as Router, Navigate, Route, Routes, useNavigate } from "react-router-dom";
@@ -131,21 +132,25 @@ function App() {
         <Route
           path="/pos"
           element={
-            <Suspense fallback={<RouteLoading />}>
-              <RequireAuth>
-                <POSRoute />
-              </RequireAuth>
-            </Suspense>
+            <ErrorBoundary level="page">
+              <Suspense fallback={<RouteLoading />}>
+                <RequireAuth>
+                  <POSRoute />
+                </RequireAuth>
+              </Suspense>
+            </ErrorBoundary>
           }
         />
         <Route
           path="/kiosk"
           element={
-            <Suspense fallback={<RouteLoading />}>
-              <RequireAuth>
-                <KioskRedesign />
-              </RequireAuth>
-            </Suspense>
+            <ErrorBoundary level="page">
+              <Suspense fallback={<RouteLoading />}>
+                <RequireAuth>
+                  <KioskRedesign />
+                </RequireAuth>
+              </Suspense>
+            </ErrorBoundary>
           }
         />
 
