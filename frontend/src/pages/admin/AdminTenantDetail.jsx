@@ -45,6 +45,11 @@ export default function AdminTenantDetail() {
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState({});
   const [setupInfo, setSetupInfo] = useState(null);
+  const [payments, setPayments] = useState([]);
+  const [planPricing, setPlanPricing] = useState([]);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({ plan: "starter", cycle: "monthly", amount: "", payment_method: "bank_transfer", reference_note: "" });
+  const [upgradeReqs, setUpgradeReqs] = useState([]);
 
   const loadTenant = async () => {
     try {
@@ -83,6 +88,12 @@ export default function AdminTenantDetail() {
           setSetupInfo(setupData);
         }
       } catch {}
+
+      adminFetch(`/api/admin/tenants/${id}/payments`).then(r => r.json()).then(setPayments).catch(() => {});
+      adminFetch("/api/admin/plan-pricing").then(r => r.json()).then(setPlanPricing).catch(() => {});
+      adminFetch("/api/admin/upgrade-requests").then(r => r.json()).then(reqs => {
+        setUpgradeReqs(reqs.filter(r => r.tenant_id === Number(id)));
+      }).catch(() => {});
     } catch (err) {
       setError(err.message);
     } finally {
@@ -333,6 +344,97 @@ export default function AdminTenantDetail() {
             </div>
           </div>
 
+          {/* Billing */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Billing</h2>
+              <button
+                onClick={() => {
+                  const match = planPricing.find(p => p.plan === paymentForm.plan && p.cycle === paymentForm.cycle);
+                  setPaymentForm(f => ({ ...f, amount: match ? String(match.price) : "" }));
+                  setShowPaymentModal(true);
+                }}
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+              >
+                Record Payment
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+              <div>
+                <p className="text-slate-500">Plan</p>
+                <p className="font-semibold text-slate-800 capitalize">{tenant?.plan || "free"}</p>
+              </div>
+              <div>
+                <p className="text-slate-500">Billing Cycle</p>
+                <p className="font-semibold text-slate-800 capitalize">{tenant?.billing_cycle || "\u2014"}</p>
+              </div>
+              <div>
+                <p className="text-slate-500">Expires</p>
+                <p className="font-semibold text-slate-800">{tenant?.plan_expires_at ? new Date(tenant.plan_expires_at).toLocaleDateString() : "\u2014"}</p>
+              </div>
+              <div>
+                <p className="text-slate-500">Payment Status</p>
+                <p className={`font-semibold capitalize ${
+                  tenant?.payment_status === "active" ? "text-emerald-600" :
+                  tenant?.payment_status === "overdue" ? "text-red-600" :
+                  "text-slate-800"
+                }`}>{tenant?.payment_status || "active"}</p>
+              </div>
+            </div>
+
+            {/* Pending Upgrade Requests */}
+            {upgradeReqs.length > 0 && (
+              <div className="mb-4 rounded-lg bg-purple-50 border border-purple-200 p-3">
+                <p className="text-sm font-semibold text-purple-700 mb-2">Pending Upgrade Requests</p>
+                {upgradeReqs.map(r => (
+                  <div key={r.id} className="flex items-center justify-between text-sm mb-1">
+                    <span className="text-purple-600">{"\u2192"} {r.requested_plan} ({r.requested_cycle}){r.message ? `: "${r.message}"` : ""}</span>
+                    <div className="flex gap-2">
+                      <button onClick={async () => {
+                        await adminFetch(`/api/admin/upgrade-requests/${r.id}`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ status: "approved" }) });
+                        setUpgradeReqs(prev => prev.filter(x => x.id !== r.id));
+                      }} className="text-xs font-semibold text-emerald-600 hover:underline">Approve</button>
+                      <button onClick={async () => {
+                        await adminFetch(`/api/admin/upgrade-requests/${r.id}`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ status: "dismissed" }) });
+                        setUpgradeReqs(prev => prev.filter(x => x.id !== r.id));
+                      }} className="text-xs font-semibold text-red-600 hover:underline">Dismiss</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Payment History */}
+            {payments.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-400 mb-2">Payment History</p>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-slate-500 border-b">
+                      <th className="pb-1">Date</th>
+                      <th className="pb-1">Amount</th>
+                      <th className="pb-1">Plan</th>
+                      <th className="pb-1">Method</th>
+                      <th className="pb-1">Reference</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payments.map(p => (
+                      <tr key={p.id} className="border-b border-slate-100">
+                        <td className="py-1.5">{new Date(p.recorded_at).toLocaleDateString()}</td>
+                        <td className="py-1.5 font-semibold">PKR {Number(p.amount).toLocaleString()}</td>
+                        <td className="py-1.5 capitalize">{p.plan}/{p.cycle}</td>
+                        <td className="py-1.5 capitalize">{(p.payment_method || "").replace(/_/g, " ")}</td>
+                        <td className="py-1.5 text-slate-500">{p.reference_note || "\u2014"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* Audit log */}
           {auditLog.length > 0 && (
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -444,6 +546,78 @@ export default function AdminTenantDetail() {
           </div>
         </div>
       </div>
+
+          {/* Record Payment Modal */}
+          {showPaymentModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+                <h3 className="text-lg font-semibold text-slate-800 mb-4">Record Payment</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Plan</label>
+                    <select value={paymentForm.plan} onChange={e => {
+                      const plan = e.target.value;
+                      const match = planPricing.find(p => p.plan === plan && p.cycle === paymentForm.cycle);
+                      setPaymentForm(f => ({ ...f, plan, amount: match ? String(match.price) : f.amount }));
+                    }} className="w-full border rounded-lg px-3 py-2 text-sm">
+                      <option value="starter">Starter</option>
+                      <option value="pro">Pro</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Billing Cycle</label>
+                    <select value={paymentForm.cycle} onChange={e => {
+                      const cycle = e.target.value;
+                      const match = planPricing.find(p => p.plan === paymentForm.plan && p.cycle === cycle);
+                      setPaymentForm(f => ({ ...f, cycle, amount: match ? String(match.price) : f.amount }));
+                    }} className="w-full border rounded-lg px-3 py-2 text-sm">
+                      <option value="monthly">Monthly</option>
+                      <option value="annual">Annual</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Amount (PKR)</label>
+                    <input type="number" value={paymentForm.amount} onChange={e => setPaymentForm(f => ({ ...f, amount: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="3000" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Payment Method</label>
+                    <select value={paymentForm.payment_method} onChange={e => setPaymentForm(f => ({ ...f, payment_method: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm">
+                      <option value="bank_transfer">Bank Transfer</option>
+                      <option value="jazzcash">JazzCash</option>
+                      <option value="cash">Cash</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Reference Note</label>
+                    <input type="text" value={paymentForm.reference_note} onChange={e => setPaymentForm(f => ({ ...f, reference_note: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Receipt #, transaction ID, etc." />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 mt-5">
+                  <button onClick={() => setShowPaymentModal(false)} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800">Cancel</button>
+                  <button onClick={async () => {
+                    try {
+                      const r = await adminFetch(`/api/admin/tenants/${id}/record-payment`, {
+                        method: "POST", headers: {"Content-Type":"application/json"},
+                        body: JSON.stringify(paymentForm),
+                      });
+                      if (r.ok) {
+                        setShowPaymentModal(false);
+                        // Refresh data
+                        adminFetch(`/api/admin/tenants/${id}`).then(r => r.json()).then(setTenant).catch(() => {});
+                        adminFetch(`/api/admin/tenants/${id}/payments`).then(r => r.json()).then(setPayments).catch(() => {});
+                      }
+                    } catch {}
+                  }} className="px-4 py-2 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+                    Record Payment
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
     </div>
   );
 }

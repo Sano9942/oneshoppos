@@ -134,7 +134,69 @@ const MIGRATIONS = [
       `);
     },
   },
-  // Future migrations go here (next: version 7):
+  {
+    version: 7,
+    description: "Add billing tables and columns to master schema",
+    up: async (client) => {
+      // These tables only exist in public schema — skip if tenants table doesn't exist
+      const { rows } = await client.query(
+        "SELECT 1 FROM information_schema.tables WHERE table_name = 'tenants' LIMIT 1"
+      );
+      if (!rows.length) return;
+
+      await client.query(`
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS billing_cycle TEXT;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan_expires_at TIMESTAMPTZ;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS grace_ends_at TIMESTAMPTZ;
+        ALTER TABLE tenants ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'active';
+
+        CREATE TABLE IF NOT EXISTS plan_pricing (
+          id            SERIAL PRIMARY KEY,
+          plan          TEXT NOT NULL,
+          cycle         TEXT NOT NULL,
+          price         NUMERIC(12,2) NOT NULL,
+          currency_code TEXT DEFAULT 'PKR',
+          is_active     BOOLEAN DEFAULT true,
+          UNIQUE(plan, cycle)
+        );
+
+        INSERT INTO plan_pricing (plan, cycle, price) VALUES
+          ('starter', 'monthly', 3000),
+          ('starter', 'annual', 30000),
+          ('pro', 'monthly', 8000),
+          ('pro', 'annual', 80000)
+        ON CONFLICT DO NOTHING;
+
+        CREATE TABLE IF NOT EXISTS payment_records (
+          id              SERIAL PRIMARY KEY,
+          tenant_id       INTEGER NOT NULL REFERENCES tenants(id),
+          amount          NUMERIC(12,2) NOT NULL,
+          currency_code   TEXT DEFAULT 'PKR',
+          plan            TEXT NOT NULL,
+          cycle           TEXT NOT NULL,
+          period_start    TIMESTAMPTZ NOT NULL,
+          period_end      TIMESTAMPTZ NOT NULL,
+          payment_method  TEXT,
+          reference_note  TEXT,
+          recorded_by     TEXT,
+          recorded_at     TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS upgrade_requests (
+          id              SERIAL PRIMARY KEY,
+          tenant_id       INTEGER NOT NULL REFERENCES tenants(id),
+          requested_plan  TEXT NOT NULL,
+          requested_cycle TEXT NOT NULL,
+          message         TEXT,
+          status          TEXT DEFAULT 'pending',
+          created_at      TIMESTAMPTZ DEFAULT NOW(),
+          resolved_at     TIMESTAMPTZ,
+          resolved_by     TEXT
+        );
+      `);
+    },
+  },
+  // Future migrations go here (next: version 8):
 ];
 
 async function migrate(db) {

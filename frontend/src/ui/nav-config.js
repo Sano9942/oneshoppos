@@ -124,6 +124,7 @@ export const SHOPIFY_NAV_GROUPS = [
     items: [
       { name: "Administrator", path: "/administrator", icon: Shield, requiredPerm: "all_access" },
       { name: "Action History", path: "/action-history", icon: ClipboardList, requiredPerm: "all_access" },
+      { name: "Billing", path: "/billing", icon: CreditCard, requiredPerm: "all_access" },
     ],
   },
 ];

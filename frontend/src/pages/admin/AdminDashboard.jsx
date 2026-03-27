@@ -262,6 +262,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [attention, setAttention] = useState(null);
+  const [billingAttention, setBillingAttention] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -281,6 +282,10 @@ export default function AdminDashboard() {
     fetch(`${API_BASE}/api/admin/attention`, { headers })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => { if (data) setAttention(data); })
+      .catch(() => {});
+    fetch(`${API_BASE}/api/admin/billing-attention`, { headers })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setBillingAttention(data); })
       .catch(() => {});
   }, []);
 
@@ -380,6 +385,44 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      {/* Billing Attention */}
+      {billingAttention && (billingAttention.due_soon.length > 0 || billingAttention.overdue.length > 0 || billingAttention.past_grace.length > 0 || billingAttention.pending_upgrades > 0) && (
+        <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-slate-800">Billing Attention</h2>
+          <div className="space-y-3">
+            {billingAttention.past_grace.length > 0 && (
+              <div className="rounded-lg bg-red-50 border border-red-200 p-3">
+                <p className="text-sm font-semibold text-red-700">{billingAttention.past_grace.length} tenant(s) past grace period — should be suspended</p>
+                {billingAttention.past_grace.map(t => (
+                  <a key={t.id} href={`/admin/tenants/${t.id}`} className="block text-sm text-red-600 hover:underline mt-1">{t.name} ({t.slug})</a>
+                ))}
+              </div>
+            )}
+            {billingAttention.overdue.length > 0 && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
+                <p className="text-sm font-semibold text-amber-700">{billingAttention.overdue.length} tenant(s) overdue — in grace period</p>
+                {billingAttention.overdue.map(t => (
+                  <a key={t.id} href={`/admin/tenants/${t.id}`} className="block text-sm text-amber-600 hover:underline mt-1">{t.name} ({t.slug})</a>
+                ))}
+              </div>
+            )}
+            {billingAttention.due_soon.length > 0 && (
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
+                <p className="text-sm font-semibold text-blue-700">{billingAttention.due_soon.length} tenant(s) expiring within 7 days</p>
+                {billingAttention.due_soon.map(t => (
+                  <a key={t.id} href={`/admin/tenants/${t.id}`} className="block text-sm text-blue-600 hover:underline mt-1">{t.name} ({t.slug})</a>
+                ))}
+              </div>
+            )}
+            {billingAttention.pending_upgrades > 0 && (
+              <div className="rounded-lg bg-purple-50 border border-purple-200 p-3">
+                <p className="text-sm font-semibold text-purple-700">{billingAttention.pending_upgrades} pending upgrade request(s)</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Infrastructure Monitoring */}
       <InfrastructurePanel />

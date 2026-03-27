@@ -137,6 +137,8 @@ export default function AdminTenantList() {
                 <th className="px-4 py-3 font-semibold text-slate-500">Plan</th>
                 <th className="px-4 py-3 font-semibold text-slate-500">Revenue</th>
                 <th className="px-4 py-3 font-semibold text-slate-500">Status</th>
+                <th className="px-4 py-3 font-semibold text-slate-500">Payment</th>
+                <th className="px-4 py-3 font-semibold text-slate-500">Expires</th>
                 <th className="px-4 py-3 font-semibold text-slate-500">Last Activity</th>
                 <th className="px-4 py-3 font-semibold text-slate-500">Created</th>
               </tr>
@@ -170,6 +172,21 @@ export default function AdminTenantList() {
                       t.status === "suspended" ? "bg-amber-100 text-amber-700" :
                       "bg-slate-100 text-slate-500"
                     }`}>{t.status}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {t.plan !== "free" ? (
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        t.payment_status === "active" ? "bg-emerald-100 text-emerald-700" :
+                        t.payment_status === "overdue" ? "bg-red-100 text-red-700" :
+                        t.payment_status === "due" ? "bg-amber-100 text-amber-700" :
+                        "bg-slate-100 text-slate-500"
+                      }`}>{t.payment_status || "active"}</span>
+                    ) : (
+                      <span className="text-xs text-slate-400">{"\u2014"}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-500">
+                    {t.plan_expires_at ? new Date(t.plan_expires_at).toLocaleDateString() : "\u2014"}
                   </td>
                   <td className="px-4 py-3 text-slate-500">{timeAgo(t.last_login)}</td>
                   <td className="px-4 py-3 text-slate-500">

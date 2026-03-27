@@ -421,6 +421,7 @@ function AccordionItem({ question, answer }) {
 export default function LandingPage() {
   const { isAuthenticated, isBootstrapping } = useAuth();
   const [scrolled, setScrolled] = useState(false);
+  const [livePricing, setLivePricing] = useState(null);
   const heroRef = useRef(null);
 
   useEffect(() => {
@@ -428,6 +429,21 @@ export default function LandingPage() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/billing/pricing`)
+      .then(r => r.ok ? r.json() : null)
+      .then(setLivePricing)
+      .catch(() => {});
+  }, []);
+
+  function getLivePrice(planName) {
+    if (planName === "Free") return "Free";
+    if (!livePricing) return "...";
+    const monthly = livePricing.find(p => p.plan === planName.toLowerCase() && p.cycle === "monthly");
+    if (!monthly) return "Contact Us";
+    return `PKR ${Number(monthly.price).toLocaleString()}/mo`;
+  }
 
   if (isBootstrapping) return null;
   if (isAuthenticated) return <Navigate to="/context-select" replace />;
@@ -655,7 +671,16 @@ export default function LandingPage() {
                 </div>
 
                 <div className="mb-6">
-                  <span className="text-3xl font-extrabold text-slate-900">{price}</span>
+                  <span className="text-3xl font-extrabold text-slate-900">{getLivePrice(name)}</span>
+                  {livePricing && name !== "Free" && (() => {
+                    const annual = livePricing.find(p => p.plan === name.toLowerCase() && p.cycle === "annual");
+                    const monthly = livePricing.find(p => p.plan === name.toLowerCase() && p.cycle === "monthly");
+                    if (annual && monthly) {
+                      const savings = (Number(monthly.price) * 12) - Number(annual.price);
+                      return <p className="text-xs text-emerald-600 font-semibold mt-1">Annual: PKR {Number(annual.price).toLocaleString()}/yr (save PKR {savings.toLocaleString()})</p>;
+                    }
+                    return null;
+                  })()}
                 </div>
 
                 {/* Limits */}

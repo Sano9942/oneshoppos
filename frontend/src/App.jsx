@@ -22,6 +22,7 @@ const AttributeSetsRoute = lazy(() => import("./pages/AttributeSetsRoute"));
 const BackupRestoreRoute = lazy(() => import("./pages/BackupRestoreRoute"));
 const BarcodeTemplatesRedesign = lazy(() => import("./pages/redesign/BarcodeTemplatesRedesign"));
 const PrinterSettingsRedesign = lazy(() => import("./pages/redesign/PrinterSettingsRedesign"));
+const BillingRoute = lazy(() => import("./pages/BillingRoute"));
 const BrandsRoute = lazy(() => import("./pages/BrandsRoute"));
 const CategoriesRoute = lazy(() => import("./pages/CategoriesRoute"));
 const DashboardRoute = lazy(() => import("./pages/DashboardRoute"));
@@ -614,6 +615,14 @@ function App() {
             element={
               <RequirePerm perm="all_access">
                 <CourierSettingsRedesign />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/billing"
+            element={
+              <RequirePerm perm="all_access">
+                <BillingRoute />
               </RequirePerm>
             }
           />
