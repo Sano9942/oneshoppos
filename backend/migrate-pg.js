@@ -196,7 +196,46 @@ const MIGRATIONS = [
       `);
     },
   },
-  // Future migrations go here (next: version 8):
+  {
+    version: 8,
+    description: "Add support_tickets (tenant) + impersonation_sessions (master)",
+    up: async (client) => {
+      // support_tickets — tenant schema table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS support_tickets (
+          id              SERIAL PRIMARY KEY,
+          type            VARCHAR(20) NOT NULL DEFAULT 'bug',
+          message         TEXT NOT NULL,
+          page_url        TEXT,
+          browser         TEXT,
+          employee_id     INTEGER REFERENCES employees(id),
+          screenshots     JSONB DEFAULT '[]',
+          last_req_id     VARCHAR(64),
+          status          VARCHAR(20) DEFAULT 'open',
+          created_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          resolved_at     TIMESTAMPTZ
+        );
+      `);
+
+      // impersonation_sessions — only in public/master schema
+      const { rows } = await client.query(
+        "SELECT 1 FROM information_schema.tables WHERE table_name = 'tenants' LIMIT 1"
+      );
+      if (rows.length) {
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS impersonation_sessions (
+            id              SERIAL PRIMARY KEY,
+            super_admin_id  INTEGER NOT NULL,
+            tenant_id       INTEGER NOT NULL REFERENCES tenants(id),
+            started_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            ended_at        TIMESTAMPTZ,
+            pages_visited   JSONB DEFAULT '[]',
+            actions_taken   INTEGER DEFAULT 0
+          );
+        `);
+      }
+    },
+  },
 ];
 
 async function migrate(db) {

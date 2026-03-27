@@ -1,4 +1,12 @@
 require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
+const Sentry = require("@sentry/node");
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || "development",
+    tracesSampleRate: 0, // No tracing — we use our own request timing
+  });
+}
 const express = require("express");
 const compression = require("compression");
 const cors = require("cors");
@@ -9,6 +17,8 @@ const path = require("path");
 const crypto = require("crypto");
 const multer = require("multer");
 const rateLimit = require("express-rate-limit");
+const requestId = require("./middleware/request-id");
+const alerting = require("./services/alerting");
 const createTier4Router = require("./routes/tier4");
 const registerAllRoutes = require("./routes/registerAllRoutes");
 
@@ -267,6 +277,7 @@ if (!process.env.R2_PUBLIC_URL) {
 app.use(compression());   // Gzip/deflate API responses (~70% smaller)
 app.use(cookieParser()); // Parse cookies (needed for JWT refresh token httpOnly cookie)
 app.use(globalLimiter);
+app.use(requestId);         // Structured logging + X-Request-Id header
 
 // --- PERMISSION MIDDLEWARE SCAFFOLD ---
 // Reads optional x-employee-id header, attaches permissions to req.
@@ -324,6 +335,10 @@ async function loadTenantAndPerms(req, res, next) {
     req.tenantId = decoded.tid;
     req.employee = { id: decoded.eid, role_id: decoded.rid };
     req.tokenScope = decoded.scope || "full";
+    req.isImpersonating = !!decoded.impersonating;
+    if (decoded.impersonating && decoded.realIdentity) {
+      req.impersonatedBy = decoded.realIdentity;
+    }
 
     // Bridge: set x-employee-id header so downstream code that reads it still works
     req.headers["x-employee-id"] = String(decoded.eid);
@@ -372,11 +387,15 @@ async function loadTenantAndPerms(req, res, next) {
     // Load permissions
     try {
       const { rows: [emp] } = await permDb.query(
-        "SELECT role_id FROM employees WHERE id = $1", [decoded.eid]
+        "SELECT role_id, name FROM employees WHERE id = $1", [decoded.eid]
       );
       if (!emp) {
         req.employeePerms = [];
         return next();
+      }
+      req.employee.name = emp.name;
+      if (req.isImpersonating) {
+        req.employee.name = (emp.name || "Admin") + " (impersonated by Super-Admin)";
       }
       const { rows } = await permDb.query(
         "SELECT permission FROM role_permissions WHERE role_id = $1", [emp.role_id]
@@ -1006,6 +1025,24 @@ const { processPendingShopifyInventoryEvents, processPendingReportSchedules } =
     decryptShopifySecret,
     logShopifyEvent,
   });
+
+// Global error handler — catches unhandled route errors
+app.use((err, req, res, _next) => {
+  const reqId = req.id || "unknown";
+  if (req.log) {
+    req.log.error({ err, reqId }, "Unhandled route error");
+  } else {
+    console.error("Unhandled route error:", err);
+  }
+  if (process.env.SENTRY_DSN) {
+    Sentry.captureException(err, {
+      tags: { tenantSlug: req.tenantSlug, reqId },
+      user: { id: req.employee?.id, username: req.employee?.name },
+    });
+  }
+  alerting.recordError({ tenant: req.tenantSlug, message: err.message, reqId }).catch(() => {});
+  res.status(err.status || 500).json({ error: err.message || "Internal server error", reqId });
+});
 
 function collectRegisteredRoutes(appInstance) {
   const stack = appInstance?.router?.stack || [];

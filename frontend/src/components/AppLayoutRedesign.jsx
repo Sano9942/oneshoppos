@@ -1,12 +1,14 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, LogOut, Moon, Search, Sun, User, UserCircle } from "lucide-react";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { useAuth } from "../auth/AuthProvider";
 import { SHOPIFY_NAV_GROUPS } from "../ui/nav-config";
 import { Input } from "../ui/primitives";
 import { getTheme, toggleTheme } from "../utils/theme";
 import useFeatureFlags from "../hooks/useFeatureFlags";
 import Breadcrumbs from "../ui/Breadcrumbs";
+import SupportWidget from "../ui/SupportWidget";
 import ContextSwitcher from "./ContextSwitcher";
 import NotificationBell from "./NotificationBell";
 
@@ -174,11 +176,14 @@ export default function AppLayoutRedesign() {
         </header>
         <main className="min-h-0 flex-1 overflow-auto p-4">
           <Breadcrumbs />
-          <Suspense fallback={<div className="flex min-h-[40vh] items-center justify-center"><div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-500 shadow-sm">Loading...</div></div>}>
-            <Outlet />
-          </Suspense>
+          <ErrorBoundary level="page">
+            <Suspense fallback={<div className="flex min-h-[40vh] items-center justify-center"><div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-500 shadow-sm">Loading...</div></div>}>
+              <Outlet />
+            </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
+      <SupportWidget />
     </div>
   );
 }

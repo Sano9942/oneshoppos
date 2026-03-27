@@ -1,8 +1,10 @@
 import { Suspense, lazy, useEffect, useRef } from "react";
+import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { initTheme } from "./utils/theme";
 initTheme();
 import { BrowserRouter as Router, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth/AuthProvider";
+import ImpersonationBanner from "./ui/ImpersonationBanner";
 import { IS_MULTI_TENANT } from "./config";
 import RequireAuth from "./components/RequireAuth";
 import RequireContext from "./components/RequireContext";
@@ -55,6 +57,8 @@ const AdminLayout = lazy(() => import("./pages/admin/AdminLayout"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminTenantList = lazy(() => import("./pages/admin/AdminTenantList"));
 const AdminTenantDetail = lazy(() => import("./pages/admin/AdminTenantDetail"));
+const AdminSupportTickets = lazy(() => import("./pages/admin/AdminSupportTickets"));
+const AdminDeadLetters = lazy(() => import("./pages/admin/AdminDeadLetters"));
 const OrdersRoute = lazy(() => import("./pages/OrdersRoute"));
 const CustomersRoute = lazy(() => import("./pages/CustomersRoute"));
 const SalesHistoryRoute = lazy(() => import("./pages/SalesHistoryRoute"));
@@ -110,7 +114,11 @@ function HomeRedirect() {
 }
 
 function App() {
+  const { isImpersonating } = useAuth();
+
   return (
+    <>
+    {isImpersonating && <ImpersonationBanner />}
     <Router>
       <Routes>
         <Route path="/" element={<HomeRedirect />} />
@@ -131,21 +139,25 @@ function App() {
         <Route
           path="/pos"
           element={
-            <Suspense fallback={<RouteLoading />}>
-              <RequireAuth>
-                <POSRoute />
-              </RequireAuth>
-            </Suspense>
+            <ErrorBoundary level="page">
+              <Suspense fallback={<RouteLoading />}>
+                <RequireAuth>
+                  <POSRoute />
+                </RequireAuth>
+              </Suspense>
+            </ErrorBoundary>
           }
         />
         <Route
           path="/kiosk"
           element={
-            <Suspense fallback={<RouteLoading />}>
-              <RequireAuth>
-                <KioskRedesign />
-              </RequireAuth>
-            </Suspense>
+            <ErrorBoundary level="page">
+              <Suspense fallback={<RouteLoading />}>
+                <RequireAuth>
+                  <KioskRedesign />
+                </RequireAuth>
+              </Suspense>
+            </ErrorBoundary>
           }
         />
 
@@ -165,6 +177,8 @@ function App() {
           <Route index element={<Suspense fallback={<RouteLoading />}><AdminDashboard /></Suspense>} />
           <Route path="tenants" element={<Suspense fallback={<RouteLoading />}><AdminTenantList /></Suspense>} />
           <Route path="tenants/:id" element={<Suspense fallback={<RouteLoading />}><AdminTenantDetail /></Suspense>} />
+          <Route path="support" element={<Suspense fallback={<RouteLoading />}><AdminSupportTickets /></Suspense>} />
+          <Route path="dead-letters" element={<Suspense fallback={<RouteLoading />}><AdminDeadLetters /></Suspense>} />
         </Route>
 
         <Route
@@ -631,6 +645,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
+    </>
   );
 }
 

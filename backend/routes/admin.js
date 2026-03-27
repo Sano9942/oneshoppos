@@ -6,6 +6,7 @@
  */
 const bcrypt = require("bcryptjs");
 const net = require("net");
+const alerting = require("../services/alerting");
 
 const BCRYPT_ROUNDS = 10;
 
@@ -766,14 +767,25 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
         // pg_stat_statements not enabled — skip silently
       }
 
+      const connections = {
+        active: parseInt(conn.active, 10),
+        idle: parseInt(conn.idle, 10),
+        idle_in_tx: parseInt(conn.idle_in_tx, 10),
+        total: parseInt(conn.total, 10),
+        max: maxConn,
+      };
+
+      // Fire DB pressure alert if active connections > 80% of max
+      if (connections.active > connections.max * 0.8) {
+        alerting.recordDbPressure({
+          active: connections.active,
+          max: connections.max,
+          longestQuery: slowNowResult.rows[0]?.query || null,
+        }).catch(() => {});
+      }
+
       return res.json({
-        connections: {
-          active: parseInt(conn.active, 10),
-          idle: parseInt(conn.idle, 10),
-          idle_in_tx: parseInt(conn.idle_in_tx, 10),
-          total: parseInt(conn.total, 10),
-          max: maxConn,
-        },
+        connections,
         database: {
           size_mb: Math.round(Number(dbSizeResult.rows[0].bytes) / 1048576 * 10) / 10,
           name: dbSizeResult.rows[0].name,
@@ -1034,6 +1046,201 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
         past_grace: pastGrace.rows,
         pending_upgrades: upgradeCount.rows[0].count,
       });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Support Tickets (cross-tenant) ──────────────────────────────────
+
+  app.get("/api/admin/support-tickets", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const status = req.query.status || null;
+      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+
+      const { rows: tenants } = await db.query(
+        "SELECT id, slug, name FROM tenants WHERE status = 'active' ORDER BY id"
+      );
+
+      const allTickets = [];
+      for (const tenant of tenants) {
+        try {
+          const tenantDb = await tenantDbManager.getDb(tenant.id);
+          let sql = `SELECT id, type, message, page_url, browser, employee_id, screenshots, last_req_id, status, created_at, resolved_at
+                     FROM support_tickets`;
+          const params = [];
+          if (status) {
+            sql += " WHERE status = $1";
+            params.push(status);
+          }
+          sql += " ORDER BY created_at DESC LIMIT $" + (params.length + 1);
+          params.push(limit);
+
+          const { rows } = await tenantDb.query(sql, params);
+          for (const row of rows) {
+            allTickets.push({ ...row, tenant_id: tenant.id, tenant_slug: tenant.slug, tenant_name: tenant.name });
+          }
+        } catch {
+          // Table may not exist for this tenant — skip silently
+        }
+      }
+
+      // Sort aggregated results by created_at DESC, then trim to limit
+      allTickets.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      return res.json({ tickets: allTickets.slice(0, limit) });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/admin/support-tickets/:tenantId/:ticketId", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { status } = req.body || {};
+      if (!status || !["open", "acknowledged", "resolved"].includes(status)) {
+        return res.status(400).json({ error: "status must be one of: open, acknowledged, resolved" });
+      }
+
+      const tenantDb = await tenantDbManager.getDb(parseInt(req.params.tenantId, 10));
+      const resolvedAt = status === "resolved" ? "NOW()" : "NULL";
+      const { rows } = await tenantDb.query(
+        `UPDATE support_tickets SET status = $1, resolved_at = ${resolvedAt} WHERE id = $2 RETURNING *`,
+        [status, req.params.ticketId]
+      );
+
+      if (rows.length === 0) {
+        return res.status(404).json({ error: "Ticket not found" });
+      }
+
+      return res.json({ ticket: rows[0] });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Impersonation ──────────────────────────────────────────────────
+
+  app.post("/api/admin/impersonate/:tenantId", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const tenantId = parseInt(req.params.tenantId, 10);
+
+      // 1. Get tenant from master DB
+      const { rows: tenantRows } = await db.query(
+        "SELECT id, slug, name, status FROM tenants WHERE id = $1",
+        [tenantId]
+      );
+      const tenant = tenantRows[0];
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+      if (tenant.status !== "active") return res.status(400).json({ error: "Can only impersonate active tenants" });
+
+      // 2. Get tenant DB and find admin employee (role_id = 1)
+      const tenantDb = await tenantDbManager.getDb(tenantId);
+      const { rows: empRows } = await tenantDb.query(
+        "SELECT id, name, role_id FROM employees WHERE role_id = 1 LIMIT 1"
+      );
+      const adminEmployee = empRows[0];
+      if (!adminEmployee) return res.status(404).json({ error: "No admin employee found in tenant" });
+
+      // 3. Get super-admin name for audit
+      const { rows: saRows } = await db.query(
+        "SELECT name FROM super_admins WHERE id = $1",
+        [req.admin.id]
+      );
+      const adminName = saRows[0]?.name || req.admin.email;
+
+      // 4. Create short-lived JWT (1 hour) — sign directly to include impersonation fields
+      const token = jwt.sign(
+        {
+          tid: tenant.id,
+          eid: adminEmployee.id,
+          rid: 1,
+          oid: null,
+          scope: "full",
+          impersonating: true,
+          realIdentity: { id: req.admin.id, name: adminName, email: req.admin.email },
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "1h" }
+      );
+
+      // 5. Create impersonation_sessions row
+      const { rows: sessionRows } = await masterDb.query(
+        "INSERT INTO impersonation_sessions (super_admin_id, tenant_id) VALUES ($1, $2) RETURNING id",
+        [req.admin.id, tenantId]
+      );
+      const sessionId = sessionRows[0].id;
+
+      // 6. Audit log
+      await auditLog(tenantId, "impersonated", { session_id: sessionId, admin_name: adminName }, `admin:${req.admin.email}`);
+
+      return res.json({ token, tenantSlug: tenant.slug, tenantName: tenant.name, sessionId });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/impersonate/:sessionId/end", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const sessionId = parseInt(req.params.sessionId, 10);
+      await masterDb.query(
+        "UPDATE impersonation_sessions SET ended_at = NOW() WHERE id = $1",
+        [sessionId]
+      );
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Dead Letter Queue (cross-tenant) ────────────────────────────────
+
+  app.get("/api/admin/dead-letters", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+
+      const { rows: tenants } = await db.query(
+        "SELECT id, slug, name FROM tenants WHERE status = 'active' ORDER BY id"
+      );
+
+      const allEvents = [];
+      for (const tenant of tenants) {
+        try {
+          const tenantDb = await tenantDbManager.getDb(tenant.id);
+          const { rows } = await tenantDb.query(
+            `SELECT id, topic, status, payload, error, retries, created_at, updated_at
+             FROM shopify_webhook_events
+             WHERE status IN ('dead_letter', 'failed')
+             ORDER BY created_at DESC
+             LIMIT $1`,
+            [limit]
+          );
+          for (const row of rows) {
+            allEvents.push({ ...row, tenant_id: tenant.id, tenant_slug: tenant.slug, tenant_name: tenant.name });
+          }
+        } catch {
+          // Table may not exist — skip silently
+        }
+      }
+
+      allEvents.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      return res.json({ events: allEvents.slice(0, limit) });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/dead-letters/:tenantId/:id/retry", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const tenantDb = await tenantDbManager.getDb(parseInt(req.params.tenantId, 10));
+      const { rows } = await tenantDb.query(
+        `UPDATE shopify_webhook_events SET status = 'pending', updated_at = NOW() WHERE id = $1 RETURNING *`,
+        [req.params.id]
+      );
+
+      if (rows.length === 0) {
+        return res.status(404).json({ error: "Event not found" });
+      }
+
+      return res.json({ event: rows[0] });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }

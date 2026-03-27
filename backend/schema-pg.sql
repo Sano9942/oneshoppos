@@ -1201,6 +1201,21 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   used_at     TIMESTAMPTZ
 );
 
+-- ── Support Tickets ───────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS support_tickets (
+  id              SERIAL PRIMARY KEY,
+  type            VARCHAR(20) NOT NULL DEFAULT 'bug',
+  message         TEXT NOT NULL,
+  page_url        TEXT,
+  browser         TEXT,
+  employee_id     INTEGER REFERENCES employees(id),
+  screenshots     JSONB DEFAULT '[]',
+  last_req_id     VARCHAR(64),
+  status          VARCHAR(20) DEFAULT 'open',
+  created_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  resolved_at     TIMESTAMPTZ
+);
+
 -- ── Seed data ─────────────────────────────────────────────────────
 INSERT INTO company_profile (id, company_name, setup_complete)
 VALUES (1, 'My Store', false)

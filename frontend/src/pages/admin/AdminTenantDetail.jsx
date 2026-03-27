@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Database, Pause, Play, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowLeft, Database, Eye, Pause, Play, RotateCcw, Trash2 } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
 
 function safeDateParse(ts) {
@@ -332,6 +332,33 @@ export default function AdminTenantDetail() {
                 className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
               >
                 <RotateCcw size={14} /> {actionLoading === "/reset-pin" ? "Resetting..." : "Reset PIN"}
+              </button>
+
+              <button
+                onClick={async () => {
+                  setActionLoading("impersonate");
+                  try {
+                    const res = await adminFetch(`/api/admin/impersonate/${id}`, { method: "POST" });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error);
+                    const frontendUrl = window.location.origin;
+                    const params = new URLSearchParams({
+                      impersonate_token: data.token,
+                      impersonate_session: String(data.sessionId),
+                      tenant_slug: data.tenantSlug,
+                      tenant_name: data.tenantName,
+                    });
+                    window.open(`${frontendUrl}/context-select?${params.toString()}`, "_blank");
+                  } catch (err) {
+                    alert(err.message);
+                  } finally {
+                    setActionLoading("");
+                  }
+                }}
+                disabled={!!actionLoading || tenant.status !== "active"}
+                className="flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+              >
+                <Eye size={14} /> {actionLoading === "impersonate" ? "Opening..." : "Log in as Tenant"}
               </button>
 
               <button
