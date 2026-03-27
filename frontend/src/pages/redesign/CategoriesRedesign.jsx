@@ -26,6 +26,8 @@ const EMPTY = {
   parent_id: "",
   is_active: "1",
   sort_order: "0",
+  tax_id: "",
+  hs_code: "",
 };
 
 export default function CategoriesRedesign() {
@@ -40,6 +42,11 @@ export default function CategoriesRedesign() {
   const [moveModal, setMoveModal] = useState(null);
   const [moveTargetId, setMoveTargetId] = useState("");
   const [moveSaving, setMoveSaving] = useState(false);
+  const [taxes, setTaxes] = useState([]);
+
+  useEffect(() => {
+    fetch(`${API}/api/taxes`).then(r => r.json()).then(d => setTaxes(d.taxes || d || [])).catch(() => {});
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -93,6 +100,8 @@ export default function CategoriesRedesign() {
       parent_id: row.parent_id ? String(row.parent_id) : "",
       is_active: String(Number(row.is_active ?? 1)),
       sort_order: String(row.sort_order ?? 0),
+      tax_id: row.tax_id ? String(row.tax_id) : "",
+      hs_code: row.hs_code || "",
     });
     setModalOpen(true);
   };
@@ -115,6 +124,8 @@ export default function CategoriesRedesign() {
           parent_id: form.parent_id ? Number(form.parent_id) : null,
           is_active: Number(form.is_active),
           sort_order: Number(form.sort_order || 0),
+          tax_id: form.tax_id ? Number(form.tax_id) : null,
+          hs_code: form.hs_code || null,
         }),
       });
       const data = await res.json();
@@ -477,6 +488,36 @@ export default function CategoriesRedesign() {
                     value={form.sort_order}
                     onChange={(e) =>
                       setForm((p) => ({ ...p, sort_order: e.target.value }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">
+                    Tax
+                  </label>
+                  <Select
+                    value={form.tax_id}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, tax_id: e.target.value }))
+                    }
+                  >
+                    <option value="">None (inherit from parent)</option>
+                    {taxes.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({Number(t.rate)}%)
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-(--ui-text-muted)">
+                    HS Code
+                  </label>
+                  <Input
+                    value={form.hs_code}
+                    placeholder="e.g. 4901"
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, hs_code: e.target.value }))
                     }
                   />
                 </div>

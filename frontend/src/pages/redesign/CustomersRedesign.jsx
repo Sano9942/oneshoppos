@@ -23,6 +23,7 @@ const EMPTY = {
   address: "",
   cnic: "",
   occupation: "",
+  ntn_cnic: "",
 };
 
 function exportCsv(rows) {
@@ -155,6 +156,7 @@ export default function CustomersRedesign() {
       address: row.address || "",
       cnic: row.cnic || "",
       occupation: row.occupation || "",
+      ntn_cnic: row.ntn_cnic || "",
     });
     setFormError("");
     setModalOpen(true);
@@ -574,6 +576,11 @@ export default function CustomersRedesign() {
                 placeholder="Address"
                 value={form.address}
                 onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
+              />
+              <Input
+                placeholder="NTN / CNIC (for FBR invoicing)"
+                value={form.ntn_cnic}
+                onChange={(e) => setForm((p) => ({ ...p, ntn_cnic: e.target.value }))}
               />
               <div className="flex gap-2 pt-2">
                 <Button type="button" onClick={() => setModalOpen(false)}>
