@@ -46,6 +46,7 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 | Error boundary | `ui/ErrorBoundary.jsx` — global + page-level |
 | Support widget | `ui/SupportWidget.jsx` — floating ticket form |
 | Impersonation banner | `ui/ImpersonationBanner.jsx` — amber bar during impersonation |
+| Tenant billing page | `pages/redesign/BillingRedesign.jsx` — plan info, payment history, upgrade requests |
 
 ## Key Conventions
 

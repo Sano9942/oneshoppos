@@ -137,7 +137,8 @@ oneshoppos/
 - **Courier dispatch**: `routes/couriers.js` — CRUD couriers, ship orders, get tracking. `services/couriers/` adapter pattern (base → generic → leopards). `courier_integrations` table with 10 pre-seeded Pakistan couriers.
 - **FBR export**: `GET /api/reports/fbr-export?from=X&to=Y` — generates FBR-compliant CSV data.
 - **AI insights**: `GET /api/insights/auto` (5 pre-built analytics cards). `POST /api/insights/ask` (Claude AI chat, feature-flagged `ai_insights`, requires `ANTHROPIC_API_KEY`).
-- **Self-service signup**: `POST /api/auth/signup` — creates tenant + admin employee + welcome email. Gated by `SELF_SERVICE_SIGNUP=1` env var.
+- **Self-service signup**: `POST /api/auth/signup` — creates tenant + admin employee + welcome email. Gated by `SELF_SERVICE_SIGNUP=1` env var. Rate-limited. Dead tenant cleanup job (`backend/jobs/cleanup-dead-tenants.js`) removes tenants that never complete setup after 7 days.
+- **Subscription billing**: `routes/billing.js` + admin billing UI in `AdminTenantDetail.jsx`. Manual payment recording (`POST /api/admin/payments/:tenantId`), plan upgrade/downgrade, billing cycle management. Tables: `plan_pricing`, `payment_records`, `upgrade_requests` (migration v7). Tenant-facing billing page at `/billing` (`BillingRedesign.jsx`). Public pricing endpoint: `GET /api/billing/pricing`.
 - **PWA**: `manifest.webmanifest` + service worker for installable app.
 
 ## Reliability & Monitoring

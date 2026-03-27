@@ -58,6 +58,7 @@ The following files are **legacy SQLite code** — never executed in production 
 | Alert emails | `utils/alertEmail.js` (Resend-based) |
 | Support tickets | `routes/support.js` |
 | Billing routes | `routes/billing.js` |
+| Dead tenant cleanup | `jobs/cleanup-dead-tenants.js` (removes tenants with no setup after 7 days) |
 
 ## Database is Postgres
 
