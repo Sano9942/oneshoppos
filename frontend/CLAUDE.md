@@ -11,8 +11,8 @@
 
 ## DO NOT READ These Files (token waste)
 
-### Route Wrappers (31 files — skip all, they are 5-line pass-throughs)
-`AccountingRoute.jsx`, `ActionHistoryRoute.jsx`, `AdministratorRoute.jsx`, `AttributeSetsRoute.jsx`, `BackupRestoreRoute.jsx`, `BrandsRoute.jsx`, `CRMRoute.jsx`, `CashManagementRoute.jsx`, `CategoriesRoute.jsx`, `CompanySettingsRoute.jsx`, `CustomersRoute.jsx`, `DashboardRoute.jsx`, `EmployeesRoute.jsx`, `ExpensesRoute.jsx`, `HRManagementRoute.jsx`, `InventoryRoute.jsx`, `OrdersRoute.jsx`, `OutletsRoute.jsx`, `POSRoute.jsx`, `PromotionsRoute.jsx`, `PurchaseOrdersRoute.jsx`, `QuotationsRoute.jsx`, `ReturnedStockRoute.jsx`, `ReturnsRoute.jsx`, `SalesHistoryRoute.jsx`, `ShopifyIntegrationRoute.jsx`, `StockAdjustmentsRoute.jsx`, `SupplierPayablesRoute.jsx`, `SuppliersRoute.jsx`, `TaxesRoute.jsx`, `TransfersRoute.jsx`
+### Route Wrappers (34 files — skip all, they are 5-line pass-throughs)
+`AccountingRoute.jsx`, `ActionHistoryRoute.jsx`, `AdministratorRoute.jsx`, `AttributeSetsRoute.jsx`, `BackupRestoreRoute.jsx`, `BrandsRoute.jsx`, `CRMRoute.jsx`, `CashManagementRoute.jsx`, `CategoriesRoute.jsx`, `CompanySettingsRoute.jsx`, `CustomersRoute.jsx`, `DashboardRoute.jsx`, `EmployeesRoute.jsx`, `ExpensesRoute.jsx`, `FBRDashboardRoute.jsx`, `FBRSettingsRoute.jsx`, `HRManagementRoute.jsx`, `InventoryRoute.jsx`, `OrdersRoute.jsx`, `OutletsRoute.jsx`, `POSRoute.jsx`, `PromotionsRoute.jsx`, `PurchaseOrdersRoute.jsx`, `QuotationsRoute.jsx`, `ReturnedStockRoute.jsx`, `ReturnsRoute.jsx`, `SalesHistoryRoute.jsx`, `ShopifyIntegrationRoute.jsx`, `StockAdjustmentsRoute.jsx`, `SupplierPayablesRoute.jsx`, `SuppliersRoute.jsx`, `TaxesRoute.jsx`, `TaxLookupRoute.jsx`, `TransfersRoute.jsx`
 
 Each one just does: `import XRedesign from './redesign/XRedesign'; export default function XRoute() { return <XRedesign />; }`
 
@@ -47,6 +47,10 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 | Support widget | `ui/SupportWidget.jsx` — floating ticket form |
 | Impersonation banner | `ui/ImpersonationBanner.jsx` — amber bar during impersonation |
 | Tenant billing page | `pages/redesign/BillingRedesign.jsx` — plan info, payment history, upgrade requests |
+| FBR settings | `pages/redesign/FBRSettingsRedesign.jsx` — NTN, token, province, enable toggle |
+| FBR invoice queue | `pages/redesign/FBRDashboardRedesign.jsx` — summary cards, filters, retry, auto-refresh |
+| Tax rate lookup | `pages/redesign/TaxLookupRedesign.jsx` — province-aware search, export, suggest correction |
+| Admin tax rates | `pages/admin/AdminTaxRates.jsx` — super-admin CRUD + suggestion review |
 
 ## Key Conventions
 

@@ -43,14 +43,14 @@ The following files are **legacy SQLite code** — never executed in production 
 | Server entry + middleware | `index.js` |
 | Route registration | `routes/registerAllRoutes.js` (orchestrator only — no route logic here) |
 | Route logic for a domain | `routes/<domain>.js` (e.g., `routes/sales.js`, `routes/products.js`) |
-| Super-admin + infra monitoring | `routes/admin.js` — includes `GET /api/admin/infra` (Postgres system stats) |
+| Super-admin + infra monitoring | `routes/admin.js` — includes `GET /api/admin/infra`, tax rate CRUD, FBR health |
 | Report endpoints | `routes/reports/` (11 files, modular) |
 | Shopify integration | `routes/shopify/` (9 files) + `shopify/` (3 files) |
 | Tier4 features | `routes/tier4/` (7 files) |
 | Timezone utilities | `utils/tz.js` |
 | Receipt email builder | `utils/receiptEmail.js` |
 | Postgres backup/restore | `utils/backup-pg.js` |
-| Category tree logic | `category-tree.js` |
+| Category tree logic | `category-tree.js` — includes `resolveInheritedField()` for tax/HS inheritance |
 | Printer service | `services/printer.js` |
 | Structured logging | `services/logger.js` (Pino) |
 | Alert system | `services/alerting.js` (error spikes, DB pressure) |
@@ -59,6 +59,9 @@ The following files are **legacy SQLite code** — never executed in production 
 | Support tickets | `routes/support.js` |
 | Billing routes | `routes/billing.js` |
 | Dead tenant cleanup | `jobs/cleanup-dead-tenants.js` (removes tenants with no setup after 7 days) |
+| FBR Digital Invoicing | `services/fbr.js` (API client + payload builders), `routes/fbr.js` (config/dashboard/retry), `routes/tax-lookup.js` (HS code search) |
+| FBR background worker | `workers/fbr-worker.js` (polls queue, posts to FBR, inline or standalone) |
+| Tax rate seed data | `scripts/seed-tax-rates.js` (one-time, ~96 HS codes with Urdu descriptions) |
 
 ## Database is Postgres
 

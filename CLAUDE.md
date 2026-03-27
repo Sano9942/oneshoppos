@@ -25,7 +25,7 @@ oneshoppos/
 │   ├── schema-pg.sql             # Full DDL — single source of truth
 │   ├── migrate-pg.js             # Postgres migration runner
 │   ├── jwt-auth.js               # JWT sign/verify utilities
-│   ├── category-tree.js          # Category tree enrichment
+│   ├── category-tree.js          # Category tree enrichment + resolveInheritedField (FBR)
 │   ├── routes/
 │   │   ├── registerAllRoutes.js  # Orchestrator only (~324 lines)
 │   │   ├── admin.js              # /api/admin/* (super-admin, mounted BEFORE tenant middleware)
@@ -48,6 +48,8 @@ oneshoppos/
 │   │   ├── insights-ai.js        # /api/insights/ask (Claude AI chat)
 │   │   ├── support.js            # /api/support/* (tickets + screenshot upload)
 │   │   ├── billing.js            # /api/billing/* (subscription billing)
+│   │   ├── fbr.js                # /api/fbr/* (FBR config, dashboard, retry)
+│   │   ├── tax-lookup.js         # /api/tax-lookup (HS code search, suggest)
 │   │   ├── reports/              # /api/reports/* (12 files, modular — includes fbr-export)
 │   │   ├── shopify/              # /api/integrations/shopify* (9 files, modular)
 │   │   ├── tier4/                # Tier 4 features (7 files, modular)
@@ -62,6 +64,9 @@ oneshoppos/
 │   ├── services/couriers/        # Courier adapter pattern (base, generic, leopards)
 │   ├── services/logger.js        # Pino logger instance
 │   ├── services/alerting.js      # In-house alert system (error spikes, DB pressure)
+│   ├── services/fbr.js           # FBR API client, payload builders, queue helper
+│   ├── workers/fbr-worker.js     # FBR background worker (inline or standalone)
+│   ├── scripts/seed-tax-rates.js # One-time seed for tax_rate_reference (~96 HS codes)
 │   └── utils/                    # tz.js, receiptEmail.js, digestEmail.js, backup-pg.js, resendEmail.js, alertEmail.js
 └── frontend/src/
     ├── App.jsx                   # Route orchestrator
@@ -92,11 +97,14 @@ oneshoppos/
         │   ├── ImportRedesign.jsx   # Bulk CSV/XLSX import (products, customers, suppliers)
         │   ├── CourierSettingsRedesign.jsx # Delivery courier configuration
         │   ├── WooCommerceIntegrationRedesign.jsx # WooCommerce sync
+        │   ├── FBRSettingsRedesign.jsx # FBR config (NTN, token, province, enable toggle)
+        │   ├── FBRDashboardRedesign.jsx # FBR invoice queue dashboard
+        │   ├── TaxLookupRedesign.jsx # Tax rate lookup (province-aware search)
         │   └── [all other *Redesign.jsx]
         ├── reports/              # Report domain modules (includes FBRExportTab)
         ├── dashboard/            # Dashboard components (15 files — includes InsightCards, AIChatPanel, BackupStatusCard)
         ├── shopify/              # Shopify tab modules
-        ├── admin/                # Super-admin panel (separate auth, infra monitoring)
+        ├── admin/                # Super-admin panel (separate auth, infra monitoring, tax rates CRUD)
         ├── LandingPage.jsx       # Public landing page (product info, setup/user guide, login)
         ├── ResetPassword.jsx     # Public password reset page (/reset-password?token=xxx)
         ├── ReceiptPublicPage.jsx # Public shareable receipt (/receipt/:invoiceNumber)
