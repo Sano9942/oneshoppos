@@ -136,6 +136,7 @@ oneshoppos/
 - **Cloud printing**: `services/printer.js` has `printToNetwork(host, port, buffer)` via raw TCP socket. `POST /api/print/test` for testing.
 - **Courier dispatch**: `routes/couriers.js` — CRUD couriers, ship orders, get tracking. `services/couriers/` adapter pattern (base → generic → leopards). `courier_integrations` table with 10 pre-seeded Pakistan couriers.
 - **FBR export**: `GET /api/reports/fbr-export?from=X&to=Y` — generates FBR-compliant CSV data.
+- **FBR Digital Invoicing**: Real-time invoice posting to FBR DI API. Feature-flagged per tenant (`fbr_integration`). Sales/returns/voids enqueue payloads to `fbr_invoices` table. Background worker (`workers/fbr-worker.js`, inline or standalone) polls queue with exponential backoff retry (5 attempts). Routes: `routes/fbr.js` (config, dashboard, retry), `routes/tax-lookup.js` (HS code search, suggest corrections). Admin: `routes/admin.js` has tax rate CRUD + FBR health endpoint. Category-level HS code + tax inheritance via `category-tree.js:resolveInheritedField()`. Tax rate reference table (`tax_rate_reference`) in public schema with ~100 seeded HS codes. Migration v9. Frontend: `/settings/fbr` (config), `/fbr` (invoice queue dashboard), `/tax-lookup` (rate search), `/admin/tax-rates` (super-admin CRUD).
 - **AI insights**: `GET /api/insights/auto` (5 pre-built analytics cards). `POST /api/insights/ask` (Claude AI chat, feature-flagged `ai_insights`, requires `ANTHROPIC_API_KEY`).
 - **Self-service signup**: `POST /api/auth/signup` — creates tenant + admin employee + welcome email. Gated by `SELF_SERVICE_SIGNUP=1` env var. Rate-limited. Dead tenant cleanup job (`backend/jobs/cleanup-dead-tenants.js`) removes tenants that never complete setup after 7 days.
 - **Subscription billing**: `routes/billing.js` + admin billing UI in `AdminTenantDetail.jsx`. Manual payment recording (`POST /api/admin/payments/:tenantId`), plan upgrade/downgrade, billing cycle management. Tables: `plan_pricing`, `payment_records`, `upgrade_requests` (migration v7). Tenant-facing billing page at `/billing` (`BillingRedesign.jsx`). Public pricing endpoint: `GET /api/billing/pricing`.
@@ -188,7 +189,7 @@ oneshoppos/
 
 ## Migrations
 
-- **Current version**: 8 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns, v6: setup_token_expires_at, v7: billing tables, v8: support_tickets/impersonation_sessions)
+- **Current version**: 9 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns, v6: setup_token_expires_at, v7: billing tables, v8: support_tickets/impersonation_sessions, v9: FBR digital invoicing — fbr_invoices queue, category tax/HS inheritance, tax_rate_reference, tax_rate_suggestions)
 - **migrate-pg.js CLI**: `node backend/migrate-pg.js` — migrates public schema AND all active tenant schemas
 - **Tenant migration gotcha**: existing tenants need `schema_version` table seeded with previous versions before first run
 

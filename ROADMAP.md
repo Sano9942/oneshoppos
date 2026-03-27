@@ -52,7 +52,7 @@ _Last updated: March 28 2026 — **Reliability & support tooling shipped.** Sent
 
 - **#4 Accounting Cashflow + AP/AR** — `Accounting.jsx` Cashflow + AP/AR tabs now fetch from live backend endpoints
 - **#5 HR Leave Balance + Payroll Lines** — `HRManagementRedesign.jsx` Leave Balance + Payroll tabs wired to live endpoints
-- **#6 FBR Integration** — placeholder comment added, deferred for future implementation
+- **#6 FBR Integration** — **COMPLETE** (Mar 28 2026) — FBR Digital Invoicing: real-time invoice posting, async queue with retry, category HS code inheritance, tax rate lookup, admin CRUD
 - **#7 Advance / Layaway Payments** — deferred (not in this phase)
 - **#8 Purchase Orders Edit + Approval** — `PUT /api/purchase-orders/:id`, approve button (manager/admin), Draft→Approved→Received badges
 - **#9 Orders Detail Transactions + Fulfillments** — Transactions tab + Fulfillments tab inside order detail modal
@@ -95,7 +95,7 @@ _Last updated: March 28 2026 — **Reliability & support tooling shipped.** Sent
 
 | Feature                  | Priority  | Status                      |
 | ------------------------ | --------- | --------------------------- |
-| FBR e-invoicing          | 🔴 High   | Placeholder added, deferred |
+| FBR e-invoicing          | 🔴 High   | **COMPLETE** (Mar 28 2026)  |
 | Advance/layaway payments | 🟡 Medium | Deferred                    |
 | Serial number per sale   | 🟢 Low    | Built (Mar 9 2026)          |
 | Shopcast digital signage | 🟢 Low    | Not built                   |
@@ -377,7 +377,7 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 
 ### Still Not Built (deferred)
 - **WhatsApp Business API** — official API for automated alerts (wa.me links ship now)
-- **FBR real-time API** — **IN PROGRESS** (design approved Mar 28 2026, see `docs/plans/2026-03-28-fbr-digital-invoicing-design.md`)
+- **FBR real-time API** — **COMPLETE** (Mar 28 2026) — async queue worker, category HS inheritance, tax rate lookup + suggestions. See `docs/plans/2026-03-28-fbr-digital-invoicing-design.md`
 - **TikTok Shop / Instagram Shopping** — WooCommerce first, add others on demand
 - **CRM/marketing sync** (Mailchimp, HubSpot) — deferred to tenant demand
 - **Inventory marketplace listing** (Daraz, Facebook) — deferred
