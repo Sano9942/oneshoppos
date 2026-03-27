@@ -302,6 +302,12 @@ export function AuthProvider({ children }) {
         }
       }
 
+      // Track last failed request ID for support ticket context
+      if (!response.ok) {
+        const rid = response.headers.get("X-Request-Id");
+        if (rid) window.__lastFailedReqId = rid;
+      }
+
       return response;
     };
 
