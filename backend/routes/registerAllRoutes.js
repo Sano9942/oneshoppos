@@ -533,6 +533,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: SUPPORT TICKETS ---
   require("./support")(app, deps);
 
+  // --- ROUTES: FBR DIGITAL INVOICING ---
+  require("./fbr")(app, deps);
+
   return {
     processPendingShopifyInventoryEvents:
       typeof processPendingShopifyInventoryEvents === "function"
