@@ -32,9 +32,11 @@ const requestIdMiddleware = pinoHttp({
   },
 
   // Adjust log level based on status code and duration
-  customLogLevel: (_req, res, err) => {
+  customLogLevel: (req, res, err) => {
     if (err || res.statusCode >= 500) return "error";
     if (res.statusCode >= 400) return "warn";
+    const duration = Date.now() - (req._startTime || Date.now());
+    if (duration > SLOW_REQUEST_MS) return "warn";
     return "info";
   },
 
@@ -73,20 +75,23 @@ function requestId(req, res, next) {
     if (req.id) {
       res.setHeader("X-Request-Id", req.id);
     }
-
-    // After response finishes, check for slow requests
-    res.on("finish", () => {
-      const duration = Date.now() - req._startTime;
-      if (duration > SLOW_REQUEST_MS && req.log) {
-        req.log.warn(
-          { duration, method: req.method, url: req.url, statusCode: res.statusCode },
-          "slow request"
-        );
-      }
-    });
-
     next();
   });
 }
 
+/**
+ * Enriches req.log with tenant/employee context after auth middleware has run.
+ * Wire this AFTER loadTenantAndPerms in the middleware chain.
+ */
+function enrichReqLog(req, _res, next) {
+  if (req.log && (req.tenantSlug || req.employee?.id)) {
+    const bindings = {};
+    if (req.tenantSlug) bindings.tenantSlug = req.tenantSlug;
+    if (req.employee?.id) bindings.employeeId = req.employee.id;
+    req.log = req.log.child(bindings);
+  }
+  next();
+}
+
+requestId.enrichReqLog = enrichReqLog;
 module.exports = requestId;
