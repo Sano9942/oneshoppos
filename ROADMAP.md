@@ -198,13 +198,12 @@ Token-gated 4-step wizard: Store Identity → Time & Currency → First Outlet �
 
 ---
 
-## ✅ Phase 3 — Core Robustness (Mar 10 2026) — 13/14 items shipped
+## ✅ Phase 3 — Core Robustness (Mar 10 2026) — 14/14 items shipped
 
-Split payment, brute-force throttling, soft deletes, idempotency on sales, end-of-day email digest, price change audit log, onboarding checklist, session timeout at POS, mobile/tablet POS layout, IP allowlisting, shrinkage report, customer-facing display, API key revocation — all built and live.
+Split payment, brute-force throttling, soft deletes, idempotency on sales, end-of-day email digest, price change audit log, onboarding checklist, session timeout at POS, mobile/tablet POS layout, IP allowlisting, shrinkage report, customer-facing display, API key revocation — all built and live. Subscription billing layer shipped in Onboarding Polish (Mar 27 2026).
 
 ### Still Not Built
 
-- **Subscription / billing layer** — Stripe or JazzCash for plan billing, trial enforcement, subscription expiry.
 - **Weighing scale integration** — USB scale for weight-based pricing (grocery, pharmacy niche).
 
 ---
@@ -378,7 +377,7 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 
 ### Still Not Built (deferred)
 - **WhatsApp Business API** — official API for automated alerts (wa.me links ship now)
-- **FBR real-time API** — export file covers compliance for now
+- **FBR real-time API** — **IN PROGRESS** (design approved Mar 28 2026, see `docs/plans/2026-03-28-fbr-digital-invoicing-design.md`)
 - **TikTok Shop / Instagram Shopping** — WooCommerce first, add others on demand
 - **CRM/marketing sync** (Mailchimp, HubSpot) — deferred to tenant demand
 - **Inventory marketplace listing** (Daraz, Facebook) — deferred
@@ -388,6 +387,10 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 - **Accounting software sync** (QuickBooks, Xero) — deferred
 - **Weighing scale integration** — deferred
 - **Customer/Supplier portals** — deferred
+- **FBR sandbox test scenario UI** — automated scenario runner for FBR certification (after FBR integration ships)
+- **Online channel FBR reporting** — Shopify/WooCommerce invoice posting to FBR (after FBR integration ships)
+- **Provincial revenue integrations** — PRA (Punjab), SRB (Sindh), KPRA (KPK), BRA (Balochistan) portals
+- **CCTV / loss prevention** — POS event timestamps for DVR cross-reference (Hikvision/Dahua). Start with timestamp-only, then deep link to DMSS app
 
 ## ✅ Onboarding Polish (Mar 27 2026)
 
