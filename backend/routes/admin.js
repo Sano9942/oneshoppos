@@ -6,6 +6,7 @@
  */
 const bcrypt = require("bcryptjs");
 const net = require("net");
+const alerting = require("../services/alerting");
 
 const BCRYPT_ROUNDS = 10;
 
@@ -766,14 +767,25 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
         // pg_stat_statements not enabled — skip silently
       }
 
+      const connections = {
+        active: parseInt(conn.active, 10),
+        idle: parseInt(conn.idle, 10),
+        idle_in_tx: parseInt(conn.idle_in_tx, 10),
+        total: parseInt(conn.total, 10),
+        max: maxConn,
+      };
+
+      // Fire DB pressure alert if active connections > 80% of max
+      if (connections.active > connections.max * 0.8) {
+        alerting.recordDbPressure({
+          active: connections.active,
+          max: connections.max,
+          longestQuery: slowNowResult.rows[0]?.query || null,
+        }).catch(() => {});
+      }
+
       return res.json({
-        connections: {
-          active: parseInt(conn.active, 10),
-          idle: parseInt(conn.idle, 10),
-          idle_in_tx: parseInt(conn.idle_in_tx, 10),
-          total: parseInt(conn.total, 10),
-          max: maxConn,
-        },
+        connections,
         database: {
           size_mb: Math.round(Number(dbSizeResult.rows[0].bytes) / 1048576 * 10) / 10,
           name: dbSizeResult.rows[0].name,

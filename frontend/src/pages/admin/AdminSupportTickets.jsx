@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { Eye } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
 
 const STATUS_STYLES = {
@@ -19,6 +20,7 @@ export default function AdminSupportTickets() {
   const [filter, setFilter] = useState("");
   const [expanded, setExpanded] = useState(null);
   const [updating, setUpdating] = useState(null);
+  const [impersonating, setImpersonating] = useState(null);
   const timerRef = useRef(null);
 
   const fetchTickets = (showLoading) => {
@@ -56,6 +58,32 @@ export default function AdminSupportTickets() {
       setError(err.message);
     } finally {
       setUpdating(null);
+    }
+  };
+
+  const handleImpersonate = async (ticket) => {
+    const key = `${ticket.tenant_id}-${ticket.id}`;
+    setImpersonating(key);
+    try {
+      const res = await adminFetch(`/api/admin/impersonate/${ticket.tenant_id}`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      const frontendUrl = window.location.origin;
+      const params = new URLSearchParams({
+        impersonate_token: data.token,
+        impersonate_session: String(data.sessionId),
+        tenant_slug: data.tenantSlug,
+        tenant_name: data.tenantName,
+      });
+      // If ticket has a page_url, redirect to that page after context-select
+      const target = ticket.page_url
+        ? `${frontendUrl}/context-select?${params.toString()}&redirect=${encodeURIComponent(ticket.page_url)}`
+        : `${frontendUrl}/context-select?${params.toString()}`;
+      window.open(target, "_blank");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setImpersonating(null);
     }
   };
 
@@ -173,6 +201,13 @@ export default function AdminSupportTickets() {
                               Resolve
                             </button>
                           )}
+                          <button
+                            disabled={impersonating === `${t.tenant_id}-${t.id}`}
+                            onClick={() => handleImpersonate(t)}
+                            className="flex items-center gap-1 rounded bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+                          >
+                            <Eye size={12} /> {impersonating === `${t.tenant_id}-${t.id}` ? "Opening..." : "Impersonate"}
+                          </button>
                         </div>
                       </td>
                     </tr>

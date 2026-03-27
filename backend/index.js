@@ -335,6 +335,10 @@ async function loadTenantAndPerms(req, res, next) {
     req.tenantId = decoded.tid;
     req.employee = { id: decoded.eid, role_id: decoded.rid };
     req.tokenScope = decoded.scope || "full";
+    req.isImpersonating = !!decoded.impersonating;
+    if (decoded.impersonating && decoded.realIdentity) {
+      req.impersonatedBy = decoded.realIdentity;
+    }
 
     // Bridge: set x-employee-id header so downstream code that reads it still works
     req.headers["x-employee-id"] = String(decoded.eid);
@@ -383,11 +387,15 @@ async function loadTenantAndPerms(req, res, next) {
     // Load permissions
     try {
       const { rows: [emp] } = await permDb.query(
-        "SELECT role_id FROM employees WHERE id = $1", [decoded.eid]
+        "SELECT role_id, name FROM employees WHERE id = $1", [decoded.eid]
       );
       if (!emp) {
         req.employeePerms = [];
         return next();
+      }
+      req.employee.name = emp.name;
+      if (req.isImpersonating) {
+        req.employee.name = (emp.name || "Admin") + " (impersonated by Super-Admin)";
       }
       const { rows } = await permDb.query(
         "SELECT permission FROM role_permissions WHERE role_id = $1", [emp.role_id]
