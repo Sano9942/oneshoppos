@@ -303,10 +303,10 @@ export class ErrorBoundary extends Component {
       return (
         <div className="flex flex-col items-center justify-center p-12 text-center">
           <div className="text-5xl mb-4">⚠</div>
-          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">
+          <h2 className="text-lg font-semibold text-(--text-primary) mb-2">
             Something went wrong
           </h2>
-          <p className="text-sm text-[var(--text-secondary)] mb-4 max-w-md">
+          <p className="text-sm text-(--text-secondary) mb-4 max-w-md">
             This page encountered an error. You can try reloading or navigate to another page.
           </p>
           {import.meta.env.DEV && this.state.error && (
@@ -328,12 +328,12 @@ export class ErrorBoundary extends Component {
 
     // Global (full-page fallback)
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-[var(--bg-primary)]">
+      <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-(--bg-primary)">
         <div className="text-6xl mb-6">⚠</div>
-        <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-3">
+        <h1 className="text-2xl font-bold text-(--text-primary) mb-3">
           Something went wrong
         </h1>
-        <p className="text-[var(--text-secondary)] mb-6 max-w-md">
+        <p className="text-(--text-secondary) mb-6 max-w-md">
           The application encountered an unexpected error. Please reload to continue.
         </p>
         {import.meta.env.DEV && this.state.error && (
