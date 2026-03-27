@@ -1,12 +1,8 @@
 import { Component } from "react";
 import { Button } from "./primitives";
+import * as SentryModule from "@sentry/react";
 
-let Sentry = null;
-if (import.meta.env.VITE_SENTRY_DSN) {
-  import("@sentry/react").then((m) => {
-    Sentry = m;
-  });
-}
+const Sentry = import.meta.env.VITE_SENTRY_DSN ? SentryModule : null;
 
 export class ErrorBoundary extends Component {
   constructor(props) {
