@@ -9,6 +9,7 @@ const path = require("path");
 const crypto = require("crypto");
 const multer = require("multer");
 const rateLimit = require("express-rate-limit");
+const requestId = require("./middleware/request-id");
 const createTier4Router = require("./routes/tier4");
 const registerAllRoutes = require("./routes/registerAllRoutes");
 
@@ -267,6 +268,7 @@ if (!process.env.R2_PUBLIC_URL) {
 app.use(compression());   // Gzip/deflate API responses (~70% smaller)
 app.use(cookieParser()); // Parse cookies (needed for JWT refresh token httpOnly cookie)
 app.use(globalLimiter);
+app.use(requestId);         // Structured logging + X-Request-Id header
 
 // --- PERMISSION MIDDLEWARE SCAFFOLD ---
 // Reads optional x-employee-id header, attaches permissions to req.
