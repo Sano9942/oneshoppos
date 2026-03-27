@@ -107,6 +107,8 @@ module.exports = function registerCategoryRoutes(app, deps) {
         parent_id = null,
         sort_order = 0,
         is_active = 1,
+        tax_id = null,
+        hs_code = null,
       } = req.body || {};
       const validationError = await validateParentConstraints({
         parentId: parent_id,
@@ -120,14 +122,16 @@ module.exports = function registerCategoryRoutes(app, deps) {
         parent_id == null || parent_id === "" ? null : Number(parent_id);
 
       const { rows } = await db.query(
-        `INSERT INTO categories (name, description, parent_id, sort_order, is_active)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id, name, description, parent_id, sort_order, is_active`,
+        `INSERT INTO categories (name, description, parent_id, sort_order, is_active, tax_id, hs_code)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, description, parent_id, sort_order, is_active, tax_id, hs_code`,
         [
           String(name).trim(),
           description || null,
           normalizedParentId,
           Number(sort_order || 0),
           Number(is_active) === 0 ? false : true,
+          tax_id || null,
+          hs_code || null,
         ],
       );
       res.json(rows[0]);
@@ -167,6 +171,14 @@ module.exports = function registerCategoryRoutes(app, deps) {
         req.body && Object.prototype.hasOwnProperty.call(req.body, "is_active")
           ? req.body.is_active
           : existing.is_active;
+      const nextTaxId =
+        req.body && Object.prototype.hasOwnProperty.call(req.body, "tax_id")
+          ? req.body.tax_id
+          : existing.tax_id;
+      const nextHsCode =
+        req.body && Object.prototype.hasOwnProperty.call(req.body, "hs_code")
+          ? req.body.hs_code
+          : existing.hs_code;
 
       const validationError = await validateParentConstraints({
         categoryId: id,
@@ -195,8 +207,8 @@ module.exports = function registerCategoryRoutes(app, deps) {
 
       const { rowCount } = await db.query(
         `UPDATE categories
-         SET name = $1, description = $2, parent_id = $3, sort_order = $4, is_active = $5
-         WHERE id = $6`,
+         SET name = $1, description = $2, parent_id = $3, sort_order = $4, is_active = $5, tax_id = $6, hs_code = $7
+         WHERE id = $8`,
         [
           String(nextName).trim(),
           nextDescription || null,
@@ -205,6 +217,8 @@ module.exports = function registerCategoryRoutes(app, deps) {
             : Number(nextParentId),
           Number(nextSortOrder || 0),
           Number(nextIsActive) === 0 ? false : true,
+          nextTaxId || null,
+          nextHsCode || null,
           id,
         ],
       );

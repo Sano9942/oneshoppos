@@ -53,13 +53,13 @@ module.exports = function registerCustomerRoutes(app, deps) {
 
   // POST create customer
   app.post("/api/customers", async (req, res) => {
-    const { name, mobile, email, address, cnic, occupation, balance } =
+    const { name, mobile, email, address, cnic, occupation, balance, ntn_cnic } =
       req.body;
     if (!name)
       return res.status(400).json({ error: "Customer name is required" });
     try {
       const { rows } = await db.query(
-        "INSERT INTO customers (name, mobile, email, address, cnic, occupation, balance) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+        "INSERT INTO customers (name, mobile, email, address, cnic, occupation, balance, ntn_cnic) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
         [
           name,
           mobile || null,
@@ -68,6 +68,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
           cnic || null,
           occupation || null,
           balance || 0,
+          ntn_cnic || null,
         ],
       );
       res.json({
@@ -79,6 +80,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
         cnic,
         occupation,
         balance: balance || 0,
+        ntn_cnic: ntn_cnic || null,
         order_count: 0,
         total_spent: 0,
       });
@@ -90,13 +92,13 @@ module.exports = function registerCustomerRoutes(app, deps) {
   // PUT update customer
   app.put("/api/customers/:id", requirePerm("manage_customers"), async (req, res) => {
     const { id } = req.params;
-    const { name, mobile, email, address, cnic, occupation, balance } =
+    const { name, mobile, email, address, cnic, occupation, balance, ntn_cnic } =
       req.body;
     if (!name)
       return res.status(400).json({ error: "Customer name is required" });
     try {
       const { rowCount } = await db.query(
-        "UPDATE customers SET name = $1, mobile = $2, email = $3, address = $4, cnic = $5, occupation = $6, balance = COALESCE($7, balance) WHERE id = $8",
+        "UPDATE customers SET name = $1, mobile = $2, email = $3, address = $4, cnic = $5, occupation = $6, balance = COALESCE($7, balance), ntn_cnic = $8 WHERE id = $9",
         [
           name,
           mobile || null,
@@ -105,6 +107,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
           cnic || null,
           occupation || null,
           balance !== undefined ? balance : null,
+          ntn_cnic || null,
           id,
         ],
       );
