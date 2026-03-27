@@ -36,6 +36,8 @@ import {
   PauseCircle,
   Upload,
   ShoppingBag,
+  FileCheck,
+  Search,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -117,6 +119,14 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Delivery Couriers", path: "/courier-settings", icon: Truck, requiredPerm: "all_access" },
       { name: "Import Data", path: "/import", icon: Upload, requiredPerm: "all_access" },
       { name: "Backup & Restore", path: "/backup-restore", icon: DatabaseBackup, requiredPerm: "all_access", requiredFlag: "backup_restore" },
+    ],
+  },
+  {
+    label: "Compliance",
+    items: [
+      { name: "FBR Invoices", path: "/fbr", icon: Receipt, requiredPerm: "all_access", requiredFlag: "fbr_integration" },
+      { name: "FBR Settings", path: "/settings/fbr", icon: FileCheck, requiredPerm: "all_access" },
+      { name: "Tax Lookup", path: "/tax-lookup", icon: Search },
     ],
   },
   {

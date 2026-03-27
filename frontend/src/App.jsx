@@ -80,6 +80,10 @@ const ReportTabStandaloneRoute = lazy(() =>
     default: mod.ReportTabStandaloneRoute,
   })),
 );
+const FBRSettingsRoute = lazy(() => import("./pages/FBRSettingsRoute"));
+const FBRDashboardRoute = lazy(() => import("./pages/FBRDashboardRoute"));
+const TaxLookupRoute = lazy(() => import("./pages/TaxLookupRoute"));
+const AdminTaxRates = lazy(() => import("./pages/admin/AdminTaxRates"));
 
 function RouteLoading() {
   return (
@@ -179,6 +183,7 @@ function App() {
           <Route path="tenants/:id" element={<Suspense fallback={<RouteLoading />}><AdminTenantDetail /></Suspense>} />
           <Route path="support" element={<Suspense fallback={<RouteLoading />}><AdminSupportTickets /></Suspense>} />
           <Route path="dead-letters" element={<Suspense fallback={<RouteLoading />}><AdminDeadLetters /></Suspense>} />
+          <Route path="tax-rates" element={<Suspense fallback={<RouteLoading />}><AdminTaxRates /></Suspense>} />
         </Route>
 
         <Route
@@ -640,6 +645,23 @@ function App() {
               </RequirePerm>
             }
           />
+          <Route
+            path="/settings/fbr"
+            element={
+              <RequirePerm perm="all_access">
+                <FBRSettingsRoute />
+              </RequirePerm>
+            }
+          />
+          <Route
+            path="/fbr"
+            element={
+              <RequirePerm perm="all_access">
+                <FBRDashboardRoute />
+              </RequirePerm>
+            }
+          />
+          <Route path="/tax-lookup" element={<TaxLookupRoute />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
