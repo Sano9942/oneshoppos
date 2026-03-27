@@ -217,3 +217,16 @@ oneshoppos/
 - **Alerts**: `ALERT_EMAIL` env var on Railway — receives error spike / DB pressure / support ticket notifications
 - **Uptime**: UptimeRobot monitors `/api/health` every 5 min
 - See `backend/CLAUDE.md` for Railway env vars and deployment gotchas
+
+## CLI Tools & Service Access
+
+Claude has authenticated CLI access to the full production stack. Credentials stored in `.claude/settings.local.json` (gitignored).
+
+| Service | Tool | What It Does |
+|---------|------|-------------|
+| **GitHub** | `gh` CLI | PRs, issues, repo management (account: Sano9942) |
+| **Vercel** | MCP tools | Deployments, build logs, runtime logs |
+| **Railway** | `railway` CLI | Deploy logs, env vars, service status (project: `oneshoppos`) |
+| **Supabase** | `npx supabase` | DB management, project info (project ref: `tpjewvfoqtskscmwjtjj`) |
+| **Sentry** | `sentry-cli` | Error tracking, issues, releases (org: `sanopos`, projects: `node-express` + `sanopos-frontend`) |
+| **UptimeRobot** | REST API via curl | Monitor status, uptime history (monitor-specific key) |

@@ -39,7 +39,7 @@ echo ================================================
 echo   Both servers running!
 echo.
 echo   App:    http://localhost:5173
-echo   Login:  Store Code + Username + PIN
+echo   Login:  Store Code + Username + Password
 echo   API:    http://localhost:5000/api/health
 echo.
 echo   Frontend source changes = instant HMR reload
