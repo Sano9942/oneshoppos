@@ -112,7 +112,17 @@
       "mcp__claude_ai_Vercel__list_deployments",
       "mcp__claude_ai_Vercel__get_deployment_build_logs",
       "WebFetch(domain:oneshoppos-production.up.railway.app)",
-      "WebFetch(domain:sanopos.vercel.app)"
+      "WebFetch(domain:sanopos.vercel.app)",
+      "mcp__claude_ai_Vercel__get_project",
+      "WebFetch(domain:www.shipkardo.pk)",
+      "Read(//home/user/oneshoppos/frontend/src/pages/**)",
+      "Read(//home/user/oneshoppos/backend/utils/**)",
+      "Read(//home/user/oneshoppos/backend/**)",
+      "Read(//home/user/oneshoppos/frontend/src/**)",
+      "Skill(code-review:code-review)",
+      "Skill(code-review:code-review:*)",
+      "Skill(update-config)",
+      "Skill(update-config:*)"
     ],
     "additionalDirectories": [
       "\\tmp"
