@@ -48,8 +48,92 @@ module.exports = function registerAllRoutes(app, deps) {
   } = deps;
 
   // Health check — registered BEFORE all auth/tenant middleware so Railway healthcheck always responds
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  app.get("/api/health", async (req, res) => {
+    // Quick mode (default) — unchanged behavior
+    if (req.query.deep !== "true") {
+      return res.json({ status: "ok", timestamp: new Date().toISOString() });
+    }
+
+    // Deep mode — check external dependencies
+    const alerting = require("../services/alerting");
+    const logger = require("../services/logger");
+
+    /**
+     * Run a dependency check with a timeout.
+     * Returns { status, latency_ms, error? }
+     */
+    async function checkDependency(name, fn, timeoutMs) {
+      const start = Date.now();
+      try {
+        await Promise.race([
+          fn(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`${name} check timed out after ${timeoutMs}ms`)), timeoutMs)
+          ),
+        ]);
+        return { status: "ok", latency_ms: Date.now() - start };
+      } catch (err) {
+        const latency = Date.now() - start;
+        logger.warn({ dependency: name, error: err.message, latency_ms: latency }, "Health check dependency failed");
+        alerting.recordHealthCheckFailure({ dependency: name, error: err.message });
+        return { status: "down", error: err.message, latency_ms: latency };
+      }
+    }
+
+    // Build list of checks to run
+    const checks = [];
+
+    // 1. Postgres — always checked
+    checks.push(
+      checkDependency("database", async () => {
+        await db.query("SELECT 1");
+      }, 3000)
+    );
+
+    // 2. Resend — only if API key is configured
+    if (process.env.RESEND_API_KEY) {
+      checks.push(
+        checkDependency("resend", async () => {
+          const resp = await fetch("https://api.resend.com/domains", {
+            headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+          });
+          if (!resp.ok) throw new Error(`Resend API returned ${resp.status}`);
+        }, 5000)
+      );
+    }
+
+    const checkNames = ["database"];
+    if (process.env.RESEND_API_KEY) checkNames.push("resend");
+
+    const results = await Promise.allSettled(checks);
+
+    // Build checks object
+    const checksResult = {};
+    for (let i = 0; i < checkNames.length; i++) {
+      const r = results[i];
+      checksResult[checkNames[i]] = r.status === "fulfilled" ? r.value : { status: "down", error: r.reason?.message };
+    }
+
+    // Determine overall status
+    let overall = "ok";
+    if (checksResult.database?.status === "down") {
+      overall = "down";
+    } else {
+      // Check if any optional dependency is down
+      for (const [name, check] of Object.entries(checksResult)) {
+        if (name !== "database" && check.status === "down") {
+          overall = "degraded";
+          break;
+        }
+      }
+    }
+
+    const statusCode = overall === "down" ? 503 : 200;
+    res.status(statusCode).json({
+      status: overall,
+      timestamp: new Date().toISOString(),
+      checks: checksResult,
+    });
   });
 
   // Public receipt endpoint — no auth required, manually resolves tenant DB
