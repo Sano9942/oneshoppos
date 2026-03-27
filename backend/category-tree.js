@@ -16,6 +16,8 @@ function normalizeCategoryRow(row) {
     parent_id: row.parent_id == null ? null : Number(row.parent_id),
     sort_order: Number(row.sort_order || 0),
     is_active: Number(row.is_active == null ? 1 : row.is_active),
+    tax_id: row.tax_id == null ? null : Number(row.tax_id),
+    hs_code: row.hs_code || null,
   };
 }
 
@@ -136,7 +138,7 @@ function enrichCategories(rows, directProductCounts = {}) {
 async function fetchCategoryRows(db) {
   return dbAllAsync(
     db,
-    `SELECT id, name, description, parent_id, sort_order, is_active
+    `SELECT id, name, description, parent_id, sort_order, is_active, tax_id, hs_code
      FROM categories
      ORDER BY sort_order ASC, name ASC, id ASC`,
   );
@@ -169,11 +171,22 @@ async function fetchCategoryIndexes(db) {
   return buildCategoryIndexes(rows);
 }
 
+function resolveInheritedField(byId, categoryId, fieldName) {
+  let current = categoryId;
+  while (current) {
+    const cat = byId.get(current);
+    if (!cat) break;
+    if (cat[fieldName] != null) return cat[fieldName];
+    current = cat.parent_id;
+  }
+  return null;
+}
+
 async function getCategoryById(db, categoryId) {
   if (!categoryId) return null;
   return dbGetAsync(
     db,
-    `SELECT id, name, description, parent_id, sort_order, is_active
+    `SELECT id, name, description, parent_id, sort_order, is_active, tax_id, hs_code
      FROM categories WHERE id = $1`,
     [Number(categoryId)],
   );
@@ -206,4 +219,5 @@ module.exports = {
   wouldCreateCycle,
   enrichCategories,
   buildCategoryIndexes,
+  resolveInheritedField,
 };
