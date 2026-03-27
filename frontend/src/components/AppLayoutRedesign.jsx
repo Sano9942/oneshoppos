@@ -8,6 +8,7 @@ import { Input } from "../ui/primitives";
 import { getTheme, toggleTheme } from "../utils/theme";
 import useFeatureFlags from "../hooks/useFeatureFlags";
 import Breadcrumbs from "../ui/Breadcrumbs";
+import SupportWidget from "../ui/SupportWidget";
 import ContextSwitcher from "./ContextSwitcher";
 import NotificationBell from "./NotificationBell";
 
@@ -182,6 +183,7 @@ export default function AppLayoutRedesign() {
           </ErrorBoundary>
         </main>
       </div>
+      <SupportWidget />
     </div>
   );
 }
