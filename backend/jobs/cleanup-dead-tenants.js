@@ -19,7 +19,7 @@ async function cleanupDeadTenants({ dryRun = false } = {}) {
   for (const tenant of candidates) {
     results.checked++;
     try {
-      const tenantDb = await tenantDbManager.getDb(tenant.slug);
+      const tenantDb = await tenantDbManager.getDb(tenant.id);
 
       // Check if setup is incomplete
       const { rows: [profile] } = await tenantDb.query(
