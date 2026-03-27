@@ -1,4 +1,12 @@
 require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
+const Sentry = require("@sentry/node");
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || "development",
+    tracesSampleRate: 0, // No tracing — we use our own request timing
+  });
+}
 const express = require("express");
 const compression = require("compression");
 const cors = require("cors");
@@ -1008,6 +1016,23 @@ const { processPendingShopifyInventoryEvents, processPendingReportSchedules } =
     decryptShopifySecret,
     logShopifyEvent,
   });
+
+// Global error handler — catches unhandled route errors
+app.use((err, req, res, _next) => {
+  const reqId = req.id || "unknown";
+  if (req.log) {
+    req.log.error({ err, reqId }, "Unhandled route error");
+  } else {
+    console.error("Unhandled route error:", err);
+  }
+  if (process.env.SENTRY_DSN) {
+    Sentry.captureException(err, {
+      tags: { tenantSlug: req.tenantSlug, reqId },
+      user: { id: req.employee?.id, username: req.employee?.name },
+    });
+  }
+  res.status(err.status || 500).json({ error: err.message || "Internal server error", reqId });
+});
 
 function collectRegisteredRoutes(appInstance) {
   const stack = appInstance?.router?.stack || [];
