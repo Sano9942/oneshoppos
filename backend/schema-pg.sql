@@ -10,15 +10,26 @@ CREATE TABLE IF NOT EXISTS categories (
   description TEXT,
   parent_id INTEGER REFERENCES categories(id) ON DELETE RESTRICT,
   sort_order INTEGER NOT NULL DEFAULT 0,
-  is_active BOOLEAN NOT NULL DEFAULT TRUE
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  tax_id INTEGER,
+  hs_code TEXT
 );
 
 CREATE TABLE IF NOT EXISTS taxes (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
   rate NUMERIC(8,4) NOT NULL,
-  is_default BOOLEAN DEFAULT FALSE
+  is_default BOOLEAN DEFAULT FALSE,
+  fbr_further_tax NUMERIC(8,4) DEFAULT 0,
+  fbr_extra_tax NUMERIC(8,4) DEFAULT 0,
+  fbr_fed_rate NUMERIC(8,4) DEFAULT 0
 );
+
+-- FK for categories.tax_id (categories created before taxes)
+DO $$ BEGIN
+  ALTER TABLE categories ADD CONSTRAINT fk_categories_tax_id FOREIGN KEY (tax_id) REFERENCES taxes(id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS brands (
   id SERIAL PRIMARY KEY,
@@ -210,7 +221,8 @@ CREATE TABLE IF NOT EXISTS customers (
   cnic TEXT,
   occupation TEXT,
   balance NUMERIC(12,2) DEFAULT 0,
-  deleted_at TIMESTAMPTZ DEFAULT NULL
+  deleted_at TIMESTAMPTZ DEFAULT NULL,
+  ntn_cnic TEXT
 );
 
 CREATE TABLE IF NOT EXISTS customer_wallet_ledger (
@@ -270,7 +282,10 @@ CREATE TABLE IF NOT EXISTS sales (
   notes TEXT,
   invoice_number TEXT,
   shift_id INTEGER REFERENCES cash_shifts(id),
-  idempotency_key TEXT
+  idempotency_key TEXT,
+  fbr_status TEXT DEFAULT 'not_applicable',
+  fbr_irn TEXT,
+  fbr_qr_code TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sale_items (
@@ -307,7 +322,9 @@ CREATE TABLE IF NOT EXISTS returns (
   refund_method TEXT NOT NULL,
   reason TEXT,
   timestamp TIMESTAMPTZ DEFAULT NOW(),
-  shift_id INTEGER REFERENCES cash_shifts(id)
+  shift_id INTEGER REFERENCES cash_shifts(id),
+  fbr_status TEXT DEFAULT 'not_applicable',
+  fbr_irn TEXT
 );
 
 CREATE TABLE IF NOT EXISTS return_items (
@@ -646,7 +663,11 @@ CREATE TABLE IF NOT EXISTS company_profile (
   refund_threshold_pct NUMERIC(6,2) DEFAULT 5,
   void_threshold_pct NUMERIC(6,2) DEFAULT 3,
   cash_denominations TEXT DEFAULT '[5000,1000,500,100,50,20,10]',
-  onboarding_dismissed BOOLEAN DEFAULT false
+  onboarding_dismissed BOOLEAN DEFAULT false,
+  fbr_api_token TEXT,
+  fbr_environment TEXT DEFAULT 'sandbox',
+  fbr_default_hs_code TEXT,
+  fbr_province TEXT
 );
 
 -- ── Companies (Context Unification) ───────────────────────────────────
@@ -1216,10 +1237,66 @@ CREATE TABLE IF NOT EXISTS support_tickets (
   resolved_at     TIMESTAMPTZ
 );
 
+-- ── FBR Digital Invoicing ────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS fbr_invoices (
+  id SERIAL PRIMARY KEY,
+  sale_id INTEGER REFERENCES sales(id),
+  return_id INTEGER REFERENCES returns(id),
+  invoice_type TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  fbr_irn TEXT,
+  fbr_response JSONB,
+  retry_count INTEGER DEFAULT 0,
+  max_retries INTEGER DEFAULT 5,
+  last_error TEXT,
+  next_retry_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  posted_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_fbr_invoices_status ON fbr_invoices(status, next_retry_at);
+
+-- reference_id points to tax_rate_reference.id in the PUBLIC schema.
+-- No FK constraint because cross-schema FKs break tenant isolation.
+CREATE TABLE IF NOT EXISTS tax_rate_suggestions (
+  id SERIAL PRIMARY KEY,
+  reference_id INTEGER NOT NULL,
+  suggested_by_tenant TEXT,
+  suggested_by_employee INTEGER,
+  field_name TEXT NOT NULL,
+  current_value NUMERIC(8,4),
+  suggested_value NUMERIC(8,4) NOT NULL,
+  source_reference TEXT,
+  notes TEXT,
+  status TEXT DEFAULT 'pending',
+  reviewed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS tax_rate_reference (
+  id SERIAL PRIMARY KEY,
+  hs_code TEXT NOT NULL,
+  description_en TEXT NOT NULL,
+  description_ur TEXT,
+  federal_gst NUMERIC(8,4) DEFAULT 0,
+  punjab_pra NUMERIC(8,4) DEFAULT 0,
+  sindh_srb NUMERIC(8,4) DEFAULT 0,
+  kpk_kpra NUMERIC(8,4) DEFAULT 0,
+  balochistan_bra NUMERIC(8,4) DEFAULT 0,
+  exemption_notes TEXT,
+  last_updated DATE DEFAULT CURRENT_DATE
+);
+
 -- ── Seed data ─────────────────────────────────────────────────────
 INSERT INTO company_profile (id, company_name, setup_complete)
 VALUES (1, 'My Store', false)
 ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO feature_flags (key, enabled, description)
+VALUES ('fbr_integration', false, 'FBR Digital Invoicing - real-time invoice posting to FBR API')
+ON CONFLICT (key) DO NOTHING;
 
 -- ── Schema versioning ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schema_version (

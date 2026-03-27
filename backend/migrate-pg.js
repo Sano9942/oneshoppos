@@ -236,6 +236,130 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 9,
+    description:
+      "FBR Digital Invoicing: category tax/HS inheritance, FBR queue, tax rate reference",
+    up: async (client) => {
+      // Categories: tax + HS code inheritance
+      await client.query(
+        `ALTER TABLE categories ADD COLUMN IF NOT EXISTS tax_id INTEGER REFERENCES taxes(id)`
+      );
+      await client.query(
+        `ALTER TABLE categories ADD COLUMN IF NOT EXISTS hs_code TEXT`
+      );
+
+      // Taxes: FBR-specific breakdown fields
+      await client.query(
+        `ALTER TABLE taxes ADD COLUMN IF NOT EXISTS fbr_further_tax NUMERIC(8,4) DEFAULT 0`
+      );
+      await client.query(
+        `ALTER TABLE taxes ADD COLUMN IF NOT EXISTS fbr_extra_tax NUMERIC(8,4) DEFAULT 0`
+      );
+      await client.query(
+        `ALTER TABLE taxes ADD COLUMN IF NOT EXISTS fbr_fed_rate NUMERIC(8,4) DEFAULT 0`
+      );
+
+      // Company profile: FBR config
+      await client.query(
+        `ALTER TABLE company_profile ADD COLUMN IF NOT EXISTS fbr_api_token TEXT`
+      );
+      await client.query(
+        `ALTER TABLE company_profile ADD COLUMN IF NOT EXISTS fbr_environment TEXT DEFAULT 'sandbox'`
+      );
+      await client.query(
+        `ALTER TABLE company_profile ADD COLUMN IF NOT EXISTS fbr_default_hs_code TEXT`
+      );
+      await client.query(
+        `ALTER TABLE company_profile ADD COLUMN IF NOT EXISTS fbr_province TEXT`
+      );
+
+      // Customers: buyer tax ID
+      await client.query(
+        `ALTER TABLE customers ADD COLUMN IF NOT EXISTS ntn_cnic TEXT`
+      );
+
+      // Sales: FBR tracking
+      await client.query(
+        `ALTER TABLE sales ADD COLUMN IF NOT EXISTS fbr_status TEXT DEFAULT 'not_applicable'`
+      );
+      await client.query(
+        `ALTER TABLE sales ADD COLUMN IF NOT EXISTS fbr_irn TEXT`
+      );
+      await client.query(
+        `ALTER TABLE sales ADD COLUMN IF NOT EXISTS fbr_qr_code TEXT`
+      );
+
+      // Returns: FBR tracking
+      await client.query(
+        `ALTER TABLE returns ADD COLUMN IF NOT EXISTS fbr_status TEXT DEFAULT 'not_applicable'`
+      );
+      await client.query(
+        `ALTER TABLE returns ADD COLUMN IF NOT EXISTS fbr_irn TEXT`
+      );
+
+      // FBR invoice queue
+      await client.query(`CREATE TABLE IF NOT EXISTS fbr_invoices (
+        id SERIAL PRIMARY KEY,
+        sale_id INTEGER REFERENCES sales(id),
+        return_id INTEGER REFERENCES returns(id),
+        invoice_type TEXT NOT NULL,
+        payload JSONB NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        fbr_irn TEXT,
+        fbr_response JSONB,
+        retry_count INTEGER DEFAULT 0,
+        max_retries INTEGER DEFAULT 5,
+        last_error TEXT,
+        next_retry_at TIMESTAMPTZ DEFAULT NOW(),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        posted_at TIMESTAMPTZ
+      )`);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_fbr_invoices_status ON fbr_invoices(status, next_retry_at)`
+      );
+
+      // Tax rate suggestions (tenant schema)
+      // NOTE: reference_id points to tax_rate_reference.id in the PUBLIC schema.
+      // No FK constraint because cross-schema FKs break tenant isolation.
+      await client.query(`CREATE TABLE IF NOT EXISTS tax_rate_suggestions (
+        id SERIAL PRIMARY KEY,
+        reference_id INTEGER NOT NULL,
+        suggested_by_tenant TEXT,
+        suggested_by_employee INTEGER,
+        field_name TEXT NOT NULL,
+        current_value NUMERIC(8,4),
+        suggested_value NUMERIC(8,4) NOT NULL,
+        source_reference TEXT,
+        notes TEXT,
+        status TEXT DEFAULT 'pending',
+        reviewed_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+
+      // Feature flag
+      await client.query(`INSERT INTO feature_flags (key, enabled, description)
+        VALUES ('fbr_integration', false, 'FBR Digital Invoicing - real-time invoice posting to FBR API')
+        ON CONFLICT (key) DO NOTHING`);
+
+      // Tax rate reference — created in ALL schemas (IF NOT EXISTS is safe).
+      // In tenant schemas it will be unused — the worker and lookup routes always
+      // query the public schema explicitly.
+      await client.query(`CREATE TABLE IF NOT EXISTS tax_rate_reference (
+        id SERIAL PRIMARY KEY,
+        hs_code TEXT NOT NULL,
+        description_en TEXT NOT NULL,
+        description_ur TEXT,
+        federal_gst NUMERIC(8,4) DEFAULT 0,
+        punjab_pra NUMERIC(8,4) DEFAULT 0,
+        sindh_srb NUMERIC(8,4) DEFAULT 0,
+        kpk_kpra NUMERIC(8,4) DEFAULT 0,
+        balochistan_bra NUMERIC(8,4) DEFAULT 0,
+        exemption_notes TEXT,
+        last_updated DATE DEFAULT CURRENT_DATE
+      )`);
+    },
+  },
 ];
 
 async function migrate(db) {
