@@ -627,8 +627,8 @@ module.exports = function registerAuthRoutes(app, deps) {
       const tenantDb = await tenantDbManager.getDb(result.tenantId);
       const passwordHash = await bcrypt.hash(password, 10);
       await tenantDb.query(
-        "UPDATE employees SET name = $1, username = $2, email = $3, password_hash = $4 WHERE id = $5",
-        [owner_name, email, email, passwordHash, result.employeeId]
+        "UPDATE employees SET name = $1, email = $2, password_hash = $3 WHERE id = $4",
+        [owner_name, email, passwordHash, result.employeeId]
       );
 
       // Attempt welcome email via Resend
