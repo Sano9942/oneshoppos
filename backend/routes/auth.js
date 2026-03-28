@@ -659,6 +659,36 @@ module.exports = function registerAuthRoutes(app, deps) {
         }
       }
 
+      // Enqueue onboarding drip emails
+      try {
+        const { enqueueEmail } = require("../services/email");
+        const dbPg = require("../db-pg");
+        const corsOrigin = process.env.CORS_ORIGIN?.split(",")[0] || "https://sanopos.com";
+        const dripData = { storeName: store_name, slug, frontendUrl: corsOrigin };
+
+        const day2 = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+        const day5 = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+
+        await enqueueEmail(dbPg, {
+          tenantId: result.tenantId,
+          type: "drip_getting_started",
+          to: email,
+          tenant: { slug, name: store_name },
+          data: dripData,
+          sendAt: day2,
+        });
+        await enqueueEmail(dbPg, {
+          tenantId: result.tenantId,
+          type: "drip_features",
+          to: email,
+          tenant: { slug, name: store_name },
+          data: dripData,
+          sendAt: day5,
+        });
+      } catch (dripErr) {
+        console.error("Drip email enqueue failed:", dripErr.message);
+      }
+
       res.json({ ok: true, slug, setupToken: result.setupToken, message: "Store created! Redirecting to setup..." });
     } catch (err) {
       console.error("[signup]", err.message);
