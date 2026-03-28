@@ -64,7 +64,10 @@ oneshoppos/
 │   ├── services/couriers/        # Courier adapter pattern (base, generic, leopards)
 │   ├── services/logger.js        # Pino logger instance
 │   ├── services/alerting.js      # In-house alert system (error spikes, DB pressure)
+│   ├── services/email.js          # Unified sendEmail() + enqueueEmail() orchestrator
+│   ├── services/email-templates.js # HTML builder functions for 12 email types
 │   ├── services/fbr.js           # FBR API client, payload builders, queue helper
+│   ├── workers/email-worker.js    # Email queue worker + daily billing checks (inline or standalone)
 │   ├── workers/fbr-worker.js     # FBR background worker (inline or standalone)
 │   ├── scripts/seed-tax-rates.js # One-time seed for tax_rate_reference (~96 HS codes)
 │   └── utils/                    # tz.js, receiptEmail.js, digestEmail.js, backup-pg.js, resendEmail.js, alertEmail.js
@@ -148,6 +151,7 @@ oneshoppos/
 - **AI insights**: `GET /api/insights/auto` (5 pre-built analytics cards). `POST /api/insights/ask` (Claude AI chat, feature-flagged `ai_insights`, requires `ANTHROPIC_API_KEY`).
 - **Self-service signup**: `POST /api/auth/signup` — creates tenant + admin employee + welcome email. Gated by `SELF_SERVICE_SIGNUP=1` env var. Rate-limited. After provisioning, applies `PLAN_DEFAULTS` for the selected plan (free/starter/pro) via `UPDATE tenants SET plan, max_outlets, max_employees, max_products`. Dead tenant cleanup job (`backend/jobs/cleanup-dead-tenants.js`) removes tenants that never complete setup after 7 days.
 - **Subscription billing**: `routes/billing.js` + admin billing UI in `AdminTenantDetail.jsx`. Manual payment recording (`POST /api/admin/payments/:tenantId`), plan upgrade/downgrade, billing cycle management. Tables: `plan_pricing`, `payment_records`, `upgrade_requests` (migration v7). Tenant-facing billing page at `/billing` (`BillingRedesign.jsx`). Public pricing endpoint: `GET /api/billing/pricing`.
+- **Unified Email Service**: `services/email.js` — single `sendEmail()` for all email types. Tenant->customer emails from `slug@sanopos.com`, platform->tenant from `noreply@sanopos.com`. 12 email types: receipt, digest, 3 drip, 4 billing, 2 support, 2 broadcast. `email_queue` table + `workers/email-worker.js` (inline, `EMAIL_WORKER_ENABLED=1`). Migration v10.
 - **PWA**: `manifest.webmanifest` + service worker for installable app.
 
 ## Reliability & Monitoring
@@ -204,7 +208,7 @@ oneshoppos/
 
 ## Migrations
 
-- **Current version**: 9 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns, v6: setup_token_expires_at, v7: billing tables, v8: support_tickets/impersonation_sessions, v9: FBR digital invoicing — fbr_invoices queue, category tax/HS inheritance, tax_rate_reference, tax_rate_suggestions)
+- **Current version**: 10 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns, v6: setup_token_expires_at, v7: billing tables, v8: support_tickets/impersonation_sessions, v9: FBR digital invoicing — fbr_invoices queue, category tax/HS inheritance, tax_rate_reference, tax_rate_suggestions, v10: email_queue for unified email service)
 - **migrate-pg.js CLI**: `node backend/migrate-pg.js` — migrates public schema AND all active tenant schemas
 - **Tenant migration gotcha**: existing tenants need `schema_version` table seeded with previous versions before first run
 
