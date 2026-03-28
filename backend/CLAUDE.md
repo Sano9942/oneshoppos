@@ -88,9 +88,16 @@ The following files are **legacy SQLite code** — never executed in production 
 ### Live E2E Tests (~120 tests — full stack against production)
 - Location: `frontend/tests/live/` (20 Playwright specs, 00–19)
 - Config: `frontend/playwright.config.live.js`
-- Target: `https://sanopos.vercel.app` (tenant `packagesmall`)
+- Target: `https://sanopos.com` (tenant `packagesmall`)
 - Run: `cd frontend && npx playwright test tests/live/NN-name.spec.js --config=playwright.config.live.js`
 - Covers: shift→sale→return→gift card→shift close, inventory, purchasing, GRN, customers, loyalty, CRM, HR, attendance, kiosk, approvals, notifications, reports, accounting, audit log
+
+### Onboarding E2E Tests (45 tests — full signup→sale for all 3 plans)
+- Location: `frontend/tests/live/` (specs 21–23)
+- Config: `frontend/playwright.config.onboarding.js` (no globalSetup)
+- Run: `cd frontend && npx playwright test tests/live/2N-onboard-*.spec.js --config=playwright.config.onboarding.js`
+- Creates real tenants from scratch — delete from `/admin` after each run
+- **Key gotcha**: clock-in uses `/api/attendance/pin-checkin?tenant=${slug}` (NOT `/clock-in`) — writes `attendance_sessions` which POS checkout validates
 
 ### Legacy (do not use)
 - SQLite tests (`tests/integration/*.test.js`) — do not modify or run unless explicitly asked
@@ -136,9 +143,9 @@ The following files are **legacy SQLite code** — never executed in production 
 - **Database**: Supabase Postgres (production is Postgres-only)
 - **Mode**: `MULTI_TENANT=1` on Railway, `VITE_MULTI_TENANT=1` on Vercel
 - **Boot**: `index.js` line 5 loads `db-pg` (Postgres)
-- **Frontend**: Vercel at `sanopos.vercel.app`
-- **Backend**: Railway at `oneshoppos-production.up.railway.app`
-- **Railway env vars**: `MULTI_TENANT=1`, `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `CORS_ORIGIN=https://sanopos.vercel.app`, `TZ=Asia/Karachi`, `RESEND_API_KEY`, `SENTRY_DSN`, `ALERT_EMAIL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`
+- **Frontend**: Vercel at `sanopos.com` (custom domain; `sanopos.vercel.app` fallback still active)
+- **Backend**: Railway at `api.sanopos.com` (custom domain; `oneshoppos-production.up.railway.app` fallback still active)
+- **Railway env vars**: `MULTI_TENANT=1`, `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `CORS_ORIGIN=https://sanopos.com,https://www.sanopos.com,https://sanopos.vercel.app`, `TZ=Asia/Karachi`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL=SanoPOS <noreply@sanopos.com>`, `SENTRY_DSN`, `ALERT_EMAIL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `FBR_WORKER_ENABLED=1`
 - **Railway gotchas**: `PORT` env var is overridden by Railway (binds to 8080); this is fine
 - To seed super-admin: `railway run node backend/seed-admin-pg.js --email <email> --password <password> --name <name>`
 - To provision tenant: use super-admin dashboard at `/admin` or `railway run node backend/tenant-provisioner-pg.js --slug <slug> --name <name> --pin <pin>`

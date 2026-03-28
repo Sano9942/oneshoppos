@@ -15,10 +15,10 @@ export default async function globalSetup() {
   }
 
   const browser = await chromium.launch();
-  const context = await browser.newContext({ baseURL: "https://sanopos.vercel.app" });
+  const context = await browser.newContext({ baseURL: "https://sanopos.com" });
   const page = await context.newPage();
 
-  console.log("\n🔐 Global setup: logging in to sanopos.vercel.app...");
+  console.log("\n🔐 Global setup: logging in to sanopos.com...");
   await loginMT(page);
   console.log("✅ Login successful — saving session to live-auth.json");
 

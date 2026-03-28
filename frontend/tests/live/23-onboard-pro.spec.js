@@ -1,7 +1,7 @@
 /**
  * 23-onboard-pro.spec.js — Full onboarding E2E for PRO plan.
  *
- * Runs against live production (sanopos.vercel.app / Railway).
+ * Runs against live production (sanopos.com / Railway).
  * Creates a real test tenant, walks through signup → setup → login → first sale,
  * then verifies Pro plan has no practical limits and advanced features are accessible.
  *

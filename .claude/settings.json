@@ -122,7 +122,14 @@
       "Skill(code-review:code-review)",
       "Skill(code-review:code-review:*)",
       "Skill(update-config)",
-      "Skill(update-config:*)"
+      "Skill(update-config:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:eyeconconsultant.com)",
+      "WebFetch(domain:logiclayer.com.pk)",
+      "WebFetch(domain:synavos.com)",
+      "WebFetch(domain:ipv6.fbr.gov.pk)",
+      "WebFetch(domain:fbr.gov.pk)",
+      "WebFetch(domain:aws.amazon.com)"
     ],
     "additionalDirectories": [
       "\\tmp"

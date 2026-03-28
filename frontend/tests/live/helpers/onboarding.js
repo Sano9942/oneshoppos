@@ -11,7 +11,7 @@ export const TEST_EMAIL = "sano9942@hotmail.com";
 export const TEST_PASSWORD = "TestOnboard2026!";
 export const TEST_PIN = "1234";
 export const TEST_OWNER = "Test Owner";
-export const FRONTEND = "https://sanopos.vercel.app";
+export const FRONTEND = "https://sanopos.com";
 
 /**
  * Generate a unique store name and slug for a plan.

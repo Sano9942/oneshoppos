@@ -146,7 +146,7 @@ oneshoppos/
 - **FBR export**: `GET /api/reports/fbr-export?from=X&to=Y` — generates FBR-compliant CSV data.
 - **FBR Digital Invoicing**: Real-time invoice posting to FBR DI API. Feature-flagged per tenant (`fbr_integration`). Sales/returns/voids enqueue payloads to `fbr_invoices` table. Background worker (`workers/fbr-worker.js`, inline or standalone) polls queue with exponential backoff retry (5 attempts). Routes: `routes/fbr.js` (config, dashboard, retry), `routes/tax-lookup.js` (HS code search, suggest corrections). Admin: `routes/admin.js` has tax rate CRUD + FBR health endpoint. Category-level HS code + tax inheritance via `category-tree.js:resolveInheritedField()`. Tax rate reference table (`tax_rate_reference`) in public schema with ~100 seeded HS codes. Migration v9. Frontend: `/settings/fbr` (config), `/fbr` (invoice queue dashboard), `/tax-lookup` (rate search), `/admin/tax-rates` (super-admin CRUD).
 - **AI insights**: `GET /api/insights/auto` (5 pre-built analytics cards). `POST /api/insights/ask` (Claude AI chat, feature-flagged `ai_insights`, requires `ANTHROPIC_API_KEY`).
-- **Self-service signup**: `POST /api/auth/signup` — creates tenant + admin employee + welcome email. Gated by `SELF_SERVICE_SIGNUP=1` env var. Rate-limited. Dead tenant cleanup job (`backend/jobs/cleanup-dead-tenants.js`) removes tenants that never complete setup after 7 days.
+- **Self-service signup**: `POST /api/auth/signup` — creates tenant + admin employee + welcome email. Gated by `SELF_SERVICE_SIGNUP=1` env var. Rate-limited. After provisioning, applies `PLAN_DEFAULTS` for the selected plan (free/starter/pro) via `UPDATE tenants SET plan, max_outlets, max_employees, max_products`. Dead tenant cleanup job (`backend/jobs/cleanup-dead-tenants.js`) removes tenants that never complete setup after 7 days.
 - **Subscription billing**: `routes/billing.js` + admin billing UI in `AdminTenantDetail.jsx`. Manual payment recording (`POST /api/admin/payments/:tenantId`), plan upgrade/downgrade, billing cycle management. Tables: `plan_pricing`, `payment_records`, `upgrade_requests` (migration v7). Tenant-facing billing page at `/billing` (`BillingRedesign.jsx`). Public pricing endpoint: `GET /api/billing/pricing`.
 - **PWA**: `manifest.webmanifest` + service worker for installable app.
 
@@ -170,7 +170,14 @@ oneshoppos/
 
 ### Live E2E Tests (~120 tests — full stack against production)
 - `cd frontend && npx playwright test tests/live/NN-name.spec.js --config=playwright.config.live.js`
-- 20 Playwright specs (00–19), targets `sanopos.vercel.app` (tenant `packagesmall`)
+- 20 Playwright specs (00–19), targets `sanopos.com` (tenant `packagesmall`)
+
+### Onboarding E2E Tests (45 tests — full signup→sale flow, all 3 plans)
+- `cd frontend && npx playwright test tests/live/2N-onboard-*.spec.js --config=playwright.config.onboarding.js`
+- 3 specs: `21-onboard-free`, `22-onboard-starter`, `23-onboard-pro` (15 steps each)
+- No globalSetup required — creates real test tenants from scratch each run
+- After each run, delete test tenants from `/admin` before re-running
+- Test log: `docs/test-logs/2026-03-28-onboarding-tests.md`
 
 ### Legacy SQLite Tests (do not use unless explicitly asked)
 - `smoke-gate.test.js` has **22/25 pre-existing failures on main** — do NOT investigate
@@ -217,11 +224,11 @@ oneshoppos/
 
 ## Production Deployment
 
-- **Frontend**: `https://sanopos.vercel.app` (Vercel)
-- **Backend**: `https://oneshoppos-production.up.railway.app` (Railway)
-- **Super-admin**: `https://sanopos.vercel.app/admin`
+- **Frontend**: `https://sanopos.com` (Vercel, custom domain — `sanopos.vercel.app` still works as fallback)
+- **Backend**: `https://api.sanopos.com` (Railway custom domain; `oneshoppos-production.up.railway.app` still works as fallback)
+- **Super-admin**: `https://sanopos.com/admin`
 - **Database**: Supabase Postgres, `public` schema = 6 master tables, tenant data in `tenant_<slug>` schemas
-- **Resend**: `RESEND_API_KEY` env var on Railway for system emails (password reset, alerts)
+- **Resend**: `RESEND_API_KEY` env var on Railway for system emails (password reset, alerts, welcome). Sender: `RESEND_FROM_EMAIL=SanoPOS <noreply@sanopos.com>` (custom domain, SPF/DKIM/DMARC verified on `sanopos.com` via Cloudflare)
 - **Sentry**: `SENTRY_DSN` on Railway (backend), `VITE_SENTRY_DSN` on Vercel (frontend) — sanopos.sentry.io
 - **Alerts**: `ALERT_EMAIL` env var on Railway — receives error spike / DB pressure / support ticket notifications
 - **Uptime**: UptimeRobot monitors `/api/health` every 5 min
@@ -239,3 +246,4 @@ Claude has authenticated CLI access to the full production stack. Credentials st
 | **Supabase** | `npx supabase` | DB management, project info (project ref: `tpjewvfoqtskscmwjtjj`) |
 | **Sentry** | `sentry-cli` | Error tracking, issues, releases (org: `sanopos`, projects: `node-express` + `sanopos-frontend`) |
 | **UptimeRobot** | REST API via curl | Monitor status, uptime history (monitor-specific key) |
+| **Cloudflare** | REST API via curl | DNS management for `sanopos.com` (token in `settings.local.json`) |

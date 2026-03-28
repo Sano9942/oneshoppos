@@ -112,11 +112,23 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 ### Live E2E Tests (~120 tests — full stack against production)
 - Location: `tests/live/` (20 Playwright specs, 00–19)
 - Config: `playwright.config.live.js`
-- Target: `https://sanopos.vercel.app` (tenant `packagesmall`)
+- Target: `https://sanopos.com` (tenant `packagesmall`)
 - Run: `npx playwright test tests/live/NN-name.spec.js --config=playwright.config.live.js`
 - Auth: global-setup saves token to `live-token.json` + `live-auth.json` (gitignored)
 - State: shared across specs via `tests/live/helpers/state.js` → `state.json` (gitignored)
 - Covers full POS day: shift→sale→return→gift card→shift close, plus inventory, purchasing, GRN, customers, loyalty, CRM, HR, attendance, kiosk, approvals, notifications, reports, accounting, audit log
+
+### Onboarding E2E Tests (45 tests — 3 plans × 15 steps, confirmed 45/45 PASS Mar 28 2026)
+- Location: `tests/live/` (specs 21–23: `21-onboard-free`, `22-onboard-starter`, `23-onboard-pro`)
+- Config: `playwright.config.onboarding.js` (no globalSetup — works without existing tenant)
+- Run: `npx playwright test tests/live/2N-onboard-*.spec.js --config=playwright.config.onboarding.js`
+- Shared helpers: `tests/live/helpers/onboarding.js` (all step functions), `tests/live/helpers/state.js` (state.json)
+- Creates real test tenants — **delete from `/admin` after each run**
+- Key gotchas:
+  - Login form is `LandingPage.jsx` — placeholders are `"e.g. aceshardware"` / `"Enter your password"` / button `"Sign In"`
+  - Clock-in: use `/api/attendance/pin-checkin?tenant=${slug}` with `{ pin_code, outlet_id }` — NOT `/clock-in`
+  - Health check: use simple `/api/health` (no `?deep=true` — no tenant context available)
+- Test log: `tests/live/../../../docs/test-logs/2026-03-28-onboarding-tests.md`
 
 ### Other Tests
 - Unit tests: `tests/unit/*.test.jsx`

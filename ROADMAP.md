@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-_Last updated: March 28 2026 — **Reliability & support tooling shipped.** Sentry error tracking, Pino structured logging, in-house alerting, support widget + tickets, dead letter queue UI, tenant impersonation. Also: onboarding polish + subscription billing layer._
+_Last updated: March 28 2026 — **Onboarding E2E tests run against live production (45/45 PASS). Two production bugs found and fixed: plan limits never enforced, self-service signup ignored selected plan. Custom domain `sanopos.com` purchased and configured for email (SPF/DKIM/DMARC all verified via Resend + Cloudflare)._
 
 ---
 
@@ -432,6 +432,42 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 
 ---
 
+## ✅ Onboarding E2E Tests + Production Bug Fixes (Mar 28 2026)
+
+**Branch:** `feat/onboarding-e2e-tests` — merged to `main`.
+
+### E2E Test Suite
+- 3 new Playwright specs: `21-onboard-free.spec.js`, `22-onboard-starter.spec.js`, `23-onboard-pro.spec.js`
+- New config `playwright.config.onboarding.js` (no globalSetup — runs without packagesmall login)
+- 15 steps per plan: health → pricing page → signup → setup wizard → login → billing page → support widget → add products → open shift → clock in → make sale → verify sale → plan limit checks
+- **45/45 tests passing** on live production
+
+### Production Bugs Fixed
+1. **Plan limits never enforced** — `requirePlanLimit` middleware existed in `middleware/plan-limits.js` but was never applied to any route. Added to `POST /api/outlets`, `POST /api/employees`, `POST /api/products`.
+2. **Signup ignored selected plan** — `POST /api/auth/signup` always provisioned tenant with Free DB defaults (max_outlets=1, max_employees=3). Now runs `UPDATE tenants SET plan, max_outlets, max_employees, max_products` using `PLAN_DEFAULTS` after provisioning.
+
+### Test Bugs Fixed
+1. Health check: removed `?deep=true` (no tenant DB context on that endpoint)
+2. Login placeholders: updated to match `LandingPage.jsx` login form (`"e.g. aceshardware"`, `"Enter your password"`, `"Sign In"`)
+3. Clock-in endpoint: `/api/attendance/clock-in` doesn't exist — fixed to use `/api/attendance/pin-checkin?tenant=${slug}` (kiosk PIN-based, writes `attendance_sessions` which POS checkout validates)
+
+### Infrastructure Fixed
+- `khantoys` (Khan Toys) plan limits corrected via direct DB update — was provisioned before plan limit code existed
+- Test tenant log: `docs/test-logs/2026-03-28-onboarding-tests.md`
+
+---
+
+## ✅ Custom Domain + Email Infrastructure (Mar 28 2026)
+
+- **`sanopos.com`** purchased on Cloudflare Registrar
+- **Resend domain verification** — Auto configure added SPF + DKIM records automatically. All DNS records verified (green) in Resend dashboard.
+- **DMARC** — `_dmarc.sanopos.com TXT "v=DMARC1; p=none; rua=mailto:dmarc@sanopos.com"` added via Cloudflare DNS API
+- **Railway env var** — `RESEND_FROM_EMAIL=SanoPOS <noreply@sanopos.com>` — all system emails now send from branded address
+- **Email deliverability stack**: SPF ✓ DKIM ✓ DMARC ✓ — professional sender identity established
+- **Cloudflare API token** stored in `.claude/settings.local.json` alongside Sentry/Supabase/UptimeRobot credentials
+
+---
+
 ## 📋 Discussed but Deferred
 
 - **Payment gateway integration** (card machines, JazzCash, EasyPaisa)
@@ -477,3 +513,6 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 | Mar 19 2026 | **Roadmap Waves 1-3 shipped**                          | `feature/roadmap-waves` branch (19 commits, ~40 files). Wave 1: receipt email (SMTP+Resend), shareable receipt URL, WhatsApp sharing, bulk import (products/customers/suppliers with xlsx templates), backup notifications, FBR export, onboarding checklist, self-service signup. Wave 2: cloud printing (TCP/IP), payroll export, AI insight cards, Claude AI chat. Wave 3: PWA shell, WooCommerce sync, courier dispatch (10 Pakistan couriers + Leopards adapter). Migrations v4+v5. |
 | Mar 27 2026 | **Onboarding polish shipped**                          | `feature/onboarding-polish` branch. Self-service signup improvements (rate limiting, welcome email, dead tenant cleanup). Subscription billing layer (manual payments, plan management, tenant billing page). Migrations v6+v7. |
 | Mar 28 2026 | **Reliability & support tooling shipped**               | `feature/reliability-support-tooling` branch (15 commits, 26 files, ~3,000 lines). Request ID + Pino logging, Sentry (backend+frontend), ErrorBoundary, in-house alerting (error spikes, DB pressure), deep health checks, support widget + ticket system, dead letter queue UI, tenant impersonation with audit trail. Migration v8. External: Sentry (free), UptimeRobot (free). |
+| Mar 28 2026 | **FBR Digital Invoicing shipped**                       | `feature/fbr-digital-invoicing` branch. Real-time FBR DI API posting, async queue (`fbr_invoices` table), exponential backoff retry (5 attempts), category-level HS code + tax inheritance (`resolveInheritedField()`), tax rate lookup/suggestions, admin CRUD for tax rates. Migration v9. `FBR_WORKER_ENABLED=1` on Railway. |
+| Mar 28 2026 | **Onboarding E2E tests — 45/45 PASS**                  | New Playwright config (`playwright.config.onboarding.js`) without globalSetup. 3 specs: `21-onboard-free`, `22-onboard-starter`, `23-onboard-pro` (15 steps each). Ran against live production. **2 production bugs found and fixed**: (1) `requirePlanLimit` middleware was created but never applied to any route — outlets/employees/products POST routes now enforce plan caps; (2) `POST /api/auth/signup` always provisioned with Free defaults regardless of selected plan — now applies `PLAN_DEFAULTS` for chosen plan. 3 test bugs fixed (health check deep mode, login placeholders, clock-in endpoint). `khantoys` plan limits corrected (was on Free defaults, bumped to Pro via direct DB update). Test log: `docs/test-logs/2026-03-28-onboarding-tests.md`. |
+| Mar 28 2026 | **Custom domain sanopos.com — email configured**        | Purchased `sanopos.com` on Cloudflare Registrar. Configured with Resend via "Auto configure" (SPF + DKIM added automatically). DMARC TXT record added via Cloudflare API (`_dmarc` → `v=DMARC1; p=none; rua=mailto:dmarc@sanopos.com`). Railway env var `RESEND_FROM_EMAIL=SanoPOS <noreply@sanopos.com>` set. Welcome emails now deliver from branded address. Cloudflare API token stored in `.claude/settings.local.json`. |

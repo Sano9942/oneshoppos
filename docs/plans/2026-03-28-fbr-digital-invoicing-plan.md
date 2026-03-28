@@ -74,6 +74,8 @@ Append this entry to the `MIGRATIONS` array (after the v8 object, before `];`):
     await client.query(`CREATE INDEX IF NOT EXISTS idx_fbr_invoices_status ON fbr_invoices(status, next_retry_at)`);
 
     // Tax rate suggestions (tenant schema)
+    // NOTE: reference_id points to tax_rate_reference.id in the PUBLIC schema.
+    // No FK constraint because cross-schema FKs break tenant isolation.
     await client.query(`CREATE TABLE IF NOT EXISTS tax_rate_suggestions (
       id SERIAL PRIMARY KEY,
       reference_id INTEGER NOT NULL,
@@ -95,31 +97,39 @@ Append this entry to the `MIGRATIONS` array (after the v8 object, before `];`):
       ON CONFLICT (key) DO NOTHING`);
 
     // Tax rate reference — public schema only (shared across tenants)
-    const { rows } = await client.query(
-      "SELECT 1 FROM information_schema.tables WHERE table_name = 'tenants' LIMIT 1"
-    );
-    if (rows.length) {
-      await client.query(`CREATE TABLE IF NOT EXISTS tax_rate_reference (
-        id SERIAL PRIMARY KEY,
-        hs_code TEXT NOT NULL,
-        description_en TEXT NOT NULL,
-        description_ur TEXT,
-        federal_gst NUMERIC(8,4) DEFAULT 0,
-        punjab_pra NUMERIC(8,4) DEFAULT 0,
-        sindh_srb NUMERIC(8,4) DEFAULT 0,
-        kpk_kpra NUMERIC(8,4) DEFAULT 0,
-        balochistan_bra NUMERIC(8,4) DEFAULT 0,
-        exemption_notes TEXT,
-        last_updated DATE DEFAULT CURRENT_DATE
-      )`);
-    }
+    // This table is intentionally created in ALL schemas (IF NOT EXISTS is safe).
+    // In tenant schemas it will be unused — the worker and lookup routes always
+    // query the public schema explicitly. This avoids fragile schema-detection logic.
+    await client.query(`CREATE TABLE IF NOT EXISTS tax_rate_reference (
+      id SERIAL PRIMARY KEY,
+      hs_code TEXT NOT NULL,
+      description_en TEXT NOT NULL,
+      description_ur TEXT,
+      federal_gst NUMERIC(8,4) DEFAULT 0,
+      punjab_pra NUMERIC(8,4) DEFAULT 0,
+      sindh_srb NUMERIC(8,4) DEFAULT 0,
+      kpk_kpra NUMERIC(8,4) DEFAULT 0,
+      balochistan_bra NUMERIC(8,4) DEFAULT 0,
+      exemption_notes TEXT,
+      last_updated DATE DEFAULT CURRENT_DATE
+    )`);
   },
 },
 ```
 
 **Step 2: Update schema-pg.sql with new columns and tables**
 
-Add the new columns to existing CREATE TABLE statements and add the new tables. This ensures new tenant schemas get the full schema on provisioning.
+Add the new columns to existing CREATE TABLE statements and add the new tables. This ensures new tenant schemas get the full schema on provisioning. Specifically:
+
+1. **`categories` table**: add `tax_id INTEGER REFERENCES taxes(id)` and `hs_code TEXT` columns
+2. **`taxes` table**: add `fbr_further_tax NUMERIC(8,4) DEFAULT 0`, `fbr_extra_tax NUMERIC(8,4) DEFAULT 0`, `fbr_fed_rate NUMERIC(8,4) DEFAULT 0`
+3. **`company_profile` table**: add `fbr_api_token TEXT`, `fbr_environment TEXT DEFAULT 'sandbox'`, `fbr_default_hs_code TEXT`, `fbr_province TEXT`
+4. **`customers` table**: add `ntn_cnic TEXT`
+5. **`sales` table**: add `fbr_status TEXT DEFAULT 'not_applicable'`, `fbr_irn TEXT`, `fbr_qr_code TEXT`
+6. **`returns` table**: add `fbr_status TEXT DEFAULT 'not_applicable'`, `fbr_irn TEXT`
+7. **Add new tables**: `fbr_invoices` (full CREATE TABLE as in migration), `tax_rate_suggestions`, `tax_rate_reference`
+8. **Add index**: `idx_fbr_invoices_status`
+9. **Add feature flag seed**: `INSERT INTO feature_flags ... 'fbr_integration'`
 
 **Step 3: Run migration locally**
 
@@ -190,6 +200,7 @@ git commit -m "feat(fbr): extend category tree with tax_id/hs_code inheritance"
 
 ```js
 const logger = require("./logger");
+const { resolveInheritedField } = require("../category-tree");
 
 const FBR_URLS = {
   sandbox: "https://gw.fbr.gov.pk/di_data/v1/di/postinvoicedata_sb",
@@ -202,7 +213,6 @@ const BACKOFF_DELAYS = [60, 300, 900, 3600, 14400]; // seconds: 1m, 5m, 15m, 1h,
 function buildInvoicePayload(sale, items, company, customer, categoryTree) {
   // Map SanoPOS sale data to FBR DI API JSON format
   // See design doc for full FBR payload structure
-  const { resolveInheritedField } = require("../category-tree");
   const byId = categoryTree?.byId;
 
   return {
@@ -341,15 +351,15 @@ git commit -m "feat(fbr): FBR service — API client, payload builders, queue he
 **Step 1: Create routes/fbr.js**
 
 Export a function `(app, deps)` with these endpoints:
-- `GET /api/fbr/config` — returns FBR fields from company_profile (requirePerm `all_access`)
-- `PUT /api/fbr/config` — updates FBR fields on company_profile (requirePerm `all_access`)
+- `GET /api/fbr/config` — returns FBR fields from company_profile + `fbr_integration` feature flag status (requirePerm `all_access`)
+- `PUT /api/fbr/config` — updates FBR fields on company_profile. Also accepts `enabled` boolean to toggle `fbr_integration` feature flag (requirePerm `all_access`)
 - `POST /api/fbr/test-connection` — calls `validateConnection()` with tenant's token
 - `GET /api/fbr/dashboard` — returns counts by status from fbr_invoices
 - `GET /api/fbr/invoices` — paginated list with status/date filters
 - `POST /api/fbr/invoices/:id/retry` — resets status to 'pending', retry_count to 0
 - `POST /api/fbr/invoices/retry-all` — resets all 'failed' to 'pending'
 
-All endpoints gated by `requirePerm("all_access")` and `requireFeature("fbr_integration")` (except config GET/PUT which don't need the feature flag — admin needs to configure before enabling).
+All endpoints gated by `requirePerm("all_access")` and `requireFeature("fbr_integration")` (except config GET/PUT and test-connection which don't need the feature flag — admin needs to configure before enabling). `requireFeature` is already defined in `index.js` (line 917) and passed via `deps` — destructure it alongside `requirePerm`.
 
 **Step 2: Register in registerAllRoutes.js**
 
@@ -440,7 +450,12 @@ git commit -m "feat(fbr): admin routes — tax rate CRUD, suggestions review, FB
 
 **Step 1: Add FBR enqueue to sales.js POST handler**
 
-After `assignInvoiceNumberToSale` (around line 570), add:
+First, add at the top of `sales.js` (after existing requires):
+```js
+const logger = require("../services/logger");
+```
+
+After `assignInvoiceNumberToSale` (around line 570), add. Note: `customer_id` is already destructured from `req.body` at line 276 and is in scope here:
 
 ```js
 // FBR Digital Invoicing — enqueue if enabled
@@ -457,14 +472,17 @@ try {
        FROM sale_items si LEFT JOIN products p ON si.product_id = p.id
        WHERE si.sale_id = $1`, [saleId]
     );
-    const { rows: [customer] } = customer_id
+    const { rows: [cust] } = customer_id
       ? await db.query("SELECT name, ntn_cnic FROM customers WHERE id = $1", [customer_id])
       : { rows: [null] };
     const payload = buildInvoicePayload(
       { timestamp: new Date(), invoice_number: invoiceNumber },
-      saleItems, req.company, customer, categoryTree
+      saleItems, req.company, cust, categoryTree
     );
     await enqueueFbrInvoice(db, { saleId, invoiceType: "sale", payload });
+    // Update fbr_status — separate query is OK here because the sale row
+    // already exists (committed). If this fails, the worker will still
+    // process the queued invoice and update the status itself.
     await db.query("UPDATE sales SET fbr_status = 'pending' WHERE id = $1", [saleId]);
   }
 } catch (fbrErr) {
@@ -492,11 +510,18 @@ try {
 }
 ```
 
-**Step 3: Add FBR enqueue to returns.js POST handler**
+**Step 3: Add FBR fields to sales GET endpoints**
 
-After the transaction commits (after `enqueueInventorySyncEvents`), add similar FBR enqueue logic with `buildCreditNotePayload` and `invoiceType: "credit_note"`.
+The frontend needs `fbr_status`, `fbr_irn`, `fbr_qr_code` to render the FBR status column and receipt IRN. Update both:
 
-**Step 4: Commit**
+- **GET /api/sales** (list, ~line 140): add `s.fbr_status` to SELECT and GROUP BY
+- **GET /api/sales/:id** (detail, ~line 176): already uses `s.*` so no change needed — fields come through automatically
+
+**Step 4: Add FBR enqueue to returns.js POST handler**
+
+After the transaction commits (after `enqueueInventorySyncEvents` at line 123), add similar FBR enqueue logic with `buildCreditNotePayload` and `invoiceType: "credit_note"`. Also add `const logger = require("../services/logger")` at the top of `returns.js`.
+
+**Step 5: Commit**
 
 ```bash
 git add backend/routes/sales.js backend/routes/returns.js
@@ -533,13 +558,19 @@ git commit -m "feat(fbr): accept tax_id/hs_code on categories, ntn_cnic on custo
 ## Task 9: FBR Worker Process
 
 **Files:**
-- Create: `backend/workers/fbr-worker.js`
+- Create: `backend/workers/fbr-worker.js` (directory `backend/workers/` does not exist yet — create it)
 
-**Step 1: Create the worker**
+**Step 1: Create the workers directory**
+
+```bash
+mkdir -p backend/workers
+```
+
+**Step 2: Create the worker**
 
 The worker is a standalone Node process that:
 1. Loads dotenv + creates a pg Pool from `DATABASE_URL`
-2. Exposes HTTP `/health` on a configurable port (default 8081)
+2. Exposes HTTP `/health` on a configurable port (default 8081, env `FBR_WORKER_PORT`)
 3. Every 30 seconds: queries master DB for active tenants, checks each tenant's `feature_flags` for `fbr_integration`, processes pending `fbr_invoices`
 4. Uses `SET search_path TO tenant_<slug>, public` before querying each tenant
 5. Row-locks pending records: `UPDATE fbr_invoices SET status = 'processing' WHERE id = $1 AND status = 'pending' RETURNING *`
@@ -549,10 +580,27 @@ The worker is a standalone Node process that:
 9. Handles SIGTERM gracefully (finish in-flight, then exit)
 10. Concurrency: max 5 per tenant, 20 globally via a simple counter
 
-**Step 2: Commit**
+**Step 3: Production deployment**
+
+The worker needs a separate Railway service. Two options:
+- **Option A (recommended for now):** Run as a `setInterval` inside the existing Express server (add to `index.js` startup). Simpler, no extra Railway service cost. Guard with `if (process.env.FBR_WORKER_ENABLED === '1')`.
+- **Option B (future scale):** Separate Railway service with its own `Procfile` entry (`worker: node backend/workers/fbr-worker.js`). Better isolation, independent scaling.
+
+Start with Option A. Add to `index.js` after server listen:
+```js
+// FBR Worker — inline mode (runs in same process as Express)
+if (process.env.FBR_WORKER_ENABLED === "1") {
+  const { startFbrWorker } = require("./workers/fbr-worker");
+  startFbrWorker(db);
+}
+```
+
+Export both a standalone entry point (`if (require.main === module)`) and a `startFbrWorker(db)` function for inline mode.
+
+**Step 4: Commit**
 
 ```bash
-git add backend/workers/fbr-worker.js
+git add backend/workers/fbr-worker.js backend/index.js
 git commit -m "feat(fbr): background worker — polls queue, posts to FBR with retry"
 ```
 
@@ -607,6 +655,7 @@ git commit -m "feat(fbr): seed script for tax rate reference data (~100 HS codes
 **Step 1: Create FBRSettingsRedesign.jsx**
 
 Page with `PageShell` title "FBR Settings". Form fields:
+- **Enable FBR Integration** (toggle switch) — calls `PUT /api/fbr/config` to update `feature_flags` (`fbr_integration` key). This is the primary on/off switch. Show current status.
 - NTN (text input, pre-filled from company_profile)
 - STRN (text input, pre-filled)
 - Province (dropdown: Punjab, Sindh, KPK, Balochistan, ICT, AJK, Gilgit-Baltistan)
@@ -616,6 +665,8 @@ Page with `PageShell` title "FBR Settings". Form fields:
 - "Test Connection" button → calls `POST /api/fbr/test-connection`
 - "Save" button → calls `PUT /api/fbr/config`
 - Connection status indicator (green/red/grey)
+
+The backend `PUT /api/fbr/config` endpoint should also accept an `enabled` boolean and update the `feature_flags` row for `fbr_integration` accordingly. This way admins can configure everything AND flip the switch from one page.
 
 Fetch initial data from `GET /api/fbr/config`.
 
@@ -638,8 +689,10 @@ const FBRSettingsRoute = lazy(() => import("./pages/FBRSettingsRoute"));
 
 Add under a new "Compliance" group or under existing "Settings" group:
 ```js
-{ name: "FBR Settings", path: "/settings/fbr", icon: FileCheck, requiredPerm: "all_access", requiredFlag: "fbr_integration" },
+{ name: "FBR Settings", path: "/settings/fbr", icon: FileCheck, requiredPerm: "all_access" },
 ```
+
+**No `requiredFlag`** — the settings page must be visible BEFORE the feature flag is enabled, otherwise admins can't configure FBR to enable it (Catch-22). The backend config endpoints also skip the feature flag check for this reason.
 
 Import `FileCheck` from `lucide-react`.
 
@@ -679,6 +732,8 @@ Same pattern as Task 11. Route: `/fbr`. Nav entry:
 ```js
 { name: "FBR Invoices", path: "/fbr", icon: Receipt, requiredPerm: "all_access", requiredFlag: "fbr_integration" },
 ```
+
+Import `Receipt` from `lucide-react`.
 
 **Step 3: Commit**
 
@@ -853,14 +908,14 @@ git push -u origin feature/fbr-digital-invoicing
 | 1 | Migration v9 | None |
 | 2 | Category tree extension | Task 1 |
 | 3 | FBR service | Task 1 |
-| 4 | FBR routes | Tasks 1, 3 |
+| 4 | FBR routes (+ feature flag toggle) | Tasks 1, 3 |
 | 5 | Tax lookup routes | Task 1 |
 | 6 | Admin tax rate routes | Task 1 |
-| 7 | Hook into sales/returns/voids | Tasks 1, 2, 3 |
+| 7 | Hook into sales/returns/voids + sales GET FBR fields | Tasks 1, 2, 3 |
 | 8 | Categories/customers routes | Task 1 |
-| 9 | FBR worker | Tasks 1, 3 |
+| 9 | FBR worker + inline mode in index.js | Tasks 1, 3 |
 | 10 | Seed tax rate data | Task 1 |
-| 11 | FBR settings page | Task 4 |
+| 11 | FBR settings page (+ enable/disable toggle) | Task 4 |
 | 12 | FBR dashboard page | Task 4 |
 | 13 | Tax lookup page | Task 5 |
 | 14 | Admin tax rates page | Task 6 |

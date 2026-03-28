@@ -1,10 +1,10 @@
 export const STORE_CODE = "packagesmall";
 export const EMPLOYEE_NAME = "hassan";
 export const EMPLOYEE_PIN = "2580";
-export const BACKEND = "https://oneshoppos-production.up.railway.app";
+export const BACKEND = "https://api.sanopos.com";
 
 /**
- * Performs MT login on sanopos.vercel.app.
+ * Performs MT login on sanopos.com.
  * Works for both global-setup (chromium browser) and individual specs.
  */
 export async function loginMT(page) {

@@ -1,7 +1,7 @@
 /**
  * 21-onboard-free.spec.js — Full onboarding E2E for FREE plan.
  *
- * Runs against live production (sanopos.vercel.app / Railway).
+ * Runs against live production (sanopos.com / Railway).
  * Creates a real test tenant, walks through signup → setup → login → first sale,
  * then verifies Free plan limits (1 outlet, 3 employees, 500 products).
  *

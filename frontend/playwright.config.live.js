@@ -14,7 +14,7 @@ export default defineConfig({
   timeout: 60000,
 
   use: {
-    baseURL: "https://sanopos.vercel.app",
+    baseURL: "https://sanopos.com",
     storageState: "./tests/live/live-auth.json",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
