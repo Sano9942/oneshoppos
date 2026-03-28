@@ -1,5 +1,5 @@
 module.exports = function registerOutletRoutes(app, deps) {
-  const { db, requirePerm } = deps;
+  const { db, requirePerm, requirePlanLimit } = deps;
 
   // Get all outlets
   app.get("/api/outlets", async (req, res) => {
@@ -28,7 +28,7 @@ module.exports = function registerOutletRoutes(app, deps) {
   });
 
   // Add a new outlet
-  app.post("/api/outlets", requirePerm("all_access"), async (req, res) => {
+  app.post("/api/outlets", requirePerm("all_access"), requirePlanLimit("outlets"), async (req, res) => {
     try {
       const { name, address, phone } = req.body;
       const { rows } = await db.query(

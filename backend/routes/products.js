@@ -5,7 +5,7 @@ const {
 } = require("../category-tree");
 
 module.exports = function registerProductRoutes(app, deps) {
-  const { db, multer, requirePerm, PRODUCT_UPLOADS_DIR, UPLOADS_DIR } = deps;
+  const { db, multer, requirePerm, requirePlanLimit, PRODUCT_UPLOADS_DIR, UPLOADS_DIR } = deps;
 
 
 // --- ROUTES: PRODUCTS (INVENTORY) ---
@@ -369,7 +369,7 @@ module.exports = function registerProductRoutes(app, deps) {
   });
 
   // Add a new product (and optionally set initial stock for a specific outlet)
-  app.post("/api/products", requirePerm("manage_inventory"), async (req, res) => {
+  app.post("/api/products", requirePerm("manage_inventory"), requirePlanLimit("products"), async (req, res) => {
     const {
       barcode,
       sku,

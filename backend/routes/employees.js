@@ -1,5 +1,5 @@
 module.exports = function registerEmployeeRoutes(app, deps) {
-  const { db, requirePerm, requireAnyPerm } = deps;
+  const { db, requirePerm, requireAnyPerm, requirePlanLimit } = deps;
   const bcrypt = require("bcryptjs");
   const EMPLOYEE_USAGE_CHECKS = [
     ["sales", "employee_id"],
@@ -82,7 +82,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   });
 
   // Add a new employee
-  app.post("/api/employees", requirePerm("all_access"), async (req, res) => {
+  app.post("/api/employees", requirePerm("all_access"), requirePlanLimit("employees"), async (req, res) => {
     const { name, role_id, pin_code, salary_type, monthly_salary, hourly_rate, daily_rate, email, password } = req.body;
     try {
       const pin_hash = pin_code ? await bcrypt.hash(String(pin_code), 10) : null;
