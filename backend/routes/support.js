@@ -51,10 +51,27 @@ module.exports = function supportRoutes(app, deps) {
 <p><strong>Request ID:</strong> ${last_req_id || "N/A"}</p>
 <p><strong>Message:</strong></p>
 <blockquote>${message}</blockquote>
-<p><a href="https://sanopos.vercel.app/admin">Open Admin Panel</a></p>`,
+<p><a href="https://sanopos.com/admin">Open Admin Panel</a></p>`,
       }).catch((err) => {
         req.log?.error({ err }, "Failed to send support ticket alert email");
       });
+
+      // Send confirmation email to submitting employee (fire-and-forget)
+      if (req.employee?.email) {
+        const { sendEmail } = require("../services/email");
+        sendEmail({
+          type: "support_received",
+          to: req.employee.email,
+          data: {
+            ticketId: ticket.id,
+            type,
+            message: message.trim().substring(0, 200),
+            storeName: req.company?.company_name || tenantSlug,
+          },
+        }).catch((err) => {
+          req.log?.error({ err }, "Failed to send support ticket confirmation");
+        });
+      }
 
       res.status(201).json(ticket);
     } catch (err) {

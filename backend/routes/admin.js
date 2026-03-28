@@ -1156,6 +1156,32 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
         return res.status(404).json({ error: "Ticket not found" });
       }
 
+      // Send resolved notification to submitting employee (fire-and-forget)
+      if (status === "resolved" && rows[0].employee_id) {
+        try {
+          const { rows: [emp] } = await tenantDb.query(
+            "SELECT email FROM employees WHERE id = $1", [rows[0].employee_id]
+          );
+          const { rows: [profile] } = await tenantDb.query(
+            "SELECT company_name FROM company_profile WHERE id = 1"
+          );
+          if (emp?.email) {
+            const { sendEmail } = require("../services/email");
+            sendEmail({
+              type: "support_resolved",
+              to: emp.email,
+              data: {
+                ticketId: rows[0].id,
+                type: rows[0].type,
+                storeName: profile?.company_name || "Your store",
+              },
+            }).catch((err) => console.error("Ticket resolved email failed:", err.message));
+          }
+        } catch (emailErr) {
+          console.error("Ticket resolved email lookup failed:", emailErr.message);
+        }
+      }
+
       return res.json({ ticket: rows[0] });
     } catch (err) {
       return res.status(500).json({ error: err.message });
