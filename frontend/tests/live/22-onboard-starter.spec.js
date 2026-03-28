@@ -118,7 +118,7 @@ test.describe.serial("Starter Plan Onboarding", () => {
 
   test("Step 9: Clock in", async () => {
     const state = getOnboardingState(PLAN);
-    const result = await clockIn(state.authToken, 1);
+    const result = await clockIn(state.authToken, 1, state.slug);
     console.log(`  Clocked in`);
   });
 

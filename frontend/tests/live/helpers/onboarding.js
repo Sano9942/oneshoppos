@@ -33,7 +33,7 @@ export function generateStoreInfo(plan) {
 // ── Step 0: Health Check ─────────────────────────────────────────────────
 
 export async function healthCheck() {
-  const res = await fetch(`${BACKEND}/api/health?deep=true`);
+  const res = await fetch(`${BACKEND}/api/health`);
   const data = await res.json();
   return { status: res.status, ok: res.ok, data };
 }
@@ -159,14 +159,14 @@ export async function firstLogin(page, { slug }) {
   await page.goto("/login");
   await page.waitForLoadState("networkidle");
 
-  // Store Code
-  await page.locator('input[placeholder="e.g. aces-hardware"]').fill(slug);
-  // Username — we use owner name
+  // Store Code — landing page uses "e.g. aceshardware"
+  await page.locator('input[placeholder="e.g. aceshardware"]').fill(slug);
+  // Username
   await page.locator('input[placeholder="Employee name"]').fill(TEST_OWNER);
-  // Password goes in the PIN field (backend accepts it as password via dual-auth)
-  await page.locator('input[placeholder="PIN code"]').fill(TEST_PASSWORD);
+  // Password — landing page uses "Enter your password"
+  await page.locator('input[placeholder="Enter your password"]').fill(TEST_PASSWORD);
 
-  await page.getByRole("button", { name: "Login" }).click();
+  await page.getByRole("button", { name: "Sign In" }).click();
 
   // Wait for dashboard (may pass through context-select first)
   await page.waitForURL(/\/(dashboard|context-select)/, { timeout: 30000 });
@@ -276,19 +276,17 @@ export async function openShift(token) {
 
 // ── Step 9: Clock In via API ─────────────────────────────────────────────
 
-export async function clockIn(token, employeeId) {
-  const res = await fetch(`${BACKEND}/api/attendance/clock-in`, {
+export async function clockIn(token, employeeId, slug) {
+  // Use the authenticated checkin endpoint to create an attendance_sessions record
+  // (required by POS checkout validation)
+  const res = await fetch(`${BACKEND}/api/attendance/pin-checkin?tenant=${slug}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      "x-outlet-id": "1",
-      "x-scope-mode": "outlet",
     },
     body: JSON.stringify({
-      employee_id: employeeId || 1,
+      pin_code: TEST_PIN,
       outlet_id: 1,
-      session_type: "work",
     }),
   });
   const data = await res.json();
