@@ -84,6 +84,7 @@ const FBRSettingsRoute = lazy(() => import("./pages/FBRSettingsRoute"));
 const FBRDashboardRoute = lazy(() => import("./pages/FBRDashboardRoute"));
 const TaxLookupRoute = lazy(() => import("./pages/TaxLookupRoute"));
 const AdminTaxRates = lazy(() => import("./pages/admin/AdminTaxRates"));
+const AdminEmails = lazy(() => import("./pages/admin/AdminEmails"));
 
 function RouteLoading() {
   return (
@@ -182,6 +183,7 @@ function App() {
           <Route path="tenants" element={<Suspense fallback={<RouteLoading />}><AdminTenantList /></Suspense>} />
           <Route path="tenants/:id" element={<Suspense fallback={<RouteLoading />}><AdminTenantDetail /></Suspense>} />
           <Route path="support" element={<Suspense fallback={<RouteLoading />}><AdminSupportTickets /></Suspense>} />
+          <Route path="emails" element={<Suspense fallback={<RouteLoading />}><AdminEmails /></Suspense>} />
           <Route path="dead-letters" element={<Suspense fallback={<RouteLoading />}><AdminDeadLetters /></Suspense>} />
           <Route path="tax-rates" element={<Suspense fallback={<RouteLoading />}><AdminTaxRates /></Suspense>} />
         </Route>

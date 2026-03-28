@@ -1470,6 +1470,67 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
     }
   });
 
+  // ── Email Queue Management ─────────────────────────────────────────
+
+  // GET /api/admin/email-queue — list queued emails with optional status filter
+  app.get("/api/admin/email-queue", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { status, limit: lim } = req.query;
+      const limit = Math.min(parseInt(lim, 10) || 100, 500);
+
+      let where = "1=1";
+      if (status === "pending") where = "eq.sent_at IS NULL AND eq.attempts < eq.max_attempts";
+      else if (status === "sent") where = "eq.sent_at IS NOT NULL";
+      else if (status === "failed") where = "eq.sent_at IS NULL AND eq.attempts >= eq.max_attempts";
+
+      const { rows } = await db.query(
+        `SELECT eq.id, eq.tenant_id, t.slug AS tenant_slug, t.name AS tenant_name,
+                eq.email_type, eq.to_email, eq.subject, eq.from_address,
+                eq.send_at, eq.sent_at, eq.error, eq.attempts, eq.max_attempts, eq.created_at
+         FROM email_queue eq
+         LEFT JOIN tenants t ON t.id = eq.tenant_id
+         WHERE ${where}
+         ORDER BY eq.id DESC
+         LIMIT $1`,
+        [limit]
+      );
+
+      // Summary counts
+      const { rows: [counts] } = await db.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE sent_at IS NULL AND attempts < max_attempts) AS pending,
+           COUNT(*) FILTER (WHERE sent_at IS NOT NULL) AS sent,
+           COUNT(*) FILTER (WHERE sent_at IS NULL AND attempts >= max_attempts) AS failed
+         FROM email_queue`
+      );
+
+      return res.json({
+        emails: rows,
+        counts: {
+          pending: Number(counts.pending),
+          sent: Number(counts.sent),
+          failed: Number(counts.failed),
+        },
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/email-queue/:id/retry — reset a failed email for retry
+  app.post("/api/admin/email-queue/:id/retry", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { rowCount } = await db.query(
+        "UPDATE email_queue SET attempts = 0, error = NULL WHERE id = $1 AND sent_at IS NULL",
+        [req.params.id]
+      );
+      if (rowCount === 0) return res.status(404).json({ error: "Email not found or already sent" });
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Broadcast Emails ───────────────────────────────────────────────
 
   // POST /api/admin/email/broadcast — send downtime or announcement to all tenants

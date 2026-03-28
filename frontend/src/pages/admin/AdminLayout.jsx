@@ -1,11 +1,12 @@
 import { NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
-import { Home, LogOut, Server, Shield, MessageSquare, AlertTriangle } from "lucide-react";
+import { Home, LogOut, Server, Shield, MessageSquare, AlertTriangle, Mail } from "lucide-react";
 import { clearAdminSession, getAdminToken, getAdminSession } from "./AdminLogin";
 
 const NAV_ITEMS = [
   { name: "Dashboard", path: "/admin", icon: Home, end: true },
   { name: "Tenants", path: "/admin/tenants", icon: Server },
   { name: "Support", path: "/admin/support", icon: MessageSquare },
+  { name: "Emails", path: "/admin/emails", icon: Mail },
   { name: "Dead Letters", path: "/admin/dead-letters", icon: AlertTriangle },
 ];
 
