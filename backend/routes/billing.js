@@ -10,9 +10,10 @@ module.exports = function registerBillingRoutes(app, deps) {
   const masterDb = require("../master-db-pg");
 
   // ── Public Pricing ─────────────────────────────────────────────────────
+  // Use db.pool directly (raw pg pool) to query public schema without tenant context
   app.get("/api/billing/pricing", async (req, res) => {
     try {
-      const { rows } = await masterDb.query(
+      const { rows } = await db.pool.query(
         "SELECT plan, cycle, price, currency_code FROM plan_pricing WHERE is_active = true ORDER BY plan, cycle"
       );
       res.json(rows);
