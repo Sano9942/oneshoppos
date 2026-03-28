@@ -55,7 +55,7 @@ export default function FBRDashboardRedesign() {
 
   const fetchSummary = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/fbr/dashboard`);
+      const res = await fetch(`${API}/api/fbr/dashboard`);
       if (!res.ok) throw new Error("Failed to load summary");
       const data = await res.json();
       setSummary(data);
@@ -71,7 +71,7 @@ export default function FBRDashboardRedesign() {
       if (from) params.set("from", from);
       if (to) params.set("to", to);
       if (search.trim()) params.set("search", search.trim());
-      const res = await fetch(`${API}/fbr/invoices?${params}`);
+      const res = await fetch(`${API}/api/fbr/invoices?${params}`);
       if (!res.ok) throw new Error("Failed to load invoices");
       const data = await res.json();
       setInvoices(data.invoices || []);
@@ -110,7 +110,7 @@ export default function FBRDashboardRedesign() {
   const handleRetry = async (id) => {
     setRetrying((prev) => ({ ...prev, [id]: true }));
     try {
-      const res = await fetch(`${API}/fbr/invoices/${id}/retry`, { method: "POST" });
+      const res = await fetch(`${API}/api/fbr/invoices/${id}/retry`, { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Retry failed");
@@ -127,7 +127,7 @@ export default function FBRDashboardRedesign() {
   const handleRetryAll = async () => {
     setRetryingAll(true);
     try {
-      const res = await fetch(`${API}/fbr/invoices/retry-all`, { method: "POST" });
+      const res = await fetch(`${API}/api/fbr/invoices/retry-all`, { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Retry all failed");
