@@ -622,6 +622,16 @@ module.exports = function registerAuthRoutes(app, deps) {
       const { provision } = require("../tenant-provisioner-pg");
       const result = await provision(dbPg, { slug, name: store_name, ownerEmail: email, pin: "0000", timezone: "UTC" });
 
+      // Apply plan + its default limits
+      const { PLAN_DEFAULTS } = require("../middleware/plan-limits");
+      const effectivePlan = plan || "free";
+      const limits = PLAN_DEFAULTS[effectivePlan] || PLAN_DEFAULTS.free;
+      await masterDb.query(
+        `UPDATE tenants SET plan = $1, max_outlets = $2, max_employees = $3, max_products = $4
+         WHERE id = $5`,
+        [effectivePlan, limits.max_outlets, limits.max_employees, limits.max_products, result.tenantId]
+      );
+
       // Update the admin employee with password and email
       const tenantDbManager = require("../tenant-db-manager-pg");
       const tenantDb = await tenantDbManager.getDb(result.tenantId);
