@@ -266,20 +266,16 @@ module.exports = function emailRoutes(app, deps) {
         return res.json({ ok: true, via: "smtp" });
       }
 
-      // Fall back to Resend
+      // Fall back to Resend with branded sender
       if (process.env.RESEND_API_KEY) {
-        const { Resend } = require("resend");
-        const resend = new Resend(process.env.RESEND_API_KEY);
-        const fromEmail =
-          process.env.RESEND_FROM_EMAIL ||
-          `${storeName} <onboarding@resend.dev>`;
-        const { error } = await resend.emails.send({
-          from: fromEmail,
+        const { sendEmail } = require("../services/email");
+        await sendEmail({
+          type: "receipt",
           to: toEmail,
+          tenant: { slug: req.tenantSlug, name: storeName },
           subject,
           html,
         });
-        if (error) throw new Error(`Resend error: ${error.message}`);
         return res.json({ ok: true, via: "resend" });
       }
 
