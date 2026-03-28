@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-_Last updated: March 28 2026 — **Onboarding E2E tests run against live production (45/45 PASS). Two production bugs found and fixed: plan limits never enforced, self-service signup ignored selected plan. Custom domain `sanopos.com` purchased and configured for email (SPF/DKIM/DMARC all verified via Resend + Cloudflare)._
+_Last updated: March 29 2026 — **Unified email service (12 email types, branded senders, drip emails, billing notifications, support lifecycle, admin broadcasts). Admin email queue management page. Railway moved to Singapore (same region as Supabase DB — ~3-4x faster API for Pakistan users).**_
 
 ---
 
@@ -331,8 +331,8 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 
 ### Still Deferred
 
-- **Self-service signup** _(requires email verification flow)_ — public tenant registration
-- **Onboarding email** _(future Resend use)_ — welcome email with setup link after tenant provisioning
+- ~~**Self-service signup**~~ — **COMPLETE** (Mar 19 2026, Roadmap Waves)
+- ~~**Onboarding email**~~ — **COMPLETE** (Mar 28 2026, Unified Email Service — welcome email + drip series)
 
 ---
 
@@ -468,6 +468,66 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 
 ---
 
+## ✅ Unified Email Service (Mar 28 2026)
+
+**Branch:** `feat/unified-email-service` — merged to `main` (11 commits, 12 files, +783 lines).
+
+**Goal:** Single `sendEmail()` entry point for all email types, tenant-branded receipt emails, onboarding drip series, billing notifications, support ticket lifecycle emails, and admin broadcast capabilities.
+
+### New Files
+- **`services/email.js`** — unified `sendEmail()` (immediate via Resend) + `enqueueEmail()` (deferred via `email_queue` table). `resolveFrom()` maps tenant→customer emails to `Store Name <slug@sanopos.com>`, platform→tenant emails to `SanoPOS <noreply@sanopos.com>`.
+- **`services/email-templates.js`** — 10 HTML template functions with shared branded wrapper (`wrapEmailHtml()`). Green gradient header, white card body, footer.
+- **`workers/email-worker.js`** — polls `email_queue` every 60s, sends via Resend. Daily billing check enqueues expiry warnings (7 days) and overdue notices with 24h deduplication. Inline mode (same pattern as FBR worker) gated by `EMAIL_WORKER_ENABLED=1`.
+
+### 12 Email Types
+| Category | Types | Trigger |
+|----------|-------|---------|
+| Tenant → Customer | `receipt`, `digest` | Branded sender: `slug@sanopos.com` |
+| Drip (queued) | `drip_getting_started`, `drip_features` | Auto-enqueued on signup (day 2, day 5) |
+| Billing (immediate) | `billing_payment_recorded`, `billing_plan_changed` | Admin records payment or changes plan |
+| Billing (daily cron) | `billing_expiry_warning`, `billing_overdue` | Worker checks daily with dedup |
+| Support | `support_received`, `support_resolved` | Ticket creation / admin resolve |
+| Broadcast (queued) | `downtime`, `announcement` | `POST /api/admin/email/broadcast` |
+
+### Modified Files
+- `routes/email.js` — receipt Resend fallback now uses branded sender via `sendEmail()`
+- `routes/auth.js` — signup enqueues 2 drip emails (+2d, +5d)
+- `routes/admin.js` — billing emails on payment/plan change, ticket-resolved email, broadcast endpoint
+- `routes/support.js` — ticket-received confirmation email + fixed admin link URL
+- `migrate-pg.js` + `schema-pg.sql` — migration v10: `email_queue` table in public schema
+
+### Database
+- **`email_queue`** table in public schema (cross-tenant) with FK to `tenants(id)`. Partial index on `(send_at) WHERE sent_at IS NULL AND attempts < max_attempts` for efficient worker polling.
+- **Railway env var:** `EMAIL_WORKER_ENABLED=1`
+
+---
+
+## ✅ Admin Email Queue Page (Mar 28 2026)
+
+**Branch:** `feat/admin-email-page` — merged to `main`.
+
+- **`GET /api/admin/email-queue`** — lists emails with `?status=pending|sent|failed` filter + summary counts (pending/sent/failed) via `COUNT(*) FILTER`
+- **`POST /api/admin/email-queue/:id/retry`** — resets failed email attempts to 0 for worker retry
+- **`AdminEmails.jsx`** — 3 summary stat cards (pending/sent/failed), broadcast form (type dropdown + subject + message), email queue table with color-coded type badges, status filter tabs, retry button for failed emails, auto-refresh 30s
+- **Nav:** "Emails" link with Mail icon added to admin sidebar between Support and Dead Letters
+- **Route:** `/admin/emails`
+
+---
+
+## ✅ Railway Region Migration — Singapore (Mar 29 2026)
+
+Moved Railway backend from **EU West (Amsterdam)** to **Asia Southeast (Singapore)** — same region as Supabase database.
+
+| Metric | Before (Amsterdam) | After (Singapore) |
+|--------|--------------------|--------------------|
+| API ↔ DB latency | ~150ms | ~12ms |
+| Pakistan ↔ API | ~250ms | ~80ms |
+| Total API round trip | ~400-500ms | ~100-160ms |
+
+Changed via Railway Settings UI after removing `numReplicas` from `railway.toml` (was locking the Scale section).
+
+---
+
 ## 📋 Discussed but Deferred
 
 - **Payment gateway integration** (card machines, JazzCash, EasyPaisa)
@@ -516,3 +576,6 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 | Mar 28 2026 | **FBR Digital Invoicing shipped**                       | `feature/fbr-digital-invoicing` branch. Real-time FBR DI API posting, async queue (`fbr_invoices` table), exponential backoff retry (5 attempts), category-level HS code + tax inheritance (`resolveInheritedField()`), tax rate lookup/suggestions, admin CRUD for tax rates. Migration v9. `FBR_WORKER_ENABLED=1` on Railway. |
 | Mar 28 2026 | **Onboarding E2E tests — 45/45 PASS**                  | New Playwright config (`playwright.config.onboarding.js`) without globalSetup. 3 specs: `21-onboard-free`, `22-onboard-starter`, `23-onboard-pro` (15 steps each). Ran against live production. **2 production bugs found and fixed**: (1) `requirePlanLimit` middleware was created but never applied to any route — outlets/employees/products POST routes now enforce plan caps; (2) `POST /api/auth/signup` always provisioned with Free defaults regardless of selected plan — now applies `PLAN_DEFAULTS` for chosen plan. 3 test bugs fixed (health check deep mode, login placeholders, clock-in endpoint). `khantoys` plan limits corrected (was on Free defaults, bumped to Pro via direct DB update). Test log: `docs/test-logs/2026-03-28-onboarding-tests.md`. |
 | Mar 28 2026 | **Custom domain sanopos.com — email configured**        | Purchased `sanopos.com` on Cloudflare Registrar. Configured with Resend via "Auto configure" (SPF + DKIM added automatically). DMARC TXT record added via Cloudflare API (`_dmarc` → `v=DMARC1; p=none; rua=mailto:dmarc@sanopos.com`). Railway env var `RESEND_FROM_EMAIL=SanoPOS <noreply@sanopos.com>` set. Welcome emails now deliver from branded address. Cloudflare API token stored in `.claude/settings.local.json`. |
+| Mar 28 2026 | **Unified email service shipped**                       | `feat/unified-email-service` branch (11 commits, 12 files, +783 lines). Single `sendEmail()` + `enqueueEmail()` service, 10 HTML templates, email queue worker with daily billing checks. 12 email types: receipt (branded `slug@sanopos.com`), 2 drip, 4 billing, 2 support, 2 broadcast. Migration v10 (`email_queue` table). `EMAIL_WORKER_ENABLED=1` on Railway. |
+| Mar 28 2026 | **Admin email queue page shipped**                      | `feat/admin-email-page` branch. `GET /api/admin/email-queue` (list + counts), `POST /api/admin/email-queue/:id/retry`. `AdminEmails.jsx` with summary cards, broadcast form, queue table, status filters, auto-refresh. Nav item added to admin sidebar. |
+| Mar 29 2026 | **Railway moved to Singapore**                          | Backend region changed from EU West (Amsterdam) to Asia Southeast (Singapore). API↔DB latency dropped from ~150ms to ~12ms (same region as Supabase). Total API round trip for Pakistan users: ~400-500ms → ~100-160ms. |
