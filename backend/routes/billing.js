@@ -9,6 +9,18 @@ module.exports = function registerBillingRoutes(app, deps) {
   const db = require("../db-pg");
   const masterDb = require("../master-db-pg");
 
+  // ── Public Pricing ─────────────────────────────────────────────────────
+  app.get("/api/billing/pricing", async (req, res) => {
+    try {
+      const { rows } = await masterDb.query(
+        "SELECT plan, cycle, price, currency_code FROM plan_pricing WHERE is_active = true ORDER BY plan, cycle"
+      );
+      res.json(rows);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Billing Status ─────────────────────────────────────────────────────
   app.get("/api/billing/status", async (req, res) => {
     try {
