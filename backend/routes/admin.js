@@ -247,7 +247,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
   app.put("/api/admin/tenants/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     const { name, owner_email, plan, timezone, max_employees, max_outlets, max_products } = req.body || {};
     try {
-      const { rows } = await db.query("SELECT id, plan FROM tenants WHERE id = $1", [req.params.id]);
+      const { rows } = await db.query("SELECT id, plan, name FROM tenants WHERE id = $1", [req.params.id]);
       const tenant = rows[0] || null;
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
 
@@ -277,6 +277,29 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       if (planChanged) changes.plan = { from: tenant.plan, to: plan };
       if (Object.keys(changes).length) {
         await auditLog(tenant.id, "updated", changes, `admin:${req.admin.email}`);
+      }
+
+      // Fire plan change notification email (fire-and-forget)
+      if (planChanged) {
+        try {
+          const tenantDb = await tenantDbManager.getDb(tenant.id);
+          const { rows: [profile] } = await tenantDb.query("SELECT email FROM company_profile WHERE id = 1");
+          if (profile?.email) {
+            const { sendEmail } = require("../services/email");
+            sendEmail({
+              type: "billing_plan_changed",
+              to: profile.email,
+              data: {
+                storeName: name || tenant.name || "Your store",
+                oldPlan: tenant.plan,
+                newPlan: plan,
+                newLimits: PLAN_DEFAULTS[plan] || null,
+              },
+            }).catch((err) => console.error("Plan change email failed:", err.message));
+          }
+        } catch (emailErr) {
+          console.error("Plan change email lookup failed:", emailErr.message);
+        }
       }
 
       return res.json({ message: "Tenant updated" });
@@ -921,6 +944,28 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       );
 
       await auditLog(tenantId, "payment_recorded", { plan, cycle, amount, payment_method }, `admin:${req.admin.email}`);
+
+      // Fire billing notification email (fire-and-forget)
+      try {
+        const tenantDb = await tenantDbManager.getDb(tenantId);
+        const { rows: [profile] } = await tenantDb.query("SELECT email FROM company_profile WHERE id = 1");
+        if (profile?.email) {
+          const { sendEmail } = require("../services/email");
+          sendEmail({
+            type: "billing_payment_recorded",
+            to: profile.email,
+            data: {
+              storeName: tenant?.name || "Your store",
+              amount: `${amount}`,
+              plan,
+              cycle,
+              periodEnd: periodEnd.toLocaleDateString(),
+            },
+          }).catch((err) => console.error("Billing payment email failed:", err.message));
+        }
+      } catch (emailErr) {
+        console.error("Billing payment email lookup failed:", emailErr.message);
+      }
 
       return res.json({
         ok: true,
