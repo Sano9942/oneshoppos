@@ -1287,3 +1287,9 @@ if (String(process.env.FBR_WORKER_ENABLED || "0") === "1") {
   const { startFbrWorker } = require("./workers/fbr-worker");
   startFbrWorker(db);
 }
+
+// Email Worker — processes email_queue + daily billing checks
+if (String(process.env.EMAIL_WORKER_ENABLED || "0") === "1") {
+  const { startEmailWorker } = require("./workers/email-worker");
+  startEmailWorker(db);
+}
