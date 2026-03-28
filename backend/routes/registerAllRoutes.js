@@ -139,18 +139,6 @@ module.exports = function registerAllRoutes(app, deps) {
   // Public receipt endpoint — no auth required, manually resolves tenant DB
   require("./receipts")(app, deps);
 
-  // Public billing pricing (no auth needed)
-  app.get("/api/billing/pricing", async (req, res) => {
-    try {
-      const { rows } = await deps.db.query(
-        "SELECT plan, cycle, price, currency_code FROM plan_pricing WHERE is_active = true ORDER BY plan, cycle"
-      );
-      res.json(rows);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
   // Setup wizard — must be BEFORE auth middleware (no session exists yet)
   const createSetupRouter = require("./setup");
   const IS_MULTI_TENANT = process.env.MULTI_TENANT === "1";
