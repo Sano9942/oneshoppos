@@ -360,6 +360,29 @@ const MIGRATIONS = [
       )`);
     },
   },
+  {
+    version: 10,
+    description: "Email queue for deferred/scheduled emails",
+    async up(client) {
+      await client.query(`CREATE TABLE IF NOT EXISTS email_queue (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER REFERENCES tenants(id),
+        email_type TEXT NOT NULL,
+        to_email TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        html_body TEXT NOT NULL,
+        from_address TEXT NOT NULL,
+        send_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        sent_at TIMESTAMPTZ,
+        error TEXT,
+        attempts INTEGER DEFAULT 0,
+        max_attempts INTEGER DEFAULT 3,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_email_queue_pending
+        ON email_queue(send_at) WHERE sent_at IS NULL AND attempts < max_attempts`);
+    },
+  },
 ];
 
 async function migrate(db) {
