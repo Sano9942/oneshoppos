@@ -1469,4 +1469,53 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // ── Broadcast Emails ───────────────────────────────────────────────
+
+  // POST /api/admin/email/broadcast — send downtime or announcement to all tenants
+  app.post("/api/admin/email/broadcast", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { type, subject, message } = req.body || {};
+      if (!type || !["downtime", "announcement"].includes(type)) {
+        return res.status(400).json({ error: "type must be 'downtime' or 'announcement'" });
+      }
+      if (!subject || !message) {
+        return res.status(400).json({ error: "subject and message are required" });
+      }
+
+      // Get all active tenants
+      const { rows: tenants } = await masterDb.query(
+        "SELECT id, slug, name FROM tenants WHERE status = 'active'"
+      );
+
+      const { enqueueEmail } = require("../services/email");
+      const dbPg = require("../db-pg");
+      let enqueued = 0;
+
+      for (const t of tenants) {
+        try {
+          const tenantDb = await tenantDbManager.getDb(t.id);
+          const { rows: [profile] } = await tenantDb.query(
+            "SELECT email FROM company_profile WHERE id = 1"
+          );
+          if (!profile?.email) continue;
+
+          await enqueueEmail(dbPg, {
+            tenantId: t.id,
+            type,
+            to: profile.email,
+            data: { subject, message },
+          });
+          enqueued++;
+        } catch (err) {
+          console.error(`Broadcast enqueue failed for ${t.slug}:`, err.message);
+        }
+      }
+
+      await auditLog(null, "broadcast_sent", { type, subject, recipients: enqueued }, `admin:${req.admin.email}`);
+      return res.json({ ok: true, enqueued });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
 };
