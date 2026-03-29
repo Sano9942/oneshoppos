@@ -1292,7 +1292,7 @@ CREATE TABLE IF NOT EXISTS tax_rate_reference (
 -- Email queue (public schema — cross-tenant deferred emails)
 CREATE TABLE IF NOT EXISTS email_queue (
   id SERIAL PRIMARY KEY,
-  tenant_id INTEGER REFERENCES tenants(id),
+  tenant_id INTEGER NOT NULL,
   email_type TEXT NOT NULL,
   to_email TEXT NOT NULL,
   subject TEXT NOT NULL,
