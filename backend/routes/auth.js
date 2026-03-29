@@ -691,7 +691,7 @@ module.exports = function registerAuthRoutes(app, deps) {
 
       res.json({ ok: true, slug, setupToken: result.setupToken, message: "Store created! Redirecting to setup..." });
     } catch (err) {
-      console.error("[signup]", err.message);
+      console.error("[signup]", err.message, err.stack);
       res.status(500).json({ error: err.message });
     }
   });
