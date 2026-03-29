@@ -122,7 +122,13 @@ let _db = null;
  */
 async function init(db) {
   _db = db;
-  await db.query(MASTER_SCHEMA);
+  const client = await db.pool.connect();
+  try {
+    await client.query("SET search_path TO public");
+    await client.query(MASTER_SCHEMA);
+  } finally {
+    client.release();
+  }
 }
 
 /**
@@ -131,7 +137,10 @@ async function init(db) {
  */
 async function createTenant({ slug, name, ownerEmail, timezone }) {
   const db = _getDb();
-  return db.transaction(async (client) => {
+  const client = await db.pool.connect();
+  try {
+    await client.query("SET search_path TO public");
+    await client.query("BEGIN");
     const { rows } = await client.query(
       `INSERT INTO tenants (slug, name, owner_email, timezone)
        VALUES ($1, $2, $3, $4)
@@ -146,18 +155,21 @@ async function createTenant({ slug, name, ownerEmail, timezone }) {
       [tenantId, JSON.stringify({ slug, timezone, provisioned_at: new Date().toISOString() })]
     );
 
+    await client.query("COMMIT");
     return tenantId;
-  });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /**
  * Look up a tenant by slug. Returns the row or null.
  */
 async function getTenantBySlug(slug) {
-  const { rows } = await _getDb().query(
-    "SELECT * FROM tenants WHERE slug = $1",
-    [slug]
-  );
+  const { rows } = await query("SELECT * FROM tenants WHERE slug = $1", [slug]);
   return rows[0] || null;
 }
 
@@ -165,19 +177,24 @@ async function getTenantBySlug(slug) {
  * Look up a tenant by id. Returns the row or null.
  */
 async function getTenantById(id) {
-  const { rows } = await _getDb().query(
-    "SELECT * FROM tenants WHERE id = $1",
-    [id]
-  );
+  const { rows } = await query("SELECT * FROM tenants WHERE id = $1", [id]);
   return rows[0] || null;
 }
 
 /**
  * Direct query on the master (public schema) pool.
- * Use this for writes to public-schema tables like tenant_audit_log.
+ * Explicitly sets search_path to public to avoid stale tenant schema
+ * on reused pool connections.
  */
-function query(sql, params) {
-  return _getDb().query(sql, params);
+async function query(sql, params) {
+  const db = _getDb();
+  const client = await db.pool.connect();
+  try {
+    await client.query("SET search_path TO public");
+    return await client.query(sql, params);
+  } finally {
+    client.release();
+  }
 }
 
 function _getDb() {
