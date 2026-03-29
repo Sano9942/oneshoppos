@@ -41,5 +41,8 @@ backend/uploads_tmp/
 backend/test_results*.json
 backend/schema_dump.json
 
+# Supabase CLI temp files
+supabase/.temp
+
 # Local dev scripts with credentials
 START-ADMIN.bat

@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-_Last updated: March 29 2026 — **Unified email service (12 email types, branded senders, drip emails, billing notifications, support lifecycle, admin broadcasts). Admin email queue management page. Railway moved to Singapore (same region as Supabase DB — ~3-4x faster API for Pakistan users).**_
+_Last updated: March 30 2026 — **SaaS monetization strategy added (5 phases: revenue protection, growth, stickiness, competitive moats, payment integration). Fixed tenant provisioning bug (email_queue FK). Fixed master-db search_path leak.**_
 
 ---
 
@@ -528,9 +528,69 @@ Changed via Railway Settings UI after removing `numReplicas` from `railway.toml`
 
 ---
 
+## 📋 SaaS Monetization & Growth Strategy (Mar 30 2026)
+
+### How POS SaaS Companies Monetize
+
+**International (Square, Lightspeed, Vend, Toast):**
+- Free tier = lead generation, limited features
+- Paid tiers = $30-$100+/month per outlet
+- Payment processing fees (2-3% per transaction) = the real money maker
+- Add-ons sold separately (loyalty, advanced reporting, payroll)
+
+**Pakistan (Oscar POS, EasyPOS, RetailPro PK):**
+- Monthly subscriptions PKR 2,000-15,000/month (cash-heavy economy, no payment processing revenue)
+- Per-outlet pricing common (PKR 3,000-5,000 per outlet/month)
+- Annual discounts 15-25% to reduce churn
+- Setup fees PKR 10,000-50,000 (onboarding, training, data migration)
+- Hardware bundles (scanner + printer + tablet) sold at markup
+
+### Phase 1 — Protect Revenue (Quick Wins)
+
+- [ ] **Free-only self-service signup** — Starter/Pro signup creates a 14-day trial, not a permanent free account. After trial: auto-downgrade to Free limits or soft-lock with "Trial expired" banner
+- [ ] **Fix soft-delete slug conflict** — `SELECT id FROM tenants WHERE slug = $1 AND deleted_at IS NULL` so deleted store names can be reused
+- [ ] **Fix welcome email setup link** — currently renders as raw URL text instead of a styled button
+- [ ] **Manual payment recording** — continue using `/admin` to record bank transfer / JazzCash / EasyPaisa payments (already built)
+
+### Phase 2 — Growth & Conversion
+
+- [ ] **Demo store / sandbox** — read-only tenant anyone can log into without signup. Pre-loaded with sample products, sales, reports. Store code: `demo`, credentials: `guest` / `demo1234`. Best sales tool — zero friction
+- [ ] **Referral program** — "Refer a store, get 1 month free." `referred_by` column on `tenants`. Both referrer and referred get credited
+- [ ] **Setup fee / onboarding service** — charge PKR 10,000-25,000 for data migration, hardware setup, training call. Pure profit, standard in Pakistan POS market
+- [ ] **Per-outlet pricing** — instead of flat monthly, charge per outlet (first outlet PKR 2,000/mo, each additional PKR 1,500/mo). `max_outlets` and billing tables already support this
+- [ ] **Annual discount push** — Starter PKR 30,000/yr (save PKR 6,000), Pro PKR 80,000/yr (save PKR 16,000). Show savings prominently on pricing page
+
+### Phase 3 — Product Stickiness & Engagement
+
+- [ ] **Daily/weekly email digest** — "Your store did PKR 45,000 yesterday, 23 transactions, top product: XYZ." Uses existing `email_queue` + sales data. Keeps owners engaged
+- [ ] **WhatsApp notifications** — WhatsApp Business API for low-stock alerts, shift summaries, daily digests. Pakistan runs on WhatsApp — major differentiator
+- [ ] **Digital receipts via WhatsApp** — proper WhatsApp template messages (not just wa.me links). Customer loyalty balance check via WhatsApp
+- [ ] **Automated onboarding progress emails** — targeted drip based on what they haven't done: "You haven't added products yet" (day 2), "Ready to open your first shift?" (day 3). Reduces drop-off. Drip infrastructure already exists
+
+### Phase 4 — Competitive Moats
+
+- [ ] **FBR integration as headline marketing** — most Pakistan POS competitors don't have real-time FBR digital invoicing or charge extra. Already built — make it the #1 selling point
+- [ ] **Offline-first reliability marketing** — offline sale queuing already built. Pakistan retailers face frequent power outages / internet drops. "Never lose a sale" messaging
+- [ ] **Multi-language support (Urdu UI)** — POS screen especially: product names, receipt text, button labels. Most retail staff more comfortable in Urdu. Major differentiator
+- [ ] **Inventory alerts via SMS** — low stock SMS via Twilio or local gateway (JazzCash SMS API). Store owners check SMS more reliably than email
+
+### Phase 5 — Payment Integration & Scale
+
+- [ ] **Stripe / Paddle** — international card payments for overseas Pakistani diaspora stores
+- [ ] **JazzCash / EasyPaisa integration** — local mobile money for Pakistan customers, auto-activate plan on payment
+- [ ] **Per-outlet add-on pricing** — transaction-based pricing for high-volume stores
+- [ ] **White-label / enterprise tier** — for chains that want their own branding
+
+### Technical Improvements
+
+- [ ] **Tenant analytics dashboard (super-admin)** — track which features each tenant actually uses. Aggregate `action_history` across tenants to inform investment decisions
+- [ ] **Signup flow: clear browser auth state** — logging into super admin then navigating to signup causes 403 because old JWT is sent. Frontend should not send auth headers on signup endpoint
+
+---
+
 ## 📋 Discussed but Deferred
 
-- **Payment gateway integration** (card machines, JazzCash, EasyPaisa)
+- **Payment gateway integration** (card machines, JazzCash, EasyPaisa) — see Phase 5 above
 - **Advance / layaway payments** — installment-based sales
 - **Shopcast / digital signage**
 - **CCTV / loss prevention**
