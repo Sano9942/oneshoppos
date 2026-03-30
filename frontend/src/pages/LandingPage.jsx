@@ -301,45 +301,22 @@ const STEPS = [
 const PLANS = [
   {
     name: "Free",
-    price: "Free",
-    subtitle: "For trying out SanoPOS",
-    featured: false,
-    limits: { outlets: 1, employees: 3, products: "500" },
-    features: [
-      "Full POS with barcode scanning",
-      "Cash shift management",
-      "Sales & inventory reports",
-      "Customer loyalty & wallet",
-      "Thermal receipt printing",
-    ],
-  },
-  {
-    name: "Starter",
-    price: "Contact Us",
-    subtitle: "For growing businesses",
-    featured: false,
-    limits: { outlets: 3, employees: 10, products: "2,000" },
-    features: [
-      "Everything in Free",
-      "Multi-store management",
-      "Stock transfers between outlets",
-      "Purchase orders & GRN",
-      "Shopify sync",
-    ],
+    price: "Free forever",
+    desc: "Perfect for trying out SanoPOS",
+    features: ["1 outlet", "3 employees", "100 products", "POS + inventory", "Basic reports"],
+    cta: "Start Free",
+    plan: "free",
+    highlight: false,
   },
   {
     name: "Pro",
-    price: "Contact Us",
-    subtitle: "For established retailers",
-    featured: true,
-    limits: { outlets: 10, employees: 50, products: "Unlimited" },
-    features: [
-      "Everything in Starter",
-      "67+ advanced reports",
-      "Accounting (P&L, cashflow)",
-      "HR & payroll management",
-      "Priority support",
-    ],
+    price: "PKR 8,000",
+    period: "/month per outlet",
+    desc: "Everything you need to run your business",
+    features: ["Unlimited outlets", "Unlimited employees", "Unlimited products", "All integrations", "Priority support", "45-day free trial"],
+    cta: "Start Free Trial",
+    plan: "pro",
+    highlight: true,
   },
 ];
 
@@ -421,7 +398,6 @@ function AccordionItem({ question, answer }) {
 export default function LandingPage() {
   const { isAuthenticated, isBootstrapping } = useAuth();
   const [scrolled, setScrolled] = useState(false);
-  const [livePricing, setLivePricing] = useState(null);
   const heroRef = useRef(null);
 
   useEffect(() => {
@@ -429,21 +405,6 @@ export default function LandingPage() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-
-  useEffect(() => {
-    fetch(`${API_BASE}/api/billing/pricing`)
-      .then(r => r.ok ? r.json() : null)
-      .then(setLivePricing)
-      .catch(() => {});
-  }, []);
-
-  function getLivePrice(planName) {
-    if (planName === "Free") return "Free";
-    if (!livePricing) return "...";
-    const monthly = livePricing.find(p => p.plan === planName.toLowerCase() && p.cycle === "monthly");
-    if (!monthly) return "Contact Us";
-    return `PKR ${Number(monthly.price).toLocaleString()}/mo`;
-  }
 
   if (isBootstrapping) return null;
   if (isAuthenticated) return <Navigate to="/context-select" replace />;
@@ -648,60 +609,36 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {PLANS.map(({ name, price, subtitle, featured, limits, features }) => (
+          <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+            {PLANS.map((p) => (
               <div
-                key={name}
+                key={p.name}
                 className={`relative rounded-2xl border p-6 flex flex-col ${
-                  featured
+                  p.highlight
                     ? "border-emerald-500 bg-white shadow-lg shadow-emerald-100 ring-1 ring-emerald-500"
                     : "border-slate-200 bg-white"
                 }`}
               >
-                {featured && (
+                {p.highlight && (
                   <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 bg-emerald-600 text-white text-xs font-bold px-3 py-1 rounded-full">
                     <Star size={11} fill="currentColor" />
-                    Most Popular
+                    Recommended
                   </div>
                 )}
 
                 <div className="mb-5">
-                  <h3 className="text-lg font-bold text-slate-900">{name}</h3>
-                  <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>
+                  <h3 className="text-lg font-bold text-slate-900">{p.name}</h3>
+                  <p className="text-sm text-slate-500 mt-0.5">{p.desc}</p>
                 </div>
 
                 <div className="mb-6">
-                  <span className="text-3xl font-extrabold text-slate-900">{getLivePrice(name)}</span>
-                  {livePricing && name !== "Free" && (() => {
-                    const annual = livePricing.find(p => p.plan === name.toLowerCase() && p.cycle === "annual");
-                    const monthly = livePricing.find(p => p.plan === name.toLowerCase() && p.cycle === "monthly");
-                    if (annual && monthly) {
-                      const savings = (Number(monthly.price) * 12) - Number(annual.price);
-                      return <p className="text-xs text-emerald-600 font-semibold mt-1">Annual: PKR {Number(annual.price).toLocaleString()}/yr (save PKR {savings.toLocaleString()})</p>;
-                    }
-                    return null;
-                  })()}
-                </div>
-
-                {/* Limits */}
-                <div className="grid grid-cols-3 gap-3 mb-6 bg-slate-50 rounded-lg p-3">
-                  <div className="text-center">
-                    <p className="text-lg font-bold text-slate-900">{limits.outlets}</p>
-                    <p className="text-xs text-slate-500">Outlets</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-lg font-bold text-slate-900">{limits.employees}</p>
-                    <p className="text-xs text-slate-500">Employees</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-lg font-bold text-slate-900">{limits.products}</p>
-                    <p className="text-xs text-slate-500">Products</p>
-                  </div>
+                  <span className="text-3xl font-extrabold text-slate-900">{p.price}</span>
+                  {p.period && <span className="text-sm text-slate-500 ml-1">{p.period}</span>}
                 </div>
 
                 {/* Features */}
                 <ul className="space-y-2.5 mb-6 grow">
-                  {features.map((f) => (
+                  {p.features.map((f) => (
                     <li key={f} className="flex items-start gap-2 text-sm text-slate-600">
                       <Check size={15} className="text-emerald-500 shrink-0 mt-0.5" />
                       {f}
@@ -710,14 +647,14 @@ export default function LandingPage() {
                 </ul>
 
                 <a
-                  href={`/signup?plan=${name.toLowerCase()}`}
+                  href={`/signup?plan=${p.plan}`}
                   className={`block text-center py-2.5 rounded-lg font-semibold text-sm transition-colors ${
-                    featured
+                    p.highlight
                       ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                       : "bg-slate-100 hover:bg-slate-200 text-slate-800"
                   }`}
                 >
-                  {price === "Free" ? "Get Started Free" : "Get Started"}
+                  {p.cta}
                 </a>
               </div>
             ))}
