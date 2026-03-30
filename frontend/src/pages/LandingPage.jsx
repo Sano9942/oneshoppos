@@ -337,6 +337,105 @@ const STATS = [
   { value: "0", label: "Feature Locks" },
 ];
 
+/* ─── Full Feature List ──────────────────────────────────── */
+
+const FULL_FEATURES = [
+  {
+    category: "POS",
+    items: [
+      "Barcode scanning (USB/Bluetooth)",
+      "Split payment (cash + card + wallet)",
+      "Keyboard shortcuts (F1-F10)",
+      "Park and recall sales",
+      "Offline sale queuing",
+      "Customer-facing display",
+      "Gift cards and vouchers",
+      "Quotation to sale conversion",
+      "Session-expired PIN re-auth",
+    ],
+  },
+  {
+    category: "Inventory",
+    items: [
+      "Stock by outlet breakdown",
+      "Stock transfers between outlets",
+      "Stock adjustments with reasons",
+      "Reorder alerts",
+      "Serial number tracking",
+      "Bulk CSV/XLSX import with preview",
+      "Dead stock reporting",
+    ],
+  },
+  {
+    category: "Purchasing",
+    items: [
+      "Purchase orders (create/edit/approve)",
+      "GRN with partial receiving",
+      "Supplier payables + aging ledger",
+      "Multi-level approval workflow",
+      "Supplier returns (RMA)",
+      "Purchase order templates",
+    ],
+  },
+  {
+    category: "Customers & CRM",
+    items: [
+      "Loyalty points (earn/redeem)",
+      "Customer wallet (deposit/debit)",
+      "CRM with activity timeline",
+      "Email receipts (SMTP + Resend)",
+      "WhatsApp sharing",
+      "Shareable receipt links",
+    ],
+  },
+  {
+    category: "HR & Operations",
+    items: [
+      "Attendance + kiosk PIN clock-in",
+      "Leave management + balance tracking",
+      "Payroll export",
+      "Cash shift management (denomination-based)",
+      "Dark mode",
+      "End-of-day email digest",
+    ],
+  },
+  {
+    category: "Reports & Analytics",
+    items: [
+      "67+ report tabs",
+      "AI insight cards",
+      "AI chat for data questions",
+      "FBR export (CSV)",
+      "Inventory forecasting",
+      "Shrinkage report",
+      "Pricing margin analysis",
+    ],
+  },
+  {
+    category: "Integrations",
+    items: [
+      "Shopify sync (products, stock, orders)",
+      "WooCommerce sync",
+      "FBR digital invoicing (real-time)",
+      "10 Pakistan courier integrations",
+      "Thermal + cloud printing (ESC/POS)",
+      "PWA (installable on any device)",
+    ],
+  },
+  {
+    category: "Admin & Security",
+    items: [
+      "Role-based permissions (Admin/Manager/Cashier)",
+      "IP allowlisting",
+      "Audit log (action history)",
+      "Brute-force throttling",
+      "JWT auth + session management",
+      "Idempotent sales (no duplicates)",
+      "Soft deletes with recovery",
+    ],
+  },
+];
+
 /* ─── How It Works Steps ──────────────────────────────────── */
 
 const STEPS = [
@@ -768,6 +867,36 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ── Full Feature List ───────────────────────────────── */}
+      <section className="py-12 md:py-16 bg-slate-50">
+        <div className="max-w-5xl mx-auto px-5">
+          <details className="group">
+            <summary className="flex items-center justify-center gap-2 cursor-pointer text-center list-none [&::-webkit-details-marker]:hidden">
+              <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                Every feature included on every plan
+              </h2>
+              <ChevronDown size={22} className="text-slate-400 transition-transform group-open:rotate-180 shrink-0 mt-1" />
+            </summary>
+
+            <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {FULL_FEATURES.map(({ category, items }) => (
+                <div key={category}>
+                  <h3 className="text-sm font-bold text-emerald-700 uppercase tracking-wider mb-3">{category}</h3>
+                  <ul className="space-y-1.5">
+                    {items.map((item) => (
+                      <li key={item} className="flex items-start gap-2 text-sm text-slate-600">
+                        <Check size={14} className="text-emerald-500 shrink-0 mt-0.5" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </details>
         </div>
       </section>
 
