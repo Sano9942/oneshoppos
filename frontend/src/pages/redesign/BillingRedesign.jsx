@@ -120,6 +120,35 @@ export default function BillingRedesign() {
     </PageShell>
   );
 
+  const PRICING = { monthly: 8000, annual: 80000 };
+  const priceLabel = cycle === "annual"
+    ? `PKR ${PRICING.annual.toLocaleString()}/year`
+    : `PKR ${PRICING.monthly.toLocaleString()}/mo`;
+
+  const CycleToggle = () => (
+    <div className="inline-flex rounded-lg border border-slate-200 p-0.5 text-sm">
+      {["monthly", "annual"].map(c => (
+        <button key={c} onClick={() => setCycle(c)}
+          className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer ${
+            cycle === c ? "bg-emerald-600 text-white" : "text-slate-600 hover:text-slate-800"
+          }`}>
+          {c === "annual" ? "Annual (save 17%)" : "Monthly"}
+        </button>
+      ))}
+    </div>
+  );
+
+  const OutletBreakdown = () => {
+    const outlets = billing?.max_outlets || 1;
+    if (outlets <= 1) return null;
+    const unitPrice = cycle === "annual" ? PRICING.annual : PRICING.monthly;
+    return (
+      <p className="text-xs text-slate-500 mt-1">
+        {outlets} outlets × PKR {unitPrice.toLocaleString()}/{cycle === "annual" ? "yr" : "mo"} = <strong>PKR {(unitPrice * outlets).toLocaleString()}</strong>
+      </p>
+    );
+  };
+
   const planColors = { free: "bg-slate-100 text-slate-700", pro: "bg-emerald-100 text-emerald-700" };
   const statusColors = { active: "text-emerald-600", trial: "text-blue-600", grace: "text-amber-600", expired: "text-red-600", due: "text-amber-600", overdue: "text-red-600" };
 
@@ -199,10 +228,11 @@ export default function BillingRedesign() {
                 ? "Your trial is ending soon. Subscribe to continue using all features."
                 : "You have full access to all Pro features during your trial."}
             </p>
+            <div className="mt-3 mb-2"><CycleToggle /><OutletBreakdown /></div>
             {billing.payment_enabled && (
-              <button onClick={() => handlePayNow()} disabled={submitting}
+              <button onClick={() => handlePayNow(cycle)} disabled={submitting}
                 className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50 cursor-pointer">
-                {submitting ? "Redirecting..." : "Subscribe Now — PKR 8,000/mo"}
+                {submitting ? "Redirecting..." : `Subscribe Now — ${priceLabel}`}
               </button>
             )}
           </div>
@@ -219,12 +249,13 @@ export default function BillingRedesign() {
             </div>
             <p className="text-sm text-red-700">
               Your account will become read-only after the grace period. Subscribe now to continue selling.
-              <strong> Pro plan: PKR 8,000/month per outlet.</strong>
+              <strong> Pro plan: {priceLabel} per outlet.</strong>
             </p>
+            <div className="mt-3 mb-2"><CycleToggle /><OutletBreakdown /></div>
             {billing.payment_enabled && (
-              <button onClick={() => handlePayNow()} disabled={submitting}
+              <button onClick={() => handlePayNow(cycle)} disabled={submitting}
                 className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer">
-                {submitting ? "Redirecting..." : "Pay Now — PKR 8,000/mo"}
+                {submitting ? "Redirecting..." : `Pay Now — ${priceLabel}`}
               </button>
             )}
           </div>
@@ -241,15 +272,16 @@ export default function BillingRedesign() {
               You can still view your data and export reports, but cannot make sales or changes.
               Subscribe to restore full access.
             </p>
+            <div className="mb-3"><CycleToggle /><OutletBreakdown /></div>
             {billing.payment_enabled ? (
-              <button onClick={() => handlePayNow()} disabled={submitting}
+              <button onClick={() => handlePayNow(cycle)} disabled={submitting}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer">
-                {submitting ? "Redirecting..." : "Pay Now — PKR 8,000/mo"}
+                {submitting ? "Redirecting..." : `Pay Now — ${priceLabel}`}
               </button>
             ) : (
               <button onClick={() => { setSelectedPlan("pro"); setShowUpgradeModal(true); }}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors cursor-pointer">
-                Subscribe Now — PKR 8,000/mo
+                {`Subscribe Now — ${priceLabel}`}
               </button>
             )}
           </div>
@@ -314,7 +346,8 @@ export default function BillingRedesign() {
         {Object.keys(upgradePlans).length > 0 && !billing?.pending_request && (
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-800 mb-4">Upgrade to Pro</h2>
-            <p className="text-sm text-slate-500 mb-4">PKR 8,000/month per outlet. Unlimited employees and products. All features included.</p>
+            <p className="text-sm text-slate-500 mb-4">{priceLabel} per outlet. Unlimited employees and products. All features included.</p>
+            <div className="mb-4"><CycleToggle /><OutletBreakdown /></div>
             <button
               onClick={() => { setSelectedPlan("pro"); setShowUpgradeModal(true); }}
               className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors flex items-center gap-1"
@@ -347,7 +380,8 @@ export default function BillingRedesign() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
             <h3 className="text-lg font-semibold text-slate-800 mb-2">Request Upgrade to Pro</h3>
-            <p className="text-sm text-slate-500 mb-4">PKR 8,000/month per outlet</p>
+            <p className="text-sm text-slate-500 mb-2">{priceLabel} per outlet</p>
+            <div className="mb-3"><CycleToggle /><OutletBreakdown /></div>
             <div className="mb-4">
               <label className="block text-sm font-medium text-slate-600 mb-1">Message (optional)</label>
               <textarea value={message} onChange={e => setMessage(e.target.value)}

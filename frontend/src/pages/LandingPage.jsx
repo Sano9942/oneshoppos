@@ -554,6 +554,7 @@ function AccordionItem({ question, answer }) {
 export default function LandingPage() {
   const { isAuthenticated, isBootstrapping } = useAuth();
   const [scrolled, setScrolled] = useState(false);
+  const [pricingCycle, setPricingCycle] = useState("monthly");
   const heroRef = useRef(null);
 
   useEffect(() => {
@@ -906,6 +907,18 @@ export default function LandingPage() {
             <p className="mt-3 text-slate-600 max-w-xl mx-auto">
               Start free and upgrade as your business grows. No hidden fees.
             </p>
+            <div className="flex justify-center mt-6 mb-2">
+              <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-sm shadow-sm">
+                {["monthly", "annual"].map(c => (
+                  <button key={c} onClick={() => setPricingCycle(c)}
+                    className={`px-4 py-2 rounded-md font-medium transition-colors cursor-pointer ${
+                      pricingCycle === c ? "bg-emerald-600 text-white shadow" : "text-slate-600 hover:text-slate-800"
+                    }`}>
+                    {c === "monthly" ? "Monthly" : "Annual (save 17%)"}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
@@ -931,8 +944,19 @@ export default function LandingPage() {
                 </div>
 
                 <div className="mb-6">
-                  <span className="text-3xl font-extrabold text-slate-900">{p.price}</span>
-                  {p.period && <span className="text-sm text-slate-500 ml-1">{p.period}</span>}
+                  <span className="text-3xl font-extrabold text-slate-900">
+                    {p.plan === "pro" ? (pricingCycle === "annual" ? "PKR 80,000" : "PKR 8,000") : p.price}
+                  </span>
+                  {p.plan === "pro" ? (
+                    <span className="text-sm text-slate-500 ml-1">
+                      {pricingCycle === "annual" ? "/year per outlet" : "/month per outlet"}
+                    </span>
+                  ) : p.period ? (
+                    <span className="text-sm text-slate-500 ml-1">{p.period}</span>
+                  ) : null}
+                  {p.plan === "pro" && pricingCycle === "annual" && (
+                    <p className="text-sm text-emerald-600 font-medium mt-1">Save PKR 16,000/year</p>
+                  )}
                 </div>
 
                 {/* Features */}

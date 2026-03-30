@@ -69,6 +69,7 @@ module.exports = function registerBillingRoutes(app, deps) {
         payment_enabled: paymentGateway.isEnabled(),
         upgrade_options: upgradeOptions,
         pending_request: pendingReq || null,
+        max_outlets: tenant.max_outlets || 1,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
