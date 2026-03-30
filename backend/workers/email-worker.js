@@ -2,7 +2,8 @@
  * Email Queue Worker
  *
  * Polls email_queue in public schema every 60s.
- * Also runs daily billing checks (expiry warnings, overdue notices).
+ * Also runs trial lifecycle checks (trial→grace→expired transitions)
+ * and daily billing checks (expiry warnings, overdue notices).
  *
  * Usage:
  *   Inline:     require('./workers/email-worker').startEmailWorker(db)
@@ -159,11 +160,111 @@ async function getTenantEmail(pool, slug) {
   }
 }
 
+// -- Trial Lifecycle Check ------------------------------------------------
+
+async function runTrialCheck(pool, logger) {
+  const fromAddress = process.env.RESEND_FROM_EMAIL || "SanoPOS <noreply@sanopos.com>";
+
+  try {
+    // 1. Trial warning — 7 days before trial ends
+    const { rows: warningTenants } = await pool.query(
+      `SELECT id, slug, name, trial_ends_at
+       FROM tenants
+       WHERE payment_status = 'trial'
+         AND trial_ends_at BETWEEN NOW() AND NOW() + INTERVAL '7 days'
+         AND status != 'deleted'`
+    );
+
+    for (const t of warningTenants) {
+      const { rows: dup } = await pool.query(
+        `SELECT 1 FROM email_queue
+         WHERE tenant_id = $1 AND email_type = 'trial_warning'
+           AND created_at > NOW() - INTERVAL '24 hours'
+         LIMIT 1`,
+        [t.id]
+      );
+      if (dup.length) continue;
+
+      const email = await getTenantEmail(pool, t.slug);
+      if (!email) continue;
+
+      const daysLeft = Math.max(1, Math.ceil((new Date(t.trial_ends_at) - new Date()) / 86400000));
+      const template = TEMPLATES.trial_warning({ storeName: t.name, daysLeft });
+
+      await pool.query(
+        `INSERT INTO email_queue (tenant_id, email_type, to_email, subject, html_body, from_address)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [t.id, "trial_warning", email, template.subject, template.html, fromAddress]
+      );
+      logger.info({ tenant: t.slug, daysLeft }, "Enqueued trial warning");
+    }
+
+    // 2. Trial → Grace transition
+    const { rows: expiredTrials } = await pool.query(
+      `SELECT id, slug, name, trial_ends_at
+       FROM tenants
+       WHERE payment_status = 'trial'
+         AND trial_ends_at < NOW()
+         AND status != 'deleted'`
+    );
+
+    for (const t of expiredTrials) {
+      await pool.query(
+        `UPDATE tenants SET payment_status = 'grace', grace_ends_at = trial_ends_at + INTERVAL '7 days', updated_at = NOW()
+         WHERE id = $1`,
+        [t.id]
+      );
+
+      const email = await getTenantEmail(pool, t.slug);
+      if (email) {
+        const template = TEMPLATES.trial_ended({ storeName: t.name });
+        await pool.query(
+          `INSERT INTO email_queue (tenant_id, email_type, to_email, subject, html_body, from_address)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [t.id, "trial_ended", email, template.subject, template.html, fromAddress]
+        );
+      }
+      logger.info({ tenant: t.slug }, "Trial → grace transition");
+    }
+
+    // 3. Grace → Expired transition
+    const { rows: expiredGrace } = await pool.query(
+      `SELECT id, slug, name
+       FROM tenants
+       WHERE payment_status = 'grace'
+         AND grace_ends_at < NOW()
+         AND status != 'deleted'`
+    );
+
+    for (const t of expiredGrace) {
+      await pool.query(
+        `UPDATE tenants SET payment_status = 'expired', updated_at = NOW()
+         WHERE id = $1`,
+        [t.id]
+      );
+
+      const email = await getTenantEmail(pool, t.slug);
+      if (email) {
+        const template = TEMPLATES.account_locked({ storeName: t.name });
+        await pool.query(
+          `INSERT INTO email_queue (tenant_id, email_type, to_email, subject, html_body, from_address)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [t.id, "account_locked", email, template.subject, template.html, fromAddress]
+        );
+      }
+      logger.info({ tenant: t.slug }, "Grace → expired transition (write-locked)");
+    }
+  } catch (err) {
+    logger.error({ err }, "Trial check error");
+  }
+}
+
 // -- Poll Loop ------------------------------------------------------------
 
 async function pollOnce(pool, resend, logger) {
   if (stopping) return;
   try {
+    await runTrialCheck(pool, logger);
     await runBillingCheck(pool, logger);
     await processQueue(pool, resend, logger);
   } catch (err) {
