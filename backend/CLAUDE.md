@@ -66,6 +66,15 @@ The following files are **legacy SQLite code** — never executed in production 
 | FBR background worker | `workers/fbr-worker.js` (polls queue, posts to FBR, inline or standalone) |
 | Tax rate seed data | `scripts/seed-tax-rates.js` (one-time, ~96 HS codes with Urdu descriptions) |
 
+## Efficiency Rules
+
+- **Read only the specific route file needed** — never read the whole `routes/` directory. If adding a sales feature, read `routes/sales.js` only
+- **Grep schema-pg.sql** — it's ~600 lines. Grep for the specific table name (`CREATE TABLE orders`) instead of reading the whole file
+- **Don't read registerAllRoutes.js** — route mounting is documented in the root CLAUDE.md. Skip it for all domain-level tasks
+- **Don't read index.js** — middleware order is documented in root CLAUDE.md. Only read it if the task is explicitly about server boot or middleware config
+- **One reference route** — when adding a new route file, read ONE similar existing route as a pattern reference, not multiple
+- **Grep before read** — use Grep to find the exact function/query/column before opening any file
+
 ## Database is Postgres
 
 - All queries use `await db.query(sql, [params])` with `$1, $2` placeholders

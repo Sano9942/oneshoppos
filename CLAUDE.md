@@ -15,6 +15,29 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 - **`backend/CLAUDE.md`** — file skip lists, Postgres query patterns, backend gotchas, test suites, production env
 - **`frontend/CLAUDE.md`** — route wrapper skip list, conventions (Tailwind v4, timestamps, currency, API calls), POS architecture, test suites
 
+## Efficiency Rules (Read First)
+
+### Model Usage
+- **Default to Sonnet** for all implementation tasks — code edits, file reads, bug fixes, route changes
+- **Switch to Opus only** for architecture decisions, planning multi-step features, or when genuinely stuck on a complex design problem
+- Once a plan is approved and execution starts, stay on Sonnet
+
+### Reading Files
+- **Grep first** — before reading any file, grep for the specific function/route/table name. Only read the file if grep result is insufficient
+- **Read only what's needed** — never read a whole directory; read the single relevant file
+- **No re-read after edit** — after a successful Edit or Write, do not re-read the file. Trust the tool unless it returned an error
+- **One reference rule** — when adding a new route or component, read ONE similar existing file as reference, not multiple
+- **Trust CLAUDE.md** — if the answer is documented here or in sub-guides, don't read source files to verify it
+
+### Off-Limits Unless Explicitly Needed
+- `backend/index.js` — middleware order and boot sequence are documented here; don't read unless task is specifically about server config
+- `backend/routes/registerAllRoutes.js` — route mounting is documented here; never read for domain-level changes
+- `frontend/src/App.jsx` — routing is documented in `frontend/CLAUDE.md`; don't read unless task is about routing guards
+
+### Response Style
+- No trailing summaries ("Here's what I did...") — the diff speaks for itself
+- No restating the task before acting — just do it
+
 ## Project Structure
 
 ```

@@ -52,6 +52,15 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 | Tax rate lookup | `pages/redesign/TaxLookupRedesign.jsx` — province-aware search, export, suggest correction |
 | Admin tax rates | `pages/admin/AdminTaxRates.jsx` — super-admin CRUD + suggestion review |
 
+## Efficiency Rules
+
+- **Read only the specific `*Redesign.jsx` needed** — never read the whole `redesign/` folder. If fixing a billing bug, read `BillingRedesign.jsx` only
+- **Don't read App.jsx** — routing and guards are documented in this file. Only read it if the task is explicitly about route structure or auth guards
+- **Don't read primitives.jsx** — `PageShell`, `SectionCard`, `Button`, `Input` props are documented above. Only read it if using a primitive not listed there
+- **One reference component** — when adding a new page, read ONE similar existing `*Redesign.jsx` as a pattern reference, not multiple
+- **Grep before read** — use Grep to find the exact component/hook/state before opening any file
+- **Don't re-read after edit** — after a successful Edit, don't re-read the file to verify. Trust the tool
+
 ## Key Conventions
 
 ### Tailwind v4 (linter enforced)
