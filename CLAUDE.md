@@ -132,7 +132,7 @@ oneshoppos/
         ├── reports/              # Report domain modules (includes FBRExportTab)
         ├── dashboard/            # Dashboard components (15 files — includes InsightCards, AIChatPanel, BackupStatusCard)
         ├── shopify/              # Shopify tab modules
-        ├── admin/                # Super-admin panel (separate auth, infra monitoring, tax rates CRUD)
+        ├── admin/                # Super-admin panel (separate auth, infra monitoring, tax rates CRUD, activity log, announcements)
         ├── LandingPage.jsx       # Public landing page (competitive positioning, pricing, login)
         ├── ResetPassword.jsx     # Public password reset page (/reset-password?token=xxx)
         ├── ReceiptPublicPage.jsx # Public shareable receipt (/receipt/:invoiceNumber)
@@ -192,6 +192,13 @@ oneshoppos/
 - **Support tickets**: `POST /api/support/tickets` + `POST /api/support/upload` (R2). Floating widget on all authenticated pages. Admin viewer at `/admin/support`.
 - **Dead letter queue**: `/admin/dead-letters` — failed webhook events with retry/dismiss actions.
 - **Tenant impersonation**: `POST /api/admin/impersonate/:tenantId` — 1-hour JWT, amber banner, audit trail in `impersonation_sessions` table. Actions tagged "(impersonated by Super-Admin)".
+- **Admin activity logging**: All admin mutations logged to `admin_activity_log` table. Security events (login success/failure) logged to `admin_security_log`. Cross-tenant activity via `GET /api/admin/tenant-activity`.
+- **Worker monitoring**: `GET /api/admin/worker-status` reads `global.__emailWorkerStatus`, `__fbrWorkerStatus`, `__cleanupWorkerStatus` heartbeat globals. Dashboard shows running/stopped status, queue depth, processed today.
+- **Cleanup worker**: `CLEANUP_WORKER_ENABLED=1` env var. Runs `jobs/cleanup-dead-tenants.js` every 24h inline.
+- **Orphaned schema detection**: `GET /api/admin/orphaned-schemas` + `POST /api/admin/orphaned-schemas/cleanup`.
+- **Announcements**: `GET/POST/PUT/DELETE /api/admin/announcements` (admin), `GET /api/announcements/active` (public, no auth). Tenant-side banner via `ui/AnnouncementBanner.jsx` in AppLayout.
+- **Tenant notes**: `GET/POST/DELETE /api/admin/tenants/:id/notes` — admin-only CRM notes per tenant.
+- **Support ticket replies**: `PUT /api/admin/support-tickets/:tenantId/:ticketId/reply` + in-app notification. Tenant-side "My Tickets" page at `/my-tickets`.
 
 ## Running Tests
 
@@ -235,7 +242,7 @@ oneshoppos/
 
 ## Migrations
 
-- **Current version**: 11 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns, v6: setup_token_expires_at, v7: billing tables, v8: support_tickets/impersonation_sessions, v9: FBR digital invoicing — fbr_invoices queue, category tax/HS inheritance, tax_rate_reference, tax_rate_suggestions, v10: email_queue for unified email service, v11: payment_intents for gateway checkout tracking)
+- **Current version**: 12 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns, v6: setup_token_expires_at, v7: billing tables, v8: support_tickets/impersonation_sessions, v9: FBR digital invoicing — fbr_invoices queue, category tax/HS inheritance, tax_rate_reference, tax_rate_suggestions, v10: email_queue for unified email service, v11: payment_intents for gateway checkout tracking, v12: super admin enhancements — admin_activity_log, admin_security_log, tenant_notes, announcements, broadcast_log, support_tickets reply columns)
 - **migrate-pg.js CLI**: `node backend/migrate-pg.js` — migrates public schema AND all active tenant schemas
 - **Tenant migration gotcha**: existing tenants need `schema_version` table seeded with previous versions before first run
 
