@@ -61,7 +61,7 @@ The following files are **legacy SQLite code** — never executed in production 
 | Payment gateway | `services/payment-gateway.js` — adapter (xPay impl, extensible to Stripe/JazzCash) |
 | Payment webhooks | `routes/webhooks.js` — mounted before tenant middleware, no auth |
 | Subscription enforcement | `middleware/plan-limits.js` — `requireActiveSubscription` + `requirePlanLimit` |
-| Dead tenant cleanup | `jobs/cleanup-dead-tenants.js` (removes tenants with no setup after 7 days) |
+| Dead tenant cleanup | `jobs/cleanup-dead-tenants.js` (removes tenants with no setup after 7 days, inline via `CLEANUP_WORKER_ENABLED=1`) |
 | FBR Digital Invoicing | `services/fbr.js` (API client + payload builders), `routes/fbr.js` (config/dashboard/retry), `routes/tax-lookup.js` (HS code search) |
 | FBR background worker | `workers/fbr-worker.js` (polls queue, posts to FBR, inline or standalone) |
 | Tax rate seed data | `scripts/seed-tax-rates.js` (one-time, ~96 HS codes with Urdu descriptions) |
@@ -149,6 +149,12 @@ The following files are **legacy SQLite code** — never executed in production 
 - `require("dotenv").config(...)` loads `.env` BEFORE the conditional import on line 5
 - `const db = process.env.DATABASE_URL ? require("./db-pg") : require("./db")` — Postgres or SQLite based on env
 - Railway has `DATABASE_URL` → runs Postgres. Local dev without `.env` → falls back to SQLite
+
+### Worker Heartbeat Pattern
+- Email, FBR, and cleanup workers expose `global.__emailWorkerStatus`, `__fbrWorkerStatus`, `__cleanupWorkerStatus`
+- Each object: `{ lastPollAt, processedToday, queueDepth }`
+- `GET /api/admin/worker-status` reads these globals to determine running/stopped state
+- Workers run inline in the Express process (same PID) — globals are shared memory
 
 ## Production Environment
 

@@ -43,7 +43,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 ```
 oneshoppos/
 ├── backend/
-│   ├── index.js                  # Main Express server (~749 lines)
+│   ├── index.js                  # Main Express server (~770 lines, includes cleanup worker startup)
 │   ├── db-pg.js                  # Postgres connection pool (query, transaction, getClient)
 │   ├── schema-pg.sql             # Full DDL — single source of truth
 │   ├── migrate-pg.js             # Postgres migration runner
@@ -51,7 +51,7 @@ oneshoppos/
 │   ├── category-tree.js          # Category tree enrichment + resolveInheritedField (FBR)
 │   ├── routes/
 │   │   ├── registerAllRoutes.js  # Orchestrator only (~324 lines)
-│   │   ├── admin.js              # /api/admin/* (super-admin, mounted BEFORE tenant middleware)
+│   │   ├── admin.js              # /api/admin/* (~2200 lines, super-admin, mounted BEFORE tenant middleware)
 │   │   ├── auth.js               # /api/auth/*
 │   │   ├── sales.js              # /api/sales
 │   │   ├── products.js           # /api/products (~912 lines)
@@ -92,8 +92,8 @@ oneshoppos/
 │   ├── services/email.js          # Unified sendEmail() + enqueueEmail() orchestrator
 │   ├── services/email-templates.js # HTML builder functions for 14 email types
 │   ├── services/fbr.js           # FBR API client, payload builders, queue helper
-│   ├── workers/email-worker.js    # Email queue worker + trial/paid expiry lifecycle (inline or standalone)
-│   ├── workers/fbr-worker.js     # FBR background worker (inline or standalone)
+│   ├── workers/email-worker.js    # Email queue worker + trial/paid expiry lifecycle (inline, heartbeat via global.__emailWorkerStatus)
+│   ├── workers/fbr-worker.js     # FBR background worker (inline, heartbeat via global.__fbrWorkerStatus)
 │   ├── scripts/seed-tax-rates.js # One-time seed for tax_rate_reference (~96 HS codes)
 │   └── utils/                    # tz.js, receiptEmail.js, digestEmail.js, backup-pg.js, resendEmail.js, alertEmail.js
 └── frontend/src/
@@ -108,6 +108,7 @@ oneshoppos/
     ├── ui/ErrorBoundary.jsx      # React error boundary (global + page-level)
     ├── ui/SupportWidget.jsx      # Floating support ticket widget
     ├── ui/ImpersonationBanner.jsx # Amber banner during tenant impersonation
+    ├── ui/AnnouncementBanner.jsx  # Platform announcement banners (fetches /api/announcements/active)
     ├── ui/nav-config.js          # Sidebar nav entries
     ├── utils/
     │   ├── dates.js              # UTC + LOCAL timestamp formatters
@@ -122,6 +123,7 @@ oneshoppos/
         │   ├── pos/POSContext.jsx # 130+ exports — all POS state + keyboard shortcuts
         │   ├── pos/POSShortcutsOverlay.jsx # F-key help modal
         │   ├── ProfileRedesign.jsx  # Employee profile page (PIN/password change)
+        │   ├── MyTicketsRedesign.jsx # Tenant-side support ticket viewer (/my-tickets)
         │   ├── ImportRedesign.jsx   # Bulk CSV/XLSX import (products, customers, suppliers)
         │   ├── CourierSettingsRedesign.jsx # Delivery courier configuration
         │   ├── WooCommerceIntegrationRedesign.jsx # WooCommerce sync
@@ -132,13 +134,13 @@ oneshoppos/
         ├── reports/              # Report domain modules (includes FBRExportTab)
         ├── dashboard/            # Dashboard components (15 files — includes InsightCards, AIChatPanel, BackupStatusCard)
         ├── shopify/              # Shopify tab modules
-        ├── admin/                # Super-admin panel (separate auth, infra monitoring, tax rates CRUD, activity log, announcements)
+        ├── admin/                # Super-admin panel (11 files — AdminLogin, AdminLayout, AdminDashboard, AdminTenantList, AdminTenantDetail, AdminActivity, AdminEmails, AdminSupportTickets, AdminDeadLetters, AdminTaxRates)
         ├── LandingPage.jsx       # Public landing page (competitive positioning, pricing, login)
         ├── ResetPassword.jsx     # Public password reset page (/reset-password?token=xxx)
         ├── ReceiptPublicPage.jsx # Public shareable receipt (/receipt/:invoiceNumber)
         ├── SignupPage.jsx        # Public self-service signup (/signup)
         ├── Reports.jsx           # Reports orchestrator (NOT legacy)
-        └── [*Route.jsx]          # 31 thin wrappers — never edit
+        └── [*Route.jsx]          # 32 thin wrappers — never edit (includes MyTicketsRoute.jsx)
 ```
 
 ## Key Architecture Facts
@@ -265,7 +267,7 @@ oneshoppos/
 - **Frontend**: `https://sanopos.com` (Vercel, custom domain — `sanopos.vercel.app` still works as fallback)
 - **Backend**: `https://api.sanopos.com` (Railway custom domain; `oneshoppos-production.up.railway.app` still works as fallback)
 - **Super-admin**: `https://sanopos.com/admin`
-- **Database**: Supabase Postgres, `public` schema = 7 master tables (incl. `payment_intents`), tenant data in `tenant_<slug>` schemas
+- **Database**: Supabase Postgres, `public` schema = 12 master tables (incl. `payment_intents`, `admin_activity_log`, `admin_security_log`, `tenant_notes`, `announcements`, `broadcast_log`), tenant data in `tenant_<slug>` schemas
 - **Resend**: `RESEND_API_KEY` env var on Railway for system emails (password reset, alerts, welcome). Sender: `RESEND_FROM_EMAIL=SanoPOS <noreply@sanopos.com>` (custom domain, SPF/DKIM/DMARC verified on `sanopos.com` via Cloudflare)
 - **Sentry**: `SENTRY_DSN` on Railway (backend), `VITE_SENTRY_DSN` on Vercel (frontend) — sanopos.sentry.io
 - **Alerts**: `ALERT_EMAIL` env var on Railway — receives error spike / DB pressure / support ticket notifications

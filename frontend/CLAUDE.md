@@ -11,7 +11,7 @@
 
 ## DO NOT READ These Files (token waste)
 
-### Route Wrappers (34 files — skip all, they are 5-line pass-throughs)
+### Route Wrappers (35 files — skip all, they are 5-line pass-throughs)
 `AccountingRoute.jsx`, `ActionHistoryRoute.jsx`, `AdministratorRoute.jsx`, `AttributeSetsRoute.jsx`, `BackupRestoreRoute.jsx`, `BrandsRoute.jsx`, `CRMRoute.jsx`, `CashManagementRoute.jsx`, `CategoriesRoute.jsx`, `CompanySettingsRoute.jsx`, `CustomersRoute.jsx`, `DashboardRoute.jsx`, `EmployeesRoute.jsx`, `ExpensesRoute.jsx`, `FBRDashboardRoute.jsx`, `FBRSettingsRoute.jsx`, `HRManagementRoute.jsx`, `InventoryRoute.jsx`, `OrdersRoute.jsx`, `OutletsRoute.jsx`, `POSRoute.jsx`, `PromotionsRoute.jsx`, `PurchaseOrdersRoute.jsx`, `QuotationsRoute.jsx`, `ReturnedStockRoute.jsx`, `ReturnsRoute.jsx`, `SalesHistoryRoute.jsx`, `ShopifyIntegrationRoute.jsx`, `StockAdjustmentsRoute.jsx`, `SupplierPayablesRoute.jsx`, `SuppliersRoute.jsx`, `TaxesRoute.jsx`, `TaxLookupRoute.jsx`, `TransfersRoute.jsx`
 
 Each one just does: `import XRedesign from './redesign/XRedesign'; export default function XRoute() { return <XRedesign />; }`
@@ -42,10 +42,12 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 | Dashboard modules | `pages/dashboard/*.jsx` |
 | Report modules | `pages/reports/*.jsx` |
 | Shopify modules | `pages/shopify/*.jsx` |
-| Admin panel | `pages/admin/*.jsx` |
+| Admin panel | `pages/admin/*.jsx` (11 files — dashboard, tenants, activity, emails, support, dead-letters, tax-rates) |
 | Error boundary | `ui/ErrorBoundary.jsx` — global + page-level |
 | Support widget | `ui/SupportWidget.jsx` — floating ticket form |
 | Impersonation banner | `ui/ImpersonationBanner.jsx` — amber bar during impersonation |
+| Announcement banner | `ui/AnnouncementBanner.jsx` — platform announcements, dismissible per session |
+| My Tickets page | `pages/redesign/MyTicketsRedesign.jsx` — tenant-side support ticket viewer + admin replies |
 | Tenant billing page | `pages/redesign/BillingRedesign.jsx` — trial countdown, Pay Now (gateway), payment history, upgrade requests |
 | FBR settings | `pages/redesign/FBRSettingsRedesign.jsx` — NTN, token, province, enable toggle |
 | FBR invoice queue | `pages/redesign/FBRDashboardRedesign.jsx` — summary cards, filters, retry, auto-refresh |
@@ -112,9 +114,11 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 - Session stored in `localStorage["adminSession"]` — NOT `"authSession"`
 - Routes at `/admin/*` bypass `RequireAuth`/`RequireContext`
 - `AdminDashboard.jsx` includes `InfrastructurePanel` — DB connections, cache hit ratio, table health, slow queries (30s auto-refresh)
-- `AdminSupportTickets.jsx` — cross-tenant support ticket viewer with status management + quick-impersonate
+- `AdminSupportTickets.jsx` — cross-tenant support ticket viewer with status management, quick-impersonate, reply, delete
 - `AdminDeadLetters.jsx` — failed webhook events with retry/dismiss actions
-- `AdminTenantDetail.jsx` — includes "Log in as tenant" impersonation button + payment recording + billing management
+- `AdminTenantDetail.jsx` — includes impersonation, payment recording, billing, feature flag toggles, tenant notes, plan pricing editor
+- `AdminActivity.jsx` — 3-tab activity log (admin actions, tenant activity, security log) with CSV export
+- `AdminEmails.jsx` — email queue with delete, send now, purge, retry, broadcasts tab, CSV export
 
 ## Test Suites
 
