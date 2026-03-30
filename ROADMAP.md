@@ -638,8 +638,8 @@ Changed via Railway Settings UI after removing `numReplicas` from `railway.toml`
 - [ ] **Demo store / sandbox** — read-only tenant anyone can log into without signup. Pre-loaded with sample products, sales, reports. Store code: `demo`, credentials: `guest` / `demo1234`. Best sales tool — zero friction
 - [ ] **Referral program** — "Refer a store, get 1 month free." `referred_by` column on `tenants`. Both referrer and referred get credited
 - [ ] **Setup fee / onboarding service** — charge PKR 10,000-25,000 for data migration, hardware setup, training call. Pure profit, standard in Pakistan POS market
-- [ ] **Per-outlet pricing** — instead of flat monthly, charge per outlet (first outlet PKR 2,000/mo, each additional PKR 1,500/mo). `max_outlets` and billing tables already support this
-- [ ] **Annual discount push** — Pro PKR 80,000/yr (save PKR 16,000). Show savings prominently on pricing page
+- [x] **Per-outlet pricing** (Mar 31 2026) — billing page and checkout show per-outlet breakdown (outlets × price = total). Backend already computed `amount = pricePerOutlet × outletCount`; frontend now exposes it with monthly/annual toggle.
+- [x] **Annual discount push** (Mar 31 2026) — Monthly/annual pricing toggle on billing page + landing page. Pro PKR 80,000/yr (save PKR 16,000). "Save 17%" badge on annual option.
 
 ### Phase 3 — Product Stickiness & Engagement
 
@@ -686,8 +686,8 @@ Changed via Railway Settings UI after removing `numReplicas` from `railway.toml`
 
 ### Technical Improvements
 
-- [ ] **Tenant analytics dashboard (super-admin)** — track which features each tenant actually uses. Aggregate `action_history` across tenants to inform investment decisions
-- [ ] **Signup flow: clear browser auth state** — logging into super admin then navigating to signup causes 403 because old JWT is sent. Frontend should not send auth headers on signup endpoint
+- [x] **Tenant analytics dashboard (super-admin)** (Mar 31 2026) — `GET /api/admin/tenants/:id/feature-usage` aggregates `action_history` by action_type (all time + 30d) + top users. Bar chart + user pills in `AdminTenantDetail.jsx` health panel.
+- [x] **Signup flow: clear browser auth state** (Mar 31 2026) — `AuthProvider.jsx` fetch interceptor now excludes `/api/auth/signup`, `/api/auth/forgot-password`, `/api/auth/reset-password` from token injection. (Actual bug: employee JWT leaked into public auth endpoints, not admin session.)
 
 ---
 
@@ -745,3 +745,4 @@ Changed via Railway Settings UI after removing `numReplicas` from `railway.toml`
 | Mar 30 2026 | **SaaS Phase 4 — Landing page rewrite**                  | 10 commits on `main`. Full competitive repositioning for Pakistan market. Hero ("The only POS built for Pakistan"), pain points (offline, FBR, pricing), device compatibility, benefit-first feature grid, comparison table (vs Oscar POS, EasyPOS, Vend), stats bar, expandable 50+ feature list, updated pricing cards. |
 | Mar 30 2026 | **Payment integration shipped**                         | `feature/payment-integration` branch (7 commits, 10 files, +693 lines). Gateway adapter pattern (`services/payment-gateway.js`) with xPay implementation. `POST /api/billing/create-checkout` → gateway redirect → `POST /api/webhooks/xpay` webhook confirms → tenant auto-activated. `payment_intents` table (migration v11). Double-pay guard (7-day window). Email worker gains paid subscription expiry transitions (active→grace) with `renewal_due`/`renewal_overdue` templates. Billing UI: Pay Now buttons, payment return polling, payment history table. Feature-gated by `PAYMENT_GATEWAY` env var — zero impact until activated. Pending: xPay account signup + credentials. |
 | Mar 29 2026 | **Railway moved to Singapore**                          | Backend region changed from EU West (Amsterdam) to Asia Southeast (Singapore). API↔DB latency dropped from ~150ms to ~12ms (same region as Supabase). Total API round trip for Pakistan users: ~400-500ms → ~100-160ms. |
+| Mar 31 2026 | **Roadmap items 1, 5, 6, 8 shipped**                    | `feature/roadmap-items-1-5-6-8` branch. (1) Signup auth fix: fetch interceptor excludes public auth endpoints from token injection. (5) Tenant feature-usage analytics: `GET /api/admin/tenants/:id/feature-usage` + bar chart in AdminTenantDetail. (6) Annual pricing toggle on billing + landing pages. (8) Per-outlet breakdown on billing page. Backend `GET /api/billing/status` now returns `max_outlets`. |
