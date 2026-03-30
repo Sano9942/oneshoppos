@@ -326,6 +326,17 @@ const COMPARISON = [
   { feature: "Thermal printer support", us: "ESC/POS + network", them: "Browser print only" },
 ];
 
+/* ─── Stats Bar ──────────────────────────────────────────── */
+
+const STATS = [
+  { value: "67+", label: "Reports" },
+  { value: "50+", label: "Features" },
+  { value: "F1-F10", label: "Shortcuts" },
+  { value: "100%", label: "Works Offline" },
+  { value: "5 min", label: "Setup Time" },
+  { value: "0", label: "Feature Locks" },
+];
+
 /* ─── How It Works Steps ──────────────────────────────────── */
 
 const STEPS = [
@@ -712,6 +723,20 @@ export default function LandingPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Numbers Bar ─────────────────────────────────────── */}
+      <section className="py-8 bg-emerald-600">
+        <div className="max-w-6xl mx-auto px-5">
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-6 text-center">
+            {STATS.map(({ value, label }) => (
+              <div key={label}>
+                <div className="text-2xl font-extrabold text-white">{value}</div>
+                <div className="text-xs font-medium text-emerald-100 mt-0.5">{label}</div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
