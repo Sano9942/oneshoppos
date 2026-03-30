@@ -2042,4 +2042,100 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       return res.status(500).json({ error: err.message });
     }
   });
+
+  // ── Support Ticket Reply + Delete ─────────────────────────────────
+  app.put("/api/admin/support-tickets/:tenantId/:ticketId/reply", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { reply } = req.body;
+      if (!reply || !reply.trim()) return res.status(400).json({ error: "Reply is required" });
+
+      const tenantDb = await tenantDbManager.getDb(parseInt(req.params.tenantId, 10));
+      const { rows } = await tenantDb.query(
+        `UPDATE support_tickets SET admin_reply = $1, replied_at = NOW(), status = 'acknowledged'
+         WHERE id = $2 RETURNING *`,
+        [reply.trim(), req.params.ticketId]
+      );
+      if (rows.length === 0) return res.status(404).json({ error: "Ticket not found" });
+
+      // Create in-app notification for the employee
+      if (rows[0].employee_id) {
+        try {
+          await tenantDb.query(
+            `INSERT INTO notifications (employee_id, type, title, message)
+             VALUES ($1, 'support_reply', 'Support ticket reply', $2)`,
+            [rows[0].employee_id, `Your support ticket has been replied to: ${reply.trim().substring(0, 100)}`]
+          );
+        } catch (_) { /* non-critical */ }
+      }
+
+      logAdminAction(req.admin.email, "ticket_replied", "support_ticket", req.params.ticketId, { tenant_id: req.params.tenantId }, req.ip);
+      return res.json(rows[0]);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/admin/support-tickets/:tenantId/:ticketId", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const tenantDb = await tenantDbManager.getDb(parseInt(req.params.tenantId, 10));
+      const { rowCount } = await tenantDb.query(
+        "DELETE FROM support_tickets WHERE id = $1",
+        [req.params.ticketId]
+      );
+      if (rowCount === 0) return res.status(404).json({ error: "Ticket not found" });
+      logAdminAction(req.admin.email, "ticket_deleted", "support_ticket", req.params.ticketId, { tenant_id: req.params.tenantId }, req.ip);
+      return res.json({ message: "Ticket deleted" });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Backup ────────────────────────────────────────────────────────
+  app.post("/api/admin/backup", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { isPgDumpAvailable, backupSchema } = require("../utils/backup-pg");
+      const { uploadToR2 } = require("../utils/r2");
+
+      const available = await isPgDumpAvailable();
+      if (!available) return res.status(500).json({ error: "pg_dump not available on this server" });
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const key = `backups/full-backup-${timestamp}.dump`;
+
+      const { stream, process: proc } = backupSchema("public");
+      const chunks = [];
+      stream.on("data", (chunk) => chunks.push(chunk));
+
+      await new Promise((resolve, reject) => {
+        proc.on("close", (code) => code === 0 ? resolve() : reject(new Error(`pg_dump exited ${code}`)));
+        proc.on("error", reject);
+      });
+
+      const buffer = Buffer.concat(chunks);
+      const url = await uploadToR2(buffer, key, "application/octet-stream");
+
+      try {
+        await db.query(
+          "INSERT INTO backup_log (filename, size_bytes, url, created_at) VALUES ($1, $2, $3, NOW())",
+          [key, buffer.length, url]
+        );
+      } catch (_) { /* table may not exist */ }
+
+      logAdminAction(req.admin.email, "backup_created", "system", null, { key, size: buffer.length }, req.ip);
+      return res.json({ message: "Backup created", key, size: buffer.length, url });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/backup-history", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        "SELECT * FROM backup_log ORDER BY created_at DESC LIMIT 20"
+      );
+      return res.json(rows);
+    } catch (err) {
+      return res.json([]);
+    }
+  });
 };

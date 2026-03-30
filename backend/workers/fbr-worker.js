@@ -99,6 +99,7 @@ async function processInvoice(pool, schema, invoiceId, profile, logger) {
     }
 
     logger.info({ schema, invoiceId, fbrIrn }, "FBR invoice posted successfully");
+    if (global.__fbrWorkerStatus) global.__fbrWorkerStatus.processedToday++;
   } catch (err) {
     const retryCount = (invoice.retry_count || 0) + 1;
     const maxRetries = invoice.max_retries || 5;
@@ -141,6 +142,7 @@ async function processInvoice(pool, schema, invoiceId, profile, logger) {
 
 async function pollOnce(pool, logger) {
   if (stopping) return;
+  if (global.__fbrWorkerStatus) global.__fbrWorkerStatus.lastPollAt = Date.now();
   try {
     const { rows: tenants } = await pool.query(
       "SELECT slug FROM public.tenants WHERE status = 'active'"
@@ -162,6 +164,7 @@ async function pollOnce(pool, logger) {
 }
 
 function startFbrWorker(db) {
+  global.__fbrWorkerStatus = { lastPollAt: null, processedToday: 0, queueDepth: 0 };
   // db can be the pg pool or the db-pg module
   const pool = db.pool || db;
   const logger = require("../services/logger").child({ component: "fbr-worker" });

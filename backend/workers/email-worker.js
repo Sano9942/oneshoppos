@@ -49,6 +49,7 @@ async function processQueue(pool, resend, logger) {
         [row.id]
       );
       logger.info({ id: row.id, to: row.to_email }, "Queued email sent");
+      if (global.__emailWorkerStatus) global.__emailWorkerStatus.processedToday++;
     } catch (err) {
       await pool.query(
         "UPDATE email_queue SET attempts = attempts + 1, error = $1 WHERE id = $2",
@@ -351,6 +352,7 @@ async function runPaidExpiryCheck(pool, logger) {
 
 async function pollOnce(pool, resend, logger) {
   if (stopping) return;
+  if (global.__emailWorkerStatus) global.__emailWorkerStatus.lastPollAt = Date.now();
   try {
     await runTrialCheck(pool, logger);
     await runPaidExpiryCheck(pool, logger);
@@ -362,6 +364,7 @@ async function pollOnce(pool, resend, logger) {
 }
 
 function startEmailWorker(db) {
+  global.__emailWorkerStatus = { lastPollAt: null, processedToday: 0, queueDepth: 0 };
   const pool = db.pool || db;
   const logger = require("../services/logger").child({ component: "email-worker" });
 

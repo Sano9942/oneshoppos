@@ -1295,3 +1295,26 @@ if (String(process.env.EMAIL_WORKER_ENABLED || "0") === "1") {
   const { startEmailWorker } = require("./workers/email-worker");
   startEmailWorker(db);
 }
+
+// Cleanup Worker — removes dead tenants (incomplete setup > 7 days)
+if (String(process.env.CLEANUP_WORKER_ENABLED || "0") === "1") {
+  const { cleanupDeadTenants } = require("./jobs/cleanup-dead-tenants");
+  const CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+  global.__cleanupWorkerStatus = { lastPollAt: null, processedToday: 0, queueDepth: 0 };
+
+  async function runCleanup() {
+    try {
+      global.__cleanupWorkerStatus.lastPollAt = Date.now();
+      const result = await cleanupDeadTenants();
+      global.__cleanupWorkerStatus.processedToday += result.deleted;
+      console.log(`[cleanup-worker] Checked: ${result.checked}, Deleted: ${result.deleted}, Skipped: ${result.skipped}`);
+    } catch (err) {
+      console.error("[cleanup-worker] Error:", err.message);
+    }
+  }
+
+  // Run once on startup, then every 24 hours
+  setTimeout(runCleanup, 10_000);
+  setInterval(runCleanup, CLEANUP_INTERVAL);
+  console.log("[cleanup-worker] Scheduled (every 24h)");
+}
