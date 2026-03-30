@@ -249,7 +249,8 @@ app.use(
     verify: (req, res, buf) => {
       if (
         req.originalUrl &&
-        req.originalUrl.includes("/api/integrations/shopify/webhooks/")
+        (req.originalUrl.includes("/api/integrations/shopify/webhooks/") ||
+         req.originalUrl.startsWith("/api/webhooks/"))
       ) {
         req.rawBody = buf.toString("utf8");
       }

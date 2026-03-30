@@ -137,6 +137,9 @@ module.exports = function registerAllRoutes(app, deps) {
     });
   });
 
+  // Payment gateway webhooks — no auth, no tenant context (identifies via payment_intents)
+  require("./webhooks")(app, deps);
+
   // Public receipt endpoint — no auth required, manually resolves tenant DB
   require("./receipts")(app, deps);
 
