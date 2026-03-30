@@ -276,6 +276,29 @@ const FEATURES = [
   },
 ];
 
+/* ─── Pain Points ────────────────────────────────────────── */
+
+const PAIN_POINTS = [
+  {
+    icon: WifiOff,
+    title: "Power Goes Out? Keep Selling.",
+    problem: "Load shedding and internet outages kill most POS systems.",
+    solution: "Offline sale queuing — ring up sales without internet, auto-sync when connection returns. Never lose a sale, even during load shedding.",
+  },
+  {
+    icon: Shield,
+    title: "FBR Compliant, Out of the Box",
+    problem: "Manual CSV exports, risk of penalties, no real-time posting.",
+    solution: "Real-time FBR digital invoicing with auto-retry queue. Category-level HS codes. Built in — not a paid add-on.",
+  },
+  {
+    icon: Zap,
+    title: "All Features. Every Plan.",
+    problem: "Competitors charge PKR 5,000-15,000/month and lock features behind paid tiers.",
+    solution: "Every feature is included on every plan — Free and Pro. No feature locks. No surprises. Pro adds unlimited capacity at PKR 8,000/mo per outlet.",
+  },
+];
+
 /* ─── How It Works Steps ──────────────────────────────────── */
 
 const STEPS = [
@@ -431,6 +454,9 @@ export default function LandingPage() {
           </a>
 
           <div className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
+            <a href="#why" className="hover:text-emerald-700 transition-colors">
+              Why SanoPOS
+            </a>
             <a href="#features" className="hover:text-emerald-700 transition-colors">
               Features
             </a>
@@ -531,6 +557,33 @@ export default function LandingPage() {
                 Create Free Account
               </a>
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Pain Points ─────────────────────────────────────── */}
+      <section id="why" className="py-12 md:py-16 bg-white">
+        <div className="max-w-6xl mx-auto px-5">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              Built for Pakistan's retail reality
+            </h2>
+            <p className="mt-3 text-slate-600 max-w-xl mx-auto">
+              We solve the problems other POS systems ignore.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            {PAIN_POINTS.map(({ icon: Icon, title, problem, solution }) => (
+              <div key={title} className="rounded-2xl border border-slate-200 bg-white p-6 hover:shadow-lg transition-shadow">
+                <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center mb-4">
+                  <Icon size={24} className="text-emerald-600" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 mb-2">{title}</h3>
+                <p className="text-sm text-red-600/80 font-medium mb-2">{problem}</p>
+                <p className="text-sm text-slate-600 leading-relaxed">{solution}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -721,6 +774,9 @@ export default function LandingPage() {
           </div>
 
           <div className="flex items-center gap-5 text-sm">
+            <a href="#why" className="hover:text-white transition-colors">
+              Why SanoPOS
+            </a>
             <a href="#features" className="hover:text-white transition-colors">
               Features
             </a>
