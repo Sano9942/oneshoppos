@@ -14,9 +14,8 @@
 // ── Plan defaults ────────────────────────────────────────────────────────
 // 0 = unlimited.  These are auto-applied on provision and plan change.
 const PLAN_DEFAULTS = {
-  free:    { max_outlets: 1,  max_employees: 3,  max_products: 500  },
-  starter: { max_outlets: 3,  max_employees: 10, max_products: 2000 },
-  pro:     { max_outlets: 10, max_employees: 50, max_products: 0    },
+  free: { max_outlets: 1, max_employees: 3,  max_products: 100 },
+  pro:  { max_outlets: 1, max_employees: 0,  max_products: 0   },
 };
 
 const RESOURCE_CONFIG = {
@@ -88,4 +87,45 @@ function requirePlanLimit(resource) {
   };
 }
 
-module.exports = { requirePlanLimit, PLAN_DEFAULTS };
+/**
+ * Blocks write operations (POST/PUT/DELETE) when tenant subscription is expired.
+ * Skipped for: GET requests, non-MT mode, non-API routes.
+ * Always allows: auth, billing, support, setup, health, receipts routes.
+ */
+function requireActiveSubscription(req, res, next) {
+  if (process.env.MULTI_TENANT !== "1") return next();
+  if (req.method === "GET" || req.method === "OPTIONS" || req.method === "HEAD") return next();
+
+  // Allow routes that must always work (auth, billing, support, setup, health, receipts)
+  const path = req.path;
+  if (
+    path.startsWith("/api/auth/") ||
+    path.startsWith("/api/billing/") ||
+    path.startsWith("/api/support/") ||
+    path.startsWith("/api/setup/") ||
+    path.startsWith("/api/health") ||
+    path.startsWith("/api/receipts/")
+  ) {
+    return next();
+  }
+
+  const tenantId = req.tenantId;
+  if (!tenantId) return next();
+
+  const masterDb = require("../master-db-pg");
+  masterDb.query("SELECT payment_status FROM tenants WHERE id = $1", [tenantId])
+    .then(({ rows }) => {
+      const status = rows[0]?.payment_status;
+      if (status === "expired") {
+        return res.status(403).json({
+          error: "Your subscription has expired. Please subscribe to continue.",
+          code: "SUBSCRIPTION_EXPIRED",
+          billing_url: "/billing",
+        });
+      }
+      next();
+    })
+    .catch(() => next()); // Best-effort — don't block on lookup failure
+}
+
+module.exports = { requirePlanLimit, requireActiveSubscription, PLAN_DEFAULTS };
