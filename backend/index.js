@@ -973,7 +973,7 @@ function notifyLowStockForSale(cartItems, outletId) {
 
 const runtimeState = { isRestoreInProgress: false };
 
-const { requirePlanLimit } = require("./middleware/plan-limits");
+const { requirePlanLimit, requireActiveSubscription, PLAN_DEFAULTS } = require("./middleware/plan-limits");
 
 // Mount admin routes BEFORE tenant middleware — admin endpoints use master.db directly
 const registerAdminRoutes = require("./routes/admin");
@@ -990,6 +990,7 @@ const { processPendingShopifyInventoryEvents, processPendingReportSchedules } =
     requireAnyPerm,
     requireFeature,
     requirePlanLimit,
+    requireActiveSubscription,
     createNotification,
     notifyLowStockForSale,
     loadEmployeePerms,

@@ -8,6 +8,7 @@ module.exports = function registerAllRoutes(app, deps) {
     requireAnyPerm,
     requireFeature,
     requirePlanLimit,
+    requireActiveSubscription,
     createNotification,
     notifyLowStockForSale,
     loadEmployeePerms,
@@ -165,6 +166,12 @@ module.exports = function registerAllRoutes(app, deps) {
   }
   app.use(loadCompanyProfile);
   app.use(resolveContext);
+
+  // Block write operations for expired subscriptions (must be after tenant resolution)
+  if (process.env.MULTI_TENANT === "1") {
+    app.use(requireActiveSubscription);
+  }
+
   app.use(requireContextOutlet);
   // Enrich Pino req.log with tenant/employee context now that auth has run
   const requestId = require("../middleware/request-id");
