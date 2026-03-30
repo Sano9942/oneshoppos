@@ -278,6 +278,16 @@ And at the top of the function (after line 10), add:
       const tenant = await masterDb.getTenantById(tenantId);
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
 
+      // Guard: don't allow double-pay if subscription has 7+ days remaining
+      if (tenant.payment_status === "active" && tenant.plan_expires_at) {
+        const daysLeft = Math.ceil((new Date(tenant.plan_expires_at) - new Date()) / 86400000);
+        if (daysLeft > 7) {
+          return res.status(400).json({
+            error: `Your subscription is active until ${new Date(tenant.plan_expires_at).toLocaleDateString()}. You can renew within the last 7 days.`,
+          });
+        }
+      }
+
       const { cycle = "monthly" } = req.body;
       if (!["monthly", "annual"].includes(cycle)) {
         return res.status(400).json({ error: "Invalid cycle" });
@@ -375,6 +385,25 @@ git commit -m "feat: add create-checkout and payment-history billing endpoints"
 **Files:**
 - Create: `backend/routes/webhooks.js`
 - Modify: `backend/routes/registerAllRoutes.js` (mount before tenant middleware)
+- Modify: `backend/index.js` (add xPay webhook path to raw body capture)
+
+**Step 0: Add xPay webhook path to raw body capture in index.js (line 249-256)**
+
+The existing `express.json()` middleware has a `verify` callback that saves raw body for Shopify webhooks. Add xPay webhook path to the same check:
+
+```javascript
+    verify: (req, res, buf) => {
+      if (
+        req.originalUrl &&
+        (req.originalUrl.includes("/api/integrations/shopify/webhooks/") ||
+         req.originalUrl.startsWith("/api/webhooks/"))
+      ) {
+        req.rawBody = buf.toString("utf8");
+      }
+    },
+```
+
+This preserves the raw body for HMAC verification while still letting `express.json()` parse it into `req.body`. No need for `express.raw()` on the webhook route.
 
 **Step 1: Create webhooks.js**
 
@@ -388,8 +417,6 @@ git commit -m "feat: add create-checkout and payment-history billing endpoints"
  * Identifies tenant via payment_intents.tenant_id lookup.
  */
 
-const express = require("express");
-
 module.exports = function registerWebhookRoutes(app, deps) {
   const masterDb = require("../master-db-pg");
   const paymentGateway = require("../services/payment-gateway");
@@ -397,12 +424,12 @@ module.exports = function registerWebhookRoutes(app, deps) {
   const { PLAN_DEFAULTS } = require("../middleware/plan-limits");
   const { TEMPLATES } = require("../services/email-templates");
 
-  // xPay needs raw body for HMAC verification
-  const rawBodyParser = express.raw({ type: "application/json" });
+  // Note: raw body is captured by express.json() verify callback in index.js
+  // and available as req.rawBody for HMAC verification.
 
-  app.post("/api/webhooks/xpay", rawBodyParser, async (req, res) => {
+  app.post("/api/webhooks/xpay", async (req, res) => {
     try {
-      const rawBody = req.body;
+      const rawBody = req.rawBody;
       const { valid, event_type, transaction_id, status, amount, raw, error } =
         await paymentGateway.verifyWebhook("xpay", req.headers, rawBody);
 
@@ -534,7 +561,7 @@ Find line 140 (before `require("./receipts")(app, deps);`). Insert before it:
 **Step 3: Commit**
 
 ```bash
-git add backend/routes/webhooks.js backend/routes/registerAllRoutes.js
+git add backend/routes/webhooks.js backend/routes/registerAllRoutes.js backend/index.js
 git commit -m "feat: add xPay webhook handler, mount before tenant middleware"
 ```
 
@@ -544,6 +571,21 @@ git commit -m "feat: add xPay webhook handler, mount before tenant middleware"
 
 **Files:**
 - Modify: `backend/workers/email-worker.js`
+
+**IMPORTANT: Overlap with existing `runBillingCheck`**
+
+The existing `runBillingCheck` (lines 68-150) already sends `billing_expiry_warning` and `billing_overdue` emails for tenants where `plan_expires_at` is approaching/past. The new `runPaidExpiryCheck` does the same PLUS transitions `payment_status` to `grace`. To avoid duplicate emails:
+
+- Update `runBillingCheck`'s expiry warning query to add `AND payment_status != 'active'` (skip tenants that `runPaidExpiryCheck` handles)
+- Update `runBillingCheck`'s overdue query to add `AND payment_status NOT IN ('grace', 'expired')` (skip tenants already transitioned)
+
+Or simpler: since `runPaidExpiryCheck` now handles paid tenant expiry fully, update `runBillingCheck` to skip tenants that have any `payment_records` (those are handled by `runPaidExpiryCheck`). Add to both queries in `runBillingCheck`:
+
+```sql
+AND NOT EXISTS (SELECT 1 FROM payment_records WHERE tenant_id = t.id)
+```
+
+This way `runBillingCheck` only handles tenants that were manually set to active by admin (no payment gateway involvement), and `runPaidExpiryCheck` handles gateway-paid tenants.
 
 **Step 1: Add `runPaidExpiryCheck` function after `runTrialCheck` (after line 260)**
 
@@ -1031,7 +1073,7 @@ git push -u origin feature/payment-integration
 | 1 | payment_intents table (migration v11) | `migrate-pg.js`, `master-db-pg.js` |
 | 2 | Payment gateway adapter (xPay) | `services/payment-gateway.js` (NEW) |
 | 3 | create-checkout + payment-history endpoints | `routes/billing.js` |
-| 4 | Webhook handler + route mounting | `routes/webhooks.js` (NEW), `registerAllRoutes.js` |
+| 4 | Webhook handler + route mounting + raw body capture | `routes/webhooks.js` (NEW), `registerAllRoutes.js`, `index.js` |
 | 5 | Paid subscription expiry transitions | `workers/email-worker.js` |
 | 6 | Renewal email templates (2 new) | `services/email-templates.js` |
 | 7 | Billing page: Pay Now + return handling + history | `BillingRedesign.jsx` |
