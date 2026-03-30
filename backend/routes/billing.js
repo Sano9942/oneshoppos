@@ -35,7 +35,7 @@ module.exports = function registerBillingRoutes(app, deps) {
         "SELECT plan, cycle, price, currency_code FROM plan_pricing WHERE is_active = true ORDER BY plan, cycle"
       );
 
-      const planRank = { free: 0, starter: 1, pro: 2 };
+      const planRank = { free: 0, pro: 1 };
       const currentRank = planRank[tenant.plan] || 0;
       const upgradeOptions = pricing.filter((p) => (planRank[p.plan] || 0) > currentRank);
 
@@ -44,12 +44,24 @@ module.exports = function registerBillingRoutes(app, deps) {
         [tenantId]
       );
 
+      let trial_days_left = null;
+      let grace_days_left = null;
+      if (tenant.payment_status === "trial" && tenant.trial_ends_at) {
+        trial_days_left = Math.max(0, Math.ceil((new Date(tenant.trial_ends_at) - new Date()) / 86400000));
+      }
+      if (tenant.payment_status === "grace" && tenant.grace_ends_at) {
+        grace_days_left = Math.max(0, Math.ceil((new Date(tenant.grace_ends_at) - new Date()) / 86400000));
+      }
+
       res.json({
         plan: tenant.plan,
         billing_cycle: tenant.billing_cycle || null,
         expires_at: tenant.plan_expires_at || null,
+        trial_ends_at: tenant.trial_ends_at || null,
         grace_ends_at: tenant.grace_ends_at || null,
         payment_status: tenant.payment_status || "active",
+        trial_days_left,
+        grace_days_left,
         upgrade_options: upgradeOptions,
         pending_request: pendingReq || null,
       });
