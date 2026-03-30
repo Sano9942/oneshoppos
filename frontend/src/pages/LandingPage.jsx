@@ -21,6 +21,9 @@ import {
   ArrowUp,
   Check,
   Star,
+  Tablet,
+  Laptop,
+  Smartphone,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
 import { API_BASE, IS_MULTI_TENANT } from "../config";
@@ -297,6 +300,14 @@ const PAIN_POINTS = [
     problem: "Competitors charge PKR 5,000-15,000/month and lock features behind paid tiers.",
     solution: "Every feature is included on every plan — Free and Pro. No feature locks. No surprises. Pro adds unlimited capacity at PKR 8,000/mo per outlet.",
   },
+];
+
+/* ─── Device Compatibility ───────────────────────────────── */
+
+const DEVICES = [
+  { icon: Tablet, title: "Tablet", desc: "Install as app (PWA) — touch-friendly POS layout" },
+  { icon: Laptop, title: "Laptop / Desktop", desc: "Full dashboard with F1-F10 keyboard shortcuts" },
+  { icon: Smartphone, title: "Phone", desc: "Check reports and manage inventory on the go" },
 ];
 
 /* ─── How It Works Steps ──────────────────────────────────── */
@@ -585,6 +596,36 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ── Works on Any Device ─────────────────────────────── */}
+      <section className="py-12 md:py-16 bg-slate-50">
+        <div className="max-w-6xl mx-auto px-5">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              No special hardware. No app store.
+            </h2>
+            <p className="mt-3 text-slate-600 max-w-xl mx-auto">
+              Just open your browser. SanoPOS works on any device you already own.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
+            {DEVICES.map(({ icon: Icon, title, desc }) => (
+              <div key={title} className="text-center">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-3">
+                  <Icon size={28} className="text-emerald-600" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 mb-1">{title}</h3>
+                <p className="text-sm text-slate-500">{desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-center text-sm text-slate-500">
+            <span className="font-medium text-slate-700">Optional add-ons:</span> USB/Bluetooth barcode scanner and ESC/POS thermal printer for the full retail experience.
+          </p>
         </div>
       </section>
 
