@@ -38,6 +38,7 @@ import {
   ShoppingBag,
   FileCheck,
   Search,
+  MessageSquare,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -135,6 +136,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Administrator", path: "/administrator", icon: Shield, requiredPerm: "all_access" },
       { name: "Action History", path: "/action-history", icon: ClipboardList, requiredPerm: "all_access" },
       { name: "Billing", path: "/billing", icon: CreditCard, requiredPerm: "all_access" },
+      { name: "My Tickets", path: "/my-tickets", icon: MessageSquare },
     ],
   },
 ];

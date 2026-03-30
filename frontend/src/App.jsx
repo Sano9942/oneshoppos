@@ -70,6 +70,7 @@ const ReorderAlertsRedesign = lazy(() => import("./pages/redesign/ReorderAlertsR
 const NotificationsRedesign = lazy(() => import("./pages/redesign/NotificationsRedesign"));
 const CustomerDisplayPage = lazy(() => import("./pages/CustomerDisplayPage"));
 const ProfileRedesign = lazy(() => import("./pages/redesign/ProfileRedesign"));
+const MyTicketsRoute = lazy(() => import("./pages/MyTicketsRoute"));
 const ReceiptPublicPage = lazy(() => import("./pages/ReceiptPublicPage"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const SignupPage = lazy(() => import("./pages/SignupPage"));
@@ -203,6 +204,7 @@ function App() {
         >
           <Route path="/dashboard" element={<DashboardRoute />} />
           <Route path="/profile" element={<ProfileRedesign />} />
+          <Route path="/my-tickets" element={<MyTicketsRoute />} />
           <Route path="/sales-history" element={<SalesHistoryRoute />} />
           <Route path="/cash-management" element={<CashManagementRoute />} />
           <Route path="/customers" element={<CustomersRoute />} />
