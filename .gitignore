@@ -46,3 +46,4 @@ supabase/.temp
 
 # Local dev scripts with credentials
 START-ADMIN.bat
+.playwright-mcp/
