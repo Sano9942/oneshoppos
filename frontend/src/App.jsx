@@ -5,6 +5,7 @@ initTheme();
 import { BrowserRouter as Router, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth/AuthProvider";
 import ImpersonationBanner from "./ui/ImpersonationBanner";
+import SubscriptionBanner from "./ui/SubscriptionBanner";
 import { IS_MULTI_TENANT } from "./config";
 import RequireAuth from "./components/RequireAuth";
 import RequireContext from "./components/RequireContext";
@@ -125,6 +126,7 @@ function App() {
     <>
     {isImpersonating && <ImpersonationBanner />}
     <Router>
+      <SubscriptionBanner />
       <Routes>
         <Route path="/" element={<HomeRedirect />} />
         <Route path="/setup" element={<SetupWizard />} />
