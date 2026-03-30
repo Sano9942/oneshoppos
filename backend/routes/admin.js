@@ -77,6 +77,26 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
     );
   }
 
+  async function logAdminAction(email, action, targetType, targetId, details, ip) {
+    try {
+      await db.query(
+        `INSERT INTO admin_activity_log (admin_email, action, target_type, target_id, details, ip_address)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [email, action, targetType, String(targetId || ""), details ? JSON.stringify(details) : null, ip || null]
+      );
+    } catch (_) { /* non-critical — never block admin operations */ }
+  }
+
+  async function logSecurityEvent(eventType, email, ip, userAgent, details) {
+    try {
+      await db.query(
+        `INSERT INTO admin_security_log (event_type, email, ip_address, user_agent, details)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [eventType, email, ip, userAgent, details ? JSON.stringify(details) : null]
+      );
+    } catch (_) { /* non-critical */ }
+  }
+
   // ── Auth middleware ─────────────────────────────────────────────────────
 
   function requireSuperAdmin(req, res, next) {
@@ -114,10 +134,12 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       );
       const admin = rows[0] || null;
       if (!admin) {
+        logSecurityEvent("login_failed", email, req.ip, req.headers["user-agent"], { reason: "invalid_credentials" });
         return res.status(401).json({ error: "Invalid email or password" });
       }
       const valid = await bcrypt.compare(String(password), admin.password_hash);
       if (!valid) {
+        logSecurityEvent("login_failed", email, req.ip, req.headers["user-agent"], { reason: "invalid_credentials" });
         return res.status(401).json({ error: "Invalid email or password" });
       }
       const token = jwt.sign(
@@ -125,6 +147,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
         process.env.JWT_SECRET,
         { expiresIn: jwtDefaults.accessExpiresIn }
       );
+      logSecurityEvent("login_success", email, req.ip, req.headers["user-agent"], null);
       return res.json({ token, admin: { id: admin.id, name: admin.name, email: admin.email } });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -209,6 +232,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       await auditLog(result.tenantId, "created", { slug, timezone: timezone || "UTC", plan: plan || "free" }, `admin:${req.admin.email}`);
 
       const frontendUrl = process.env.FRONTEND_URL || "https://sanopos.vercel.app";
+      logAdminAction(req.admin.email, "tenant_created", "tenant", slug, { plan: plan || "free" }, req.ip);
       return res.status(201).json({
         message: "Tenant provisioned",
         tenant: { id: result.tenantId, slug, name, status: "active", plan: plan || "free" },
@@ -302,6 +326,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
         }
       }
 
+      logAdminAction(req.admin.email, "tenant_updated", "tenant", req.params.id, req.body, req.ip);
       return res.json({ message: "Tenant updated" });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -321,6 +346,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       );
 
       await auditLog(tenant.id, "suspended", { reason: req.body?.reason }, `admin:${req.admin.email}`);
+      logAdminAction(req.admin.email, "tenant_suspended", "tenant", req.params.id, null, req.ip);
       return res.json({ message: `Tenant "${tenant.slug}" suspended` });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -341,6 +367,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       );
 
       await auditLog(tenant.id, "activated", null, `admin:${req.admin.email}`);
+      logAdminAction(req.admin.email, "tenant_activated", "tenant", req.params.id, null, req.ip);
       return res.json({ message: `Tenant "${tenant.slug}" activated` });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -370,6 +397,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       await db.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
 
       await auditLog(tenant.id, "deleted", null, `admin:${req.admin.email}`);
+      logAdminAction(req.admin.email, "tenant_deleted", "tenant", req.params.id, null, req.ip);
       return res.json({ message: `Tenant "${tenant.slug}" deleted and schema dropped` });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -654,6 +682,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       const result = { applied: [], message: "Postgres tenant migration not yet implemented" };
 
       await auditLog(tenant.id, "migrated", { applied: result.applied }, `admin:${req.admin.email}`);
+      logAdminAction(req.admin.email, "tenant_migrated", "tenant", req.params.id, null, req.ip);
       return res.json(result);
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -673,6 +702,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
         message: "Postgres tenant migration not yet implemented",
       }));
 
+      logAdminAction(req.admin.email, "migrate_all", "system", null, null, req.ip);
       return res.json({ results });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -715,6 +745,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       );
 
       await auditLog(tenant.id, "pin_reset", { employee_id: adminEmp.id }, `admin:${req.admin.email}`);
+      logAdminAction(req.admin.email, "pin_reset", "tenant", req.params.id, null, req.ip);
       return res.json({ message: `Admin PIN reset for tenant "${tenant.slug}"`, employee_id: adminEmp.id });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -920,6 +951,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       if (rows.length === 0) {
         return res.status(404).json({ error: "Pricing row not found" });
       }
+      logAdminAction(req.admin.email, "pricing_updated", "plan", req.params.id, req.body, req.ip);
       return res.json(rows[0]);
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -1000,6 +1032,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
         console.error("Billing payment email lookup failed:", emailErr.message);
       }
 
+      logAdminAction(req.admin.email, "payment_recorded", "tenant", req.params.id, { amount: req.body.amount, method: req.body.method }, req.ip);
       return res.json({
         ok: true,
         plan,
@@ -1065,6 +1098,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
         return res.status(404).json({ error: "Upgrade request not found" });
       }
 
+      logAdminAction(req.admin.email, "upgrade_request_" + status, "tenant", req.params.id, null, req.ip);
       return res.json(rows[0]);
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -1276,6 +1310,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       // 6. Audit log
       await auditLog(tenantId, "impersonated", { session_id: sessionId, admin_name: adminName }, `admin:${req.admin.email}`);
 
+      logAdminAction(req.admin.email, "impersonation_started", "tenant", req.params.tenantId, null, req.ip);
       return res.json({ token, tenantSlug: tenant.slug, tenantName: tenant.name, sessionId });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -1289,6 +1324,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
         "UPDATE impersonation_sessions SET ended_at = NOW() WHERE id = $1",
         [sessionId]
       );
+      logAdminAction(req.admin.email, "impersonation_ended", "session", req.params.sessionId, null, req.ip);
       return res.json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -1607,6 +1643,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       }
 
       await auditLog(null, "broadcast_sent", { type, subject, recipients: enqueued }, `admin:${req.admin.email}`);
+      logAdminAction(req.admin.email, "broadcast_sent", "email", null, { subject: req.body.subject, type: req.body.type }, req.ip);
       return res.json({ ok: true, enqueued });
     } catch (err) {
       return res.status(500).json({ error: err.message });
