@@ -498,7 +498,6 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
            SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
            SUM(CASE WHEN status = 'suspended' THEN 1 ELSE 0 END) AS suspended,
            SUM(CASE WHEN plan = 'free' THEN 1 ELSE 0 END) AS free_plan,
-           SUM(CASE WHEN plan = 'starter' THEN 1 ELSE 0 END) AS starter_plan,
            SUM(CASE WHEN plan = 'pro' THEN 1 ELSE 0 END) AS pro_plan
          FROM tenants WHERE status != 'deleted'`
       );
