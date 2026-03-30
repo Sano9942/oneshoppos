@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Database, Eye, Pause, Play, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowLeft, Database, Eye, MessageSquare, Pause, Pencil, Play, RotateCcw, ToggleLeft, ToggleRight, Trash2, X } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
 
 function safeDateParse(ts) {
@@ -51,6 +51,12 @@ export default function AdminTenantDetail() {
   const [paymentForm, setPaymentForm] = useState({ plan: "pro", cycle: "monthly", amount: "", payment_method: "bank_transfer", reference_note: "" });
   const [upgradeReqs, setUpgradeReqs] = useState([]);
   const [featureUsage, setFeatureUsage] = useState(null);
+  const [featureFlags, setFeatureFlags] = useState([]);
+  const [flagsLoading, setFlagsLoading] = useState(false);
+  const [notes, setNotes] = useState([]);
+  const [newNote, setNewNote] = useState("");
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [editingPricing, setEditingPricing] = useState(null); // { id, price, cycle, plan }
 
   const loadTenant = async () => {
     try {
@@ -96,6 +102,8 @@ export default function AdminTenantDetail() {
       adminFetch("/api/admin/upgrade-requests").then(r => r.json()).then(reqs => {
         setUpgradeReqs(reqs.filter(r => r.tenant_id === Number(id)));
       }).catch(() => {});
+      adminFetch(`/api/admin/tenants/${id}/feature-flags`).then(r => r.json()).then(setFeatureFlags).catch(() => {});
+      adminFetch(`/api/admin/tenants/${id}/notes`).then(r => r.json()).then(setNotes).catch(() => {});
     } catch (err) {
       setError(err.message);
     } finally {
@@ -137,6 +145,67 @@ export default function AdminTenantDetail() {
       alert(err.message);
     } finally {
       setActionLoading("");
+    }
+  };
+
+  const toggleFlag = async (key, currentEnabled) => {
+    setFlagsLoading(true);
+    try {
+      const res = await adminFetch(`/api/admin/tenants/${id}/feature-flags`, {
+        method: "PUT",
+        body: JSON.stringify({ key, enabled: !currentEnabled }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      setFeatureFlags(prev => prev.map(f => f.key === key ? { ...f, enabled: !currentEnabled } : f));
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setFlagsLoading(false);
+    }
+  };
+
+  const addNote = async () => {
+    if (!newNote.trim()) return;
+    setNotesLoading(true);
+    try {
+      const res = await adminFetch(`/api/admin/tenants/${id}/notes`, {
+        method: "POST",
+        body: JSON.stringify({ note: newNote.trim() }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      const created = await res.json();
+      setNotes(prev => [created, ...prev]);
+      setNewNote("");
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setNotesLoading(false);
+    }
+  };
+
+  const deleteNote = async (noteId) => {
+    if (!confirm("Delete this note?")) return;
+    try {
+      const res = await adminFetch(`/api/admin/tenants/${id}/notes/${noteId}`, { method: "DELETE" });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      setNotes(prev => prev.filter(n => n.id !== noteId));
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const savePricing = async () => {
+    if (!editingPricing) return;
+    try {
+      const res = await adminFetch(`/api/admin/plan-pricing/${editingPricing.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ price: Number(editingPricing.price) }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      setPlanPricing(prev => prev.map(p => p.id === editingPricing.id ? { ...p, price: Number(editingPricing.price) } : p));
+      setEditingPricing(null);
+    } catch (err) {
+      alert(err.message);
     }
   };
 
@@ -462,6 +531,121 @@ export default function AdminTenantDetail() {
               </div>
             )}
           </div>
+
+          {/* Feature Flags */}
+          {featureFlags.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Feature Flags</h2>
+              <div className="space-y-3">
+                {featureFlags.map(flag => (
+                  <div key={flag.key} className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">{flag.key.replace(/_/g, " ")}</p>
+                      {flag.description && <p className="text-xs text-slate-400">{flag.description}</p>}
+                    </div>
+                    <button
+                      onClick={() => toggleFlag(flag.key, flag.enabled)}
+                      disabled={flagsLoading}
+                      className="shrink-0 disabled:opacity-50"
+                      title={flag.enabled ? "Disable" : "Enable"}
+                    >
+                      {flag.enabled ? (
+                        <ToggleRight size={28} className="text-emerald-500" />
+                      ) : (
+                        <ToggleLeft size={28} className="text-slate-300" />
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Tenant Notes */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+              <MessageSquare size={14} /> Notes
+            </h2>
+            <div className="flex gap-2 mb-4">
+              <input
+                value={newNote}
+                onChange={(e) => setNewNote(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addNote()}
+                placeholder="Add a note..."
+                className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-violet-500 focus:outline-none"
+              />
+              <button
+                onClick={addNote}
+                disabled={notesLoading || !newNote.trim()}
+                className="shrink-0 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
+              >
+                {notesLoading ? "Adding..." : "Add Note"}
+              </button>
+            </div>
+            {notes.length > 0 ? (
+              <div className="max-h-60 space-y-2 overflow-y-auto">
+                {notes.map(n => (
+                  <div key={n.id} className="flex items-start justify-between gap-2 rounded-lg bg-slate-50 p-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{n.note}</p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {n.admin_email} — {safeDateParse(n.created_at)?.toLocaleString() ?? "—"}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => deleteNote(n.id)}
+                      className="shrink-0 text-slate-400 hover:text-red-500"
+                      title="Delete note"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">No notes yet.</p>
+            )}
+          </div>
+
+          {/* Plan Pricing Editor */}
+          {planPricing.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Plan Pricing</h2>
+              <div className="space-y-3">
+                {planPricing.map(p => (
+                  <div key={p.id} className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
+                    {editingPricing?.id === p.id ? (
+                      <div className="flex flex-1 items-center gap-3">
+                        <span className="text-sm font-medium capitalize text-slate-700">{p.plan} / {p.cycle}</span>
+                        <input
+                          type="number"
+                          value={editingPricing.price}
+                          onChange={(e) => setEditingPricing({ ...editingPricing, price: e.target.value })}
+                          className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-violet-500 focus:outline-none"
+                        />
+                        <button onClick={savePricing} className="text-xs font-semibold text-emerald-600 hover:text-emerald-500">Save</button>
+                        <button onClick={() => setEditingPricing(null)} className="text-xs font-medium text-slate-500 hover:text-slate-700">Cancel</button>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <p className="text-sm font-medium capitalize text-slate-700">{p.plan} / {p.cycle}</p>
+                          <p className="text-xs text-slate-400">PKR {Number(p.price).toLocaleString()}</p>
+                        </div>
+                        <button
+                          onClick={() => setEditingPricing({ id: p.id, price: String(p.price), cycle: p.cycle, plan: p.plan })}
+                          className="shrink-0 text-slate-400 hover:text-violet-600"
+                          title="Edit pricing"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Audit log */}
           {auditLog.length > 0 && (

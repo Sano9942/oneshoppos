@@ -1934,6 +1934,41 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
     }
   });
 
+  // ── Tenant Feature Flags (per-tenant schema) ──────────────────────
+  app.get("/api/admin/tenants/:id/feature-flags", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { rows: [tenant] } = await db.query("SELECT id, slug FROM tenants WHERE id = $1", [req.params.id]);
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+      const tenantDb = await tenantDbManager.getDb(tenant.id);
+      const { rows } = await tenantDb.query("SELECT key, enabled, description FROM feature_flags ORDER BY key");
+      return res.json(rows);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/admin/tenants/:id/feature-flags", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { key, enabled } = req.body;
+      if (!key) return res.status(400).json({ error: "key is required" });
+
+      const { rows: [tenant] } = await db.query("SELECT id, slug FROM tenants WHERE id = $1", [req.params.id]);
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+      const tenantDb = await tenantDbManager.getDb(tenant.id);
+      await tenantDb.query(
+        "UPDATE feature_flags SET enabled = $1, updated_by = $2, updated_at = NOW() WHERE key = $3",
+        [!!enabled, `admin:${req.admin.email}`, key]
+      );
+
+      logAdminAction(req.admin.email, "feature_flag_toggled", "tenant", req.params.id, { key, enabled: !!enabled }, req.ip);
+      return res.json({ message: "Feature flag updated" });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Tenant Notes ──────────────────────────────────────────────────
   app.get("/api/admin/tenants/:id/notes", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
