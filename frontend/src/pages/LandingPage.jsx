@@ -281,8 +281,8 @@ const FEATURES = [
 const STEPS = [
   {
     num: "01",
-    title: "Get Provisioned",
-    desc: "Our team creates your store account and assigns a plan that fits your business.",
+    title: "Sign Up Free",
+    desc: "Create your store in under a minute. No sales call, no credit card required.",
   },
   {
     num: "02",
@@ -480,25 +480,25 @@ export default function LandingPage() {
           <div>
             <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-6 border border-emerald-100">
               <Shield size={13} />
-              Trusted by retail businesses
+              FBR-compliant POS for Pakistan
             </div>
 
             <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 leading-tight tracking-tight">
-              The Complete POS
+              Pakistan's Most Complete
               <br />
-              <span className="text-emerald-600">for Modern Retail</span>
+              <span className="text-emerald-600">POS System</span>
             </h1>
 
             <p className="mt-5 text-lg text-slate-600 leading-relaxed max-w-lg">
-              Manage sales, inventory, staff, and reports — all in one place.
-              Built for multi-store retailers who need reliability and speed.
+              FBR-compliant. Works offline. All features free to start.
+              Set up in 5 minutes — no sales call needed.
             </p>
 
             <div className="mt-8 flex flex-col gap-3">
               {[
-                { icon: Building2, text: "Multi-store ready out of the box" },
-                { icon: WifiOff, text: "Works offline — syncs when you reconnect" },
-                { icon: RefreshCw, text: "Syncs with your Shopify store" },
+                { icon: WifiOff, text: "Works offline — never lose a sale during load shedding" },
+                { icon: Shield, text: "Real-time FBR digital invoicing — built in, not an add-on" },
+                { icon: Building2, text: "Multi-outlet with stock transfers — grow at your pace" },
               ].map(({ icon: Icon, text }) => (
                 <div key={text} className="flex items-center gap-3 text-sm text-slate-700">
                   <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
