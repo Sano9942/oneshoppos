@@ -1233,6 +1233,8 @@ CREATE TABLE IF NOT EXISTS support_tickets (
   screenshots     JSONB DEFAULT '[]',
   last_req_id     VARCHAR(64),
   status          VARCHAR(20) DEFAULT 'open',
+  admin_reply     TEXT,
+  replied_at      TIMESTAMPTZ,
   created_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   resolved_at     TIMESTAMPTZ
 );
@@ -1307,6 +1309,62 @@ CREATE TABLE IF NOT EXISTS email_queue (
 );
 CREATE INDEX IF NOT EXISTS idx_email_queue_pending
   ON email_queue(send_at) WHERE sent_at IS NULL AND attempts < max_attempts;
+
+-- ── Super Admin Enhancements ───────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS admin_activity_log (
+  id              SERIAL PRIMARY KEY,
+  admin_email     TEXT NOT NULL,
+  action          TEXT NOT NULL,
+  target_type     TEXT,
+  target_id       TEXT,
+  details         JSONB,
+  ip_address      TEXT,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_admin_activity_log_created ON admin_activity_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_activity_log_action ON admin_activity_log(action);
+
+CREATE TABLE IF NOT EXISTS admin_security_log (
+  id              SERIAL PRIMARY KEY,
+  event_type      TEXT NOT NULL,
+  email           TEXT,
+  ip_address      TEXT,
+  user_agent      TEXT,
+  details         JSONB,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_admin_security_log_created ON admin_security_log(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS tenant_notes (
+  id              SERIAL PRIMARY KEY,
+  tenant_id       INTEGER REFERENCES tenants(id),
+  admin_email     TEXT NOT NULL,
+  note            TEXT NOT NULL,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_tenant_notes_tenant ON tenant_notes(tenant_id);
+
+CREATE TABLE IF NOT EXISTS announcements (
+  id              SERIAL PRIMARY KEY,
+  message         TEXT NOT NULL,
+  type            TEXT DEFAULT 'info',
+  active          BOOLEAN DEFAULT true,
+  starts_at       TIMESTAMPTZ DEFAULT NOW(),
+  ends_at         TIMESTAMPTZ,
+  created_by      TEXT,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS broadcast_log (
+  id              SERIAL PRIMARY KEY,
+  admin_email     TEXT NOT NULL,
+  broadcast_type  TEXT NOT NULL,
+  subject         TEXT NOT NULL,
+  message         TEXT NOT NULL,
+  recipient_count INTEGER,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
 
 -- ── Seed data ─────────────────────────────────────────────────────
 INSERT INTO company_profile (id, company_name, setup_complete)

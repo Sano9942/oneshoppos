@@ -407,6 +407,74 @@ const MIGRATIONS = [
       await client.query(`CREATE INDEX IF NOT EXISTS idx_payment_intents_tenant ON payment_intents(tenant_id, status)`);
     },
   },
+  {
+    version: 12,
+    description: "Super admin enhancements — activity log, security log, tenant notes, announcements, broadcast log, support replies",
+    up: async (client) => {
+      // Public schema tables
+      await client.query(`CREATE TABLE IF NOT EXISTS admin_activity_log (
+        id SERIAL PRIMARY KEY,
+        admin_email TEXT NOT NULL,
+        action TEXT NOT NULL,
+        target_type TEXT,
+        target_id TEXT,
+        details JSONB,
+        ip_address TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_admin_activity_log_created ON admin_activity_log(created_at DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_admin_activity_log_action ON admin_activity_log(action)`);
+
+      await client.query(`CREATE TABLE IF NOT EXISTS admin_security_log (
+        id SERIAL PRIMARY KEY,
+        event_type TEXT NOT NULL,
+        email TEXT,
+        ip_address TEXT,
+        user_agent TEXT,
+        details JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_admin_security_log_created ON admin_security_log(created_at DESC)`);
+
+      await client.query(`CREATE TABLE IF NOT EXISTS tenant_notes (
+        id SERIAL PRIMARY KEY,
+        tenant_id INTEGER REFERENCES tenants(id),
+        admin_email TEXT NOT NULL,
+        note TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_tenant_notes_tenant ON tenant_notes(tenant_id)`);
+
+      await client.query(`CREATE TABLE IF NOT EXISTS announcements (
+        id SERIAL PRIMARY KEY,
+        message TEXT NOT NULL,
+        type TEXT DEFAULT 'info',
+        active BOOLEAN DEFAULT true,
+        starts_at TIMESTAMPTZ DEFAULT NOW(),
+        ends_at TIMESTAMPTZ,
+        created_by TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+
+      await client.query(`CREATE TABLE IF NOT EXISTS broadcast_log (
+        id SERIAL PRIMARY KEY,
+        admin_email TEXT NOT NULL,
+        broadcast_type TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        message TEXT NOT NULL,
+        recipient_count INTEGER,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+
+      // Per-tenant: support ticket reply columns (safe if table doesn't exist in this schema)
+      try {
+        await client.query(`ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS admin_reply TEXT`);
+        await client.query(`ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS replied_at TIMESTAMPTZ`);
+      } catch (_) {
+        // Table may not exist in public schema — ignore
+      }
+    },
+  },
 ];
 
 async function migrate(db) {
