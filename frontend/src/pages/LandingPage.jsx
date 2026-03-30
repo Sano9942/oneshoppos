@@ -24,6 +24,7 @@ import {
   Tablet,
   Laptop,
   Smartphone,
+  Printer,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
 import { API_BASE, IS_MULTI_TENANT } from "../config";
@@ -238,44 +239,44 @@ function LoginForm() {
 
 const FEATURES = [
   {
-    icon: ShoppingCart,
-    title: "Point of Sale",
-    desc: "Fast checkout with barcode scanning, split payments, and thermal receipt printing.",
-  },
-  {
-    icon: Package,
-    title: "Inventory",
-    desc: "Stock levels, transfers, and adjustments across all your outlets in real time.",
-  },
-  {
-    icon: Users,
-    title: "Staff Management",
-    desc: "Employee accounts, role permissions, attendance tracking, and kiosk PIN clock-in.",
+    icon: Shield,
+    title: "FBR Digital Invoicing",
+    desc: "Real-time posting to FBR with auto-retry queue. HS code inheritance per category. No manual exports.",
   },
   {
     icon: BarChart3,
-    title: "67+ Reports",
-    desc: "Sales, inventory, financial, and operational reports with date filters and exports.",
-  },
-  {
-    icon: Clock,
-    title: "Cash Shifts",
-    desc: "Denomination-based open and close with automatic variance tracking per shift.",
-  },
-  {
-    icon: Building2,
-    title: "Multi-Store",
-    desc: "Manage multiple outlets from a single dashboard. Transfer stock between locations.",
+    title: "67+ Report Tabs",
+    desc: "Sales, inventory, purchasing, accounting, HR reports — 3x more analytics than competitors.",
   },
   {
     icon: Heart,
-    title: "Customer Loyalty",
-    desc: "Wallet top-ups, loyalty points earn and redeem, and full customer purchase history.",
+    title: "Customer Loyalty & Wallet",
+    desc: "Built-in points earning and redemption, customer wallet deposits. No paid add-on needed.",
+  },
+  {
+    icon: Building2,
+    title: "Multi-Outlet Management",
+    desc: "Stock transfers between branches. Per-outlet reporting. Add outlets as your business grows.",
+  },
+  {
+    icon: WifiOff,
+    title: "Offline Sale Queuing",
+    desc: "Sales queue locally during power or internet outages. Auto-sync on reconnect. Never lose a transaction.",
+  },
+  {
+    icon: Printer,
+    title: "Thermal + Cloud Printing",
+    desc: "ESC/POS thermal printers and TCP/IP network printing. Works with standard retail hardware.",
+  },
+  {
+    icon: Users,
+    title: "HR, Attendance & Kiosk",
+    desc: "PIN clock-in/out with breaks, leave management, payroll export. Built into the POS — not separate software.",
   },
   {
     icon: RefreshCw,
-    title: "Shopify Sync",
-    desc: "Import products, sync inventory, and receive order webhooks from your Shopify store.",
+    title: "Shopify + WooCommerce Sync",
+    desc: "Import products, sync inventory, manage orders from one dashboard. Multi-channel from day one.",
   },
 ];
 
@@ -634,11 +635,10 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-5">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-              Everything you need to run your store
+              Everything you need — nothing you don't
             </h2>
             <p className="mt-3 text-slate-600 max-w-xl mx-auto">
-              From checkout to closing, SanoPOS covers every part of your daily
-              retail operations.
+              From POS checkout to HR payroll, SanoPOS covers your entire retail operation in one system.
             </p>
           </div>
 
