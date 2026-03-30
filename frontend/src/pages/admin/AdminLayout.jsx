@@ -1,12 +1,15 @@
+import { useState, useEffect } from "react";
 import { NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
-import { Home, LogOut, Server, Shield, MessageSquare, AlertTriangle, Mail } from "lucide-react";
-import { clearAdminSession, getAdminToken, getAdminSession } from "./AdminLogin";
+import { Home, LogOut, Server, Shield, MessageSquare, AlertTriangle, Mail, Activity, Scale } from "lucide-react";
+import { clearAdminSession, getAdminToken, getAdminSession, adminFetch } from "./AdminLogin";
 
 const NAV_ITEMS = [
   { name: "Dashboard", path: "/admin", icon: Home, end: true },
   { name: "Tenants", path: "/admin/tenants", icon: Server },
-  { name: "Support", path: "/admin/support", icon: MessageSquare },
+  { name: "Support", path: "/admin/support", icon: MessageSquare, badge: true },
   { name: "Emails", path: "/admin/emails", icon: Mail },
+  { name: "Activity", path: "/admin/activity", icon: Activity },
+  { name: "Tax Rates", path: "/admin/tax-rates", icon: Scale },
   { name: "Dead Letters", path: "/admin/dead-letters", icon: AlertTriangle },
 ];
 
@@ -17,6 +20,20 @@ export default function AdminLayout() {
   if (!token) return <Navigate to="/admin/login" replace />;
 
   const admin = getAdminSession()?.admin || null;
+
+  const [openTicketCount, setOpenTicketCount] = useState(0);
+
+  useEffect(() => {
+    const fetchCount = () => {
+      adminFetch("/api/admin/support-tickets?status=open")
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data) setOpenTicketCount(data.tickets?.length || 0); })
+        .catch(() => {});
+    };
+    fetchCount();
+    const timer = setInterval(fetchCount, 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-100">
@@ -49,6 +66,11 @@ export default function AdminLayout() {
               >
                 <Icon size={16} />
                 <span>{item.name}</span>
+                {item.badge && openTicketCount > 0 && (
+                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                    {openTicketCount}
+                  </span>
+                )}
               </NavLink>
             );
           })}
