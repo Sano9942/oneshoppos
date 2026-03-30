@@ -76,7 +76,8 @@ async function runBillingCheck(pool, logger) {
       `SELECT id, slug, name, plan, plan_expires_at
        FROM tenants
        WHERE plan_expires_at BETWEEN NOW() AND NOW() + INTERVAL '7 days'
-         AND status = 'active' AND plan != 'free'`
+         AND status = 'active' AND plan != 'free'
+         AND NOT EXISTS (SELECT 1 FROM payment_records WHERE tenant_id = tenants.id)`
     );
 
     for (const t of expiring7) {
@@ -115,7 +116,8 @@ async function runBillingCheck(pool, logger) {
       `SELECT id, slug, name, plan, plan_expires_at
        FROM tenants
        WHERE plan_expires_at < NOW()
-         AND status = 'active' AND plan != 'free'`
+         AND status = 'active' AND plan != 'free'
+         AND NOT EXISTS (SELECT 1 FROM payment_records WHERE tenant_id = tenants.id)`
     );
 
     for (const t of overdue) {
@@ -259,12 +261,99 @@ async function runTrialCheck(pool, logger) {
   }
 }
 
+// -- Paid Subscription Expiry Check ----------------------------------------
+
+async function runPaidExpiryCheck(pool, logger) {
+  const fromAddress = process.env.RESEND_FROM_EMAIL || "SanoPOS <noreply@sanopos.com>";
+
+  try {
+    // 1. Renewal warning — 7 days before plan_expires_at (for active PAID tenants only)
+    const { rows: renewalWarning } = await pool.query(
+      `SELECT t.id, t.slug, t.name, t.plan, t.plan_expires_at
+       FROM tenants t
+       WHERE t.payment_status = 'active'
+         AND t.plan != 'free'
+         AND t.plan_expires_at BETWEEN NOW() AND NOW() + INTERVAL '7 days'
+         AND t.status != 'deleted'
+         AND EXISTS (SELECT 1 FROM payment_records WHERE tenant_id = t.id)`
+    );
+
+    for (const t of renewalWarning) {
+      const { rows: dup } = await pool.query(
+        `SELECT 1 FROM email_queue
+         WHERE tenant_id = $1 AND email_type = 'renewal_due'
+           AND created_at > NOW() - INTERVAL '24 hours'
+         LIMIT 1`,
+        [t.id]
+      );
+      if (dup.length) continue;
+
+      const email = await getTenantEmail(pool, t.slug);
+      if (!email) continue;
+
+      const daysLeft = Math.max(1, Math.ceil((new Date(t.plan_expires_at) - new Date()) / 86400000));
+      const template = TEMPLATES.renewal_due({
+        storeName: t.name,
+        plan: t.plan,
+        expiresAt: new Date(t.plan_expires_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+        daysLeft,
+      });
+
+      await pool.query(
+        `INSERT INTO email_queue (tenant_id, email_type, to_email, subject, html_body, from_address)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [t.id, "renewal_due", email, template.subject, template.html, fromAddress]
+      );
+      logger.info({ tenant: t.slug, daysLeft }, "Enqueued renewal due notice");
+    }
+
+    // 2. Active (paid) → Grace transition
+    const { rows: expiredPaid } = await pool.query(
+      `SELECT t.id, t.slug, t.name, t.plan, t.plan_expires_at
+       FROM tenants t
+       WHERE t.payment_status = 'active'
+         AND t.plan != 'free'
+         AND t.plan_expires_at < NOW()
+         AND t.status != 'deleted'
+         AND EXISTS (SELECT 1 FROM payment_records WHERE tenant_id = t.id)`
+    );
+
+    for (const t of expiredPaid) {
+      await pool.query(
+        `UPDATE tenants SET payment_status = 'grace', grace_ends_at = plan_expires_at + INTERVAL '7 days', updated_at = NOW()
+         WHERE id = $1`,
+        [t.id]
+      );
+
+      const email = await getTenantEmail(pool, t.slug);
+      if (email) {
+        const template = TEMPLATES.renewal_overdue({
+          storeName: t.name,
+          plan: t.plan,
+          expiredAt: new Date(t.plan_expires_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+        });
+        await pool.query(
+          `INSERT INTO email_queue (tenant_id, email_type, to_email, subject, html_body, from_address)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [t.id, "renewal_overdue", email, template.subject, template.html, fromAddress]
+        );
+      }
+      logger.info({ tenant: t.slug }, "Paid subscription → grace transition");
+    }
+
+    // Note: grace → expired is already handled by runTrialCheck (same logic applies to both trial and paid)
+  } catch (err) {
+    logger.error({ err }, "Paid expiry check error");
+  }
+}
+
 // -- Poll Loop ------------------------------------------------------------
 
 async function pollOnce(pool, resend, logger) {
   if (stopping) return;
   try {
     await runTrialCheck(pool, logger);
+    await runPaidExpiryCheck(pool, logger);
     await runBillingCheck(pool, logger);
     await processQueue(pool, resend, logger);
   } catch (err) {
