@@ -1649,4 +1649,98 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       return res.status(500).json({ error: err.message });
     }
   });
+
+  // ── Activity Log ──────────────────────────────────────────────────
+  app.get("/api/admin/activity-log", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { action, limit: lim, offset: off } = req.query;
+      const limit = Math.min(parseInt(lim, 10) || 50, 200);
+      const offset = parseInt(off, 10) || 0;
+      const conditions = [];
+      const params = [];
+
+      if (action) {
+        params.push(action);
+        conditions.push(`action = $${params.length}`);
+      }
+
+      const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+      const { rows } = await db.query(
+        `SELECT * FROM admin_activity_log ${where} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        [...params, limit, offset]
+      );
+
+      const { rows: [{ count }] } = await db.query(
+        `SELECT COUNT(*) AS count FROM admin_activity_log ${where}`,
+        params
+      );
+
+      return res.json({ entries: rows, total: Number(count) });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Security Log ──────────────────────────────────────────────────
+  app.get("/api/admin/security-log", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { event_type, limit: lim, offset: off } = req.query;
+      const limit = Math.min(parseInt(lim, 10) || 50, 200);
+      const offset = parseInt(off, 10) || 0;
+      const conditions = [];
+      const params = [];
+
+      if (event_type) {
+        params.push(event_type);
+        conditions.push(`event_type = $${params.length}`);
+      }
+
+      const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+      const { rows } = await db.query(
+        `SELECT * FROM admin_security_log ${where} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        [...params, limit, offset]
+      );
+
+      const { rows: [{ count }] } = await db.query(
+        `SELECT COUNT(*) AS count FROM admin_security_log ${where}`,
+        params
+      );
+
+      return res.json({ entries: rows, total: Number(count) });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Cross-Tenant Activity ─────────────────────────────────────────
+  app.get("/api/admin/tenant-activity", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+      const { rows: tenants } = await db.query(
+        "SELECT id, slug, name FROM tenants WHERE status = 'active' ORDER BY id"
+      );
+
+      const allActivity = [];
+      for (const tenant of tenants) {
+        try {
+          const tenantDb = await tenantDbManager.getDb(tenant.id);
+          const { rows } = await tenantDb.query(
+            `SELECT action, entity_type, entity_id, details, performed_by, created_at
+             FROM action_history ORDER BY created_at DESC LIMIT $1`,
+            [Math.ceil(limit / tenants.length) || 10]
+          );
+          for (const row of rows) {
+            allActivity.push({ ...row, tenant_slug: tenant.slug, tenant_name: tenant.name });
+          }
+        } catch (_) { /* table may not exist */ }
+      }
+
+      allActivity.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      return res.json({ entries: allActivity.slice(0, limit) });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
 };
