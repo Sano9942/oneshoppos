@@ -31,6 +31,8 @@ export function AuthProvider({ children }) {
   const [isImpersonating, setIsImpersonating] = useState(false);
   const [impersonationTenantName, setImpersonationTenantName] = useState(null);
   const [impersonationSessionId, setImpersonationSessionId] = useState(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState(null); // null | 'trial' | 'grace' | 'expired' | 'active'
+  const [subscriptionDaysLeft, setSubscriptionDaysLeft] = useState(null);
 
   const employee = session?.employee || null;
   const permissions = session?.permissions || EMPTY_PERMISSIONS;
@@ -250,6 +252,25 @@ export function AuthProvider({ children }) {
         };
         writeSession(refreshed);
         if (isMounted) setSession(refreshed);
+
+        // Check subscription status for banner
+        if (IS_MULTI_TENANT && refreshed?.token) {
+          try {
+            const nf = window._nativeFetch || window.fetch;
+            const billingRes = await nf(`${API}/api/billing/status`, {
+              headers: { Authorization: `Bearer ${refreshed.token}` },
+            });
+            if (billingRes.ok) {
+              const billingData = await billingRes.json();
+              if (isMounted) {
+                setSubscriptionStatus(billingData.payment_status || "active");
+                setSubscriptionDaysLeft(billingData.trial_days_left ?? billingData.grace_days_left ?? null);
+              }
+            }
+          } catch {
+            // non-critical
+          }
+        }
       } catch {
         clearSession();
         if (isMounted) setSession(null);
@@ -364,6 +385,19 @@ export function AuthProvider({ children }) {
         if (rid) window.__lastFailedReqId = rid;
       }
 
+      // Detect subscription expiry
+      if (response.status === 403) {
+        try {
+          const cloned2 = response.clone();
+          const body2 = await cloned2.json();
+          if (body2.code === "SUBSCRIPTION_EXPIRED") {
+            setSubscriptionStatus("expired");
+          }
+        } catch {
+          // ignore parse errors
+        }
+      }
+
       return response;
     };
 
@@ -390,6 +424,8 @@ export function AuthProvider({ children }) {
       isImpersonating,
       impersonationTenantName,
       impersonationSessionId,
+      subscriptionStatus,
+      subscriptionDaysLeft,
     }),
     [
       session,
@@ -403,6 +439,8 @@ export function AuthProvider({ children }) {
       isImpersonating,
       impersonationTenantName,
       impersonationSessionId,
+      subscriptionStatus,
+      subscriptionDaysLeft,
     ],
   );
 
