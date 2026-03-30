@@ -1644,6 +1644,15 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
       await auditLog(null, "broadcast_sent", { type, subject, recipients: enqueued }, `admin:${req.admin.email}`);
       logAdminAction(req.admin.email, "broadcast_sent", "email", null, { subject: req.body.subject, type: req.body.type }, req.ip);
+
+      // Log broadcast
+      try {
+        await db.query(
+          `INSERT INTO broadcast_log (admin_email, broadcast_type, subject, message, recipient_count) VALUES ($1, $2, $3, $4, $5)`,
+          [req.admin.email, type, subject, message, enqueued]
+        );
+      } catch (_) { /* non-critical */ }
+
       return res.json({ ok: true, enqueued });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -1906,6 +1915,129 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
 
       logAdminAction(req.admin.email, "orphaned_schemas_cleanup", "system", null, { dropped }, req.ip);
       return res.json({ dropped, count: dropped.length });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Public: active announcements (no auth — for tenant dashboards) ──
+  app.get("/api/announcements/active", async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        `SELECT id, message, type, starts_at, ends_at FROM announcements
+         WHERE active = true AND starts_at <= NOW() AND (ends_at IS NULL OR ends_at > NOW())
+         ORDER BY created_at DESC LIMIT 5`
+      );
+      return res.json(rows);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Tenant Notes ──────────────────────────────────────────────────
+  app.get("/api/admin/tenants/:id/notes", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        "SELECT * FROM tenant_notes WHERE tenant_id = $1 ORDER BY created_at DESC",
+        [req.params.id]
+      );
+      return res.json(rows);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/tenants/:id/notes", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { note } = req.body;
+      if (!note || !note.trim()) return res.status(400).json({ error: "Note is required" });
+
+      const { rows } = await db.query(
+        "INSERT INTO tenant_notes (tenant_id, admin_email, note) VALUES ($1, $2, $3) RETURNING *",
+        [req.params.id, req.admin.email, note.trim()]
+      );
+      logAdminAction(req.admin.email, "note_added", "tenant", req.params.id, { note: note.trim().substring(0, 100) }, req.ip);
+      return res.status(201).json(rows[0]);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/admin/tenants/:id/notes/:noteId", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { rowCount } = await db.query(
+        "DELETE FROM tenant_notes WHERE id = $1 AND tenant_id = $2",
+        [req.params.noteId, req.params.id]
+      );
+      if (rowCount === 0) return res.status(404).json({ error: "Note not found" });
+      return res.json({ message: "Note deleted" });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Announcements ─────────────────────────────────────────────────
+  app.get("/api/admin/announcements", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { rows } = await db.query("SELECT * FROM announcements ORDER BY created_at DESC LIMIT 50");
+      return res.json(rows);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/announcements", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { message, type = "info", ends_at } = req.body;
+      if (!message || !message.trim()) return res.status(400).json({ error: "Message is required" });
+      if (!["info", "warning", "maintenance"].includes(type)) return res.status(400).json({ error: "Type must be info, warning, or maintenance" });
+
+      const { rows } = await db.query(
+        `INSERT INTO announcements (message, type, ends_at, created_by) VALUES ($1, $2, $3, $4) RETURNING *`,
+        [message.trim(), type, ends_at || null, req.admin.email]
+      );
+      logAdminAction(req.admin.email, "announcement_created", "announcement", rows[0].id, { type, message: message.trim().substring(0, 100) }, req.ip);
+      return res.status(201).json(rows[0]);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/admin/announcements/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { message, type, active, ends_at } = req.body;
+      const { rows } = await db.query(
+        `UPDATE announcements SET
+          message = COALESCE($1, message),
+          type = COALESCE($2, type),
+          active = COALESCE($3, active),
+          ends_at = $4
+        WHERE id = $5 RETURNING *`,
+        [message, type, active, ends_at !== undefined ? ends_at : null, req.params.id]
+      );
+      if (rows.length === 0) return res.status(404).json({ error: "Announcement not found" });
+      return res.json(rows[0]);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/admin/announcements/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { rowCount } = await db.query("DELETE FROM announcements WHERE id = $1", [req.params.id]);
+      if (rowCount === 0) return res.status(404).json({ error: "Announcement not found" });
+      logAdminAction(req.admin.email, "announcement_deleted", "announcement", req.params.id, null, req.ip);
+      return res.json({ message: "Announcement deleted" });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Broadcast History ─────────────────────────────────────────────
+  app.get("/api/admin/broadcast-history", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { rows } = await db.query("SELECT * FROM broadcast_log ORDER BY created_at DESC LIMIT 50");
+      return res.json(rows);
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
