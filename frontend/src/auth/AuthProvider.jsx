@@ -319,7 +319,12 @@ export function AuthProvider({ children }) {
         );
       }
 
-      if (!isApiCall || !employee?.id) {
+      // Public auth endpoints must never receive employee credentials
+      const urlStr = typeof input === "string" ? input : input.url;
+      const isPublicAuth = ["/api/auth/signup", "/api/auth/forgot-password", "/api/auth/reset-password"]
+        .some(p => urlStr.includes(p));
+
+      if (!isApiCall || !employee?.id || isPublicAuth) {
         return nativeFetch(input, init);
       }
 
