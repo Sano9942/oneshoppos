@@ -1743,4 +1743,47 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       return res.status(500).json({ error: err.message });
     }
   });
+
+  // DELETE /api/admin/email-queue/purge-deleted — delete all emails for deleted tenants
+  app.delete("/api/admin/email-queue/purge-deleted", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { rowCount } = await db.query(
+        "DELETE FROM email_queue WHERE tenant_id IN (SELECT id FROM tenants WHERE status = 'deleted')"
+      );
+      logAdminAction(req.admin.email, "email_purge_deleted", "email", null, { count: rowCount }, req.ip);
+      return res.json({ message: `Purged ${rowCount} email(s) for deleted tenants` });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // DELETE /api/admin/email-queue/:id — hard delete a pending/failed email
+  app.delete("/api/admin/email-queue/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { rowCount } = await db.query(
+        "DELETE FROM email_queue WHERE id = $1 AND sent_at IS NULL",
+        [req.params.id]
+      );
+      if (rowCount === 0) return res.status(404).json({ error: "Email not found or already sent" });
+      logAdminAction(req.admin.email, "email_deleted", "email", req.params.id, null, req.ip);
+      return res.json({ message: "Email deleted" });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/email-queue/:id/send-now — force a pending email to send immediately
+  app.post("/api/admin/email-queue/:id/send-now", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { rowCount } = await db.query(
+        "UPDATE email_queue SET send_at = NOW(), attempts = 0, error = NULL WHERE id = $1 AND sent_at IS NULL",
+        [req.params.id]
+      );
+      if (rowCount === 0) return res.status(404).json({ error: "Email not found or already sent" });
+      logAdminAction(req.admin.email, "email_force_sent", "email", req.params.id, null, req.ip);
+      return res.json({ message: "Email queued for immediate send" });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
 };
