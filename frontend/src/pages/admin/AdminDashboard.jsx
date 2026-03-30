@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, Building2, Server, Users, Database, Zap, AlertTriangle, Clock, HardDrive } from "lucide-react";
+import { Activity, Building2, Server, Users, Database, Zap, AlertTriangle, Clock, HardDrive, DollarSign, TrendingUp, CreditCard, AlertCircle, CheckCircle, Wrench, Megaphone, HardDriveDownload, RefreshCw } from "lucide-react";
 import { API_BASE } from "../../config";
-import { getAdminToken } from "./AdminLogin";
+import { getAdminToken, adminFetch } from "./AdminLogin";
 
 function safeDateParse(ts) {
   if (!ts) return null;
@@ -265,6 +265,17 @@ export default function AdminDashboard() {
   const [billingAttention, setBillingAttention] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [revenue, setRevenue] = useState(null);
+  const [workers, setWorkers] = useState(null);
+  const [orphans, setOrphans] = useState(null);
+  const [backups, setBackups] = useState(null);
+  const [announcements, setAnnouncements] = useState([]);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [migrateLoading, setMigrateLoading] = useState(false);
+  const [migrateResult, setMigrateResult] = useState(null);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
+  const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
+  const [annForm, setAnnForm] = useState({ message: "", type: "info", ends_at: "" });
 
   useEffect(() => {
     const token = getAdminToken();
@@ -286,6 +297,26 @@ export default function AdminDashboard() {
     fetch(`${API_BASE}/api/admin/billing-attention`, { headers })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => { if (data) setBillingAttention(data); })
+      .catch(() => {});
+    adminFetch("/api/admin/revenue-stats")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setRevenue(data); })
+      .catch(() => {});
+    adminFetch("/api/admin/worker-status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setWorkers(data); })
+      .catch(() => {});
+    adminFetch("/api/admin/orphaned-schemas")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setOrphans(data); })
+      .catch(() => {});
+    adminFetch("/api/admin/backup-history")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setBackups(data); })
+      .catch(() => {});
+    adminFetch("/api/admin/announcements")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setAnnouncements(Array.isArray(data) ? data : data.announcements || []); })
       .catch(() => {});
   }, []);
 
@@ -419,6 +450,277 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* Revenue Stats */}
+      {revenue && (
+        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard icon={DollarSign} label="MRR" value={revenue.mrr != null ? Number(revenue.mrr).toLocaleString() : "—"} color="bg-emerald-600" />
+          <StatCard icon={TrendingUp} label="Revenue This Month" value={revenue.revenue_this_month != null ? Number(revenue.revenue_this_month).toLocaleString() : "—"} color="bg-blue-600" />
+          <StatCard icon={CreditCard} label="Paying Tenants" value={revenue.paying_tenants ?? "—"} color="bg-violet-600" />
+          <StatCard icon={AlertCircle} label="Overdue" value={revenue.overdue_count ?? 0} color={revenue.overdue_count > 0 ? "bg-red-600" : "bg-slate-400"} />
+        </div>
+      )}
+
+      {/* Worker Status */}
+      {workers && (
+        <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-slate-800">Worker Status</h2>
+          <div className="space-y-3">
+            {(workers.workers || []).map((w) => (
+              <div key={w.name} className="flex items-center justify-between rounded-lg border border-slate-100 px-4 py-2.5">
+                <div className="flex items-center gap-3">
+                  <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${
+                    w.status === "running" ? "bg-emerald-500" : w.status === "stopped" ? "bg-red-500" : "bg-slate-300"
+                  }`} />
+                  <span className="text-sm font-medium text-slate-700">{w.name}</span>
+                </div>
+                <div className="flex items-center gap-4 text-xs text-slate-500">
+                  {w.queue_depth != null && <span>Queue: {w.queue_depth}</span>}
+                  {w.processed_today != null && <span>Today: {w.processed_today}</span>}
+                  {w.last_poll && <span>Last poll: {new Date(w.last_poll).toLocaleString()}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Orphaned Schema Detector */}
+      {orphans && (
+        <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-slate-800">Orphaned Schemas</h2>
+          {(orphans.schemas || []).length === 0 ? (
+            <div className="flex items-center gap-2 text-sm font-medium text-emerald-600">
+              <CheckCircle size={16} /> All schemas healthy
+            </div>
+          ) : (
+            <div>
+              <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-sm font-semibold text-amber-700">{orphans.schemas.length} orphaned schema(s) found</p>
+              </div>
+              <div className="mb-3 space-y-1">
+                {orphans.schemas.map((s) => (
+                  <div key={s.schema || s.name} className="flex items-center justify-between text-sm">
+                    <span className="font-medium text-slate-700">{s.schema || s.name}</span>
+                    {s.size_mb != null && <span className="text-slate-500">{s.size_mb} MB</span>}
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={async () => {
+                  if (!window.confirm("This will permanently delete orphaned schemas. Continue?")) return;
+                  setCleanupLoading(true);
+                  try {
+                    const r = await adminFetch("/api/admin/orphaned-schemas/cleanup", { method: "POST" });
+                    if (r.ok) {
+                      const data = await r.json();
+                      setOrphans({ schemas: [] });
+                      alert(`Cleaned up ${data.cleaned ?? 0} schema(s).`);
+                    } else {
+                      alert("Cleanup failed.");
+                    }
+                  } catch { alert("Cleanup request failed."); }
+                  setCleanupLoading(false);
+                }}
+                disabled={cleanupLoading}
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                {cleanupLoading ? "Cleaning..." : "Clean Up"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Database Backup */}
+      <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-800">Database Backup</h2>
+          <button
+            onClick={async () => {
+              setBackupLoading(true);
+              try {
+                const r = await adminFetch("/api/admin/backup", { method: "POST" });
+                if (r.ok) {
+                  const data = await r.json();
+                  // Refresh backup list
+                  const lr = await adminFetch("/api/admin/backup-history");
+                  if (lr.ok) { const ld = await lr.json(); setBackups(ld); }
+                  alert(data.message || "Backup started.");
+                } else {
+                  alert("Backup failed.");
+                }
+              } catch { alert("Backup request failed."); }
+              setBackupLoading(false);
+            }}
+            disabled={backupLoading}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            <HardDriveDownload size={14} />
+            {backupLoading ? "Backing up..." : "Backup Now"}
+          </button>
+        </div>
+        {backups && (backups.backups || []).length > 0 ? (
+          <div className="space-y-1.5">
+            {(backups.backups || []).map((b, i) => (
+              <div key={i} className="flex items-center justify-between rounded-lg border border-slate-100 px-4 py-2 text-sm">
+                <span className="font-medium text-slate-700">{b.filename || b.name}</span>
+                <div className="flex items-center gap-3 text-xs text-slate-500">
+                  {b.size && <span>{b.size}</span>}
+                  {b.created_at && <span>{new Date(b.created_at).toLocaleString()}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">No backups recorded yet.</p>
+        )}
+      </div>
+
+      {/* Migrate All Tenants */}
+      <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800">Migrate All Tenants</h2>
+            <p className="text-xs text-slate-500">Run pending migrations on all tenant schemas.</p>
+          </div>
+          <button
+            onClick={async () => {
+              if (!window.confirm("Run migrations on ALL tenant schemas? This may take a moment.")) return;
+              setMigrateLoading(true);
+              setMigrateResult(null);
+              try {
+                const r = await adminFetch("/api/admin/migrate-all", { method: "POST" });
+                if (r.ok) {
+                  const data = await r.json();
+                  setMigrateResult(data);
+                } else {
+                  setMigrateResult({ error: "Migration failed." });
+                }
+              } catch { setMigrateResult({ error: "Migration request failed." }); }
+              setMigrateLoading(false);
+            }}
+            disabled={migrateLoading}
+            className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={migrateLoading ? "animate-spin" : ""} />
+            {migrateLoading ? "Migrating..." : "Migrate All"}
+          </button>
+        </div>
+        {migrateResult && (
+          <div className={`mt-3 rounded-lg p-3 text-sm ${migrateResult.error ? "bg-red-50 border border-red-200 text-red-700" : "bg-emerald-50 border border-emerald-200 text-emerald-700"}`}>
+            {migrateResult.error
+              ? migrateResult.error
+              : `Done. ${migrateResult.migrated ?? 0} schema(s) migrated, ${migrateResult.skipped ?? 0} already current.${migrateResult.errors?.length ? ` ${migrateResult.errors.length} error(s).` : ""}`
+            }
+          </div>
+        )}
+      </div>
+
+      {/* Announcements Management */}
+      <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-800">Announcements</h2>
+          <button
+            onClick={() => setShowAnnouncementForm(!showAnnouncementForm)}
+            className="flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900"
+          >
+            <Megaphone size={14} />
+            {showAnnouncementForm ? "Cancel" : "New Announcement"}
+          </button>
+        </div>
+
+        {showAnnouncementForm && (
+          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <input
+              type="text"
+              placeholder="Announcement message..."
+              value={annForm.message}
+              onChange={(e) => setAnnForm({ ...annForm, message: e.target.value })}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            />
+            <div className="flex items-center gap-3">
+              <select
+                value={annForm.type}
+                onChange={(e) => setAnnForm({ ...annForm, type: e.target.value })}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              >
+                <option value="info">Info</option>
+                <option value="warning">Warning</option>
+                <option value="maintenance">Maintenance</option>
+              </select>
+              <input
+                type="datetime-local"
+                value={annForm.ends_at}
+                onChange={(e) => setAnnForm({ ...annForm, ends_at: e.target.value })}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                placeholder="End time (optional)"
+              />
+              <button
+                onClick={async () => {
+                  if (!annForm.message.trim()) return;
+                  const body = { message: annForm.message, type: annForm.type };
+                  if (annForm.ends_at) body.ends_at = new Date(annForm.ends_at).toISOString();
+                  const r = await adminFetch("/api/admin/announcements", { method: "POST", body: JSON.stringify(body) });
+                  if (r.ok) {
+                    const created = await r.json();
+                    setAnnouncements((prev) => [created, ...prev]);
+                    setAnnForm({ message: "", type: "info", ends_at: "" });
+                    setShowAnnouncementForm(false);
+                  }
+                }}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        )}
+
+        {announcements.length === 0 ? (
+          <p className="text-sm text-slate-400">No announcements.</p>
+        ) : (
+          <div className="space-y-2">
+            {announcements.map((a) => (
+              <div key={a.id} className="flex items-center justify-between rounded-lg border border-slate-100 px-4 py-2.5">
+                <div className="flex items-center gap-3">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    a.type === "warning" ? "bg-amber-100 text-amber-700" :
+                    a.type === "maintenance" ? "bg-red-100 text-red-700" :
+                    "bg-blue-100 text-blue-700"
+                  }`}>{a.type}</span>
+                  <span className={`text-sm ${a.active === false ? "text-slate-400 line-through" : "text-slate-700"}`}>{a.message}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {a.active !== false && (
+                    <button
+                      onClick={async () => {
+                        const r = await adminFetch(`/api/admin/announcements/${a.id}`, {
+                          method: "PUT",
+                          body: JSON.stringify({ active: false }),
+                        });
+                        if (r.ok) setAnnouncements((prev) => prev.map((x) => x.id === a.id ? { ...x, active: false } : x));
+                      }}
+                      className="text-xs text-amber-600 hover:text-amber-800 font-medium"
+                    >
+                      Deactivate
+                    </button>
+                  )}
+                  <button
+                    onClick={async () => {
+                      const r = await adminFetch(`/api/admin/announcements/${a.id}`, { method: "DELETE" });
+                      if (r.ok) setAnnouncements((prev) => prev.filter((x) => x.id !== a.id));
+                    }}
+                    className="text-xs text-red-600 hover:text-red-800 font-medium"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Infrastructure Monitoring */}
       <InfrastructurePanel />
