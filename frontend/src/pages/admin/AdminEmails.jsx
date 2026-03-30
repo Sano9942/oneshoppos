@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { Send } from "lucide-react";
+import { Send, Trash2, RotateCcw } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
 
 const STATUS_TABS = [
@@ -7,6 +7,7 @@ const STATUS_TABS = [
   { key: "pending", label: "Pending" },
   { key: "sent", label: "Sent" },
   { key: "failed", label: "Failed" },
+  { key: "broadcasts", label: "Broadcasts" },
 ];
 
 const TYPE_COLORS = {
@@ -42,6 +43,10 @@ export default function AdminEmails() {
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("");
   const [retrying, setRetrying] = useState(null);
+  const [actionInFlight, setActionInFlight] = useState(null);
+  const [broadcasts, setBroadcasts] = useState([]);
+  const [broadcastsLoading, setBroadcastsLoading] = useState(false);
+  const [purgeMsg, setPurgeMsg] = useState("");
   const timerRef = useRef(null);
 
   // Broadcast form state
@@ -66,9 +71,26 @@ export default function AdminEmails() {
       .finally(() => setLoading(false));
   };
 
+  const fetchBroadcasts = () => {
+    setBroadcastsLoading(true);
+    adminFetch("/api/admin/broadcast-history")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Failed to load broadcasts"))))
+      .then((data) => {
+        setBroadcasts(data.broadcasts || []);
+        setError("");
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setBroadcastsLoading(false));
+  };
+
   useEffect(() => {
-    fetchQueue(true);
-    timerRef.current = setInterval(() => fetchQueue(false), 30000);
+    if (filter === "broadcasts") {
+      fetchBroadcasts();
+      clearInterval(timerRef.current);
+    } else {
+      fetchQueue(true);
+      timerRef.current = setInterval(() => fetchQueue(false), 30000);
+    }
     return () => clearInterval(timerRef.current);
   }, [filter]);
 
@@ -82,6 +104,48 @@ export default function AdminEmails() {
       setError(err.message);
     } finally {
       setRetrying(null);
+    }
+  };
+
+  const deleteOne = async (id) => {
+    if (!window.confirm("Delete this email?")) return;
+    setActionInFlight(id);
+    try {
+      const r = await adminFetch(`/api/admin/email-queue/${id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error("Delete failed");
+      fetchQueue(false);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setActionInFlight(null);
+    }
+  };
+
+  const sendNow = async (id) => {
+    setActionInFlight(id);
+    try {
+      const r = await adminFetch(`/api/admin/email-queue/${id}/send-now`, { method: "POST" });
+      if (!r.ok) throw new Error("Send now failed");
+      fetchQueue(false);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setActionInFlight(null);
+    }
+  };
+
+  const purgeDeleted = async () => {
+    if (!window.confirm("Purge all queued emails for deleted tenants?")) return;
+    setPurgeMsg("");
+    try {
+      const r = await adminFetch("/api/admin/email-queue/purge-deleted", { method: "DELETE" });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Purge failed");
+      setPurgeMsg(`Purged ${data.deleted || 0} email(s)`);
+      fetchQueue(false);
+      setTimeout(() => setPurgeMsg(""), 5000);
+    } catch (err) {
+      setError(err.message);
     }
   };
 
@@ -193,21 +257,31 @@ export default function AdminEmails() {
         </div>
       )}
 
-      {/* Filter tabs */}
-      <div className="mb-3 flex gap-1">
-        {STATUS_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setFilter(tab.key)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-              filter === tab.key
-                ? "bg-slate-800 text-white"
-                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* Filter tabs + purge */}
+      <div className="mb-3 flex items-center gap-3">
+        <div className="flex gap-1">
+          {STATUS_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setFilter(tab.key)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                filter === tab.key
+                  ? "bg-slate-800 text-white"
+                  : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={purgeDeleted}
+          className="ml-auto flex items-center gap-1 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100"
+        >
+          <Trash2 size={12} />
+          Purge Deleted Tenants
+        </button>
+        {purgeMsg && <span className="text-xs font-medium text-emerald-600">{purgeMsg}</span>}
       </div>
 
       {error && (
@@ -216,7 +290,49 @@ export default function AdminEmails() {
         </div>
       )}
 
-      {loading ? (
+      {filter === "broadcasts" ? (
+        /* ── Broadcasts tab ── */
+        broadcastsLoading ? (
+          <p className="text-sm text-slate-400">Loading...</p>
+        ) : broadcasts.length === 0 ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+            <p className="text-sm font-medium text-slate-400">No broadcasts yet</p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+                    <th className="px-4 py-3 font-medium">Time</th>
+                    <th className="px-4 py-3 font-medium">Admin</th>
+                    <th className="px-4 py-3 font-medium">Type</th>
+                    <th className="px-4 py-3 font-medium">Subject</th>
+                    <th className="px-4 py-3 font-medium text-right">Recipients</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {broadcasts.map((b, i) => (
+                    <tr key={b.id || i} className="border-b border-slate-50 last:border-0">
+                      <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                        {new Date(b.created_at).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600">{b.admin_name || b.admin_email || "—"}</td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${TYPE_COLORS[b.type] || "bg-slate-100 text-slate-600"}`}>
+                          {b.type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600">{b.subject}</td>
+                      <td className="px-4 py-3 text-right text-xs text-slate-500">{b.recipient_count ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      ) : loading ? (
         <p className="text-sm text-slate-400">Loading...</p>
       ) : emails.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
@@ -242,57 +358,85 @@ export default function AdminEmails() {
                 </tr>
               </thead>
               <tbody>
-                {emails.map((e) => (
-                  <tr key={e.id} className="border-b border-slate-50 last:border-0">
-                    <td className="px-4 py-3 text-xs text-slate-400">#{e.id}</td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${TYPE_COLORS[e.email_type] || "bg-slate-100 text-slate-600"}`}>
-                        {e.email_type}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {e.tenant_name ? (
-                        <>
-                          <span className="font-medium text-slate-700">{e.tenant_name}</span>
-                          <span className="ml-1 text-xs text-slate-400">({e.tenant_slug})</span>
-                        </>
-                      ) : (
-                        <span className="text-xs text-slate-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-600">{e.to_email}</td>
-                    <td className="px-4 py-3 max-w-xs">
-                      <span className="text-xs text-slate-600">{truncate(e.subject, 40)}</span>
-                    </td>
-                    <td className="px-4 py-3">{statusBadge(e)}</td>
-                    <td className="px-4 py-3 text-right text-xs text-slate-500">
-                      {e.attempts}/{e.max_attempts}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
-                      {e.sent_at
-                        ? new Date(e.sent_at).toLocaleString()
-                        : e.send_at
-                          ? new Date(e.send_at).toLocaleString()
-                          : new Date(e.created_at).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      {!e.sent_at && e.attempts >= e.max_attempts && (
-                        <button
-                          disabled={retrying === e.id}
-                          onClick={() => retryOne(e.id)}
-                          className="rounded bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50"
-                        >
-                          {retrying === e.id ? "..." : "Retry"}
-                        </button>
-                      )}
-                      {e.error && (
-                        <span className="ml-2 text-[10px] text-red-500" title={e.error}>
-                          {truncate(e.error, 30)}
+                {emails.map((e) => {
+                  const isPending = !e.sent_at && e.attempts < e.max_attempts;
+                  const isFailed = !e.sent_at && e.attempts >= e.max_attempts;
+                  const busy = actionInFlight === e.id || retrying === e.id;
+                  return (
+                    <tr key={e.id} className="border-b border-slate-50 last:border-0">
+                      <td className="px-4 py-3 text-xs text-slate-400">#{e.id}</td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${TYPE_COLORS[e.email_type] || "bg-slate-100 text-slate-600"}`}>
+                          {e.email_type}
                         </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-3">
+                        {e.tenant_name ? (
+                          <>
+                            <span className="font-medium text-slate-700">{e.tenant_name}</span>
+                            <span className="ml-1 text-xs text-slate-400">({e.tenant_slug})</span>
+                          </>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600">{e.to_email}</td>
+                      <td className="px-4 py-3 max-w-xs">
+                        <span className="text-xs text-slate-600">{truncate(e.subject, 40)}</span>
+                      </td>
+                      <td className="px-4 py-3">{statusBadge(e)}</td>
+                      <td className="px-4 py-3 text-right text-xs text-slate-500">
+                        {e.attempts}/{e.max_attempts}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                        {e.sent_at
+                          ? new Date(e.sent_at).toLocaleString()
+                          : e.send_at
+                            ? new Date(e.send_at).toLocaleString()
+                            : new Date(e.created_at).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          {isPending && (
+                            <button
+                              disabled={busy}
+                              onClick={() => sendNow(e.id)}
+                              title="Send now"
+                              className="rounded p-1 text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+                            >
+                              <Send size={14} />
+                            </button>
+                          )}
+                          {isFailed && (
+                            <button
+                              disabled={busy}
+                              onClick={() => retryOne(e.id)}
+                              title="Retry"
+                              className="rounded p-1 text-violet-600 hover:bg-violet-50 disabled:opacity-50"
+                            >
+                              <RotateCcw size={14} />
+                            </button>
+                          )}
+                          {(isPending || isFailed) && (
+                            <button
+                              disabled={busy}
+                              onClick={() => deleteOne(e.id)}
+                              title="Delete"
+                              className="rounded p-1 text-red-500 hover:bg-red-50 disabled:opacity-50"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                          {e.error && (
+                            <span className="ml-1 text-[10px] text-red-500" title={e.error}>
+                              {truncate(e.error, 30)}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
