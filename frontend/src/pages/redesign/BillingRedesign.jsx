@@ -23,6 +23,52 @@ export default function BillingRedesign() {
 
   useEffect(() => { fetchBilling(); }, []);
 
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
+
+  // Handle payment return from gateway
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentResult = params.get("payment");
+    const intentId = params.get("intent");
+
+    if (paymentResult === "success" && intentId) {
+      setPaymentProcessing(true);
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        try {
+          const r = await fetch(`${API_BASE}/api/billing/status`);
+          const data = await r.json();
+          if (data.payment_status === "active" && data.expires_at) {
+            clearInterval(poll);
+            setPaymentProcessing(false);
+            setBilling(data);
+            success("Payment confirmed! Your subscription is now active.");
+            window.history.replaceState({}, "", "/billing");
+          } else if (attempts >= 15) {
+            clearInterval(poll);
+            setPaymentProcessing(false);
+            fetchBilling();
+            success("Payment is being processed. Check back in a minute.");
+            window.history.replaceState({}, "", "/billing");
+          }
+        } catch {
+          if (attempts >= 15) {
+            clearInterval(poll);
+            setPaymentProcessing(false);
+            fetchBilling();
+          }
+        }
+      }, 2000);
+      return () => clearInterval(poll);
+    }
+
+    if (paymentResult === "cancelled") {
+      showError("Payment was cancelled.");
+      window.history.replaceState({}, "", "/billing");
+    }
+  }, []);
+
   const handleRequestUpgrade = async () => {
     if (!selectedPlan) return;
     setSubmitting(true);
@@ -45,7 +91,34 @@ export default function BillingRedesign() {
     }
   };
 
+  const handlePayNow = async (cycle = "monthly") => {
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/billing/create-checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cycle }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create checkout");
+      window.location.href = data.checkout_url;
+    } catch (err) {
+      showError(err.message);
+      setSubmitting(false);
+    }
+  };
+
   if (loading) return <PageShell title="Billing"><div className="animate-pulse h-40 bg-slate-100 rounded-xl" /></PageShell>;
+
+  if (paymentProcessing) return (
+    <PageShell title="Billing">
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="animate-spin h-8 w-8 border-4 border-emerald-500 border-t-transparent rounded-full mb-4" />
+        <p className="text-slate-600 font-medium">Verifying your payment...</p>
+        <p className="text-sm text-slate-400 mt-1">This usually takes a few seconds.</p>
+      </div>
+    </PageShell>
+  );
 
   const planColors = { free: "bg-slate-100 text-slate-700", pro: "bg-emerald-100 text-emerald-700" };
   const statusColors = { active: "text-emerald-600", trial: "text-blue-600", grace: "text-amber-600", expired: "text-red-600", due: "text-amber-600", overdue: "text-red-600" };
@@ -60,6 +133,50 @@ export default function BillingRedesign() {
   const isTrial = paymentStatus === "trial";
   const isGrace = paymentStatus === "grace";
   const isExpired = paymentStatus === "expired";
+
+  function PaymentHistorySection() {
+    const [payments, setPayments] = useState([]);
+    const [loadingPayments, setLoadingPayments] = useState(true);
+
+    useEffect(() => {
+      fetch(`${API_BASE}/api/billing/payment-history`)
+        .then(r => r.json())
+        .then(data => { setPayments(Array.isArray(data) ? data : []); setLoadingPayments(false); })
+        .catch(() => setLoadingPayments(false));
+    }, []);
+
+    if (loadingPayments || !payments.length) return null;
+
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-800 mb-4">Payment History</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-slate-500">
+                <th className="pb-2 font-medium">Date</th>
+                <th className="pb-2 font-medium">Amount</th>
+                <th className="pb-2 font-medium">Plan</th>
+                <th className="pb-2 font-medium">Period</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payments.map(p => (
+                <tr key={p.id} className="border-b border-slate-100">
+                  <td className="py-2 text-slate-700">{new Date(p.recorded_at).toLocaleDateString()}</td>
+                  <td className="py-2 text-slate-700">PKR {Number(p.amount).toLocaleString()}</td>
+                  <td className="py-2 capitalize text-slate-700">{p.plan} ({p.cycle})</td>
+                  <td className="py-2 text-slate-500 text-xs">
+                    {new Date(p.period_start).toLocaleDateString()} — {new Date(p.period_end).toLocaleDateString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <PageShell title="Billing">
@@ -82,6 +199,12 @@ export default function BillingRedesign() {
                 ? "Your trial is ending soon. Subscribe to continue using all features."
                 : "You have full access to all Pro features during your trial."}
             </p>
+            {billing.payment_enabled && (
+              <button onClick={() => handlePayNow()} disabled={submitting}
+                className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50 cursor-pointer">
+                {submitting ? "Redirecting..." : "Subscribe Now — PKR 8,000/mo"}
+              </button>
+            )}
           </div>
         )}
 
@@ -98,6 +221,12 @@ export default function BillingRedesign() {
               Your account will become read-only after the grace period. Subscribe now to continue selling.
               <strong> Pro plan: PKR 8,000/month per outlet.</strong>
             </p>
+            {billing.payment_enabled && (
+              <button onClick={() => handlePayNow()} disabled={submitting}
+                className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer">
+                {submitting ? "Redirecting..." : "Pay Now — PKR 8,000/mo"}
+              </button>
+            )}
           </div>
         )}
 
@@ -112,10 +241,17 @@ export default function BillingRedesign() {
               You can still view your data and export reports, but cannot make sales or changes.
               Subscribe to restore full access.
             </p>
-            <button onClick={() => { setSelectedPlan("pro"); setShowUpgradeModal(true); }}
-              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors">
-              Subscribe Now — PKR 8,000/mo
-            </button>
+            {billing.payment_enabled ? (
+              <button onClick={() => handlePayNow()} disabled={submitting}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer">
+                {submitting ? "Redirecting..." : "Pay Now — PKR 8,000/mo"}
+              </button>
+            ) : (
+              <button onClick={() => { setSelectedPlan("pro"); setShowUpgradeModal(true); }}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors cursor-pointer">
+                Subscribe Now — PKR 8,000/mo
+              </button>
+            )}
           </div>
         )}
 
@@ -151,6 +287,29 @@ export default function BillingRedesign() {
           )}
         </div>
 
+        {/* Upcoming Renewal */}
+        {paymentStatus === "active" && billing?.plan === "pro" && billing?.expires_at && (() => {
+          const daysUntilExpiry = Math.ceil((new Date(billing.expires_at) - new Date()) / 86400000);
+          if (daysUntilExpiry > 7) return null;
+          return (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <Clock size={18} className="text-amber-600" />
+                <h2 className="text-base font-semibold text-amber-800">
+                  Subscription renews in {daysUntilExpiry} {daysUntilExpiry === 1 ? "day" : "days"}
+                </h2>
+              </div>
+              <p className="text-sm text-amber-700">Renew now to avoid any interruption in service.</p>
+              {billing.payment_enabled && (
+                <button onClick={() => handlePayNow(billing.billing_cycle || "monthly")} disabled={submitting}
+                  className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50 cursor-pointer">
+                  {submitting ? "Redirecting..." : "Renew Now"}
+                </button>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Upgrade Options */}
         {Object.keys(upgradePlans).length > 0 && !billing?.pending_request && (
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -178,6 +337,9 @@ export default function BillingRedesign() {
             </p>
           </div>
         )}
+
+        {/* Payment History */}
+        {billing?.plan !== "free" && <PaymentHistorySection />}
       </div>
 
       {/* Upgrade Modal */}
