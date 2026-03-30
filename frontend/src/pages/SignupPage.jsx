@@ -4,9 +4,8 @@ import { Store, CheckCircle, XCircle } from "lucide-react";
 import { API_BASE } from "../config";
 
 const PLANS = [
-  { value: "free", label: "Free", desc: "1 outlet, 1 employee" },
-  { value: "starter", label: "Starter", desc: "Up to 3 outlets, 10 employees" },
-  { value: "pro", label: "Pro", desc: "Unlimited outlets and employees" },
+  { value: "free", label: "Free", desc: "1 outlet, 3 employees, 100 products", badge: null },
+  { value: "pro", label: "Pro", desc: "Unlimited employees & products", badge: "45-day free trial" },
 ];
 
 export default function SignupPage() {
@@ -25,7 +24,7 @@ export default function SignupPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const planParam = params.get("plan");
-    if (planParam && ["free", "starter", "pro"].includes(planParam)) {
+    if (planParam && ["free", "pro"].includes(planParam)) {
       setForm((f) => ({ ...f, plan: planParam }));
     }
   }, []);
@@ -165,11 +164,11 @@ export default function SignupPage() {
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Plan</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-3">
               {PLANS.map((p) => (
                 <label
                   key={p.value}
-                  className={`flex cursor-pointer flex-col items-center rounded-lg border-2 p-3 text-center transition-all ${
+                  className={`flex cursor-pointer flex-col items-center rounded-lg border-2 p-4 text-center transition-all ${
                     form.plan === p.value
                       ? "border-emerald-500 bg-emerald-50"
                       : "border-slate-200 hover:border-slate-300"
@@ -185,6 +184,11 @@ export default function SignupPage() {
                   />
                   <span className="text-sm font-semibold text-slate-900">{p.label}</span>
                   <span className="mt-0.5 text-xs text-slate-500">{p.desc}</span>
+                  {p.badge && (
+                    <span className="mt-1.5 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                      {p.badge}
+                    </span>
+                  )}
                 </label>
               ))}
             </div>
