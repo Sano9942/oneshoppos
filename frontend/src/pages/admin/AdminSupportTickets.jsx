@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { Eye } from "lucide-react";
+import { Eye, Trash2, MessageSquare, Send } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
 
 const STATUS_STYLES = {
@@ -21,6 +21,10 @@ export default function AdminSupportTickets() {
   const [expanded, setExpanded] = useState(null);
   const [updating, setUpdating] = useState(null);
   const [impersonating, setImpersonating] = useState(null);
+  const [replyTarget, setReplyTarget] = useState(null);
+  const [replyText, setReplyText] = useState("");
+  const [replying, setReplying] = useState(false);
+  const [deleting, setDeleting] = useState(null);
   const timerRef = useRef(null);
 
   const fetchTickets = (showLoading) => {
@@ -58,6 +62,50 @@ export default function AdminSupportTickets() {
       setError(err.message);
     } finally {
       setUpdating(null);
+    }
+  };
+
+  const handleDelete = async (tenantId, ticketId) => {
+    if (!window.confirm("Delete this ticket?")) return;
+    setDeleting(ticketId);
+    try {
+      const r = await adminFetch(`/api/admin/support-tickets/${tenantId}/${ticketId}`, {
+        method: "DELETE",
+      });
+      if (!r.ok) throw new Error("Delete failed");
+      setTickets((prev) => prev.filter((t) => !(t.id === ticketId && t.tenant_id === tenantId)));
+      if (expanded === `${tenantId}-${ticketId}`) setExpanded(null);
+      if (replyTarget === `${tenantId}-${ticketId}`) { setReplyTarget(null); setReplyText(""); }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleReply = async (tenantId, ticketId) => {
+    if (!replyText.trim()) return;
+    setReplying(true);
+    try {
+      const r = await adminFetch(`/api/admin/support-tickets/${tenantId}/${ticketId}/reply`, {
+        method: "PUT",
+        body: JSON.stringify({ reply: replyText.trim() }),
+      });
+      if (!r.ok) throw new Error("Reply failed");
+      const data = await r.json();
+      setTickets((prev) =>
+        prev.map((t) =>
+          t.id === ticketId && t.tenant_id === tenantId
+            ? { ...t, admin_reply: data.ticket.admin_reply, replied_at: data.ticket.replied_at }
+            : t
+        )
+      );
+      setReplyTarget(null);
+      setReplyText("");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setReplying(false);
     }
   };
 
@@ -136,8 +184,9 @@ export default function AdminSupportTickets() {
               </thead>
               <tbody>
                 {tickets.map((t) => {
-                  const isExpanded = expanded === `${t.tenant_id}-${t.id}`;
                   const key = `${t.tenant_id}-${t.id}`;
+                  const isExpanded = expanded === key;
+                  const isReplyOpen = replyTarget === key;
                   return (
                     <tr key={key} className="border-b border-slate-50 last:border-0">
                       <td className="px-4 py-3">
@@ -167,6 +216,45 @@ export default function AdminSupportTickets() {
                                   {t.screenshots.map((src, i) => (
                                     <img key={i} src={src} alt={`Screenshot ${i + 1}`} className="max-h-40 rounded border border-slate-200" />
                                   ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Admin reply display */}
+                            {t.admin_reply && (
+                              <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                                <p className="font-semibold text-blue-700 mb-1">Admin Reply:</p>
+                                <p className="text-slate-700 whitespace-pre-wrap">{t.admin_reply}</p>
+                                {t.replied_at && (
+                                  <p className="mt-1 text-[10px] text-blue-400">Replied: {new Date(t.replied_at).toLocaleString()}</p>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Inline reply form */}
+                            {isReplyOpen && (
+                              <div className="mt-2 space-y-2">
+                                <textarea
+                                  value={replyText}
+                                  onChange={(e) => setReplyText(e.target.value)}
+                                  placeholder="Type your reply..."
+                                  rows={3}
+                                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 focus:border-blue-300 focus:ring-1 focus:ring-blue-300 focus:outline-none"
+                                />
+                                <div className="flex gap-2">
+                                  <button
+                                    disabled={replying || !replyText.trim()}
+                                    onClick={() => handleReply(t.tenant_id, t.id)}
+                                    className="flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                                  >
+                                    <Send size={12} /> {replying ? "Sending..." : "Send Reply"}
+                                  </button>
+                                  <button
+                                    onClick={() => { setReplyTarget(null); setReplyText(""); }}
+                                    className="rounded px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100"
+                                  >
+                                    Cancel
+                                  </button>
                                 </div>
                               </div>
                             )}
@@ -201,12 +289,32 @@ export default function AdminSupportTickets() {
                               Resolve
                             </button>
                           )}
+                          {t.status !== "resolved" && (
+                            <button
+                              onClick={() => {
+                                const k = `${t.tenant_id}-${t.id}`;
+                                if (!isExpanded) setExpanded(k);
+                                setReplyTarget(isReplyOpen ? null : k);
+                                if (isReplyOpen) setReplyText("");
+                              }}
+                              className="flex items-center gap-1 rounded bg-sky-50 px-2 py-1 text-xs font-medium text-sky-700 hover:bg-sky-100"
+                            >
+                              <MessageSquare size={12} /> Reply
+                            </button>
+                          )}
                           <button
-                            disabled={impersonating === `${t.tenant_id}-${t.id}`}
+                            disabled={impersonating === key}
                             onClick={() => handleImpersonate(t)}
                             className="flex items-center gap-1 rounded bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50"
                           >
-                            <Eye size={12} /> {impersonating === `${t.tenant_id}-${t.id}` ? "Opening..." : "Impersonate"}
+                            <Eye size={12} /> {impersonating === key ? "Opening..." : "Impersonate"}
+                          </button>
+                          <button
+                            disabled={deleting === t.id}
+                            onClick={() => handleDelete(t.tenant_id, t.id)}
+                            className="flex items-center gap-1 rounded bg-red-50 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
+                          >
+                            <Trash2 size={12} />
                           </button>
                         </div>
                       </td>

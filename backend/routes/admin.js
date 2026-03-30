@@ -1178,7 +1178,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       for (const tenant of tenants) {
         try {
           const tenantDb = await tenantDbManager.getDb(tenant.id);
-          let sql = `SELECT id, type, message, page_url, browser, employee_id, screenshots, last_req_id, status, created_at, resolved_at
+          let sql = `SELECT id, type, message, page_url, browser, employee_id, screenshots, last_req_id, status, admin_reply, replied_at, created_at, resolved_at
                      FROM support_tickets`;
           const params = [];
           if (status) {
@@ -1250,6 +1250,38 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       }
 
       return res.json({ ticket: rows[0] });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/admin/support-tickets/:tenantId/:ticketId/reply", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { reply } = req.body || {};
+      if (!reply || !reply.trim()) {
+        return res.status(400).json({ error: "reply is required" });
+      }
+      const tenantDb = await tenantDbManager.getDb(parseInt(req.params.tenantId, 10));
+      const { rows } = await tenantDb.query(
+        `UPDATE support_tickets SET admin_reply = $1, replied_at = NOW() WHERE id = $2 RETURNING *`,
+        [reply.trim(), req.params.ticketId]
+      );
+      if (rows.length === 0) return res.status(404).json({ error: "Ticket not found" });
+      return res.json({ ticket: rows[0] });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/admin/support-tickets/:tenantId/:ticketId", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const tenantDb = await tenantDbManager.getDb(parseInt(req.params.tenantId, 10));
+      const { rowCount } = await tenantDb.query(
+        "DELETE FROM support_tickets WHERE id = $1",
+        [req.params.ticketId]
+      );
+      if (rowCount === 0) return res.status(404).json({ error: "Ticket not found" });
+      return res.json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
