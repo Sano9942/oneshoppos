@@ -78,7 +78,7 @@ module.exports = function registerBillingRoutes(app, deps) {
 
       const { plan, cycle, message } = req.body;
       if (!plan || !cycle) return res.status(400).json({ error: "plan and cycle are required" });
-      if (!["starter", "pro"].includes(plan)) return res.status(400).json({ error: "Invalid plan" });
+      if (!["pro"].includes(plan)) return res.status(400).json({ error: "Invalid plan" });
       if (!["monthly", "annual"].includes(cycle)) return res.status(400).json({ error: "Invalid cycle" });
 
       const { rows: existing } = await db.query(
