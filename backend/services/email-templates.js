@@ -199,6 +199,58 @@ function announcement({ subject: subj, message }) {
   };
 }
 
+// -- Trial: Warning (7 days left) ------------------------------------------
+function trialWarning({ storeName, daysLeft }) {
+  const urgency = daysLeft <= 1 ? "expires tomorrow" : `ends in ${daysLeft} days`;
+  return {
+    subject: `Your Pro trial ${urgency} — ${storeName}`,
+    html: wrapEmailHtml("Trial Ending Soon", `
+      <p>Hi,</p>
+      <p>Your Pro trial for <strong>${storeName}</strong> ${urgency}.</p>
+      <p>After your trial ends, you'll have a <strong>7-day grace period</strong> to subscribe. After that, your account will become read-only — you'll still be able to view your data, but won't be able to make sales or changes.</p>
+      <p>To continue using all features, please contact us to subscribe at <strong>PKR 8,000/month per outlet</strong>.</p>
+      ${btn("View Billing", "https://sanopos.com/billing")}
+      ${footer("This is an automated reminder about your SanoPOS trial.")}
+    `),
+  };
+}
+
+// -- Trial: Ended (grace period started) -----------------------------------
+function trialEnded({ storeName }) {
+  return {
+    subject: `Trial ended — 7 days to subscribe — ${storeName}`,
+    html: wrapEmailHtml("Trial Ended", `
+      <p>Hi,</p>
+      <p>Your Pro trial for <strong>${storeName}</strong> has ended.</p>
+      <p>You have <strong>7 days</strong> to subscribe before your account becomes read-only. During this grace period, everything still works normally.</p>
+      <p><strong>Pro plan: PKR 8,000/month per outlet.</strong></p>
+      <p>Contact us to set up your subscription and keep selling without interruption.</p>
+      ${btn("View Billing", "https://sanopos.com/billing")}
+      ${footer("This is an automated notification about your SanoPOS trial.")}
+    `),
+  };
+}
+
+// -- Trial: Account Locked (grace expired) ---------------------------------
+function accountLocked({ storeName }) {
+  return {
+    subject: `Account locked — action required — ${storeName}`,
+    html: wrapEmailHtml("Account Locked", `
+      <p>Hi,</p>
+      <p>Your Pro trial and grace period for <strong>${storeName}</strong> have ended. Your account is now <strong>read-only</strong>.</p>
+      <p>You can still:</p>
+      <ul style="color:#475569;line-height:2;padding-left:20px">
+        <li>Log in and view all your data</li>
+        <li>Export reports and sales history</li>
+        <li>Submit support tickets</li>
+      </ul>
+      <p>To resume selling and managing your store, subscribe to the Pro plan at <strong>PKR 8,000/month per outlet</strong>.</p>
+      ${btn("View Billing", "https://sanopos.com/billing")}
+      ${footer("This is an automated notification about your SanoPOS account.")}
+    `),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
   drip_getting_started: dripGettingStarted,
@@ -209,6 +261,9 @@ const TEMPLATES = {
   billing_overdue: billingOverdue,
   support_received: supportReceived,
   support_resolved: supportResolved,
+  trial_warning: trialWarning,
+  trial_ended: trialEnded,
+  account_locked: accountLocked,
   downtime,
   announcement,
 };
