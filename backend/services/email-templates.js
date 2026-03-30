@@ -251,6 +251,37 @@ function accountLocked({ storeName }) {
   };
 }
 
+// -- Renewal: Due (7 days before expiry) ------------------------------------
+function renewalDue({ storeName, plan, expiresAt, daysLeft }) {
+  const urgency = daysLeft <= 1 ? "expires tomorrow" : `renews in ${daysLeft} days`;
+  return {
+    subject: `Your ${plan} subscription ${urgency} — ${storeName}`,
+    html: wrapEmailHtml("Subscription Renewal Due", `
+      <p>Hi,</p>
+      <p>Your <strong>${plan}</strong> subscription for <strong>${storeName}</strong> ${urgency} (${expiresAt}).</p>
+      <p>To continue using all features without interruption, please renew your subscription.</p>
+      <p>After expiry, you'll have a <strong>7-day grace period</strong> before your account becomes read-only.</p>
+      ${btn("Renew Now", "https://sanopos.com/billing")}
+      ${footer("This is an automated reminder about your SanoPOS subscription.")}
+    `),
+  };
+}
+
+// -- Renewal: Overdue (entered grace period) --------------------------------
+function renewalOverdue({ storeName, plan, expiredAt }) {
+  return {
+    subject: `Subscription lapsed — 7 days to renew — ${storeName}`,
+    html: wrapEmailHtml("Subscription Lapsed", `
+      <p>Hi,</p>
+      <p>Your <strong>${plan}</strong> subscription for <strong>${storeName}</strong> expired on ${expiredAt}.</p>
+      <p>You have <strong>7 days</strong> to renew before your account becomes read-only. During this grace period, everything still works normally.</p>
+      <p>Renew now to keep selling without interruption.</p>
+      ${btn("Renew Now", "https://sanopos.com/billing")}
+      ${footer("This is an automated notification about your SanoPOS subscription.")}
+    `),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
   drip_getting_started: dripGettingStarted,
@@ -264,6 +295,8 @@ const TEMPLATES = {
   trial_warning: trialWarning,
   trial_ended: trialEnded,
   account_locked: accountLocked,
+  renewal_due: renewalDue,
+  renewal_overdue: renewalOverdue,
   downtime,
   announcement,
 };
