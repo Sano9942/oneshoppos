@@ -311,6 +311,21 @@ const DEVICES = [
   { icon: Smartphone, title: "Phone", desc: "Check reports and manage inventory on the go" },
 ];
 
+/* ─── Comparison Table ───────────────────────────────────── */
+
+const COMPARISON = [
+  { feature: "FBR digital invoicing (real-time)", us: true, them: "Extra cost or not available" },
+  { feature: "Offline sale queuing", us: true, them: "Not available" },
+  { feature: "Report tabs", us: "67+", them: "15-25 typical" },
+  { feature: "Customer loyalty & wallet", us: true, them: "Paid add-on" },
+  { feature: "HR + attendance + kiosk", us: true, them: "Not available" },
+  { feature: "Multi-outlet stock transfers", us: true, them: "Enterprise tier only" },
+  { feature: "Shopify + WooCommerce sync", us: true, them: "Enterprise tier only" },
+  { feature: "Self-service signup", us: "5 minutes", them: "Requires sales call" },
+  { feature: "Free plan with all features", us: true, them: "Limited or trial only" },
+  { feature: "Thermal printer support", us: "ESC/POS + network", them: "Browser print only" },
+];
+
 /* ─── How It Works Steps ──────────────────────────────────── */
 
 const STEPS = [
@@ -657,6 +672,46 @@ export default function LandingPage() {
                 <p className="text-sm text-slate-500 leading-relaxed">{desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Comparison Table ────────────────────────────────── */}
+      <section className="py-12 md:py-16 bg-white">
+        <div className="max-w-4xl mx-auto px-5">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              SanoPOS vs Other POS Systems
+            </h2>
+            <p className="mt-3 text-slate-600 max-w-xl mx-auto">
+              See how SanoPOS compares on the features that matter most to Pakistan retailers.
+            </p>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50">
+                  <th className="text-left py-3.5 px-4 font-semibold text-slate-700">Feature</th>
+                  <th className="text-center py-3.5 px-4 font-semibold text-emerald-700 bg-emerald-50/50">SanoPOS</th>
+                  <th className="text-center py-3.5 px-4 font-semibold text-slate-500">Other POS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {COMPARISON.map(({ feature, us, them }, i) => (
+                  <tr key={feature} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                    <td className="py-3 px-4 text-slate-700 font-medium">{feature}</td>
+                    <td className="py-3 px-4 text-center bg-emerald-50/30">
+                      {us === true
+                        ? <Check size={18} className="text-emerald-600 mx-auto" />
+                        : <span className="font-semibold text-emerald-700">{us}</span>
+                      }
+                    </td>
+                    <td className="py-3 px-4 text-center text-slate-400">{them}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
