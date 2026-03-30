@@ -50,6 +50,7 @@ export default function AdminTenantDetail() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentForm, setPaymentForm] = useState({ plan: "pro", cycle: "monthly", amount: "", payment_method: "bank_transfer", reference_note: "" });
   const [upgradeReqs, setUpgradeReqs] = useState([]);
+  const [featureUsage, setFeatureUsage] = useState(null);
 
   const loadTenant = async () => {
     try {
@@ -91,6 +92,7 @@ export default function AdminTenantDetail() {
 
       adminFetch(`/api/admin/tenants/${id}/payments`).then(r => r.json()).then(setPayments).catch(() => {});
       adminFetch("/api/admin/plan-pricing").then(r => r.json()).then(setPlanPricing).catch(() => {});
+      adminFetch(`/api/admin/tenants/${id}/feature-usage`).then(r => r.json()).then(setFeatureUsage).catch(() => {});
       adminFetch("/api/admin/upgrade-requests").then(r => r.json()).then(reqs => {
         setUpgradeReqs(reqs.filter(r => r.tenant_id === Number(id)));
       }).catch(() => {});
@@ -565,6 +567,41 @@ export default function AdminTenantDetail() {
                     </div>
                   </div>
                 </div>
+
+                {/* Feature Usage */}
+                {featureUsage?.last_30_days?.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Feature Usage (30d)</h3>
+                    <div className="space-y-2">
+                      {featureUsage.last_30_days.map(item => {
+                        const maxVal = featureUsage.last_30_days[0]?.total || 1;
+                        return (
+                          <div key={item.action_type}>
+                            <div className="flex justify-between text-xs mb-0.5">
+                              <span className="text-slate-600">{item.action_type.replace(/_/g, " ")}</span>
+                              <span className="font-semibold text-slate-700">{item.total}</span>
+                            </div>
+                            <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${Math.round((item.total / maxVal) * 100)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {featureUsage.top_users?.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-xs text-slate-500 mb-1.5">Top Users (30d)</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {featureUsage.top_users.map(u => (
+                            <span key={u.user_name} className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-full">
+                              {u.user_name} <span className="font-semibold">{u.total}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <p className="text-sm text-slate-400">{stats?.message || "Stats unavailable"}</p>

@@ -433,6 +433,30 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
     }
   });
 
+  // ── Feature Usage Analytics ─────────────────────────────────────────────
+
+  app.get("/api/admin/tenants/:id/feature-usage", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        "SELECT slug, status FROM tenants WHERE id = $1 AND deleted_at IS NULL",
+        [req.params.id]
+      );
+      if (!rows[0]) return res.status(404).json({ error: "Tenant not found" });
+      if (rows[0].status !== "active") return res.json({ all_time: [], last_30_days: [], top_users: [] });
+
+      const s = `tenant_${rows[0].slug}`;
+      const [allTimeRes, last30Res, topUsersRes] = await Promise.all([
+        db.query(`SELECT action_type, COUNT(*)::int AS total FROM ${s}.action_history GROUP BY action_type ORDER BY total DESC`),
+        db.query(`SELECT action_type, COUNT(*)::int AS total FROM ${s}.action_history WHERE timestamp >= NOW() - INTERVAL '30 days' GROUP BY action_type ORDER BY total DESC`),
+        db.query(`SELECT user_name, COUNT(*)::int AS total FROM ${s}.action_history WHERE timestamp >= NOW() - INTERVAL '30 days' AND user_name IS NOT NULL GROUP BY user_name ORDER BY total DESC LIMIT 5`),
+      ]);
+
+      res.json({ all_time: allTimeRes.rows, last_30_days: last30Res.rows, top_users: topUsersRes.rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Setup Token ─────────────────────────────────────────────────────────
 
   app.get("/api/admin/tenants/:id/setup-token", requireAllowedIp, requireSuperAdmin, async (req, res) => {
