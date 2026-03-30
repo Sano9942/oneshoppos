@@ -48,7 +48,7 @@ export default function AdminTenantDetail() {
   const [payments, setPayments] = useState([]);
   const [planPricing, setPlanPricing] = useState([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentForm, setPaymentForm] = useState({ plan: "starter", cycle: "monthly", amount: "", payment_method: "bank_transfer", reference_note: "" });
+  const [paymentForm, setPaymentForm] = useState({ plan: "pro", cycle: "monthly", amount: "", payment_method: "bank_transfer", reference_note: "" });
   const [upgradeReqs, setUpgradeReqs] = useState([]);
 
   const loadTenant = async () => {
@@ -216,7 +216,6 @@ export default function AdminTenantDetail() {
                     <select value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })}
                       className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-violet-500 focus:outline-none">
                       <option value="free">Free</option>
-                      <option value="starter">Starter</option>
                       <option value="pro">Pro</option>
                     </select>
                   </label>
@@ -587,7 +586,6 @@ export default function AdminTenantDetail() {
                       const match = planPricing.find(p => p.plan === plan && p.cycle === paymentForm.cycle);
                       setPaymentForm(f => ({ ...f, plan, amount: match ? String(match.price) : f.amount }));
                     }} className="w-full border rounded-lg px-3 py-2 text-sm">
-                      <option value="starter">Starter</option>
                       <option value="pro">Pro</option>
                     </select>
                   </div>

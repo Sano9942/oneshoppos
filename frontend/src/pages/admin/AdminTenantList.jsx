@@ -272,7 +272,6 @@ export default function AdminTenantList() {
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none"
                   >
                     <option value="free">Free</option>
-                    <option value="starter">Starter</option>
                     <option value="pro">Pro</option>
                   </select>
                 </label>

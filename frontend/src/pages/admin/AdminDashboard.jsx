@@ -329,10 +329,6 @@ export default function AdminDashboard() {
             <p className="text-xs text-slate-500">Free</p>
           </div>
           <div>
-            <p className="text-lg font-bold text-slate-800">{t.starter_plan ?? 0}</p>
-            <p className="text-xs text-slate-500">Starter</p>
-          </div>
-          <div>
             <p className="text-lg font-bold text-slate-800">{t.pro_plan ?? 0}</p>
             <p className="text-xs text-slate-500">Pro</p>
           </div>
