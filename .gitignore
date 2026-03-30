@@ -47,3 +47,12 @@ supabase/.temp
 # Local dev scripts with credentials
 START-ADMIN.bat
 .playwright-mcp/
+
+# One-off debug / audit output files
+frontend/eslint_json.txt
+frontend/eslint_output.txt
+frontend/kiosk_out.txt
+backend/_endpoint_list.txt
+
+# Frontend build output
+frontend/dist/
