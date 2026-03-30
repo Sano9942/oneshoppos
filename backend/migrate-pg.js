@@ -383,6 +383,30 @@ const MIGRATIONS = [
         ON email_queue(send_at) WHERE sent_at IS NULL AND attempts < max_attempts`);
     },
   },
+  {
+    version: 11,
+    description: "payment_intents table for gateway checkout tracking",
+    up: async (client) => {
+      await client.query(`CREATE TABLE IF NOT EXISTS payment_intents (
+        id              SERIAL PRIMARY KEY,
+        tenant_id       INTEGER NOT NULL REFERENCES tenants(id),
+        amount          NUMERIC(12,2) NOT NULL,
+        currency_code   TEXT DEFAULT 'PKR',
+        plan            TEXT NOT NULL,
+        cycle           TEXT NOT NULL,
+        outlet_count    INTEGER DEFAULT 1,
+        status          TEXT DEFAULT 'pending',
+        gateway         TEXT NOT NULL,
+        gateway_ref     TEXT,
+        gateway_data    JSONB,
+        return_url      TEXT,
+        created_at      TIMESTAMPTZ DEFAULT NOW(),
+        completed_at    TIMESTAMPTZ
+      )`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_payment_intents_gateway_ref ON payment_intents(gateway_ref) WHERE gateway_ref IS NOT NULL`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_payment_intents_tenant ON payment_intents(tenant_id, status)`);
+    },
+  },
 ];
 
 async function migrate(db) {
