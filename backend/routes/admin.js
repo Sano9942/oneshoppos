@@ -354,13 +354,23 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       if (!tenant) return res.status(404).json({ error: "Tenant not found" });
       if (tenant.status === "deleted") return res.json({ message: "Already deleted" });
 
+      // Validate slug is safe before using in schema name (only a-z, 0-9, underscore allowed)
+      if (!/^[a-z0-9_]+$/.test(tenant.slug)) {
+        return res.status(400).json({ error: "Invalid tenant slug — cannot safely drop schema" });
+      }
+
+      const schemaName = `tenant_${tenant.slug}`;
+
       await db.query(
         "UPDATE tenants SET status = 'deleted', deleted_at = NOW(), updated_at = NOW() WHERE id = $1",
         [req.params.id]
       );
 
+      // Drop the tenant's Postgres schema and all its tables
+      await db.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+
       await auditLog(tenant.id, "deleted", null, `admin:${req.admin.email}`);
-      return res.json({ message: `Tenant "${tenant.slug}" soft-deleted` });
+      return res.json({ message: `Tenant "${tenant.slug}" deleted and schema dropped` });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
