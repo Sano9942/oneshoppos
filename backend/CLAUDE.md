@@ -57,7 +57,10 @@ The following files are **legacy SQLite code** — never executed in production 
 | Request ID middleware | `middleware/request-id.js` (UUID + Pino per-request) |
 | Alert emails | `utils/alertEmail.js` (Resend-based) |
 | Support tickets | `routes/support.js` |
-| Billing routes | `routes/billing.js` |
+| Billing routes | `routes/billing.js` — status, pricing, checkout, payment history, upgrade requests |
+| Payment gateway | `services/payment-gateway.js` — adapter (xPay impl, extensible to Stripe/JazzCash) |
+| Payment webhooks | `routes/webhooks.js` — mounted before tenant middleware, no auth |
+| Subscription enforcement | `middleware/plan-limits.js` — `requireActiveSubscription` + `requirePlanLimit` |
 | Dead tenant cleanup | `jobs/cleanup-dead-tenants.js` (removes tenants with no setup after 7 days) |
 | FBR Digital Invoicing | `services/fbr.js` (API client + payload builders), `routes/fbr.js` (config/dashboard/retry), `routes/tax-lookup.js` (HS code search) |
 | FBR background worker | `workers/fbr-worker.js` (polls queue, posts to FBR, inline or standalone) |
@@ -146,6 +149,7 @@ The following files are **legacy SQLite code** — never executed in production 
 - **Frontend**: Vercel at `sanopos.com` (custom domain; `sanopos.vercel.app` fallback still active)
 - **Backend**: Railway at `api.sanopos.com` (custom domain; `oneshoppos-production.up.railway.app` fallback still active)
 - **Railway env vars**: `MULTI_TENANT=1`, `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `CORS_ORIGIN=https://sanopos.com,https://www.sanopos.com,https://sanopos.vercel.app`, `TZ=Asia/Karachi`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL=SanoPOS <noreply@sanopos.com>`, `SENTRY_DSN`, `ALERT_EMAIL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `FBR_WORKER_ENABLED=1`, `EMAIL_WORKER_ENABLED=1`
+- **Payment gateway env vars** (optional, set when xPay account ready): `PAYMENT_GATEWAY=xpay`, `XPAY_API_KEY`, `XPAY_WEBHOOK_SECRET`. Without these, system uses manual admin payments only.
 - **Railway gotchas**: `PORT` env var is overridden by Railway (binds to 8080); this is fine
 - To seed super-admin: `railway run node backend/seed-admin-pg.js --email <email> --password <password> --name <name>`
 - To provision tenant: use super-admin dashboard at `/admin` or `railway run node backend/tenant-provisioner-pg.js --slug <slug> --name <name> --pin <pin>`

@@ -4,7 +4,7 @@
 
 - **Stack**: React 19 + Vite 7 + Tailwind CSS v4
 - **All pages** are in `src/pages/redesign/` — always edit `*Redesign.jsx` files
-- **Landing page**: `src/pages/LandingPage.jsx` — public one-pager with login, product info, setup/user guide
+- **Landing page**: `src/pages/LandingPage.jsx` — public one-pager with competitive positioning, pricing (2-tier: Free + Pro), login
 - **Route files** (`*Route.jsx` in `pages/`) are 5-line thin wrappers — never edit these
 - **App.jsx** is the route orchestrator — read this to understand routing
 - **AuthProvider.jsx** patches `window.fetch` globally — all `/api/` calls get auth headers automatically
@@ -46,7 +46,7 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 | Error boundary | `ui/ErrorBoundary.jsx` — global + page-level |
 | Support widget | `ui/SupportWidget.jsx` — floating ticket form |
 | Impersonation banner | `ui/ImpersonationBanner.jsx` — amber bar during impersonation |
-| Tenant billing page | `pages/redesign/BillingRedesign.jsx` — plan info, payment history, upgrade requests |
+| Tenant billing page | `pages/redesign/BillingRedesign.jsx` — trial countdown, Pay Now (gateway), payment history, upgrade requests |
 | FBR settings | `pages/redesign/FBRSettingsRedesign.jsx` — NTN, token, province, enable toggle |
 | FBR invoice queue | `pages/redesign/FBRDashboardRedesign.jsx` — summary cards, filters, retry, auto-refresh |
 | Tax rate lookup | `pages/redesign/TaxLookupRedesign.jsx` — province-aware search, export, suggest correction |

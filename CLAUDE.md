@@ -47,14 +47,16 @@ oneshoppos/
 │   │   ├── insights.js           # /api/insights/auto (pre-built analytics cards)
 │   │   ├── insights-ai.js        # /api/insights/ask (Claude AI chat)
 │   │   ├── support.js            # /api/support/* (tickets + screenshot upload)
-│   │   ├── billing.js            # /api/billing/* (subscription billing)
+│   │   ├── billing.js            # /api/billing/* (subscription billing + payment checkout)
+│   │   ├── webhooks.js           # /api/webhooks/* (payment gateway webhooks, no auth)
 │   │   ├── fbr.js                # /api/fbr/* (FBR config, dashboard, retry)
 │   │   ├── tax-lookup.js         # /api/tax-lookup (HS code search, suggest)
 │   │   ├── reports/              # /api/reports/* (12 files, modular — includes fbr-export)
 │   │   ├── shopify/              # /api/integrations/shopify* (9 files, modular)
 │   │   ├── tier4/                # Tier 4 features (7 files, modular)
 │   │   └── [other domain files]  # taxes, categories, outlets, roles, brands, suppliers, promotions, orders, etc.
-│   ├── middleware/plan-limits.js  # Tenant plan cap enforcement
+│   ├── middleware/plan-limits.js  # Tenant plan cap + subscription enforcement
+│   ├── services/payment-gateway.js # Payment gateway adapter (xPay, extensible)
 │   ├── middleware/request-id.js   # Request ID + Pino logging middleware
 │   ├── tenant-db-proxy-pg.js     # AsyncLocalStorage + Proxy for MT DB routing
 │   ├── tenant-db-manager-pg.js   # Shared pg.Pool + per-request search_path
@@ -65,9 +67,9 @@ oneshoppos/
 │   ├── services/logger.js        # Pino logger instance
 │   ├── services/alerting.js      # In-house alert system (error spikes, DB pressure)
 │   ├── services/email.js          # Unified sendEmail() + enqueueEmail() orchestrator
-│   ├── services/email-templates.js # HTML builder functions for 12 email types
+│   ├── services/email-templates.js # HTML builder functions for 14 email types
 │   ├── services/fbr.js           # FBR API client, payload builders, queue helper
-│   ├── workers/email-worker.js    # Email queue worker + daily billing checks (inline or standalone)
+│   ├── workers/email-worker.js    # Email queue worker + trial/paid expiry lifecycle (inline or standalone)
 │   ├── workers/fbr-worker.js     # FBR background worker (inline or standalone)
 │   ├── scripts/seed-tax-rates.js # One-time seed for tax_rate_reference (~96 HS codes)
 │   └── utils/                    # tz.js, receiptEmail.js, digestEmail.js, backup-pg.js, resendEmail.js, alertEmail.js
@@ -108,7 +110,7 @@ oneshoppos/
         ├── dashboard/            # Dashboard components (15 files — includes InsightCards, AIChatPanel, BackupStatusCard)
         ├── shopify/              # Shopify tab modules
         ├── admin/                # Super-admin panel (separate auth, infra monitoring, tax rates CRUD)
-        ├── LandingPage.jsx       # Public landing page (product info, setup/user guide, login)
+        ├── LandingPage.jsx       # Public landing page (competitive positioning, pricing, login)
         ├── ResetPassword.jsx     # Public password reset page (/reset-password?token=xxx)
         ├── ReceiptPublicPage.jsx # Public shareable receipt (/receipt/:invoiceNumber)
         ├── SignupPage.jsx        # Public self-service signup (/signup)
@@ -120,7 +122,7 @@ oneshoppos/
 
 - Most API routes are in `backend/routes/<domain>.js` — read only the relevant file
 - `registerAllRoutes.js` is an orchestrator only — no route logic
-- **Super-admin routes** (`admin.js`) mounted BEFORE `loadTenantAndPerms`/`resolveTenant` middleware
+- **Super-admin routes** (`admin.js`) and **webhook routes** (`webhooks.js`) mounted BEFORE `loadTenantAndPerms`/`resolveTenant` middleware
 - **Multi-tenant DB routing**: `deps.db` is a Proxy that delegates to tenant DB via AsyncLocalStorage. Middleware order: `loadTenantAndPerms` → `resolveTenant` → tenant `/uploads` → `loadCompanyProfile` → `resolveContext`
 - Internal product categories are hierarchical; leaf-only assignment
 - Frontend: port 5173 (Vite dev), Backend: port 5000
@@ -149,9 +151,11 @@ oneshoppos/
 - **FBR export**: `GET /api/reports/fbr-export?from=X&to=Y` — generates FBR-compliant CSV data.
 - **FBR Digital Invoicing**: Real-time invoice posting to FBR DI API. Feature-flagged per tenant (`fbr_integration`). Sales/returns/voids enqueue payloads to `fbr_invoices` table. Background worker (`workers/fbr-worker.js`, inline or standalone) polls queue with exponential backoff retry (5 attempts). Routes: `routes/fbr.js` (config, dashboard, retry), `routes/tax-lookup.js` (HS code search, suggest corrections). Admin: `routes/admin.js` has tax rate CRUD + FBR health endpoint. Category-level HS code + tax inheritance via `category-tree.js:resolveInheritedField()`. Tax rate reference table (`tax_rate_reference`) in public schema with ~100 seeded HS codes. Migration v9. Frontend: `/settings/fbr` (config), `/fbr` (invoice queue dashboard), `/tax-lookup` (rate search), `/admin/tax-rates` (super-admin CRUD).
 - **AI insights**: `GET /api/insights/auto` (5 pre-built analytics cards). `POST /api/insights/ask` (Claude AI chat, feature-flagged `ai_insights`, requires `ANTHROPIC_API_KEY`).
-- **Self-service signup**: `POST /api/auth/signup` — creates tenant + admin employee + welcome email. Gated by `SELF_SERVICE_SIGNUP=1` env var. Rate-limited. After provisioning, applies `PLAN_DEFAULTS` for the selected plan (free/starter/pro) via `UPDATE tenants SET plan, max_outlets, max_employees, max_products`. Dead tenant cleanup job (`backend/jobs/cleanup-dead-tenants.js`) removes tenants that never complete setup after 7 days.
-- **Subscription billing**: `routes/billing.js` + admin billing UI in `AdminTenantDetail.jsx`. Manual payment recording (`POST /api/admin/payments/:tenantId`), plan upgrade/downgrade, billing cycle management. Tables: `plan_pricing`, `payment_records`, `upgrade_requests` (migration v7). Tenant-facing billing page at `/billing` (`BillingRedesign.jsx`). Public pricing endpoint: `GET /api/billing/pricing`.
-- **Unified Email Service**: `services/email.js` — single `sendEmail()` for all email types. Tenant->customer emails from `slug@sanopos.com`, platform->tenant from `noreply@sanopos.com`. 12 email types: receipt, digest, 3 drip, 4 billing, 2 support, 2 broadcast. `email_queue` table + `workers/email-worker.js` (inline, `EMAIL_WORKER_ENABLED=1`). Migration v10.
+- **Self-service signup**: `POST /api/auth/signup` — creates tenant + admin employee + welcome email. Gated by `SELF_SERVICE_SIGNUP=1` env var. Rate-limited. 2-tier plans: Free (1 outlet, 3 employees, 100 products) or Pro (unlimited, 45-day trial). Dead tenant cleanup job (`backend/jobs/cleanup-dead-tenants.js`) removes tenants that never complete setup after 7 days.
+- **Subscription lifecycle**: `requireActiveSubscription` middleware gates all business routes. Trial (45 days) → grace (7 days) → expired (read-only). Email worker sends `trial_warning`, `trial_ended`, `account_locked` automatically. Renewal emails (`renewal_due`, `renewal_overdue`) for paid tenants. Global subscription status banner in frontend.
+- **Subscription billing**: `routes/billing.js` — `GET /api/billing/status` (includes `payment_enabled`, trial/grace status), `GET /api/billing/pricing`, `GET /api/billing/payment-history`, `POST /api/billing/request-upgrade` (manual path), `POST /api/billing/create-checkout` (gateway path). Admin billing UI in `AdminTenantDetail.jsx`. Tables: `plan_pricing`, `payment_records`, `upgrade_requests` (migration v7), `payment_intents` (migration v11).
+- **Payment integration**: `services/payment-gateway.js` — gateway adapter (xPay implementation, extensible). `routes/webhooks.js` — `POST /api/webhooks/xpay` (HMAC-verified, mounted before tenant middleware). Feature-gated by `PAYMENT_GATEWAY` env var — when unset, system uses manual admin payments. Checkout flow: create intent → gateway redirect → webhook confirms → tenant auto-activated + payment record + confirmation email.
+- **Unified Email Service**: `services/email.js` — single `sendEmail()` for all email types. Tenant->customer emails from `slug@sanopos.com`, platform->tenant from `noreply@sanopos.com`. 14 email types: receipt, digest, 3 drip, 6 billing (payment_recorded, plan_changed, expiry_warning, overdue, renewal_due, renewal_overdue), 3 lifecycle (trial_warning, trial_ended, account_locked), 2 support, 2 broadcast. `email_queue` table + `workers/email-worker.js` (inline, `EMAIL_WORKER_ENABLED=1`). Migration v10.
 - **PWA**: `manifest.webmanifest` + service worker for installable app.
 
 ## Reliability & Monitoring
@@ -208,7 +212,7 @@ oneshoppos/
 
 ## Migrations
 
-- **Current version**: 10 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns, v6: setup_token_expires_at, v7: billing tables, v8: support_tickets/impersonation_sessions, v9: FBR digital invoicing — fbr_invoices queue, category tax/HS inheritance, tax_rate_reference, tax_rate_suggestions, v10: email_queue for unified email service)
+- **Current version**: 11 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns, v6: setup_token_expires_at, v7: billing tables, v8: support_tickets/impersonation_sessions, v9: FBR digital invoicing — fbr_invoices queue, category tax/HS inheritance, tax_rate_reference, tax_rate_suggestions, v10: email_queue for unified email service, v11: payment_intents for gateway checkout tracking)
 - **migrate-pg.js CLI**: `node backend/migrate-pg.js` — migrates public schema AND all active tenant schemas
 - **Tenant migration gotcha**: existing tenants need `schema_version` table seeded with previous versions before first run
 
@@ -231,7 +235,7 @@ oneshoppos/
 - **Frontend**: `https://sanopos.com` (Vercel, custom domain — `sanopos.vercel.app` still works as fallback)
 - **Backend**: `https://api.sanopos.com` (Railway custom domain; `oneshoppos-production.up.railway.app` still works as fallback)
 - **Super-admin**: `https://sanopos.com/admin`
-- **Database**: Supabase Postgres, `public` schema = 6 master tables, tenant data in `tenant_<slug>` schemas
+- **Database**: Supabase Postgres, `public` schema = 7 master tables (incl. `payment_intents`), tenant data in `tenant_<slug>` schemas
 - **Resend**: `RESEND_API_KEY` env var on Railway for system emails (password reset, alerts, welcome). Sender: `RESEND_FROM_EMAIL=SanoPOS <noreply@sanopos.com>` (custom domain, SPF/DKIM/DMARC verified on `sanopos.com` via Cloudflare)
 - **Sentry**: `SENTRY_DSN` on Railway (backend), `VITE_SENTRY_DSN` on Vercel (frontend) — sanopos.sentry.io
 - **Alerts**: `ALERT_EMAIL` env var on Railway — receives error spike / DB pressure / support ticket notifications
