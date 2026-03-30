@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-_Last updated: March 30 2026 — **SaaS monetization strategy added (5 phases: revenue protection, growth, stickiness, competitive moats, payment integration). Fixed tenant provisioning bug (email_queue FK). Fixed master-db search_path leak.**_
+_Last updated: March 30 2026 — **Massive SaaS monetization day: Phase 1 (2-tier pricing, trial enforcement, subscription lifecycle), Phase 4 (landing page competitive rewrite), Phase 5 (payment gateway infrastructure). 32 commits across 3 initiatives.**_
 
 ---
 
@@ -383,7 +383,7 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 - **Inventory marketplace listing** (Daraz, Facebook) — deferred
 - **Dedicated mobile manager views** — PWA shell ships now, views later based on feedback
 - **Multi-language support** (Urdu) — deferred
-- **Payment gateway** (Stripe, JazzCash) — deferred
+- **Payment gateway** — infrastructure BUILT (Mar 30 2026, xPay adapter). Pending: xPay account, Stripe/JazzCash adapters
 - **Accounting software sync** (QuickBooks, Xero) — deferred
 - **Weighing scale integration** — deferred
 - **Customer/Supplier portals** — deferred
@@ -528,6 +528,83 @@ Changed via Railway Settings UI after removing `numReplicas` from `railway.toml`
 
 ---
 
+## ✅ SaaS Phase 1 — 2-Tier Pricing & Trial Enforcement (Mar 30 2026)
+
+**Commits:** 15 commits on `main` (no feature branch — rapid iteration).
+
+**Goal:** Replace 3-tier pricing (Free/Starter/Pro) with a simpler 2-tier model (Free + Pro with 45-day trial), enforce subscription lifecycle, and protect revenue.
+
+### Pricing Changes
+- **Removed Starter tier entirely** — `PLAN_DEFAULTS` updated to 2 tiers only. Admin UI, signup page, billing page, pricing endpoint all updated.
+- **Free plan**: All features unlocked, limited capacity (1 outlet, 3 employees, 100 products). Lead generation tool.
+- **Pro plan**: Unlimited capacity, PKR 8,000/mo per outlet. 45-day free trial on self-service signup.
+
+### Subscription Lifecycle
+- **`requireActiveSubscription` middleware** — gates all business routes. Free plan always passes. Trial/active pass. Grace passes (7-day window). Expired = 403 "Subscription expired".
+- **Trial lifecycle in email worker** — `runTrialCheck()`: trial warning (7 days left), trial→grace transition (on expiry), grace→expired transition (7 days after expiry). Auto-enqueues `trial_warning`, `trial_ended`, `account_locked` emails.
+- **3 new email templates** — `trial_warning`, `trial_ended`, `account_locked` in `email-templates.js`.
+
+### Frontend Changes
+- **Subscription status in AuthProvider** — detects trial/grace/expired from billing API, exposes via `useAuth()`.
+- **Global subscription banner** — amber (trial ending/grace) or red (expired) banner across all pages.
+- **Billing page rewrite** — trial countdown progress bar, grace period warning, expired read-only notice, upgrade request flow.
+- **Signup page** — 2-tier plan selection cards with "45-day free trial" badge.
+- **Admin dashboard** — removed Starter plan count.
+
+### Bug Fixes (same session)
+- **Soft-delete slug conflict** — signup now checks `WHERE deleted_at IS NULL` so deleted store names can be reused.
+- **master-db search_path leak** — all master DB queries now explicitly set `search_path = public`.
+- **email_queue FK constraint** — removed `tenants` FK from `email_queue` (was blocking tenant provisioning).
+- **Welcome email setup link** — fixed raw URL rendering.
+
+---
+
+## ✅ SaaS Phase 4 — Landing Page Competitive Rewrite (Mar 30 2026)
+
+**Commits:** 10 commits on `main`.
+
+**Goal:** Reposition landing page from generic POS to Pakistan-specific competitive advantage.
+
+### Sections Added/Rewritten
+- **Hero** — "The only POS built for Pakistan" with FBR compliance, offline reliability, no transaction fees messaging. Dual CTA (Start Free Trial + See Pricing).
+- **Pain points** — 3-card section: offline reliability (power cuts, internet drops), FBR compliance (real-time digital invoicing, auto-HS codes), transparent pricing (no hidden fees, no per-transaction cuts).
+- **Device compatibility** — tablet, laptop, phone illustrations showing POS works on any device.
+- **Feature grid** — benefit-first copy rewrite: revenue & sales, inventory, team management, customer engagement, analytics, multi-store, compliance, integrations.
+- **Comparison table** — SanoPOS vs Oscar POS vs EasyPOS vs Vend. Highlights: offline mode, FBR integration, free tier, WhatsApp receipts.
+- **Stats bar** — 50+ reports, 50+ features, 14 keyboard shortcuts, 5-minute setup.
+- **Expandable feature list** — 50+ features across 8 categories with show/hide toggle.
+- **Updated pricing cards** — Free plan shows all features with capacity limits, Pro positioned as capacity upgrade with trial badge.
+
+---
+
+## ✅ Payment Integration Infrastructure (Mar 30 2026)
+
+**Branch:** `feature/payment-integration` — merged to `main` (7 commits, 10 files, +693 lines).
+
+**Goal:** Add automated one-time payments via gateway redirect checkout (xPay first, Stripe later), so tenants can self-service pay for Pro subscriptions without admin involvement.
+
+### Backend
+- **`services/payment-gateway.js`** (new) — gateway adapter pattern. `createCheckout()`, `verifyWebhook()`, `isEnabled()`. xPay implementation with HMAC-SHA256 verification. Feature-gated by `PAYMENT_GATEWAY` env var.
+- **`routes/billing.js`** — `POST /api/billing/create-checkout` (creates payment intent, calls gateway, returns checkout URL), `GET /api/billing/payment-history` (returns up to 24 payment records). Double-pay guard (blocks if 7+ days remaining). `payment_enabled` flag in billing status response.
+- **`routes/webhooks.js`** (new) — `POST /api/webhooks/xpay` webhook handler. Mounted before tenant middleware. Verifies signature, looks up payment intent, activates tenant (plan, limits, expiry), inserts payment record, enqueues confirmation email. Idempotent.
+- **`index.js`** — raw body capture extended to `/api/webhooks/` paths.
+- **`workers/email-worker.js`** — `runPaidExpiryCheck()` handles paid tenant lifecycle: renewal warning (7 days before expiry), active→grace transition on expiry. De-duplicated with existing `runBillingCheck` via `NOT EXISTS (SELECT 1 FROM payment_records)`.
+- **`services/email-templates.js`** — 2 new templates: `renewal_due`, `renewal_overdue`.
+
+### Frontend
+- **`BillingRedesign.jsx`** — Pay Now buttons on trial/grace/expired banners (gated by `payment_enabled`), payment return polling (up to 15 attempts after gateway redirect), payment processing spinner, upcoming renewal card (7-day window), payment history table.
+
+### Database
+- **Migration v11** — `payment_intents` table in public schema with indexes on `gateway_ref` (partial) and `(tenant_id, status)`.
+- **`master-db-pg.js`** — `payment_intents` DDL + updated `plan_pricing` seed (Pro only).
+
+### Activation (pending)
+- Set `PAYMENT_GATEWAY=xpay`, `XPAY_API_KEY`, `XPAY_WEBHOOK_SECRET` on Railway when xPay account is ready
+- Configure webhook URL: `https://api.sanopos.com/api/webhooks/xpay`
+- Until activated, system works exactly as today (manual admin payments)
+
+---
+
 ## 📋 SaaS Monetization & Growth Strategy (Mar 30 2026)
 
 ### How POS SaaS Companies Monetize
@@ -545,12 +622,16 @@ Changed via Railway Settings UI after removing `numReplicas` from `railway.toml`
 - Setup fees PKR 10,000-50,000 (onboarding, training, data migration)
 - Hardware bundles (scanner + printer + tablet) sold at markup
 
-### Phase 1 — Protect Revenue (Quick Wins)
+### Phase 1 — Protect Revenue (Quick Wins) ✅ COMPLETE (Mar 30 2026)
 
-- [ ] **Free-only self-service signup** — Starter/Pro signup creates a 14-day trial, not a permanent free account. After trial: auto-downgrade to Free limits or soft-lock with "Trial expired" banner
-- [ ] **Fix soft-delete slug conflict** — `SELECT id FROM tenants WHERE slug = $1 AND deleted_at IS NULL` so deleted store names can be reused
-- [ ] **Fix welcome email setup link** — currently renders as raw URL text instead of a styled button
-- [ ] **Manual payment recording** — continue using `/admin` to record bank transfer / JazzCash / EasyPaisa payments (already built)
+- [x] **2-tier pricing (Free + Pro)** — removed Starter tier entirely. Free = all features, limited capacity (1 outlet, 3 employees, 100 products). Pro = unlimited, PKR 8,000/mo per outlet. 45-day free trial on Pro signup.
+- [x] **Trial lifecycle enforcement** — `requireActiveSubscription` middleware on all business routes. Trial countdown, grace period (7 days), expired state = read-only. Email worker sends `trial_warning`, `trial_ended`, `account_locked` emails automatically.
+- [x] **Global subscription banner** — amber/red banners in frontend for trial expiring, grace period, and expired states. AuthProvider detects subscription status.
+- [x] **Billing page rewrite** — trial countdown progress bar, grace/expired warnings, upgrade request flow. `BillingRedesign.jsx`.
+- [x] **Signup page updated** — 2-tier plan selection with "45-day free trial" badge on Pro.
+- [x] **Admin UI updated** — removed Starter references from admin dashboard, tenant management.
+- [x] **Fix soft-delete slug conflict** — `WHERE deleted_at IS NULL` check on signup so deleted store names can be reused.
+- [x] **Manual payment recording** — already built (continues working via `/admin`).
 
 ### Phase 2 — Growth & Conversion
 
@@ -558,7 +639,7 @@ Changed via Railway Settings UI after removing `numReplicas` from `railway.toml`
 - [ ] **Referral program** — "Refer a store, get 1 month free." `referred_by` column on `tenants`. Both referrer and referred get credited
 - [ ] **Setup fee / onboarding service** — charge PKR 10,000-25,000 for data migration, hardware setup, training call. Pure profit, standard in Pakistan POS market
 - [ ] **Per-outlet pricing** — instead of flat monthly, charge per outlet (first outlet PKR 2,000/mo, each additional PKR 1,500/mo). `max_outlets` and billing tables already support this
-- [ ] **Annual discount push** — Starter PKR 30,000/yr (save PKR 6,000), Pro PKR 80,000/yr (save PKR 16,000). Show savings prominently on pricing page
+- [ ] **Annual discount push** — Pro PKR 80,000/yr (save PKR 16,000). Show savings prominently on pricing page
 
 ### Phase 3 — Product Stickiness & Engagement
 
@@ -567,17 +648,39 @@ Changed via Railway Settings UI after removing `numReplicas` from `railway.toml`
 - [ ] **Digital receipts via WhatsApp** — proper WhatsApp template messages (not just wa.me links). Customer loyalty balance check via WhatsApp
 - [ ] **Automated onboarding progress emails** — targeted drip based on what they haven't done: "You haven't added products yet" (day 2), "Ready to open your first shift?" (day 3). Reduces drop-off. Drip infrastructure already exists
 
-### Phase 4 — Competitive Moats
+### Phase 4 — Competitive Moats (Partially Complete)
 
-- [ ] **FBR integration as headline marketing** — most Pakistan POS competitors don't have real-time FBR digital invoicing or charge extra. Already built — make it the #1 selling point
-- [ ] **Offline-first reliability marketing** — offline sale queuing already built. Pakistan retailers face frequent power outages / internet drops. "Never lose a sale" messaging
+- [x] **Landing page rewrite** (Mar 30 2026) — full competitive repositioning. Pakistan-specific hero ("The only POS built for Pakistan"), pain points section (offline, FBR, pricing advantages), device compatibility, comparison table (vs Oscar POS, EasyPOS, Vend), benefit-first feature grid, expandable 50+ feature list across 8 categories, stats bar (50+ reports, 50+ features, 14 shortcuts, 5-min setup).
+- [x] **FBR integration as headline marketing** — featured prominently in landing page comparison table and feature list. Already built — positioned as #1 differentiator.
+- [x] **Offline-first reliability marketing** — "Never lose a sale" messaging in landing page pain points section and feature list. Offline queuing already built.
 - [ ] **Multi-language support (Urdu UI)** — POS screen especially: product names, receipt text, button labels. Most retail staff more comfortable in Urdu. Major differentiator
 - [ ] **Inventory alerts via SMS** — low stock SMS via Twilio or local gateway (JazzCash SMS API). Store owners check SMS more reliably than email
 
 ### Phase 5 — Payment Integration & Scale
 
-- [ ] **Stripe / Paddle** — international card payments for overseas Pakistani diaspora stores
-- [ ] **JazzCash / EasyPaisa integration** — local mobile money for Pakistan customers, auto-activate plan on payment
+**Payment gateway infrastructure is BUILT** (Mar 30 2026). Gateway adapter pattern (`services/payment-gateway.js`) supports xPay now, Stripe/JazzCash later. Feature-gated by `PAYMENT_GATEWAY` env var — system works as today until activated.
+
+#### To activate xPay:
+1. Sign up at [xpay.pk](https://xpay.pk) — merchant account needs: business name, CNIC/NTN, bank account, website URL (`sanopos.com`)
+2. After approval, get **API Key** and **Webhook Secret**
+3. Configure webhook URL in xPay dashboard: `https://api.sanopos.com/api/webhooks/xpay`
+4. Set Railway env vars: `PAYMENT_GATEWAY=xpay`, `XPAY_API_KEY=<key>`, `XPAY_WEBHOOK_SECRET=<secret>`
+5. Test in xPay sandbox before going live
+6. **Note:** May need to adjust endpoint URL or field names in `payment-gateway.js` once you have actual xPay API docs
+
+#### What's built:
+- [x] **Payment gateway adapter** — `services/payment-gateway.js` (xPay implementation, extensible to Stripe/JazzCash/EasyPaisa)
+- [x] **Checkout flow** — `POST /api/billing/create-checkout` → gateway redirect → webhook confirms → tenant auto-activated
+- [x] **Webhook handler** — `POST /api/webhooks/xpay` with HMAC-SHA256 verification, idempotent processing
+- [x] **payment_intents table** — tracks checkout attempts (migration v11)
+- [x] **Double-pay guard** — blocks checkout if subscription has 7+ days remaining
+- [x] **Paid subscription expiry** — email worker transitions active→grace→expired with renewal emails
+- [x] **Billing UI** — Pay Now buttons, payment return polling, payment history table
+
+#### Remaining:
+- [ ] **xPay account setup** — sign up, get credentials, configure webhook (see steps above)
+- [ ] **Stripe / Paddle** — international card payments for overseas Pakistani diaspora stores (add adapter to `payment-gateway.js`)
+- [ ] **JazzCash / EasyPaisa integration** — local mobile money (add adapter to `payment-gateway.js`)
 - [ ] **Per-outlet add-on pricing** — transaction-based pricing for high-volume stores
 - [ ] **White-label / enterprise tier** — for chains that want their own branding
 
@@ -590,7 +693,7 @@ Changed via Railway Settings UI after removing `numReplicas` from `railway.toml`
 
 ## 📋 Discussed but Deferred
 
-- **Payment gateway integration** (card machines, JazzCash, EasyPaisa) — see Phase 5 above
+- **Payment gateway integration** — infrastructure built (Mar 30 2026), pending xPay account setup. See Phase 5 for activation steps
 - **Advance / layaway payments** — installment-based sales
 - **Shopcast / digital signage**
 - **CCTV / loss prevention**
@@ -638,4 +741,7 @@ Changed via Railway Settings UI after removing `numReplicas` from `railway.toml`
 | Mar 28 2026 | **Custom domain sanopos.com — email configured**        | Purchased `sanopos.com` on Cloudflare Registrar. Configured with Resend via "Auto configure" (SPF + DKIM added automatically). DMARC TXT record added via Cloudflare API (`_dmarc` → `v=DMARC1; p=none; rua=mailto:dmarc@sanopos.com`). Railway env var `RESEND_FROM_EMAIL=SanoPOS <noreply@sanopos.com>` set. Welcome emails now deliver from branded address. Cloudflare API token stored in `.claude/settings.local.json`. |
 | Mar 28 2026 | **Unified email service shipped**                       | `feat/unified-email-service` branch (11 commits, 12 files, +783 lines). Single `sendEmail()` + `enqueueEmail()` service, 10 HTML templates, email queue worker with daily billing checks. 12 email types: receipt (branded `slug@sanopos.com`), 2 drip, 4 billing, 2 support, 2 broadcast. Migration v10 (`email_queue` table). `EMAIL_WORKER_ENABLED=1` on Railway. |
 | Mar 28 2026 | **Admin email queue page shipped**                      | `feat/admin-email-page` branch. `GET /api/admin/email-queue` (list + counts), `POST /api/admin/email-queue/:id/retry`. `AdminEmails.jsx` with summary cards, broadcast form, queue table, status filters, auto-refresh. Nav item added to admin sidebar. |
+| Mar 30 2026 | **SaaS Phase 1 — 2-tier pricing shipped**                | 15 commits on `main`. Removed Starter tier. Free + Pro (45-day trial, PKR 8,000/mo). `requireActiveSubscription` middleware on all business routes. Trial lifecycle: email worker sends warning/ended/locked emails, transitions trial→grace→expired. Global subscription banners. Billing page rewrite with trial countdown. Signup updated to 2-tier. Admin UI cleaned. Bugs fixed: slug reuse, master-db search_path leak, email_queue FK, welcome email link. |
+| Mar 30 2026 | **SaaS Phase 4 — Landing page rewrite**                  | 10 commits on `main`. Full competitive repositioning for Pakistan market. Hero ("The only POS built for Pakistan"), pain points (offline, FBR, pricing), device compatibility, benefit-first feature grid, comparison table (vs Oscar POS, EasyPOS, Vend), stats bar, expandable 50+ feature list, updated pricing cards. |
+| Mar 30 2026 | **Payment integration shipped**                         | `feature/payment-integration` branch (7 commits, 10 files, +693 lines). Gateway adapter pattern (`services/payment-gateway.js`) with xPay implementation. `POST /api/billing/create-checkout` → gateway redirect → `POST /api/webhooks/xpay` webhook confirms → tenant auto-activated. `payment_intents` table (migration v11). Double-pay guard (7-day window). Email worker gains paid subscription expiry transitions (active→grace) with `renewal_due`/`renewal_overdue` templates. Billing UI: Pay Now buttons, payment return polling, payment history table. Feature-gated by `PAYMENT_GATEWAY` env var — zero impact until activated. Pending: xPay account signup + credentials. |
 | Mar 29 2026 | **Railway moved to Singapore**                          | Backend region changed from EU West (Amsterdam) to Asia Southeast (Singapore). API↔DB latency dropped from ~150ms to ~12ms (same region as Supabase). Total API round trip for Pakistan users: ~400-500ms → ~100-160ms. |
