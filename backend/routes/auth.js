@@ -614,7 +614,7 @@ module.exports = function registerAuthRoutes(app, deps) {
 
     try {
       const masterDb = require("../master-db-pg");
-      const { rows: existing } = await masterDb.query("SELECT id FROM tenants WHERE slug = $1", [slug]);
+      const { rows: existing } = await masterDb.query("SELECT id FROM tenants WHERE slug = $1 AND deleted_at IS NULL", [slug]);
       if (existing.length) return res.status(409).json({ error: "Store name already taken" });
 
       // Provision tenant using shared db pool
@@ -624,10 +624,16 @@ module.exports = function registerAuthRoutes(app, deps) {
 
       // Apply plan + its default limits
       const { PLAN_DEFAULTS } = require("../middleware/plan-limits");
-      const effectivePlan = plan || "free";
+      const effectivePlan = ["free", "pro"].includes(plan) ? plan : "free";
       const limits = PLAN_DEFAULTS[effectivePlan] || PLAN_DEFAULTS.free;
+
+      // Pro gets a 45-day trial; Free stays active forever
+      const trialFields = effectivePlan === "pro"
+        ? `, trial_ends_at = NOW() + INTERVAL '45 days', payment_status = 'trial'`
+        : ``;
+
       await masterDb.query(
-        `UPDATE tenants SET plan = $1, max_outlets = $2, max_employees = $3, max_products = $4
+        `UPDATE tenants SET plan = $1, max_outlets = $2, max_employees = $3, max_products = $4${trialFields}
          WHERE id = $5`,
         [effectivePlan, limits.max_outlets, limits.max_employees, limits.max_products, result.tenantId]
       );
