@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
-import { Send, Trash2, RotateCcw } from "lucide-react";
+import { Download, Send, Trash2, RotateCcw } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
+import { downloadCsv } from "../../utils/csvExport";
 
 const STATUS_TABS = [
   { key: "", label: "All" },
@@ -177,6 +178,24 @@ export default function AdminEmails() {
         <h1 className="text-2xl font-bold text-slate-800">Email Queue</h1>
         <div className="flex items-center gap-3">
           <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Auto-refresh 30s</span>
+          {filter !== "broadcasts" && (
+            <button
+              onClick={() => {
+                const headers = [
+                  { key: "id", label: "ID" },
+                  { key: "email_type", label: "Type" },
+                  { key: "to_email", label: "To" },
+                  { key: "subject", label: "Subject" },
+                  { key: "attempts", label: "Attempts" },
+                  { key: "created_at", label: "Created" },
+                ];
+                downloadCsv(headers, emails, "admin-emails.csv");
+              }}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              <Download size={14} /> Export
+            </button>
+          )}
           <button
             onClick={() => setShowBroadcast((v) => !v)}
             className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-700"

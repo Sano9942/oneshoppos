@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Server, Trash2 } from "lucide-react";
+import { Download, Plus, Search, Server, Trash2 } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
+import { downloadCsv } from "../../utils/csvExport";
 
 function safeDateParse(ts) {
   if (!ts) return null;
@@ -91,12 +92,29 @@ export default function AdminTenantList() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-800">Tenants</h1>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500"
-        >
-          <Plus size={16} /> New Tenant
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const headers = [
+                { key: "name", label: "Name" },
+                { key: "slug", label: "Slug" },
+                { key: "plan", label: "Plan" },
+                { key: "status", label: "Status" },
+                { key: "created_at", label: "Created" },
+              ];
+              downloadCsv(headers, filtered, "admin-tenants.csv");
+            }}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            <Download size={15} /> Export
+          </button>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500"
+          >
+            <Plus size={16} /> New Tenant
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

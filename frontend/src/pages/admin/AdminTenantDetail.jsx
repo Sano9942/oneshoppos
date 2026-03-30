@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Database, Eye, MessageSquare, Pause, Pencil, Play, RotateCcw, ToggleLeft, ToggleRight, Trash2, X } from "lucide-react";
+import { ArrowLeft, Database, Download, Eye, MessageSquare, Pause, Pencil, Play, RotateCcw, ToggleLeft, ToggleRight, Trash2, X } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
+import { downloadCsv } from "../../utils/csvExport";
 
 function safeDateParse(ts) {
   if (!ts) return null;
@@ -505,7 +506,24 @@ export default function AdminTenantDetail() {
             {/* Payment History */}
             {payments.length > 0 && (
               <div>
-                <p className="text-xs font-semibold uppercase text-slate-400 mb-2">Payment History</p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold uppercase text-slate-400">Payment History</p>
+                  <button
+                    onClick={() => {
+                      const headers = [
+                        { key: "recorded_at", label: "Date" },
+                        { key: "amount", label: "Amount" },
+                        { key: "plan", label: "Plan" },
+                        { key: "payment_method", label: "Method" },
+                        { key: "reference_note", label: "Reference" },
+                      ];
+                      downloadCsv(headers, payments, "tenant-payments.csv");
+                    }}
+                    className="flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-50"
+                  >
+                    <Download size={12} /> Export
+                  </button>
+                </div>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-slate-500 border-b">
