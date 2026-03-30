@@ -295,7 +295,7 @@ const PAIN_POINTS = [
     icon: Zap,
     title: "All Features. Every Plan.",
     problem: "Competitors charge PKR 5,000-15,000/month and lock features behind paid tiers.",
-    solution: "Every feature is included on every plan — Free and Pro. No feature locks. No surprises. Pro adds unlimited capacity at PKR 8,000/mo per outlet.",
+    solution: "Every feature is included on every plan — Free and Pro. No feature locks. No surprises. Pro removes capacity limits at PKR 8,000/mo per outlet — add as many outlets as your business needs.",
   },
 ];
 
@@ -469,7 +469,7 @@ const PLANS = [
     price: "PKR 8,000",
     period: "/month per outlet",
     desc: "For growing businesses that need more capacity",
-    features: ["Unlimited outlets", "Unlimited employees", "Unlimited products", "All integrations", "Priority support", "45-day free trial"],
+    features: ["Add as many outlets as you need (billed per outlet)", "Unlimited employees", "Unlimited products", "All integrations", "Priority support", "45-day free trial"],
     cta: "Start Free Trial",
     plan: "pro",
     highlight: true,
@@ -870,13 +870,10 @@ export default function LandingPage() {
       {/* ── Full Feature List ───────────────────────────────── */}
       <section className="py-12 md:py-16 bg-slate-50">
         <div className="max-w-5xl mx-auto px-5">
-          <details className="group">
-            <summary className="flex items-center justify-center gap-2 cursor-pointer text-center list-none [&::-webkit-details-marker]:hidden">
-              <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-                Every feature included on every plan
-              </h2>
-              <ChevronDown size={22} className="text-slate-400 transition-transform group-open:rotate-180 shrink-0 mt-1" />
-            </summary>
+          <div>
+            <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight text-center">
+              Every feature included on every plan
+            </h2>
 
             <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {FULL_FEATURES.map(({ category, items }) => (
@@ -893,7 +890,7 @@ export default function LandingPage() {
                 </div>
               ))}
             </div>
-          </details>
+          </div>
         </div>
       </section>
 
