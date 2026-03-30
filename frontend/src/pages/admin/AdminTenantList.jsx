@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Server } from "lucide-react";
+import { Plus, Search, Server, Trash2 } from "lucide-react";
 import { adminFetch } from "./AdminLogin";
 
 function safeDateParse(ts) {
@@ -43,6 +43,9 @@ export default function AdminTenantList() {
   const [createError, setCreateError] = useState("");
   const [form, setForm] = useState({ slug: "", name: "", owner_email: "", timezone: "UTC", pin: "", plan: "free" });
   const [createdSetupUrl, setCreatedSetupUrl] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const loadTenants = () => {
     adminFetch("/api/admin/tenants")
@@ -141,6 +144,7 @@ export default function AdminTenantList() {
                 <th className="px-4 py-3 font-semibold text-slate-500">Expires</th>
                 <th className="px-4 py-3 font-semibold text-slate-500">Last Activity</th>
                 <th className="px-4 py-3 font-semibold text-slate-500">Created</th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
@@ -191,6 +195,15 @@ export default function AdminTenantList() {
                   <td className="px-4 py-3 text-slate-500">{timeAgo(t.last_login)}</td>
                   <td className="px-4 py-3 text-slate-500">
                     {safeDateParse(t.created_at)?.toLocaleDateString() ?? "\u2014"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(t); setDeleteConfirm(""); }}
+                      className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                      title="Delete tenant"
+                    >
+                      <Trash2 size={15} />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -324,6 +337,57 @@ export default function AdminTenantList() {
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
               >
                 Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => { if (!deleting) setDeleteTarget(null); }}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="mb-2 text-lg font-bold text-red-700">Delete Tenant</h2>
+            <p className="mb-4 text-sm text-slate-600">
+              Type <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm font-semibold text-red-600">{deleteTarget.slug}</code> to confirm deletion. This will permanently drop all data.
+            </p>
+            <input
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder={deleteTarget.slug}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+              autoFocus
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={deleteConfirm !== deleteTarget.slug || deleting}
+                onClick={async () => {
+                  setDeleting(true);
+                  try {
+                    const res = await adminFetch(`/api/admin/tenants/${deleteTarget.id}`, { method: "DELETE" });
+                    if (!res.ok) {
+                      const data = await res.json().catch(() => ({}));
+                      throw new Error(data.error || "Failed to delete tenant");
+                    }
+                    setDeleteTarget(null);
+                    loadTenants();
+                  } catch (err) {
+                    alert(err.message);
+                  } finally {
+                    setDeleting(false);
+                  }
+                }}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-60"
+              >
+                {deleting ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>
