@@ -40,7 +40,9 @@ module.exports = function registerReturnsRoutes(app, deps) {
     if (original_sale_id) {
       try {
         const { rows: saleItems } = await db.query(
-          "SELECT product_id, SUM(quantity) as sold_qty FROM sale_items WHERE sale_id = $1 GROUP BY product_id",
+          `SELECT product_id, variant_id, SUM(quantity) AS sold_qty
+           FROM sale_items WHERE sale_id = $1
+           GROUP BY product_id, variant_id`,
           [original_sale_id],
         );
         if (!saleItems || saleItems.length === 0) {
@@ -48,15 +50,23 @@ module.exports = function registerReturnsRoutes(app, deps) {
         }
 
         const soldMap = {};
-        saleItems.forEach((si) => { soldMap[si.product_id] = Number(si.sold_qty); });
+        saleItems.forEach((r) => {
+          const key = `${r.product_id}_${r.variant_id ?? "null"}`;
+          soldMap[key] = Number(r.sold_qty);
+        });
 
         for (const item of items) {
-          if (!(item.product_id in soldMap)) {
-            return res.status(400).json({ error: `Product ${item.product_id} was not part of the original sale` });
-          }
-          if (item.quantity > soldMap[item.product_id]) {
+          const key = `${item.product_id}_${item.variant_id ?? "null"}`;
+          if (!(key in soldMap)) {
             return res.status(400).json({
-              error: `Return quantity ${item.quantity} for product ${item.product_id} exceeds sold quantity ${soldMap[item.product_id]}`,
+              error: item.variant_id
+                ? `Variant ${item.variant_id} of product ${item.product_id} was not part of the original sale`
+                : `Product ${item.product_id} was not part of the original sale`,
+            });
+          }
+          if (item.quantity > soldMap[key]) {
+            return res.status(400).json({
+              error: `Return quantity ${item.quantity} exceeds sold quantity for this variant`,
             });
           }
         }
@@ -91,8 +101,8 @@ module.exports = function registerReturnsRoutes(app, deps) {
 
         for (const item of items) {
           await client.query(
-            "INSERT INTO return_items (return_id, product_id, quantity, refund_price) VALUES ($1, $2, $3, $4)",
-            [retId, item.product_id, item.quantity, item.refund_price],
+            "INSERT INTO return_items (return_id, product_id, variant_id, quantity, refund_price) VALUES ($1, $2, $3, $4, $5)",
+            [retId, item.product_id, item.variant_id || null, item.quantity, item.refund_price],
           );
           // Restock outlet_stock
           await client.query(

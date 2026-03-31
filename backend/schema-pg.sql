@@ -331,6 +331,7 @@ CREATE TABLE IF NOT EXISTS return_items (
   id SERIAL PRIMARY KEY,
   return_id INTEGER NOT NULL REFERENCES returns(id),
   product_id INTEGER NOT NULL REFERENCES products(id),
+  variant_id INTEGER REFERENCES product_variants(id),
   quantity INTEGER NOT NULL,
   refund_price NUMERIC(12,2) NOT NULL
 );
@@ -1212,6 +1213,23 @@ CREATE INDEX IF NOT EXISTS idx_products_deleted_at ON products(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_customers_deleted_at ON customers(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_employees_deleted_at ON employees(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_revoked_tokens_jti ON revoked_tokens(token_jti);
+
+-- Performance indexes (migration v13)
+CREATE INDEX IF NOT EXISTS idx_sales_outlet_id ON sales (outlet_id);
+CREATE INDEX IF NOT EXISTS idx_sales_employee_id ON sales (employee_id);
+CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sales_invoice_number ON sales (invoice_number);
+CREATE INDEX IF NOT EXISTS idx_sales_voided ON sales (voided) WHERE voided = false;
+CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items (sale_id);
+CREATE INDEX IF NOT EXISTS idx_sale_items_product_id ON sale_items (product_id);
+CREATE INDEX IF NOT EXISTS idx_products_barcode ON products (barcode) WHERE barcode IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_products_sku ON products (sku) WHERE sku IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_products_deleted_at_active ON products (deleted_at) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_customers_mobile ON customers (mobile) WHERE mobile IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_customers_email ON customers (email) WHERE email IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_cash_shifts_outlet_status ON cash_shifts (outlet_id, status);
+CREATE INDEX IF NOT EXISTS idx_returns_original_sale_id ON returns (original_sale_id);
+CREATE INDEX IF NOT EXISTS idx_returns_created_at ON returns (created_at DESC);
 
 -- ── Password Reset Tokens ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
