@@ -212,5 +212,57 @@ module.exports = function createApprovalsRouter(deps) {
     },
   );
 
+  // Approve a reconciliation fix (push local to Shopify or pull from Shopify)
+  router.post(
+    "/api/reconciliation/inventory/:id/approve-fix",
+    requireFeature("approvals"),
+    requireAnyPerm(["manage_inventory", "all_access"]),
+    async (req, res) => {
+      const { id } = req.params;
+      const { mode } = req.body; // "push_to_shopify" or "pull_from_shopify"
+      const employeeId = req.employee?.id;
+
+      try {
+        const { rows: [row] } = await db.query(
+          `SELECT * FROM inventory_reconciliation WHERE id = $1`,
+          [id]
+        );
+        if (!row) return res.status(404).json({ error: "Reconciliation row not found" });
+
+        await db.transaction(async (client) => {
+          if (mode === "push_to_shopify") {
+            // Local wins — mark as resolved, Shopify sync handled separately
+            await client.query(
+              `UPDATE inventory_reconciliation
+               SET resolution_status = 'resolved', resolved_by = $1, resolved_at = NOW()
+               WHERE id = $2`,
+              [employeeId, id]
+            );
+          } else if (mode === "pull_from_shopify") {
+            // Shopify wins — update outlet_stock to match external_qty
+            await client.query(
+              `UPDATE outlet_stock SET quantity = $1
+               WHERE product_id = $2 AND outlet_id = $3`,
+              [row.external_qty, row.product_id, row.outlet_id]
+            );
+            await client.query(
+              `UPDATE inventory_reconciliation
+               SET resolution_status = 'resolved', resolved_by = $1, resolved_at = NOW()
+               WHERE id = $2`,
+              [employeeId, id]
+            );
+          } else {
+            throw new Error("Invalid mode");
+          }
+        });
+
+        res.json({ message: "Reconciliation fix applied" });
+      } catch (err) {
+        console.error("Reconciliation approve-fix error:", err);
+        res.status(500).json({ error: "Failed to apply fix" });
+      }
+    },
+  );
+
   return router;
 };
