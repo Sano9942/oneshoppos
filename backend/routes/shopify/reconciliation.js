@@ -302,9 +302,43 @@ module.exports = function registerShopifyReconciliationRoutes(app, deps) {
           logActionHistory(req, "reconciliation_bulk_ignore", `Ignored ${rowCount} rows`);
           res.json({ message: `Ignored ${rowCount} items` });
         } else if (action === "fix") {
-          res.status(501).json({
-            error: "Bulk fix execution via API coming soon. Use individual fix requests for now.",
+          if (!mode || !["pos_wins", "shopify_wins"].includes(mode)) {
+            return res.status(400).json({ error: "mode must be 'pos_wins' or 'shopify_wins'" });
+          }
+          const employeeId = req.headers["x-employee-id"]
+            ? Number(req.headers["x-employee-id"])
+            : null;
+
+          let fixedCount = 0;
+          await db.transaction(async (client) => {
+            if (mode === "shopify_wins") {
+              const { rows } = await client.query(
+                `SELECT product_id, outlet_id, external_qty
+                 FROM inventory_reconciliation WHERE id = ANY($1::int[])`,
+                [ids]
+              );
+              for (const row of rows) {
+                await client.query(
+                  `UPDATE outlet_stock SET quantity = $1
+                   WHERE product_id = $2 AND outlet_id = $3`,
+                  [row.external_qty, row.product_id, row.outlet_id]
+                );
+              }
+            }
+            // pos_wins: no stock changes needed — Shopify sync will push POS values
+
+            const placeholders = ids.map((_, i) => `$${i + 2}`).join(",");
+            const result = await client.query(
+              `UPDATE inventory_reconciliation
+               SET resolution_status = 'resolved', resolved_by = $1, resolved_at = NOW()
+               WHERE id IN (${placeholders})`,
+              [employeeId, ...ids]
+            );
+            fixedCount = result.rowCount;
           });
+
+          logActionHistory(req, "reconciliation_bulk_fix", `Fixed ${fixedCount} rows (mode: ${mode})`);
+          res.json({ message: `Fixed ${fixedCount} items` });
         } else {
           res.status(400).json({ error: "Invalid action" });
         }
