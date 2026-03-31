@@ -64,7 +64,7 @@ export default function BackupRestoreRedesign() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `backup-${new Date().toISOString().slice(0, 10)}.sqlite`;
+      a.download = `backup-${new Date().toISOString().slice(0, 10)}.pgdump`;
       a.click();
       URL.revokeObjectURL(url);
       showMsg("success", "Backup downloaded successfully.");
@@ -87,7 +87,7 @@ export default function BackupRestoreRedesign() {
     setRestoring(true);
     try {
       const formData = new FormData();
-      formData.append("backup", file);
+      formData.append("backup_file", file);
       const performedBy = employee?.name || "Unknown";
       const res = await fetch(
         `${API}/api/backup/restore?performed_by=${encodeURIComponent(performedBy)}`,
@@ -147,7 +147,7 @@ export default function BackupRestoreRedesign() {
             </div>
             <div>
               <p className="font-semibold text-(--ui-text)">Download Backup</p>
-              <p className="text-xs text-(--ui-text-muted)">Export current database as SQLite file</p>
+              <p className="text-xs text-(--ui-text-muted)">Export current database as backup file</p>
             </div>
           </div>
           <Button tone="primary" onClick={handleDownload} disabled={loading || restoring} className="w-full">
@@ -174,7 +174,7 @@ export default function BackupRestoreRedesign() {
             <input
               ref={fileRef}
               type="file"
-              accept=".sqlite,.db"
+              accept=".pgdump,.sql,.sqlite,.db"
               className="block w-full text-sm text-(--ui-text-muted) file:mr-3 file:rounded-lg file:border-0 file:bg-(--ui-muted-surface) file:px-3 file:py-1.5 file:text-xs file:font-medium"
               onChange={(e) => handleRestore(e.target.files?.[0])}
               disabled={restoring}
