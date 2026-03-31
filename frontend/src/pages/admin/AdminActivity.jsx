@@ -63,7 +63,7 @@ export default function AdminActivity() {
     adminFetch(url)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Failed to load"))))
       .then((res) => {
-        setData(res.rows || res.logs || res.events || res || []);
+        setData(res.entries || res.rows || res.logs || res.events || []);
         setError("");
       })
       .catch((err) => setError(err.message))
