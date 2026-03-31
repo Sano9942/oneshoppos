@@ -18,6 +18,7 @@ import POSRecentSalesPanel from "./pos/POSRecentSalesPanel";
 import POSReturnExchangeModal from "./pos/POSReturnExchangeModal";
 import POSSessionExpiredModal from "./pos/POSSessionExpiredModal";
 import POSShortcutsOverlay from "./pos/POSShortcutsOverlay";
+import { ErrorBoundary } from "../../ui/ErrorBoundary";
 
 const MOBILE_TABS = [
   { key: "cart", label: "Cart", icon: ShoppingCart },
@@ -160,7 +161,9 @@ function POSContent() {
 export default function POSRedesign() {
   return (
     <POSProvider>
-      <POSContent />
+      <ErrorBoundary>
+        <POSContent />
+      </ErrorBoundary>
     </POSProvider>
   );
 }
