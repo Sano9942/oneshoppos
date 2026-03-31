@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-_Last updated: March 30 2026 — **Massive SaaS monetization day: Phase 1 (2-tier pricing, trial enforcement, subscription lifecycle), Phase 4 (landing page competitive rewrite), Phase 5 (payment gateway infrastructure). 32 commits across 3 initiatives.**_
+_Last updated: April 1 2026 — **Production readiness audit: 12 bugs fixed (auth on 24 GET routes, stock TOCTOU race condition, POS ErrorBoundary, 15 DB indexes, variant stock drift, backup field mismatch, return variant validation, Shopify field names, kiosk 401, approvals feature gate, reconciliation endpoint, bulk fix stub). Migration v13.**_
 
 ---
 
@@ -746,3 +746,50 @@ Changed via Railway Settings UI after removing `numReplicas` from `railway.toml`
 | Mar 30 2026 | **Payment integration shipped**                         | `feature/payment-integration` branch (7 commits, 10 files, +693 lines). Gateway adapter pattern (`services/payment-gateway.js`) with xPay implementation. `POST /api/billing/create-checkout` → gateway redirect → `POST /api/webhooks/xpay` webhook confirms → tenant auto-activated. `payment_intents` table (migration v11). Double-pay guard (7-day window). Email worker gains paid subscription expiry transitions (active→grace) with `renewal_due`/`renewal_overdue` templates. Billing UI: Pay Now buttons, payment return polling, payment history table. Feature-gated by `PAYMENT_GATEWAY` env var — zero impact until activated. Pending: xPay account signup + credentials. |
 | Mar 29 2026 | **Railway moved to Singapore**                          | Backend region changed from EU West (Amsterdam) to Asia Southeast (Singapore). API↔DB latency dropped from ~150ms to ~12ms (same region as Supabase). Total API round trip for Pakistan users: ~400-500ms → ~100-160ms. |
 | Mar 31 2026 | **Roadmap items 1, 5, 6, 8 shipped**                    | `feature/roadmap-items-1-5-6-8` branch. (1) Signup auth fix: fetch interceptor excludes public auth endpoints from token injection. (5) Tenant feature-usage analytics: `GET /api/admin/tenants/:id/feature-usage` + bar chart in AdminTenantDetail. (6) Annual pricing toggle on billing + landing pages. (8) Per-outlet breakdown on billing page. Backend `GET /api/billing/status` now returns `max_outlets`. |
+| Apr 1 2026  | **Production readiness audit — 12 bugs fixed**           | `fix/production-readiness-audit` branch (11 commits, 17 files, +249/-93 lines). Auth on 24 GET routes (#1), stock TOCTOU with FOR UPDATE (#2), POS ErrorBoundary (#3), 15 DB indexes via migration v13 (#4), variant stock drift on void (#12), backup field name + sqlite label (#11), return variant validation per variant_id + return_items.variant_id column (#13), Shopify reconciliation field aliases (#6), kiosk 401 graceful handling (#8), approvals feature flag gate (#9), reconciliation approve-fix endpoint (#7/#15), Shopify bulk fix replaces 501 stub (#14). Not fixed: #5 (legacy SQLite tests), #17 (admin migration UI stubs). |
+
+---
+
+## ✅ Production Readiness Audit — FIXED (Apr 1 2026)
+
+Full audit of the codebase before giving the app to real shops. 17 findings across 3 review rounds. **12 items fixed** in branch `fix/production-readiness-audit` (11 commits, 17 files, +249/-93 lines). Migration v13.
+
+### 🔴 Must Fix Before Real Shops (5 items — all fixed)
+
+- [x] **#1 Auth on GET routes** — 24 GET endpoints across 8 route files secured with `requirePerm`/`requireAnyPerm`. Permission mapping: sales/returns/customers → `view_reports`, products → `view_reports`+`manage_inventory`, POs/GRN → `manage_orders`+`view_reports`, transfers/adjustments → `manage_inventory`+`view_reports`, employees → `all_access`.
+
+- [x] **#2 Stock check race condition (TOCTOU)** — Pre-transaction stock check removed. Stock validation now runs INSIDE `db.transaction()` with `SELECT ... FOR UPDATE` row locks. Prevents concurrent sales from overselling.
+
+- [x] **#3 POS ErrorBoundary** — `POSContent` wrapped in `<ErrorBoundary>` inside `<POSProvider>`. Uses built-in fallback with Sentry reporting.
+
+- [x] **#4 Missing database indexes** — 15 performance indexes added via migration v13: sales (outlet_id, employee_id, created_at, invoice_number, voided), sale_items (sale_id, product_id), products (barcode, sku, deleted_at), customers (mobile, email), cash_shifts (outlet_id+status), returns (original_sale_id, created_at).
+
+- [x] **#12 Variant stock drift** — Void handler now restores `product_variants.stock` alongside `outlet_stock`. Transfers confirmed correct (variant stock is global pool, not per-outlet). Adjustments don't handle variants (no `variant_id` in schema — separate feature).
+
+### 🟡 Should Fix Soon (3 items — all fixed)
+
+- [x] **#11 Backup/restore broken** — Frontend field name `"backup"` → `"backup_file"` to match backend multer. Download extension `.sqlite` → `.pgdump`. UI text "SQLite file" → "backup file". File input accepts `.pgdump,.sql,.sqlite,.db`.
+
+- [x] **#13 Return variant validation weak** — Validation query now groups by `product_id, variant_id`. Sold map uses composite `productId_variantId` keys. `return_items` INSERT includes `variant_id`. New column added via migration v13.
+
+- [x] **#6 Shopify reconciliation field mismatch** — Backend GET response now includes `pos_qty` and `shopify_qty` aliases alongside original `local_qty`/`external_qty` DB column names.
+
+### 🟢 Low Priority (7 items — 5 fixed, 2 remaining)
+
+- **#5 Legacy SQLite integration tests failing** — Not fixed (only affects abandoned SQLite test harness, not the primary 340-test Postgres suite).
+
+- [x] **#7/#15 Reconciliation approval endpoint missing** — `POST /api/reconciliation/inventory/:id/approve-fix` added to `tier4/approvals.js`. Supports `push_to_shopify` (local wins) and `pull_from_shopify` (update outlet_stock) modes.
+
+- [x] **#8 Kiosk ignores kiosk_context_locked** — Kiosk feature-flags fetch now handles non-2xx responses gracefully (`if (!r.ok) return { flags: [] }`) instead of trying to parse 401 as JSON.
+
+- [x] **#9 Approvals page not feature-flag gated in frontend** — `ApprovalsRedesign.jsx` now checks `useFeatureFlags()` and redirects to `/` if `approvals` flag is off.
+
+- [x] **#14 Shopify bulk fix returns 501** — 501 stub replaced with real implementation. Supports `pos_wins` (mark resolved, Shopify sync pushes local) and `shopify_wins` (update outlet_stock to match external_qty). Transaction-safe.
+
+- **#17 Tenant migration admin UI stubs** — Not fixed (CLI `migrate-pg.js` works, only admin UI buttons are stubs).
+
+### ❌ Not Real Issues (2 items)
+
+- **#10 Single-tenant trusts x-employee-id header** — True but irrelevant. Production runs `MULTI_TENANT=1` with JWT auth. Single-tenant mode is a dev-only path.
+
+- **#16 Billing page no auth headers** — Report was wrong. Global `AuthProvider` fetch interceptor injects `x-employee-id` + `Authorization: Bearer` on all `/api/` calls automatically.

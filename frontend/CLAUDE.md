@@ -97,6 +97,7 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 - All POS state lives in `POSContext.jsx` (128+ exports)
 - New POS components must call all hooks BEFORE any conditional early return
 - Mount new POS modals in `POSRedesign.jsx`
+- **ErrorBoundary** wraps `<POSContent />` inside `<POSProvider>` — crashes show recovery UI instead of white screen
 - `POST /api/sales` requires active shift + clocked-in employee
 - Stock deduction uses `item.variant_id` for variant stock, `item.id` for `outlet_stock` — always pass `variant_id` when known
 - Receipt rendering: **all logic in `utils/receipt.js`** — `buildReceiptSections`, `buildReceiptHtml`, `printToHardware`; `POSContext.printSlip` tries hardware first, falls back to browser popup
@@ -108,6 +109,13 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 - Every table page has an "Export CSV" button using `<Download>` icon from lucide-react
 - New pages MUST use the shared utility, not inline blob code
 - Exports visible/filtered rows (respects user's current search/filter)
+
+### Feature Flag Gating (Apr 1 2026)
+- `useFeatureFlags(authHeaders)` hook from `hooks/useFeatureFlags.js` — returns `{ flags, loading }`
+- **Approvals page** (`ApprovalsRedesign.jsx`) checks `flags.approvals` and redirects to `/` if off
+- **Kiosk page** (`KioskRedesign.jsx`) gracefully handles 401 on feature-flags fetch (`if (!r.ok) return { flags: [] }`)
+- No `RequireFeature` wrapper component exists — feature-flag checks are done inside individual page components
+- When adding feature-flagged pages, check the flag inside the component and redirect if off
 
 ### Admin Panel (separate auth system)
 - Uses `adminFetch` from `AdminLogin.jsx` — NOT the global fetch interceptor

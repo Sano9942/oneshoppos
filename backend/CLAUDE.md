@@ -123,6 +123,17 @@ The following files are **legacy SQLite code** — never executed in production 
 - `req.company.timezone` (IANA string) set by `loadCompanyProfile` middleware — use it in all date filter queries
 - **CRITICAL**: `session_start` and `check_in` are already local — use `date(col)` with NO modifier. `date(col,'localtime')` double-converts and breaks UTC+ timezones
 
+### Auth on GET routes (Apr 1 2026)
+- **ALL data-returning GET endpoints now require auth** — `requirePerm` or `requireAnyPerm` on every GET across sales, returns, customers, products, POs, GRN, inventory, employees
+- Permission mapping: sales/returns/customers → `view_reports`, products → `view_reports`+`manage_inventory`, POs/GRN → `manage_orders`+`view_reports`, transfers/adjustments → `manage_inventory`+`view_reports`, employees → `all_access`
+- When adding new GET routes, **always add auth middleware** — no unprotected data endpoints
+
+### Stock check — FOR UPDATE (Apr 1 2026)
+- `POST /api/sales` stock validation runs INSIDE `db.transaction()` with `SELECT ... FOR UPDATE` row locks
+- Prevents TOCTOU race condition (two concurrent sales overselling)
+- If stock insufficient, throws with `statusCode: 400` — caught by outer try/catch
+- Void handler restores both `outlet_stock` AND `product_variants.stock`
+
 ### Sales table schema
 - The sale timestamp column is named `timestamp`, NOT `created_at` — using `created_at` silently returns undefined
 
