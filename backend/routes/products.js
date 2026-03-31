@@ -5,7 +5,7 @@ const {
 } = require("../category-tree");
 
 module.exports = function registerProductRoutes(app, deps) {
-  const { db, multer, requirePerm, requirePlanLimit, PRODUCT_UPLOADS_DIR, UPLOADS_DIR } = deps;
+  const { db, multer, requirePerm, requireAnyPerm, requirePlanLimit, PRODUCT_UPLOADS_DIR, UPLOADS_DIR } = deps;
 
 
 // --- ROUTES: PRODUCTS (INVENTORY) ---
@@ -106,7 +106,7 @@ module.exports = function registerProductRoutes(app, deps) {
   }
 
   // Get all products (with aggregated stock, sort/filter/search support)
-  app.get("/api/products", async (req, res) => {
+  app.get("/api/products", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
       const { search, sort, order, status, category_id, outlet_id } = req.query;
 
@@ -194,7 +194,7 @@ module.exports = function registerProductRoutes(app, deps) {
 
   // Search products by name or barcode (for autocomplete and search)
   // NOTE: must be registered BEFORE /:id to prevent Express matching "search" as an id param
-  app.get("/api/products/search", async (req, res) => {
+  app.get("/api/products/search", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
       const { query, outlet_id, field } = req.query;
 
@@ -261,7 +261,7 @@ module.exports = function registerProductRoutes(app, deps) {
 
   // Scan/Find a product by barcode (Crucial for POS speed)
   // NOTE: must be registered BEFORE /:id to prevent Express matching "scan" as an id param
-  app.get("/api/products/scan/:barcode", async (req, res) => {
+  app.get("/api/products/scan/:barcode", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
       const { barcode } = req.params;
       const outlet_id = req.query.outlet_id; // Pass outlet ID from POS to get local stock
@@ -304,7 +304,7 @@ module.exports = function registerProductRoutes(app, deps) {
   });
 
   // Get a single product by id
-  app.get("/api/products/:id", async (req, res) => {
+  app.get("/api/products/:id", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
       const { id } = req.params;
       const { rows: [row] } = await db.query(
@@ -323,7 +323,7 @@ module.exports = function registerProductRoutes(app, deps) {
   });
 
   // Get variants for a specific product
-  app.get("/api/products/:id/variants", async (req, res) => {
+  app.get("/api/products/:id/variants", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
       const { id } = req.params;
 
@@ -352,7 +352,7 @@ module.exports = function registerProductRoutes(app, deps) {
   });
 
   // Get individual product stock across all outlets
-  app.get("/api/products/:id/stock", async (req, res) => {
+  app.get("/api/products/:id/stock", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
       const { id } = req.params;
       const { rows } = await db.query(

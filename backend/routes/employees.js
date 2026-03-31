@@ -39,7 +39,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   };
 
   // Get all employees
-  app.get("/api/employees", async (req, res) => {
+  app.get("/api/employees", requirePerm("all_access"), async (req, res) => {
     try {
       const { rows } = await db.query(
         `SELECT e.id, e.name, e.pin_code, e.email, e.password_hash IS NOT NULL as has_password,

@@ -1,11 +1,11 @@
 const { toUtcStart, toUtcEnd } = require("../utils/tz");
 
 module.exports = function registerGRNRoutes(app, deps) {
-  const { db, requirePerm, requireFeature, createNotification } = deps;
+  const { db, requirePerm, requireAnyPerm, requireFeature, createNotification } = deps;
 
 // --- GRN (Goods Received Notes) ---
 
-  app.get("/api/grn", async (req, res) => {
+  app.get("/api/grn", requireAnyPerm(["manage_orders", "view_reports", "all_access"]), async (req, res) => {
     try {
       const { date_from, date_to } = req.query;
       const where = [];
@@ -41,7 +41,7 @@ module.exports = function registerGRNRoutes(app, deps) {
     }
   });
 
-  app.get("/api/grn/:id", async (req, res) => {
+  app.get("/api/grn/:id", requireAnyPerm(["manage_orders", "view_reports", "all_access"]), async (req, res) => {
     try {
       const { id } = req.params;
       const { rows: [grn] } = await db.query(
@@ -107,6 +107,7 @@ module.exports = function registerGRNRoutes(app, deps) {
   // GET all supplier invoices (with supplier name, payment totals)
   app.get(
     "/api/supplier-invoices",
+    requireAnyPerm(["manage_orders", "view_reports", "all_access"]),
     requireFeature("supplier_payables"),
     async (req, res) => {
       try {
@@ -145,6 +146,7 @@ module.exports = function registerGRNRoutes(app, deps) {
   // GET single supplier invoice with its payments
   app.get(
     "/api/supplier-invoices/:id",
+    requireAnyPerm(["manage_orders", "view_reports", "all_access"]),
     requireFeature("supplier_payables"),
     async (req, res) => {
       try {
@@ -239,6 +241,7 @@ module.exports = function registerGRNRoutes(app, deps) {
   // GET supplier aging summary — one row per supplier with total owed
   app.get(
     "/api/supplier-aging",
+    requireAnyPerm(["manage_orders", "view_reports", "all_access"]),
     requireFeature("supplier_payables"),
     async (req, res) => {
       try {
@@ -322,6 +325,7 @@ module.exports = function registerGRNRoutes(app, deps) {
   // GET /api/supplier-ledger/:supplier_id — full chronological statement with running balance
   app.get(
     "/api/supplier-ledger/:supplier_id",
+    requireAnyPerm(["manage_orders", "view_reports", "all_access"]),
     requireFeature("supplier_payables"),
     async (req, res) => {
       try {

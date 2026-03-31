@@ -88,7 +88,7 @@ module.exports = function registerSalesRoutes(app, deps) {
 // --- SALES HISTORY ROUTES ---
 
   // GET all sales (paginated, filterable)
-  app.get("/api/sales", async (req, res) => {
+  app.get("/api/sales", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
     try {
       const {
         page = 1,
@@ -170,7 +170,7 @@ module.exports = function registerSalesRoutes(app, deps) {
   });
 
   // GET a single sale with full line items and payments
-  app.get("/api/sales/:id", async (req, res) => {
+  app.get("/api/sales/:id", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
     const { id } = req.params;
 
     try {

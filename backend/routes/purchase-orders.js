@@ -1,5 +1,5 @@
 module.exports = function registerPurchaseOrderRoutes(app, deps) {
-  const { db, requirePerm, createNotification } = deps;
+  const { db, requirePerm, requireAnyPerm, createNotification } = deps;
 
   function enqueueInventorySyncEvents(changes, context, cb) {
     try {
@@ -15,7 +15,7 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
   // --- ROUTES: PURCHASE ORDERS ---
 
   // Get all purchase orders (with supplier names)
-  app.get("/api/purchase-orders", async (req, res) => {
+  app.get("/api/purchase-orders", requireAnyPerm(["manage_orders", "view_reports", "all_access"]), async (req, res) => {
     try {
       const { rows } = await db.query(
         `SELECT po.*, s.name as supplier_name
@@ -30,7 +30,7 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
   });
 
   // Get a single purchase order with its items
-  app.get("/api/purchase-orders/:id", async (req, res) => {
+  app.get("/api/purchase-orders/:id", requireAnyPerm(["manage_orders", "view_reports", "all_access"]), async (req, res) => {
     try {
       const { id } = req.params;
       const { rows: [po] } = await db.query(

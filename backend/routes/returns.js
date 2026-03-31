@@ -2,7 +2,7 @@ const { toUtcStart, toUtcEnd } = require("../utils/tz");
 const logger = require("../services/logger");
 
 module.exports = function registerReturnsRoutes(app, deps) {
-  const { db, requirePerm, createNotification, notifyLowStockForSale } = deps;
+  const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale } = deps;
 
   function enqueueInventorySyncEvents(changes, context, cb) {
     try {
@@ -161,7 +161,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
   });
 
   // Get all returns (with details)
-  app.get("/api/returns", async (req, res) => {
+  app.get("/api/returns", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
     const { date_from, date_to } = req.query;
     const tz = req.company?.timezone || "UTC";
     const where = [];
@@ -204,7 +204,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
   });
 
   // Get a single return with items
-  app.get("/api/returns/:id", async (req, res) => {
+  app.get("/api/returns/:id", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
     const { id } = req.params;
 
     try {

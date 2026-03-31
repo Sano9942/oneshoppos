@@ -1,5 +1,5 @@
 module.exports = function registerInventoryRoutes(app, deps) {
-  const { db, requirePerm, createNotification } = deps;
+  const { db, requirePerm, requireAnyPerm, createNotification } = deps;
 
   // Safe column addition — Postgres: use DO block to check if column exists
   (async () => {
@@ -24,7 +24,7 @@ module.exports = function registerInventoryRoutes(app, deps) {
 // --- INVENTORY TRANSFERS ---
 
   // Get all transfers (with product, outlet, employee names)
-  app.get("/api/transfers", async (req, res) => {
+  app.get("/api/transfers", requireAnyPerm(["manage_inventory", "view_reports", "all_access"]), async (req, res) => {
     try {
       const { rows } = await db.query(`
         SELECT it.*,
@@ -188,7 +188,7 @@ module.exports = function registerInventoryRoutes(app, deps) {
 
   // --- STOCK ADJUSTMENTS ---
 
-  app.get("/api/adjustments", async (req, res) => {
+  app.get("/api/adjustments", requireAnyPerm(["manage_inventory", "view_reports", "all_access"]), async (req, res) => {
     try {
       const { rows } = await db.query(`
         SELECT sa.*, p.name as product_name, p.barcode, o.name as outlet_name, e.name as employee_name

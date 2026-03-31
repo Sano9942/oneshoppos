@@ -1,8 +1,8 @@
 module.exports = function registerCustomerRoutes(app, deps) {
-  const { db, requirePerm } = deps;
+  const { db, requirePerm, requireAnyPerm } = deps;
 
   // GET all customers (with total order count and spend)
-  app.get("/api/customers", async (req, res) => {
+  app.get("/api/customers", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
     const { search = "" } = req.query;
     let query = `
     SELECT c.*,
@@ -30,7 +30,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   });
 
   // GET single customer's sales history
-  app.get("/api/customers/:id/sales", async (req, res) => {
+  app.get("/api/customers/:id/sales", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
     const { id } = req.params;
     try {
       const { rows } = await db.query(
@@ -140,7 +140,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   });
 
   // GET customer wallet balance + ledger
-  app.get("/api/customers/:id/wallet", async (req, res) => {
+  app.get("/api/customers/:id/wallet", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
     const { id } = req.params;
     try {
       const { rows: custRows } = await db.query(
