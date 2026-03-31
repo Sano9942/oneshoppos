@@ -63,7 +63,12 @@ module.exports = function registerShopifyReconciliationRoutes(app, deps) {
            ORDER BY ir.checked_at DESC, ABS(ir.diff) DESC`,
           params
         );
-        res.json({ rows: rows || [] });
+        const mapped = (rows || []).map(r => ({
+          ...r,
+          pos_qty: r.local_qty,
+          shopify_qty: r.external_qty,
+        }));
+        res.json({ rows: mapped });
       } catch (err) {
         res.status(500).json({ error: err.message });
       }
