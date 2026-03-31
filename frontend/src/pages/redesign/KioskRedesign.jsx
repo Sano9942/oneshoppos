@@ -66,7 +66,10 @@ export default function KioskRedesign() {
     const outletsUrl = tenantSlug ? `${API}/outlets?tenant=${tenantSlug}` : `${API}/outlets`;
     Promise.all([
       fetch(outletsUrl).then((r) => r.json()),
-      fetch(tenantSlug ? `${API}/feature-flags?tenant=${tenantSlug}` : `${API}/feature-flags`).then((r) => r.json()).catch(() => ({ flags: [] })),
+      fetch(tenantSlug ? `${API}/feature-flags?tenant=${tenantSlug}` : `${API}/feature-flags`).then((r) => {
+        if (!r.ok) return { flags: [] };
+        return r.json();
+      }).catch(() => ({ flags: [] })),
     ]).then(([outData, flagsData]) => {
       const outList = outData.outlets || [];
       setOutlets(outList);
