@@ -369,55 +369,6 @@ module.exports = function registerSalesRoutes(app, deps) {
       return res.status(500).json({ error: validationErr.message });
     }
 
-    // B2 fix: Check stock availability before starting the transaction
-    try {
-      const stockChecks = await Promise.all(
-        cartItems.map(async (item) => {
-          const productId = item.original_product_id || item.id;
-          const variantId = item.variant_id || null;
-          if (variantId) {
-            // For variant items: check product_variants.stock (the variant-level pool)
-            const { rows: [row] } = await db.query(
-              "SELECT COALESCE(stock, 0) AS available FROM product_variants WHERE id = $1",
-              [variantId]
-            );
-            return {
-              productId,
-              variantId,
-              name: item.name || `Product #${productId}`,
-              requested: Number(item.quantity),
-              available: row ? Number(row.available) : 0,
-            };
-          } else {
-            // For non-variant items: check outlet_stock
-            const { rows: [row] } = await db.query(
-              "SELECT COALESCE(quantity, 0) AS available FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2",
-              [productId, outlet_id]
-            );
-            return {
-              productId,
-              name: item.name || `Product #${productId}`,
-              requested: Number(item.quantity),
-              available: row ? Number(row.available) : 0,
-            };
-          }
-        }),
-      );
-      const insufficient = stockChecks.filter((s) => s.requested > s.available);
-      if (insufficient.length > 0) {
-        const details = insufficient
-          .map((s) => `${s.name}: requested ${s.requested}, available ${s.available}`)
-          .join("; ");
-        return res.status(400).json({
-          error: `Insufficient stock: ${details}`,
-          code: "insufficient_stock",
-          items: insufficient,
-        });
-      }
-    } catch (stockErr) {
-      return res.status(500).json({ error: stockErr.message });
-    }
-
     // 1. Calculate Expected Total (subtotal minus discount)
     const subtotal = cartItems.reduce(
       (acc, item) => acc + item.price * item.quantity,
@@ -484,6 +435,37 @@ module.exports = function registerSalesRoutes(app, deps) {
     // Start Transaction Logic
     try {
       const saleId = await db.transaction(async (client) => {
+        // Lock and check stock for each item (FOR UPDATE prevents TOCTOU race)
+        for (const item of cartItems) {
+          const variantId = item.variant_id || null;
+          if (variantId) {
+            const { rows: [row] } = await client.query(
+              `SELECT COALESCE(stock, 0) AS available
+               FROM product_variants WHERE id = $1 FOR UPDATE`,
+              [variantId]
+            );
+            if (!row || row.available < item.quantity) {
+              throw Object.assign(
+                new Error(`Insufficient stock for variant ${variantId}`),
+                { statusCode: 400, code: "insufficient_stock" }
+              );
+            }
+          } else {
+            const productId = item.original_product_id || item.id;
+            const { rows: [row] } = await client.query(
+              `SELECT COALESCE(quantity, 0) AS available
+               FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2 FOR UPDATE`,
+              [productId, outlet_id]
+            );
+            if (!row || row.available < item.quantity) {
+              throw Object.assign(
+                new Error(`Insufficient stock for product ${productId}`),
+                { statusCode: 400, code: "insufficient_stock" }
+              );
+            }
+          }
+        }
+
         // 2. Insert into Sales Table
         const { rows: [saleRow] } = await client.query(
           "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
@@ -633,6 +615,9 @@ module.exports = function registerSalesRoutes(app, deps) {
         });
       }
     } catch (err) {
+      if (err.statusCode === 400) {
+        return res.status(400).json({ error: err.message, code: err.code });
+      }
       res.status(500).json({ error: err.message || "Transaction failed" });
     }
   });
