@@ -244,6 +244,14 @@ module.exports = function registerSalesRoutes(app, deps) {
                ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
               [item.product_id, sale.outlet_id, item.quantity, item.quantity]
             );
+
+            // Restore variant global stock if item has a variant
+            if (item.variant_id) {
+              await client.query(
+                `UPDATE product_variants SET stock = stock + $1 WHERE id = $2`,
+                [item.quantity, item.variant_id]
+              );
+            }
           }
         });
 
