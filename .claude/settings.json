@@ -129,10 +129,32 @@
       "WebFetch(domain:synavos.com)",
       "WebFetch(domain:ipv6.fbr.gov.pk)",
       "WebFetch(domain:fbr.gov.pk)",
-      "WebFetch(domain:aws.amazon.com)"
+      "WebFetch(domain:aws.amazon.com)",
+      "Read(//c/Users/HP/.claude/**)",
+      "mcp__claude_ai_Gmail__gmail_search_messages",
+      "Skill(schedule)",
+      "Skill(schedule:*)",
+      "mcp__claude_ai_Supabase__get_project",
+      "mcp__claude_ai_Cloudflare_Developer_Platform__r2_buckets_list",
+      "mcp__claude_ai_Cloudflare_Developer_Platform__accounts_list",
+      "mcp__claude_ai_Cloudflare_Developer_Platform__set_active_account"
     ],
     "additionalDirectories": [
-      "\\tmp"
+      "\\tmp",
+      "d:\\newprojects\\oneshoppos\\.claude"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash d:/newprojects/oneshoppos/.claude/hooks/check-services-reminder.sh"
+          }
+        ]
+      }
     ]
   }
 }

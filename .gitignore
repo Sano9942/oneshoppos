@@ -56,3 +56,4 @@ backend/_endpoint_list.txt
 
 # Frontend build output
 frontend/dist/
+.claude/.last-service-check
