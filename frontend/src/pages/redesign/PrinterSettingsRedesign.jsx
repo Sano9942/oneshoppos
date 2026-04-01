@@ -46,9 +46,7 @@ export default function PrinterSettingsRedesign() {
   const [emailTestResult, setEmailTestResult] = useState(null);
 
   useEffect(() => {
-    fetch(`${API}/api/print/config`, {
-      headers: { "x-employee-id": localStorage.getItem("employeeId") || "1" },
-    })
+    fetch(`${API}/api/print/config`)
       .then((r) => r.json())
       .then((data) => {
         if (data && !data.error) {
@@ -64,9 +62,7 @@ export default function PrinterSettingsRedesign() {
   }, []);
 
   useEffect(() => {
-    fetch(`${API}/api/email/config`, {
-      headers: { "x-employee-id": localStorage.getItem("employeeId") || "1" },
-    })
+    fetch(`${API}/api/email/config`)
       .then((r) => r.json())
       .then((data) => {
         if (data && !data.error) {
@@ -107,10 +103,7 @@ export default function PrinterSettingsRedesign() {
     try {
       const res = await fetch(`${API}/api/print/config`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "x-employee-id": localStorage.getItem("employeeId") || "1",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const data = await res.json();
@@ -134,10 +127,7 @@ export default function PrinterSettingsRedesign() {
     try {
       const res = await fetch(`${API}/api/email/config`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "x-employee-id": localStorage.getItem("employeeId") || "1",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...emailCfg,
           // Only send smtp_pass if the user typed a new one
@@ -160,10 +150,7 @@ export default function PrinterSettingsRedesign() {
     try {
       const res = await fetch(`${API}/api/email/test`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-employee-id": localStorage.getItem("employeeId") || "1",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
       const data = await res.json();
@@ -185,10 +172,7 @@ export default function PrinterSettingsRedesign() {
     try {
       const res = await fetch(`${API}/api/print/test`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-employee-id": localStorage.getItem("employeeId") || "1",
-        },
+        headers: { "Content-Type": "application/json" },
       });
       const data = await res.json();
       if (data.ok) {

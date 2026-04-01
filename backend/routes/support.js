@@ -41,16 +41,17 @@ module.exports = function supportRoutes(app, deps) {
       const ticket = rows[0];
 
       // Fire-and-forget alert email
+      const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
       sendAlertEmail({
-        subject: `Support Ticket #${ticket.id} — ${type}`,
+        subject: `Support Ticket #${ticket.id} — ${esc(type)}`,
         html: `<h2>Support Ticket</h2>
-<p><strong>Tenant:</strong> ${tenantSlug}</p>
-<p><strong>Employee:</strong> ${employeeName}</p>
-<p><strong>Type:</strong> ${type}</p>
-<p><strong>Page:</strong> ${page_url || "N/A"}</p>
-<p><strong>Request ID:</strong> ${last_req_id || "N/A"}</p>
+<p><strong>Tenant:</strong> ${esc(tenantSlug)}</p>
+<p><strong>Employee:</strong> ${esc(employeeName)}</p>
+<p><strong>Type:</strong> ${esc(type)}</p>
+<p><strong>Page:</strong> ${esc(page_url || "N/A")}</p>
+<p><strong>Request ID:</strong> ${esc(last_req_id || "N/A")}</p>
 <p><strong>Message:</strong></p>
-<blockquote>${message}</blockquote>
+<blockquote>${esc(message)}</blockquote>
 <p><a href="https://sanopos.com/admin">Open Admin Panel</a></p>`,
       }).catch((err) => {
         req.log?.error({ err }, "Failed to send support ticket alert email");

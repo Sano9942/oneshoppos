@@ -1508,6 +1508,7 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       const { status, tenant_slug } = req.body;
       if (!["approved", "rejected"].includes(status)) return res.status(400).json({ error: "status must be approved or rejected" });
       if (!tenant_slug) return res.status(400).json({ error: "tenant_slug is required" });
+      if (!/^[a-z0-9_]{3,40}$/.test(tenant_slug)) return res.status(400).json({ error: "Invalid tenant_slug format" });
 
       // Update suggestion in tenant schema
       const { rows: [suggestion] } = await db.query(

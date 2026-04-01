@@ -457,7 +457,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
         [employee.id, tokenHash, expiresAt]
       );
 
-      const frontendUrl = process.env.CORS_ORIGIN || "http://localhost:5173";
+      const frontendUrl = process.env.CORS_ORIGIN?.split(",")[0] || "http://localhost:5173";
       let resetLink = `${frontendUrl}/reset-password?token=${rawToken}`;
 
       let storeName = "SanoPOS";

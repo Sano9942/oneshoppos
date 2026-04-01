@@ -484,7 +484,7 @@ module.exports = function registerAuthRoutes(app, deps) {
         [employee.id, tokenHash, expiresAt]
       );
 
-      const frontendUrl = process.env.CORS_ORIGIN || "http://localhost:5173";
+      const frontendUrl = process.env.CORS_ORIGIN?.split(",")[0] || "http://localhost:5173";
       let resetLink = `${frontendUrl}/reset-password?token=${rawToken}`;
       if (tenantSlug) resetLink += `&tenant=${tenantSlug}`;
 
@@ -651,7 +651,7 @@ module.exports = function registerAuthRoutes(app, deps) {
       if (process.env.RESEND_API_KEY) {
         try {
           const { sendWelcomeEmail } = require("../utils/resendEmail");
-          const corsOrigin = process.env.CORS_ORIGIN || "https://sanopos.vercel.app";
+          const corsOrigin = process.env.CORS_ORIGIN?.split(",")[0] || "https://sanopos.vercel.app";
           const setupUrl = `${corsOrigin}/setup?token=${result.setupToken}&tenant=${slug}`;
           await sendWelcomeEmail({
             toEmail: email,
