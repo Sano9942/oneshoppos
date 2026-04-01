@@ -1,7 +1,7 @@
 const logger = require("./logger");
 const { sendAlertEmail } = require("../utils/alertEmail");
 
-const ADMIN_URL = "https://sanopos.vercel.app/admin";
+const ADMIN_URL = "https://sanopos.com/admin";
 
 // Threshold configuration
 const THRESHOLDS = {

@@ -257,6 +257,13 @@ app.use(
     },
   }),
 ); // Parse JSON bodies
+// Catch malformed JSON bodies (bots/scanners) — return 400 instead of bubbling to Sentry
+app.use((err, req, res, next) => {
+  if (err.type === "entity.parse.failed") {
+    return res.status(400).json({ error: "Invalid JSON in request body" });
+  }
+  next(err);
+});
 // Single-tenant static file serving (fallback for MT mode when no tenant context)
 app.use("/uploads", express.static(UPLOADS_DIR));
 

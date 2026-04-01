@@ -84,10 +84,11 @@ module.exports = function registerAllRoutes(app, deps) {
     // Build list of checks to run
     const checks = [];
 
-    // 1. Postgres — always checked
+    // 1. Postgres — always checked (use raw pool, not tenant proxy)
+    const rawDb = require("../db-pg");
     checks.push(
       checkDependency("database", async () => {
-        await db.query("SELECT 1");
+        await rawDb.query("SELECT 1");
       }, 3000)
     );
 
@@ -95,10 +96,19 @@ module.exports = function registerAllRoutes(app, deps) {
     if (process.env.RESEND_API_KEY) {
       checks.push(
         checkDependency("resend", async () => {
-          const resp = await fetch("https://api.resend.com/domains", {
-            headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+          // POST with empty body returns 422 (valid key) or 401 (bad key)
+          const resp = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({}),
           });
-          if (!resp.ok) throw new Error(`Resend API returned ${resp.status}`);
+          if (resp.status === 401 || resp.status === 403) {
+            throw new Error(`Resend API key invalid (${resp.status})`);
+          }
+          // 422 = key valid, body invalid — that's expected and means Resend is reachable
         }, 5000)
       );
     }
