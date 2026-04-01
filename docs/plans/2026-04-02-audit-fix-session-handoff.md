@@ -59,10 +59,32 @@ See `docs/architecture-audit.md` section "Complete Fix Execution Plan" for the f
 3. Manual smoke test: password reset, admin tax approval, printer settings, support ticket, POS receipt reprint
 4. Push branch, merge to main when verified
 
+## CRITICAL: Git Workflow Rules
+
+- **NEVER merge to main** — the user merges manually when ready
+- **NEVER create a PR** — the user handles that themselves
+- **NEVER push to main** — all work stays on `fix/architecture-audit-fixes`
+- **DO commit frequently** — one commit per fix or logical group of fixes
+- **DO push to the branch** — `git push` (branch is already tracking origin)
+- **Commit style:** `fix: short description` — see recent git log for examples
+- **Co-author line:** Always include `Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>`
+
+## How To Work
+
+1. Read the relevant source file before making any change
+2. Make the fix
+3. Run the affected test batch to verify: `cd backend && npx jest tests/integration/pg-batchN-name.test.js --no-coverage --forceExit`
+4. Commit the fix
+5. Move to the next fix
+6. After completing a full phase, push all commits to the branch
+
 ## Important Context
 
-- **Git workflow:** Always create branches, never create PRs — user merges manually
 - **Tests run sequentially:** Running all batches in parallel exhausts Supabase connection pool (`MaxClientsInSessionMode`). Run one batch at a time
 - **Test command:** `cd backend && npx jest tests/integration/pg-batchN-name.test.js --no-coverage --forceExit`
 - **The architecture-audit.md is the master reference** — contains all findings, scores, dead file inventory, test gaps, and execution plan
 - **4 Codex audit files in docs/ are redundant** — everything is already in architecture-audit.md. Can delete them in Phase 5
+- **User preferences:** No trailing summaries, no restating the task, just do the work. Use Sonnet for implementation, Opus only for architecture decisions
+- **Tailwind v4 conventions (linter enforced):** `(--css-var)` not `[var(--css-var)]`, `shrink-0` not `flex-shrink-0`, `bg-linear-to-br` not `bg-gradient-to-br`
+- **Timestamp rules:** UTC columns use `fmtUtcDateTime`, LOCAL columns use `fmtLocalDateTime` — never raw `new Date()`
+- **Currency:** Never hardcode PKR/Rs — use `useCurrency().fmt`
