@@ -370,6 +370,8 @@ async function createTestApp(options = {}) {
     PERMISSION_RULES,
     DEFAULT_FEATURE_FLAGS,
     runtimeState,
+    requirePlanLimit: () => (req, res, next) => next(),
+    requireActiveSubscription: (req, res, next) => next(),
     authLimiter: noopLimiter,
     webhookLimiter: noopLimiter,
     PRODUCT_UPLOADS_DIR: prodUploadsDir,

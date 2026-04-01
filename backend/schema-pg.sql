@@ -1217,7 +1217,7 @@ CREATE INDEX IF NOT EXISTS idx_revoked_tokens_jti ON revoked_tokens(token_jti);
 -- Performance indexes (migration v13)
 CREATE INDEX IF NOT EXISTS idx_sales_outlet_id ON sales (outlet_id);
 CREATE INDEX IF NOT EXISTS idx_sales_employee_id ON sales (employee_id);
-CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sales_timestamp ON sales (timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_sales_invoice_number ON sales (invoice_number);
 CREATE INDEX IF NOT EXISTS idx_sales_voided ON sales (voided) WHERE voided = false;
 CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items (sale_id);
@@ -1229,7 +1229,7 @@ CREATE INDEX IF NOT EXISTS idx_customers_mobile ON customers (mobile) WHERE mobi
 CREATE INDEX IF NOT EXISTS idx_customers_email ON customers (email) WHERE email IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_cash_shifts_outlet_status ON cash_shifts (outlet_id, status);
 CREATE INDEX IF NOT EXISTS idx_returns_original_sale_id ON returns (original_sale_id);
-CREATE INDEX IF NOT EXISTS idx_returns_created_at ON returns (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_returns_timestamp ON returns (timestamp DESC);
 
 -- ── Password Reset Tokens ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -1356,7 +1356,7 @@ CREATE INDEX IF NOT EXISTS idx_admin_security_log_created ON admin_security_log(
 
 CREATE TABLE IF NOT EXISTS tenant_notes (
   id              SERIAL PRIMARY KEY,
-  tenant_id       INTEGER REFERENCES tenants(id),
+  tenant_id       INTEGER NOT NULL,
   admin_email     TEXT NOT NULL,
   note            TEXT NOT NULL,
   created_at      TIMESTAMPTZ DEFAULT NOW()
