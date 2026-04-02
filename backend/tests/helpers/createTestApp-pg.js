@@ -96,6 +96,15 @@ const PERMISSION_RULES = [
  * The proxy holds a dedicated client from the pool with search_path set.
  */
 function createScopedDb(client) {
+  // Wrap client with a no-op release() so route code that calls
+  // db.getClient() + client.release() doesn't actually release
+  // the test schema's dedicated client back to the pool.
+  const safeClient = new Proxy(client, {
+    get(target, prop) {
+      if (prop === "release") return () => {};
+      return target[prop];
+    },
+  });
   return {
     query: (sql, params) => client.query(sql, params),
     transaction: async (fn) => {
@@ -109,7 +118,7 @@ function createScopedDb(client) {
         throw err;
       }
     },
-    getClient: () => Promise.resolve(client),
+    getClient: () => Promise.resolve(safeClient),
   };
 }
 
