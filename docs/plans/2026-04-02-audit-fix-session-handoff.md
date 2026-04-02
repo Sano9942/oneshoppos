@@ -1,9 +1,9 @@
 # Architecture Audit Fix — Session Handoff
 
-## Current State (2026-04-02, updated after Phase 5)
+## Current State (2026-04-02, updated after Phase 6)
 
 **Branch:** `fix/architecture-audit-fixes`
-**Latest commit:** `3227600` (pushed to origin)
+**Latest commit:** `d648b86` (pushed to origin)
 **Tests:** 357 passing across 10 suites (pg-batch1 through pg-batch9 + pg-tenant-isolation), 0 failures
 
 ### Completed Phases
@@ -38,22 +38,14 @@
 - Deleted 88 files (7,880 lines): 73 SQLite migrations, 10 SQLite infra files, 2 SQLite seed scripts, 3 SQLite test helpers, cleanup-public-schema.js, reset-production.js, test_output.txt, App.css
 - Simplified index.js boot: removed `HAS_POSTGRES` conditional, removed all SQLite fallback branches, direct `require("./db-pg")`
 
+**Phase 6 — Structural Improvements** (commits `5f80851`, `d648b86`)
+- Fix 20: Added `helmet` middleware to backend (CSP + COEP disabled for API-first use)
+- Fix 21: Added security headers to `vercel.json` (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy, X-DNS-Prefetch-Control)
+- Fix 22: Fixed object URL memory leak in `SupportWidget.jsx` — `useMemo` for stable URLs + `useEffect` cleanup via `URL.revokeObjectURL()`
+- Fix 23: Split `admin.js` (2,210 lines) into 8 domain modules under `routes/admin/` — helpers, auth, tenants, monitoring, billing, operations, compliance, messaging, system. Also consolidated duplicate support ticket reply handler (dead code with notification logic → single handler with in-app notifications).
+- Fixes 24-25 (api.js service layer, Zod validation) deferred — separate sprint scope.
+
 ## What To Do Next
-
-### Phase 6: Structural Improvements (Tier 4)
-
-See `docs/architecture-audit.md` section "Complete Fix Execution Plan" → Phase 6 for details.
-
-| # | Fix | Effort | Notes |
-|---|-----|--------|-------|
-| 20 | Add `helmet` middleware to backend | 30 min | `npm install helmet`, add to index.js before routes |
-| 21 | Add security headers to `vercel.json` (CSP, X-Frame-Options, Referrer-Policy) | 30 min | Frontend deployment config |
-| 22 | Revoke object URLs in SupportWidget cleanup | 15 min | `URL.revokeObjectURL()` in useEffect cleanup |
-| 23 | Split `admin.js` (2,208 lines) into 5-6 domain files | Half day | Biggest refactor — careful with route ordering |
-| 24 | Create frontend `api.js` service layer (replaces 164 scattered fetch calls) | 1 day | Optional — large scope |
-| 25 | Add Zod validation to critical backend routes | 1-2 days | Optional — auth, sales, products, employees, billing |
-
-Fixes 20-22 are quick wins. Fixes 23-25 are larger structural changes that could be done in a separate branch if preferred.
 
 ### Phase 7: Wave 2 Tests
 
