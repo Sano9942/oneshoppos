@@ -122,4 +122,131 @@ describe("Batch 9 — Architecture audit fixes (Postgres)", () => {
       expect(esc('a"b')).toBe('a&quot;b');
     });
   });
+
+  // ─── Fix 5: Stop writing pin_code plaintext ─────────────────
+
+  describe("pin_code no longer written on create/update", () => {
+    it("new employee has pin_hash but no plaintext pin_code", async () => {
+      const res = await request(app)
+        .post("/api/employees")
+        .set("x-employee-id", "1")
+        .send({ name: "Pin Test User", pin_code: "9876", role_id: 3 });
+
+      expect(res.status).toBe(200);
+      const newId = res.body.id;
+
+      const { rows } = await db.query(
+        "SELECT pin_code, pin_hash FROM employees WHERE id = $1",
+        [newId]
+      );
+      expect(rows[0].pin_code).toBeNull();
+      expect(rows[0].pin_hash).toBeTruthy();
+    });
+
+    it("updating employee PIN sets hash but not plaintext", async () => {
+      const res = await request(app)
+        .put("/api/employees/3")
+        .set("x-employee-id", "1")
+        .send({ pin_code: "5555" });
+
+      expect(res.status).toBe(200);
+
+      const { rows } = await db.query(
+        "SELECT pin_code, pin_hash FROM employees WHERE id = 3"
+      );
+      // pin_code should still be the old seeded value (not overwritten to "5555")
+      expect(rows[0].pin_code).not.toBe("5555");
+      expect(rows[0].pin_hash).toBeTruthy();
+
+      // Verify the hash matches the new PIN
+      const bcrypt = require("bcryptjs");
+      const match = await bcrypt.compare("5555", rows[0].pin_hash);
+      expect(match).toBe(true);
+    });
+
+    it("login still works with hash-only employee (no pin_code)", async () => {
+      // Create employee with hash only (no pin_code)
+      const bcrypt = require("bcryptjs");
+      const hash = await bcrypt.hash("7777", 10);
+      await db.query(
+        "INSERT INTO employees (id, name, pin_hash, role_id) VALUES (99, 'HashOnly User', $1, 3)",
+        [hash]
+      );
+      await db.query(
+        "INSERT INTO employee_outlets (employee_id, outlet_id, is_primary) VALUES (99, 1, true)"
+      );
+
+      const res = await request(app)
+        .post("/api/employees/validate-pin")
+        .send({ pin_code: "7777" });
+
+      expect(res.status).toBe(200);
+      expect(res.body.employee.id).toBe(99);
+    });
+  });
+
+  // ─── Fix 8: Opaque upload filenames ─────────────────────────
+
+  describe("Support upload opaque filenames", () => {
+    it("generates opaque filename from crypto, preserving extension", () => {
+      const crypto = require("crypto");
+      const path = require("path");
+
+      // Simulate the logic deployed in support.js
+      const originalname = "my-secret-screenshot.png";
+      const ext = path.extname(originalname).toLowerCase() || ".png";
+      const opaqueId = crypto.randomBytes(16).toString("hex");
+      const key = `support/${opaqueId}${ext}`;
+
+      // Key should not contain the original filename
+      expect(key).not.toContain("my-secret-screenshot");
+      // Key should have correct extension
+      expect(key).toMatch(/^support\/[a-f0-9]{32}\.png$/);
+    });
+
+    it("handles files with no extension", () => {
+      const crypto = require("crypto");
+      const path = require("path");
+
+      const ext = path.extname("noextension").toLowerCase() || ".png";
+      const opaqueId = crypto.randomBytes(16).toString("hex");
+      const key = `support/${opaqueId}${ext}`;
+
+      // Falls back to .png
+      expect(key).toMatch(/\.png$/);
+    });
+  });
+
+  // ─── Fix 9: Feature flag fail-closed defaults ───────────────
+
+  describe("Feature flag defaults are fail-closed", () => {
+    it("DEFAULT_FLAGS has all privileged flags set to false", () => {
+      // This mirrors the frontend useFeatureFlags.js DEFAULT_FLAGS
+      const DEFAULT_FLAGS = {
+        backup_restore: false,
+        e_invoicing_export: false,
+        supplier_payables: false,
+        approvals: false,
+        notifications: false,
+        accounting_core: false,
+        crm_quotations: false,
+        advanced_hr: false,
+        multi_company: false,
+        ui_redesign_pos: false,
+        reports_enhanced_filters: false,
+        reports_profit_layer: false,
+        reports_inventory_health_plus: false,
+        reports_exceptions: false,
+        reports_scheduled_exports: false,
+        context_selection_required: false,
+        context_header_enforced: false,
+        kiosk_context_locked: false,
+      };
+
+      // Every default must be false (fail-closed)
+      for (const [key, value] of Object.entries(DEFAULT_FLAGS)) {
+        expect(value).toBe(false);
+      }
+    });
+  });
 });

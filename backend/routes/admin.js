@@ -740,8 +740,8 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
       }
 
       await db.query(
-        `UPDATE ${schemaName}.employees SET pin_code = $1, pin_hash = $2 WHERE id = $3`,
-        [newPin, pinHash, adminEmp.id]
+        `UPDATE ${schemaName}.employees SET pin_hash = $1 WHERE id = $2`,
+        [pinHash, adminEmp.id]
       );
 
       await auditLog(tenant.id, "pin_reset", { employee_id: adminEmp.id }, `admin:${req.admin.email}`);

@@ -88,8 +88,8 @@ module.exports = function registerEmployeeRoutes(app, deps) {
       const pin_hash = pin_code ? await bcrypt.hash(String(pin_code), 10) : null;
       const password_hash = password ? await bcrypt.hash(String(password), 10) : null;
       const { rows } = await db.query(
-        "INSERT INTO employees (name, role_id, pin_code, pin_hash, salary_type, monthly_salary, hourly_rate, daily_rate, email, password_hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
-        [name, role_id || 3, pin_code, pin_hash, salary_type || "monthly", Number(monthly_salary || 0), Number(hourly_rate || 0), Number(daily_rate || 0), email || null, password_hash],
+        "INSERT INTO employees (name, role_id, pin_hash, salary_type, monthly_salary, hourly_rate, daily_rate, email, password_hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
+        [name, role_id || 3, pin_hash, salary_type || "monthly", Number(monthly_salary || 0), Number(hourly_rate || 0), Number(daily_rate || 0), email || null, password_hash],
       );
       const newId = rows[0].id;
       // Auto-assign new employee to all active outlets
@@ -138,8 +138,8 @@ module.exports = function registerEmployeeRoutes(app, deps) {
 
       if (pin_code !== undefined && pin_code !== "") {
         const pin_hash = await bcrypt.hash(String(pin_code), 10);
-        query += `, pin_code = $${paramIdx++}, pin_hash = $${paramIdx++}`;
-        params.push(pin_code, pin_hash);
+        query += `, pin_hash = $${paramIdx++}`;
+        params.push(pin_hash);
       }
 
       if (email !== undefined) {
@@ -425,8 +425,8 @@ module.exports = function registerEmployeeRoutes(app, deps) {
 
       const pin_hash = await bcrypt.hash(String(new_pin), 10);
       await db.query(
-        "UPDATE employees SET pin_code = $1, pin_hash = $2 WHERE id = $3",
-        [new_pin, pin_hash, Number(id)]
+        "UPDATE employees SET pin_hash = $1 WHERE id = $2",
+        [pin_hash, Number(id)]
       );
 
       res.json({ message: "PIN changed successfully" });

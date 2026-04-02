@@ -15,6 +15,7 @@ import InvoiceView from "../InvoiceView";
 import { Ban, Download, FileText, Printer, RefreshCw, Search } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { buildReceiptHtml } from "../../utils/receipt";
 
 const formatDate = fmtUtcDateTime;
 
@@ -57,7 +58,7 @@ function exportCsv(rows) {
 }
 
 export default function SalesHistoryRedesign() {
-  const { fmt: money } = useCurrency();
+  const { fmt: money, symbol: currencySymbol } = useCurrency();
   const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -169,40 +170,22 @@ export default function SalesHistoryRedesign() {
   const handleReprint = () => {
     if (!detail?.sale || !detail?.items) return;
     const s = detail.sale;
-    const printWindow = window.open("", "_blank", "width=420,height=700");
-    const lines = detail.items
-      .map(
-        (i) =>
-          `<tr><td>${i.quantity}x ${i.product_name}</td><td style="text-align:right">${money(
-            i.price_at_sale * i.quantity,
-          )}</td></tr>`,
-      )
-      .join("");
-    const pays = (detail.payments || [])
-      .map(
-        (p) =>
-          `<tr><td>${p.payment_method}</td><td style="text-align:right">${money(
-            p.amount,
-          )}</td></tr>`,
-      )
-      .join("");
-    printWindow.document.write(`
-      <html><head><title>Receipt #${s.id}</title></head>
-      <body style="font-family:monospace;max-width:320px;margin:0 auto;padding:8px;">
-      <h3 style="margin:0">SanoPOS</h3>
-      <p style="margin:4px 0">Receipt #${s.id} (Reprint)</p>
-      <p style="margin:4px 0">${formatDate(s.timestamp)}</p>
-      <hr/>
-      <table style="width:100%">${lines}</table>
-      <hr/>
-      <table style="width:100%">
-        <tr><td>Total</td><td style="text-align:right;font-weight:700">${money(s.total_amount)}</td></tr>
-        ${pays}
-      </table>
-      </body></html>
-    `);
-    printWindow.document.close();
-    printWindow.onload = () => printWindow.print();
+    const slip = {
+      invoiceNumber: s.invoice_number || `#${s.id}`,
+      timestamp: formatDate(s.timestamp),
+      total: s.total_amount,
+      cart: detail.items.map((i) => ({
+        name: i.product_name,
+        price: i.price_at_sale,
+        quantity: i.quantity,
+      })),
+      payments: (detail.payments || []).map((p) => ({
+        method: p.payment_method,
+        amount: p.amount,
+      })),
+      customer: s.customer_name ? { name: s.customer_name } : null,
+    };
+    buildReceiptHtml(slip, null, currencySymbol);
   };
 
   if (invoiceSaleId) {

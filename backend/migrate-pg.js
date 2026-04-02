@@ -500,6 +500,15 @@ const MIGRATIONS = [
       await client.query(`ALTER TABLE return_items ADD COLUMN IF NOT EXISTS variant_id INTEGER REFERENCES product_variants(id)`);
     },
   },
+  {
+    version: 14,
+    description: "Make pin_code nullable — stop storing plaintext PINs",
+    up: async (client) => {
+      // Drop the NOT NULL and UNIQUE constraints on pin_code
+      await client.query(`ALTER TABLE employees ALTER COLUMN pin_code DROP NOT NULL`);
+      await client.query(`ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_pin_code_key`);
+    },
+  },
 ];
 
 async function migrate(db) {

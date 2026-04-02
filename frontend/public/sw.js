@@ -2,20 +2,6 @@ const STATIC_CACHE = "sanopos-static-v1";
 const API_CACHE = "sanopos-api-v1";
 const STATIC_ASSETS = ["/", "/manifest.webmanifest", "/vite.svg"];
 
-function shouldCacheApiPath(pathname) {
-  const allow = [
-    "/api/feature-flags",
-    "/api/outlets",
-    "/api/categories",
-    "/api/brands",
-    "/api/taxes",
-    "/api/products",
-    "/api/reports/dashboard",
-    "/api/notifications/count",
-  ];
-  return allow.some((prefix) => pathname.startsWith(prefix));
-}
-
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(STATIC_CACHE).then((cache) => cache.addAll(STATIC_ASSETS)).catch(() => {})
@@ -51,28 +37,6 @@ async function cacheFirst(request) {
   return response;
 }
 
-async function staleWhileRevalidate(request) {
-  const cache = await caches.open(API_CACHE);
-  const cached = await cache.match(request);
-  const fetchPromise = fetch(request)
-    .then((response) => {
-      if (response && response.ok) cache.put(request, response.clone());
-      return response;
-    })
-    .catch(() => null);
-
-  if (cached) {
-    fetchPromise.catch(() => {});
-    return cached;
-  }
-  const fresh = await fetchPromise;
-  if (fresh) return fresh;
-  return new Response(JSON.stringify({ error: "Offline and no cached response available" }), {
-    status: 503,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
@@ -101,9 +65,5 @@ self.addEventListener("fetch", (event) => {
       event.respondWith(cacheFirst(request));
       return;
     }
-  }
-
-  if (sameOrigin && url.pathname.startsWith("/api/") && shouldCacheApiPath(url.pathname)) {
-    event.respondWith(staleWhileRevalidate(request));
   }
 });

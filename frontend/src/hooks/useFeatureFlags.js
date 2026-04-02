@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { API_BASE as API } from "../config";
 
+// Fail-closed: all flags default to false so privileged features
+// are hidden when the backend is unreachable or returns an error.
 const DEFAULT_FLAGS = {
-  backup_restore: true,
-  e_invoicing_export: true,
-  supplier_payables: true,
-  approvals: true,
-  notifications: true,
-  accounting_core: true,
-  crm_quotations: true,
-  advanced_hr: true,
-  multi_company: true,
-  ui_redesign_pos: true,
+  backup_restore: false,
+  e_invoicing_export: false,
+  supplier_payables: false,
+  approvals: false,
+  notifications: false,
+  accounting_core: false,
+  crm_quotations: false,
+  advanced_hr: false,
+  multi_company: false,
+  ui_redesign_pos: false,
   reports_enhanced_filters: false,
   reports_profit_layer: false,
   reports_inventory_health_plus: false,

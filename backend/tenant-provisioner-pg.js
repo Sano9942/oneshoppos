@@ -83,8 +83,8 @@ async function provision(db, { slug, name, ownerEmail, timezone, pin }) {
 
     // Admin employee
     const empRes = await client.query(
-      "INSERT INTO employees (name, pin_code, pin_hash, role_id) VALUES ('Admin', $1, $2, $3) RETURNING id",
-      [pin, pinHash, roleId]
+      "INSERT INTO employees (name, pin_hash, role_id) VALUES ('Admin', $1, $2) RETURNING id",
+      [pinHash, roleId]
     );
     const employeeId = empRes.rows[0].id;
 

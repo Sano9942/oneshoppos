@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+const path = require("path");
 const multer = require("multer");
 const { uploadToR2 } = require("../utils/r2");
 const { sendAlertEmail } = require("../utils/alertEmail");
@@ -101,7 +103,9 @@ module.exports = function supportRoutes(app, deps) {
           return res.status(400).json({ error: "Only image files are allowed" });
         }
 
-        const key = `support/${Date.now()}-${file.originalname}`;
+        const ext = path.extname(file.originalname).toLowerCase() || ".png";
+        const opaqueId = crypto.randomBytes(16).toString("hex");
+        const key = `support/${opaqueId}${ext}`;
         const url = await uploadToR2(file.buffer, key, file.mimetype);
 
         res.json({ filename: file.originalname, url });

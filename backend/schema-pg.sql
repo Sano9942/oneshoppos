@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS employees (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'Cashier',
-  pin_code TEXT UNIQUE NOT NULL,
+  pin_code TEXT,
   pin_hash TEXT,
   role_id INTEGER REFERENCES roles(id) DEFAULT 3,
   salary_type TEXT DEFAULT 'monthly',
