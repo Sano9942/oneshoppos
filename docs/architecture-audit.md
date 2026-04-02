@@ -1874,7 +1874,7 @@ Frontend checks `code` (stable) not `message` (can change).
 | ~~Create `api.js` frontend service layer~~ | ~~Centralizes 164 fetch calls~~ | ~~Low~~ | ✅ Done (Fix 24, commit `7206fd0`) — 90 files migrated |
 | ~~Add Zod validation to backend routes~~ | ~~Prevents whole class of bugs~~ | ~~Low~~ | ✅ Done (Fix 25, commit `62bbafb`) — 17 endpoints validated |
 | ~~Split `admin.js` (2208 lines) into 5-6 files~~ | ~~Maintainability~~ | ~~Low~~ | ✅ Done (Fix 23, commit `d648b86`) — split into 8 modules under `routes/admin/` |
-| Split `index.js` (1306 lines) | Boot sequence clarity | Low | 4-5 files |
+| ~~Split `index.js` (1306 lines)~~ | ~~Boot sequence clarity~~ | ~~Low~~ | ✅ Done (Fix 26) — split into 6 modules: `middleware/rate-limit.js`, `middleware/tenant-auth.js`, `middleware/permissions.js`, `middleware/feature-flags.js`, `shopify/crypto.js`, `boot/workers.js`. index.js reduced from 1306 → ~230 lines |
 | Split report files (ReportsInventory 2705 lines) | Maintainability | Low | 3-4 files per report |
 
 ### Tier 3 -- Medium Risk, Strategic (1-2 weeks)
@@ -2181,6 +2181,7 @@ These look like dead code but are **still actively used**:
 | 23 | Split `admin.js` (2,208 lines) into 5-6 domain files | Half day | ✅ Done — split into 8 modules under `routes/admin/`: helpers, auth, tenants, monitoring, billing, operations, compliance, messaging, system. Also fixed duplicate support ticket reply handler (dead code → single handler with in-app notifications). |
 | 24 | Create frontend `api.js` service layer (replaces 164 scattered fetch calls) | 1 day | ✅ Done — `frontend/src/api.js` created, 90 files migrated (net -1,100 lines), zero raw `fetch()` in non-admin pages. See Phase 8. |
 | 25 | Add Zod validation to critical backend routes (auth, sales, products, employees, billing) | 1-2 days | ✅ Done — 17 POST/PUT endpoints across 5 route files validated with Zod schemas. See Phase 8. |
+| 26 | Split `index.js` (1306 lines) into focused modules | Half day | ✅ Done — 6 extracted modules: `middleware/rate-limit.js`, `middleware/tenant-auth.js`, `middleware/permissions.js`, `middleware/feature-flags.js`, `shopify/crypto.js`, `boot/workers.js`. index.js reduced to ~230-line orchestrator. See Phase 9. |
 
 ### Phase 7: Wave 2 Tests ✅ COMPLETED (2026-04-02)
 
@@ -2254,6 +2255,23 @@ Created `frontend/src/api.js` with 6 methods: `api.get()`, `api.post()`, `api.pu
 |---|------|--------|-------|
 | — | Billing tenant-facing route tests | Half day | Needs `req.tenantId` mock in test harness |
 
+### Phase 9: Fix 26 — Split index.js ✅ COMPLETED (2026-04-02)
+
+**Fix 26: Split `index.js` (1306 lines) into 6 focused modules**
+
+Extracted concerns from the monolithic entry point into single-responsibility modules:
+
+| Module | Responsibility | Lines |
+|--------|---------------|-------|
+| `middleware/rate-limit.js` | Rate limiter config (global, auth, webhook) + helpers | ~90 |
+| `middleware/tenant-auth.js` | JWT auth, tenant resolution, company profile cache, context resolution | ~250 |
+| `middleware/permissions.js` | requirePerm, requireAnyPerm, PERMISSION_RULES, role defaults | ~180 |
+| `middleware/feature-flags.js` | Feature flag cache, requireFeature, notification helpers | ~140 |
+| `shopify/crypto.js` | Shopify secret encryption/decryption + event logging | ~80 |
+| `boot/workers.js` | All scheduled tasks (cleanup, sync, attendance) + worker startup (Shopify, report, FBR, email, cleanup) | ~200 |
+
+**Result:** `index.js` reduced from 1,306 → ~230 lines. Now a thin orchestrator that: loads env + Sentry, creates Express app, applies middleware chain, registers routes, starts server + workers. All 412 pg-batch integration tests pass.
+
 ---
 
-*This audit reflects the codebase state as of 2026-04-02. All claims have been verified against actual file contents, line counts, and import chains. Test coverage analysis and execution plan added 2026-04-02. Phases 1-8 completed 2026-04-02 — 419 tests passing, 0 failures. Fix 25 (Zod) and Fix 24 (api.js) completed same day.*
+*This audit reflects the codebase state as of 2026-04-02. All claims have been verified against actual file contents, line counts, and import chains. Test coverage analysis and execution plan added 2026-04-02. Phases 1-9 completed 2026-04-02 — 419 tests passing, 0 failures. Fix 26 (index.js split) completed same day.*
