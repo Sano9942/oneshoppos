@@ -1,10 +1,10 @@
 # Architecture Audit Fix — Session Handoff
 
-## Current State (2026-04-02, updated after Phase 6)
+## Current State (2026-04-02, updated after Phase 7)
 
 **Branch:** `fix/architecture-audit-fixes`
-**Latest commit:** `d648b86` (pushed to origin)
-**Tests:** 357 passing across 10 suites (pg-batch1 through pg-batch9 + pg-tenant-isolation), 0 failures
+**Latest commit:** `0672460` (pushed to origin)
+**Tests:** 419 passing across 12 suites (pg-batch1 through pg-batch11 + pg-tenant-isolation), 0 failures
 
 ### Completed Phases
 
@@ -45,20 +45,17 @@
 - Fix 23: Split `admin.js` (2,210 lines) into 8 domain modules under `routes/admin/` — helpers, auth, tenants, monitoring, billing, operations, compliance, messaging, system. Also consolidated duplicate support ticket reply handler (dead code with notification logic → single handler with in-app notifications).
 - Fixes 24-25 (api.js service layer, Zod validation) deferred — separate sprint scope.
 
+**Phase 7 — Wave 2 Tests** (commits `ed62c8a`, `0672460`)
+- pg-batch10-wave2.test.js: 26 tests — support tickets (6), FBR config (5), FBR dashboard/invoices (6), import routes (9)
+- pg-batch11-admin.test.js: 36 tests — auth (4), auth guard (3), tenant CRUD (6), lifecycle (2), stats/monitoring (5), billing (3), announcements (5), notes (3), logs (2), orphaned schemas (1), deletion (1)
+- Infrastructure fix: `createTestApp-pg.js` — `getClient()` now returns Proxy with no-op `release()` to prevent route code from releasing the test client
+- Billing tenant routes (billing.js as tenant-facing) not tested — requires `req.tenantId` from multi-tenant middleware, not available in test harness
+
 ## What To Do Next
-
-### Phase 7: Wave 2 Tests
-
-Write integration tests for 10+ untested production routes. Priority:
-1. admin.js (~15-20 tests)
-2. billing.js (~10 tests)
-3. support.js (~5 tests)
-4. fbr.js + tax-lookup.js (~10 tests)
-5. import.js (~5 tests)
 
 ### After All Phases
 
-1. Re-run all 357+ integration tests — confirm green
+1. Re-run all 419 integration tests — confirm green ✅ (done)
 2. Run live E2E suite against staging
 3. Manual smoke: password reset, admin tax approval, printer settings, support ticket, POS receipt reprint
 4. Push branch, user merges to main when verified
