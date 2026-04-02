@@ -1,0 +1,251 @@
+/**
+ * Admin billing — plan pricing, payments, upgrade requests, billing attention.
+ */
+module.exports = function registerBillingRoutes(app, deps) {
+  const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager, PLAN_DEFAULTS, auditLog, logAdminAction } = deps;
+
+  // ── Plan Pricing CRUD ──────────────────────────────────────────────────
+  app.get("/api/admin/plan-pricing", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { rows } = await masterDb.query(
+        "SELECT * FROM plan_pricing ORDER BY plan, cycle"
+      );
+      return res.json(rows);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/admin/plan-pricing/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { price, is_active } = req.body;
+
+      const sets = [];
+      const vals = [];
+      let idx = 1;
+
+      if (price !== undefined) {
+        sets.push(`price = $${idx++}`);
+        vals.push(price);
+      }
+      if (is_active !== undefined) {
+        sets.push(`is_active = $${idx++}`);
+        vals.push(is_active);
+      }
+
+      if (sets.length === 0) {
+        return res.status(400).json({ error: "Nothing to update" });
+      }
+
+      vals.push(id);
+      const { rows } = await masterDb.query(
+        `UPDATE plan_pricing SET ${sets.join(", ")} WHERE id = $${idx} RETURNING *`,
+        vals
+      );
+      if (rows.length === 0) {
+        return res.status(404).json({ error: "Pricing row not found" });
+      }
+      logAdminAction(req.admin.email, "pricing_updated", "plan", req.params.id, req.body, req.ip);
+      return res.json(rows[0]);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Record Payment ─────────────────────────────────────────────────────
+  app.post("/api/admin/tenants/:id/record-payment", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const tenantId = parseInt(req.params.id, 10);
+      const { plan, cycle, amount, payment_method, reference_note } = req.body;
+
+      if (!plan || !cycle || !amount) {
+        return res.status(400).json({ error: "plan, cycle, and amount are required" });
+      }
+
+      const tenant = await masterDb.getTenantById(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+
+      const now = new Date();
+      const periodStart = now;
+      const daysToAdd = cycle === "annual" ? 365 : 30;
+      const periodEnd = new Date(now.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+      const graceEnd = new Date(periodEnd.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+      const limits = PLAN_DEFAULTS[plan] || PLAN_DEFAULTS.free;
+
+      await masterDb.query(
+        `UPDATE tenants
+         SET plan = $1,
+             billing_cycle = $2,
+             plan_expires_at = $3,
+             grace_ends_at = $4,
+             payment_status = 'active',
+             max_employees = $5,
+             max_outlets = $6,
+             max_products = $7,
+             updated_at = NOW()
+         WHERE id = $8`,
+        [plan, cycle, periodEnd.toISOString(), graceEnd.toISOString(),
+         limits.max_employees, limits.max_outlets, limits.max_products, tenantId]
+      );
+
+      await masterDb.query(
+        `INSERT INTO payment_records
+           (tenant_id, amount, plan, cycle, period_start, period_end, payment_method, reference_note, recorded_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [tenantId, amount, plan, cycle, periodStart.toISOString(), periodEnd.toISOString(),
+         payment_method || null, reference_note || null, req.admin.email]
+      );
+
+      await auditLog(tenantId, "payment_recorded", { plan, cycle, amount, payment_method }, `admin:${req.admin.email}`);
+
+      try {
+        const tenantDb = await tenantDbManager.getDb(tenantId);
+        const { rows: [profile] } = await tenantDb.query("SELECT email FROM company_profile WHERE id = 1");
+        if (profile?.email) {
+          const { sendEmail } = require("../../services/email");
+          sendEmail({
+            type: "billing_payment_recorded",
+            to: profile.email,
+            data: {
+              storeName: tenant?.name || "Your store",
+              amount: `${amount}`,
+              plan,
+              cycle,
+              periodEnd: periodEnd.toLocaleDateString(),
+            },
+          }).catch((err) => console.error("Billing payment email failed:", err.message));
+        }
+      } catch (emailErr) {
+        console.error("Billing payment email lookup failed:", emailErr.message);
+      }
+
+      logAdminAction(req.admin.email, "payment_recorded", "tenant", req.params.id, { amount: req.body.amount, method: req.body.method }, req.ip);
+      return res.json({
+        ok: true,
+        plan,
+        cycle,
+        period_start: periodStart.toISOString(),
+        period_end: periodEnd.toISOString(),
+        grace_ends_at: graceEnd.toISOString(),
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Payment History ────────────────────────────────────────────────────
+  app.get("/api/admin/tenants/:id/payments", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const tenantId = parseInt(req.params.id, 10);
+      const { rows } = await masterDb.query(
+        "SELECT * FROM payment_records WHERE tenant_id = $1 ORDER BY recorded_at DESC",
+        [tenantId]
+      );
+      return res.json(rows);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Upgrade Requests ───────────────────────────────────────────────────
+  app.get("/api/admin/upgrade-requests", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { rows } = await masterDb.query(
+        `SELECT ur.*, t.slug, t.name AS tenant_name, t.plan AS current_plan
+         FROM upgrade_requests ur
+         JOIN tenants t ON t.id = ur.tenant_id
+         WHERE ur.status = 'pending'
+         ORDER BY ur.created_at ASC`
+      );
+      return res.json(rows);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/admin/upgrade-requests/:id", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!status || !["approved", "dismissed"].includes(status)) {
+        return res.status(400).json({ error: "status must be 'approved' or 'dismissed'" });
+      }
+
+      const { rows } = await masterDb.query(
+        `UPDATE upgrade_requests
+         SET status = $1, resolved_at = NOW(), resolved_by = $2
+         WHERE id = $3
+         RETURNING *`,
+        [status, req.admin.email, id]
+      );
+
+      if (rows.length === 0) {
+        return res.status(404).json({ error: "Upgrade request not found" });
+      }
+
+      logAdminAction(req.admin.email, "upgrade_request_" + status, "tenant", req.params.id, null, req.ip);
+      return res.json(rows[0]);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Billing Attention ──────────────────────────────────────────────────
+  app.get("/api/admin/billing-attention", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const now = new Date().toISOString();
+      const sevenDays = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      const dueSoon = await masterDb.query(
+        `SELECT id, slug, name, plan, plan_expires_at
+         FROM tenants
+         WHERE status = 'active'
+           AND plan_expires_at IS NOT NULL
+           AND plan_expires_at > $1
+           AND plan_expires_at <= $2
+         ORDER BY plan_expires_at ASC`,
+        [now, sevenDays]
+      );
+
+      const overdue = await masterDb.query(
+        `SELECT id, slug, name, plan, plan_expires_at, grace_ends_at
+         FROM tenants
+         WHERE status = 'active'
+           AND plan_expires_at IS NOT NULL
+           AND plan_expires_at < $1
+           AND grace_ends_at IS NOT NULL
+           AND grace_ends_at >= $1
+         ORDER BY plan_expires_at ASC`,
+        [now]
+      );
+
+      const pastGrace = await masterDb.query(
+        `SELECT id, slug, name, plan, plan_expires_at, grace_ends_at
+         FROM tenants
+         WHERE status = 'active'
+           AND grace_ends_at IS NOT NULL
+           AND grace_ends_at < $1
+         ORDER BY grace_ends_at ASC`,
+        [now]
+      );
+
+      const upgradeCount = await masterDb.query(
+        "SELECT COUNT(*)::int AS count FROM upgrade_requests WHERE status = 'pending'"
+      );
+
+      return res.json({
+        due_soon: dueSoon.rows,
+        overdue: overdue.rows,
+        past_grace: pastGrace.rows,
+        pending_upgrades: upgradeCount.rows[0].count,
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+};
