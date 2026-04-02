@@ -2316,4 +2316,86 @@ Added `pg-batch12-billing.test.js` — 29 integration tests covering all 5 billi
 
 ---
 
+## Merge Rollback Plan
+
+**Last known-good production commit (Railway + Vercel as of 2026-04-02):**
+
+```
+d0c46d5  fix: migration v13 uses wrong column name (created_at → timestamp)
+```
+
+This is the commit `origin/main` is on BEFORE merging `fix/architecture-audit-fixes`. Railway and Vercel both auto-deploy from `main`.
+
+### Pre-merge verification done
+
+| Check | Status |
+|-------|--------|
+| Backend boots on this branch | ✅ Server starts, listens, no crash |
+| Frontend `vite build` | ✅ Clean, zero errors across 224 changed files |
+| 448 integration tests | ✅ All pass across 12 suites |
+| Live E2E Playwright suite | ⬜ Not run — run immediately after merge + deploy |
+| Manual smoke test | ⬜ Not run — do after deploy |
+
+### What could go wrong after merge
+
+| Risk | Likelihood | How you'd notice | Which pages |
+|------|-----------|-------------------|-------------|
+| `api.js` migration typo in one of 90 files | Low-Medium | Page throws runtime error on a specific action (submit, load) | Any redesign page, reports, POS |
+| Zod schema rejects a valid request | Low | 400 error on form submit that worked before | Login, signup, employee create/edit, product create/edit, sales, billing |
+| `index.js` split middleware ordering | Low | Server boots but a specific route returns 403/401 unexpectedly | Any authenticated route |
+| Admin panel (`admin.js` split) | Low | Admin page crashes or 500 error | `/admin/*` pages only |
+| Report splits (inventory/sales) | Very Low | Report tab shows blank or crashes | Reports page only |
+
+**None of these affect the database.** All changes are code-level (import paths, request/response handling). No migrations, no schema changes, no data mutations.
+
+### If something breaks — rollback steps
+
+**Option A: Revert the merge commit (recommended — takes ~2 minutes)**
+
+```bash
+# 1. Revert the merge commit on main (creates a NEW commit that undoes all changes)
+git checkout main
+git revert -m 1 <merge-commit-hash>
+git push origin main
+
+# Railway and Vercel will auto-deploy the reverted code (~60 seconds each)
+```
+
+This takes `main` back to the exact code Railway was running before, but keeps git history clean. The branch `fix/architecture-audit-fixes` is preserved — you can fix the issue and re-merge later.
+
+**Option B: Hard reset to the known-good commit (nuclear — use only if revert doesn't work)**
+
+```bash
+# WARNING: This rewrites history. Only use as last resort.
+git checkout main
+git reset --hard d0c46d5
+git push --force origin main
+```
+
+**Option C: Fix forward (if the issue is small)**
+
+If Sentry shows a single file has a bug (e.g. one `api.post()` call passing wrong params), fix it directly on `main` and push. Faster than reverting 224 files.
+
+### After merge — immediate verification checklist
+
+1. **Wait for deploys** — Railway backend (~90s), Vercel frontend (~60s)
+2. **Hit health check**: `curl https://api.sanopos.com/api/health`
+3. **Open Sentry** (`sanopos.sentry.io`) — watch for new errors in first 5 minutes
+4. **Quick smoke test** (manually in browser):
+   - [ ] Login at `sanopos.com` with packagesmall tenant
+   - [ ] Dashboard loads (tests api.js migration + dashboard components)
+   - [ ] POS page loads, scan a product, complete a sale (tests POSContext changes)
+   - [ ] Reports page → Sales tab → any sub-tab (tests ReportsSales split)
+   - [ ] Reports page → Inventory tab → any sub-tab (tests ReportsInventory split)
+   - [ ] Settings → Company (tests api.js on settings pages)
+   - [ ] `/admin` login → tenant list (tests admin.js split)
+5. **Run live E2E suite** (covers 120 scenarios):
+   ```bash
+   cd frontend && npx playwright test tests/live/ --config=playwright.config.live.js
+   ```
+6. **If all green** — you're done, production is verified
+7. **If something fails** — check Sentry for the stack trace, decide between Option A (revert) or Option C (fix forward)
+
+---
+
 *This audit reflects the codebase state as of 2026-04-02. All claims have been verified against actual file contents, line counts, and import chains. Test coverage analysis and execution plan added 2026-04-02. Phases 1-11 completed 2026-04-02 — 448 tests passing, 0 failures. All identified items complete — no remaining work.*
