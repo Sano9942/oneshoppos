@@ -795,7 +795,7 @@ No Material-UI, no shadcn, no Ant Design, no state management library. Zero bloa
 | 14 | `pages/redesign/SupplierPayablesRedesign.jsx` | 760 | Page |
 | 15 | `pages/reports/ReportsCatalog.jsx` | 754 | Report tab |
 
-**Report files are the worst offenders.** ReportsInventory.jsx (2,721 lines) and ReportsSales.jsx (1,804 lines) should each be split into tab-per-file components.
+**Report files were the worst offenders.** ~~ReportsInventory.jsx (2,721 lines)~~ and ~~ReportsSales.jsx (1,804 lines)~~ have been split into tab-per-file domain modules (Fixes 27 + 28). Parent files are now thin barrel re-exports (~8 lines each).
 
 **POSContext.jsx (1,248 lines)** is large but *justified* -- POS is an atomic system. Splitting it would create worse prop-drilling problems. This is an acceptable trade-off, not a mistake. It exports 166 properties covering: employees, auth, cart, checkout, payments, offline queue, shift management, barcode scanning, and keyboard shortcuts.
 
@@ -1096,7 +1096,7 @@ Type hints: @types/react, @types/react-dom
 3. **Zero type safety** -- No TS, no PropTypes, no JSDoc
 4. **7 aria attributes in 51K lines** -- Accessibility near-zero
 5. **2% unit test coverage** -- 3 test files for 100+ components
-6. **Report file sizes** -- ReportsInventory.jsx at 2,721 lines
+6. ~~**Report file sizes** -- ReportsInventory.jsx at 2,721 lines~~ ✅ Fixed (Fixes 27+28) — split into 4+4 domain modules
 7. **Unused App.css** -- 42 lines of Vite template CSS still committed
 
 ---
@@ -2182,6 +2182,8 @@ These look like dead code but are **still actively used**:
 | 24 | Create frontend `api.js` service layer (replaces 164 scattered fetch calls) | 1 day | ✅ Done — `frontend/src/api.js` created, 90 files migrated (net -1,100 lines), zero raw `fetch()` in non-admin pages. See Phase 8. |
 | 25 | Add Zod validation to critical backend routes (auth, sales, products, employees, billing) | 1-2 days | ✅ Done — 17 POST/PUT endpoints across 5 route files validated with Zod schemas. See Phase 8. |
 | 26 | Split `index.js` (1306 lines) into focused modules | Half day | ✅ Done — 6 extracted modules: `middleware/rate-limit.js`, `middleware/tenant-auth.js`, `middleware/permissions.js`, `middleware/feature-flags.js`, `shopify/crypto.js`, `boot/workers.js`. index.js reduced to ~230-line orchestrator. See Phase 9. |
+| 27 | Split `ReportsInventory.jsx` (2705 lines) into domain modules | Half day | ✅ Done — 4 modules: `ReportsInventoryCore` (3 tabs, ~500 lines), `ReportsInventoryAnalytics` (3 tabs, ~935 lines), `ReportsInventoryHealth` (4 tabs, ~605 lines), `ReportsInventoryReplenishment` (4 tabs, ~620 lines). Parent is barrel re-export. See Phase 10. |
+| 28 | Split `ReportsSales.jsx` (1791 lines) into domain modules | Half day | ✅ Done — 4 modules: `ReportsSalesOverview`, `ReportsSalesCore`, `ReportsSalesDetail`, `ReportsSalesOperations`. Parent is barrel re-export. See Phase 10. |
 
 ### Phase 7: Wave 2 Tests ✅ COMPLETED (2026-04-02)
 
@@ -2272,6 +2274,30 @@ Extracted concerns from the monolithic entry point into single-responsibility mo
 
 **Result:** `index.js` reduced from 1,306 → ~230 lines. Now a thin orchestrator that: loads env + Sentry, creates Express app, applies middleware chain, registers routes, starts server + workers. All 412 pg-batch integration tests pass.
 
+### Phase 10: Fixes 27 & 28 — Split Report Mega-Files ✅ COMPLETED (2026-04-02)
+
+The two largest frontend files — both inventory and sales report containers — split into domain-specific modules with barrel re-exports preserving backward compatibility.
+
+**Fix 27: Split `ReportsInventory.jsx` (2,705 lines) into 4 domain modules** (commit `464098a`)
+
+| Module | Tabs | Lines | Domain |
+|--------|------|-------|--------|
+| `ReportsInventoryCore.jsx` | SalesStockTab, InventoryDumpTab, OnHandTab | ~500 | Stock snapshots — "What do I have?" |
+| `ReportsInventoryAnalytics.jsx` | ProductPerformanceTab, BrandWiseTab, MerchandisingWorkspaceTab | ~935 | Performance — "How is it selling?" |
+| `ReportsInventoryHealth.jsx` | PricingMarginTab, DeadStockTab, StockAgingTab, ShrinkageTab | ~605 | Stock health — "What's going wrong?" |
+| `ReportsInventoryReplenishment.jsx` | ReplenishmentTab, StockoutRiskTab, ForecastDemandTab, ReplenishmentSmartTab | ~620 | Reorder — "What should I order?" |
+
+**Fix 28: Split `ReportsSales.jsx` (1,791 lines) into 4 domain modules** (commit `c340e4d`)
+
+| Module | Tabs | Domain |
+|--------|------|--------|
+| `ReportsSalesOverview.jsx` | Summary/overview tabs | High-level sales metrics |
+| `ReportsSalesCore.jsx` | Core sales report tabs | Transaction-level detail |
+| `ReportsSalesDetail.jsx` | Drill-down detail tabs | Item/category breakdowns |
+| `ReportsSalesOperations.jsx` | Operational tabs | Shift, payment, discount analysis |
+
+**Result:** Both parent files reduced to ~8-line barrel re-exports. `Reports.jsx` imports unchanged — zero consumer modifications needed. Frontend build passes clean.
+
 ---
 
-*This audit reflects the codebase state as of 2026-04-02. All claims have been verified against actual file contents, line counts, and import chains. Test coverage analysis and execution plan added 2026-04-02. Phases 1-9 completed 2026-04-02 — 419 tests passing, 0 failures. Fix 26 (index.js split) completed same day.*
+*This audit reflects the codebase state as of 2026-04-02. All claims have been verified against actual file contents, line counts, and import chains. Test coverage analysis and execution plan added 2026-04-02. Phases 1-10 completed 2026-04-02 — 419 tests passing, 0 failures. Fixes 27+28 (report file splits) completed same day.*
