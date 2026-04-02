@@ -147,14 +147,20 @@ async function pollOnce(pool, logger) {
     const { rows: tenants } = await pool.query(
       "SELECT slug FROM public.tenants WHERE status = 'active'"
     );
+    let totalPending = 0;
     for (const tenant of tenants) {
       if (stopping) break;
       try {
         await processTenant(pool, tenant.slug, logger);
+        const { rows } = await pool.query(
+          `SELECT COUNT(*)::int AS cnt FROM tenant_${tenant.slug}.fbr_invoices WHERE status = 'pending'`
+        );
+        totalPending += rows[0]?.cnt || 0;
       } catch (err) {
         logger.error({ err, tenant: tenant.slug }, "FBR worker tenant error");
       }
     }
+    if (global.__fbrWorkerStatus) global.__fbrWorkerStatus.queueDepth = totalPending;
   } catch (err) {
     // If tenants table doesn't exist (single-tenant mode), silently skip
     if (!err.message.includes('relation "public.tenants"')) {

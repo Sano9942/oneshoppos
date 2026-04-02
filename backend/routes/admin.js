@@ -199,8 +199,8 @@ module.exports = function registerAdminRoutes(app, { authLimiter }) {
     if (!slug || !name || !pin) {
       return res.status(400).json({ error: "slug, name, and pin are required" });
     }
-    if (!/^[a-z0-9-]{3,40}$/.test(slug)) {
-      return res.status(400).json({ error: "slug must be 3-40 chars: lowercase letters, numbers, hyphens" });
+    if (!/^[a-z0-9_]{3,40}$/.test(slug)) {
+      return res.status(400).json({ error: "slug must be 3-40 chars: lowercase letters, numbers, underscores only" });
     }
     if (!/^\d{4,8}$/.test(String(pin))) {
       return res.status(400).json({ error: "pin must be 4-8 digits" });

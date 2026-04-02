@@ -382,35 +382,6 @@ module.exports = function registerAllRoutes(app, deps) {
     },
   );
 
-  app.get("/api/health", async (req, res) => {
-    const requiredTables = [
-      "sales",
-      "sale_items",
-      "sale_payments",
-      "backup_log",
-      "invoice_sequences",
-      "feature_flags",
-    ];
-    try {
-      const { rows } = await db.query(
-        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)",
-        [requiredTables],
-      );
-      const found = new Set(rows.map((r) => r.table_name));
-      const missingTables = requiredTables.filter((t) => !found.has(t));
-      const ok = missingTables.length === 0;
-      res.status(ok ? 200 : 503).json({
-        status: ok ? "ok" : "degraded",
-        database: "reachable",
-        restore_lock: runtimeState.isRestoreInProgress,
-        missing_tables: missingTables,
-        checked_at: new Date().toISOString(),
-      });
-    } catch (err) {
-      return res.status(500).json({ status: "error", error: err.message });
-    }
-  });
-
   // --- ROUTES: TIER 4 ---
   const createTier4Router = require("./tier4/index");
   app.use(

@@ -1222,13 +1222,6 @@ setInterval(() => cleanupReportScheduleArtifacts().catch(e => console.error("[Re
 closeStaleAttendanceSessions().catch(e => console.error("Stale session cleanup error:", e.message));
 setInterval(() => closeStaleAttendanceSessions().catch(e => console.error("Stale session cleanup error:", e.message)), 24 * 60 * 60 * 1000);
 
-// Dead tenant cleanup — remove tenants that signed up but never completed setup after 7 days
-if (IS_MULTI_TENANT) {
-  const { cleanupDeadTenants } = require("./jobs/cleanup-dead-tenants");
-  cleanupDeadTenants().catch(e => console.error("[DeadTenantCleanup]", e.message));
-  setInterval(() => cleanupDeadTenants().catch(e => console.error("[DeadTenantCleanup]", e.message)), 24 * 60 * 60 * 1000);
-}
-
 // Health check is now registered early in registerAllRoutes.js (before auth middleware)
 
 

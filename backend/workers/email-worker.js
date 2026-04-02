@@ -358,6 +358,11 @@ async function pollOnce(pool, resend, logger) {
     await runPaidExpiryCheck(pool, logger);
     await runBillingCheck(pool, logger);
     await processQueue(pool, resend, logger);
+    // Update queue depth for admin dashboard telemetry
+    if (global.__emailWorkerStatus) {
+      const { rows } = await pool.query("SELECT COUNT(*)::int AS cnt FROM email_queue WHERE sent_at IS NULL AND attempts < 5");
+      global.__emailWorkerStatus.queueDepth = rows[0]?.cnt || 0;
+    }
   } catch (err) {
     logger.error({ err }, "Email worker poll error");
   }
