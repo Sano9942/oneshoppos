@@ -258,20 +258,16 @@ if (String(process.env.CLEANUP_WORKER_ENABLED || "0") === "1") {
 
 ### Input Validation
 
-**No validation library found** in `package.json`. No Joi, Zod, Yup, or similar.
+**✅ PARTIALLY RESOLVED (Fix 25, commit `62bbafb`)**
 
-Request bodies are used directly:
-```javascript
-const { name, email, phone } = req.body;
-```
+~~No validation library found in `package.json`.~~ → Zod added, with `backend/middleware/validate.js` helper. 17 critical POST/PUT endpoints validated across `auth.js`, `employees.js`, `products.js`, `sales.js`, and `billing.js`.
 
-**Problems:**
-- No schema enforcement at route boundaries
-- Invalid types (string where number expected) cause runtime crashes
-- API contracts are implicit (exist only in frontend code and developer memory)
-- A whole class of bugs (missing fields, wrong types, extra fields) goes undetected
+**Current state:** Critical routes (auth, sales, products, employees, billing) have Zod schemas. Remaining routes still use direct `req.body` destructuring — should be incrementally validated as they are modified.
 
-**Recommended fix:** Add Zod (lightweight, TypeScript-friendly). Validate at every route boundary. Makes API contracts explicit and self-documenting.
+**What the Zod middleware provides:**
+- Schema enforcement at route boundaries — rejects invalid types, missing fields, extra fields
+- Structured 400 error responses with field-level detail
+- Self-documenting API contracts (schemas serve as documentation)
 
 ---
 
@@ -878,33 +874,18 @@ No sensitive data stored directly in localStorage beyond auth tokens (industry-s
 
 ### API Layer
 
-**THE BIGGEST FRONTEND DEBT**
+**✅ RESOLVED (Fix 24, commit `7206fd0`)**
 
-**164+ raw `fetch()` calls scattered across 50+ files.** No centralized API service layer.
+~~164+ raw `fetch()` calls scattered across 50+ files. No centralized API service layer.~~ → Replaced with `frontend/src/api.js` service layer providing `api.get()`, `api.post()`, `api.put()`, `api.del()`, `api.upload()`, `api.raw()`. 90 files migrated, net -1,100 lines removed. Zero raw `fetch()` calls remain in non-admin pages.
 
-Every component independently:
-- Builds authorization headers
-- Constructs URLs with `${API}/api/...`
-- Parses JSON responses
-- Handles errors (or doesn't)
+**What the service layer provides:**
+- Centralized URL construction (single `API_BASE` import in `api.js`)
+- Automatic JSON parsing + structured error throwing (`.status`, `.body` on errors)
+- Consistent error handling patterns across all pages
+- Single place to add cross-cutting concerns (logging, metrics, caching) in the future
+- Auth headers still injected via `AuthProvider.jsx`'s `window.fetch` patch — `api.js` uses `fetch()` internally so the interceptor works transparently
 
-**Example from a typical component:**
-```javascript
-fetch(`${API}/api/accounting/pnl?${q}`, { headers: authHeaders() })
-  .then((r) => r.json())
-  .then(data => setState(data))
-  .catch(err => console.error(err))
-```
-
-**Problems:**
-- No centralized error handling or interceptors
-- No retry logic for failed requests
-- No request/response logging
-- Inconsistent error-to-toast patterns
-- Difficult to add cross-cutting concerns (loading states, metrics, caching)
-- When auth header logic changes, 50+ files need updating
-
-**AuthProvider.jsx fetch interceptor:** Does exist for token refresh, but it patches `window.fetch` globally rather than providing a service layer.
+**Remaining:** 11 admin pages use `adminFetch` from `AdminLogin.jsx` — intentionally separate auth system with its own session management. Not a debt item.
 
 **Recommended fix:** Create `api.js` (~50 lines) wrapping fetch with auth headers, JSON parsing, error handling, and toast notifications. All components import from it.
 
@@ -1131,7 +1112,7 @@ Type hints: @types/react, @types/react-dom
 | Dependency hygiene | 9/10 | 8 prod deps, zero bloat, all current |
 | Security | 5/10 | SW caches authenticated API responses; localStorage session model; PrinterSettings hardcodes employee "1" (verified) |
 | Error handling | 5/10 | ErrorBoundary exists, API errors inconsistent |
-| API layer | 4/10 | 164 scattered fetch calls, no service layer |
+| API layer | 8/10 | ✅ Centralized `api.js` service layer — 90 files migrated, -1,100 lines (Fix 24) |
 | Unit testing | 3/10 | 3 test files for 100+ components |
 | Type safety | 2/10 | No TypeScript, no PropTypes, no JSDoc |
 | Accessibility | 2/10 | 7 aria attributes in 51K lines |
@@ -1890,8 +1871,8 @@ Frontend checks `code` (stable) not `message` (can change).
 
 | Fix | Impact | Risk | Files Changed |
 |-----|--------|------|---------------|
-| Create `api.js` frontend service layer | Centralizes 164 fetch calls | Low | 50+ files (mechanical) |
-| Add Zod validation to backend routes | Prevents whole class of bugs | Low | Route files |
+| ~~Create `api.js` frontend service layer~~ | ~~Centralizes 164 fetch calls~~ | ~~Low~~ | ✅ Done (Fix 24) — 90 files migrated |
+| ~~Add Zod validation to backend routes~~ | ~~Prevents whole class of bugs~~ | ~~Low~~ | ✅ Done (Fix 25) — 17 endpoints validated |
 | Split `admin.js` (2208 lines) into 5-6 files | Maintainability | Low | 6-7 files |
 | Split `index.js` (1327 lines) | Boot sequence clarity | Low | 4-5 files |
 | Split report files (ReportsInventory 2721 lines) | Maintainability | Low | 3-4 files per report |
@@ -1957,9 +1938,9 @@ These are all mechanical cleanup tasks that don't require rethinking anything:
 | Add .gitignore entries | 20 minutes | Zero |
 | Delete unused App.css | 5 minutes | Zero |
 | Quarantine broken tests | 30 minutes | Zero |
-| Create API service layer (frontend) | 1 day | Low |
-| Split large files (admin.js, index.js) | 1-2 days | Low |
-| Add Zod validation | 2-3 days | Low |
+| ~~Create API service layer (frontend)~~ | ~~1 day~~ | ✅ Done (Fix 24) |
+| Split large files (admin.js, index.js) | 1-2 days | Low (admin.js ✅ done, index.js pending) |
+| ~~Add Zod validation~~ | ~~2-3 days~~ | ✅ Done (Fix 25) |
 
 ### "Good Enough" Depends on the Goal
 
@@ -2198,8 +2179,8 @@ These look like dead code but are **still actively used**:
 | 21 | Add security headers to `vercel.json` (CSP, X-Frame-Options, Referrer-Policy) | 30 min | ✅ Done — X-Content-Type-Options, X-Frame-Options: DENY, Referrer-Policy, Permissions-Policy, X-DNS-Prefetch-Control |
 | 22 | Revoke object URLs in SupportWidget cleanup | 15 min | ✅ Done — `useMemo` for stable URLs + `useEffect` cleanup via `URL.revokeObjectURL()` |
 | 23 | Split `admin.js` (2,208 lines) into 5-6 domain files | Half day | ✅ Done — split into 8 modules under `routes/admin/`: helpers, auth, tenants, monitoring, billing, operations, compliance, messaging, system. Also fixed duplicate support ticket reply handler (dead code → single handler with in-app notifications). |
-| 24 | Create frontend `api.js` service layer (replaces 164 scattered fetch calls) | 1 day | ⏭️ Deferred — separate sprint scope |
-| 25 | Add Zod validation to critical backend routes (auth, sales, products, employees, billing) | 1-2 days | ⏭️ Deferred — separate sprint scope |
+| 24 | Create frontend `api.js` service layer (replaces 164 scattered fetch calls) | 1 day | ✅ Done — `frontend/src/api.js` created, 90 files migrated (net -1,100 lines), zero raw `fetch()` in non-admin pages. See Phase 8. |
+| 25 | Add Zod validation to critical backend routes (auth, sales, products, employees, billing) | 1-2 days | ✅ Done — 17 POST/PUT endpoints across 5 route files validated with Zod schemas. See Phase 8. |
 
 ### Phase 7: Wave 2 Tests ✅ COMPLETED (2026-04-02)
 
@@ -2228,21 +2209,51 @@ These look like dead code but are **still actively used**:
 
 **Not tested:** Billing tenant-facing routes (`billing.js`) — requires `req.tenantId` from multi-tenant middleware, not available in the current test harness.
 
+### Phase 8: Fixes 24 & 25 — API Layer + Zod Validation ✅ COMPLETED (2026-04-02)
+
+**Fix 25: Zod validation on 17 backend POST/PUT endpoints** (commit `62bbafb`)
+
+Added `backend/middleware/validate.js` helper and Zod schemas for 5 route files:
+
+| Route File | Endpoints Validated | Schemas |
+|------------|-------------------|---------|
+| `billing.js` | POST create-checkout, POST request-upgrade | `createCheckoutSchema`, `requestUpgradeSchema` |
+| `auth.js` | POST login, POST mt-login, POST signup, POST forgot-password, POST reset-password, POST kiosk-login | 6 schemas |
+| `employees.js` | POST create, PUT update, PUT change-pin, PUT change-password, PUT set-password | 5 schemas |
+| `products.js` | POST create, PUT update | `createProductSchema`, `updateProductSchema` |
+| `sales.js` | POST create sale | `createSaleSchema` (with nested `cartItemSchema`) |
+
+**Fix 24: Frontend `api.js` service layer** (commit `7206fd0`)
+
+Created `frontend/src/api.js` with 6 methods: `api.get()`, `api.post()`, `api.put()`, `api.del()`, `api.upload()`, `api.raw()`. Migrated 90 files across all frontend directories:
+
+| Directory | Files Migrated | Notes |
+|-----------|---------------|-------|
+| `pages/redesign/` | 51 files | Including POS context, modals, all page components |
+| `pages/reports/` | 13 files | All report tab modules |
+| `pages/dashboard/` | 4 files | AI chat, backup, onboarding, insights |
+| `pages/shopify/` | 6 files | Context + all tab modules |
+| `pages/` (root) | 15 files | Accounting, Attendance, Reports, SetupWizard, SignupPage, etc. |
+| `ui/` | 1 file | SupportWidget |
+
+**Result:** 90 files changed, net -1,100 lines of boilerplate removed (URL construction, JSON parsing, error checking). Zero raw `fetch()` calls remain in non-admin pages. Admin pages intentionally keep `adminFetch` (separate auth system). Also fixed a bug in `Attendance.jsx` where `openBreakDetail()` referenced an undefined `API` variable.
+
+**Not migrated (by design):** 11 admin pages use `adminFetch` from `AdminLogin.jsx` — separate auth system with its own session management.
+
 ### Post-Completion Verification
 
 1. ✅ Re-run all 419 integration tests across 12 suites — all green (2026-04-02)
-2. Run live E2E suite against staging
-3. Manual smoke test: password reset flow, admin tax approval, printer settings, support ticket, POS receipt reprint
-4. Deploy to production via branch — verify — merge
+2. ✅ Frontend build passes after Fix 24 migration (90 files, `vite build` clean)
+3. Run live E2E suite against staging
+4. Manual smoke test: password reset flow, admin tax approval, printer settings, support ticket, POS receipt reprint
+5. Deploy to production via branch — verify — merge
 
 ### Remaining Items (separate sprints)
 
 | # | Item | Effort | Notes |
 |---|------|--------|-------|
-| 24 | Frontend `api.js` service layer | 1 day | Replaces 164 scattered fetch calls — code quality, not behavior change |
-| 25 | Zod validation on backend routes | 1-2 days | auth, sales, products, employees, billing — schema-driven validation |
 | — | Billing tenant-facing route tests | Half day | Needs `req.tenantId` mock in test harness |
 
 ---
 
-*This audit reflects the codebase state as of 2026-04-02. All claims have been verified against actual file contents, line counts, and import chains. Test coverage analysis and execution plan added 2026-04-02. Phases 1-7 completed 2026-04-02 — 419 tests passing, 0 failures.*
+*This audit reflects the codebase state as of 2026-04-02. All claims have been verified against actual file contents, line counts, and import chains. Test coverage analysis and execution plan added 2026-04-02. Phases 1-8 completed 2026-04-02 — 419 tests passing, 0 failures. Fix 25 (Zod) and Fix 24 (api.js) completed same day.*
