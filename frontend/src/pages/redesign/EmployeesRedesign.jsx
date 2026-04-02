@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, KeyRound, Lock, Mail, MapPin, Plus, Search, Shield, Star, Trash2, User } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   Badge,
   Button,
@@ -47,18 +47,16 @@ export default function EmployeesRedesign() {
     setLoading(true);
     setError("");
     try {
-      const [empRes, rolesRes, outletsRes] = await Promise.all([
-        fetch(`${API}/api/employees`),
-        fetch(`${API}/api/roles`),
-        fetch(`${API}/api/outlets`),
+      const [empData, rolesData, outletsData] = await Promise.all([
+        api.get("/api/employees"),
+        api.get("/api/roles"),
+        api.get("/api/outlets"),
       ]);
-      const [empData, rolesData, outletsData] = await Promise.all([empRes.json(), rolesRes.json(), outletsRes.json()]);
-      if (!empRes.ok) throw new Error(empData.error || "Failed to load employees");
       setEmployees(empData.employees || []);
       setRoles(rolesData.roles || []);
       setAllOutlets((outletsData.outlets || []).filter((o) => o.is_active !== 0));
     } catch (e) {
-      setError(e.message || "Failed to load employees");
+      setError(e.body?.error || e.message || "Failed to load employees");
     } finally {
       setLoading(false);
     }
@@ -94,18 +92,15 @@ export default function EmployeesRedesign() {
     setModalOpen(true);
     // Fetch attendance config + outlet assignments (non-blocking)
     try {
-      const [attRes, outRes] = await Promise.all([
-        fetch(`${API}/api/employees/${emp.id}/attendance-config`),
-        fetch(`${API}/api/employees/${emp.id}/outlets`),
+      const [attData, outData] = await Promise.all([
+        api.get(`/api/employees/${emp.id}/attendance-config`),
+        api.get(`/api/employees/${emp.id}/outlets`),
       ]);
-      const [attData, outData] = await Promise.all([attRes.json(), outRes.json()]);
-      if (attRes.ok) {
-        setAttConfig({
-          work_hours_per_day: attData.work_hours_per_day ?? 8,
-          monthly_leave_allowance: attData.monthly_leave_allowance ?? 2,
-        });
-      }
-      if (outRes.ok && outData.outlets) {
+      setAttConfig({
+        work_hours_per_day: attData.work_hours_per_day ?? 8,
+        monthly_leave_allowance: attData.monthly_leave_allowance ?? 2,
+      });
+      if (outData.outlets) {
         setAssignedOutletIds(outData.outlets.map((o) => o.outlet_id));
         const primary = outData.outlets.find((o) => o.is_primary);
         setPrimaryOutletId(primary ? primary.outlet_id : null);
@@ -118,10 +113,6 @@ export default function EmployeesRedesign() {
     setSaving(true);
     setError("");
     try {
-      const url = editing
-        ? `${API}/api/employees/${editing.id}`
-        : `${API}/api/employees`;
-      const method = editing ? "PUT" : "POST";
       const body = {
         name: form.name,
         role_id: Number(form.role_id),
@@ -132,39 +123,30 @@ export default function EmployeesRedesign() {
       };
       if (form.pin_code) body.pin_code = form.pin_code;
       if (form.email !== undefined) body.email = form.email;
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save employee");
+      let data;
+      if (editing) {
+        data = await api.put(`/api/employees/${editing.id}`, body);
+      } else {
+        data = await api.post("/api/employees", body);
+      }
       // Save attendance config + outlet assignments
       const empId = editing ? editing.id : (data.employee?.id || data.id || null);
       if (editing) {
-        await fetch(`${API}/api/employees/${editing.id}/attendance-config`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            work_hours_per_day: Number(attConfig.work_hours_per_day),
-            monthly_leave_allowance: Number(attConfig.monthly_leave_allowance),
-          }),
+        await api.put(`/api/employees/${editing.id}/attendance-config`, {
+          work_hours_per_day: Number(attConfig.work_hours_per_day),
+          monthly_leave_allowance: Number(attConfig.monthly_leave_allowance),
         });
       }
       if (empId && assignedOutletIds.length > 0) {
-        await fetch(`${API}/api/employees/${empId}/outlets`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            outlet_ids: assignedOutletIds,
-            primary_outlet_id: primaryOutletId || assignedOutletIds[0],
-          }),
+        await api.put(`/api/employees/${empId}/outlets`, {
+          outlet_ids: assignedOutletIds,
+          primary_outlet_id: primaryOutletId || assignedOutletIds[0],
         });
       }
       setModalOpen(false);
       await load();
     } catch (e2) {
-      setError(e2.message || "Failed to save employee");
+      setError(e2.body?.error || e2.message || "Failed to save employee");
     } finally {
       setSaving(false);
     }
@@ -174,12 +156,10 @@ export default function EmployeesRedesign() {
     if (!window.confirm(`Archive employee "${emp.name}"? They will be hidden from listings but preserved in history.`)) return;
     setError("");
     try {
-      const res = await fetch(`${API}/api/employees/${emp.id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete employee");
+      await api.del(`/api/employees/${emp.id}`);
       await load();
     } catch (e) {
-      setError(e.message || "Failed to delete employee");
+      setError(e.body?.error || e.message || "Failed to delete employee");
     }
   };
 
@@ -188,19 +168,13 @@ export default function EmployeesRedesign() {
     setRevoking(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/employees/${revokeTarget.id}/revoke-all-tokens`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: revokeReason || undefined }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to revoke sessions");
+      await api.post(`/api/employees/${revokeTarget.id}/revoke-all-tokens`, { reason: revokeReason || undefined });
       setRevokeTarget(null);
       setRevokeReason("");
       setError(""); // clear any old error
       alert(`All sessions revoked for ${revokeTarget.name}`);
     } catch (e) {
-      setError(e.message || "Failed to revoke sessions");
+      setError(e.body?.error || e.message || "Failed to revoke sessions");
     } finally {
       setRevoking(false);
     }
@@ -211,20 +185,14 @@ export default function EmployeesRedesign() {
     setSettingPassword(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/employees/${passwordTarget.id}/set-password`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: newPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to set password");
+      await api.put(`/api/employees/${passwordTarget.id}/set-password`, { password: newPassword });
       setPasswordTarget(null);
       setNewPassword("");
       setConfirmPassword("");
       await load();
       alert(`Password set for ${passwordTarget.name}`);
     } catch (e) {
-      setError(e.message || "Failed to set password");
+      setError(e.body?.error || e.message || "Failed to set password");
     } finally {
       setSettingPassword(false);
     }
@@ -238,15 +206,10 @@ export default function EmployeesRedesign() {
     if (!window.confirm(`Send password reset email to ${emp.email}?`)) return;
     setError("");
     try {
-      const res = await fetch(`${API}/api/employees/${emp.id}/send-reset`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to send reset email");
+      const data = await api.post(`/api/employees/${emp.id}/send-reset`, {});
       alert(data.message || "Reset email sent");
     } catch (e) {
-      setError(e.message || "Failed to send reset email");
+      setError(e.body?.error || e.message || "Failed to send reset email");
     }
   };
 

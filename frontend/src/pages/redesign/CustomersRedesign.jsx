@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Search, UserRound, Wallet } from "lucide-react";
-import { API_BASE as API_BASE_URL } from "../../config";
+import { api } from "../../api";
 import { fmtDate, fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import {
@@ -14,7 +14,6 @@ import {
 } from "../../ui/primitives";
 
 const PAGE_SIZE = 25;
-const API = `${API_BASE_URL}/api`;
 
 const EMPTY = {
   name: "",
@@ -90,14 +89,12 @@ export default function CustomersRedesign() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API}/customers?search=${encodeURIComponent(query)}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load customers");
+      const data = await api.get(`/api/customers?search=${encodeURIComponent(query)}`);
       setRows(data.customers || []);
       setSelectedIds(new Set());
       setPage(1);
     } catch (e) {
-      setError(e.message || "Failed to load customers");
+      setError(e.body?.error || e.message || "Failed to load customers");
     } finally {
       setLoading(false);
     }
@@ -109,12 +106,10 @@ export default function CustomersRedesign() {
     setWalletTopup("");
     setWalletNote("");
     try {
-      const [salesRes, walletRes] = await Promise.all([
-        fetch(`${API}/customers/${customer.id}/sales`),
-        fetch(`${API}/customers/${customer.id}/wallet`),
+      const [salesData, walletData] = await Promise.all([
+        api.get(`/api/customers/${customer.id}/sales`),
+        api.get(`/api/customers/${customer.id}/wallet`),
       ]);
-      const salesData = await salesRes.json();
-      const walletData = await walletRes.json();
       setCustomerSales(salesData.sales || []);
       setWalletBalance(walletData.balance || 0);
       setWalletLedger(walletData.ledger || []);
@@ -167,22 +162,18 @@ export default function CustomersRedesign() {
     setBusy(true);
     setFormError("");
     try {
-      const url = editing ? `${API}/customers/${editing.id}` : `${API}/customers`;
-      const method = editing ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save customer");
+      if (editing) {
+        await api.put(`/api/customers/${editing.id}`, form);
+      } else {
+        await api.post("/api/customers", form);
+      }
       setModalOpen(false);
       await fetchCustomers(search);
       if (detail && editing && detail.id === editing.id) {
         await loadDetail({ ...detail, ...form });
       }
     } catch (e2) {
-      setFormError(e2.message || "Failed to save customer");
+      setFormError(e2.body?.error || e2.message || "Failed to save customer");
     } finally {
       setBusy(false);
     }
@@ -195,14 +186,12 @@ export default function CustomersRedesign() {
     setError("");
     try {
       for (const id of ids) {
-        const res = await fetch(`${API}/customers/${id}`, { method: "DELETE" });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || `Failed deleting customer ${id}`);
+        await api.del(`/api/customers/${id}`);
       }
       if (detail && ids.includes(detail.id)) setDetail(null);
       await fetchCustomers(search);
     } catch (e) {
-      setError(e.message || "Delete failed");
+      setError(e.body?.error || e.message || "Delete failed");
     } finally {
       setBusy(false);
     }
@@ -233,20 +222,14 @@ export default function CustomersRedesign() {
     if (!detail) return;
     setBusy(true);
     try {
-      const res = await fetch(`${API}/customers/${detail.id}/points`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ points: Number(pointsAdjust || 0) }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update points");
+      await api.put(`/api/customers/${detail.id}/points`, { points: Number(pointsAdjust || 0) });
       const nextRows = rows.map((r) =>
         r.id === detail.id ? { ...r, loyalty_points: Number(pointsAdjust || 0) } : r,
       );
       setRows(nextRows);
       setDetail((p) => ({ ...p, loyalty_points: Number(pointsAdjust || 0) }));
     } catch (e) {
-      setError(e.message || "Failed to update points");
+      setError(e.body?.error || e.message || "Failed to update points");
     } finally {
       setBusy(false);
     }
@@ -256,18 +239,12 @@ export default function CustomersRedesign() {
     if (!detail || !walletTopup || Number(walletTopup) <= 0) return;
     setBusy(true);
     try {
-      const res = await fetch(`${API}/customers/${detail.id}/wallet/topup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: Number(walletTopup), note: walletNote }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Top-up failed");
+      const data = await api.post(`/api/customers/${detail.id}/wallet/topup`, { amount: Number(walletTopup), note: walletNote });
       setWalletBalance(Number(data.balance || 0));
       setWalletTopup("");
       setWalletNote("");
     } catch (e) {
-      setError(e.message || "Top-up failed");
+      setError(e.body?.error || e.message || "Top-up failed");
     } finally {
       setBusy(false);
     }

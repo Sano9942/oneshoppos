@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { PageShell } from "../../ui/primitives";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 
 const PAPER_SIZES = [
   { label: "80mm — 48 chars (standard)", value: 48 },
@@ -46,10 +46,9 @@ export default function PrinterSettingsRedesign() {
   const [emailTestResult, setEmailTestResult] = useState(null);
 
   useEffect(() => {
-    fetch(`${API}/api/print/config`)
-      .then((r) => r.json())
+    api.get("/api/print/config")
       .then((data) => {
-        if (data && !data.error) {
+        if (data) {
           setCfg(data);
           const predefined = PAPER_SIZES.find((s) => s.value === data.paper_width);
           if (!predefined || predefined.value === "custom") {
@@ -62,10 +61,9 @@ export default function PrinterSettingsRedesign() {
   }, []);
 
   useEffect(() => {
-    fetch(`${API}/api/email/config`)
-      .then((r) => r.json())
+    api.get("/api/email/config")
       .then((data) => {
-        if (data && !data.error) {
+        if (data) {
           // smtp_pass always arrives as "*****" or "" — never store it in state
           setEmailPassSet(data.smtp_pass === "*****");
           setEmailCfg({
@@ -101,12 +99,7 @@ export default function PrinterSettingsRedesign() {
     const body = { ...cfg };
     if (isCustom) body.paper_width = Number(customWidth) || 48;
     try {
-      const res = await fetch(`${API}/api/print/config`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
+      const data = await api.put("/api/print/config", body);
       if (data.ok) setSaved(true);
       else setSaveError(data.error || "Failed to save settings.");
     } catch (err) {
@@ -125,16 +118,11 @@ export default function PrinterSettingsRedesign() {
     setEmailSaved(false);
     setEmailSaveError(null);
     try {
-      const res = await fetch(`${API}/api/email/config`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...emailCfg,
-          // Only send smtp_pass if the user typed a new one
-          ...(emailCfg.smtp_pass ? {} : { smtp_pass: "*****" }),
-        }),
+      const data = await api.put("/api/email/config", {
+        ...emailCfg,
+        // Only send smtp_pass if the user typed a new one
+        ...(emailCfg.smtp_pass ? {} : { smtp_pass: "*****" }),
       });
-      const data = await res.json();
       if (data.ok) setEmailSaved(true);
       else setEmailSaveError(data.error || "Failed to save email settings.");
     } catch (err) {
@@ -148,12 +136,7 @@ export default function PrinterSettingsRedesign() {
     setEmailTesting(true);
     setEmailTestResult(null);
     try {
-      const res = await fetch(`${API}/api/email/test`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const data = await res.json();
+      const data = await api.post("/api/email/test", {});
       if (data.ok) {
         setEmailTestResult({ ok: true, message: data.message || "Test email sent!" });
       } else {
@@ -170,11 +153,7 @@ export default function PrinterSettingsRedesign() {
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await fetch(`${API}/api/print/test`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await res.json();
+      const data = await api.post("/api/print/test", {});
       if (data.ok) {
         setTestResult({ ok: true, message: data.message || "Printer OK — test receipt printed!" });
       } else {

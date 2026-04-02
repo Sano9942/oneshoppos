@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { SectionCard } from "../../ui/primitives";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 
 function relativeTime(isoString) {
@@ -19,7 +19,7 @@ function hoursAgo(isoString) {
 }
 
 export function BackupStatusCard() {
-  const { authHeaders, hasPerm } = useAuth();
+  const { hasPerm } = useAuth();
   const [backup, setBackup] = useState(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -27,8 +27,7 @@ export function BackupStatusCard() {
 
   useEffect(() => {
     if (!isAdmin) return;
-    fetch(`${API}/api/backup-status`, { headers: authHeaders() })
-      .then((r) => r.json())
+    api.get("/api/backup-status")
       .then((d) => { setBackup(d.backup); setLoaded(true); })
       .catch(() => setLoaded(true));
   }, [isAdmin, authHeaders]);

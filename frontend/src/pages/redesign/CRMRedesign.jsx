@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
-import { API_BASE as API } from "../../config";
-import { useAuth } from "../../auth/AuthProvider";
+import { api } from "../../api";
 import {
   Badge,
   Button,
@@ -42,7 +41,6 @@ import { useCurrency } from "../../contexts/CurrencyContext";
 const fmtDate = fmtLocalDateTime;
 
 export default function CRMRedesign() {
-  const { authHeaders } = useAuth();
   const { fmt: money } = useCurrency();
   const [leads, setLeads] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -64,27 +62,26 @@ export default function CRMRedesign() {
     setError("");
     try {
       const [leadRes, empRes] = await Promise.all([
-        fetch(`${API}/api/crm/leads`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/employees`, { headers: authHeaders() }).then((r) => r.json()),
+        api.get("/api/crm/leads"),
+        api.get("/api/employees"),
       ]);
       setLeads(leadRes.leads || []);
       setEmployees(empRes.employees || []);
     } catch (e) {
-      setError(e.message || "Failed to load CRM data");
+      setError(e.body?.error || e.message || "Failed to load CRM data");
     } finally {
       setLoading(false);
     }
-  }, [authHeaders]);
+  }, []);
 
   const loadActivities = useCallback(async (leadId) => {
     try {
-      const res = await fetch(`${API}/api/crm/leads/${leadId}/activities`, { headers: authHeaders() });
-      const data = await res.json();
-      if (res.ok) setActivities(data.activities || []);
+      const data = await api.get(`/api/crm/leads/${leadId}/activities`);
+      setActivities(data.activities || []);
     } catch {
       setActivities([]);
     }
-  }, [authHeaders]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -93,18 +90,12 @@ export default function CRMRedesign() {
     setSaving(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/crm/leads`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create lead");
+      await api.post("/api/crm/leads", form);
       setForm(EMPTY_FORM);
       setModalOpen(false);
       await load();
     } catch (e2) {
-      setError(e2.message || "Failed to create lead");
+      setError(e2.body?.error || e2.message || "Failed to create lead");
     } finally {
       setSaving(false);
     }
@@ -112,11 +103,7 @@ export default function CRMRedesign() {
 
   const setStage = async (lead, stage) => {
     try {
-      await fetch(`${API}/api/crm/leads/${lead.id}`, {
-        method: "PUT",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ ...lead, stage }),
-      });
+      await api.put(`/api/crm/leads/${lead.id}`, { ...lead, stage });
       await load();
     } catch {
       // silent — optimistic failure
@@ -125,10 +112,7 @@ export default function CRMRedesign() {
 
   const convertLead = async (leadId) => {
     try {
-      await fetch(`${API}/api/crm/leads/${leadId}/convert`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-      });
+      await api.post(`/api/crm/leads/${leadId}/convert`, {});
       await load();
     } catch {
       // silent
@@ -140,11 +124,7 @@ export default function CRMRedesign() {
     if (!activityLead || !activityText.trim()) return;
     setAddingActivity(true);
     try {
-      await fetch(`${API}/api/crm/leads/${activityLead.id}/activities`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ type: activityType, description: activityText, employee_id: null }),
-      });
+      await api.post(`/api/crm/leads/${activityLead.id}/activities`, { type: activityType, description: activityText, employee_id: null });
       setActivityText("");
       setActivityType("note");
       await loadActivities(activityLead.id);

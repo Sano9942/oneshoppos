@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { FileText, Plus, Edit2, Trash2, X, CheckCircle2, Star } from "lucide-react";
 
-import { API_BASE as API } from '../config';
+import { api } from '../api';
 import { useCurrency } from '../contexts/CurrencyContext';
 
 
@@ -63,8 +63,7 @@ export default function ReceiptTemplates() {
   const fetchTemplates = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API}/api/receipt-templates`);
-      const data = await res.json();
+      const data = await api.get("/api/receipt-templates");
       setTemplates(data.templates || []);
     } catch {
       setError("Failed to load templates.");
@@ -97,17 +96,11 @@ export default function ReceiptTemplates() {
     if (!form.name.trim()) return;
     setIsSaving(true);
     try {
-      const url = editingTemplate
-        ? `${API}/api/receipt-templates/${editingTemplate.id}`
-        : `${API}/api/receipt-templates`;
-      const method = editingTemplate ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (editingTemplate) {
+        await api.put(`/api/receipt-templates/${editingTemplate.id}`, form);
+      } else {
+        await api.post("/api/receipt-templates", form);
+      }
       await fetchTemplates();
       setIsModalOpen(false);
     } catch (err) {
@@ -120,8 +113,7 @@ export default function ReceiptTemplates() {
   const handleDelete = async (id, name) => {
     if (!window.confirm(`Delete "${name}"?`)) return;
     try {
-      const res = await fetch(`${API}/api/receipt-templates/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error((await res.json()).error);
+      await api.del(`/api/receipt-templates/${id}`);
       fetchTemplates();
     } catch (err) {
       alert(err.message);
@@ -130,11 +122,7 @@ export default function ReceiptTemplates() {
 
   const handleSetActive = async (t) => {
     try {
-      await fetch(`${API}/api/receipt-templates/${t.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...t, show_barcode: !!t.show_barcode, show_logo: !!t.show_logo, is_active: true }),
-      });
+      await api.put(`/api/receipt-templates/${t.id}`, { ...t, show_barcode: !!t.show_barcode, show_logo: !!t.show_logo, is_active: true });
       fetchTemplates();
     } catch (err) {
       alert(err.message);

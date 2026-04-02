@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useState } from "react";
 import { Wallet, Receipt, ListChecks, Shield, Calculator } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   fmtDate,
   fmtDateTime,
@@ -33,8 +33,7 @@ export function ShiftSummaryTab({ filters }) {
     setLoading(true);
     try {
       const p = new URLSearchParams({ session_id: filters.shiftId });
-      const res = await fetch(`${API}/api/reports/shift-summary?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/shift-summary?${p}`);
       setData(d.summary || null);
     } catch {
       setData(null);
@@ -178,8 +177,7 @@ export function ShiftSalesTab({ filters }) {
     setLoading(true);
     try {
       const p = new URLSearchParams({ session_id: filters.shiftId });
-      const res = await fetch(`${API}/api/reports/shift-sales?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/shift-sales?${p}`);
       setRows(d.sales || []);
     } catch {
       setRows([]);
@@ -310,8 +308,7 @@ export function PaymentSummaryTab({ filters }) {
     setLoading(true);
     try {
       const p = new URLSearchParams({ session_id: filters.shiftId });
-      const res = await fetch(`${API}/api/reports/payment-summary?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/payment-summary?${p}`);
       setRows(d.payments || []);
     } catch {
       setRows([]);
@@ -418,8 +415,7 @@ export function CashFlowTab({ filters }) {
         date_from: filters.dateFrom,
         date_to: filters.dateTo,
       });
-      const res = await fetch(`${API}/api/reports/cash-flow?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/cash-flow?${p}`);
       setRows(d.sessions || []);
     } catch {
       setRows([]);
@@ -535,8 +531,7 @@ export function CurrentSessionZReportTab({ filters }) {
     setLoading(true);
     try {
       const p = new URLSearchParams({ session_id: filters.shiftId });
-      const res = await fetch(`${API}/api/reports/current-session-zreport?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/current-session-zreport?${p}`);
       setRows(d.zReport || []);
     } catch {
       setRows([]);
@@ -625,8 +620,7 @@ export function CashAuditTab({ filters }) {
     setLoading(true);
     try {
       const p = new URLSearchParams({ session_id: filters.shiftId });
-      const res = await fetch(`${API}/api/reports/cash-audit?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/cash-audit?${p}`);
       setRows(d.audit || []);
     } catch {
       setRows([]);
@@ -725,8 +719,7 @@ export function DenominationsTab({ filters }) {
     try {
       const p = new URLSearchParams();
       if (filters.shiftId) p.set("session_id", filters.shiftId);
-      const res = await fetch(`${API}/api/reports/all-denominations?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/all-denominations?${p}`);
       setRows(d.denominations || []);
     } catch {
       setRows([]);

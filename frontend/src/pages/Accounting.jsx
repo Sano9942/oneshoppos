@@ -1,7 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { API_BASE as API } from "../config";
-import { useAuth } from "../auth/AuthProvider";
+import { api } from "../api";
 import { fmtUtcDate } from "../utils/dates";
 import { useCurrency } from "../contexts/CurrencyContext";
 
@@ -29,7 +28,6 @@ const TABS = [
 
 export default function Accounting() {
   const { fmt } = useCurrency();
-  const { authHeaders } = useAuth();
   const [tab, setTab] = useState("pnl");
   const [from, setFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10));
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
@@ -58,28 +56,27 @@ export default function Accounting() {
 
   const loadOutlets = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/outlets`, { headers: authHeaders() });
-      const data = await res.json();
-      if (res.ok) setOutlets(data.outlets || []);
+      const data = await api.get("/api/outlets");
+      setOutlets(data.outlets || []);
     } catch { /* ignore */ }
-  }, [authHeaders]);
+  }, []);
 
   const loadAll = useCallback(async () => {
     const q = new URLSearchParams({ from, to });
     if (outletId) q.set("outlet_id", outletId);
     try {
       const [a, b, c, d, e, f, g, h, i, j, k] = await Promise.all([
-        fetch(`${API}/api/accounting/pnl?${q}`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/accounting/cashflow?from=${from}&to=${to}`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/accounting/ap`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/accounting/balance-sheet`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/accounting/expenses?from=${from}&to=${to}${outletId ? `&outlet_id=${outletId}` : ""}`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/accounting/ap-aging`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/accounting/tax-ledger?from=${from}&to=${to}`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/accounting/supplier-payments?from=${from}&to=${to}`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/accounting/periods`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/accounting/cashflow/daily?from=${from}&to=${to}`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/accounting/ap-ar`, { headers: authHeaders() }).then((r) => r.json()),
+        api.get(`/api/accounting/pnl?${q}`),
+        api.get("/api/accounting/cashflow", { from, to }),
+        api.get("/api/accounting/ap"),
+        api.get("/api/accounting/balance-sheet"),
+        api.get(`/api/accounting/expenses?from=${from}&to=${to}${outletId ? `&outlet_id=${outletId}` : ""}`),
+        api.get("/api/accounting/ap-aging"),
+        api.get("/api/accounting/tax-ledger", { from, to }),
+        api.get("/api/accounting/supplier-payments", { from, to }),
+        api.get("/api/accounting/periods"),
+        api.get("/api/accounting/cashflow/daily", { from, to }),
+        api.get("/api/accounting/ap-ar"),
       ]);
       setPnl(a);
       setCashflow(b);
@@ -93,7 +90,7 @@ export default function Accounting() {
       setCashflowDaily(j?.entries || []);
       setApArSummary(k || null);
     } catch { /* ignore */ }
-  }, [authHeaders, from, to, outletId]);
+  }, [from, to, outletId]);
 
   useEffect(() => { loadOutlets(); }, [loadOutlets]);
   useEffect(() => { loadAll(); }, [loadAll]);
@@ -117,26 +114,17 @@ export default function Accounting() {
     e.preventDefault();
     setSavingPeriod(true);
     try {
-      const res = await fetch(`${API}/api/accounting/periods`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify(periodForm),
-      });
-      if (res.ok) {
-        setPeriodForm({ period_name: "", start_date: "", end_date: "" });
-        const data = await fetch(`${API}/api/accounting/periods`, { headers: authHeaders() }).then((r) => r.json());
-        setPeriods(data?.periods || []);
-      }
-    } finally { setSavingPeriod(false); }
+      await api.post("/api/accounting/periods", periodForm);
+      setPeriodForm({ period_name: "", start_date: "", end_date: "" });
+      const data = await api.get("/api/accounting/periods");
+      setPeriods(data?.periods || []);
+    } catch { /* ignore */ }
+    finally { setSavingPeriod(false); }
   };
 
   const closePeriod = async (id) => {
-    await fetch(`${API}/api/accounting/periods/${id}`, {
-      method: "PUT",
-      headers: { ...authHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "closed" }),
-    });
-    const data = await fetch(`${API}/api/accounting/periods`, { headers: authHeaders() }).then((r) => r.json());
+    await api.put(`/api/accounting/periods/${id}`, { status: "closed" });
+    const data = await api.get("/api/accounting/periods");
     setPeriods(data?.periods || []);
   };
 

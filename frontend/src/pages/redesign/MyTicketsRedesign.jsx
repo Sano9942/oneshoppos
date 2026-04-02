@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { MessageSquare } from "lucide-react";
-import { API } from "../../config";
+import { api } from "../../api";
 import { PageShell } from "../../ui/primitives";
 
 const STATUS_COLORS = {
@@ -16,10 +16,9 @@ export default function MyTicketsRedesign() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch(`${API}/api/support/tickets`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Failed to load tickets"))))
+    api.get("/api/support/tickets")
       .then((data) => setTickets(data))
-      .catch((err) => setError(err.message))
+      .catch((err) => setError(err.body?.error || err.message))
       .finally(() => setLoading(false));
   }, []);
 

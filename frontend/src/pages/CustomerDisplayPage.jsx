@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { API_BASE, IS_MULTI_TENANT } from "../config";
+import { IS_MULTI_TENANT } from "../config";
+import { api } from "../api";
 import { useCurrency } from "../contexts/CurrencyContext";
 
 /**
@@ -29,7 +30,7 @@ export default function CustomerDisplayPage() {
 
   // Fetch store name once
   useEffect(() => {
-    fetch(`${API_BASE}/api/health`)
+    api.raw("/api/health")
       .then((r) => r.json())
       .catch(() => null);
     // Try to get company name from company profile (public endpoint may not exist)
@@ -42,7 +43,7 @@ export default function CustomerDisplayPage() {
 
     const poll = () => {
       const tenantParam = IS_MULTI_TENANT && tenantSlug ? `&tenant=${tenantSlug}` : "";
-      fetch(`${API_BASE}/api/pos/customer-display?shift_id=${shiftId}${tenantParam}`)
+      api.raw(`/api/pos/customer-display?shift_id=${shiftId}${tenantParam}`)
         .then((r) => r.json())
         .then((d) => {
           setData((prev) => {

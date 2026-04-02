@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Search, Tag, Trash2 } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   Button,
   EmptyState,
@@ -26,12 +26,10 @@ export default function BrandsRedesign() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/brands`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load brands");
+      const data = await api.get("/api/brands");
       setRows(data.brands || []);
     } catch (e) {
-      setError(e.message || "Failed to load brands");
+      setError(e.body?.error || e.message || "Failed to load brands");
     } finally {
       setLoading(false);
     }
@@ -70,20 +68,17 @@ export default function BrandsRedesign() {
     setSaving(true);
     setError("");
     try {
-      const url = form.id ? `${API}/api/brands/${form.id}` : `${API}/api/brands`;
-      const method = form.id ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: form.name, description: form.description }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save brand");
+      const payload = { name: form.name, description: form.description };
+      if (form.id) {
+        await api.put(`/api/brands/${form.id}`, payload);
+      } else {
+        await api.post("/api/brands", payload);
+      }
       setModalOpen(false);
       setForm(EMPTY);
       await load();
     } catch (e2) {
-      setError(e2.message || "Failed to save brand");
+      setError(e2.body?.error || e2.message || "Failed to save brand");
     } finally {
       setSaving(false);
     }
@@ -93,12 +88,10 @@ export default function BrandsRedesign() {
     if (!window.confirm(`Delete brand "${row.name}"?`)) return;
     setError("");
     try {
-      const res = await fetch(`${API}/api/brands/${row.id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete brand");
+      await api.del(`/api/brands/${row.id}`);
       await load();
     } catch (e) {
-      setError(e.message || "Failed to delete brand");
+      setError(e.body?.error || e.message || "Failed to delete brand");
     }
   };
 

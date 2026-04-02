@@ -9,7 +9,7 @@ import {
   Select,
   TableToolbar,
 } from "../../ui/primitives";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import { Calculator, Download, RefreshCw } from "lucide-react";
 import { useAuth } from "../../auth/AuthProvider";
 import { fmtUtcDateTime } from "../../utils/dates";
@@ -86,19 +86,12 @@ export default function CashManagementRedesign() {
     setLoading(true);
     setError("");
     try {
-      const [shiftRes, outRes, empRes, reasonRes] = await Promise.all([
-        fetch(`${API}/api/shifts${selectedOutlet ? `?outlet_id=${selectedOutlet}` : ""}`),
-        fetch(`${API}/api/outlets`),
-        fetch(`${API}/api/employees`),
-        fetch(`${API}/api/variance-reasons`),
-      ]);
       const [shiftData, outData, empData, reasonData] = await Promise.all([
-        shiftRes.json(),
-        outRes.json(),
-        empRes.json(),
-        reasonRes.json(),
+        api.get(`/api/shifts${selectedOutlet ? `?outlet_id=${selectedOutlet}` : ""}`),
+        api.get("/api/outlets"),
+        api.get("/api/employees"),
+        api.get("/api/variance-reasons"),
       ]);
-      if (!shiftRes.ok) throw new Error(shiftData.error || "Failed to load shifts");
       setRows(shiftData.shifts || []);
       const outletList = outData.outlets || [];
       setOutlets(outletList);
@@ -152,18 +145,12 @@ export default function CashManagementRedesign() {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/shifts/open`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          outlet_id: Number(selectedOutlet),
-          employee_id: openForm.employee_id ? Number(openForm.employee_id) : null,
-          opening_float: Number(openingCash.toFixed(2)),
-          denominations: openingDenoms.filter((d) => Number(d.count || 0) > 0),
-        }),
+      await api.post("/api/shifts/open", {
+        outlet_id: Number(selectedOutlet),
+        employee_id: openForm.employee_id ? Number(openForm.employee_id) : null,
+        opening_float: Number(openingCash.toFixed(2)),
+        denominations: openingDenoms.filter((d) => Number(d.count || 0) > 0),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to open shift");
       setOpenModal(false);
       setOpenForm({ employee_id: "" });
       setOpeningDenoms(denominations.map((d) => ({ denomination: d, count: 0 })));
@@ -181,19 +168,13 @@ export default function CashManagementRedesign() {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/shifts/${activeShift.id}/close`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          closing_cash: closingCash,
-          notes: closeNotes || null,
-          variance_reason: varianceReason || null,
-          variance_approved_by: varianceApprovedBy || null,
-          denominations: denoms.filter((d) => Number(d.count || 0) > 0),
-        }),
+      const data = await api.post(`/api/shifts/${activeShift.id}/close`, {
+        closing_cash: closingCash,
+        notes: closeNotes || null,
+        variance_reason: varianceReason || null,
+        variance_approved_by: varianceApprovedBy || null,
+        denominations: denoms.filter((d) => Number(d.count || 0) > 0),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to close shift");
       setCloseResult(data);
       await loadData();
     } catch (e2) {
@@ -206,9 +187,8 @@ export default function CashManagementRedesign() {
   const loadDenominations = async (shift) => {
     if (shift.status !== "closed") return;
     try {
-      const res = await fetch(`${API}/api/shifts/${shift.id}/denominations?stage=closing`);
-      const data = await res.json();
-      if (res.ok) setDenomDetail({ shift, rows: data.denominations || [] });
+      const data = await api.get(`/api/shifts/${shift.id}/denominations?stage=closing`);
+      setDenomDetail({ shift, rows: data.denominations || [] });
     } catch {
       setDenomDetail(null);
     }

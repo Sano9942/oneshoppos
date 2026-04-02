@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { API_BASE } from "../../config";
+import { api } from "../../api";
 import { readContext, readTenantSlug } from "../../auth/authStore";
 import { parseLocalDate, fmtLocalTime } from "../../utils/dates";
-
-const API = `${API_BASE}/api`;
 
 const fmtDuration = (hours) => {
   if (!hours && hours !== 0) return "--";
@@ -63,13 +61,10 @@ export default function KioskRedesign() {
 
   useEffect(() => {
     const tenantSlug = searchParams.get("tenant") || readTenantSlug();
-    const outletsUrl = tenantSlug ? `${API}/outlets?tenant=${tenantSlug}` : `${API}/outlets`;
+    const outletsQs = tenantSlug ? `?tenant=${tenantSlug}` : "";
     Promise.all([
-      fetch(outletsUrl).then((r) => r.json()),
-      fetch(tenantSlug ? `${API}/feature-flags?tenant=${tenantSlug}` : `${API}/feature-flags`).then((r) => {
-        if (!r.ok) return { flags: [] };
-        return r.json();
-      }).catch(() => ({ flags: [] })),
+      api.get(`/api/outlets${outletsQs}`),
+      api.get(`/api/feature-flags${outletsQs}`).catch(() => ({ flags: [] })),
     ]).then(([outData, flagsData]) => {
       const outList = outData.outlets || [];
       setOutlets(outList);
@@ -118,14 +113,11 @@ export default function KioskRedesign() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API}/attendance/pin-status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin_code: pin, outlet_id: outlet.id }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Invalid PIN");
+      let data;
+      try {
+        data = await api.post("/api/attendance/pin-status", { pin_code: pin, outlet_id: outlet.id });
+      } catch (err) {
+        setError(err.body?.error || "Invalid PIN");
         setPin("");
         return;
       }
@@ -142,14 +134,11 @@ export default function KioskRedesign() {
   const clockIn = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/attendance/pin-checkin`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin_code: pin, outlet_id: outlet.id }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Failed");
+      let data;
+      try {
+        data = await api.post("/api/attendance/pin-checkin", { pin_code: pin, outlet_id: outlet.id });
+      } catch (err) {
+        setError(err.body?.error || "Failed");
         return;
       }
       const isReturn = todayStatus?.status === "on_break";
@@ -180,18 +169,15 @@ export default function KioskRedesign() {
   const goOnBreak = (breakReason) => async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/attendance/pin-checkout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      let data;
+      try {
+        data = await api.post("/api/attendance/pin-checkout", {
           pin_code: pin,
           break_reason: breakReason,
           outlet_id: outlet?.id || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Failed");
+        });
+      } catch (err) {
+        setError(err.body?.error || "Failed");
         return;
       }
       const reasonLabel = BREAK_REASONS.find((r) => r.key === breakReason)?.label || breakReason;
@@ -211,18 +197,15 @@ export default function KioskRedesign() {
   const endOfDay = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/attendance/pin-checkout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      let data;
+      try {
+        data = await api.post("/api/attendance/pin-checkout", {
           pin_code: pin,
           break_reason: null,
           outlet_id: outlet?.id || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Failed");
+        });
+      } catch (err) {
+        setError(err.body?.error || "Failed");
         return;
       }
       setConfirm({

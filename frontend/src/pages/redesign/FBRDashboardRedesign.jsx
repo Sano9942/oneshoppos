@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { RefreshCw, Eye, RotateCcw, AlertCircle } from "lucide-react";
-import { API } from "../../config";
+import { api } from "../../api";
 import { PageShell, SectionCard, Button, Input, Select } from "../../ui/primitives";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -55,9 +55,7 @@ export default function FBRDashboardRedesign() {
 
   const fetchSummary = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/fbr/dashboard`);
-      if (!res.ok) throw new Error("Failed to load summary");
-      const data = await res.json();
+      const data = await api.get("/api/fbr/dashboard");
       setSummary(data);
     } catch {
       // silent — summary is non-critical
@@ -71,9 +69,7 @@ export default function FBRDashboardRedesign() {
       if (from) params.set("from", from);
       if (to) params.set("to", to);
       if (search.trim()) params.set("search", search.trim());
-      const res = await fetch(`${API}/api/fbr/invoices?${params}`);
-      if (!res.ok) throw new Error("Failed to load invoices");
-      const data = await res.json();
+      const data = await api.get(`/api/fbr/invoices?${params}`);
       setInvoices(data.invoices || []);
       setTotal(data.total || 0);
       setPages(data.pages || 1);
@@ -110,15 +106,11 @@ export default function FBRDashboardRedesign() {
   const handleRetry = async (id) => {
     setRetrying((prev) => ({ ...prev, [id]: true }));
     try {
-      const res = await fetch(`${API}/api/fbr/invoices/${id}/retry`, { method: "POST" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Retry failed");
-      }
+      await api.post(`/api/fbr/invoices/${id}/retry`);
       success("Invoice queued for retry");
       refresh();
     } catch (err) {
-      showError(err.message);
+      showError(err.body?.error || err.message);
     } finally {
       setRetrying((prev) => ({ ...prev, [id]: false }));
     }
@@ -127,16 +119,11 @@ export default function FBRDashboardRedesign() {
   const handleRetryAll = async () => {
     setRetryingAll(true);
     try {
-      const res = await fetch(`${API}/api/fbr/invoices/retry-all`, { method: "POST" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Retry all failed");
-      }
-      const data = await res.json().catch(() => ({}));
+      const data = await api.post("/api/fbr/invoices/retry-all");
       success(`Retrying ${data.count ?? "all"} failed invoices`);
       refresh();
     } catch (err) {
-      showError(err.message);
+      showError(err.body?.error || err.message);
     } finally {
       setRetryingAll(false);
     }

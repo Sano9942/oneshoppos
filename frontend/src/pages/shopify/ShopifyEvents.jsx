@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { RefreshCw, Search, Filter } from "lucide-react";
 import { useShopify } from "./ShopifyContext";
-import { API } from "../../config";
 import { fmtLocalDateTime } from "../../utils/dates";
 
 export default function ShopifyEvents() {
@@ -22,7 +21,7 @@ export default function ShopifyEvents() {
       try {
         const query = new URLSearchParams(filters).toString();
         const res = await apiFetch(
-          `${API}/integrations/shopify/events?limit=100&${query}`,
+          `/api/integrations/shopify/events?limit=100&${query}`,
         );
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to load events");
@@ -43,7 +42,7 @@ export default function ShopifyEvents() {
   const retrySingleEvent = async (id) => {
     try {
       const res = await apiFetch(
-        `${API}/integrations/shopify/events/${id}/retry`,
+        `/api/integrations/shopify/events/${id}/retry`,
         { method: "POST" },
       );
       if (res.ok) {

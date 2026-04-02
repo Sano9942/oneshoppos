@@ -6,8 +6,7 @@ import React, {
   useEffect,
   useMemo,
 } from "react";
-import { API } from "../../config";
-import { useAuth } from "../../auth/AuthProvider";
+import { api } from "../../api";
 
 const ShopifyContext = createContext();
 
@@ -20,7 +19,6 @@ export const useShopify = () => {
 };
 
 export const ShopifyProvider = ({ children }) => {
-  const { authHeaders } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -43,13 +41,8 @@ export const ShopifyProvider = ({ children }) => {
   });
 
   const apiFetch = useCallback(
-    (url, options = {}) => {
-      const headers = new Headers(options.headers || {});
-      const merged = authHeaders();
-      Object.entries(merged).forEach(([key, value]) => headers.set(key, value));
-      return fetch(url, { ...options, headers });
-    },
-    [authHeaders],
+    (path, options = {}) => api.raw(path, options),
+    [],
   );
 
   const loadAll = useCallback(async () => {
@@ -58,12 +51,12 @@ export const ShopifyProvider = ({ children }) => {
     try {
       const [cfgRes, statusRes, prodMapRes, locMapRes, custMapRes, outletsRes] =
         await Promise.all([
-          apiFetch(`${API}/integrations/shopify/config`),
-          apiFetch(`${API}/integrations/shopify/status`),
-          apiFetch(`${API}/integrations/mappings/products`),
-          apiFetch(`${API}/integrations/mappings/locations`),
-          apiFetch(`${API}/integrations/mappings/customers`),
-          apiFetch(`${API}/outlets`),
+          apiFetch("/api/integrations/shopify/config"),
+          apiFetch("/api/integrations/shopify/status"),
+          apiFetch("/api/integrations/mappings/products"),
+          apiFetch("/api/integrations/mappings/locations"),
+          apiFetch("/api/integrations/mappings/customers"),
+          apiFetch("/api/outlets"),
         ]);
 
       const cfg = await cfgRes.json();

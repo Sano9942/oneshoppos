@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Tag, Plus, Edit2, Trash2, X, RefreshCw, Printer, Check } from "lucide-react";
 
-import { API } from '../config';
+import { api } from '../api';
 import { useCurrency } from '../contexts/CurrencyContext';
 
 // ── Minimal Code128B encoder ─────────────────────────────────────────────────
@@ -203,8 +203,7 @@ export default function BarcodeTemplates() {
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/barcode-templates`);
-      const data = await res.json();
+      const data = await api.get("/api/barcode-templates");
       setTemplates(data.templates || []);
     } catch { setTemplates([]); }
     finally { setLoading(false); }
@@ -212,7 +211,7 @@ export default function BarcodeTemplates() {
 
   useEffect(() => {
     fetchTemplates();
-    fetch(`${API}/products`).then((r) => r.json()).then((d) => setProducts(d.products || [])).catch(() => {});
+    api.get("/api/products").then((d) => setProducts(d.products || [])).catch(() => {});
   }, [fetchTemplates]);
 
   const openAdd = () => { setForm(EMPTY); setFormError(""); setModal("add"); };
@@ -233,27 +232,26 @@ export default function BarcodeTemplates() {
     setSaving(true);
     try {
       const isEdit = modal && modal !== "add";
-      const url = isEdit ? `${API}/barcode-templates/${modal.id}` : `${API}/barcode-templates`;
-      const method = isEdit ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method, headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          width_mm: parseFloat(form.width_mm),
-          height_mm: parseFloat(form.height_mm),
-          font_size: parseInt(form.font_size),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setFormError(data.error || "Save failed"); return; }
+      const url = isEdit ? `/api/barcode-templates/${modal.id}` : `/api/barcode-templates`;
+      const payload = {
+        ...form,
+        width_mm: parseFloat(form.width_mm),
+        height_mm: parseFloat(form.height_mm),
+        font_size: parseInt(form.font_size),
+      };
+      if (isEdit) {
+        await api.put(url, payload);
+      } else {
+        await api.post(url, payload);
+      }
       setModal(null); fetchTemplates();
-    } catch { setFormError("Connection failed"); }
+    } catch (err) { setFormError(err.body?.error || err.message || "Save failed"); }
     finally { setSaving(false); }
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this template?")) return;
-    await fetch(`${API}/barcode-templates/${id}`, { method: "DELETE" });
+    await api.del(`/api/barcode-templates/${id}`);
     fetchTemplates();
   };
 
@@ -288,10 +286,7 @@ export default function BarcodeTemplates() {
     setPrinting(true);
     printLabels(tpl, printItems, fmt);
     try {
-      await fetch(`${API}/barcode-print-jobs`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ template_id: tpl.id, items: printItems }),
-      });
+      await api.post("/api/barcode-print-jobs", { template_id: tpl.id, items: printItems });
     } catch { /* non-critical */ }
     setPrinting(false);
   };

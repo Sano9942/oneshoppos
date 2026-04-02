@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { X, Printer, RotateCcw, Search, Mail } from "lucide-react";
 import POSEmailReceiptModal from "./POSEmailReceiptModal";
-import { API_BASE as API } from "../../../config";
+import { api } from "../../../api";
 import { usePOS } from "./POSContext";
 import { useCurrency } from "../../../contexts/CurrencyContext";
 import { fmtDateTime, fmtTime } from "../../../utils/dates";
@@ -20,7 +20,6 @@ export default function POSRecentSalesPanel() {
     outlets,
     selectedOutletId,
     employee,
-    authHeaders,
   } = usePOS();
 
   const filtered = useMemo(() => {
@@ -39,8 +38,7 @@ export default function POSRecentSalesPanel() {
 
   const handleReprint = async (sale) => {
     try {
-      const res = await fetch(`${API}/api/sales/${sale.id}`, { headers: authHeaders() });
-      const data = await res.json();
+      const data = await api.get(`/api/sales/${sale.id}`);
       const s = data.sale;
       const slip = {
         saleId: s.id,

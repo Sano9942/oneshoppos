@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Sparkles, X, Send, Loader2 } from "lucide-react";
-import { API_BASE as API } from "../../config";
-import { useAuth } from "../../auth/AuthProvider";
+import { api } from "../../api";
 
 function ChatMessage({ msg }) {
   const isUser = msg.role === "user";
@@ -21,7 +20,6 @@ function ChatMessage({ msg }) {
 }
 
 export function AIChatPanel({ flagEnabled }) {
-  const { authHeaders } = useAuth();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -56,9 +54,8 @@ export function AIChatPanel({ flagEnabled }) {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API}/api/insights/ask`, {
+      const res = await api.raw("/api/insights/ask", {
         method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({ question }),
       });
       const data = await res.json();

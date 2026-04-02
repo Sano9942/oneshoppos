@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { CheckCircle2, Circle, X, PartyPopper } from "lucide-react";
 import { SectionCard } from "../../ui/primitives";
-import { API_BASE as API } from "../../config";
-import { useAuth } from "../../auth/AuthProvider";
+import { api } from "../../api";
 
 const STORAGE_KEY = "onboarding_dismissed";
 
@@ -45,7 +44,6 @@ function buildSteps(data, onNavigate) {
 }
 
 export function DashboardOnboarding({ data, onNavigate }) {
-  const { authHeaders } = useAuth();
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem(STORAGE_KEY) === "1"
   );
@@ -55,8 +53,7 @@ export function DashboardOnboarding({ data, onNavigate }) {
   // Check server-side dismissal status on mount
   useEffect(() => {
     if (dismissed) { setServerChecked(true); return; }
-    fetch(`${API}/api/company-profile`, { headers: authHeaders() })
-      .then((r) => r.json())
+    api.get("/api/company-profile")
       .then((d) => {
         if (d.profile?.onboarding_dismissed) {
           localStorage.setItem(STORAGE_KEY, "1");
@@ -83,9 +80,8 @@ export function DashboardOnboarding({ data, onNavigate }) {
 
   const persistDismiss = () => {
     localStorage.setItem(STORAGE_KEY, "1");
-    fetch(`${API}/api/company-profile/onboarding-dismiss`, {
+    api.raw("/api/company-profile/onboarding-dismiss", {
       method: "PUT",
-      headers: authHeaders(),
     }).catch(() => {});
   };
 

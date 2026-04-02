@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { TrendingUp, TrendingDown, Package, Clock, DollarSign, AlertTriangle } from "lucide-react";
-import { API_BASE as API } from "../../config";
-import { useAuth } from "../../auth/AuthProvider";
+import { api } from "../../api";
 import { SectionCard } from "../../ui/primitives";
 import { useCurrency } from "../../contexts/CurrencyContext";
 
@@ -38,15 +37,13 @@ function TrendBadge({ trend }) {
 }
 
 export function InsightCards() {
-  const { authHeaders } = useAuth();
   const { fmt } = useCurrency();
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
-    fetch(`${API}/api/insights/auto`, { headers: authHeaders() })
-      .then((r) => r.json())
+    api.get("/api/insights/auto")
       .then((data) => {
         if (mounted) setCards(data.cards || []);
       })
@@ -55,7 +52,7 @@ export function InsightCards() {
         if (mounted) setLoading(false);
       });
     return () => { mounted = false; };
-  }, [authHeaders]);
+  }, []);
 
   if (loading || cards.length === 0) return null;
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import { parseLocalDate } from "../../utils/dates";
 import {
   fmtDate,
@@ -23,8 +23,7 @@ export function AttendanceTab({ filters }) {
         employee_id: filters.employeeId,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/attendance?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/attendance?${p}`);
       const filtered = (d.records || []).filter((row) =>
         filters.outletIds && filters.outletIds.length ? filters.outletIds.includes(Number(row.outlet_id)) : true,
       );
@@ -130,8 +129,7 @@ export function LaborPerformanceTab({ filters }) {
         date_to: filters.dateTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/labor-performance?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/labor-performance?${p}`);
       setData(d.labor_performance || []);
     } catch {
       setData([]);
@@ -227,8 +225,7 @@ export function LossPreventionTab({ filters }) {
         date_to: filters.dateTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/loss-prevention?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/loss-prevention?${p}`);
       setData(d.loss_prevention || []);
     } catch {
       setData([]);

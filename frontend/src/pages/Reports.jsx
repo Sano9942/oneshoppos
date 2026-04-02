@@ -41,7 +41,7 @@ import {
   Boxes,
 } from "lucide-react";
 
-import { API_BASE as API } from "../config";
+import { api } from "../api";
 import {
   fmtDate,
   ExportButton,
@@ -775,19 +775,15 @@ export default function Reports() {
     const loadMeta = async () => {
       try {
         const [outlets, categories, brands, suppliers, employees, cashFlow] = await Promise.all([
-          fetch(`${API}/api/outlets`).then((r) => r.json()),
-          fetch(`${API}/api/categories`).then((r) => r.json()),
-          fetch(`${API}/api/brands`).then((r) => r.json()),
-          fetch(`${API}/api/suppliers`).then((r) => r.json()),
-          fetch(`${API}/api/employees`).then((r) => r.json()),
-          fetch(
-            `${API}/api/reports/cash-flow?${
-              new URLSearchParams({
-                date_from: filters.dateFrom,
-                date_to: filters.dateTo,
-              }).toString()
-            }`,
-          ).then((r) => r.json()),
+          api.get("/api/outlets"),
+          api.get("/api/categories"),
+          api.get("/api/brands"),
+          api.get("/api/suppliers"),
+          api.get("/api/employees"),
+          api.get("/api/reports/cash-flow", {
+            date_from: filters.dateFrom,
+            date_to: filters.dateTo,
+          }),
         ]);
         setMeta({
           outlets: outlets.outlets || outlets || [],

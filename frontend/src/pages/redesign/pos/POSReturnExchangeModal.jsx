@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { X, Search, Plus, Minus, RotateCcw, ShoppingCart } from "lucide-react";
-import { API_BASE as API } from "../../../config";
+import { api } from "../../../api";
 import { usePOS } from "./POSContext";
 import { useCurrency } from "../../../contexts/CurrencyContext";
 
@@ -61,9 +61,7 @@ export default function POSReturnExchangeModal() {
   const loadSaleDetail = async (saleId) => {
     setSaleLoading(true);
     try {
-      const res = await fetch(`${API}/api/sales/${saleId}`, { headers: authHeaders() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Sale not found");
+      const data = await api.get(`/api/sales/${saleId}`);
       setResolvedSale(data.sale);
       const items = (data.items || []).map((i) => ({
         product_id: i.product_id,
@@ -87,11 +85,7 @@ export default function POSReturnExchangeModal() {
     if (!invoiceSearch.trim()) return;
     setSaleLoading(true);
     try {
-      const res = await fetch(
-        `${API}/api/sales?search=${encodeURIComponent(invoiceSearch.trim())}&limit=5`,
-        { headers: authHeaders() },
-      );
-      const data = await res.json();
+      const data = await api.get("/api/sales", { search: invoiceSearch.trim(), limit: 5 });
       const match = (data.sales || []).find(
         (s) => String(s.invoice_number || "").toLowerCase() === invoiceSearch.trim().toLowerCase(),
       ) || data.sales?.[0];
@@ -108,27 +102,19 @@ export default function POSReturnExchangeModal() {
     if (!q.trim() || !selectedOutletId) return;
     setReturnSearching(true);
     try {
-      const res = await fetch(
-        `${API}/api/products/search?query=${encodeURIComponent(q)}&outlet_id=${selectedOutletId}`,
-        { headers: authHeaders() },
-      );
-      const data = await res.json();
+      const data = await api.get("/api/products/search", { query: q, outlet_id: selectedOutletId });
       setReturnSearchResults(data.products || data.results || []);
     } catch { setReturnSearchResults([]); } finally { setReturnSearching(false); }
-  }, [selectedOutletId, authHeaders]);
+  }, [selectedOutletId]);
 
   const searchExchangeProducts = useCallback(async (q) => {
     if (!q.trim() || !selectedOutletId) return;
     setExSearching(true);
     try {
-      const res = await fetch(
-        `${API}/api/products/search?query=${encodeURIComponent(q)}&outlet_id=${selectedOutletId}`,
-        { headers: authHeaders() },
-      );
-      const data = await res.json();
+      const data = await api.get("/api/products/search", { query: q, outlet_id: selectedOutletId });
       setExResults(data.products || data.results || []);
     } catch { setExResults([]); } finally { setExSearching(false); }
-  }, [selectedOutletId, authHeaders]);
+  }, [selectedOutletId]);
 
   // Debounce for no-bill return item search
   useEffect(() => {
@@ -225,10 +211,7 @@ export default function POSReturnExchangeModal() {
         // balance === 0: even exchange — Return Credit covers exactly exchangeTotal
         // Total = exchangeTotal - refundTotal = 0, so no payment entry needed at all
 
-        const saleRes = await fetch(`${API}/api/sales`, {
-          method: "POST",
-          headers: { ...authHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({
+        saleData = await api.post("/api/sales", {
             cartItems: exchangeItems.map((i) => ({
               id: i.id,
               variant_id: i.variant_id || null,
@@ -242,18 +225,12 @@ export default function POSReturnExchangeModal() {
             discount_amount: refundTotal,
             discount_type: "fixed",
             notes: `Exchange for ${resolvedSale?.invoice_number || "return"}`,
-          }),
-        });
-        saleData = await saleRes.json();
-        if (!saleRes.ok) throw new Error(saleData.error || "Exchange sale failed");
+          });
       }
 
       // POST return only after exchange sale succeeds (or if refund-only mode)
       if (selectedItems.length > 0) {
-        const retRes = await fetch(`${API}/api/returns`, {
-          method: "POST",
-          headers: { ...authHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({
+        await api.post("/api/returns", {
             original_sale_id: resolvedSale?.id || null,
             outlet_id: Number(selectedOutletId),
             employee_id: employee?.id || null,
@@ -262,10 +239,7 @@ export default function POSReturnExchangeModal() {
             refund_method: mode === "exchange" ? "Return Credit" : settleMethod,
             reason: reason || null,
             items: selectedItems,
-          }),
-        });
-        const retData = await retRes.json();
-        if (!retRes.ok) throw new Error(retData.error || "Return failed");
+          });
       }
 
       if (saleData) {

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Wallet, Receipt, Truck, Calculator, BadgePercent, FileSpreadsheet } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   fmtDate,
   fmtDateTime,
@@ -67,10 +67,7 @@ export function SettlementOverviewTab({ filters }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(
-        `${API}/api/reports/settlement-overview?${buildFinanceParams(filters)}`,
-      );
-      const json = await res.json();
+      const json = await api.get(`/api/reports/settlement-overview?${buildFinanceParams(filters)}`);
       setData(json);
     } catch {
       setData(null);
@@ -269,10 +266,7 @@ export function PayablesReceivablesTab({ filters }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(
-        `${API}/api/reports/payables-receivables?${buildFinanceParams(filters)}`,
-      );
-      const json = await res.json();
+      const json = await api.get(`/api/reports/payables-receivables?${buildFinanceParams(filters)}`);
       setData(json);
     } catch {
       setData(null);
@@ -414,10 +408,7 @@ export function SupplierPaymentsInvoicesTab({ filters }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(
-        `${API}/api/reports/supplier-payments-invoices?${buildFinanceParams(filters)}`,
-      );
-      const json = await res.json();
+      const json = await api.get(`/api/reports/supplier-payments-invoices?${buildFinanceParams(filters)}`);
       setData(json);
     } catch {
       setData(null);
@@ -585,10 +576,7 @@ export function FinancePaymentMixTab({ filters }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(
-        `${API}/api/reports/finance-payment-mix?${buildFinanceParams(filters)}`,
-      );
-      const json = await res.json();
+      const json = await api.get(`/api/reports/finance-payment-mix?${buildFinanceParams(filters)}`);
       setData(json);
     } catch {
       setData(null);
@@ -740,8 +728,7 @@ export function GSTOutputTab({ filters }) {
     try {
       const params = buildFinanceParams(filters);
       params.set("tax_mode", taxMode);
-      const res = await fetch(`${API}/api/reports/gst-output?${params}`);
-      const json = await res.json();
+      const json = await api.get(`/api/reports/gst-output?${params}`);
       setData(json);
     } catch {
       setData(null);
@@ -906,8 +893,7 @@ export function GSTTypeSummaryTab({ filters }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/reports/gst-type-summary?${buildFinanceParams(filters)}`);
-      const json = await res.json();
+      const json = await api.get(`/api/reports/gst-type-summary?${buildFinanceParams(filters)}`);
       setData(json);
     } catch {
       setData(null);

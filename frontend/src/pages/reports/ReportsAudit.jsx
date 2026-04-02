@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, ShieldAlert } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   fmtDateTime,
   exportCSV,
@@ -48,7 +48,7 @@ export function DiscountLeakageTab({ filters }) {
     setError("");
     setUnavailable("");
     try {
-      const res = await fetch(`${API}/api/reports/discount-leakage?${buildParams(filters)}`);
+      const res = await api.raw(`/api/reports/discount-leakage?${buildParams(filters)}`);
       const data = await res.json();
       if (res.status === 503) {
         setUnavailable(data?.error || "Feature unavailable");
@@ -173,7 +173,7 @@ export function ExceptionsTab({ filters }) {
     try {
       const params = buildParams(filters);
       params.set("type", type);
-      const res = await fetch(`${API}/api/reports/exceptions?${params}`);
+      const res = await api.raw(`/api/reports/exceptions?${params}`);
       const data = await res.json();
       if (res.status === 503) {
         setUnavailable(data?.error || "Feature unavailable");

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Calculator, X } from "lucide-react";
-import { API_BASE as API } from "../../../config";
+import { api } from "../../../api";
 import { usePOS } from "./POSContext";
 import { useCurrency } from "../../../contexts/CurrencyContext";
 
@@ -51,10 +51,7 @@ export default function POSCloseShiftModal() {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/shifts/${activeShift.id}/close`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
+      const data = await api.post(`/api/shifts/${activeShift.id}/close`, {
           closing_cash: Number(closingCash.toFixed(2)),
           notes: notes || null,
           variance_reason: varianceReason || null,
@@ -65,10 +62,7 @@ export default function POSCloseShiftModal() {
               denomination: row.denomination,
               count: Number(row.count || 0),
             })),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to close shift");
+        });
       setResult(data);
       showNotice("Shift closed successfully.");
       await refreshGateStatus(activeShift.outlet_id);

@@ -1,11 +1,9 @@
 import { useState, useEffect } from "react";
 import { PageShell } from "../../ui/primitives";
-import { API_BASE as API } from "../../config";
-import { useAuth } from "../../auth/AuthProvider";
+import { api } from "../../api";
 import { Truck, Plus, ExternalLink } from "lucide-react";
 
 export default function CourierSettingsRedesign() {
-  const { authHeaders } = useAuth();
   const [couriers, setCouriers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState({});
@@ -15,8 +13,7 @@ export default function CourierSettingsRedesign() {
   const [adding, setAdding] = useState(false);
 
   const load = () => {
-    fetch(`${API}/api/couriers`, { headers: authHeaders })
-      .then((r) => r.json())
+    api.get("/api/couriers")
       .then((data) => {
         setCouriers((data.couriers || []).map((c) => ({ ...c, _dirty: false })));
         setLoading(false);
@@ -35,15 +32,11 @@ export default function CourierSettingsRedesign() {
   const saveCourier = async (courier) => {
     setSaving((s) => ({ ...s, [courier.id]: true }));
     try {
-      await fetch(`${API}/api/couriers/${courier.id}`, {
-        method: "PUT",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          enabled: courier.enabled,
-          api_key: courier.api_key || null,
-          api_secret: courier.api_secret || null,
-          api_base_url: courier.api_base_url || null,
-        }),
+      await api.put(`/api/couriers/${courier.id}`, {
+        enabled: courier.enabled,
+        api_key: courier.api_key || null,
+        api_secret: courier.api_secret || null,
+        api_base_url: courier.api_base_url || null,
       });
       setCouriers((prev) =>
         prev.map((c) => (c.id === courier.id ? { ...c, _dirty: false } : c))
@@ -56,17 +49,11 @@ export default function CourierSettingsRedesign() {
     if (!newName.trim()) return;
     setAdding(true);
     try {
-      const res = await fetch(`${API}/api/couriers`, {
-        method: "POST",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim(), tracking_url_template: newTemplate.trim() }),
-      });
-      if (res.ok) {
-        setNewName("");
-        setNewTemplate("");
-        setShowAdd(false);
-        load();
-      }
+      await api.post("/api/couriers", { name: newName.trim(), tracking_url_template: newTemplate.trim() });
+      setNewName("");
+      setNewTemplate("");
+      setShowAdd(false);
+      load();
     } catch { /* ignore */ }
     setAdding(false);
   };

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, Key, Plus, Search, Shield, Trash2, X } from "lucide-react";
-import { API } from "../../config";
+import { api } from "../../api";
 import {
   Badge,
   Button,
@@ -43,19 +43,16 @@ export default function AdministratorRedesign() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API}/roles`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load roles");
+      const data = await api.get("/api/roles");
       const withPerms = await Promise.all(
         data.roles.map(async (role) => {
-          const pr = await fetch(`${API}/roles/${role.id}/permissions`);
-          const pd = await pr.json();
+          const pd = await api.get(`/api/roles/${role.id}/permissions`);
           return { ...role, permissions: pd.permissions || [] };
         }),
       );
       setRoles(withPerms);
     } catch (e) {
-      setError(e.message || "Failed to load roles");
+      setError(e.body?.error || e.message || "Failed to load roles");
     } finally {
       setLoading(false);
     }
@@ -96,34 +93,16 @@ export default function AdministratorRedesign() {
     try {
       let roleId = editing?.id;
       if (!editing) {
-        const res = await fetch(`${API}/roles`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Failed to create role");
+        const data = await api.post("/api/roles", form);
         roleId = data.role?.id || data.id;
       } else {
-        const res = await fetch(`${API}/roles/${roleId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Failed to update role");
+        await api.put(`/api/roles/${roleId}`, form);
       }
-      const pr = await fetch(`${API}/roles/${roleId}/permissions`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ permissions: rolePerms }),
-      });
-      const pd = await pr.json();
-      if (!pr.ok) throw new Error(pd.error || "Failed to update permissions");
+      await api.put(`/api/roles/${roleId}/permissions`, { permissions: rolePerms });
       setModalOpen(false);
       await load();
     } catch (e2) {
-      setError(e2.message || "Failed to save role");
+      setError(e2.body?.error || e2.message || "Failed to save role");
     } finally {
       setSaving(false);
     }
@@ -134,12 +113,10 @@ export default function AdministratorRedesign() {
     if (!window.confirm(`Delete role "${role.name}"?`)) return;
     setError("");
     try {
-      const res = await fetch(`${API}/roles/${role.id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete role");
+      await api.del(`/api/roles/${role.id}`);
       await load();
     } catch (e) {
-      setError(e.message || "Failed to delete role");
+      setError(e.body?.error || e.message || "Failed to delete role");
     }
   };
 

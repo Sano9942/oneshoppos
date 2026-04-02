@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRightLeft, Download, FolderPlus, Plus, Search, Trash2 } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   Badge,
   Button,
@@ -45,19 +45,17 @@ export default function CategoriesRedesign() {
   const [taxes, setTaxes] = useState([]);
 
   useEffect(() => {
-    fetch(`${API}/api/taxes`).then(r => r.json()).then(d => setTaxes(d.taxes || d || [])).catch(() => {});
+    api.get("/api/taxes").then(d => setTaxes(d.taxes || d || [])).catch(() => {});
   }, []);
 
   const load = async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/categories`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load categories");
+      const data = await api.get("/api/categories");
       setRows(sortCategories(data.categories || []));
     } catch (e) {
-      setError(e.message || "Failed to load categories");
+      setError(e.body?.error || e.message || "Failed to load categories");
     } finally {
       setLoading(false);
     }
@@ -111,40 +109,33 @@ export default function CategoriesRedesign() {
     setSaving(true);
     setError("");
     try {
-      const url = form.id
-        ? `${API}/api/categories/${form.id}`
-        : `${API}/api/categories`;
-      const method = form.id ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: form.name,
-          description: form.description,
-          parent_id: form.parent_id ? Number(form.parent_id) : null,
-          is_active: Number(form.is_active),
-          sort_order: Number(form.sort_order || 0),
-          tax_id: form.tax_id ? Number(form.tax_id) : null,
-          hs_code: form.hs_code || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        if (!form.id && data.code === "parent_has_products" && form.parent_id) {
-          setConversionPrompt({
-            form: { ...form },
-            parentId: Number(form.parent_id),
-            directProductCount: Number(data.direct_product_count || 0),
-          });
-          return;
-        }
-        throw new Error(data.error || "Failed to save category");
+      const payload = {
+        name: form.name,
+        description: form.description,
+        parent_id: form.parent_id ? Number(form.parent_id) : null,
+        is_active: Number(form.is_active),
+        sort_order: Number(form.sort_order || 0),
+        tax_id: form.tax_id ? Number(form.tax_id) : null,
+        hs_code: form.hs_code || null,
+      };
+      if (form.id) {
+        await api.put(`/api/categories/${form.id}`, payload);
+      } else {
+        await api.post("/api/categories", payload);
       }
       setModalOpen(false);
       setForm(EMPTY);
       await load();
     } catch (e2) {
-      setError(e2.message || "Failed to save category");
+      if (!form.id && e2.body?.code === "parent_has_products" && form.parent_id) {
+        setConversionPrompt({
+          form: { ...form },
+          parentId: Number(form.parent_id),
+          directProductCount: Number(e2.body.direct_product_count || 0),
+        });
+        return;
+      }
+      setError(e2.body?.error || e2.message || "Failed to save category");
     } finally {
       setSaving(false);
     }
@@ -156,26 +147,19 @@ export default function CategoriesRedesign() {
     setError("");
     try {
       const promptForm = conversionPrompt.form;
-      const res = await fetch(`${API}/api/categories/create-child-and-move`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: promptForm.name,
-          description: promptForm.description,
-          parent_id: promptForm.parent_id ? Number(promptForm.parent_id) : null,
-          is_active: Number(promptForm.is_active),
-          sort_order: Number(promptForm.sort_order || 0),
-        }),
+      await api.post("/api/categories/create-child-and-move", {
+        name: promptForm.name,
+        description: promptForm.description,
+        parent_id: promptForm.parent_id ? Number(promptForm.parent_id) : null,
+        is_active: Number(promptForm.is_active),
+        sort_order: Number(promptForm.sort_order || 0),
       });
-      const data = await res.json();
-      if (!res.ok)
-        throw new Error(data.error || "Failed to create child category");
       setConversionPrompt(null);
       setModalOpen(false);
       setForm(EMPTY);
       await load();
     } catch (e) {
-      setError(e.message || "Failed to create child category");
+      setError(e.body?.error || e.message || "Failed to create child category");
     } finally {
       setSaving(false);
     }
@@ -191,21 +175,12 @@ export default function CategoriesRedesign() {
     setMoveSaving(true);
     setError("");
     try {
-      const res = await fetch(
-        `${API}/api/categories/${moveModal.id}/move-products`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ target_category_id: Number(moveTargetId) }),
-        },
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to move products");
+      await api.post(`/api/categories/${moveModal.id}/move-products`, { target_category_id: Number(moveTargetId) });
       setMoveModal(null);
       setMoveTargetId("");
       await load();
     } catch (e) {
-      setError(e.message || "Failed to move products");
+      setError(e.body?.error || e.message || "Failed to move products");
     } finally {
       setMoveSaving(false);
     }
@@ -216,14 +191,10 @@ export default function CategoriesRedesign() {
       return;
     setError("");
     try {
-      const res = await fetch(`${API}/api/categories/${row.id}`, {
-        method: "DELETE",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete category");
+      await api.del(`/api/categories/${row.id}`);
       await load();
     } catch (e) {
-      setError(e.message || "Failed to delete category");
+      setError(e.body?.error || e.message || "Failed to delete category");
     }
   };
 

@@ -3,7 +3,8 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { Building2, MapPin, ChevronRight } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
 import { readContext, writeContext, writeToken } from "../auth/authStore";
-import { API_BASE as API, IS_MULTI_TENANT } from "../config";
+import { IS_MULTI_TENANT } from "../config";
+import { api } from "../api";
 import useFeatureFlags from "../hooks/useFeatureFlags";
 
 export default function ContextSelect() {
@@ -29,11 +30,7 @@ export default function ContextSelect() {
 
   useEffect(() => {
     if (shouldSkip) return;
-    fetch(`${API}/api/context/bootstrap`, { headers: authHeaders() })
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed to load context");
-        return r.json();
-      })
+    api.get("/api/context/bootstrap")
       .then((data) => {
         setBootstrap(data);
 
@@ -96,18 +93,8 @@ export default function ContextSelect() {
     // In MT mode, re-sign the JWT with the selected outlet_id
     if (IS_MULTI_TENANT) {
       try {
-        const res = await fetch(`${API}/api/auth/update-context`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...authHeaders(),
-          },
-          body: JSON.stringify({ outlet_id: outletId }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.token) writeToken(data.token);
-        }
+        const data = await api.post("/api/auth/update-context", { outlet_id: outletId });
+        if (data.token) writeToken(data.token);
       } catch {
         // Best-effort — context still works via headers
       }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Search } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   Badge,
   Button,
@@ -41,13 +41,11 @@ export default function TransfersRedesign() {
     setLoading(true);
     setError("");
     try {
-      const [trRes, pRes, oRes] = await Promise.all([
-        fetch(`${API}/api/transfers`),
-        fetch(`${API}/api/products`),
-        fetch(`${API}/api/outlets`),
+      const [trData, pData, oData] = await Promise.all([
+        api.get("/api/transfers"),
+        api.get("/api/products"),
+        api.get("/api/outlets"),
       ]);
-      const [trData, pData, oData] = await Promise.all([trRes.json(), pRes.json(), oRes.json()]);
-      if (!trRes.ok) throw new Error(trData.error || "Failed to load transfers");
       setRows(trData.transfers || []);
       setProducts(pData.products || []);
       setOutlets(oData.outlets || []);
@@ -93,20 +91,14 @@ export default function TransfersRedesign() {
     setSaving(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/transfers`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          product_id: Number(form.product_id),
-          from_outlet_id: Number(form.from_outlet_id),
-          to_outlet_id: Number(form.to_outlet_id),
-          quantity: Number(form.quantity),
-          note: form.note || null,
-          employee_id: employee?.id || null,
-        }),
+      await api.post("/api/transfers", {
+        product_id: Number(form.product_id),
+        from_outlet_id: Number(form.from_outlet_id),
+        to_outlet_id: Number(form.to_outlet_id),
+        quantity: Number(form.quantity),
+        note: form.note || null,
+        employee_id: employee?.id || null,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create transfer");
       setModalOpen(false);
       await load();
     } catch (e2) {
@@ -120,9 +112,7 @@ export default function TransfersRedesign() {
     if (!window.confirm(`Reverse transfer of ${row.quantity}x "${row.product_name}" from ${row.from_outlet_name} → ${row.to_outlet_name}? Stock will be returned to source.`)) return;
     setError("");
     try {
-      const res = await fetch(`${API}/api/transfers/${row.id}/reverse`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to reverse transfer");
+      await api.post(`/api/transfers/${row.id}/reverse`);
       await load();
     } catch (e) {
       setError(e.message || "Failed to reverse transfer");

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import { PageShell, SectionCard } from "../../ui/primitives";
 
 function rowClass(days) {
@@ -17,8 +17,7 @@ export default function ReorderAlertsRedesign() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch(`${API}/api/reports/replenishment-smart`)
-      .then((r) => r.json())
+    api.get("/api/reports/replenishment-smart")
       .then((data) => {
         const sorted = (data.products || []).slice().sort(
           (a, b) => (a.days_of_stock_remaining ?? Infinity) - (b.days_of_stock_remaining ?? Infinity)

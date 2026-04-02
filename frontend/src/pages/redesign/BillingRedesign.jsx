@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { CreditCard, ArrowUpRight, Clock, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
-import { API_BASE } from "../../config";
+import { api } from "../../api";
 import { PageShell } from "../../ui/primitives";
 import { useToast } from "../../contexts/ToastContext";
 
@@ -15,8 +15,7 @@ export default function BillingRedesign() {
   const [submitting, setSubmitting] = useState(false);
 
   const fetchBilling = () => {
-    fetch(`${API_BASE}/api/billing/status`)
-      .then(r => r.json())
+    api.get("/api/billing/status")
       .then(data => { setBilling(data); setLoading(false); })
       .catch(() => setLoading(false));
   };
@@ -37,8 +36,7 @@ export default function BillingRedesign() {
       const poll = setInterval(async () => {
         attempts++;
         try {
-          const r = await fetch(`${API_BASE}/api/billing/status`);
-          const data = await r.json();
+          const data = await api.get("/api/billing/status");
           if (data.payment_status === "active" && data.expires_at) {
             clearInterval(poll);
             setPaymentProcessing(false);
@@ -73,19 +71,13 @@ export default function BillingRedesign() {
     if (!selectedPlan) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_BASE}/api/billing/request-upgrade`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: selectedPlan, cycle, message: message || undefined }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed");
+      const data = await api.post("/api/billing/request-upgrade", { plan: selectedPlan, cycle, message: message || undefined });
       success("Upgrade request submitted! We'll be in touch shortly.");
       setShowUpgradeModal(false);
       setMessage("");
       fetchBilling();
     } catch (err) {
-      showError(err.message);
+      showError(err.body?.error || err.message);
     } finally {
       setSubmitting(false);
     }
@@ -94,16 +86,10 @@ export default function BillingRedesign() {
   const handlePayNow = async (cycle = "monthly") => {
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_BASE}/api/billing/create-checkout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cycle }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create checkout");
+      const data = await api.post("/api/billing/create-checkout", { cycle });
       window.location.href = data.checkout_url;
     } catch (err) {
-      showError(err.message);
+      showError(err.body?.error || err.message);
       setSubmitting(false);
     }
   };
@@ -168,8 +154,7 @@ export default function BillingRedesign() {
     const [loadingPayments, setLoadingPayments] = useState(true);
 
     useEffect(() => {
-      fetch(`${API_BASE}/api/billing/payment-history`)
-        .then(r => r.json())
+      api.get("/api/billing/payment-history")
         .then(data => { setPayments(Array.isArray(data) ? data : []); setLoadingPayments(false); })
         .catch(() => setLoadingPayments(false));
     }, []);

@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { RefreshCw, Link2, CheckCircle2, ShieldAlert } from "lucide-react";
 import { useShopify } from "./ShopifyContext";
-import { API } from "../../config";
 
 export default function ShopifyMappings() {
   const { apiFetch, config, status, outlets, setError, setSuccess, loadAll } =
@@ -55,7 +54,7 @@ export default function ShopifyMappings() {
   const loadLiveLocations = async () => {
     setLoadingLocations(true);
     try {
-      const res = await apiFetch(`${API}/integrations/shopify/locations/live`);
+      const res = await apiFetch(`/api/integrations/shopify/locations/live`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch locations");
       setLiveLocations(data.locations || []);
@@ -71,7 +70,7 @@ export default function ShopifyMappings() {
     if (!shopifyLocationId) return;
     setSavingLocationOutletId(outletId);
     try {
-      const res = await apiFetch(`${API}/integrations/mappings/locations`, {
+      const res = await apiFetch(`/api/integrations/mappings/locations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -95,7 +94,7 @@ export default function ShopifyMappings() {
   const loadSuggestions = async () => {
     setLoadingSuggestions(true);
     try {
-      const res = await apiFetch(`${API}/integrations/shopify/suggestions`);
+      const res = await apiFetch(`/api/integrations/shopify/suggestions`);
       const data = await res.json();
       setLiveSuggestions(data.suggestions || []);
       if (res.ok)
@@ -135,7 +134,7 @@ export default function ShopifyMappings() {
     setApplySuggestionConflicts([]);
     try {
       const res = await apiFetch(
-        `${API}/integrations/shopify/suggestions/apply`,
+        `/api/integrations/shopify/suggestions/apply`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

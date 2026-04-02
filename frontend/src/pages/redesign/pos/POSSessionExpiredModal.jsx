@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { usePOS } from "./POSContext";
-import { API_BASE as API } from "../../../config";
+import { api } from "../../../api";
 
 export default function POSSessionExpiredModal() {
   const {
@@ -28,14 +28,9 @@ export default function POSSessionExpiredModal() {
     try {
       // Use validate-pin (not /auth/login) — POS re-auth is always PIN-based,
       // even after employee has a password set for dashboard login.
-      const res = await fetch(`${API}/api/employees/validate-pin`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin_code: pin }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.employee) {
-        setError(data.error || "Invalid PIN");
+      const data = await api.post("/api/employees/validate-pin", { pin_code: pin });
+      if (!data.employee) {
+        setError("Invalid PIN");
         setPin("");
         return;
       }

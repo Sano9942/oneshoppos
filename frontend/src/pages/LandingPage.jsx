@@ -23,7 +23,8 @@ import {
   Printer,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthProvider";
-import { API_BASE, IS_MULTI_TENANT } from "../config";
+import { IS_MULTI_TENANT } from "../config";
+import { api } from "../api";
 import { useCurrency } from "../contexts/CurrencyContext";
 
 /* ─── Forgot Password Modal ───────────────────────────────── */
@@ -38,9 +39,8 @@ function ForgotPasswordModal({ storeCode, onClose }) {
     if (!username.trim()) return;
     setLoading(true);
     try {
-      await fetch(`${API_BASE}/api/auth/forgot-password`, {
+      await api.raw("/api/auth/forgot-password", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username: username.trim(),
           store_code: IS_MULTI_TENANT ? storeCode : undefined,

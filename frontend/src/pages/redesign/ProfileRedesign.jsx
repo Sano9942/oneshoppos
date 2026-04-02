@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { KeyRound, Lock, Mail, MapPin, Shield, User } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { Badge, Button, Input, PageShell, SectionCard } from "../../ui/primitives";
 import { useToast } from "../../contexts/ToastContext";
@@ -27,14 +27,12 @@ export default function ProfileRedesign() {
   useEffect(() => {
     (async () => {
       try {
-        const [meRes, outRes] = await Promise.all([
-          fetch(`${API}/api/auth/me`),
-          employee?.id ? fetch(`${API}/api/employees/${employee.id}/outlets`) : null,
+        const [meData, outData] = await Promise.all([
+          api.get("/api/auth/me"),
+          employee?.id ? api.get(`/api/employees/${employee.id}/outlets`) : null,
         ]);
-        const meData = await meRes.json();
         setProfile(meData.employee || meData);
-        if (outRes) {
-          const outData = await outRes.json();
+        if (outData) {
           setOutlets(outData.outlets || []);
         }
       } catch { /* silent */ }
@@ -48,13 +46,7 @@ export default function ProfileRedesign() {
     if (newPin.length < 4) { showError("PIN must be at least 4 digits"); return; }
     setSavingPin(true);
     try {
-      const res = await fetch(`${API}/api/employees/${employee.id}/change-pin`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ current_pin: currentPin, new_pin: newPin }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      await api.put(`/api/employees/${employee.id}/change-pin`, { current_pin: currentPin, new_pin: newPin });
       success("PIN changed successfully");
       setCurrentPin(""); setNewPin(""); setConfirmPin("");
     } catch (err) { showError(err.message); }
@@ -67,13 +59,7 @@ export default function ProfileRedesign() {
     if (newPassword.length < 8) { showError("Password must be at least 8 characters"); return; }
     setSavingPassword(true);
     try {
-      const res = await fetch(`${API}/api/employees/${employee.id}/change-password`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ current_password: currentPassword || undefined, pin: !currentPassword ? currentPin : undefined, new_password: newPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      await api.put(`/api/employees/${employee.id}/change-password`, { current_password: currentPassword || undefined, pin: !currentPassword ? currentPin : undefined, new_password: newPassword });
       success("Password changed successfully");
       setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
     } catch (err) { showError(err.message); }

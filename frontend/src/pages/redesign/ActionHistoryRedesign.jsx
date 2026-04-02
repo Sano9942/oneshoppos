@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Download, RefreshCcw, Search } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   Button,
   EmptyState,
@@ -44,12 +44,10 @@ export default function ActionHistoryRedesign() {
       if (from) params.set("date_from", from);
       if (to) params.set("date_to", to);
       if (type) params.set("action_type", type);
-      const res = await fetch(`${API}/api/action-history?${params}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load action history");
+      const data = await api.get(`/api/action-history?${params}`);
       setLogs(data.logs || []);
     } catch (e) {
-      setError(e.message || "Failed to load action history");
+      setError(e.body?.error || e.message || "Failed to load action history");
     } finally {
       setLoading(false);
     }

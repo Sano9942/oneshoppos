@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { PageShell } from "../../ui/primitives";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   Link2,
   Unplug,
@@ -24,8 +24,7 @@ export default function WooCommerceIntegrationRedesign() {
 
   const loadStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/integrations/woocommerce/status`);
-      const data = await res.json();
+      const data = await api.get("/api/integrations/woocommerce/status");
       setStatus(data);
     } catch {
       setStatus({ connected: false });
@@ -97,20 +96,11 @@ function ConnectionTab({ status, onRefresh }) {
     setSaving(true);
     setMsg(null);
     try {
-      const res = await fetch(
-        `${API}/api/integrations/woocommerce/connect`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            store_url: storeUrl,
-            consumer_key: consumerKey,
-            consumer_secret: consumerSecret,
-          }),
-        },
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Connection failed");
+      await api.post("/api/integrations/woocommerce/connect", {
+        store_url: storeUrl,
+        consumer_key: consumerKey,
+        consumer_secret: consumerSecret,
+      });
       setMsg({ type: "success", text: "Connected successfully!" });
       setStoreUrl("");
       setConsumerKey("");
@@ -127,11 +117,7 @@ function ConnectionTab({ status, onRefresh }) {
     if (!window.confirm("Disconnect WooCommerce? This will clear credentials."))
       return;
     try {
-      const res = await fetch(
-        `${API}/api/integrations/woocommerce/disconnect`,
-        { method: "POST" },
-      );
-      if (!res.ok) throw new Error("Failed to disconnect");
+      await api.post("/api/integrations/woocommerce/disconnect", {});
       setMsg({ type: "success", text: "Disconnected." });
       onRefresh();
     } catch (err) {
@@ -263,12 +249,7 @@ function ProductsTab({ connected }) {
     setResult(null);
     setError(null);
     try {
-      const res = await fetch(
-        `${API}/api/integrations/woocommerce/import-products`,
-        { method: "POST" },
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Import failed");
+      const data = await api.post("/api/integrations/woocommerce/import-products", {});
       setResult(data);
     } catch (err) {
       setError(err.message);
@@ -350,12 +331,7 @@ function StockTab({ connected }) {
     setResult(null);
     setError(null);
     try {
-      const res = await fetch(
-        `${API}/api/integrations/woocommerce/sync-stock`,
-        { method: "POST" },
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Sync failed");
+      const data = await api.post("/api/integrations/woocommerce/sync-stock", {});
       setResult(data);
     } catch (err) {
       setError(err.message);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Users, TrendingUp, GitBranch, Target, X } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   fmtDate,
   exportCSV,
@@ -104,8 +104,7 @@ export function CustomerDetailsTab({ filters }) {
         search: filters.search,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/customer-details?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/customer-details?${p}`);
       setRows(d.items || []);
     } catch {
       setRows([]);
@@ -217,8 +216,7 @@ export function CustomerWiseTab({ filters }) {
         date_to: filters.dateTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/customer-wise?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/customer-wise?${p}`);
       setRows(d.items || []);
     } catch {
       setRows([]);
@@ -333,8 +331,7 @@ export function CustomerRFMTab({ filters }) {
     try {
       const p = new URLSearchParams();
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/customer-rfm?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/customer-rfm?${p}`);
       setRaw(d.items || []);
     } catch {
       setRaw([]);
@@ -509,8 +506,7 @@ export function CustomerRetentionTab({ filters }) {
         date_to: filters.dateTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/customer-retention?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/customer-retention?${p}`);
       setRows(d.timeline || []);
     } catch {
       setRows([]);
@@ -604,8 +600,7 @@ export function CustomerCaptureRateTab({ filters }) {
         date_to: filters.dateTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/customer-capture-rate?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/customer-capture-rate?${p}`);
       setData(d.staff_breakdown || []);
     } catch {
       setData([]);

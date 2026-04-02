@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, MapPin, Phone, Plus, Search, Trash2 } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   Button,
   EmptyState,
@@ -29,12 +29,10 @@ export default function OutletsRedesign() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/outlets`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load outlets");
+      const data = await api.get("/api/outlets");
       setOutlets(data.outlets || []);
     } catch (e) {
-      setError(e.message || "Failed to load outlets");
+      setError(e.body?.error || e.message || "Failed to load outlets");
     } finally {
       setLoading(false);
     }
@@ -64,19 +62,15 @@ export default function OutletsRedesign() {
     setSaving(true);
     setError("");
     try {
-      const url = editing ? `${API}/api/outlets/${editing.id}` : `${API}/api/outlets`;
-      const method = editing ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save outlet");
+      if (editing) {
+        await api.put(`/api/outlets/${editing.id}`, form);
+      } else {
+        await api.post("/api/outlets", form);
+      }
       setModalOpen(false);
       await load();
     } catch (e2) {
-      setError(e2.message || "Failed to save outlet");
+      setError(e2.body?.error || e2.message || "Failed to save outlet");
     } finally {
       setSaving(false);
     }
@@ -92,16 +86,14 @@ export default function OutletsRedesign() {
     if (!deleteTarget) return;
     setError("");
     try {
-      const url = reassignTo
-        ? `${API}/api/outlets/${deleteTarget.id}?reassign_to=${reassignTo}`
-        : `${API}/api/outlets/${deleteTarget.id}`;
-      const res = await fetch(url, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete outlet");
+      const path = reassignTo
+        ? `/api/outlets/${deleteTarget.id}?reassign_to=${reassignTo}`
+        : `/api/outlets/${deleteTarget.id}`;
+      await api.del(path);
       setDeleteTarget(null);
       await load();
     } catch (e) {
-      setError(e.message || "Failed to delete outlet");
+      setError(e.body?.error || e.message || "Failed to delete outlet");
     }
   };
 

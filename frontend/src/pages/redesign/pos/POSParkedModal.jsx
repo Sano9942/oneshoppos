@@ -1,7 +1,7 @@
 import React from "react";
 import { Play, X, ShoppingCart } from "lucide-react";
 import { usePOS } from "./POSContext";
-import { API_BASE as API } from "../../../config";
+import { api } from "../../../api";
 import { fmtLocalDateTime } from "../../../utils/dates";
 
 export default function POSParkedModal() {
@@ -62,10 +62,7 @@ export default function POSParkedModal() {
                   <div className="flex gap-2 ml-4 shrink-0">
                     <button
                       onClick={async () => {
-                        await fetch(`${API}/api/parked-sales/${p.id}`, {
-                          method: "DELETE",
-                          headers: authHeaders(),
-                        });
+                        await api.del(`/api/parked-sales/${p.id}`);
                         await loadParked(selectedOutletId);
                         showNotice("Parked sale deleted.");
                       }}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BarChart2, CreditCard, Download, Hash, Plus, Search, Trash2, Upload, X } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import {
@@ -202,10 +202,7 @@ export default function InventoryRedesign() {
       if (outletFilter) qs.set("outlet_id", outletFilter);
       qs.set("sort", sortField);
       qs.set("order", sortOrder);
-      const res = await fetch(`${API}/api/products?${qs}`, {
-        headers: authHeaders(),
-      });
-      const data = await res.json();
+      const data = await api.get(`/api/products?${qs}`);
       setProducts(data.products || []);
       setSelectedIds(new Set());
       setPage(1);
@@ -218,14 +215,11 @@ export default function InventoryRedesign() {
 
   const fetchCategories = async () => {
     try {
-      const [catRes, brandRes, outletRes] = await Promise.all([
-        fetch(`${API}/api/categories`, { headers: authHeaders() }),
-        fetch(`${API}/api/brands`, { headers: authHeaders() }),
-        fetch(`${API}/api/outlets`, { headers: authHeaders() }),
+      const [catData, brandData, outletData] = await Promise.all([
+        api.get("/api/categories"),
+        api.get("/api/brands"),
+        api.get("/api/outlets"),
       ]);
-      const catData = await catRes.json();
-      const brandData = await brandRes.json();
-      const outletData = await outletRes.json();
       setCategories(sortCategories(catData.categories || []));
       setBrands(brandData.brands || []);
       setOutlets(outletData.outlets || []);
@@ -238,8 +232,7 @@ export default function InventoryRedesign() {
     e.stopPropagation();
     setStockPopup({ productId, productName, loading: true, stock: [] });
     try {
-      const res = await fetch(`${API}/api/products/${productId}/stock`, { headers: authHeaders() });
-      const data = await res.json();
+      const data = await api.get(`/api/products/${productId}/stock`);
       setStockPopup({ productId, productName, loading: false, stock: data.stock || [] });
     } catch {
       setStockPopup((prev) => prev && ({ ...prev, loading: false }));
@@ -250,8 +243,7 @@ export default function InventoryRedesign() {
     e.stopPropagation();
     setSerialsModal({ productId, productName, loading: true, serials: [], newSerials: "" });
     try {
-      const res = await fetch(`${API}/api/products/${productId}/serials`, { headers: authHeaders() });
-      const data = await res.json();
+      const data = await api.get(`/api/products/${productId}/serials`);
       setSerialsModal({ productId, productName, loading: false, serials: data.serials || [], newSerials: "" });
     } catch {
       setSerialsModal((prev) => prev && ({ ...prev, loading: false }));
@@ -264,16 +256,9 @@ export default function InventoryRedesign() {
     if (!serial_numbers.length) return;
     setSerialsSaving(true);
     try {
-      const res = await fetch(`${API}/api/products/${serialsModal.productId}/serials`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ serial_numbers }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to add serials");
+      await api.post(`/api/products/${serialsModal.productId}/serials`, { serial_numbers });
       // Refresh serials list
-      const refetch = await fetch(`${API}/api/products/${serialsModal.productId}/serials`, { headers: authHeaders() });
-      const refetchData = await refetch.json();
+      const refetchData = await api.get(`/api/products/${serialsModal.productId}/serials`);
       setSerialsModal((prev) => prev && ({ ...prev, serials: refetchData.serials || [], newSerials: "" }));
     } catch (err) {
       alert(err.message);
@@ -285,8 +270,7 @@ export default function InventoryRedesign() {
   const fetchGiftCards = async () => {
     setGiftCardsLoading(true);
     try {
-      const res = await fetch(`${API}/api/gift-cards`, { headers: authHeaders() });
-      const data = await res.json();
+      const data = await api.get("/api/gift-cards");
       setGiftCards(data.giftCards || data.gift_cards || []);
     } catch {
       // non-fatal
@@ -300,13 +284,7 @@ export default function InventoryRedesign() {
     if (!val || val <= 0) { alert("Enter a valid initial value."); return; }
     setGcGenerating(true);
     try {
-      const res = await fetch(`${API}/api/gift-cards`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ initial_value: val }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate gift card");
+      const data = await api.post("/api/gift-cards", { initial_value: val });
       setGcInitialValue("");
       alert(`Gift card generated!\nCode: ${data.code || data.gift_card?.code || "—"}`);
       await fetchGiftCards();
@@ -320,9 +298,7 @@ export default function InventoryRedesign() {
   const lookupGiftCard = async () => {
     if (!gcLookupCode.trim()) return;
     try {
-      const res = await fetch(`${API}/api/gift-cards/${encodeURIComponent(gcLookupCode.trim())}`, { headers: authHeaders() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Not found");
+      const data = await api.get(`/api/gift-cards/${encodeURIComponent(gcLookupCode.trim())}`);
       setGcLookupResult(data.giftCard || data.gift_card || data);
     } catch (err) {
       setGcLookupResult({ error: err.message });
@@ -391,13 +367,7 @@ export default function InventoryRedesign() {
   const runBulk = async (path, payload, successMessage = null) => {
     setBulkWorking(true);
     try {
-      const res = await fetch(`${API}/api/products/${path}`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Bulk action failed");
+      const data = await api.post(`/api/products/${path}`, payload);
       if (successMessage) alert(successMessage(data));
       setSelectedIds(new Set());
       await fetchProducts();
@@ -432,13 +402,7 @@ export default function InventoryRedesign() {
     if (!rows.length) return alert("File is empty or unreadable.");
     setImporting(true);
     try {
-      const res = await fetch(`${API}/api/products/bulk-import`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ rows }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Import failed");
+      const data = await api.post("/api/products/bulk-import", { rows });
       setImportResults(data.results || []);
       await fetchProducts();
     } catch (err) {

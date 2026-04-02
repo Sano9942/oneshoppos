@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "./primitives";
 import { useToast } from "../contexts/ToastContext";
-import { API_BASE as API } from "../config";
+import { api } from "../api";
 
 const MAX_FILES = 3;
 const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
@@ -66,10 +66,7 @@ export default function SupportWidget() {
         try {
           const fd = new FormData();
           fd.append("file", file);
-          const res = await fetch(`${API}/api/support/upload`, {
-            method: "POST",
-            body: fd,
-          });
+          const res = await api.upload("/api/support/upload", fd);
           if (res.ok) {
             const data = await res.json();
             screenshots.push({ filename: data.filename, url: data.url });
@@ -80,20 +77,14 @@ export default function SupportWidget() {
       }
 
       // Submit the ticket
-      const res = await fetch(`${API}/api/support/tickets`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type,
-          message: message.trim(),
-          page_url: window.location.pathname,
-          browser: navigator.userAgent,
-          screenshots,
-          last_req_id: window.__lastFailedReqId || null,
-        }),
+      await api.post("/api/support/tickets", {
+        type,
+        message: message.trim(),
+        page_url: window.location.pathname,
+        browser: navigator.userAgent,
+        screenshots,
+        last_req_id: window.__lastFailedReqId || null,
       });
-
-      if (!res.ok) throw new Error("Failed to submit");
 
       // Clear stale request ID
       window.__lastFailedReqId = null;

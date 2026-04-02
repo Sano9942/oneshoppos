@@ -8,7 +8,7 @@ import React, {
   useCallback,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { API_BASE as API } from "../../../config";
+import { api } from "../../../api";
 import { useAuth } from "../../../auth/AuthProvider";
 import { readContext } from "../../../auth/authStore";
 import { buildReceiptHtml, buildReceiptSections, printToHardware } from "../../../utils/receipt";
@@ -165,12 +165,8 @@ export const POSProvider = ({ children }) => {
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   useEffect(() => {
     Promise.all([
-      fetch(`${API}/api/outlets`, { headers: authHeaders() }).then((r) =>
-        r.json(),
-      ),
-      fetch(`${API}/api/customers`, { headers: authHeaders() }).then((r) =>
-        r.json(),
-      ),
+      api.get("/api/outlets"),
+      api.get("/api/customers"),
     ])
       .then(([outData, custData]) => {
         const outList = outData.outlets || [];
@@ -188,8 +184,7 @@ export const POSProvider = ({ children }) => {
       })
       .catch(() => setError("Failed to load POS setup data."));
 
-    fetch(`${API}/api/receipt-templates/active`, { headers: authHeaders() })
-      .then((r) => r.json())
+    api.get("/api/receipt-templates/active")
       .then((d) => { if (d.template) setReceiptTemplate(d.template); })
       .catch(() => {}); // silently fall back to defaults if no template
   }, []);
@@ -219,22 +214,10 @@ export const POSProvider = ({ children }) => {
     }
     setGateLoading(true);
     try {
-      const [shiftRes, attendanceRes] = await Promise.all([
-        fetch(`${API}/api/shifts/active?outlet_id=${outletId}`, {
-          headers: authHeaders(),
-        }),
-        fetch(`${API}/api/attendance/my-status?outlet_id=${outletId}`, {
-          headers: authHeaders(),
-        }),
-      ]);
       const [shiftData, attendanceData] = await Promise.all([
-        shiftRes.json(),
-        attendanceRes.json(),
+        api.get("/api/shifts/active", { outlet_id: outletId }),
+        api.get("/api/attendance/my-status", { outlet_id: outletId }),
       ]);
-      if (!shiftRes.ok) throw new Error(shiftData.error || "Failed to load active shift");
-      if (!attendanceRes.ok) {
-        throw new Error(attendanceData.error || "Failed to load attendance status");
-      }
       setActiveShift(shiftData.shift || null);
       setAttendanceStatus(attendanceData || null);
     } catch (err) {
@@ -254,11 +237,8 @@ export const POSProvider = ({ children }) => {
   // ── Functions ─────────────────────────────────────────────────────────────
   const loadParked = async (outletId = selectedOutletId) => {
     try {
-      const qs = outletId ? `?outlet_id=${outletId}` : "";
-      const res = await fetch(`${API}/api/parked-sales${qs}`, {
-        headers: authHeaders(),
-      });
-      const data = await res.json();
+      const query = outletId ? { outlet_id: outletId } : undefined;
+      const data = await api.get("/api/parked-sales", query);
       setParkedSales(data.parkedSales || []);
     } catch {
       setParkedSales([]);
@@ -270,11 +250,7 @@ export const POSProvider = ({ children }) => {
     setRecentSalesLoading(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const res = await fetch(
-        `${API}/api/sales?date_from=${today}&outlet_id=${selectedOutletId}&limit=50`,
-        { headers: authHeaders() },
-      );
-      const data = await res.json();
+      const data = await api.get("/api/sales", { date_from: today, outlet_id: selectedOutletId, limit: 50 });
       setRecentSales(data.sales || []);
     } catch {
       setRecentSales([]);
@@ -298,15 +274,10 @@ export const POSProvider = ({ children }) => {
     }
     searchTimer.current = setTimeout(async () => {
       try {
-        const outletParam = selectedOutletId
-          ? `&outlet_id=${selectedOutletId}`
-          : "";
-        const fieldParam = field !== "all" ? `&field=${field}` : "";
-        const res = await fetch(
-          `${API}/api/products/search?query=${encodeURIComponent(query)}${outletParam}${fieldParam}`,
-          { headers: authHeaders() },
-        );
-        const data = await res.json();
+        const params = { query };
+        if (selectedOutletId) params.outlet_id = selectedOutletId;
+        if (field !== "all") params.field = field;
+        const data = await api.get("/api/products/search", params);
         setResults(data.products || []);
         setShowResults(true);
       } catch {
@@ -370,7 +341,7 @@ export const POSProvider = ({ children }) => {
 
   const handleBarcodeScanned = useCallback(async (barcode) => {
     try {
-      const res = await fetch(`${API}/api/products/scan/${encodeURIComponent(barcode)}`, {
+      const res = await api.raw(`/api/products/scan/${encodeURIComponent(barcode)}`, {
         headers: { "x-employee-id": String(employee?.id || "") },
       });
       if (!res.ok) return; // 404 = product not found — silently ignore
@@ -447,10 +418,7 @@ export const POSProvider = ({ children }) => {
       return;
     }
     setCheckoutWalletLoading(true);
-    fetch(`${API}/api/customers/${checkoutCustomerId}/wallet`, {
-      headers: authHeaders(),
-    })
-      .then((r) => r.json())
+    api.get(`/api/customers/${checkoutCustomerId}/wallet`)
       .then((d) => setCheckoutWalletBalance(Number(d.balance || 0)))
       .catch(() => setCheckoutWalletBalance(0))
       .finally(() => setCheckoutWalletLoading(false));
@@ -559,10 +527,7 @@ export const POSProvider = ({ children }) => {
   const parkSale = async () => {
     if (!cart.length || !selectedOutletId) return;
     try {
-      const res = await fetch(`${API}/api/parked-sales`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
+      await api.post("/api/parked-sales", {
           employee_id: employee?.id || null,
           outlet_id: Number(selectedOutletId),
           customer_id: selectedCustomerId ? Number(selectedCustomerId) : null,
@@ -575,9 +540,7 @@ export const POSProvider = ({ children }) => {
             price: i.price,
             effective_tax_rate: i.effectiveTaxRate || 0,
           })),
-        }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
+        });
       setCart([]);
       setDiscountInput("");
       setOrderNote("");
@@ -592,11 +555,7 @@ export const POSProvider = ({ children }) => {
 
   const restoreParked = async (row) => {
     try {
-      const res = await fetch(`${API}/api/parked-sales/${row.id}`, {
-        headers: authHeaders(),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const data = await api.get(`/api/parked-sales/${row.id}`);
       setCart(
         (data.items || []).map((i) => ({
           id: i.product_id,
@@ -610,10 +569,7 @@ export const POSProvider = ({ children }) => {
       setOrderNote(data.parkedSale?.notes || "");
       if (data.parkedSale?.customer_id)
         setSelectedCustomerId(String(data.parkedSale.customer_id));
-      await fetch(`${API}/api/parked-sales/${row.id}`, {
-        method: "DELETE",
-        headers: authHeaders(),
-      });
+      await api.del(`/api/parked-sales/${row.id}`);
       await loadParked(selectedOutletId);
       setShowParked(false);
       showNotice("Parked sale restored.");
@@ -668,19 +624,10 @@ export const POSProvider = ({ children }) => {
     setNewCustSaving(true);
     setNewCustError("");
     try {
-      const res = await fetch(`${API}/api/customers`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const data = await api.post("/api/customers", {
           name: newCustName.trim(),
           mobile: newCustMobile.trim() || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setNewCustError(data.error || "Failed to create customer");
-        return;
-      }
+        });
       setCustomers((prev) => [...prev, data]);
       setCheckoutCustomerId(String(data.id));
       setCheckoutCustSearch(data.name);
@@ -699,10 +646,7 @@ export const POSProvider = ({ children }) => {
     setOpeningShiftBusy(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/shifts/open`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
+      await api.post("/api/shifts/open", {
           outlet_id: Number(selectedOutletId),
           employee_id: employee?.id || null,
           opening_float: Number(openingFloat.toFixed(2)),
@@ -712,10 +656,7 @@ export const POSProvider = ({ children }) => {
               denomination: row.denomination,
               count: Number(row.count || 0),
             })),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to open shift");
+        });
       showNotice("Shift opened successfully.");
       await refreshGateStatus(selectedOutletId);
     } catch (err) {
@@ -826,9 +767,8 @@ export const POSProvider = ({ children }) => {
     }
 
     try {
-      const res = await fetch(`${API}/api/sales`, {
+      const res = await api.raw(`/api/sales`, {
         method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(salePayload),
       });
       const data = await res.json();
@@ -865,18 +805,14 @@ export const POSProvider = ({ children }) => {
 
       // Signal "paid" to customer-facing display before clearing cart
       if (activeShift?.id) {
-        fetch(`${API}/api/pos/customer-display`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders() },
-          body: JSON.stringify({
+        api.post("/api/pos/customer-display", {
             shift_id: activeShift.id,
             items: cart.map((i) => ({ name: i.name, qty: i.quantity, price: i.price, total: i.quantity * i.price })),
             subtotal: grossTotal,
             tax: taxTotal,
             total,
             status: "paid",
-          }),
-        }).catch(() => {});
+          }).catch(() => {});
       }
 
       setCart([]);
@@ -909,13 +845,7 @@ export const POSProvider = ({ children }) => {
     setSubmitting(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/sales`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to complete sale");
+      const data = await api.post("/api/sales", payload);
 
       const custObj = payload.customer_id
         ? customers.find((c) => String(c.id) === String(payload.customer_id))
@@ -963,9 +893,8 @@ export const POSProvider = ({ children }) => {
     let synced = 0;
     for (const sale of queue) {
       try {
-        const res = await fetch(`${API}/api/sales`, {
+        const res = await api.raw("/api/sales", {
           method: "POST",
-          headers: authHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify(sale),
         });
         if (res.ok) {
@@ -1020,13 +949,8 @@ export const POSProvider = ({ children }) => {
     if (e && e.preventDefault) e.preventDefault();
     if (!lockPin) return;
     try {
-      const res = await fetch(`${API}/api/employees/validate-pin`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin_code: lockPin }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.employee) {
+      const data = await api.post("/api/employees/validate-pin", { pin_code: lockPin });
+      if (!data.employee) {
         setLockError("Invalid PIN");
         setLockPin("");
         return;
@@ -1057,18 +981,14 @@ export const POSProvider = ({ children }) => {
         price: i.price,
         total: i.quantity * i.price,
       }));
-      fetch(`${API}/api/pos/customer-display`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({
+      api.post("/api/pos/customer-display", {
           shift_id: activeShift.id,
           items,
           subtotal: grossTotal,
           tax: taxTotal,
           total,
           status: cart.length > 0 ? "active" : "idle",
-        }),
-      }).catch(() => {}); // silent fail — display is non-critical
+        }).catch(() => {}); // silent fail — display is non-critical
     }, 500);
     return () => clearTimeout(customerDisplayTimerRef.current);
   }, [cart, grossTotal, taxTotal, total, activeShift]);

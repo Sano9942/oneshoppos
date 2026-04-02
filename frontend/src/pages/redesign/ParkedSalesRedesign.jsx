@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Download, PauseCircle, RefreshCw, Trash2 } from "lucide-react";
-import { API } from "../../config";
-import { useAuth } from "../../auth/AuthProvider";
+import { api } from "../../api";
 import { fmtLocalDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import {
@@ -14,7 +13,6 @@ import {
 import { downloadCsv } from "../../utils/csvExport";
 
 export default function ParkedSalesRedesign() {
-  const { authHeaders } = useAuth();
   const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
@@ -28,9 +26,7 @@ export default function ParkedSalesRedesign() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API}/parked-sales`, { headers: authHeaders() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load parked sales");
+      const data = await api.get("/api/parked-sales");
       setRows(data.parkedSales || data.parked_sales || []);
     } catch (e) {
       setError(e.message || "Failed to load parked sales");
@@ -41,8 +37,7 @@ export default function ParkedSalesRedesign() {
 
   const loadOutlets = async () => {
     try {
-      const res = await fetch(`${API}/outlets`, { headers: authHeaders() });
-      const data = await res.json();
+      const data = await api.get("/api/outlets");
       setOutlets(data.outlets || []);
     } catch {
       // non-critical
@@ -58,12 +53,7 @@ export default function ParkedSalesRedesign() {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`${API}/parked-sales/${id}`, {
-        method: "DELETE",
-        headers: authHeaders(),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete parked sale");
+      await api.del(`/api/parked-sales/${id}`);
       setConfirmId(null);
       setRows((prev) => prev.filter((r) => r.id !== id));
     } catch (e) {

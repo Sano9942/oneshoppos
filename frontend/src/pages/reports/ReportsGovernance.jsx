@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Play, Plus, RefreshCw, ShieldCheck } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 
@@ -207,22 +207,13 @@ export default function GovernanceTab({ filters }) {
     setLoading(true);
     setError("");
     try {
-      const headers = authHeaders();
       const calls = [
-        fetch(`${API}/api/reports/saved-views`, { headers }).then((r) => r.json()),
+        api.get("/api/reports/saved-views"),
       ];
       if (canManageGovernance) {
-        calls.push(
-          fetch(`${API}/api/reports/schedules`, { headers }).then((r) => r.json()),
-        );
-        calls.push(
-          fetch(`${API}/api/reports/governance/definitions`, {
-            headers,
-          }).then((r) => r.json()),
-        );
-        calls.push(
-          fetch(`${API}/api/reports/delivery-log`, { headers }).then((r) => r.json()),
-        );
+        calls.push(api.get("/api/reports/schedules"));
+        calls.push(api.get("/api/reports/governance/definitions"));
+        calls.push(api.get("/api/reports/delivery-log"));
       }
 
       const [viewsRes, schedulesRes, defsRes, logRes] = await Promise.all(calls);
@@ -245,18 +236,12 @@ export default function GovernanceTab({ filters }) {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/reports/schedules`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
+      await api.post("/api/reports/schedules", {
           ...scheduleDraft,
           run_hour: Number(scheduleDraft.run_hour || 6),
           run_minute: Number(scheduleDraft.run_minute || 0),
           filters,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create schedule");
+        });
       setScheduleDraft((p) => ({ ...p, name: "", recipient: "" }));
       await load();
     } catch (e) {
@@ -270,16 +255,10 @@ export default function GovernanceTab({ filters }) {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/reports/saved-views`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
+      await api.post("/api/reports/saved-views", {
           ...viewDraft,
           filters,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save view");
+        });
       setViewDraft((p) => ({ ...p, name: "" }));
       await load();
     } catch (e) {
@@ -293,13 +272,7 @@ export default function GovernanceTab({ filters }) {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/reports/governance/definitions`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(defDraft),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save definition");
+      await api.post("/api/reports/governance/definitions", defDraft);
       setDefDraft((p) => ({ ...p, version: "", query_signature: "", notes: "" }));
       await load();
     } catch (e) {
@@ -313,12 +286,7 @@ export default function GovernanceTab({ filters }) {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/reports/schedules/${id}/run-now`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to run schedule");
+      await api.post(`/api/reports/schedules/${id}/run-now`);
       await load();
     } catch (e) {
       setError(e.message || "Failed to run schedule");

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Tag, Package, SearchCheck, ReceiptText, History } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   fmtDate,
   fmtDateTime,
@@ -44,8 +44,7 @@ export function CategoryWiseTab({ filters }) {
         time_to: filters.timeTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/category-wise?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/category-wise?${p}`);
       setRows(d.items || []);
     } catch {
       setRows([]);
@@ -118,8 +117,7 @@ export function ProductSpecTab({ filters }) {
         brand_id: filters.brandId,
         supplier_id: filters.supplierId,
       });
-      const res = await fetch(`${API}/api/reports/product-spec?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/product-spec?${p}`);
       setRows(d.items || []);
     } catch {
       setRows([]);
@@ -296,8 +294,7 @@ export function HistoryCostTab({ filters }) {
     setLoading(true);
     try {
       const p = buildCatalogParams(filters);
-      const res = await fetch(`${API}/api/reports/history-cost?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/history-cost?${p}`);
       setRows(d.items || []);
     } catch {
       setRows([]);
@@ -433,8 +430,7 @@ export function HistorySaleTab({ filters }) {
     setLoading(true);
     try {
       const p = buildCatalogParams(filters);
-      const res = await fetch(`${API}/api/reports/history-sale?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/history-sale?${p}`);
       setRows(d.items || []);
     } catch {
       setRows([]);
@@ -572,8 +568,7 @@ export function ProductAuditTab({ filters }) {
         issue,
         inactivity_days: String(inactivityDays),
       });
-      const res = await fetch(`${API}/api/reports/product-audit?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/product-audit?${p}`);
       setRows(d.rows || []);
       setSummary(d.summary || null);
     } catch {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Search, Trash2, Truck } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import {
   Badge,
@@ -41,12 +41,10 @@ export default function SuppliersRedesign() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/suppliers`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load suppliers");
+      const data = await api.get("/api/suppliers");
       setRows(data.suppliers || []);
     } catch (e) {
-      setError(e.message || "Failed to load suppliers");
+      setError(e.body?.error || e.message || "Failed to load suppliers");
     } finally {
       setLoading(false);
     }
@@ -92,28 +90,26 @@ export default function SuppliersRedesign() {
     setError("");
     try {
       const isEdit = Boolean(form.id);
-      const url = isEdit ? `${API}/api/suppliers/${form.id}` : `${API}/api/suppliers`;
-      const res = await fetch(url, {
-        method: isEdit ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: form.name,
-          contact_person: form.contact_person,
-          phone: form.phone,
-          email: form.email,
-          address: form.address,
-          payment_terms: form.payment_terms,
-          credit_days: form.payment_terms === "credit" ? Number(form.credit_days) : 0,
-          credit_limit: form.payment_terms === "credit" ? Number(form.credit_limit) : 0,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save supplier");
+      const payload = {
+        name: form.name,
+        contact_person: form.contact_person,
+        phone: form.phone,
+        email: form.email,
+        address: form.address,
+        payment_terms: form.payment_terms,
+        credit_days: form.payment_terms === "credit" ? Number(form.credit_days) : 0,
+        credit_limit: form.payment_terms === "credit" ? Number(form.credit_limit) : 0,
+      };
+      if (isEdit) {
+        await api.put(`/api/suppliers/${form.id}`, payload);
+      } else {
+        await api.post("/api/suppliers", payload);
+      }
       setModalOpen(false);
       setForm(EMPTY);
       await load();
     } catch (e2) {
-      setError(e2.message || "Failed to save supplier");
+      setError(e2.body?.error || e2.message || "Failed to save supplier");
     } finally {
       setSaving(false);
     }
@@ -123,12 +119,10 @@ export default function SuppliersRedesign() {
     if (!window.confirm(`Delete supplier "${row.name}"?`)) return;
     setError("");
     try {
-      const res = await fetch(`${API}/api/suppliers/${row.id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete supplier");
+      await api.del(`/api/suppliers/${row.id}`);
       await load();
     } catch (e) {
-      setError(e.message || "Failed to delete supplier");
+      setError(e.body?.error || e.message || "Failed to delete supplier");
     }
   };
 

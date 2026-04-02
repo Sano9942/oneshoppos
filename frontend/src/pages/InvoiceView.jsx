@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Printer, ArrowLeft, RefreshCw, FileText, Download } from "lucide-react";
 
-import { API_BASE as API } from '../config';
+import { api } from '../api';
 import { fmtUtcDateTime } from '../utils/dates';
 import { useCurrency } from '../contexts/CurrencyContext';
 
@@ -200,10 +200,8 @@ export default function InvoiceView({ saleId, onBack }) {
       setLoading(true);
       setError(null);
     });
-    fetch(`${API}/api/sales/${saleId}/invoice`)
-      .then((r) => r.json())
+    api.get(`/api/sales/${saleId}/invoice`)
       .then((d) => {
-        if (d.error) throw new Error(d.error);
         if (!active) return;
         setData(d);
         setError(null);
@@ -232,11 +230,7 @@ export default function InvoiceView({ saleId, onBack }) {
 
   const handleExportJson = async () => {
     if (!saleId) return;
-    const res = await fetch(`${API}/api/sales/${saleId}/invoice/export`);
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || "Failed to export invoice");
-    }
+    const data = await api.get(`/api/sales/${saleId}/invoice/export`);
     const blob = new Blob([JSON.stringify(data, null, 2)], {
       type: "application/json;charset=utf-8",
     });

@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, Download, RefreshCw, X, BookOpen, Ban } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { fmtLocalDate as fmtDate } from "../../utils/dates";
@@ -26,7 +26,7 @@ function calcDue(inv) {
 }
 
 export default function SupplierPayablesRedesign() {
-  const { authHeaders, hasPerm } = useAuth();
+  const { hasPerm } = useAuth();
   const { fmt: money } = useCurrency();
   const isAdmin = hasPerm("all_access");
   const [tab, setTab] = useState("aging");
@@ -69,9 +69,7 @@ export default function SupplierPayablesRedesign() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/supplier-aging`, { headers: authHeaders() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load supplier aging");
+      const data = await api.get("/api/supplier-aging");
       setAging(data.aging || []);
     } catch (e) {
       setAging([]);
@@ -79,19 +77,14 @@ export default function SupplierPayablesRedesign() {
     } finally {
       setLoading(false);
     }
-  }, [authHeaders]);
+  }, []);
 
   const fetchInvoices = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams();
-      if (filterStatus) params.set("status", filterStatus);
-      const res = await fetch(`${API}/api/supplier-invoices?${params.toString()}`, {
-        headers: authHeaders(),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load supplier invoices");
+      const query = filterStatus ? { status: filterStatus } : undefined;
+      const data = await api.get("/api/supplier-invoices", query);
       setInvoices(data.invoices || []);
     } catch (e) {
       setInvoices([]);
@@ -99,7 +92,7 @@ export default function SupplierPayablesRedesign() {
     } finally {
       setLoading(false);
     }
-  }, [authHeaders, filterStatus]);
+  }, [filterStatus]);
 
   const refreshCurrent = useCallback(async () => {
     if (tab === "aging") await fetchAging();
@@ -112,22 +105,19 @@ export default function SupplierPayablesRedesign() {
 
   // Load supplier list for ledger dropdown
   useEffect(() => {
-    fetch(`${API}/api/suppliers`, { headers: authHeaders() })
-      .then((r) => r.json())
+    api.get("/api/suppliers")
       .then((d) => setSuppliers(d.suppliers || []))
       .catch(() => {});
-  }, [authHeaders]);
+  }, []);
 
   const fetchLedger = useCallback(async () => {
     if (!ledgerSupplierId) return;
     setLedgerLoading(true);
     try {
-      const q = new URLSearchParams({ from: ledgerFrom, to: ledgerTo });
-      const res = await fetch(`${API}/api/supplier-ledger/${ledgerSupplierId}?${q}`, { headers: authHeaders() });
-      const data = await res.json();
-      setLedger(res.ok ? data : null);
+      const data = await api.get(`/api/supplier-ledger/${ledgerSupplierId}`, { from: ledgerFrom, to: ledgerTo });
+      setLedger(data);
     } catch { setLedger(null); } finally { setLedgerLoading(false); }
-  }, [ledgerSupplierId, ledgerFrom, ledgerTo, authHeaders]);
+  }, [ledgerSupplierId, ledgerFrom, ledgerTo]);
 
   const toggleSupplier = async (supplierId) => {
     if (expandedSupplierId === supplierId) {
@@ -137,10 +127,7 @@ export default function SupplierPayablesRedesign() {
     setExpandedSupplierId(supplierId);
     if (supplierInvoices[supplierId]) return;
     try {
-      const res = await fetch(`${API}/api/supplier-invoices?supplier_id=${supplierId}`, {
-        headers: authHeaders(),
-      });
-      const data = await res.json();
+      const data = await api.get("/api/supplier-invoices", { supplier_id: supplierId });
       setSupplierInvoices((prev) => ({ ...prev, [supplierId]: data.invoices || [] }));
     } catch {
       setSupplierInvoices((prev) => ({ ...prev, [supplierId]: [] }));
@@ -177,19 +164,13 @@ export default function SupplierPayablesRedesign() {
     setError("");
     setNotice("");
     try {
-      const res = await fetch(`${API}/api/supplier-invoices/${payModal.id}/pay`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount,
-          payment_method: payMethod,
-          reference: payRef,
-          paid_by: payBy,
-          notes: payNotes,
-        }),
+      await api.post(`/api/supplier-invoices/${payModal.id}/pay`, {
+        amount,
+        payment_method: payMethod,
+        reference: payRef,
+        paid_by: payBy,
+        notes: payNotes,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Payment failed");
       setNotice("Payment recorded successfully.");
       closePayModal();
       setSupplierInvoices({});
@@ -207,8 +188,7 @@ export default function SupplierPayablesRedesign() {
     setExpandedInvoiceId(invId);
     if (invoicePayments[invId]) return;
     try {
-      const res = await fetch(`${API}/api/supplier-invoices/${invId}`, { headers: authHeaders() });
-      const data = await res.json();
+      const data = await api.get(`/api/supplier-invoices/${invId}`);
       setInvoicePayments((prev) => ({ ...prev, [invId]: data.payments || [] }));
     } catch { setInvoicePayments((prev) => ({ ...prev, [invId]: [] })); }
   };
@@ -224,13 +204,7 @@ export default function SupplierPayablesRedesign() {
     setError("");
     setNotice("");
     try {
-      const res = await fetch(`${API}/api/supplier-payments/${voidModal.id}/void`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: voidReason }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to void payment");
+      await api.post(`/api/supplier-payments/${voidModal.id}/void`, { reason: voidReason });
       setNotice("Payment voided successfully.");
       setVoidModal(null);
       setVoidReason("");

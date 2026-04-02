@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { Search, Download, MessageSquarePlus, X, Loader2 } from "lucide-react";
 import { PageShell, SectionCard, Button, Input, Select } from "../../ui/primitives";
 import { useToast } from "../../contexts/ToastContext";
-import { API } from "../../config";
+import { api } from "../../api";
 
 const PROVINCES = [
   { key: "punjab", label: "Punjab", field: "punjab_pra" },
@@ -46,11 +46,7 @@ export default function TaxLookupRedesign() {
     if (!query.trim()) return;
     setLoading(true);
     try {
-      const res = await fetch(
-        `${API}/tax-lookup?q=${encodeURIComponent(query.trim())}&province=${province}`,
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Search failed");
+      const data = await api.get("/api/tax-lookup", { q: query.trim(), province });
       setResults(data.rates || []);
       setLastUpdated(data.last_updated || null);
     } catch (err) {
@@ -70,9 +66,7 @@ export default function TaxLookupRedesign() {
   const handleExport = useCallback(async () => {
     setExporting(true);
     try {
-      const res = await fetch(`${API}/tax-lookup/export`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Export failed");
+      const data = await api.get("/api/tax-lookup/export");
 
       const rates = data.rates || [];
       if (!rates.length) {
@@ -136,19 +130,13 @@ export default function TaxLookupRedesign() {
     }
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/tax-lookup/suggest`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          reference_id: suggestModal.id || suggestModal.hs_code,
-          field_name: suggestForm.field_name,
-          suggested_value: suggestForm.suggested_value,
-          source_reference: suggestForm.source_reference || undefined,
-          notes: suggestForm.notes || undefined,
-        }),
+      await api.post("/api/tax-lookup/suggest", {
+        reference_id: suggestModal.id || suggestModal.hs_code,
+        field_name: suggestForm.field_name,
+        suggested_value: suggestForm.suggested_value,
+        source_reference: suggestForm.source_reference || undefined,
+        notes: suggestForm.notes || undefined,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Submission failed");
       success("Correction suggestion submitted. Thank you!");
       closeSuggestModal();
     } catch (err) {

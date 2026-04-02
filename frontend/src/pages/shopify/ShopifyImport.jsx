@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Download, RefreshCw } from "lucide-react";
 import { useShopify } from "./ShopifyContext";
-import { API } from "../../config";
 
 export default function ShopifyImport() {
   const { apiFetch, config, setError, setSuccess, loadAll } = useShopify();
@@ -23,7 +22,7 @@ export default function ShopifyImport() {
     setImportResult(null);
     try {
       const res = await apiFetch(
-        `${API}/integrations/shopify/import/products`,
+        `/api/integrations/shopify/import/products`,
         { method: "POST" },
       );
       const data = await res.json();
@@ -43,7 +42,7 @@ export default function ShopifyImport() {
     setInventorySyncResult(null);
     try {
       const res = await apiFetch(
-        `${API}/integrations/shopify/import/inventory`,
+        `/api/integrations/shopify/import/inventory`,
         { method: "POST" },
       );
       const data = await res.json();
@@ -67,7 +66,7 @@ export default function ShopifyImport() {
     setDeletingImport(true);
     try {
       const res = await apiFetch(
-        `${API}/integrations/shopify/import/products`,
+        `/api/integrations/shopify/import/products`,
         { method: "DELETE" },
       );
       if (res.ok) {

@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { CheckCircle, XCircle, Clock, RefreshCw } from "lucide-react";
 import { fmtLocalDateTime as fmtDateTime } from "../utils/dates";
-import { useAuth } from "../auth/AuthProvider";
-
-import { API } from '../config';
+import { api } from '../api';
 
 const STATUS_LABELS = {
   pending_approval: { label: "Pending", color: "bg-yellow-100 text-yellow-800" },
@@ -17,14 +15,14 @@ const TYPE_LABELS = {
   reconciliation_fix: "Inventory Reconciliation",
 };
 
-function getApprovalEndpoint(approval) {
+function getApprovalPath(approval) {
   if (approval.reference_type === "purchase_order") {
-    return `${API}/purchase-orders/${approval.reference_id}/approve`;
+    return `/api/purchase-orders/${approval.reference_id}/approve`;
   }
   if (approval.reference_type === "reconciliation") {
-    return `${API}/reconciliation/inventory/${approval.reference_id}/approve-fix`;
+    return `/api/reconciliation/inventory/${approval.reference_id}/approve-fix`;
   }
-  return `${API}/transfers/${approval.reference_id}/approve`;
+  return `/api/transfers/${approval.reference_id}/approve`;
 }
 
 function formatApprovalNotes(approval) {
@@ -39,7 +37,6 @@ function formatApprovalNotes(approval) {
 }
 
 export default function Approvals() {
-  const { authHeaders } = useAuth();
   const [approvals, setApprovals] = useState([]);
   const [filterStatus, setFilterStatus] = useState("pending_approval");
   const [loading, setLoading] = useState(false);
@@ -48,28 +45,17 @@ export default function Approvals() {
   const [actionReason, setActionReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const apiFetch = useCallback(
-    (url, options = {}) => {
-      const headers = new Headers(options.headers || {});
-      const merged = authHeaders();
-      Object.entries(merged).forEach(([key, value]) => headers.set(key, value));
-      return fetch(url, { ...options, headers });
-    },
-    [authHeaders],
-  );
-
   const fetchApprovals = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiFetch(`${API}/approvals?status=${filterStatus}`);
-      const data = await res.json();
+      const data = await api.get("/api/approvals", { status: filterStatus });
       setApprovals(data.approvals || []);
     } catch {
       setApprovals([]);
     } finally {
       setLoading(false);
     }
-  }, [filterStatus, apiFetch]);
+  }, [filterStatus]);
 
   useEffect(() => {
     fetchApprovals();
@@ -79,26 +65,17 @@ export default function Approvals() {
     if (!actionModal) return;
     const { approval, action } = actionModal;
 
-    const endpoint = getApprovalEndpoint(approval);
+    const path = getApprovalPath(approval);
 
     setSubmitting(true);
     try {
-      const res = await apiFetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, action_by: actionBy, reason: actionReason }),
-      });
-      if (res.ok) {
-        setActionModal(null);
-        setActionBy("");
-        setActionReason("");
-        fetchApprovals();
-      } else {
-        const err = await res.json();
-        alert(err.error || "Action failed");
-      }
-    } catch {
-      alert("Network error");
+      await api.post(path, { action, action_by: actionBy, reason: actionReason });
+      setActionModal(null);
+      setActionBy("");
+      setActionReason("");
+      fetchApprovals();
+    } catch (e) {
+      alert(e.body?.error || e.message || "Action failed");
     } finally {
       setSubmitting(false);
     }

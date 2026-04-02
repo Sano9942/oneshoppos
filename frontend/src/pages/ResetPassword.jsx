@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Lock, CheckCircle, XCircle } from "lucide-react";
-import { API_BASE } from "../config";
+import { api } from "../api";
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -21,17 +21,11 @@ export default function ResetPassword() {
     if (!valid) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/auth/reset-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token,
-          new_password: password,
-          store_code: tenant || undefined,
-        }),
+      const data = await api.post("/api/auth/reset-password", {
+        token,
+        new_password: password,
+        store_code: tenant || undefined,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Reset failed");
       setResult({ success: true, message: data.message });
     } catch (err) {
       setResult({ success: false, message: err.message });

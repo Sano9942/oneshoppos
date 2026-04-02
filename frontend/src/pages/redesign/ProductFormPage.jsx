@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import { Button, PageShell, Input, SectionCard, Select } from "../../ui/primitives";
-import { useAuth } from "../../auth/AuthProvider";
 import { sortCategories, indentLabel } from "../../utils/categoryTree";
 import { X } from "lucide-react";
 
@@ -51,8 +51,6 @@ export default function ProductFormPage() {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
-  const { authHeaders } = useAuth();
-
   const [form, setForm] = useState({ ...BLANK_FORM });
   const [variants, setVariants] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -82,13 +80,7 @@ export default function ProductFormPage() {
       // If user typed a new supplier name, create it first and get the ID back
       let resolvedSupplierId = form.supplier_id || null;
       if (form.supplier_id === "__new__" && newSupplierName.trim()) {
-        const sRes = await fetch(`${API}/api/suppliers`, {
-          method: "POST",
-          headers: { ...authHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({ name: newSupplierName.trim() }),
-        });
-        const sData = await sRes.json();
-        if (!sRes.ok) throw new Error(sData.error || "Failed to create supplier");
+        const sData = await api.post("/api/suppliers", { name: newSupplierName.trim() });
         resolvedSupplierId = sData.id;
         // Add to local list so it shows immediately if user navigates back
         setSuppliers((prev) => [...prev, sData]);
@@ -144,15 +136,11 @@ export default function ProductFormPage() {
           }));
       }
 
-      const url = isEdit ? `${API}/api/products/${id}` : `${API}/api/products`;
-      const method = isEdit ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Save failed");
+      if (isEdit) {
+        await api.put(`/api/products/${id}`, payload);
+      } else {
+        await api.post("/api/products", payload);
+      }
       navigate("/inventory");
     } catch (err) {
       setError(err.message);
@@ -167,11 +155,7 @@ export default function ProductFormPage() {
     try {
       const fd = new FormData();
       fd.append("image", file);
-      const res = await fetch(`${API}/api/uploads/product-image`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: fd,
-      });
+      const res = await api.upload("/api/uploads/product-image", fd);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
       upd("image_url", data.url);
@@ -183,18 +167,17 @@ export default function ProductFormPage() {
   };
 
   useEffect(() => {
-    const h = authHeaders();
     const base = [
-      fetch(`${API}/api/categories`, { headers: h }).then(r => r.json()),
-      fetch(`${API}/api/brands`, { headers: h }).then(r => r.json()),
-      fetch(`${API}/api/attribute-sets`, { headers: h }).then(r => r.json()),
-      fetch(`${API}/api/suppliers`, { headers: h }).then(r => r.json()),
+      api.get("/api/categories"),
+      api.get("/api/brands"),
+      api.get("/api/attribute-sets"),
+      api.get("/api/suppliers"),
     ];
     const all = isEdit
       ? [...base,
-          fetch(`${API}/api/products/${id}`, { headers: h }).then(r => r.json()),
-          fetch(`${API}/api/products/${id}/variants`, { headers: h }).then(r => r.json()),
-          fetch(`${API}/api/products/${id}/stock`, { headers: h }).then(r => r.json()),
+          api.get(`/api/products/${id}`),
+          api.get(`/api/products/${id}/variants`),
+          api.get(`/api/products/${id}/stock`),
         ]
       : base;
 

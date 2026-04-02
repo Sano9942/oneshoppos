@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle, Database, Download, History, RefreshCw, Upload } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import {
   Badge,
@@ -20,7 +20,7 @@ const fmtBytes = (b) => {
 };
 
 export default function BackupRestoreRedesign() {
-  const { employee, authHeaders } = useAuth();
+  const { employee } = useAuth();
   const [log, setLog] = useState([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState(null); // { type: 'success'|'error', text }
@@ -35,15 +35,13 @@ export default function BackupRestoreRedesign() {
   const fetchLog = useCallback(
     async (silent = false) => {
       try {
-        const r = await fetch(`${API}/api/backup/log`, { headers: authHeaders() });
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error || "Failed to load backup log");
+        const d = await api.get("/api/backup/log");
         setLog(d.log || []);
       } catch (e) {
         if (!silent) showMsg("error", e.message || "Failed to load backup log");
       }
     },
-    [showMsg, authHeaders],
+    [showMsg],
   );
 
   useEffect(() => { fetchLog(true); }, [fetchLog]);
@@ -52,10 +50,7 @@ export default function BackupRestoreRedesign() {
     setLoading(true);
     try {
       const performedBy = employee?.name || (employee?.id ? `Employee #${employee.id}` : "Unknown");
-      const res = await fetch(
-        `${API}/api/backup/download?performed_by=${encodeURIComponent(performedBy)}`,
-        { headers: authHeaders() },
-      );
+      const res = await api.raw(`/api/backup/download?performed_by=${encodeURIComponent(performedBy)}`);
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error || "Backup failed");
@@ -89,10 +84,7 @@ export default function BackupRestoreRedesign() {
       const formData = new FormData();
       formData.append("backup_file", file);
       const performedBy = employee?.name || "Unknown";
-      const res = await fetch(
-        `${API}/api/backup/restore?performed_by=${encodeURIComponent(performedBy)}`,
-        { method: "POST", body: formData, headers: authHeaders() },
-      );
+      const res = await api.upload(`/api/backup/restore?performed_by=${encodeURIComponent(performedBy)}`, formData);
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Restore failed");
       showMsg("success", "Database restored successfully. Please refresh the app.");

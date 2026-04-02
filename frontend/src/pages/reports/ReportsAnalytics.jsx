@@ -6,7 +6,7 @@ import {
   ShoppingBag,
   LayoutGrid,
 } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   exportCSV,
   ExportButton,
@@ -27,8 +27,7 @@ export function ComparativeTrendsTab({ filters }) {
     try {
       const p = new URLSearchParams();
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/comparative-trends?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/comparative-trends?${p}`);
       setData(d);
     } catch {
       setData(null);
@@ -152,8 +151,7 @@ export function HeatmapsTab({ filters }) {
         date_to: filters.dateTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/heatmaps?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/heatmaps?${p}`);
       setHeatmap(d.heatmap || []);
     } catch {
       setHeatmap([]);
@@ -277,8 +275,7 @@ export function RevenueLeaksTab({ filters }) {
         employee_id: filters.employeeId,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/revenue-leaks?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/revenue-leaks?${p}`);
       setData(d);
     } catch {
       setData(null);
@@ -397,8 +394,7 @@ export function ProductMixTab({ filters }) {
         date_to: filters.dateTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/product-mix?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/product-mix?${p}`);
       setRows(d.product_mix || []);
     } catch {
       setRows([]);
@@ -491,8 +487,7 @@ export function RetailMatrixTab({ filters }) {
         date_to: filters.dateTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/retail-matrix?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/retail-matrix?${p}`);
       setMatrix(d.matrix || []);
     } catch {
       setMatrix([]);

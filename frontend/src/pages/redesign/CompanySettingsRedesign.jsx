@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Building2, CheckCircle, Globe, Target, Upload, X } from "lucide-react";
 import { API_BASE as API } from "../../config";
-import { useAuth } from "../../auth/AuthProvider";
+import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import {
   Button,
@@ -31,7 +31,6 @@ function FormField({ label, children }) {
 }
 
 export default function CompanySettingsRedesign() {
-  const { authHeaders } = useAuth();
   const { refresh } = useCurrency();
   const [form, setForm] = useState(DEFAULT_FORM);
   const [saving, setSaving] = useState(false);
@@ -60,11 +59,10 @@ export default function CompanySettingsRedesign() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/company-profile`, { headers: authHeaders() });
-      const data = await res.json();
-      if (res.ok && data.profile) setForm({ ...DEFAULT_FORM, ...data.profile });
+      const data = await api.get("/api/company-profile");
+      if (data.profile) setForm({ ...DEFAULT_FORM, ...data.profile });
     } catch { /* silent */ }
-  }, [authHeaders]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -77,18 +75,12 @@ export default function CompanySettingsRedesign() {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await fetch(`${API}/api/company-profile`, {
-        method: "PUT",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save profile");
+      await api.put("/api/company-profile", form);
       showMsg("success", "Company profile saved.");
       load();
       refresh();
     } catch (err) {
-      showMsg("error", err.message || "Save failed");
+      showMsg("error", err.body?.error || err.message || "Save failed");
     } finally {
       setSaving(false);
     }
@@ -99,18 +91,14 @@ export default function CompanySettingsRedesign() {
     const fd = new FormData();
     fd.append("logo", logoFile);
     try {
-      const res = await fetch(`${API}/api/company-profile/logo`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: fd,
-      });
+      const res = await api.upload("/api/company-profile/logo", fd);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Logo upload failed");
       showMsg("success", "Logo updated.");
       setLogoFile(null);
       load();
     } catch (err) {
-      showMsg("error", err.message || "Logo upload failed");
+      showMsg("error", err.body?.error || err.message || "Logo upload failed");
     }
   };
 

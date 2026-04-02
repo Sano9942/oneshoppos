@@ -9,7 +9,6 @@ import {
   Download,
 } from "lucide-react";
 import { useShopify } from "./ShopifyContext";
-import { API } from "../../config";
 
 export default function ShopifySettings() {
   const { config, setConfig, apiFetch, status, loadAll, setError, setSuccess } =
@@ -30,7 +29,7 @@ export default function ShopifySettings() {
     setError("");
     setSuccess("");
     try {
-      const res = await apiFetch(`${API}/integrations/shopify/config`, {
+      const res = await apiFetch(`/api/integrations/shopify/config`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
@@ -51,7 +50,7 @@ export default function ShopifySettings() {
     if (!window.confirm("Disconnect Shopify? This will clear credentials."))
       return;
     try {
-      const res = await apiFetch(`${API}/integrations/shopify/config`, {
+      const res = await apiFetch(`/api/integrations/shopify/config`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Failed to disconnect");
@@ -67,7 +66,7 @@ export default function ShopifySettings() {
     setError("");
     setSuccess("");
     try {
-      const res = await apiFetch(`${API}/integrations/shopify/verify`, {
+      const res = await apiFetch(`/api/integrations/shopify/verify`, {
         method: "POST",
       });
       const data = await res.json();
@@ -84,7 +83,7 @@ export default function ShopifySettings() {
   const runLiveValidation = async () => {
     setRunningLiveValidation(true);
     try {
-      const res = await apiFetch(`${API}/integrations/shopify/validate`, {
+      const res = await apiFetch(`/api/integrations/shopify/validate`, {
         method: "POST",
       });
       if (res.ok)
@@ -99,7 +98,7 @@ export default function ShopifySettings() {
   const runPush = async () => {
     setSyncingPush(true);
     try {
-      const res = await apiFetch(`${API}/integrations/shopify/sync/inventory`, {
+      const res = await apiFetch(`/api/integrations/shopify/sync/inventory`, {
         method: "POST",
       });
       if (res.ok) setSuccess("Dry-run inventory push triggered.");
@@ -113,7 +112,7 @@ export default function ShopifySettings() {
   const runPull = async () => {
     setSyncingPull(true);
     try {
-      const res = await apiFetch(`${API}/integrations/shopify/sync/orders`, {
+      const res = await apiFetch(`/api/integrations/shopify/sync/orders`, {
         method: "POST",
       });
       if (res.ok) setSuccess("Dry-run order pull triggered.");
@@ -127,7 +126,7 @@ export default function ShopifySettings() {
   const processPending = async () => {
     setProcessingQueue(true);
     try {
-      const res = await apiFetch(`${API}/integrations/shopify/queue/process`, {
+      const res = await apiFetch(`/api/integrations/shopify/queue/process`, {
         method: "POST",
       });
       if (res.ok) setSuccess("Queue processing triggered.");
@@ -141,7 +140,7 @@ export default function ShopifySettings() {
   const retryFailed = async () => {
     setRetryingFailed(true);
     try {
-      const res = await apiFetch(`${API}/integrations/shopify/queue/retry`, {
+      const res = await apiFetch(`/api/integrations/shopify/queue/retry`, {
         method: "POST",
       });
       if (res.ok) setSuccess("Retrying failed events...");

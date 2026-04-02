@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Search, Trash2, X } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   Badge,
   Button,
@@ -34,9 +34,7 @@ export default function AttributeSetsRedesign() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/attribute-sets`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load attribute sets");
+      const data = await api.get("/api/attribute-sets");
       setRows(data.attributeSets || []);
       setSelectedId((prev) => prev ?? data.attributeSets?.[0]?.id ?? null);
     } catch (e) {
@@ -137,22 +135,14 @@ export default function AttributeSetsRedesign() {
           options: (a.options || []).filter(Boolean),
         }));
 
-      const url = form.id
-        ? `${API}/api/attribute-sets/${form.id}`
-        : `${API}/api/attribute-sets`;
-      const method = form.id ? "PUT" : "POST";
-
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: form.name,
-          description: form.description || null,
-          attributes: cleanAttrs,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save attribute set");
+      const payload = {
+        name: form.name,
+        description: form.description || null,
+        attributes: cleanAttrs,
+      };
+      const data = form.id
+        ? await api.put(`/api/attribute-sets/${form.id}`, payload)
+        : await api.post("/api/attribute-sets", payload);
 
       setModalOpen(false);
       setForm(EMPTY_FORM);
@@ -170,11 +160,7 @@ export default function AttributeSetsRedesign() {
     if (!window.confirm(`Delete attribute set "${row.name}"?`)) return;
     setError("");
     try {
-      const res = await fetch(`${API}/api/attribute-sets/${row.id}`, {
-        method: "DELETE",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete attribute set");
+      await api.del(`/api/attribute-sets/${row.id}`);
       await load();
       if (selectedId === row.id) setSelectedId(null);
     } catch (e) {

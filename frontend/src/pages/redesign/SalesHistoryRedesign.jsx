@@ -10,7 +10,7 @@ import {
   Select,
   TableToolbar,
 } from "../../ui/primitives";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import InvoiceView from "../InvoiceView";
 import { Ban, Download, FileText, Printer, RefreshCw, Search } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
@@ -90,9 +90,7 @@ export default function SalesHistoryRedesign() {
           date_from: dateFrom,
           date_to: dateTo,
         });
-        const res = await fetch(`${API}/api/sales?${qs.toString()}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Failed to load sales");
+        const data = await api.get(`/api/sales?${qs.toString()}`);
         setRows(data.sales || []);
         setTotal(Number(data.total || 0));
         setPages(Math.max(1, Number(data.pages || 1)));
@@ -111,9 +109,7 @@ export default function SalesHistoryRedesign() {
     setDetail(null);
     setDetailLoading(true);
     try {
-      const res = await fetch(`${API}/api/sales/${sale.id}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load sale details");
+      const data = await api.get(`/api/sales/${sale.id}`);
       setDetail(data);
     } catch (e) {
       setError(e.message || "Failed to load sale details");
@@ -132,8 +128,7 @@ export default function SalesHistoryRedesign() {
   }, [search, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    fetch(`${API}/api/employees`)
-      .then((r) => r.json())
+    api.get("/api/employees")
       .then((d) => setEmployees(d.employees || []))
       .catch(() => {});
   }, []);
@@ -152,13 +147,7 @@ export default function SalesHistoryRedesign() {
     const reason = window.prompt("Void reason");
     if (!reason) return;
     try {
-      const res = await fetch(`${API}/api/sales/${selected.id}/void`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ void_reason: reason }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to void sale");
+      await api.put(`/api/sales/${selected.id}/void`, { void_reason: reason });
       await loadSales(page);
       setSelected(null);
       setDetail(null);

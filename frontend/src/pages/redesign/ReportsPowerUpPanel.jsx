@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, ChevronUp, Download, RefreshCw } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import useReportFilters from "../../hooks/useReportFilters";
 import { indentLabel, sortCategories } from "../../utils/categoryTree";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -86,7 +86,7 @@ function Filters({ filters, setFilters, show, categories }) {
   );
 }
 
-export default function ReportsPowerUpPanel({ flags, authHeaders }) {
+export default function ReportsPowerUpPanel({ flags }) {
   const { fmt: money, code: currencyCode } = useCurrency();
   const { filters, setFilters, query } = useReportFilters();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -111,61 +111,20 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
     try {
       const calls = [];
       if (flags.reports_profit_layer) {
-        calls.push(
-          fetch(`${API}/api/reports/profit-summary?${query}`, {
-            headers: authHeaders(),
-          }).then((r) => r.json()),
-        );
-        calls.push(
-          fetch(`${API}/api/reports/profit-by-product?${query}`, {
-            headers: authHeaders(),
-          }).then((r) => r.json()),
-        );
-        calls.push(
-          fetch(`${API}/api/reports/profit-by-outlet?${query}`, {
-            headers: authHeaders(),
-          }).then((r) => r.json()),
-        );
-        calls.push(
-          fetch(`${API}/api/reports/discount-leakage?${query}`, {
-            headers: authHeaders(),
-          }).then((r) => r.json()),
-        );
+        calls.push(api.get(`/api/reports/profit-summary?${query}`));
+        calls.push(api.get(`/api/reports/profit-by-product?${query}`));
+        calls.push(api.get(`/api/reports/profit-by-outlet?${query}`));
+        calls.push(api.get(`/api/reports/discount-leakage?${query}`));
       }
       if (flags.reports_inventory_health_plus) {
-        calls.push(
-          fetch(`${API}/api/reports/dead-stock?${query}`, {
-            headers: authHeaders(),
-          }).then((r) => r.json()),
-        );
-        calls.push(
-          fetch(`${API}/api/reports/stock-aging?${query}`, {
-            headers: authHeaders(),
-          }).then((r) => r.json()),
-        );
-        calls.push(
-          fetch(`${API}/api/reports/stockout-risk?${query}`, {
-            headers: authHeaders(),
-          }).then((r) => r.json()),
-        );
-        calls.push(
-          fetch(`${API}/api/reports/forecast-demand?${query}`, {
-            headers: authHeaders(),
-          }).then((r) => r.json()),
-        );
-        calls.push(
-          fetch(`${API}/api/reports/replenishment-smart?${query}`, {
-            headers: authHeaders(),
-          }).then((r) => r.json()),
-        );
+        calls.push(api.get(`/api/reports/dead-stock?${query}`));
+        calls.push(api.get(`/api/reports/stock-aging?${query}`));
+        calls.push(api.get(`/api/reports/stockout-risk?${query}`));
+        calls.push(api.get(`/api/reports/forecast-demand?${query}`));
+        calls.push(api.get(`/api/reports/replenishment-smart?${query}`));
       }
       if (flags.reports_exceptions) {
-        calls.push(
-          fetch(
-            `${API}/api/reports/exceptions?${query}&type=${encodeURIComponent(exceptionType)}`,
-            { headers: authHeaders() },
-          ).then((r) => r.json()),
-        );
+        calls.push(api.get(`/api/reports/exceptions?${query}&type=${encodeURIComponent(exceptionType)}`));
       }
 
       const results = await Promise.all(calls);
@@ -194,11 +153,10 @@ export default function ReportsPowerUpPanel({ flags, authHeaders }) {
   };
 
   useEffect(() => {
-    fetch(`${API}/api/categories`, { headers: authHeaders() })
-      .then((r) => r.json())
+    api.get("/api/categories")
       .then((data) => setCategories(sortCategories(data.categories || [])))
       .catch(() => setCategories([]));
-  }, [authHeaders]);
+  }, []);
 
   useEffect(() => {
     if (!isExpanded) return;

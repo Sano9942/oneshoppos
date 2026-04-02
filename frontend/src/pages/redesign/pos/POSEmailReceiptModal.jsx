@@ -1,8 +1,6 @@
 import React, { useState } from "react";
 import { Mail, X, Loader2 } from "lucide-react";
-import { API_BASE as API } from "../../../config";
-import { usePOS } from "./POSContext";
-
+import { api } from "../../../api";
 /**
  * POSEmailReceiptModal — sends an HTML receipt to a customer email.
  *
@@ -12,7 +10,6 @@ import { usePOS } from "./POSContext";
  *   onClose       {fn}      — Called on dismiss or after success
  */
 export default function POSEmailReceiptModal({ saleId, customerEmail, onClose }) {
-  const { authHeaders } = usePOS();
   const [email, setEmail] = useState(customerEmail || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -26,13 +23,7 @@ export default function POSEmailReceiptModal({ saleId, customerEmail, onClose })
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/email/send-receipt-v2`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ saleId, toEmail: email }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to send email.");
+      await api.post("/api/email/send-receipt-v2", { saleId, toEmail: email });
       setSent(true);
       setTimeout(onClose, 1500);
     } catch (e) {

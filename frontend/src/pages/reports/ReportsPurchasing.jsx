@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Truck, ShoppingCart, Archive, Boxes, ClipboardList } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   fmtDate,
   fmtDateTime,
@@ -23,8 +23,7 @@ export function SupplierWiseTab({ filters }) {
     try {
       const p = new URLSearchParams();
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/supplier-wise?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/supplier-wise?${p}`);
       setRows(d.items || d.rows || []);
     } catch {
       setRows([]);
@@ -134,8 +133,7 @@ export function PurchaseOrdersReportTab({ filters }) {
         date_to: filters.dateTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/purchase-orders?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/purchase-orders?${p}`);
       setRows(d.purchaseOrders || d.purchase_orders || []);
     } catch {
       setRows([]);
@@ -269,8 +267,7 @@ export function TotalPurchasesTab({ filters }) {
         tax_mode: taxMode,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/total-purchases?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/total-purchases?${p}`);
       setRows(d.items || []);
       setSummary(d.summary || null);
     } catch {
@@ -447,8 +444,7 @@ export function ItemwisePurchasesTab({ filters }) {
         tax_mode: taxMode,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/itemwise-purchases?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/itemwise-purchases?${p}`);
       setRows(d.items || []);
       setSummary(d.summary || null);
     } catch {
@@ -612,8 +608,7 @@ export function POWorkflowTab({ filters }) {
         supplier_id: filters.supplierId,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/po-workflow?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/po-workflow?${p}`);
       setRows(d.items || []);
       setSummary(d.summary || null);
     } catch {
@@ -725,8 +720,7 @@ export function ProcurementParityTab({ filters }) {
         date_to: filters.dateTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/procurement-parity?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/procurement-parity?${p}`);
       setRows(d.items || []);
       setSummary(d.summary || null);
     } catch {
@@ -824,8 +818,7 @@ export function GRNReportTab({ filters }) {
         date_to: filters.dateTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/grn-report?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/grn-report?${p}`);
       setRows(d.items || d.rows || []);
     } catch {
       setRows([]);

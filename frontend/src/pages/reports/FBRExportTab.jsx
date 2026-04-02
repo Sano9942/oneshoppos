@@ -1,11 +1,9 @@
 import { useState } from "react";
 import { FileSpreadsheet, Download, Search } from "lucide-react";
-import { API_BASE as API } from "../../config";
-import { useAuth } from "../../auth/AuthProvider";
+import { api } from "../../api";
 import { downloadCsv } from "../../utils/csvExport";
 
 export default function FBRExportTab() {
-  const { authHeaders } = useAuth();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [rows, setRows] = useState([]);
@@ -18,12 +16,7 @@ export default function FBRExportTab() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(
-        `${API}/api/reports/fbr-export?from=${from}&to=${to}`,
-        { headers: authHeaders() }
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate");
+      const data = await api.get("/api/reports/fbr-export", { from, to });
       setRows(data.rows || []);
       setCompany(data.company || {});
     } catch (err) {

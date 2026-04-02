@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Plus, RefreshCw, Tag, Trash2, X } from "lucide-react";
-import { API } from "../../config";
-import { useAuth } from "../../auth/AuthProvider";
+import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import {
   Button,
@@ -33,7 +32,6 @@ function firstOfMonth() {
 }
 
 export default function ExpensesRedesign() {
-  const { authHeaders } = useAuth();
   const { fmt: money } = useCurrency();
 
   const [rows, setRows] = useState([]);
@@ -65,9 +63,9 @@ export default function ExpensesRedesign() {
   const loadDropdowns = useCallback(async () => {
     try {
       const [catRes, outRes, empRes] = await Promise.all([
-        fetch(`${API}/expense-categories`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/outlets`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/employees`, { headers: authHeaders() }).then((r) => r.json()),
+        api.get("/api/expense-categories"),
+        api.get("/api/outlets"),
+        api.get("/api/employees"),
       ]);
       setCategories(catRes.categories || []);
       setOutlets(outRes.outlets || []);
@@ -75,7 +73,7 @@ export default function ExpensesRedesign() {
     } catch {
       // Non-blocking for page use.
     }
-  }, [authHeaders]);
+  }, []);
 
   const loadRowsAndSummary = useCallback(async () => {
     setLoading(true);
@@ -88,10 +86,8 @@ export default function ExpensesRedesign() {
       if (filterOutlet) params.set("outlet_id", filterOutlet);
 
       const [expRes, sumRes] = await Promise.all([
-        fetch(`${API}/expenses?${params.toString()}`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/expenses/summary?${params.toString()}`, { headers: authHeaders() }).then((r) =>
-          r.json(),
-        ),
+        api.get(`/api/expenses?${params.toString()}`),
+        api.get(`/api/expenses/summary?${params.toString()}`),
       ]);
       setRows(expRes.expenses || []);
       setSummary(sumRes.summary || []);
@@ -104,7 +100,7 @@ export default function ExpensesRedesign() {
     } finally {
       setLoading(false);
     }
-  }, [authHeaders, filterFrom, filterTo, filterCat, filterOutlet]);
+  }, [filterFrom, filterTo, filterCat, filterOutlet]);
 
   useEffect(() => {
     loadDropdowns();
@@ -159,8 +155,6 @@ export default function ExpensesRedesign() {
     setSaving(true);
     try {
       const isEdit = modal && modal !== "add";
-      const url = isEdit ? `${API}/expenses/${modal.id}` : `${API}/expenses`;
-      const method = isEdit ? "PUT" : "POST";
       const payload = {
         category_id: form.category_id || null,
         outlet_id: form.outlet_id || null,
@@ -171,22 +165,17 @@ export default function ExpensesRedesign() {
         expense_date: form.expense_date || today(),
       };
 
-      const res = await fetch(url, {
-        method,
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setFormError(data.error || "Save failed.");
-        return;
+      if (isEdit) {
+        await api.put(`/api/expenses/${modal.id}`, payload);
+      } else {
+        await api.post("/api/expenses", payload);
       }
 
       setNotice(isEdit ? "Expense updated." : "Expense created.");
       closeModal();
       await loadRowsAndSummary();
-    } catch {
-      setFormError("Connection failed.");
+    } catch (e) {
+      setFormError(e.body?.error || e.message || "Connection failed.");
     } finally {
       setSaving(false);
     }
@@ -197,16 +186,11 @@ export default function ExpensesRedesign() {
     setError("");
     setNotice("");
     try {
-      const res = await fetch(`${API}/expenses/${id}`, {
-        method: "DELETE",
-        headers: authHeaders(),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Delete failed");
+      await api.del(`/api/expenses/${id}`);
       setNotice("Expense deleted.");
       await loadRowsAndSummary();
     } catch (e) {
-      setError(e.message || "Delete failed.");
+      setError(e.body?.error || e.message || "Delete failed.");
     }
   };
 
@@ -217,18 +201,12 @@ export default function ExpensesRedesign() {
     setCatSaving(true);
     setError("");
     try {
-      const res = await fetch(`${API}/expense-categories`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Category create failed");
+      await api.post("/api/expense-categories", { name });
       setNewCategoryName("");
       await loadDropdowns();
       setNotice("Category created.");
     } catch (e2) {
-      setError(e2.message || "Category create failed.");
+      setError(e2.body?.error || e2.message || "Category create failed.");
     } finally {
       setCatSaving(false);
     }
@@ -238,17 +216,12 @@ export default function ExpensesRedesign() {
     if (!window.confirm("Delete this category? Expenses using it become uncategorized.")) return;
     setError("");
     try {
-      const res = await fetch(`${API}/expense-categories/${id}`, {
-        method: "DELETE",
-        headers: authHeaders(),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Category delete failed");
+      await api.del(`/api/expense-categories/${id}`);
       await loadDropdowns();
       await loadRowsAndSummary();
       setNotice("Category deleted.");
     } catch (e) {
-      setError(e.message || "Category delete failed.");
+      setError(e.body?.error || e.message || "Category delete failed.");
     }
   };
 

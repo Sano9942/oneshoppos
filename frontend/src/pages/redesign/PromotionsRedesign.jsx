@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Percent, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
-import { API } from "../../config";
-import { useAuth } from "../../auth/AuthProvider";
+import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import {
   Badge,
@@ -70,7 +69,6 @@ function describeValue(row, fmt) {
 }
 
 export default function PromotionsRedesign() {
-  const { authHeaders } = useAuth();
   const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
   const [products, setProducts] = useState([]);
@@ -96,9 +94,7 @@ export default function PromotionsRedesign() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API}/promotions`, { headers: authHeaders() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load promotions");
+      const data = await api.get("/api/promotions");
       setRows(data.promotions || []);
     } catch (e) {
       setRows([]);
@@ -106,20 +102,20 @@ export default function PromotionsRedesign() {
     } finally {
       setLoading(false);
     }
-  }, [authHeaders]);
+  }, []);
 
   const loadDependencies = useCallback(async () => {
     try {
       const [productsRes, categoriesRes] = await Promise.all([
-        fetch(`${API}/products`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/categories`, { headers: authHeaders() }).then((r) => r.json()),
+        api.get("/api/products"),
+        api.get("/api/categories"),
       ]);
       setProducts(productsRes.products || []);
       setCategories(sortCategories(categoriesRes.categories || []));
     } catch {
       // Non-blocking for list load.
     }
-  }, [authHeaders]);
+  }, []);
 
   useEffect(() => {
     loadPromotions();
@@ -205,27 +201,20 @@ export default function PromotionsRedesign() {
     setSaving(true);
     try {
       const isEdit = Boolean(editing?.id);
-      const url = isEdit ? `${API}/promotions/${editing.id}` : `${API}/promotions`;
-      const method = isEdit ? "PUT" : "POST";
       const payload = normalizePromoPayload(
         form,
         isEdit ? { active: Number(editing.active || 0) } : { active: 1 },
       );
-      const res = await fetch(url, {
-        method,
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setFormError(data.error || "Failed to save promotion");
-        return;
+      if (isEdit) {
+        await api.put(`/api/promotions/${editing.id}`, payload);
+      } else {
+        await api.post("/api/promotions", payload);
       }
       setNotice(isEdit ? "Promotion updated." : "Promotion created.");
       closeModal();
       await loadPromotions();
-    } catch {
-      setFormError("Connection failed");
+    } catch (e) {
+      setFormError(e.message || "Connection failed");
     } finally {
       setSaving(false);
     }
@@ -236,12 +225,7 @@ export default function PromotionsRedesign() {
     setError("");
     setNotice("");
     try {
-      const res = await fetch(`${API}/promotions/${id}`, {
-        method: "DELETE",
-        headers: authHeaders(),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Delete failed");
+      await api.del(`/api/promotions/${id}`);
       setNotice("Promotion deleted.");
       await loadPromotions();
     } catch (e) {
@@ -256,13 +240,7 @@ export default function PromotionsRedesign() {
       const payload = normalizePromoPayload(row, {
         active: Number(row.active || 0) === 1 ? 0 : 1,
       });
-      const res = await fetch(`${API}/promotions/${row.id}`, {
-        method: "PUT",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Toggle failed");
+      await api.put(`/api/promotions/${row.id}`, payload);
       setNotice(`Promotion ${payload.active ? "enabled" : "disabled"}.`);
       await loadPromotions();
     } catch (e) {
@@ -308,21 +286,15 @@ export default function PromotionsRedesign() {
     setError("");
     setNotice("");
     try {
-      const res = await fetch(`${API}/promotions/quote`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: quoteItems.map((i) => ({
-            product_id: Number(i.product_id),
-            category_id: i.category_id ? Number(i.category_id) : null,
-            quantity: Number(i.quantity || 0),
-            price: Number(i.price || 0),
-          })),
-          order_total: quoteOrderTotal,
-        }),
+      const data = await api.post("/api/promotions/quote", {
+        items: quoteItems.map((i) => ({
+          product_id: Number(i.product_id),
+          category_id: i.category_id ? Number(i.category_id) : null,
+          quantity: Number(i.quantity || 0),
+          price: Number(i.price || 0),
+        })),
+        order_total: quoteOrderTotal,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Quote failed");
       setQuoteResult(data);
     } catch (e) {
       setError(e.message || "Quote failed");

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Search, Trash2 } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   Badge,
   Button,
@@ -27,12 +27,10 @@ export default function TaxesRedesign() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/taxes`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load taxes");
+      const data = await api.get("/api/taxes");
       setRows(data.taxes || []);
     } catch (e) {
-      setError(e.message || "Failed to load taxes");
+      setError(e.body?.error || e.message || "Failed to load taxes");
     } finally {
       setLoading(false);
     }
@@ -68,24 +66,21 @@ export default function TaxesRedesign() {
     setSaving(true);
     setError("");
     try {
-      const url = form.id ? `${API}/api/taxes/${form.id}` : `${API}/api/taxes`;
-      const method = form.id ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: form.name,
-          rate: Number(form.rate || 0),
-          is_default: Boolean(form.is_default),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save tax");
+      const payload = {
+        name: form.name,
+        rate: Number(form.rate || 0),
+        is_default: Boolean(form.is_default),
+      };
+      if (form.id) {
+        await api.put(`/api/taxes/${form.id}`, payload);
+      } else {
+        await api.post("/api/taxes", payload);
+      }
       setModalOpen(false);
       setForm(EMPTY);
       await load();
     } catch (e2) {
-      setError(e2.message || "Failed to save tax");
+      setError(e2.body?.error || e2.message || "Failed to save tax");
     } finally {
       setSaving(false);
     }
@@ -95,12 +90,10 @@ export default function TaxesRedesign() {
     if (!window.confirm(`Delete tax "${row.name}"?`)) return;
     setError("");
     try {
-      const res = await fetch(`${API}/api/taxes/${row.id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete tax");
+      await api.del(`/api/taxes/${row.id}`);
       await load();
     } catch (e) {
-      setError(e.message || "Failed to delete tax");
+      setError(e.body?.error || e.message || "Failed to delete tax");
     }
   };
 

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { readContext, readSession } from "../../auth/authStore";
 import { PageShell, SectionCard, Skeleton } from "../../ui/primitives";
@@ -55,10 +55,8 @@ export default function DashboardRedesign() {
     if (!silent) setLoading(true);
     else setRefreshing(true);
     Promise.all([
-      fetch(`${API}/api/reports/dashboard`, { headers: authHeaders() }).then((r) => r.json()),
-      fetch(`${API}/api/sales?limit=10`, { headers: authHeaders() })
-        .then((r) => r.json())
-        .catch(() => ({ sales: [] })),
+      api.get("/api/reports/dashboard"),
+      api.get("/api/sales?limit=10").catch(() => ({ sales: [] })),
     ])
       .then(([dash, salesData]) => {
         if (!mounted) return;
@@ -74,7 +72,7 @@ export default function DashboardRedesign() {
         if (mounted) { setLoading(false); setRefreshing(false); }
       });
     return () => { mounted = false; };
-  }, [authHeaders]);
+  }, []);
 
   // Initial load + re-fetch when refreshKey changes
   useEffect(() => {

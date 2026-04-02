@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Store, CheckCircle, XCircle } from "lucide-react";
-import { API_BASE } from "../config";
+import { api } from "../api";
 
 const PLANS = [
   { value: "free", label: "Free", desc: "1 outlet, 3 employees, 100 products", badge: null },
@@ -40,13 +40,7 @@ export default function SignupPage() {
     if (!valid) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/auth/signup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Signup failed");
+      const data = await api.post("/api/auth/signup", form);
       // Redirect immediately to setup wizard
       if (data.setupToken && data.slug) {
         window.location.href = `/setup?token=${data.setupToken}&tenant=${data.slug}`;

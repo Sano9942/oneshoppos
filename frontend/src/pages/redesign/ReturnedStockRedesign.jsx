@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Search } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   Badge,
   Button,
@@ -48,19 +48,12 @@ export default function ReturnedStockRedesign() {
     setLoading(true);
     setError("");
     try {
-      const [retRes, supRes, outRes, prodRes] = await Promise.all([
-        fetch(`${API}/api/supplier-returns`),
-        fetch(`${API}/api/suppliers`),
-        fetch(`${API}/api/outlets`),
-        fetch(`${API}/api/products`),
-      ]);
       const [retData, supData, outData, prodData] = await Promise.all([
-        retRes.json(),
-        supRes.json(),
-        outRes.json(),
-        prodRes.json(),
+        api.get("/api/supplier-returns"),
+        api.get("/api/suppliers"),
+        api.get("/api/outlets"),
+        api.get("/api/products"),
       ]);
-      if (!retRes.ok) throw new Error(retData.error || "Failed to load supplier returns");
       setRows(retData.returns || []);
       setSuppliers(supData.suppliers || []);
       const outList = outData.outlets || [];
@@ -81,9 +74,7 @@ export default function ReturnedStockRedesign() {
     setDetail(null);
     setDetailLoading(true);
     try {
-      const res = await fetch(`${API}/api/supplier-returns/${id}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load return detail");
+      const data = await api.get(`/api/supplier-returns/${id}`);
       setDetail(data);
     } catch (e) {
       setError(e.message || "Failed to load return detail");
@@ -152,25 +143,19 @@ export default function ReturnedStockRedesign() {
     setSaving(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/supplier-returns`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          supplier_id: Number(form.supplier_id),
-          employee_id: employee?.id || null,
-          outlet_id: Number(form.outlet_id),
-          reason: form.reason || null,
-          reference_number: form.reference_number || null,
-          items: draftItems.map((i) => ({
-            product_id: i.product_id,
-            quantity: Number(i.quantity),
-            unit_price: Number(i.unit_price),
-            reason: i.reason || null,
-          })),
-        }),
+      await api.post("/api/supplier-returns", {
+        supplier_id: Number(form.supplier_id),
+        employee_id: employee?.id || null,
+        outlet_id: Number(form.outlet_id),
+        reason: form.reason || null,
+        reference_number: form.reference_number || null,
+        items: draftItems.map((i) => ({
+          product_id: i.product_id,
+          quantity: Number(i.quantity),
+          unit_price: Number(i.unit_price),
+          reason: i.reason || null,
+        })),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create supplier return");
       setModalOpen(false);
       await load();
     } catch (e2) {

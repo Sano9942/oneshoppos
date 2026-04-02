@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { PageShell, SectionCard, Button, Input, Select } from "../../ui/primitives";
 import { useToast } from "../../contexts/ToastContext";
-import { API } from "../../config";
+import { api } from "../../api";
 
 const PROVINCES = [
   "Punjab",
@@ -38,9 +38,7 @@ export default function FBRSettingsRedesign() {
 
   async function fetchConfig() {
     try {
-      const res = await fetch(`${API}/api/fbr/config`);
-      if (!res.ok) throw new Error("Failed to load FBR config");
-      const data = await res.json();
+      const data = await api.get("/api/fbr/config");
       setEnabled(!!data.enabled);
       setNtn(data.ntn || "");
       setStrn(data.strn || "");
@@ -49,7 +47,7 @@ export default function FBRSettingsRedesign() {
       setFbrEnvironment(data.fbr_environment || "sandbox");
       setDefaultHsCode(data.fbr_default_hs_code || "");
     } catch (e) {
-      showError(e.message || "Failed to load FBR configuration");
+      showError(e.body?.error || e.message || "Failed to load FBR configuration");
     } finally {
       setLoading(false);
     }
@@ -58,24 +56,16 @@ export default function FBRSettingsRedesign() {
   async function handleSave() {
     setSaving(true);
     try {
-      const res = await fetch(`${API}/api/fbr/config`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          enabled,
-          fbr_api_token: fbrApiToken,
-          fbr_environment: fbrEnvironment,
-          fbr_default_hs_code: defaultHsCode,
-          fbr_province: province,
-        }),
+      await api.put("/api/fbr/config", {
+        enabled,
+        fbr_api_token: fbrApiToken,
+        fbr_environment: fbrEnvironment,
+        fbr_default_hs_code: defaultHsCode,
+        fbr_province: province,
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Failed to save");
-      }
       success("FBR settings saved");
     } catch (e) {
-      showError(e.message || "Failed to save FBR settings");
+      showError(e.body?.error || e.message || "Failed to save FBR settings");
     } finally {
       setSaving(false);
     }
@@ -85,9 +75,9 @@ export default function FBRSettingsRedesign() {
     setTesting(true);
     setConnectionStatus("untested");
     try {
-      const res = await fetch(`${API}/api/fbr/test-connection`, {
+      const res = await api.raw("/api/fbr/test-connection", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {

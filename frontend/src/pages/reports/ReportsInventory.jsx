@@ -19,7 +19,7 @@ import {
   LineChart,
   Line,
 } from "recharts";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   fmtDate,
   exportCSV,
@@ -27,7 +27,6 @@ import {
   TableShell,
   CardShell,
 } from "./ReportShared";
-import { useAuth } from "../../auth/AuthProvider";
 import { useCurrency } from "../../contexts/CurrencyContext";
 
 // --- Tab: Sales & Stock -------------------------------------------------------
@@ -47,8 +46,7 @@ export function SalesStockTab({ filters }) {
         time_to: filters.timeTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/sales-stock?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/sales-stock?${p}`);
       setRows(d.items || []);
     } catch {
       setRows([]);
@@ -155,8 +153,7 @@ export function InventoryDumpTab({ filters }) {
         margin_threshold: String(marginThreshold),
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/inventory-dump?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/inventory-dump?${p}`);
       setRows(d.items || []);
     } catch {
       setRows([]);
@@ -362,8 +359,7 @@ export function ProductPerformanceTab({ filters }) {
         search: filters.search,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/product-performance?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/product-performance?${p}`);
       setRows(d.items || []);
     } catch {
       setRows([]);
@@ -519,8 +515,7 @@ export function BrandWiseTab({ filters }) {
         search: filters.search,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/brand-wise?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/brand-wise?${p}`);
       setRows(d.items || []);
     } catch {
       setRows([]);
@@ -647,8 +642,8 @@ export function MerchandisingWorkspaceTab({ filters, setFilters, setActiveTab })
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       const [workspaceRes, comparisonRes] = await Promise.all([
-        fetch(`${API}/api/reports/performance-workspace?${p}`).then((r) => r.json()),
-        fetch(`${API}/api/reports/performance-comparison?${p}`).then((r) => r.json()),
+        api.get(`/api/reports/performance-workspace?${p}`),
+        api.get(`/api/reports/performance-comparison?${p}`),
       ]);
       setData(workspaceRes);
       setComparison(comparisonRes);
@@ -1303,8 +1298,7 @@ export function OnHandTab({ filters }) {
         margin_threshold: String(marginThreshold),
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/on-hand?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/on-hand?${p}`);
       setRows(d.items || []);
     } catch {
       setRows([]);
@@ -1480,7 +1474,7 @@ export function OnHandTab({ filters }) {
 
 // --- Tab: Replenishment -------------------------------------------------------
 export function ReplenishmentTab({ filters }) {
-  const { authHeaders } = useAuth();
+
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [drafting, setDrafting] = useState(false);
@@ -1491,8 +1485,7 @@ export function ReplenishmentTab({ filters }) {
     try {
       const p = new URLSearchParams();
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/replenishment?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/replenishment?${p}`);
       setRows(d.items || []);
     } catch {
       setRows([]);
@@ -1539,16 +1532,14 @@ export function ReplenishmentTab({ filters }) {
         0,
         );
 
-        const res = await fetch(`${API}/api/purchase-orders`, {
+        const res = await api.raw("/api/purchase-orders", {
           method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
+          body: JSON.stringify({
             supplier_id: supplierId,
-        total_cost,
-        items,
+            total_cost,
+            items,
           }),
-      });
-      if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
+        });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
           createdCount += 1;
@@ -1721,8 +1712,7 @@ export function PricingMarginTab({ filters }) {
         margin_threshold: String(marginThreshold),
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/pricing-exceptions?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/pricing-exceptions?${p}`);
       setRows(d.items || []);
     } catch {
       setRows([]);
@@ -1938,8 +1928,7 @@ export function DeadStockTab({ filters }) {
         inactive_days: String(inactiveDays),
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/dead-stock?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/dead-stock?${p}`);
       setRows(d.items || d.rows || []);
     } catch {
       setRows([]);
@@ -2068,8 +2057,7 @@ export function StockAgingTab({ filters }) {
         search: filters.search,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/stock-aging?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/stock-aging?${p}`);
       setRows(d.items || d.rows || []);
     } catch {
       setRows([]);
@@ -2184,8 +2172,7 @@ export function StockoutRiskTab({ filters }) {
         lookback_days: String(lookbackDays),
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/stockout-risk?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/stockout-risk?${p}`);
       setRows(d.items || d.rows || []);
     } catch {
       setRows([]);
@@ -2318,8 +2305,7 @@ export function ForecastDemandTab({ filters }) {
         lookback_days: String(lookbackDays),
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/forecast-demand?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/forecast-demand?${p}`);
       setRows(d.items || d.rows || []);
     } catch {
       setRows([]);
@@ -2449,8 +2435,7 @@ export function ReplenishmentSmartTab({ filters }) {
         forecast_days: String(forecastDays),
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/replenishment-smart?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/replenishment-smart?${p}`);
       setRows(d.items || d.rows || []);
     } catch {
       setRows([]);
@@ -2594,8 +2579,7 @@ export function ShrinkageTab({ filters }) {
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
       if (filters.categoryId) p.set("category_id", filters.categoryId);
       if (filters.search) p.set("search", filters.search);
-      const res = await fetch(`${API}/api/reports/shrinkage?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/shrinkage?${p}`);
       setRows(d.rows || []);
       setSummary(d.summary || {});
     } catch {

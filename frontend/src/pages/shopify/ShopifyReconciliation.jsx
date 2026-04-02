@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { RefreshCw, CheckCircle2, ShieldAlert, Download } from "lucide-react";
 import { useShopify } from "./ShopifyContext";
-import { API } from "../../config";
 
 export default function ShopifyReconciliation() {
   const { apiFetch, setError, setSuccess } = useShopify();
@@ -21,8 +20,8 @@ export default function ShopifyReconciliation() {
     if (!silent) setLoading(true);
     try {
       const [reconRes, approvalsRes] = await Promise.all([
-        apiFetch(`${API}/integrations/shopify/reconciliation`),
-        apiFetch(`${API}/approvals`),
+        apiFetch(`/api/integrations/shopify/reconciliation`),
+        apiFetch(`/api/approvals`),
       ]);
       const reconData = await reconRes.json();
       const approvalsData = await approvalsRes
@@ -68,7 +67,7 @@ export default function ShopifyReconciliation() {
   const runReconciliation = async () => {
     setRunning(true);
     try {
-      const res = await apiFetch(`${API}/integrations/shopify/reconciliation`, {
+      const res = await apiFetch(`/api/integrations/shopify/reconciliation`, {
         method: "POST",
       });
       if (res.ok) {
@@ -85,7 +84,7 @@ export default function ShopifyReconciliation() {
   const resolveReconciliation = async (id, resolution_status) => {
     try {
       const res = await apiFetch(
-        `${API}/integrations/shopify/reconciliation/${id}`,
+        `/api/integrations/shopify/reconciliation/${id}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -104,7 +103,7 @@ export default function ShopifyReconciliation() {
   const requestFix = async (id, mode) => {
     try {
       const res = await apiFetch(
-        `${API}/integrations/shopify/reconciliation/${id}/fix`,
+        `/api/integrations/shopify/reconciliation/${id}/fix`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -139,7 +138,7 @@ export default function ShopifyReconciliation() {
     setProcessingBulk(true);
     try {
       const res = await apiFetch(
-        `${API}/integrations/shopify/reconciliation/bulk`,
+        `/api/integrations/shopify/reconciliation/bulk`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Download } from "lucide-react";
-import { API_BASE as API } from "../../config";
-import { useAuth } from "../../auth/AuthProvider";
+import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { downloadCsv } from "../../utils/csvExport";
 import {
@@ -29,7 +28,6 @@ const TABS = [
 ];
 
 export default function HRManagementRedesign() {
-  const { authHeaders } = useAuth();
   const { fmt: money } = useCurrency();
   const [tab, setTab] = useState("leave");
   const [employees, setEmployees] = useState([]);
@@ -64,30 +62,29 @@ export default function HRManagementRedesign() {
   const loadAll = useCallback(async () => {
     try {
       const [empRes, leaveRes, periodRes, balanceRes] = await Promise.all([
-        fetch(`${API}/api/employees`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/hr/leave`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/hr/payroll/periods`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/hr/leave/balance`, { headers: authHeaders() }).then((r) => r.json()),
+        api.get("/api/employees"),
+        api.get("/api/hr/leave"),
+        api.get("/api/hr/payroll/periods"),
+        api.get("/api/hr/leave/balance"),
       ]);
       setEmployees(empRes.employees || []);
       setLeaves(leaveRes.leave_requests || []);
       setPeriods(periodRes.periods || []);
       setLeaveBalances(balanceRes.balances || []);
     } catch (e) {
-      setError(e.message || "Failed to load HR data");
+      setError(e.body?.error || e.message || "Failed to load HR data");
     }
-  }, [authHeaders]);
+  }, []);
 
   const loadLines = useCallback(async (periodId) => {
     if (!periodId) return setLines([]);
     try {
-      const res = await fetch(`${API}/api/hr/payroll/periods/${periodId}/lines`, { headers: authHeaders() });
-      const data = await res.json();
-      if (res.ok) setLines(data.lines || []);
+      const data = await api.get(`/api/hr/payroll/periods/${periodId}/lines`);
+      setLines(data.lines || []);
     } catch {
       setLines([]);
     }
-  }, [authHeaders]);
+  }, []);
 
   const loadAttSummary = useCallback(async (month) => {
     setAttLoading(true);
@@ -96,11 +93,7 @@ export default function HRManagementRedesign() {
       const start = `${year}-${mon}-01`;
       const lastDay = new Date(Number(year), Number(mon), 0).getDate();
       const end = `${year}-${mon}-${String(lastDay).padStart(2, "0")}`;
-      const res = await fetch(
-        `${API}/api/attendance?date_from=${start}&date_to=${end}`,
-        { headers: authHeaders() }
-      );
-      const data = await res.json();
+      const data = await api.get(`/api/attendance?date_from=${start}&date_to=${end}`);
       const records = data.records || data.attendance || [];
 
       // Aggregate per employee
@@ -117,7 +110,7 @@ export default function HRManagementRedesign() {
     } finally {
       setAttLoading(false);
     }
-  }, [authHeaders]);
+  }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
   useEffect(() => { loadLines(selectedPeriod); }, [selectedPeriod, loadLines]);
@@ -128,13 +121,7 @@ export default function HRManagementRedesign() {
     setSubmittingLeave(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/hr/leave`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(leaveForm),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to submit leave");
+      await api.post("/api/hr/leave", leaveForm);
       setLeaveForm(EMPTY_LEAVE);
       await loadAll();
     } catch (e2) {
@@ -146,11 +133,7 @@ export default function HRManagementRedesign() {
 
   const updateLeaveStatus = async (id, status, note) => {
     try {
-      await fetch(`${API}/api/hr/leave/${id}/status`, {
-        method: "PUT",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ status, rejection_note: note || null }),
-      });
+      await api.put(`/api/hr/leave/${id}/status`, { status, rejection_note: note || null });
       await loadAll();
     } catch { /* silent */ }
   };
@@ -166,13 +149,7 @@ export default function HRManagementRedesign() {
     setCreatingPeriod(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/hr/payroll/periods`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(periodForm),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create period");
+      await api.post("/api/hr/payroll/periods", periodForm);
       setPeriodForm(EMPTY_PERIOD);
       await loadAll();
     } catch (e2) {
@@ -184,10 +161,7 @@ export default function HRManagementRedesign() {
 
   const generatePayroll = async (periodId) => {
     try {
-      await fetch(`${API}/api/hr/payroll/periods/${periodId}/generate`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-      });
+      await api.post(`/api/hr/payroll/periods/${periodId}/generate`);
       await loadAll();
       setSelectedPeriod(String(periodId));
     } catch { /* silent */ }
@@ -198,13 +172,7 @@ export default function HRManagementRedesign() {
     if (!selectedPeriod) return;
     setSavingLine(true);
     try {
-      const res = await fetch(`${API}/api/hr/payroll/periods/${selectedPeriod}/lines`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(lineForm),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save line");
+      await api.post(`/api/hr/payroll/periods/${selectedPeriod}/lines`, lineForm);
       setLineForm({ employee_id: "", type: "Basic", amount: "" });
       await loadLines(selectedPeriod);
     } catch (e2) {
@@ -218,9 +186,7 @@ export default function HRManagementRedesign() {
     if (!selectedPeriod) return;
     setExportingPayroll(true);
     try {
-      const res = await fetch(`${API}/api/hr/payroll-export?period_id=${selectedPeriod}`, { headers: authHeaders() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Export failed");
+      const data = await api.get(`/api/hr/payroll-export?period_id=${selectedPeriod}`);
       const rows = (data.rows || []).map((r) => [
         r.employee_name,
         r.department,

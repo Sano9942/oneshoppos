@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Clock, User, Search, Pencil, X, Check } from "lucide-react";
 
-import { API_BASE as API } from '../config';
+import { api } from '../api';
 import { fmtLocalTime, fmtLocalDate, parseLocalDate } from '../utils/dates';
 
 // "8.25" → "8h 15m"
@@ -62,10 +62,12 @@ export default function Attendance() {
     setBreakLoading(true);
     try {
       const date = row.check_in?.slice(0, 10);
-      const res = await fetch(
-        `${API}/api/attendance/sessions?employee_id=${row.employee_id}&date_from=${date}&date_to=${date}&session_type=break`
-      );
-      const data = await res.json();
+      const data = await api.get("/api/attendance/sessions", {
+        employee_id: row.employee_id,
+        date_from: date,
+        date_to: date,
+        session_type: "break",
+      });
       setBreakSessions(data.sessions || []);
     } catch {
       setBreakSessions([]);
@@ -84,10 +86,8 @@ export default function Attendance() {
     if (dateFrom) params.set("date_from", dateFrom);
     if (dateTo) params.set("date_to", dateTo);
     if (employeeId) params.set("employee_id", employeeId);
-    fetch(`${API}/api/attendance?${params}`)
-      .then((r) => r.json())
+    api.get(`/api/attendance?${params}`)
       .then((d) => {
-        if (d.error) throw new Error(d.error);
         setRecords(d.records || []);
       })
       .catch((e) => setError(e.message))
@@ -96,8 +96,7 @@ export default function Attendance() {
 
   /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
-    fetch(`${API}/api/employees`)
-      .then((r) => r.json())
+    api.get("/api/employees")
       .then((d) => setEmployees(d.employees || []))
       .catch(() => {});
     fetchRecords();
@@ -134,13 +133,7 @@ export default function Attendance() {
         check_out: editForm.check_out ? editForm.check_out.replace("T", " ") + ":00" : undefined,
         comment: editForm.comment || null,
       };
-      const res = await fetch(`${API}/api/attendance/${editingRow.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update");
+      await api.put(`/api/attendance/${editingRow.id}`, body);
       setEditingRow(null);
       fetchRecords();
     } catch (e) {

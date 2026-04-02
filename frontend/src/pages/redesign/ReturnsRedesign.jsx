@@ -10,8 +10,7 @@ import {
   Select,
   TableToolbar,
 } from "../../ui/primitives";
-import { API_BASE as API } from "../../config";
-import { useAuth } from "../../auth/AuthProvider";
+import { api } from "../../api";
 import { ArrowLeftRight, Download, Plus, Search } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -22,7 +21,6 @@ const fmtDate = fmtUtcDateTime;
 export default function ReturnsRedesign() {
   const { fmt: money } = useCurrency();
   const location = useLocation();
-  const { authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -57,12 +55,10 @@ export default function ReturnsRedesign() {
     setLoading(true);
     setError("");
     try {
-      const qs = new URLSearchParams();
-      if (dateFrom) qs.set("date_from", dateFrom);
-      if (dateTo) qs.set("date_to", dateTo);
-      const res = await fetch(`${API}/api/returns?${qs.toString()}`, { headers: authHeaders() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load returns");
+      const query = {};
+      if (dateFrom) query.date_from = dateFrom;
+      if (dateTo) query.date_to = dateTo;
+      const data = await api.get("/api/returns", Object.keys(query).length ? query : undefined);
       setRows(data.returns || []);
     } catch (e) {
       setError(e.message || "Failed to load returns");
@@ -73,12 +69,10 @@ export default function ReturnsRedesign() {
 
   const loadBootstrap = async () => {
     try {
-      const [outRes, empRes] = await Promise.all([
-        fetch(`${API}/api/outlets`, { headers: authHeaders() }),
-        fetch(`${API}/api/employees`, { headers: authHeaders() }),
+      const [outData, empData] = await Promise.all([
+        api.get("/api/outlets"),
+        api.get("/api/employees"),
       ]);
-      const outData = await outRes.json();
-      const empData = await empRes.json();
       setOutlets(outData.outlets || []);
       setEmployees(empData.employees || []);
     } catch {
@@ -125,9 +119,7 @@ export default function ReturnsRedesign() {
     setDetail(null);
     setDetailLoading(true);
     try {
-      const res = await fetch(`${API}/api/returns/${row.id}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load detail");
+      const data = await api.get(`/api/returns/${row.id}`);
       setDetail(data);
     } catch (e) {
       setError(e.message || "Failed to load detail");
@@ -167,32 +159,21 @@ export default function ReturnsRedesign() {
     if (!barcodeInput.trim()) return;
     setBarcodeError("");
     try {
-      const outletParam = form.outlet_id ? `?outlet_id=${form.outlet_id}` : "";
-      const res = await fetch(
-        `${API}/api/products/scan/${encodeURIComponent(barcodeInput)}${outletParam}`,
-        { headers: authHeaders() },
-      );
-      const data = await res.json();
-      if (!res.ok) {
-        setBarcodeError(data.error || "Product not found");
-        return;
-      }
+      const query = form.outlet_id ? { outlet_id: form.outlet_id } : undefined;
+      const data = await api.get(`/api/products/scan/${encodeURIComponent(barcodeInput)}`, query);
       addProductToItems(data.product);
-    } catch {
-      setBarcodeError("Failed to scan item");
+    } catch (err) {
+      setBarcodeError(err.message || "Product not found");
     }
   };
 
-  const searchProducts = async (query) => {
-    setBarcodeInput(query);
-    if (!query.trim()) { setSearchResults([]); setShowSearchResults(false); return; }
+  const searchProducts = async (q) => {
+    setBarcodeInput(q);
+    if (!q.trim()) { setSearchResults([]); setShowSearchResults(false); return; }
     try {
-      const outletParam = form.outlet_id ? `&outlet_id=${form.outlet_id}` : "";
-      const res = await fetch(
-        `${API}/api/products/search?query=${encodeURIComponent(query)}${outletParam}`,
-        { headers: authHeaders() },
-      );
-      const data = await res.json();
+      const params = { query: q };
+      if (form.outlet_id) params.outlet_id = form.outlet_id;
+      const data = await api.get("/api/products/search", params);
       setSearchResults(data.products || []);
       setShowSearchResults(true);
     } catch {
@@ -211,22 +192,16 @@ export default function ReturnsRedesign() {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/returns`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          original_sale_id: form.original_sale_id ? Number(form.original_sale_id) : null,
-          outlet_id: Number(form.outlet_id),
-          employee_id: form.employee_id ? Number(form.employee_id) : null,
-          customer_id: form.customer_id ? Number(form.customer_id) : null,
-          total_refund: draftTotal,
-          refund_method: form.refund_method,
-          reason: form.reason || null,
-          items,
-        }),
+      await api.post("/api/returns", {
+        original_sale_id: form.original_sale_id ? Number(form.original_sale_id) : null,
+        outlet_id: Number(form.outlet_id),
+        employee_id: form.employee_id ? Number(form.employee_id) : null,
+        customer_id: form.customer_id ? Number(form.customer_id) : null,
+        total_refund: draftTotal,
+        refund_method: form.refund_method,
+        reason: form.reason || null,
+        items,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to process return");
       setModalOpen(false);
       setItems([]);
       setForm({

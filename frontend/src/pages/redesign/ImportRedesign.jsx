@@ -2,7 +2,8 @@ import { useState, useRef, useCallback } from "react";
 import { Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import { PageShell, SectionCard, Button } from "../../ui/primitives";
 import { useToast } from "../../contexts/ToastContext";
-import { API } from "../../config";
+import { api } from "../../api";
+import { API_BASE } from "../../config";
 
 const TABS = [
   { key: "products", label: "Products" },
@@ -44,10 +45,7 @@ export default function ImportRedesign() {
       try {
         const fd = new FormData();
         fd.append("file", selected);
-        const res = await fetch(`${API}/import/${activeTab}?preview=1`, {
-          method: "POST",
-          body: fd,
-        });
+        const res = await api.upload(`/api/import/${activeTab}?preview=1`, fd);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Preview failed");
         setPreview(data);
@@ -67,10 +65,7 @@ export default function ImportRedesign() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch(`${API}/import/${activeTab}`, {
-        method: "POST",
-        body: fd,
-      });
+      const res = await api.upload(`/api/import/${activeTab}`, fd);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Import failed");
       success(`Imported ${data.imported ?? data.count ?? 0} ${activeTab} successfully`);
@@ -117,7 +112,7 @@ export default function ImportRedesign() {
             Download the template to see the expected format, then upload your filled file.
           </p>
           <a
-            href={`${API}/import/template/${activeTab}`}
+            href={`${API_BASE}/api/import/template/${activeTab}`}
             download
             className="inline-flex items-center gap-2 rounded-(--ui-radius-sm) border border-(--ui-border) bg-(--ui-surface) px-4 py-2 text-sm font-medium text-(--ui-text) hover:bg-(--ui-muted-surface) transition shrink-0"
           >

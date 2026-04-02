@@ -15,7 +15,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { fmtDate, fmtDateTime } from "../../utils/dates";
@@ -58,7 +58,7 @@ function exportCSV(rows) {
 }
 
 export default function PurchaseOrdersRedesign() {
-  const { authHeaders, employee, hasPerm } = useAuth();
+  const { employee, hasPerm } = useAuth();
   const { fmt: money } = useCurrency();
   const [view, setView] = useState("list");
   const [rows, setRows] = useState([]);
@@ -103,9 +103,7 @@ export default function PurchaseOrdersRedesign() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/purchase-orders`, { headers: authHeaders() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load purchase orders");
+      const data = await api.get("/api/purchase-orders");
       setRows(data.purchaseOrders || []);
     } catch (e) {
       setError(e.message || "Failed to load purchase orders");
@@ -117,10 +115,10 @@ export default function PurchaseOrdersRedesign() {
   const loadDropdowns = async () => {
     try {
       const [supRes, prRes, outRes, empRes] = await Promise.all([
-        fetch(`${API}/api/suppliers`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/products`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/outlets`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/employees`, { headers: authHeaders() }).then((r) => r.json()),
+        api.get("/api/suppliers"),
+        api.get("/api/products"),
+        api.get("/api/outlets"),
+        api.get("/api/employees"),
       ]);
       setSuppliers(supRes.suppliers || []);
       setProducts(prRes.products || []);
@@ -133,8 +131,7 @@ export default function PurchaseOrdersRedesign() {
 
   const loadTemplates = async () => {
     try {
-      const res = await fetch(`${API}/api/po-templates`, { headers: authHeaders() });
-      const data = await res.json();
+      const data = await api.get("/api/po-templates");
       setTemplates(data.templates || []);
     } catch {
       // non-fatal
@@ -146,17 +143,11 @@ export default function PurchaseOrdersRedesign() {
     if (!form.supplier_id) { setError("Select a supplier before saving as template."); return; }
     if (!cart.length) { setError("Add items before saving as template."); return; }
     try {
-      const res = await fetch(`${API}/api/po-templates`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: templateName.trim(),
-          supplier_id: Number(form.supplier_id),
-          items: cart.map((i) => ({ product_id: i.product_id, quantity: i.quantity, unit_cost: i.cost_price })),
-        }),
+      await api.post("/api/po-templates", {
+        name: templateName.trim(),
+        supplier_id: Number(form.supplier_id),
+        items: cart.map((i) => ({ product_id: i.product_id, quantity: i.quantity, unit_cost: i.cost_price })),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save template");
       setSaveTemplateOpen(false);
       setTemplateName("");
       setNotice(`Template "${templateName.trim()}" saved.`);
@@ -170,14 +161,8 @@ export default function PurchaseOrdersRedesign() {
     setLoadTemplateOpen(false);
     // Set supplier
     setForm((prev) => ({ ...prev, supplier_id: String(tmpl.supplier_id || "") }));
-    // Fetch template items via use endpoint — but just populate form without creating PO
-    // We'll fetch individual template details by using the listing data and products
     try {
-      const res = await fetch(`${API}/api/po-templates`, { headers: authHeaders() });
-      const data = await res.json();
-      // Re-fetch full template details — use the /use endpoint approach or build cart from what we know
-      // Since we don't have a GET /api/po-templates/:id, we create a PO then navigate to it
-      // Instead, let's just set the supplier and notify user to add items
+      await api.get("/api/po-templates");
       setNotice(`Template "${tmpl.name}" loaded — supplier pre-filled. Items will be loaded when you use "Create PO from template".`);
     } catch {
       // non-fatal
@@ -186,12 +171,7 @@ export default function PurchaseOrdersRedesign() {
 
   const createFromTemplate = async (tmplId, tmplName) => {
     try {
-      const res = await fetch(`${API}/api/po-templates/${tmplId}/use`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create PO from template");
+      const data = await api.post(`/api/po-templates/${tmplId}/use`, {});
       setTemplatesOpen(false);
       setNotice(`Draft PO ${poNumber(data.id)} created from template "${tmplName}".`);
       await loadRows();
@@ -203,11 +183,7 @@ export default function PurchaseOrdersRedesign() {
   const deleteTemplate = async (tmplId) => {
     if (!window.confirm("Delete this template?")) return;
     try {
-      const res = await fetch(`${API}/api/po-templates/${tmplId}`, {
-        method: "DELETE",
-        headers: authHeaders(),
-      });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed to delete"); }
+      await api.del(`/api/po-templates/${tmplId}`);
       await loadTemplates();
     } catch (e) {
       setError(e.message || "Failed to delete template");
@@ -219,9 +195,7 @@ export default function PurchaseOrdersRedesign() {
     setError("");
     setWarn("");
     try {
-      const res = await fetch(`${API}/api/purchase-orders/${id}`, { headers: authHeaders() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load purchase order details");
+      const data = await api.get(`/api/purchase-orders/${id}`);
       setSelectedPo(data);
       setView("view");
     } catch (e) {
@@ -271,12 +245,7 @@ export default function PurchaseOrdersRedesign() {
     setNotice("");
     setWarn("");
     try {
-      const res = await fetch(`${API}/api/purchase-orders/${poId}/approve`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to approve purchase order");
+      await api.post(`/api/purchase-orders/${poId}/approve`, {});
       setNotice(`${poNumber(poId)} approved successfully.`);
       await loadRows();
     } catch (e) {
@@ -295,9 +264,7 @@ export default function PurchaseOrdersRedesign() {
     setEditProductSearch("");
     // Load full PO items to pre-fill cart
     try {
-      const res = await fetch(`${API}/api/purchase-orders/${po.id}`, { headers: authHeaders() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load PO details");
+      const data = await api.get(`/api/purchase-orders/${po.id}`);
       setEditCart(
         (data.items || []).map((item) => ({
           product_id: item.product_id,
@@ -384,13 +351,7 @@ export default function PurchaseOrdersRedesign() {
           unit_cost: Number(i.cost_price || 0),
         })),
       };
-      const res = await fetch(`${API}/api/purchase-orders/${editingPo.id}`, {
-        method: "PUT",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update purchase order");
+      await api.put(`/api/purchase-orders/${editingPo.id}`, payload);
       setEditOpen(false);
       setEditingPo(null);
       setNotice(`${poNumber(editingPo.id)} updated successfully.`);
@@ -474,13 +435,7 @@ export default function PurchaseOrdersRedesign() {
           cost_price: Number(i.cost_price || 0),
         })),
       };
-      const res = await fetch(`${API}/api/purchase-orders`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create purchase order");
+      const data = await api.post("/api/purchase-orders", payload);
       await loadRows();
       if (data.warning) {
         setWarn(`PO ${poNumber(data.id)} created. Warning: ${data.warning}`);
@@ -500,16 +455,10 @@ export default function PurchaseOrdersRedesign() {
     setError("");
     setNotice("");
     try {
-      const res = await fetch(`${API}/api/purchase-orders/${poId}/submit`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          requested_by: employee?.name || employee?.username || `Employee #${employee?.id || ""}`,
-          notes: "",
-        }),
+      const data = await api.post(`/api/purchase-orders/${poId}/submit`, {
+        requested_by: employee?.name || employee?.username || `Employee #${employee?.id || ""}`,
+        notes: "",
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to submit purchase order");
       setNotice(data.message || "PO submitted for approval.");
       await loadRows();
       await loadDetail(poId);
@@ -552,13 +501,7 @@ export default function PurchaseOrdersRedesign() {
           qty_received: Number(grnQtys[item.product_id] ?? item.quantity ?? 0),
         })),
       };
-      const res = await fetch(`${API}/api/purchase-orders/${selectedPo.purchaseOrder.id}/receive`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to receive purchase order");
+      const data = await api.post(`/api/purchase-orders/${selectedPo.purchaseOrder.id}/receive`, payload);
       setGrnOpen(false);
       setNotice(`${data.message} (${data.grn_number})`);
       await loadRows();

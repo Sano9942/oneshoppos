@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckSquare, Download, Eye, Package, RefreshCw, Save, Search, Truck } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
-import { API } from "../../config";
-import { useAuth } from "../../auth/AuthProvider";
+import { api } from "../../api";
 import {
   Badge,
   BulkActionBar,
@@ -63,7 +62,6 @@ function exportCsv(rows) {
 
 export default function OrdersRedesign() {
   const { fmt } = useCurrency();
-  const { authHeaders } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -96,11 +94,7 @@ export default function OrdersRedesign() {
       if (filters.fulfillment_status) {
         qs.set("fulfillment_status", filters.fulfillment_status);
       }
-      const res = await fetch(`${API}/orders?${qs.toString()}`, {
-        headers: authHeaders(),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load orders");
+      const data = await api.get(`/api/orders?${qs.toString()}`);
       setRows(data.orders || []);
       setSelectedIds(new Set());
       setPage(1);
@@ -114,9 +108,7 @@ export default function OrdersRedesign() {
   const loadDetail = async (id) => {
     setError("");
     try {
-      const res = await fetch(`${API}/orders/${id}`, { headers: authHeaders() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load order details");
+      const data = await api.get(`/api/orders/${id}`);
       setDetail(data);
       setSelectedOrder(data.order);
     } catch (e) {
@@ -186,18 +178,12 @@ export default function OrdersRedesign() {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`${API}/orders/bulk-update`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ids,
-          order_status: bulkForm.order_status || null,
-          payment_status: bulkForm.payment_status || null,
-          fulfillment_status: bulkForm.fulfillment_status || null,
-        }),
+      await api.post("/api/orders/bulk-update", {
+        ids,
+        order_status: bulkForm.order_status || null,
+        payment_status: bulkForm.payment_status || null,
+        fulfillment_status: bulkForm.fulfillment_status || null,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Bulk update failed");
       setBulkForm({ order_status: "", payment_status: "", fulfillment_status: "" });
       await loadOrders();
       if (selectedOrder?.id && ids.includes(selectedOrder.id)) {
@@ -216,13 +202,7 @@ export default function OrdersRedesign() {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`${API}/orders/mark-complete`, {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to mark complete");
+      await api.post("/api/orders/mark-complete", { ids });
       await loadOrders();
       if (selectedOrder?.id && ids.includes(selectedOrder.id)) {
         await loadDetail(selectedOrder.id);
@@ -239,17 +219,11 @@ export default function OrdersRedesign() {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`${API}/orders/${selectedOrder.id}/status`, {
-        method: "PUT",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          order_status: selectedOrder.order_status,
-          payment_status: selectedOrder.payment_status,
-          fulfillment_status: selectedOrder.fulfillment_status,
-        }),
+      await api.put(`/api/orders/${selectedOrder.id}/status`, {
+        order_status: selectedOrder.order_status,
+        payment_status: selectedOrder.payment_status,
+        fulfillment_status: selectedOrder.fulfillment_status,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update status");
       await loadOrders();
       await loadDetail(selectedOrder.id);
     } catch (e) {

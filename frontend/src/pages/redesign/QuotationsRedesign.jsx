@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Download, Plus, Search, Trash2 } from "lucide-react";
-import { API_BASE as API } from "../../config";
-import { useAuth } from "../../auth/AuthProvider";
+import { api } from "../../api";
 import {
   Badge,
   Button,
@@ -31,7 +30,6 @@ const EMPTY_FORM = {
 const EMPTY_ITEM = { product_id: "", quantity: 1, unit_price: 0, tax_rate: 0 };
 
 export default function QuotationsRedesign() {
-  const { authHeaders } = useAuth();
   const { fmt: money } = useCurrency();
   const [rows, setRows] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -55,11 +53,11 @@ export default function QuotationsRedesign() {
     setError("");
     try {
       const [qRes, cRes, pRes, oRes, eRes] = await Promise.all([
-        fetch(`${API}/api/quotations${statusFilter ? `?status=${statusFilter}` : ""}`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/customers`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/products`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/outlets`, { headers: authHeaders() }).then((r) => r.json()),
-        fetch(`${API}/api/employees`, { headers: authHeaders() }).then((r) => r.json()),
+        api.get("/api/quotations", statusFilter ? { status: statusFilter } : undefined),
+        api.get("/api/customers"),
+        api.get("/api/products"),
+        api.get("/api/outlets"),
+        api.get("/api/employees"),
       ]);
       setRows(qRes.quotations || []);
       setCustomers(cRes.customers || []);
@@ -71,7 +69,7 @@ export default function QuotationsRedesign() {
     } finally {
       setLoading(false);
     }
-  }, [authHeaders, statusFilter]);
+  }, [statusFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -102,9 +100,7 @@ export default function QuotationsRedesign() {
   const openEdit = async (id) => {
     setError("");
     try {
-      const res = await fetch(`${API}/api/quotations/${id}`, { headers: authHeaders() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load quotation");
+      const data = await api.get(`/api/quotations/${id}`);
       setEditing(data.quotation);
       setForm({
         customer_id: data.quotation.customer_id || "",
@@ -134,15 +130,11 @@ export default function QuotationsRedesign() {
     try {
       const payload = { ...form, items };
       const isNew = editing === "new";
-      const method = isNew ? "POST" : "PUT";
-      const url = isNew ? `${API}/api/quotations` : `${API}/api/quotations/${editing.id}`;
-      const res = await fetch(url, {
-        method,
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save quotation");
+      if (isNew) {
+        await api.post("/api/quotations", payload);
+      } else {
+        await api.put(`/api/quotations/${editing.id}`, payload);
+      }
       resetEditor();
       await load();
     } catch (e) {
@@ -154,22 +146,14 @@ export default function QuotationsRedesign() {
 
   const setStatus = async (id, status) => {
     try {
-      await fetch(`${API}/api/quotations/${id}/status`, {
-        method: "PUT",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ status }),
-      });
+      await api.put(`/api/quotations/${id}/status`, { status });
       await load();
     } catch { /* silent */ }
   };
 
   const convert = async (id) => {
     try {
-      await fetch(`${API}/api/quotations/${id}/convert`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ payment_method: "Cash" }),
-      });
+      await api.post(`/api/quotations/${id}/convert`, { payment_method: "Cash" });
       await load();
     } catch { /* silent */ }
   };
@@ -177,10 +161,7 @@ export default function QuotationsRedesign() {
   const remove = async (id) => {
     if (!window.confirm("Delete this quotation?")) return;
     try {
-      await fetch(`${API}/api/quotations/${id}`, {
-        method: "DELETE",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-      });
+      await api.del(`/api/quotations/${id}`);
       await load();
     } catch { /* silent */ }
   };
@@ -188,12 +169,7 @@ export default function QuotationsRedesign() {
   const sendEmail = async (id) => {
     setSendMsg({ id, msg: "Sending...", ok: true });
     try {
-      const res = await fetch(`${API}/api/quotations/${id}/send`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to send email");
+      const data = await api.post(`/api/quotations/${id}/send`, {});
       setSendMsg({ id, msg: data.message || "Email sent", ok: true });
       await load();
     } catch (e) {

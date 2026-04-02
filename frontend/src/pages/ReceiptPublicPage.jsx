@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-
-const API = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+import { api } from "../api";
 
 function fmtMoney(amount, symbol = "") {
   const n = Number(amount) || 0;
@@ -30,8 +29,8 @@ export default function ReceiptPublicPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const url = `${API}/api/receipts/${encodeURIComponent(invoiceNumber)}/public${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""}`;
-    fetch(url)
+    const path = `/api/receipts/${encodeURIComponent(invoiceNumber)}/public${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""}`;
+    api.raw(path)
       .then((r) => {
         if (!r.ok) throw new Error(r.status === 404 ? "Receipt not found" : "Failed to load receipt");
         return r.json();

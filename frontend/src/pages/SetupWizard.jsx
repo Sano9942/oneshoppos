@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { API } from "../config";
+import { api } from "../api";
 
 const ALL_TIMEZONES = Intl.supportedValuesOf("timeZone");
 
@@ -143,7 +143,7 @@ export default function SetupWizard() {
 
   // On mount: check setup status
   useEffect(() => {
-    fetch(`${API}/setup/status${tenantSlug ? `?tenant=${tenantSlug}` : ""}`)
+    api.raw(`/api/setup/status${tenantSlug ? `?tenant=${tenantSlug}` : ""}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.setup_complete) navigate("/login", { replace: true });
@@ -197,9 +197,8 @@ export default function SetupWizard() {
     setError("");
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/setup/complete${tenantSlug ? `?tenant=${tenantSlug}` : ""}`, {
+      const res = await api.raw(`/api/setup/complete${tenantSlug ? `?tenant=${tenantSlug}` : ""}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           token,
           tenant: tenantSlug || undefined,

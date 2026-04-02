@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Bell, CheckCircle, AlertTriangle, Info, RefreshCw } from "lucide-react";
-import { API_BASE as API } from "../../config";
-import { useAuth } from "../../auth/AuthProvider";
+import { api } from "../../api";
 import { Badge, Button, EmptyState, PageShell, SectionCard } from "../../ui/primitives";
 import { fmtUtcDateTime } from "../../utils/dates";
 
@@ -12,33 +11,26 @@ const TYPE_CONFIG = {
 };
 
 export default function NotificationsRedesign() {
-  const { authHeaders } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch(`${API}/api/notifications`, { headers: authHeaders() });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Failed to load notifications");
+      const d = await api.get("/api/notifications");
       setNotifications(d.notifications || []);
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }, [authHeaders]);
+  }, []);
 
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
   const markRead = async (id) => {
     try {
-      const r = await fetch(`${API}/api/notifications/${id}/read`, {
-        method: "POST",
-        headers: authHeaders(),
-      });
-      if (!r.ok) return;
+      await api.post(`/api/notifications/${id}/read`);
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, read: 1 } : n)),
       );

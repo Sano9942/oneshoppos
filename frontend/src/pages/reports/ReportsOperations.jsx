@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Building2 } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   fmtDateTime,
   exportCSV,
@@ -23,8 +23,7 @@ export function InventoryLossTab({ filters }) {
         date_to: filters.dateTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/inventory-loss?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/inventory-loss?${p}`);
       setRows(d.items || []);
     } catch {
       setRows([]);
@@ -115,8 +114,7 @@ export function WastageTab({ filters }) {
         date_to: filters.dateTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/wastage?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/wastage?${p}`);
       setRows(d.items || []);
     } catch {
       setRows([]);
@@ -208,8 +206,7 @@ export function ProductMovementTab({ filters }) {
         date_to: filters.dateTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/product-movement?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/product-movement?${p}`);
       setRows(d.items || []);
     } catch {
       setRows([]);
@@ -297,8 +294,7 @@ export function STRReportTab({ filters }) {
         date_to: filters.dateTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/str-report?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/str-report?${p}`);
       setRows(d.items || d.rows || d || []);
     } catch {
       setRows([]);
@@ -383,8 +379,7 @@ export function OutletComparisonTab({ filters }) {
         date_to: filters.dateTo,
       });
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
-      const res = await fetch(`${API}/api/reports/outlet-comparison?${p}`);
-      const d = await res.json();
+      const d = await api.get(`/api/reports/outlet-comparison?${p}`);
       setData(d.comparison || []);
     } catch {
       setData([]);

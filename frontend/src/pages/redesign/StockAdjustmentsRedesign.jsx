@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Search, Trash2 } from "lucide-react";
-import { API_BASE as API } from "../../config";
+import { api } from "../../api";
 import {
   Badge,
   Button,
@@ -44,17 +44,11 @@ export default function StockAdjustmentsRedesign() {
     setLoading(true);
     setError("");
     try {
-      const [adjRes, prodRes, outRes] = await Promise.all([
-        fetch(`${API}/api/adjustments`),
-        fetch(`${API}/api/products`),
-        fetch(`${API}/api/outlets`),
-      ]);
       const [adjData, prodData, outData] = await Promise.all([
-        adjRes.json(),
-        prodRes.json(),
-        outRes.json(),
+        api.get("/api/adjustments"),
+        api.get("/api/products"),
+        api.get("/api/outlets"),
       ]);
-      if (!adjRes.ok) throw new Error(adjData.error || "Failed to load adjustments");
       setRows(Array.isArray(adjData) ? adjData : []);
       setProducts(prodData.products || []);
       const outList = outData.outlets || [];
@@ -100,19 +94,13 @@ export default function StockAdjustmentsRedesign() {
     setSaving(true);
     setError("");
     try {
-      const res = await fetch(`${API}/api/adjustments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          product_id: Number(form.product_id),
-          outlet_id: Number(form.outlet_id),
-          employee_id: employee?.id || null,
-          quantity_change: Number(form.quantity_change),
-          reason: form.reason,
-        }),
+      await api.post("/api/adjustments", {
+        product_id: Number(form.product_id),
+        outlet_id: Number(form.outlet_id),
+        employee_id: employee?.id || null,
+        quantity_change: Number(form.quantity_change),
+        reason: form.reason,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create adjustment");
       setModalOpen(false);
       await load();
     } catch (e2) {
@@ -126,9 +114,7 @@ export default function StockAdjustmentsRedesign() {
     if (!window.confirm(`Delete adjustment for "${row.product_name}" (${Number(row.quantity_change) > 0 ? "+" : ""}${row.quantity_change})? This will reverse the stock effect.`)) return;
     setError("");
     try {
-      const res = await fetch(`${API}/api/adjustments/${row.id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete adjustment");
+      await api.del(`/api/adjustments/${row.id}`);
       await load();
     } catch (e) {
       setError(e.message || "Failed to delete adjustment");
