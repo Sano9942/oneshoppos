@@ -1875,7 +1875,7 @@ Frontend checks `code` (stable) not `message` (can change).
 | ~~Add Zod validation to backend routes~~ | ~~Prevents whole class of bugs~~ | ~~Low~~ | ✅ Done (Fix 25, commit `62bbafb`) — 17 endpoints validated |
 | ~~Split `admin.js` (2208 lines) into 5-6 files~~ | ~~Maintainability~~ | ~~Low~~ | ✅ Done (Fix 23, commit `d648b86`) — split into 8 modules under `routes/admin/` |
 | ~~Split `index.js` (1306 lines)~~ | ~~Boot sequence clarity~~ | ~~Low~~ | ✅ Done (Fix 26) — split into 6 modules: `middleware/rate-limit.js`, `middleware/tenant-auth.js`, `middleware/permissions.js`, `middleware/feature-flags.js`, `shopify/crypto.js`, `boot/workers.js`. index.js reduced from 1306 → ~230 lines |
-| Split report files (ReportsInventory 2705 lines) | Maintainability | Low | 3-4 files per report |
+| ~~Split report files (ReportsInventory 2705 lines, ReportsSales 1791 lines)~~ | ~~Maintainability~~ | ~~Low~~ | ✅ Done (Fix 27 + Fix 28) — ReportsInventory split into 4 domain modules (commit `464098a`); ReportsSales split into 4 domain modules: `ReportsSalesOverview`, `ReportsSalesCore`, `ReportsSalesDetail`, `ReportsSalesOperations`. Parent files are thin barrel re-exports |
 
 ### Tier 3 -- Medium Risk, Strategic (1-2 weeks)
 
