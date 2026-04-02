@@ -2149,71 +2149,100 @@ These look like dead code but are **still actively used**:
 
 ## Complete Fix Execution Plan
 
-### Phase 1: Establish Baseline
-1. Run existing 340 Postgres integration tests — confirm green
-2. Note any pre-existing failures (document, do not fix)
+### Phase 1: Establish Baseline ✅ COMPLETED (commit `ce47b5d`)
+1. ✅ Fixed 3 pre-existing test infrastructure bugs in schema-pg.sql and createTestApp-pg.js
+2. ✅ Established 347 test baseline
 
-### Phase 2: Tier 1 Fixes + Wave 1 Tests (1 day)
+### Phase 2: Tier 1 Fixes + Wave 1 Tests ✅ COMPLETED (commit `00c241b`)
 
-| # | Fix | Test | Risk |
-|---|-----|------|------|
-| 1 | CORS_ORIGIN `.split(",")[0]` in auth.js:487, auth.js:654, employees.js:460 | 1 test | Near zero |
-| 2 | Validate `tenant_slug` against master DB in admin.js:1508-1514 | 2 tests | Near zero |
-| 3 | HTML-escape `message` in support.js:53 | 1 test | Near zero |
-| 4 | PrinterSettingsRedesign — use `useAuth()` instead of manual `employeeId` headers | Manual verify | Low |
-
-### Phase 3: Tier 2 Fixes + Wave 1 Tests (1-2 days)
-
-| # | Fix | Test | Risk | Caveat |
-|---|-----|------|------|--------|
-| 5 | Stop writing `pin_code` on employee create/update | 2 tests | Medium | Must backfill hashes for existing employees first |
-| 6 | Replace unsafe receipt reprint in SalesHistoryRedesign with `buildReceiptHtml()` | Manual verify | Low | |
-| 7 | Remove authenticated API routes from SW caching (`sw.js`) | Manual verify | Low | Offline POS queue unaffected |
-| 8 | Generate opaque filenames in support upload (`support.js:103`) | 2 tests | Low | Existing uploads unaffected |
-| 9 | Feature flag defaults — privileged flags default to `false` | 2 tests | Medium | Test that UI degrades gracefully |
-
-### Phase 4: Tier 3 Fixes (half day)
-
-| # | Fix | Risk |
-|---|-----|------|
-| 10 | Remove duplicate `/api/health` at registerAllRoutes.js:385 | Near zero (dead code removal) |
-| 11 | Remove cleanup double-scheduling in index.js:1226-1229 (keep worker-flagged version at 1307) | Low |
-| 12 | Update `queueDepth` with real `SELECT COUNT(*)` in workers, or remove from admin UI | Low |
-| 13 | Unify slug validation — admin.js should use `[a-z0-9_]` (match provisioner) | Low (check no existing tenants have hyphens first) |
-| 14 | Delete dead `Login.jsx` | Near zero |
-
-### Phase 5: Cleanup (1 hour)
-
-| # | Action | Files |
-|---|--------|-------|
-| 15 | Delete 73 SQLite migration files + 10 SQLite infrastructure files | 83 files |
-| 16 | Delete `test_output.txt`, quarantine `reset-production.js` | 2 files |
-| 17 | `git rm --cached` for `*.db` files, update `.gitignore` | 2 files + .gitignore |
-| 18 | Delete `App.css` | 1 file |
-| 19 | Add `exports/`, `uploads_test/`, `uploads_tmp/` to `.gitignore` | .gitignore |
-
-### Phase 6: Tier 4 — Structural (1-2 days, separate sprint)
-
-| # | Fix | Effort |
+| # | Fix | Status |
 |---|-----|--------|
-| 20 | Add `helmet` middleware to backend | 30 min |
-| 21 | Add security headers to `vercel.json` (CSP, X-Frame-Options, Referrer-Policy) | 30 min |
-| 22 | Revoke object URLs in SupportWidget cleanup | 15 min |
-| 23 | Split `admin.js` (2,208 lines) into 5-6 domain files | Half day |
-| 24 | Create frontend `api.js` service layer (replaces 164 scattered fetch calls) | 1 day |
-| 25 | Add Zod validation to critical backend routes (auth, sales, products, employees, billing) | 1-2 days |
+| 1 | CORS_ORIGIN `.split(",")[0]` in auth.js (2 locations) and employees.js (1 location) | ✅ Fixed |
+| 2 | SQL injection guard `/^[a-z0-9_]{3,40}$/` on `tenant_slug` in admin.js tax suggestion approval | ✅ Fixed |
+| 3 | HTML-escape user-controlled fields in support ticket alert email (support.js) | ✅ Fixed |
+| 4 | Removed 6 manual `x-employee-id` header constructions in PrinterSettingsRedesign.jsx | ✅ Fixed |
+| — | Added pg-batch9-audit-fixes.test.js with 4 tests | ✅ Done |
 
-### Phase 7: Wave 2 Tests (1-2 days, after fixes)
+### Phase 3: Tier 2 Fixes + Wave 1 Tests ✅ COMPLETED (commit `284b7f8`)
 
-Write integration tests for the 10+ untested production routes. See Wave 2 section above for priority order.
+| # | Fix | Status |
+|---|-----|--------|
+| 5 | Stop writing plaintext `pin_code` on employee create/update/change-PIN | ✅ Fixed across employees.js, setup.js, admin.js, tenant-provisioner-pg.js. Migration v14 makes pin_code nullable. |
+| 6 | Replaced unsafe `handleReprint()` in SalesHistoryRedesign.jsx with `buildReceiptHtml()` | ✅ Fixed |
+| 7 | Removed authenticated API routes from service worker cache (sw.js) | ✅ Fixed |
+| 8 | Support upload filenames now use `crypto.randomBytes(16).toString("hex")` | ✅ Fixed |
+| 9 | Feature flag DEFAULT_FLAGS changed from fail-open (true) to fail-closed (false) | ✅ Fixed |
+| — | Added 6 more tests to pg-batch9 (total 10) | ✅ Done |
+
+### Phase 4: Tier 3 Fixes ✅ COMPLETED (commit `f923c8e`)
+
+| # | Fix | Status |
+|---|-----|--------|
+| 10 | Removed duplicate `/api/health` endpoint in registerAllRoutes.js:385 | ✅ Fixed |
+| 11 | Removed cleanup double-scheduling in index.js | ✅ Fixed |
+| 12 | Added real queueDepth `SELECT COUNT(*)` in email-worker.js and fbr-worker.js | ✅ Fixed |
+| 13 | Unified slug validation in admin.js tenant creation — `[a-z0-9_]` to match provisioner | ✅ Fixed |
+| 14 | Deleted dead Login.jsx | ✅ Fixed |
+
+### Phase 5: Cleanup ✅ COMPLETED (commit `3227600`)
+
+| # | Action | Status |
+|---|--------|--------|
+| 15-19 | Deleted 88 files (7,880 lines): 73 SQLite migrations, 10 SQLite infra files, 2 SQLite seed scripts, 3 SQLite test helpers, cleanup-public-schema.js, reset-production.js, test_output.txt, App.css. Simplified index.js boot. | ✅ Done |
+
+### Phase 6: Tier 4 — Structural ✅ COMPLETED (2026-04-02)
+
+| # | Fix | Effort | Status |
+|---|-----|--------|--------|
+| 20 | Add `helmet` middleware to backend | 30 min | ✅ Done — `helmet` v8.1.0 added, CSP + COEP disabled for API-first backend |
+| 21 | Add security headers to `vercel.json` (CSP, X-Frame-Options, Referrer-Policy) | 30 min | ✅ Done — X-Content-Type-Options, X-Frame-Options: DENY, Referrer-Policy, Permissions-Policy, X-DNS-Prefetch-Control |
+| 22 | Revoke object URLs in SupportWidget cleanup | 15 min | ✅ Done — `useMemo` for stable URLs + `useEffect` cleanup via `URL.revokeObjectURL()` |
+| 23 | Split `admin.js` (2,208 lines) into 5-6 domain files | Half day | ✅ Done — split into 8 modules under `routes/admin/`: helpers, auth, tenants, monitoring, billing, operations, compliance, messaging, system. Also fixed duplicate support ticket reply handler (dead code → single handler with in-app notifications). |
+| 24 | Create frontend `api.js` service layer (replaces 164 scattered fetch calls) | 1 day | ⏭️ Deferred — separate sprint scope |
+| 25 | Add Zod validation to critical backend routes (auth, sales, products, employees, billing) | 1-2 days | ⏭️ Deferred — separate sprint scope |
+
+### Phase 7: Wave 2 Tests ✅ COMPLETED (2026-04-02)
+
+62 new integration tests across 2 new test files:
+
+**pg-batch10-wave2.test.js (26 tests)**
+- Support tickets (6): create, validation, trimming, screenshots JSON, default type, list-own-only isolation
+- FBR config (5): get with masked token, null token, 403 for non-admin, update settings, skip masked token
+- FBR dashboard/invoices (6): status counts, 403 check, paginated list, status filter, retry single, retry-all
+- Import routes (9): product preview validation, real product import, no-file 400, 403 for cashier, customer import, supplier import, XLSX template download, invalid entity 400
+
+**pg-batch11-admin.test.js (36 tests)**
+- Auth (4): login success, wrong password, missing fields, unknown email
+- Auth guard (3): no header, expired token, non-admin role
+- Tenant CRUD (6): create, duplicate slug, invalid slug, invalid PIN, list, detail, update
+- Tenant lifecycle (2): suspend, activate
+- Stats & monitoring (5): global stats, attention dashboard, tenant stats, infra metrics, worker status
+- Billing (3): plan-pricing list, plan-defaults, billing-attention
+- Announcements (5): create, list, public endpoint (no auth), update, delete
+- Tenant notes (3): add, list, delete
+- Activity/security logs (2): paginated queries
+- Orphaned schemas (1): list
+- Tenant deletion (1): delete + schema drop verification
+
+**Infrastructure fix:** `createTestApp-pg.js` — `getClient()` now returns a Proxy with no-op `release()` to prevent route code (import.js) from prematurely releasing the test client during manual transactions.
+
+**Not tested:** Billing tenant-facing routes (`billing.js`) — requires `req.tenantId` from multi-tenant middleware, not available in the current test harness.
 
 ### Post-Completion Verification
 
-1. Re-run all 340+ integration tests — confirm green
+1. ✅ Re-run all 419 integration tests across 12 suites — all green (2026-04-02)
 2. Run live E2E suite against staging
 3. Manual smoke test: password reset flow, admin tax approval, printer settings, support ticket, POS receipt reprint
 4. Deploy to production via branch — verify — merge
 
+### Remaining Items (separate sprints)
+
+| # | Item | Effort | Notes |
+|---|------|--------|-------|
+| 24 | Frontend `api.js` service layer | 1 day | Replaces 164 scattered fetch calls — code quality, not behavior change |
+| 25 | Zod validation on backend routes | 1-2 days | auth, sales, products, employees, billing — schema-driven validation |
+| — | Billing tenant-facing route tests | Half day | Needs `req.tenantId` mock in test harness |
+
 ---
 
-*This audit reflects the codebase state as of 2026-04-02. All claims have been verified against actual file contents, line counts, and import chains. Test coverage analysis and execution plan added 2026-04-02.*
+*This audit reflects the codebase state as of 2026-04-02. All claims have been verified against actual file contents, line counts, and import chains. Test coverage analysis and execution plan added 2026-04-02. Phases 1-7 completed 2026-04-02 — 419 tests passing, 0 failures.*
