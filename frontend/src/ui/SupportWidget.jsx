@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "./primitives";
 import { useToast } from "../contexts/ToastContext";
@@ -15,6 +15,12 @@ export default function SupportWidget() {
   const [loading, setLoading] = useState(false);
   const fileRef = useRef(null);
   const { success, error } = useToast();
+
+  // Create stable object URLs and revoke them on change/unmount
+  const previewUrls = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
+  useEffect(() => {
+    return () => previewUrls.forEach((url) => URL.revokeObjectURL(url));
+  }, [previewUrls]);
 
   function handleFiles(e) {
     const selected = Array.from(e.target.files || []);
@@ -174,7 +180,7 @@ export default function SupportWidget() {
                   {files.map((f, i) => (
                     <div key={i} className="relative">
                       <img
-                        src={URL.createObjectURL(f)}
+                        src={previewUrls[i]}
                         alt={f.name}
                         className="h-14 w-14 rounded border border-(--ui-border) object-cover"
                       />

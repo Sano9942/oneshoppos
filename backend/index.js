@@ -9,6 +9,7 @@ if (process.env.SENTRY_DSN) {
 }
 const express = require("express");
 const compression = require("compression");
+const helmet = require("helmet");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const db = require("./db-pg");
@@ -225,6 +226,10 @@ const webhookLimiter = rateLimit({
 });
 
 // Middleware
+app.use(helmet({
+  contentSecurityPolicy: false,   // CSP managed by frontend/Vercel — API returns JSON, not HTML
+  crossOriginEmbedderPolicy: false, // Allow cross-origin requests from SPA frontend
+}));
 app.use(cors({
   origin: process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
