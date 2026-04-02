@@ -1858,24 +1858,24 @@ Frontend checks `code` (stable) not `message` (can change).
 
 ## Recommended Fix Priority
 
-### Tier 1 -- Zero Risk, Immediate ROI (1-2 hours)
+### Tier 1 -- Zero Risk, Immediate ROI ✅ ALL DONE
 
-| Fix | Impact | Risk | Files Changed |
-|-----|--------|------|---------------|
-| Delete 75+ dead SQLite files | Repo clarity | Zero | Delete only |
-| Add `.gitignore` entries for *.db, exports/, test_output.txt | Hygiene | Zero | 1 file |
-| Delete unused `App.css` | Cleanup | Zero | 1 file |
-| Quarantine/delete broken SQLite tests | CI clarity | Zero | Delete only |
+| Fix | Impact | Risk | Status |
+|-----|--------|------|--------|
+| ~~Delete 75+ dead SQLite files~~ | Repo clarity | Zero | ✅ Done (Phase 5, commit `3227600`) — 88 files deleted |
+| ~~Add `.gitignore` entries for *.db, exports/, test_output.txt~~ | Hygiene | Zero | ✅ Already in `.gitignore` (prior commit on main) |
+| ~~Delete unused `App.css`~~ | Cleanup | Zero | ✅ Done (Phase 5, commit `3227600`) |
+| ~~Quarantine/delete broken SQLite tests~~ | CI clarity | Zero | ✅ Done (Phase 5, commit `3227600`) — 3 SQLite test helpers deleted |
 
 ### Tier 2 -- Low Risk, High ROI (1-2 days)
 
 | Fix | Impact | Risk | Files Changed |
 |-----|--------|------|---------------|
-| ~~Create `api.js` frontend service layer~~ | ~~Centralizes 164 fetch calls~~ | ~~Low~~ | ✅ Done (Fix 24) — 90 files migrated |
-| ~~Add Zod validation to backend routes~~ | ~~Prevents whole class of bugs~~ | ~~Low~~ | ✅ Done (Fix 25) — 17 endpoints validated |
-| Split `admin.js` (2208 lines) into 5-6 files | Maintainability | Low | 6-7 files |
-| Split `index.js` (1327 lines) | Boot sequence clarity | Low | 4-5 files |
-| Split report files (ReportsInventory 2721 lines) | Maintainability | Low | 3-4 files per report |
+| ~~Create `api.js` frontend service layer~~ | ~~Centralizes 164 fetch calls~~ | ~~Low~~ | ✅ Done (Fix 24, commit `7206fd0`) — 90 files migrated |
+| ~~Add Zod validation to backend routes~~ | ~~Prevents whole class of bugs~~ | ~~Low~~ | ✅ Done (Fix 25, commit `62bbafb`) — 17 endpoints validated |
+| ~~Split `admin.js` (2208 lines) into 5-6 files~~ | ~~Maintainability~~ | ~~Low~~ | ✅ Done (Fix 23, commit `d648b86`) — split into 8 modules under `routes/admin/` |
+| Split `index.js` (1306 lines) | Boot sequence clarity | Low | 4-5 files |
+| Split report files (ReportsInventory 2705 lines) | Maintainability | Low | 3-4 files per report |
 
 ### Tier 3 -- Medium Risk, Strategic (1-2 weeks)
 
