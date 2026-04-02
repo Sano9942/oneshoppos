@@ -1,12 +1,11 @@
 module.exports = function registerAuthRoutes(app, deps) {
   const { db, authLimiter } = deps;
   const bcrypt = require("bcryptjs");
+  const { validate } = require("../middleware/validate");
+  const { LoginSchema, MtLoginSchema, KioskLoginSchema, ForgotPasswordSchema, ResetPasswordSchema, SignupSchema } = require("../schemas/auth");
 
-  app.post("/api/auth/login", authLimiter, async (req, res) => {
-    const { username, password, pin } = req.body || {};
-    if (!username || (!password && !pin)) {
-      return res.status(400).json({ error: "username and password (or pin) are required" });
-    }
+  app.post("/api/auth/login", authLimiter, validate(LoginSchema), async (req, res) => {
+    const { username, password, pin } = req.body;
 
     try {
       const { rows: [employee] } = await db.query(
@@ -174,11 +173,8 @@ module.exports = function registerAuthRoutes(app, deps) {
       : require("../tenant-db-manager");
 
     // POST /api/auth/mt-login — standard login with tenant slug + username + password/PIN
-    app.post("/api/auth/mt-login", authLimiter, async (req, res) => {
-      const { tenant_slug, username, password, pin } = req.body || {};
-      if (!tenant_slug || !username || (!password && !pin)) {
-        return res.status(400).json({ error: "tenant_slug, username, and password (or pin) are required" });
-      }
+    app.post("/api/auth/mt-login", authLimiter, validate(MtLoginSchema), async (req, res) => {
+      const { tenant_slug, username, password, pin } = req.body;
       const JWT_SECRET = process.env.JWT_SECRET;
       const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
       if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
@@ -383,11 +379,8 @@ module.exports = function registerAuthRoutes(app, deps) {
     });
 
     // POST /api/auth/kiosk-login — PIN-only login with limited scope (8h, kiosk scope)
-    app.post("/api/auth/kiosk-login", authLimiter, async (req, res) => {
-      const { tenant_slug, pin } = req.body || {};
-      if (!tenant_slug || !pin) {
-        return res.status(400).json({ error: "tenant_slug and pin are required" });
-      }
+    app.post("/api/auth/kiosk-login", authLimiter, validate(KioskLoginSchema), async (req, res) => {
+      const { tenant_slug, pin } = req.body;
       const JWT_SECRET = process.env.JWT_SECRET;
       if (!JWT_SECRET) {
         return res.status(500).json({ error: "JWT secrets not configured" });
@@ -441,11 +434,8 @@ module.exports = function registerAuthRoutes(app, deps) {
   const crypto = require("crypto");
 
   // POST /api/auth/forgot-password — request password reset email
-  app.post("/api/auth/forgot-password", authLimiter, async (req, res) => {
-    const { username, store_code } = req.body || {};
-    if (!username) {
-      return res.status(400).json({ error: "username is required" });
-    }
+  app.post("/api/auth/forgot-password", authLimiter, validate(ForgotPasswordSchema), async (req, res) => {
+    const { username, store_code } = req.body;
 
     const okMsg = { message: "If an account with that username exists and has an email address, a reset link has been sent." };
 
@@ -504,14 +494,8 @@ module.exports = function registerAuthRoutes(app, deps) {
   });
 
   // POST /api/auth/reset-password — consume token, set new password
-  app.post("/api/auth/reset-password", async (req, res) => {
-    const { token, new_password, store_code } = req.body || {};
-    if (!token || !new_password) {
-      return res.status(400).json({ error: "token and new_password are required" });
-    }
-    if (new_password.length < 8) {
-      return res.status(400).json({ error: "Password must be at least 8 characters" });
-    }
+  app.post("/api/auth/reset-password", validate(ResetPasswordSchema), async (req, res) => {
+    const { token, new_password, store_code } = req.body;
 
     try {
       let tenantDb = db;
@@ -580,7 +564,7 @@ module.exports = function registerAuthRoutes(app, deps) {
   }
 
   // POST /api/auth/signup — self-service tenant signup (MT only, opt-in)
-  app.post("/api/auth/signup", async (req, res) => {
+  app.post("/api/auth/signup", validate(SignupSchema), async (req, res) => {
     if (process.env.MULTI_TENANT !== "1") {
       return res.status(400).json({ error: "Signup is only available in multi-tenant mode" });
     }
@@ -593,13 +577,7 @@ module.exports = function registerAuthRoutes(app, deps) {
       return res.status(429).json({ error: "Too many signup attempts. Please try again in an hour." });
     }
 
-    const { store_name, owner_name, email, password, plan } = req.body || {};
-    if (!store_name || !owner_name || !email || !password) {
-      return res.status(400).json({ error: "All fields required" });
-    }
-    if (password.length < 8) {
-      return res.status(400).json({ error: "Password must be at least 8 characters" });
-    }
+    const { store_name, owner_name, email, password, plan } = req.body;
 
     const slug = store_name
       .toLowerCase()

@@ -3,6 +3,8 @@ const logger = require("../services/logger");
 
 module.exports = function registerSalesRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale, path, fs, UPLOADS_DIR } = deps;
+  const { validate } = require("../middleware/validate");
+  const { CreateSaleSchema, VoidSaleSchema } = require("../schemas/sales");
 
   // --- HELPERS (inlined because these functions live in other route modules) ---
 
@@ -206,12 +208,10 @@ module.exports = function registerSalesRoutes(app, deps) {
   app.put(
     "/api/sales/:id/void",
     requireAnyPerm(["void_sales", "pos_void"]),
+    validate(VoidSaleSchema),
     async (req, res) => {
       const { id } = req.params;
       const { void_reason } = req.body;
-
-      if (!void_reason)
-        return res.status(400).json({ error: "void_reason is required" });
 
       try {
         // Fetch the sale first to check it exists and isn't already voided
@@ -287,7 +287,7 @@ module.exports = function registerSalesRoutes(app, deps) {
   );
 
   // Process a Sale (Cart Checkout)
-  app.post("/api/sales", async (req, res) => {
+  app.post("/api/sales", validate(CreateSaleSchema), async (req, res) => {
     const {
       cartItems,
       paymentMethod,
@@ -305,16 +305,6 @@ module.exports = function registerSalesRoutes(app, deps) {
 
     const authenticatedEmployeeId =
       Number(req.headers["x-employee-id"] || employee_id || 0) || null;
-
-    // Validation
-    if (!cartItems || cartItems.length === 0) {
-      return res.status(400).json({ error: "Cart is empty" });
-    }
-    if (!outlet_id) {
-      return res
-        .status(400)
-        .json({ error: "Outlet ID is required for checkout" });
-    }
     for (const item of cartItems) {
       if (!isFinite(Number(item.price)) || !isFinite(Number(item.quantity))) {
         return res.status(400).json({ error: "Cart items must have valid numeric price and quantity" });

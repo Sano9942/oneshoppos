@@ -1,6 +1,8 @@
 module.exports = function registerEmployeeRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, requirePlanLimit } = deps;
   const bcrypt = require("bcryptjs");
+  const { validate } = require("../middleware/validate");
+  const { ValidatePinSchema, CreateEmployeeSchema, SetPasswordSchema, ChangePasswordSchema, ChangePinSchema } = require("../schemas/employees");
   const EMPLOYEE_USAGE_CHECKS = [
     ["sales", "employee_id"],
     ["returns", "employee_id"],
@@ -55,9 +57,8 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   });
 
   // Validate PIN (For POS Login)
-  app.post("/api/employees/validate-pin", async (req, res) => {
+  app.post("/api/employees/validate-pin", validate(ValidatePinSchema), async (req, res) => {
     const { pin_code } = req.body;
-    if (!pin_code) return res.status(400).json({ error: "pin_code is required" });
 
     try {
       const { rows: employees } = await db.query(
@@ -82,7 +83,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   });
 
   // Add a new employee
-  app.post("/api/employees", requirePerm("all_access"), requirePlanLimit("employees"), async (req, res) => {
+  app.post("/api/employees", requirePerm("all_access"), requirePlanLimit("employees"), validate(CreateEmployeeSchema), async (req, res) => {
     const { name, role_id, pin_code, salary_type, monthly_salary, hourly_rate, daily_rate, email, password } = req.body;
     try {
       const pin_hash = pin_code ? await bcrypt.hash(String(pin_code), 10) : null;
@@ -310,12 +311,9 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   });
 
   // PUT /api/employees/:id/set-password — admin sets password for an employee
-  app.put("/api/employees/:id/set-password", requirePerm("all_access"), async (req, res) => {
+  app.put("/api/employees/:id/set-password", requirePerm("all_access"), validate(SetPasswordSchema), async (req, res) => {
     const { id } = req.params;
-    const { password } = req.body || {};
-    if (!password || password.length < 8) {
-      return res.status(400).json({ error: "Password must be at least 8 characters" });
-    }
+    const { password } = req.body;
 
     try {
       const password_hash = await bcrypt.hash(String(password), 10);
@@ -341,7 +339,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   });
 
   // PUT /api/employees/:id/change-password — employee changes own password
-  app.put("/api/employees/:id/change-password", async (req, res) => {
+  app.put("/api/employees/:id/change-password", validate(ChangePasswordSchema), async (req, res) => {
     const { id } = req.params;
     const actorId = Number(req.headers["x-employee-id"] || 0);
 
@@ -349,13 +347,7 @@ module.exports = function registerEmployeeRoutes(app, deps) {
       return res.status(403).json({ error: "You can only change your own password" });
     }
 
-    const { current_password, pin, new_password } = req.body || {};
-    if (!new_password || new_password.length < 8) {
-      return res.status(400).json({ error: "New password must be at least 8 characters" });
-    }
-    if (!current_password && !pin) {
-      return res.status(400).json({ error: "current_password or pin is required for verification" });
-    }
+    const { current_password, pin, new_password } = req.body;
 
     try {
       const { rows: [employee] } = await db.query(
@@ -391,20 +383,14 @@ module.exports = function registerEmployeeRoutes(app, deps) {
   });
 
   // PUT /api/employees/:id/change-pin — employee changes own PIN
-  app.put("/api/employees/:id/change-pin", async (req, res) => {
+  app.put("/api/employees/:id/change-pin", validate(ChangePinSchema), async (req, res) => {
     const { id } = req.params;
     const actorId = Number(req.headers["x-employee-id"] || 0);
     if (actorId !== Number(id)) {
       return res.status(403).json({ error: "You can only change your own PIN" });
     }
 
-    const { current_pin, new_pin } = req.body || {};
-    if (!new_pin || new_pin.length < 4 || new_pin.length > 10) {
-      return res.status(400).json({ error: "New PIN must be 4-10 digits" });
-    }
-    if (!current_pin) {
-      return res.status(400).json({ error: "current_pin is required" });
-    }
+    const { current_pin, new_pin } = req.body;
 
     try {
       const { rows: [employee] } = await db.query(

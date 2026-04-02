@@ -6,6 +6,8 @@ const {
 
 module.exports = function registerProductRoutes(app, deps) {
   const { db, multer, requirePerm, requireAnyPerm, requirePlanLimit, PRODUCT_UPLOADS_DIR, UPLOADS_DIR } = deps;
+  const { validate } = require("../middleware/validate");
+  const { CreateProductSchema, BulkDeleteSchema, BulkStatusSchema } = require("../schemas/products");
 
 
 // --- ROUTES: PRODUCTS (INVENTORY) ---
@@ -369,7 +371,7 @@ module.exports = function registerProductRoutes(app, deps) {
   });
 
   // Add a new product (and optionally set initial stock for a specific outlet)
-  app.post("/api/products", requirePerm("manage_inventory"), requirePlanLimit("products"), async (req, res) => {
+  app.post("/api/products", requirePerm("manage_inventory"), requirePlanLimit("products"), validate(CreateProductSchema), async (req, res) => {
     const {
       barcode,
       sku,
@@ -827,11 +829,10 @@ module.exports = function registerProductRoutes(app, deps) {
   app.post(
     "/api/products/bulk-delete",
     requirePerm("manage_inventory"),
+    validate(BulkDeleteSchema),
     async (req, res) => {
       try {
-        const ids = (req.body?.ids || []).map(Number).filter(Boolean);
-        if (!ids.length)
-          return res.status(400).json({ error: "No product IDs provided." });
+        const { ids } = req.body;
 
         const CHUNK = 400;
         let totalDeleted = 0;
@@ -857,16 +858,10 @@ module.exports = function registerProductRoutes(app, deps) {
   app.post(
     "/api/products/bulk-status",
     requirePerm("manage_inventory"),
+    validate(BulkStatusSchema),
     async (req, res) => {
       try {
-        const ids = (req.body?.ids || []).map(Number).filter(Boolean);
-        const { status } = req.body || {};
-        if (!ids.length)
-          return res.status(400).json({ error: "No product IDs provided." });
-        if (status !== "active" && status !== "inactive")
-          return res
-            .status(400)
-            .json({ error: "status must be 'active' or 'inactive'." });
+        const { ids, status } = req.body;
 
         const CHUNK = 400;
         let updated = 0;

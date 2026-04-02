@@ -12,6 +12,8 @@ module.exports = function registerBillingRoutes(app, deps) {
   const db = require("../db-pg");
   const masterDb = require("../master-db-pg");
   const paymentGateway = require("../services/payment-gateway");
+  const { validate } = require("../middleware/validate");
+  const { RequestUpgradeSchema, CreateCheckoutSchema } = require("../schemas/billing");
 
   // ── Public Pricing ─────────────────────────────────────────────────────
   // Use db.pool directly (raw pg pool) to query public schema without tenant context
@@ -77,15 +79,12 @@ module.exports = function registerBillingRoutes(app, deps) {
   });
 
   // ── Request Upgrade ────────────────────────────────────────────────────
-  app.post("/api/billing/request-upgrade", async (req, res) => {
+  app.post("/api/billing/request-upgrade", validate(RequestUpgradeSchema), async (req, res) => {
     try {
       const tenantId = req.tenantId;
       if (!tenantId) return res.status(400).json({ error: "Tenant context required" });
 
       const { plan, cycle, message } = req.body;
-      if (!plan || !cycle) return res.status(400).json({ error: "plan and cycle are required" });
-      if (!["pro"].includes(plan)) return res.status(400).json({ error: "Invalid plan" });
-      if (!["monthly", "annual"].includes(cycle)) return res.status(400).json({ error: "Invalid cycle" });
 
       const { rows: existing } = await db.query(
         "SELECT id FROM upgrade_requests WHERE tenant_id = $1 AND status = 'pending'",
@@ -108,7 +107,7 @@ module.exports = function registerBillingRoutes(app, deps) {
   });
 
   // ── Create Checkout ──────────────────────────────────────────────────
-  app.post("/api/billing/create-checkout", async (req, res) => {
+  app.post("/api/billing/create-checkout", validate(CreateCheckoutSchema), async (req, res) => {
     try {
       const tenantId = req.tenantId;
       if (!tenantId) return res.status(400).json({ error: "Tenant context required" });
@@ -131,9 +130,6 @@ module.exports = function registerBillingRoutes(app, deps) {
       }
 
       const { cycle = "monthly" } = req.body;
-      if (!["monthly", "annual"].includes(cycle)) {
-        return res.status(400).json({ error: "Invalid cycle" });
-      }
 
       const plan = "pro";
       const outletCount = Math.max(1, tenant.max_outlets || 1);
