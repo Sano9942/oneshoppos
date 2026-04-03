@@ -25,8 +25,8 @@ declare global {
        */
       employeePerms?: string[];
 
-      /** UUID assigned by request-id middleware. Included in all Pino log entries. */
-      requestId?: string;
+      /** UUID assigned by pino-http (request-id middleware). Forwarded as X-Request-Id response header. */
+      id?: string;
 
       /** Pino child logger enriched with tenantSlug + employeeId. Set by request-id middleware. */
       log?: {
