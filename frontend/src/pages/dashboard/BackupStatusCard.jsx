@@ -30,7 +30,7 @@ export function BackupStatusCard() {
     api.get("/api/backup-status")
       .then((d) => { setBackup(d.backup); setLoaded(true); })
       .catch(() => setLoaded(true));
-  }, [isAdmin, authHeaders]);
+  }, [isAdmin]);
 
   if (!isAdmin || !loaded) return null;
 

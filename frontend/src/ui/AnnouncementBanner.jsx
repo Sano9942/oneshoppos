@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { X, Info, AlertTriangle, Wrench } from "lucide-react";
-import { API } from "../config";
+import { API_BASE } from "../config";
 
 const TYPE_STYLES = {
   info: { bg: "bg-blue-50 border-blue-200", text: "text-blue-800", icon: Info },
@@ -17,7 +17,7 @@ export default function AnnouncementBanner() {
   });
 
   useEffect(() => {
-    fetch(`${API}/api/announcements/active`)
+    fetch(`${API_BASE}/api/announcements/active`)
       .then(r => r.ok ? r.json() : [])
       .then(data => setAnnouncements(data))
       .catch(() => {});
