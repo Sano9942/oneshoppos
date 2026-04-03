@@ -1,3 +1,6 @@
+const { validate } = require("../middleware/validate");
+const { CreateTransferSchema, CreateAdjustmentSchema } = require("../schemas/inventory");
+
 module.exports = function registerInventoryRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification } = deps;
 
@@ -46,7 +49,7 @@ module.exports = function registerInventoryRoutes(app, deps) {
   });
 
   // Create a new inventory transfer (atomically moves stock between outlets)
-  app.post("/api/transfers", requirePerm("manage_inventory"), async (req, res) => {
+  app.post("/api/transfers", requirePerm("manage_inventory"), validate(CreateTransferSchema), async (req, res) => {
     const {
       product_id,
       from_outlet_id,
@@ -204,7 +207,7 @@ module.exports = function registerInventoryRoutes(app, deps) {
     }
   });
 
-  app.post("/api/adjustments", requirePerm("manage_inventory"), async (req, res) => {
+  app.post("/api/adjustments", requirePerm("manage_inventory"), validate(CreateAdjustmentSchema), async (req, res) => {
     const { product_id, outlet_id, employee_id, quantity_change, reason } =
       req.body;
 
