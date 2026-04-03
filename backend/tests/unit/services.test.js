@@ -223,3 +223,112 @@ describe("payment-gateway — createCheckout() in xpay mode", () => {
     ).rejects.toThrow();
   });
 });
+
+// ── fbr — payload builders ────────────────────────────────────────────────────
+
+import {
+  buildInvoicePayload,
+  buildCreditNotePayload,
+  getNextRetryDelay,
+  BACKOFF_DELAYS,
+} from "../../services/fbr.js";
+
+// Minimal sale fixture — field names match what backend routes produce
+const minimalSale = {
+  id: 1,
+  invoice_number: "INV-0001",
+  timestamp: "2026-03-06T10:00:00.000Z",
+  total_amount: 1180,
+  tax_amount: 180,
+  discount_amount: 0,
+  payment_method: "cash",
+};
+
+const minimalItems = [
+  {
+    name: "Widget",
+    quantity: 2,
+    price: 500,
+    price_at_sale: 500,
+    tax_rate: 18,
+    effective_tax_rate: 18,
+    discount_amount: 0,
+  },
+];
+
+const minimalCompany = {
+  company_name: "Test Store",
+  ntn: "1234567-8",
+  fbr_province: "Punjab",
+  address: "123 Main St",
+};
+
+describe("fbr — buildInvoicePayload", () => {
+  it("returns an object with invoiceRefNo equal to invoice_number", () => {
+    const payload = buildInvoicePayload(minimalSale, minimalItems, minimalCompany, null, null);
+    expect(payload).toHaveProperty("invoiceRefNo");
+    expect(payload.invoiceRefNo).toBe("INV-0001");
+  });
+
+  it("sets invoiceType to 'Sale Invoice'", () => {
+    const payload = buildInvoicePayload(minimalSale, minimalItems, minimalCompany, null, null);
+    expect(payload.invoiceType).toBe("Sale Invoice");
+  });
+
+  it("includes at least one item in the items array", () => {
+    const payload = buildInvoicePayload(minimalSale, minimalItems, minimalCompany, null, null);
+    expect(Array.isArray(payload.items)).toBe(true);
+    expect(payload.items.length).toBeGreaterThan(0);
+  });
+
+  it("maps sellerBusinessName from company.company_name", () => {
+    const payload = buildInvoicePayload(minimalSale, minimalItems, minimalCompany, null, null);
+    expect(payload.sellerBusinessName).toBe("Test Store");
+  });
+
+  it("sets buyerBusinessName to Walk-in Customer when no customer provided", () => {
+    const payload = buildInvoicePayload(minimalSale, minimalItems, minimalCompany, null, null);
+    expect(payload.buyerBusinessName).toBe("Walk-in Customer");
+  });
+});
+
+describe("fbr — buildCreditNotePayload", () => {
+  it("returns an object with invoiceType Credit Note", () => {
+    const returnRecord = {
+      ...minimalSale,
+      return_number: "RET-0001",
+      created_at: "2026-03-06T11:00:00.000Z",
+    };
+    const payload = buildCreditNotePayload(returnRecord, minimalItems, minimalCompany, null, null);
+    expect(payload.invoiceType).toBe("Credit Note");
+  });
+
+  it("uses return_number as invoiceRefNo", () => {
+    const returnRecord = {
+      ...minimalSale,
+      return_number: "RET-0001",
+      created_at: "2026-03-06T11:00:00.000Z",
+    };
+    const payload = buildCreditNotePayload(returnRecord, minimalItems, minimalCompany, null, null);
+    expect(payload.invoiceRefNo).toBe("RET-0001");
+  });
+
+  it("falls back to RET-{id} when return_number is absent", () => {
+    const returnRecord = { ...minimalSale, id: 42, created_at: "2026-03-06T11:00:00.000Z" };
+    const payload = buildCreditNotePayload(returnRecord, minimalItems, minimalCompany, null, null);
+    expect(payload.invoiceRefNo).toBe("RET-42");
+  });
+});
+
+describe("fbr — getNextRetryDelay", () => {
+  it("returns the delay from BACKOFF_DELAYS at the given index", () => {
+    for (let i = 0; i < BACKOFF_DELAYS.length; i++) {
+      expect(getNextRetryDelay(i)).toBe(BACKOFF_DELAYS[i]);
+    }
+  });
+
+  it("returns the last delay for an out-of-bounds index", () => {
+    const last = BACKOFF_DELAYS[BACKOFF_DELAYS.length - 1];
+    expect(getNextRetryDelay(999)).toBe(last);
+  });
+});
