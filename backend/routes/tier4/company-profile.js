@@ -133,7 +133,7 @@ module.exports = function createCompanyProfileRouter({
   );
 
   // Dismiss onboarding checklist
-  router.put("/api/company-profile/onboarding-dismiss", async (req, res) => {
+  router.put("/api/company-profile/onboarding-dismiss", requirePerm("all_access"), async (req, res) => {
     try {
       await db.query("UPDATE company_profile SET onboarding_dismissed = true WHERE id = 1");
       res.json({ ok: true });
