@@ -13,10 +13,10 @@ const _require = createRequire(import.meta.url);
 /** Clear alerting.js from the require cache so the next _require() gives a
  *  fresh module with an empty windows Map. */
 function clearAlertingFromCache() {
-  const key = Object.keys(require.cache).find(
+  const key = Object.keys(_require.cache).find(
     (k) => k.includes("services") && k.includes("alerting.js")
   );
-  if (key) delete require.cache[key];
+  if (key) delete _require.cache[key];
 }
 
 describe("alerting — recordError", () => {
