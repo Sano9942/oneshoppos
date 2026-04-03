@@ -129,8 +129,19 @@ describe("requireAnyPerm", () => {
 });
 
 // ── plan-limits middleware ────────────────────────────────────────────────────
-// plan-limits.js uses CJS with inline require() calls.
-// We mock via require.cache so the inline require() picks up our stubs.
+//
+// WHY require.cache injection instead of vi.doMock():
+//
+// plan-limits.js calls require("../master-db-pg") and require("../tenant-db-manager-pg")
+// INLINE inside the middleware closure bodies — not at module top-level.  Those inline
+// require() calls hit Node's native CJS module cache at runtime, which is invisible to
+// Vitest's ESM mock registry.  vi.doMock() + dynamic import() only intercepts Vite's
+// ESM transform layer; it cannot redirect a CJS inline require() that fires inside an
+// already-loaded function closure.
+//
+// The require.cache injection pattern below directly replaces the CJS cache entry so
+// that the inline require() inside the closure picks up our stub.  This is the only
+// reliable approach without rewriting plan-limits.js to hoist its requires.
 
 import { createRequire } from "module";
 import { fileURLToPath } from "url";
