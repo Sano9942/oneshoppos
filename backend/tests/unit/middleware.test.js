@@ -319,3 +319,249 @@ describe("requireActiveSubscription", () => {
     expect(next).toHaveBeenCalled();
   });
 });
+
+// ── feature-flags middleware ──────────────────────────────────────────────────
+//
+// feature-flags.js uses module.exports (CJS) with an init() dependency injection
+// pattern.  We load it via createRequire, call init() with a mock db, then call
+// invalidateFeatureFlagCache() before each test so the per-tenant in-memory
+// cache cannot bleed between tests.
+
+const FEATURE_FLAGS_PATH = path.resolve(
+  fileURLToPath(import.meta.url),
+  "../../..",
+  "middleware/feature-flags.js"
+);
+
+describe("requireFeature", () => {
+  let requireFeature;
+  let invalidateFeatureFlagCache;
+  let DEFAULT_FEATURE_FLAGS;
+  let mockDbQuery;
+
+  beforeEach(() => {
+    // Always reload the module fresh so module-level cache state is clean
+    removeCjsMock(FEATURE_FLAGS_PATH);
+    delete _require.cache[FEATURE_FLAGS_PATH];
+    ({
+      requireFeature,
+      invalidateFeatureFlagCache,
+      DEFAULT_FEATURE_FLAGS,
+    } = _require(FEATURE_FLAGS_PATH));
+
+    // Inject a mock db that returns no rows (feature_flags table empty — defaults apply)
+    mockDbQuery = vi.fn().mockResolvedValue({ rows: [] });
+    // init() injects the db dependency
+    _require(FEATURE_FLAGS_PATH).init({ db: { query: mockDbQuery }, IS_MULTI_TENANT: false });
+
+    // Clear the in-memory cache so defaults are recalculated each test
+    invalidateFeatureFlagCache();
+  });
+
+  afterEach(() => {
+    delete _require.cache[FEATURE_FLAGS_PATH];
+  });
+
+  it("calls next() when flag is enabled by default (accounting_core = true)", async () => {
+    const req = { tenantId: null };
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+    const next = vi.fn();
+    await requireFeature("accounting_core")(req, res, next);
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 when flag is disabled by default (ui_redesign_pos = false)", async () => {
+    const req = { tenantId: null };
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+    const next = vi.fn();
+    await requireFeature("ui_redesign_pos")(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ flag: "ui_redesign_pos" })
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 for a completely unknown flag key (not in DEFAULT_FEATURE_FLAGS)", async () => {
+    const req = { tenantId: null };
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+    const next = vi.fn();
+    await requireFeature("nonexistent_flag")(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("calls next() when DB row overrides a default-false flag to true", async () => {
+    // Simulate DB returning ui_redesign_pos = true
+    mockDbQuery.mockResolvedValue({
+      rows: [{ key: "ui_redesign_pos", enabled: true }],
+    });
+    invalidateFeatureFlagCache(); // ensure fresh DB fetch
+
+    const req = { tenantId: null };
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+    const next = vi.fn();
+    await requireFeature("ui_redesign_pos")(req, res, next);
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it("DEFAULT_FEATURE_FLAGS exports are all booleans", () => {
+    for (const [key, val] of Object.entries(DEFAULT_FEATURE_FLAGS)) {
+      expect(typeof val, `DEFAULT_FEATURE_FLAGS["${key}"] should be boolean`).toBe("boolean");
+    }
+  });
+
+  it("invalidateFeatureFlagCache() clears all cached entries", async () => {
+    // Prime the cache with one call
+    const req = { tenantId: null };
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+    const next = vi.fn();
+    await requireFeature("accounting_core")(req, res, next);
+    expect(mockDbQuery).toHaveBeenCalledTimes(1);
+
+    // Second call should hit cache (no additional DB query)
+    const next2 = vi.fn();
+    await requireFeature("accounting_core")(req, { status: vi.fn().mockReturnThis(), json: vi.fn() }, next2);
+    expect(mockDbQuery).toHaveBeenCalledTimes(1); // still 1
+
+    // After invalidation, next call should re-query DB
+    invalidateFeatureFlagCache();
+    const next3 = vi.fn();
+    await requireFeature("accounting_core")(req, { status: vi.fn().mockReturnThis(), json: vi.fn() }, next3);
+    expect(mockDbQuery).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ── upload-validation middleware ──────────────────────────────────────────────
+
+const UPLOAD_VALIDATION_PATH = path.resolve(
+  fileURLToPath(import.meta.url),
+  "../../..",
+  "middleware/upload-validation.js"
+);
+
+const {
+  imageFileFilter,
+  safeExtension,
+  ALLOWED_IMAGE_MIMES,
+} = _require(UPLOAD_VALIDATION_PATH);
+
+describe("imageFileFilter", () => {
+  function makeFile(mimetype, originalname = "photo.jpg") {
+    return { mimetype, originalname };
+  }
+
+  it("accepts image/jpeg", () => {
+    const cb = vi.fn();
+    imageFileFilter({}, makeFile("image/jpeg", "test.jpg"), cb);
+    expect(cb).toHaveBeenCalledWith(null, true);
+  });
+
+  it("accepts image/png", () => {
+    const cb = vi.fn();
+    imageFileFilter({}, makeFile("image/png", "test.png"), cb);
+    expect(cb).toHaveBeenCalledWith(null, true);
+  });
+
+  it("accepts image/webp", () => {
+    const cb = vi.fn();
+    imageFileFilter({}, makeFile("image/webp", "test.webp"), cb);
+    expect(cb).toHaveBeenCalledWith(null, true);
+  });
+
+  it("accepts image/gif", () => {
+    const cb = vi.fn();
+    imageFileFilter({}, makeFile("image/gif", "test.gif"), cb);
+    expect(cb).toHaveBeenCalledWith(null, true);
+  });
+
+  it("accepts image/svg+xml", () => {
+    const cb = vi.fn();
+    imageFileFilter({}, makeFile("image/svg+xml", "logo.svg"), cb);
+    expect(cb).toHaveBeenCalledWith(null, true);
+  });
+
+  it("rejects application/pdf", () => {
+    const cb = vi.fn();
+    imageFileFilter({}, makeFile("application/pdf", "doc.pdf"), cb);
+    expect(cb.mock.calls[0][0]).toBeInstanceOf(Error);
+    expect(cb.mock.calls[0][0].message).toMatch(/image/i);
+  });
+
+  it("rejects a mismatched extension (.exe on image/jpeg)", () => {
+    const cb = vi.fn();
+    imageFileFilter({}, makeFile("image/jpeg", "virus.exe"), cb);
+    expect(cb.mock.calls[0][0]).toBeInstanceOf(Error);
+    expect(cb.mock.calls[0][0].message).toContain(".exe");
+  });
+
+  it("rejects null file", () => {
+    const cb = vi.fn();
+    imageFileFilter({}, null, cb);
+    expect(cb.mock.calls[0][0]).toBeInstanceOf(Error);
+    expect(cb.mock.calls[0][0].message).toContain("Invalid file");
+  });
+
+  it("rejects file with no mimetype", () => {
+    const cb = vi.fn();
+    imageFileFilter({}, { originalname: "test.jpg" }, cb);
+    expect(cb.mock.calls[0][0]).toBeInstanceOf(Error);
+  });
+
+  it("accepts jpeg with no extension (empty originalname)", () => {
+    // ext will be "" — the extension check is skipped (ext is falsy), MIME passes
+    const cb = vi.fn();
+    imageFileFilter({}, makeFile("image/jpeg", "noextension"), cb);
+    expect(cb).toHaveBeenCalledWith(null, true);
+  });
+});
+
+describe("safeExtension", () => {
+  it("returns original .jpg extension when it is in the allowlist", () => {
+    expect(safeExtension("photo.jpg", "image/jpeg")).toBe(".jpg");
+  });
+
+  it("returns original .png extension when it is in the allowlist", () => {
+    expect(safeExtension("logo.png", "image/png")).toBe(".png");
+  });
+
+  it("returns original .webp extension when it is in the allowlist", () => {
+    expect(safeExtension("banner.webp", "image/webp")).toBe(".webp");
+  });
+
+  it("falls back to MIME-derived .jpg when filename has no extension", () => {
+    expect(safeExtension("filename", "image/jpeg")).toBe(".jpg");
+  });
+
+  it("falls back to MIME-derived .webp when originalname is empty string", () => {
+    expect(safeExtension("", "image/webp")).toBe(".webp");
+  });
+
+  it("falls back to .png for an unknown MIME type", () => {
+    expect(safeExtension("file.bin", "application/octet-stream")).toBe(".png");
+  });
+
+  it("falls back to MIME-derived ext when extension is not in allowlist (.dat)", () => {
+    // .dat is not in ALLOWED_IMAGE_EXTS, so falls back to MIME map
+    expect(safeExtension("upload.dat", "image/gif")).toBe(".gif");
+  });
+});
+
+describe("ALLOWED_IMAGE_MIMES", () => {
+  it("is a Set", () => {
+    expect(ALLOWED_IMAGE_MIMES).toBeInstanceOf(Set);
+  });
+
+  it("contains the standard web image types", () => {
+    expect(ALLOWED_IMAGE_MIMES.has("image/jpeg")).toBe(true);
+    expect(ALLOWED_IMAGE_MIMES.has("image/png")).toBe(true);
+    expect(ALLOWED_IMAGE_MIMES.has("image/webp")).toBe(true);
+    expect(ALLOWED_IMAGE_MIMES.has("image/gif")).toBe(true);
+  });
+
+  it("does not contain application/pdf", () => {
+    expect(ALLOWED_IMAGE_MIMES.has("application/pdf")).toBe(false);
+  });
+});
