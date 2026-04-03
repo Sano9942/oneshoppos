@@ -1,5 +1,7 @@
 const { toUtcStart, toUtcEnd } = require("../utils/tz");
 const logger = require("../services/logger");
+const { validate } = require("../middleware/validate");
+const { CreateReturnSchema } = require("../schemas/returns");
 
 module.exports = function registerReturnsRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale } = deps;
@@ -15,7 +17,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
 // --- ROUTES: RETURNS ---
 
   // Create a new return
-  app.post("/api/returns", requirePerm("manage_orders"), async (req, res) => {
+  app.post("/api/returns", requirePerm("manage_orders"), validate(CreateReturnSchema), async (req, res) => {
     const {
       original_sale_id,
       outlet_id,

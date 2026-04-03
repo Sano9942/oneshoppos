@@ -1,3 +1,6 @@
+const { validate } = require("../middleware/validate");
+const { CreateCustomerSchema, UpdateCustomerSchema } = require("../schemas/customers");
+
 module.exports = function registerCustomerRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm } = deps;
 
@@ -52,7 +55,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   });
 
   // POST create customer
-  app.post("/api/customers", async (req, res) => {
+  app.post("/api/customers", validate(CreateCustomerSchema), async (req, res) => {
     const { name, mobile, email, address, cnic, occupation, balance, ntn_cnic } =
       req.body;
     if (!name)
@@ -90,7 +93,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
   });
 
   // PUT update customer
-  app.put("/api/customers/:id", requirePerm("manage_customers"), async (req, res) => {
+  app.put("/api/customers/:id", requirePerm("manage_customers"), validate(UpdateCustomerSchema), async (req, res) => {
     const { id } = req.params;
     const { name, mobile, email, address, cnic, occupation, balance, ntn_cnic } =
       req.body;
