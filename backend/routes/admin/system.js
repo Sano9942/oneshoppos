@@ -136,6 +136,37 @@ module.exports = function registerSystemRoutes(app, deps) {
     }
   });
 
+  // ── Backup Verification ─────────────────────────────────────────────────
+  app.post("/api/admin/backup/verify", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { listSchemasInBackup } = require("../../utils/backup-pg");
+      const { filePath } = req.body;
+      if (!filePath) return res.status(400).json({ error: "filePath is required" });
+
+      const schemasInBackup = await listSchemasInBackup(filePath);
+
+      // Expected: public + all active tenant schemas
+      const { rows: tenants } = await db.query(
+        "SELECT slug FROM tenants WHERE status = 'active' ORDER BY slug"
+      );
+      const expectedSchemas = ["public", ...tenants.map(t => `tenant_${t.slug}`)].sort();
+
+      const missing = expectedSchemas.filter(s => !schemasInBackup.includes(s));
+      const extra = schemasInBackup.filter(s => !expectedSchemas.includes(s));
+      const valid = missing.length === 0;
+
+      return res.json({
+        valid,
+        schemas_in_backup: schemasInBackup.length,
+        schemas_expected: expectedSchemas.length,
+        missing,
+        extra,
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/admin/backup-history", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
       const { rows } = await db.query(
