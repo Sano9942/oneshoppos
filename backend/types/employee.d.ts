@@ -2,17 +2,20 @@
 export interface Employee {
   id: number;
   name: string;
-  username: string;
+  role: string;
   role_id: number;
-  outlet_id: number | null;
   email: string | null;
-  is_active: boolean;
-  created_at: string;
+  /** Soft-delete timestamp — null means active. */
+  deleted_at: string | null;
+  tokens_revoked_before: string | null;
+  joining_date: string | null;
+  department: string | null;
 }
 
-/** A row from the tenant `roles` table with its permissions joined. */
+/** A row from the tenant `roles` table with its permissions joined in. */
 export interface Role {
   id: number;
   name: string;
+  /** Aggregated from role_permissions join — not a direct DB column. */
   permissions: string[];
 }
