@@ -114,3 +114,112 @@ describe("alerting — recordDbPressure", () => {
     expect(call.subject).toContain("DB pressure");
   });
 });
+
+// ── payment-gateway ───────────────────────────────────────────────────────────
+
+import { isEnabled, createCheckout, verifyWebhook } from "../../services/payment-gateway.js";
+
+describe("payment-gateway — isEnabled()", () => {
+  afterEach(() => {
+    delete process.env.PAYMENT_GATEWAY;
+  });
+
+  it("returns false when PAYMENT_GATEWAY is unset", () => {
+    delete process.env.PAYMENT_GATEWAY;
+    expect(isEnabled()).toBe(false);
+  });
+
+  it("returns false when PAYMENT_GATEWAY=manual", () => {
+    process.env.PAYMENT_GATEWAY = "manual";
+    expect(isEnabled()).toBe(false);
+  });
+
+  it("returns true when PAYMENT_GATEWAY=xpay", () => {
+    process.env.PAYMENT_GATEWAY = "xpay";
+    expect(isEnabled()).toBe(true);
+  });
+});
+
+describe("payment-gateway — createCheckout() in manual mode", () => {
+  beforeEach(() => { delete process.env.PAYMENT_GATEWAY; });
+  afterEach(() => { delete process.env.PAYMENT_GATEWAY; });
+
+  it("throws with 'not configured' message", async () => {
+    await expect(
+      createCheckout({ amount: 1000, reference: "ref-1", returnUrl: "/ok", cancelUrl: "/cancel" })
+    ).rejects.toThrow("not configured");
+  });
+});
+
+describe("payment-gateway — verifyWebhook()", () => {
+  it("returns { valid: false } for unknown gateway", async () => {
+    const result = await verifyWebhook("unknown_gw", {}, "{}");
+    expect(result).toMatchObject({ valid: false });
+  });
+});
+
+describe("payment-gateway — createCheckout() in xpay mode", () => {
+  beforeEach(() => {
+    process.env.PAYMENT_GATEWAY = "xpay";
+    process.env.XPAY_API_KEY = "test-key-123";
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    delete process.env.PAYMENT_GATEWAY;
+    delete process.env.XPAY_API_KEY;
+    vi.unstubAllGlobals();
+  });
+
+  it("calls the xPay checkout URL with correct headers", async () => {
+    const mockFetch = vi.mocked(global.fetch);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ checkout_url: "https://pay.xpay.pk/abc", session_id: "sess-1" }),
+    });
+
+    await createCheckout({
+      amount: 8000,
+      currency: "PKR",
+      reference: "pi-42",
+      description: "Pro subscription",
+      returnUrl: "https://sanopos.com/billing?success=1",
+      cancelUrl: "https://sanopos.com/billing?cancel=1",
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toContain("xpay.pk");
+    expect(opts.headers["Authorization"]).toBe("Bearer test-key-123");
+
+    const body = JSON.parse(opts.body);
+    expect(body.reference_id).toBe("pi-42");
+    expect(body.amount).toBe(8000);
+  });
+
+  it("returns checkout_url and gateway_ref from xPay response", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ checkout_url: "https://pay.xpay.pk/abc", session_id: "sess-99" }),
+    });
+
+    const result = await createCheckout({
+      amount: 1000, reference: "pi-1", returnUrl: "/ok", cancelUrl: "/cancel",
+    });
+
+    expect(result.checkout_url).toBe("https://pay.xpay.pk/abc");
+    expect(result.gateway_ref).toBe("sess-99");
+  });
+
+  it("throws when xPay responds with non-ok status", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      text: async () => "Unauthorized",
+    });
+
+    await expect(
+      createCheckout({ amount: 1000, reference: "pi-1", returnUrl: "/ok", cancelUrl: "/cancel" })
+    ).rejects.toThrow();
+  });
+});
