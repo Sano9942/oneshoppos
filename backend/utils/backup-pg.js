@@ -85,10 +85,30 @@ function restoreSchema(schemaName, filePath) {
 }
 
 /**
+ * Returns a readable stream of pg_dump output for multiple schemas in one archive.
+ *
+ * @param {string[]} schemaNames - Array of Postgres schema names
+ * @returns {{ stream: ChildProcess.stdout, process: ChildProcess }}
+ */
+function backupAllSchemas(schemaNames) {
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) throw new Error("DATABASE_URL not set");
+  if (!schemaNames.length) throw new Error("No schemas to backup");
+
+  const args = [dbUrl, "--format", "custom", "--no-owner", "--no-privileges"];
+  for (const s of schemaNames) {
+    args.push("--schema", s);
+  }
+
+  const proc = spawn("pg_dump", args, { stdio: ["ignore", "pipe", "pipe"] });
+  return { stream: proc.stdout, process: proc };
+}
+
+/**
  * Returns the schema name for a given tenant slug, or "public" for single-tenant.
  */
 function getSchemaName(tenantSlug) {
   return tenantSlug ? `tenant_${tenantSlug}` : "public";
 }
 
-module.exports = { backupSchema, restoreSchema, getSchemaName, isPgDumpAvailable, MAX_BACKUP_SIZE };
+module.exports = { backupSchema, backupAllSchemas, restoreSchema, getSchemaName, isPgDumpAvailable, MAX_BACKUP_SIZE };
