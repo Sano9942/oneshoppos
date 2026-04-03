@@ -2589,6 +2589,8 @@ Zero `.ts` files currently exist. Use `allowJs: true` in `tsconfig.json` as the 
 
 ### Phase 20: Unit Test Coverage (~ 1–2 weeks, can overlap Phase 19)
 
+**Status: Complete** — Coverage infrastructure installed, 125 backend unit tests + 37 frontend unit tests across utils, services, middleware, and frontend contexts. Backend coverage: 29.4% statements. Completed 2026-04-03.
+
 Currently 449 integration tests (441 in pg-batch1–12 + 8 in tenant isolation/DB tests). There are 37 existing unit tests (19 in `backend/tests/unit/tz.test.js` + 18 in `frontend/tests/unit/` — auth_guards, layout, primitives), but zero unit tests for services, middleware, or utility modules beyond `tz.js`.
 
 | Order | Target | Notes |
