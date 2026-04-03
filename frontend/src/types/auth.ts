@@ -1,6 +1,7 @@
 /**
  * The employee object stored in AuthProvider after a successful login.
- * Matches the shape returned by POST /api/auth/login and /api/auth/mt-login.
+ * Derived from POST /api/auth/login / /api/auth/mt-login response,
+ * merged with client-side context (username, outlet_id).
  */
 export interface AuthEmployee {
   id: number;
