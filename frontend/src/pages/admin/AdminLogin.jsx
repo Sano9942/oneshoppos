@@ -2,30 +2,15 @@ import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Lock, Mail, Shield } from "lucide-react";
 import { API_BASE } from "../../config";
+import {
+  readAdminSession,
+  writeAdminSession,
+  getAdminToken,
+} from "../../auth/adminAuthStore";
 
-function readAdminSession() {
-  try {
-    return JSON.parse(localStorage.getItem("adminSession") || "null");
-  } catch {
-    return null;
-  }
-}
-
-export function writeAdminSession(session) {
-  localStorage.setItem("adminSession", JSON.stringify(session));
-}
-
-export function clearAdminSession() {
-  localStorage.removeItem("adminSession");
-}
-
-export function getAdminToken() {
-  return readAdminSession()?.token || null;
-}
-
-export function getAdminSession() {
-  return readAdminSession();
-}
+// Re-export from adminAuthStore so existing admin components keep their import paths working.
+export { writeAdminSession, getAdminToken } from "../../auth/adminAuthStore";
+export { clearAdminSession, getAdminSession } from "../../auth/adminAuthStore";
 
 export function adminFetch(path, options = {}) {
   const token = getAdminToken();
