@@ -1,5 +1,5 @@
 const logger = require("./logger");
-const { sendAlertEmail } = require("../utils/alertEmail");
+const alertEmail = require("../utils/alertEmail");
 
 const ADMIN_URL = "https://sanopos.com/admin";
 
@@ -78,7 +78,7 @@ async function recordError({ tenant, message, reqId } = {}) {
     .map((e) => `<tr><td style="padding:4px 8px">${e.count}</td><td style="padding:4px 8px">${escHtml(e.message)}</td></tr>`)
     .join("");
 
-  await sendAlertEmail({
+  await alertEmail.sendAlertEmail({
     subject: `Error spike — ${w.count} errors in ${Math.round(cfg.windowMs / 60_000)} min`,
     html: `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
@@ -121,7 +121,7 @@ async function recordDbPressure({ active, max, longestQuery } = {}) {
 
   const pct = max ? Math.round((active / max) * 100) : "?";
 
-  await sendAlertEmail({
+  await alertEmail.sendAlertEmail({
     subject: `DB pressure — ${active}/${max} connections (${pct}%)`,
     html: `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
@@ -152,7 +152,7 @@ async function recordHealthCheckFailure({ dependency, error } = {}) {
   if (w.count < cfg.count) return;
   if (inCooldown(w, cfg)) return;
 
-  await sendAlertEmail({
+  await alertEmail.sendAlertEmail({
     subject: `Health check failed — ${dependency || "unknown"}`,
     html: `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
