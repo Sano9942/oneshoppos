@@ -332,3 +332,148 @@ describe("fbr — getNextRetryDelay", () => {
     expect(getNextRetryDelay(999)).toBe(last);
   });
 });
+
+// ── email.js — routing logic ──────────────────────────────────────────────────
+// email.js is CommonJS with a lazy-initialized Resend singleton (_resend).
+// Tests use _require.cache eviction to get a fresh module (reset singleton)
+// and vi.spyOn on the resend module's Resend class constructor to intercept
+// calls without hitting the real API.
+
+function clearEmailFromCache() {
+  const key = Object.keys(_require.cache).find(
+    (k) => k.includes("services") && k.includes("email.js") && !k.includes("email-templates")
+  );
+  if (key) delete _require.cache[key];
+}
+
+describe("email — resolveFrom()", () => {
+  let resolveFrom;
+
+  beforeEach(() => {
+    clearEmailFromCache();
+    resolveFrom = _require("../../services/email.js").resolveFrom;
+  });
+
+  it("returns tenant-branded from for 'receipt' type when tenant has slug+name", () => {
+    const from = resolveFrom("receipt", { slug: "mystore", name: "My Store" });
+    expect(from).toBe("My Store <mystore@sanopos.com>");
+  });
+
+  it("returns tenant-branded from for 'digest' type", () => {
+    const from = resolveFrom("digest", { slug: "acme", name: "Acme Shop" });
+    expect(from).toBe("Acme Shop <acme@sanopos.com>");
+  });
+
+  it("returns platform from for 'trial_warning' (lifecycle type)", () => {
+    delete process.env.RESEND_FROM_EMAIL;
+    const from = resolveFrom("trial_warning", { slug: "t1", name: "Store" });
+    expect(from).toBe("SanoPOS <noreply@sanopos.com>");
+  });
+
+  it("returns platform from for 'billing_payment_recorded'", () => {
+    delete process.env.RESEND_FROM_EMAIL;
+    const from = resolveFrom("billing_payment_recorded", null);
+    expect(from).toBe("SanoPOS <noreply@sanopos.com>");
+  });
+
+  it("uses RESEND_FROM_EMAIL env var for platform emails when set", () => {
+    process.env.RESEND_FROM_EMAIL = "SanoPOS Test <test@example.com>";
+    const from = resolveFrom("account_locked", null);
+    expect(from).toBe("SanoPOS Test <test@example.com>");
+    delete process.env.RESEND_FROM_EMAIL;
+  });
+
+  it("falls back to platform from for 'receipt' when tenant is null", () => {
+    delete process.env.RESEND_FROM_EMAIL;
+    const from = resolveFrom("receipt", null);
+    expect(from).toBe("SanoPOS <noreply@sanopos.com>");
+  });
+});
+
+describe("email — sendEmail() validation", () => {
+  let sendEmail;
+
+  beforeEach(() => {
+    clearEmailFromCache();
+    sendEmail = _require("../../services/email.js").sendEmail;
+  });
+
+  afterEach(() => {
+    delete process.env.RESEND_API_KEY;
+  });
+
+  it("throws for an unknown email type", async () => {
+    process.env.RESEND_API_KEY = "test-key";
+    await expect(
+      sendEmail({ type: "not_a_real_type", to: "x@example.com", data: {} })
+    ).rejects.toThrow("Unknown email type: not_a_real_type");
+  });
+
+  it("throws when RESEND_API_KEY is not configured", async () => {
+    delete process.env.RESEND_API_KEY;
+    await expect(
+      sendEmail({ type: "trial_warning", to: "admin@example.com", data: { storeName: "S", daysLeft: 3 } })
+    ).rejects.toThrow("RESEND_API_KEY not configured");
+  });
+});
+
+describe("email — sendEmail() uses Resend with correct from address", () => {
+  let sendEmail;
+  let mockResendSend;
+
+  beforeEach(() => {
+    // Build a minimal mock for the resend package
+    mockResendSend = vi.fn().mockResolvedValue({ id: "resend-mock-id", error: null });
+    const mockResendModule = {
+      Resend: function MockResend() {
+        this.emails = { send: mockResendSend };
+      },
+    };
+
+    // Ensure resend is loaded so its cache key exists, then replace exports
+    _require("resend");
+    const resendCacheKey = Object.keys(_require.cache).find(
+      (k) => k.includes("node_modules") && (k.includes("/resend/") || k.includes("\\resend\\")) && k.endsWith("index.cjs")
+    );
+    if (resendCacheKey) {
+      _require.cache[resendCacheKey].exports = mockResendModule;
+    }
+
+    // Now load a fresh email.js (singleton reset) — it will pick up the mocked resend
+    clearEmailFromCache();
+    process.env.RESEND_API_KEY = "test-key-abc";
+    sendEmail = _require("../../services/email.js").sendEmail;
+  });
+
+  afterEach(() => {
+    delete process.env.RESEND_API_KEY;
+    delete process.env.RESEND_FROM_EMAIL;
+    vi.restoreAllMocks();
+  });
+
+  it("calls resend.emails.send for a platform email type (trial_warning)", async () => {
+    await sendEmail({
+      type: "trial_warning",
+      to: "owner@example.com",
+      data: { storeName: "Test Store", daysLeft: 7 },
+    });
+    expect(mockResendSend).toHaveBeenCalledTimes(1);
+    const [payload] = mockResendSend.mock.calls[0];
+    expect(payload.to).toBe("owner@example.com");
+    expect(payload.from).toContain("noreply@sanopos.com");
+  });
+
+  it("sends with pre-built subject+html when both are provided directly", async () => {
+    await sendEmail({
+      type: "receipt",
+      to: "customer@example.com",
+      subject: "Your Receipt #123",
+      html: "<p>Thank you</p>",
+      tenant: { slug: "mystore", name: "My Store" },
+    });
+    expect(mockResendSend).toHaveBeenCalledTimes(1);
+    const [payload] = mockResendSend.mock.calls[0];
+    expect(payload.subject).toBe("Your Receipt #123");
+    expect(payload.from).toBe("My Store <mystore@sanopos.com>");
+  });
+});
