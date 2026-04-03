@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { API } from "../../config";
+import { API_BASE as API } from "../../config";
 
 const adminFetch = (url, opts = {}) => {
   const session = JSON.parse(localStorage.getItem("adminSession") || "{}");
