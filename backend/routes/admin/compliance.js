@@ -1,6 +1,9 @@
 /**
  * Admin compliance — tax rate reference CRUD, tax rate suggestions, FBR health.
  */
+const { validate } = require("../../middleware/validate");
+const { CreateTaxRateSchema } = require("../../schemas/admin");
+
 module.exports = function registerComplianceRoutes(app, deps) {
   const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager } = deps;
 
@@ -14,7 +17,7 @@ module.exports = function registerComplianceRoutes(app, deps) {
     }
   });
 
-  app.post("/api/admin/tax-rates", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/tax-rates", requireAllowedIp, requireSuperAdmin, validate(CreateTaxRateSchema), async (req, res) => {
     try {
       const { hs_code, description_en, description_ur, federal_gst, punjab_pra, sindh_srb, kpk_kpra, balochistan_bra, exemption_notes } = req.body;
       if (!hs_code || !description_en) return res.status(400).json({ error: "hs_code and description_en are required" });
