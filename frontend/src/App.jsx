@@ -107,8 +107,7 @@ function HomeRedirect() {
   useEffect(() => {
     if (isBootstrapping || checkedRef.current || IS_MULTI_TENANT) return;
     checkedRef.current = true;
-    const apiBase = import.meta.env.VITE_API_BASE || "http://localhost:5000";
-    fetch(`${apiBase}/api/setup/status`)
+    fetch(`${API_BASE}/api/setup/status`)
       .then((r) => r.json())
       .then((data) => {
         if (!data.setup_complete) navigate("/setup", { replace: true });
