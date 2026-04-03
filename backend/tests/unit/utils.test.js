@@ -98,3 +98,73 @@ describe("email-templates — TEMPLATES registry completeness", () => {
     }
   });
 });
+
+// ── receiptEmail ──────────────────────────────────────────────────────────────
+
+import { buildReceiptEmailHtml } from "../../utils/receiptEmail.js";
+
+describe("receiptEmail — buildReceiptEmailHtml", () => {
+  const minimalSale = {
+    invoice_number: "INV-001",
+    timestamp: "2026-03-06 10:00:00",
+    payment_method: "cash",
+    total_amount: 500,
+    discount_amount: 0,
+  };
+  const minimalItems = [
+    { product_name: "Widget", quantity: 2, price_at_sale: 250 },
+  ];
+  const minimalPayments = [{ payment_method: "cash", amount: 500 }];
+  const minimalTemplate = { header_text: "Test Store", footer_text: "Thank you!" };
+
+  it("returns an HTML string", () => {
+    const html = buildReceiptEmailHtml(minimalSale, minimalItems, minimalPayments, minimalTemplate, "PKR");
+    expect(typeof html).toBe("string");
+    expect(html).toContain("<!DOCTYPE html>");
+  });
+
+  it("includes invoice number in output", () => {
+    const html = buildReceiptEmailHtml(minimalSale, minimalItems, minimalPayments, minimalTemplate, "PKR");
+    expect(html).toContain("INV-001");
+  });
+
+  it("includes item name in output", () => {
+    const html = buildReceiptEmailHtml(minimalSale, minimalItems, minimalPayments, minimalTemplate, "PKR");
+    expect(html).toContain("Widget");
+  });
+
+  it("includes currency symbol in output", () => {
+    const html = buildReceiptEmailHtml(minimalSale, minimalItems, minimalPayments, minimalTemplate, "PKR");
+    expect(html).toContain("PKR");
+  });
+});
+
+// ── digestEmail ───────────────────────────────────────────────────────────────
+
+import { buildDigestEmailHtml } from "../../utils/digestEmail.js";
+
+describe("digestEmail — buildDigestEmailHtml", () => {
+  const minimalData = {
+    totalRevenueToday: 15000,
+    saleCount: 10,
+    averageBill: 1500,
+    topSelling: [{ name: "Widget", total_sold: 5 }],
+    zReport: [{ payment_method: "cash", total: 15000, contribution_pct: 100 }],
+  };
+
+  it("returns an HTML string", () => {
+    const html = buildDigestEmailHtml(minimalData, "Test Store", "2026-03-06");
+    expect(typeof html).toBe("string");
+    expect(html.length).toBeGreaterThan(100);
+  });
+
+  it("includes company name in output", () => {
+    const html = buildDigestEmailHtml(minimalData, "Test Store", "2026-03-06");
+    expect(html).toContain("Test Store");
+  });
+
+  it("includes revenue figure in output", () => {
+    const html = buildDigestEmailHtml(minimalData, "Test Store", "2026-03-06");
+    expect(html).toContain("15,000");
+  });
+});
