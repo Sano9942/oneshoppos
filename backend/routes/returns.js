@@ -156,7 +156,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
             { id: returnId, timestamp: new Date() },
             returnItems, req.company, cust, categoryTree
           );
-          await enqueueFbrInvoice(db, { returnId, invoiceType: "credit_note", payload });
+          await enqueueFbrInvoice(db, { returnId, invoiceType: "credit_note", payload, tenantSlug: req.tenantSlug });
           await db.query("UPDATE returns SET fbr_status = 'pending' WHERE id = $1", [returnId]);
         }
       } catch (fbrErr) {

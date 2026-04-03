@@ -1,3 +1,4 @@
+// LEGACY — replaced by email-worker-boss.js (pg-boss). Kept as fallback.
 /**
  * Email Queue Worker
  *

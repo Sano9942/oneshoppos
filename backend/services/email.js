@@ -73,16 +73,18 @@ async function _send(from, to, subject, html) {
 }
 
 /**
- * Enqueue an email for deferred sending.
+ * Enqueue an email for deferred sending via pg-boss.
  *
- * @param {object} db       — master db (db-pg pool, queries public schema)
+ * Falls back to direct INSERT into email_queue if pg-boss is unavailable.
+ *
+ * @param {object} db       — master db (kept for backward compat; unused when pg-boss available)
  * @param {object} opts
  * @param {number} [opts.tenantId] — tenant ID (NULL for system-wide)
  * @param {string} opts.type       — email type key
  * @param {string} opts.to         — recipient email
  * @param {object} [opts.tenant]   — { slug, name } for sender resolution
  * @param {object} [opts.data]     — template-specific data
- * @param {Date}   [opts.sendAt]   — when to send (default: now)
+ * @param {Date}   [opts.sendAt]   — when to send (default: now); used only for fallback path
  */
 async function enqueueEmail(db, { tenantId, type, to, tenant, data, sendAt }) {
   const from = resolveFrom(type, tenant);
@@ -90,8 +92,22 @@ async function enqueueEmail(db, { tenantId, type, to, tenant, data, sendAt }) {
   if (!templateFn) throw new Error(`Unknown email type: ${type}`);
 
   const { subject, html } = templateFn(data || {});
-  const sendAtVal = sendAt || new Date();
 
+  try {
+    const { getBoss } = require("./boss");
+    const boss = await getBoss();
+    await boss.send(
+      "email",
+      { to, from, subject, html, tenantId: tenantId || null, type },
+      { retryLimit: 3, retryDelay: 60 }
+    );
+    return;
+  } catch (bossErr) {
+    logger.warn({ err: bossErr }, "pg-boss unavailable — falling back to email_queue INSERT");
+  }
+
+  // Fallback: direct INSERT into email_queue
+  const sendAtVal = sendAt || new Date();
   await db.query(
     `INSERT INTO email_queue (tenant_id, email_type, to_email, subject, html_body, from_address, send_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7)`,

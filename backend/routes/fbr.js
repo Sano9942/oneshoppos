@@ -228,6 +228,18 @@ module.exports = function registerFbrRoutes(app, deps) {
           return res
             .status(404)
             .json({ error: "Invoice not found or not in failed state" });
+
+        // Dispatch pg-boss job for immediate retry (non-blocking)
+        try {
+          const { getBoss } = require("../services/boss");
+          const boss = await getBoss();
+          await boss.send(
+            "fbr-invoice",
+            { tenantSlug: req.tenantSlug, invoiceId: Number(id) },
+            { retryLimit: 5, retryDelay: 60 }
+          );
+        } catch (_) {}
+
         res.json({ message: "Invoice queued for retry" });
       } catch (err) {
         res.status(500).json({ error: err.message });
@@ -242,10 +254,29 @@ module.exports = function registerFbrRoutes(app, deps) {
     requireFeature("fbr_integration"),
     async (req, res) => {
       try {
-        const { rowCount } = await db.query(
+        const { rows: updatedRows, rowCount } = await db.query(
           `UPDATE fbr_invoices SET status = 'pending', retry_count = 0, next_retry_at = NOW(), last_error = NULL
-           WHERE status = 'failed'`
+           WHERE status = 'failed'
+           RETURNING id`
         );
+
+        // Dispatch pg-boss jobs for all retried invoices (non-blocking)
+        if (updatedRows.length > 0) {
+          Promise.resolve().then(async () => {
+            try {
+              const { getBoss } = require("../services/boss");
+              const boss = await getBoss();
+              for (const row of updatedRows) {
+                await boss.send(
+                  "fbr-invoice",
+                  { tenantSlug: req.tenantSlug, invoiceId: row.id },
+                  { retryLimit: 5, retryDelay: 60 }
+                );
+              }
+            } catch (_) {}
+          });
+        }
+
         res.json({ message: `${rowCount} invoice(s) queued for retry` });
       } catch (err) {
         res.status(500).json({ error: err.message });
