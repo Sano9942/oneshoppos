@@ -181,14 +181,18 @@ export function AuthProvider({ children }) {
 
       if (impToken && impSession) {
         try {
-          // Decode JWT payload (no verification — backend already signed it)
-          const payload = JSON.parse(atob(impToken.split(".")[1]));
           const tenantSlug = params.get("tenant_slug") || "";
 
-          // Build a session from the impersonation token
+          // Verify token server-side and get real employee + permissions
+          const meRes = await fetch(`${API}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${impToken}` },
+          });
+          if (!meRes.ok) throw new Error("Impersonation token rejected");
+          const meData = await meRes.json();
+
           const impSessionData = {
-            employee: { id: payload.eid, role_id: payload.rid, name: "Admin (Impersonation)" },
-            permissions: ["all_access"],
+            employee: meData.employee,
+            permissions: meData.permissions || [],
             token: impToken,
             tenant_slug: tenantSlug,
             loadedAt: Date.now(),
@@ -211,7 +215,7 @@ export function AuthProvider({ children }) {
           url.searchParams.delete("tenant_name");
           window.history.replaceState({}, "", url.pathname + url.search + url.hash);
         } catch {
-          // Bad token — fall through to normal boot
+          // Bad or expired token — fall through to normal boot
         }
         if (isMounted) setIsBootstrapping(false);
         return;
