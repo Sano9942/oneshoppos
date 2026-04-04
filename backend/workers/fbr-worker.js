@@ -1,3 +1,4 @@
+// LEGACY — replaced by fbr-worker-boss.js (pg-boss). Kept as fallback.
 /**
  * FBR Digital Invoicing Worker
  *

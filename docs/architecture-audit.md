@@ -2398,4 +2398,237 @@ If Sentry shows a single file has a bug (e.g. one `api.post()` call passing wron
 
 ---
 
-*This audit reflects the codebase state as of 2026-04-02. All claims have been verified against actual file contents, line counts, and import chains. Test coverage analysis and execution plan added 2026-04-02. Phases 1-11 completed 2026-04-02 — 448 tests passing, 0 failures. All identified items complete — no remaining work.*
+---
+
+## Phase 12: Dashboard Crash & API Prefix Audit (2026-04-03)
+
+### PR #11 Fix Review — `fix/dashboard-crash-announcement-404` (commit 84712d9)
+
+Two bugs were fixed:
+
+1. **BackupStatusCard crash** (`frontend/src/pages/dashboard/BackupStatusCard.jsx`)
+   - `authHeaders` was referenced in `useEffect` dependency array but never defined in the component
+   - Caused a `ReferenceError` that propagated through ErrorBoundary, crashing every page that rendered the dashboard
+   - Fix: removed `authHeaders` from the deps array (the `api` module handles auth via the global fetch interceptor)
+
+2. **AnnouncementBanner 404** (`frontend/src/ui/AnnouncementBanner.jsx`)
+   - Imported `API` from config (value: `${API_BASE}/api`) and used `${API}/api/announcements/active`
+   - Produced double prefix: `/api/api/announcements/active` → 404
+   - Fix: switched import to `API_BASE`, making the URL `${API_BASE}/api/announcements/active` (correct)
+
+**Verdict: Both fixes are correct and complete.**
+
+### Wider API Prefix Audit
+
+Investigation of `config.js` exports and their usage across the frontend:
+
+```
+// frontend/src/config.js
+export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";  // e.g. "https://api.sanopos.com"
+export const API = `${API_BASE}/api`;  // e.g. "https://api.sanopos.com/api"
+```
+
+**Convention**: Most files import `{ API_BASE as API }` — aliasing the base URL to a local `API` variable. This means `${API}/api/...` produces a correct single-prefix URL. The actual `API` export (which includes `/api`) is rarely used directly.
+
+**Verified correct** (all use `API_BASE as API` or equivalent):
+
+| File | Import Pattern | Status |
+|------|---------------|--------|
+| `auth/AuthProvider.jsx` | `import { API_BASE as API }` | OK |
+| `components/NotificationBell.jsx` | `import { API_BASE as API }` | OK |
+| `components/ContextSwitcher.jsx` | `import { API_BASE as API }` | OK |
+| `hooks/useFeatureFlags.js` | `import { API_BASE as API }` | OK |
+| `ui/ImpersonationBanner.jsx` | `import { API_BASE as API }` | OK |
+| `ui/AnnouncementBanner.jsx` | `import { API_BASE }` (fixed in PR #11) | OK |
+| `contexts/CurrencyContext.jsx` | Own `const API = import.meta.env.VITE_API_BASE` | OK |
+| `pages/redesign/CompanySettingsRedesign.jsx` | `import { API_BASE as API }` | OK |
+| `pages/redesign/ProductFormPage.jsx` | `import { API_BASE as API }` | OK |
+| `pages/redesign/ImportRedesign.jsx` | `import { API_BASE }` | OK |
+| `pages/admin/AdminDashboard.jsx` | `import { API_BASE }` | OK |
+| `pages/admin/AdminLogin.jsx` | `import { API_BASE }` | OK |
+| `api.js` | `import { API_BASE }` | OK |
+
+### Remaining Bug Found
+
+**`pages/admin/AdminTaxRates.jsx`** — imports the real `{ API }` (not `API_BASE as API`), so all 6 fetch calls produce double-prefix URLs:
+
+```
+Line 2:  import { API } from "../../config";        // API = "https://api.sanopos.com/api"
+Line 36: adminFetch(`${API}/api/admin/tax-rates`)    // → /api/api/admin/tax-rates → 404
+Line 44: adminFetch(`${API}/api/admin/tax-rate-suggestions`)
+Line 58: `${API}/api/admin/tax-rates/${editRow.id}`
+Line 59: `${API}/api/admin/tax-rates`
+Line 72: adminFetch(`${API}/api/admin/tax-rates/${id}`, { method: "DELETE" })
+Line 77: adminFetch(`${API}/api/admin/tax-rate-suggestions/${id}`, ...)
+```
+
+**Confirmed broken in production** via curl:
+- `GET /api/api/admin/tax-rates` → **404**
+- `GET /api/admin/tax-rates` → **401** (correct — needs auth)
+
+**Impact**: The entire super-admin Tax Rates page (`/admin/tax-rates`) is non-functional — CRUD operations and suggestion review all fail silently.
+
+**Fix needed**: Change line 2 from `import { API } from "../../config"` to `import { API_BASE as API } from "../../config"` (same pattern as all other files).
+
+### Architectural Note
+
+The `{ API_BASE as API }` aliasing pattern across the codebase is a latent risk — it makes `${API}/api/...` look like it uses the `API` export when it actually uses `API_BASE`. Any new file that copies the URL pattern `${API}/api/...` but imports the real `{ API }` will silently break. Consider either:
+- Removing the `API` export from config.js entirely (since almost nothing uses it)
+- Or renaming it to something less confusable (e.g. `API_PREFIX`)
+
+---
+
+*This audit reflects the codebase state as of 2026-04-03. Phase 12 added 2026-04-03 — PR #11 fix verified correct, one additional bug found in AdminTaxRates.jsx (double API prefix). All prior phases (1-11) remain complete — 448 tests passing, 0 failures.*
+
+---
+
+---
+
+## Remaining Work — Phases 13–21 (planned 2026-04-03)
+
+Cross-checked against all completed phases (1–12) and git log. The following items were identified in the audit but not addressed in any prior phase.
+
+---
+
+### Phase 13: Production Fixes (~ 1 hour)
+
+Zero-risk. One active production bug plus two 1-line hardening fixes.
+
+| # | Item | Detail |
+|---|------|--------|
+| 13.1 | `AdminTaxRates.jsx` — fix double API prefix | Line 2: `import { API }` → `import { API_BASE as API }`. All 6 CRUD calls on `/admin/tax-rates` return 404 in production. |
+| 13.2 | `config.js` — remove or rename the `API` export | Export `API = ${API_BASE}/api` is used by only 1 file (`AdminTaxRates.jsx`); `API_BASE` is used by 5 files. The confusing dual-export causes silent breakage when a new file imports `API` and appends `/api/...` again. Rename to `API_PREFIX` or remove after fixing 13.1. |
+| 13.3 | `onboarding-dismiss` route — add `requirePerm("all_access")` | `routes/tier4/company-profile.js:136` — no permission check; any Cashier can dismiss the onboarding checklist. 1-line fix. |
+
+---
+
+### Phase 14: Security Closes (~ half day)
+
+Small, targeted fixes with no architectural change.
+
+| # | Item | Detail |
+|---|------|--------|
+| 14.1 | `ADMIN_ALLOWED_IPS` startup assertion | If env var is unset, entire super-admin plane (impersonation, backups, tenant suspension) is accessible from any IP. Add a startup `console.warn` or throw in production if unset. |
+| 14.2 | Centralize upload validation — MIME + extension whitelist | Three routes have three different trust models: products (Sharp re-encode — most secure), support (MIME string only, client-supplied), company logo (size limit, no MIME allowlist). Unify into a shared whitelist middleware. |
+| 14.3 | `FS2` — impersonation JWT decoded client-side | `AuthProvider.jsx` (line 185) decodes the impersonation JWT via `atob()` and writes the payload to `localStorage` without server-side verification. Align with the employee auth model where the server is the source of truth. |
+
+---
+
+### Phase 15: Critical Infrastructure — Backup Fix (~ 1 day)
+
+This is the highest-severity unresolved finding. Gets worse with every new tenant.
+
+| # | Item | Detail |
+|---|------|--------|
+| 15.1 | Fix **admin** backup endpoint to dump all `tenant_*` schemas | `routes/admin/system.js:99` calls `backupSchema("public")` only — saves master tables but zero tenant transactional data. Note: the per-tenant backup route (`routes/barcode-expenses.js:393`) correctly uses `getSchemaName(req.tenantSlug)` to dump the tenant's own schema. The gap is admin-level: there is no full-database or all-tenants backup. Replace the admin handler with a whole-database dump or an orchestrated loop over all active tenant schemas. |
+| 15.2 | Add backup verification step | After restore, verify schema count matches. Prevents false confidence in a backup that silently omits schemas. |
+
+---
+
+### Phase 16: Frontend Session & Config Cleanup (~ half day)
+
+Groups three related "make the frontend coherent" items together.
+
+| # | Item | Detail |
+|---|------|--------|
+| 16.1 | Align session storage models | Employee auth: `localStorage["authSession"]` via `authStore.js`. Admin auth: `localStorage["adminSession"]` via `AdminLogin.jsx`. Different structure, different clear logic. Consolidate clear-on-logout and impersonation teardown into one module so they are atomic. |
+| 16.2 | `config.js` as single `import.meta.env` boundary | Several modules still read `import.meta.env` directly rather than importing from `config.js`. After Phase 13 removes the confusing `API` export, make `config.js` the only place that reads env vars. |
+| 16.3 | Split `App.jsx` route registry | Route definitions, public/private/admin wiring, setup redirect logic, and fallback UI all live in `App.jsx`. Split into three config files: public routes, app routes, admin routes. Keep `App.jsx` as composition only. |
+
+---
+
+### Phase 17: Zod Expansion (~ 1–2 days)
+
+Phase 8 added Zod schemas in `backend/schemas/` for 5 route files: `auth.js`, `billing.js`, `employees.js`, `products.js`, `sales.js` (validated via `middleware/validate.js`). Remaining routes still use raw `req.body` destructuring.
+
+| Order | Route Files | Notes |
+|-------|------------|-------|
+| 1st | `returns.js`, `customers.js` | High traffic, user-facing |
+| 2nd | `purchase-orders.js`, `inventory.js` | Stock integrity |
+| 3rd | `routes/admin/*.js` modules | High-privilege surface |
+
+Add tests to `pg-batch9-audit-fixes.test.js` as each file is done to keep the integration suite honest.
+
+---
+
+### Phase 18: Workers → pg-boss (~ 3–5 days)
+
+The biggest reliability leap. Currently all three workers run inline inside the Express process, sharing the event loop — slow jobs affect HTTP latency, and a server crash loses in-flight jobs.
+
+| # | Step | Detail |
+|---|------|--------|
+| 18.1 | Add `pg-boss` dependency, wire to existing Postgres pool | No new infrastructure — pg-boss uses the same Postgres DB already in the stack. |
+| 18.2 | Migrate `workers/email-worker.js` to pg-boss job | Retries, dead-letter, and scheduling come for free. |
+| 18.3 | Migrate `workers/fbr-worker.js` to pg-boss job | Replace manual exponential backoff with pg-boss retry config. |
+| 18.4 | Migrate cleanup worker / scheduled jobs | `jobs/cleanup-dead-tenants.js` + any cron-style scheduled tasks in `boot/workers.js`. |
+| 18.5 | Update `/api/admin/worker-status` to read pg-boss queue state | Replace `global.__emailWorkerStatus` / `__fbrWorkerStatus` heartbeat globals with real pg-boss metrics. |
+
+**Trigger:** Do this before 20+ active tenants, or when a worker crash causes a visible user-facing incident — whichever comes first.
+
+---
+
+### Phase 19: TypeScript — Incremental Adoption (~ 1–2 weeks)
+
+**Status:** Foundation complete (2026-04-03). TypeScript 6.0.2 (devDep only, noEmit),
+tsconfig × 2 (backend commonjs + frontend bundler), shared/constants.js,
+backend/types/ (express.d.ts + tenant.d.ts + employee.d.ts), frontend/src/types/ (auth.ts + api.ts).
+Smoke test confirmed TS2339 catches property errors.
+Remaining: opportunistic JSDoc on services/middleware when touched for other reasons.
+
+Zero `.ts` files currently exist. Use `allowJs: true` in `tsconfig.json` as the starting config — enables type checking with zero breaking changes.
+
+| Order | Files | Reason |
+|-------|-------|--------|
+| 1st | Shared contracts: permission strings, feature flag keys, billing status enums | Used everywhere — types here multiply in value across the whole codebase. |
+| 2nd | `services/` — email, payment-gateway, logger, fbr | High logic density, most to gain from types, already small and focused. |
+| 3rd | `middleware/` modules | Already single-responsibility from Phase 9 split — easy targets. |
+| 4th | Route files — as they are touched for other reasons | Don't migrate just to migrate; opportunistic migration as routes change. |
+| 5th | Frontend `api.js`, contexts, hooks | Highest-leverage frontend files. |
+
+---
+
+### Phase 20: Unit Test Coverage (~ 1–2 weeks, can overlap Phase 19)
+
+**Status: Complete** — Coverage infrastructure installed, 125 backend unit tests + 37 frontend unit tests across utils, services, middleware, and frontend contexts. Backend coverage: 29.4% statements. Completed 2026-04-03.
+
+Currently 449 integration tests (441 in pg-batch1–12 + 8 in tenant isolation/DB tests). There are 37 existing unit tests (19 in `backend/tests/unit/tz.test.js` + 18 in `frontend/tests/unit/` — auth_guards, layout, primitives), but zero unit tests for services, middleware, or utility modules beyond `tz.js`.
+
+| Order | Target | Notes |
+|-------|--------|-------|
+| 1st | `backend/utils/` — pure functions (dates, receipt, categoryTree) | Easiest entry point — no mocking needed. `tz.test.js` already covers timezone utils (19 tests); extend to remaining utils. |
+| 2nd | `backend/services/` — email, payment-gateway, fbr | Mock the HTTP calls; test the business logic. |
+| 3rd | `backend/middleware/` — plan-limits, validate, permissions | Already small and focused from Phase 9 split. |
+| 4th | Frontend contexts — CurrencyContext, POSContext hooks | Highest logic density in the frontend. |
+
+**Goal:** 30%+ unit test coverage as a floor, not a ceiling.
+
+---
+
+### Phase 21: Long-term / Trigger-based
+
+Do not schedule these proactively — execute when the stated trigger is hit.
+
+| Item | Trigger |
+|------|---------|
+| API versioning (`/api/v1/*`) | When a mobile app or external public API integration is planned. |
+| OpenAPI/Swagger documentation | When onboarding a second developer or external integrator. |
+| `products.js` split (959 lines) | When it causes a merge conflict or becomes a regular pain point. |
+| WCAG AA compliance | When selling to enterprise or government clients. |
+
+---
+
+### Remaining Work Summary
+
+| Phase | Work | Effort | Priority |
+|-------|------|--------|----------|
+| 13 | Production bug + 2 one-line fixes | 1 hr | Do today |
+| 14 | Security closes (IP assertion, upload validation, impersonation) | Half day | This week |
+| 15 | Admin backup endpoint — all tenant schemas | 1 day | This week (disaster recovery) |
+| 16 | Frontend session/config/route cleanup | Half day | Next sprint |
+| 17 | Zod expansion to remaining routes | 1–2 days | Next sprint |
+| 18 | Workers → pg-boss | 3–5 days | Before 20+ tenants |
+| 19 | TypeScript incremental | 1–2 weeks | Whenever |
+| 20 | Unit test coverage | 1–2 weeks | Can overlap Phase 19 |
+| 21 | Long-term items | Indefinite | Trigger-based |
+
+*Phases 13–15 are non-negotiable — they fix an active production bug and a disaster-recovery gap. Everything after that is quality-of-life and scale preparation.*

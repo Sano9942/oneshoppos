@@ -6,7 +6,7 @@
 - **All pages** are in `src/pages/redesign/` — always edit `*Redesign.jsx` files
 - **Landing page**: `src/pages/LandingPage.jsx` — public one-pager with competitive positioning, pricing (2-tier: Free + Pro), login
 - **Route files** (`*Route.jsx` in `pages/`) are 5-line thin wrappers — never edit these
-- **App.jsx** is the route orchestrator — read this to understand routing
+- **App.jsx** is the route orchestrator (composition only) — route definitions live in `routes/publicRoutes.jsx`, `routes/appRoutes.jsx`, `routes/adminRoutes.jsx`
 - **AuthProvider.jsx** patches `window.fetch` globally — all `/api/` calls get auth headers automatically
 
 ## DO NOT READ These Files (token waste)
@@ -25,7 +25,7 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 
 | Need | Read This |
 |------|-----------|
-| Routing & guards | `App.jsx` |
+| Routing & guards | `App.jsx` (composition) + `routes/publicRoutes.jsx`, `routes/appRoutes.jsx`, `routes/adminRoutes.jsx` (definitions) |
 | Auth, token refresh, fetch interceptor | `auth/AuthProvider.jsx` |
 | Token storage helpers | `auth/authStore.js` |
 | Design system primitives | `ui/primitives.jsx` |
@@ -38,6 +38,10 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 | Offline queue | `utils/offlineQueue.js` |
 | CSV export | `utils/csvExport.js` — `downloadCsv(headers, rows, filename)` |
 | API base URL | `config.js` |
+| Centralized API calls | `api.js` — `api.get/post/put/del/upload/raw`; handles URL construction, auth headers, JSON parsing, error normalization |
+| Admin session storage | `auth/adminAuthStore.js` — admin session helpers (extracted from AdminLogin.jsx) |
+| TypeScript types | `types/auth.ts`, `types/api.ts` — shared shape declarations (tsconfig: allowJs + noEmit) |
+| POS cart math | `pages/redesign/pos/cartMath.js` — pure cart calculation functions (extracted from POSContext for testability) |
 | POS state & logic | `pages/redesign/pos/POSContext.jsx` |
 | Dashboard modules | `pages/dashboard/*.jsx` |
 | Report modules | `pages/reports/*.jsx` |
@@ -47,6 +51,7 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 | Support widget | `ui/SupportWidget.jsx` — floating ticket form |
 | Impersonation banner | `ui/ImpersonationBanner.jsx` — amber bar during impersonation |
 | Announcement banner | `ui/AnnouncementBanner.jsx` — platform announcements, dismissible per session |
+| Subscription banner | `ui/SubscriptionBanner.jsx` — global trial countdown / grace warning / expired state banner |
 | My Tickets page | `pages/redesign/MyTicketsRedesign.jsx` — tenant-side support ticket viewer + admin replies |
 | Tenant billing page | `pages/redesign/BillingRedesign.jsx` — trial countdown, Pay Now (gateway), payment history, upgrade requests |
 | FBR settings | `pages/redesign/FBRSettingsRedesign.jsx` — NTN, token, province, enable toggle |
@@ -82,10 +87,12 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 - Pass `currencySymbol` as param in non-component utilities (e.g., `receipt.js`)
 
 ### API Calls
+- **Use `api.js` for all API calls** — `import api from '../api'` then `api.get('/products')`, `api.post('/sales', body)`, etc. Do NOT use raw `fetch()` in non-admin pages.
+- Admin pages use `adminFetch` from `AdminLogin.jsx` — separate auth system, do NOT replace with `api.js`
 - All fetch calls to URLs containing `/api/` get auth headers injected automatically by `AuthProvider.jsx`
-- Always use `${API}/api/<route>` — missing `/api/` prefix means no headers injected
 - Do NOT manually set `x-employee-id` or `Authorization` headers — the interceptor does it
-- `API` is imported from `../config` (or `../../config` depending on depth)
+- **`config.js` gotcha**: `API` export = `${API_BASE}/api` (already includes `/api`). Never do `${API}/api/...` — produces double prefix → 404. Use `api.js` or import `API_BASE` and append `/api/...` yourself.
+- `API_BASE` is imported from `../config` (or `../../config` depending on depth)
 - **Silent refresh**: On 401 with `TOKEN_EXPIRED`, interceptor calls `POST /api/auth/refresh` via `window._nativeFetch`, stores new token, retries original request. Uses `_refreshPromise` lock to prevent concurrent refreshes.
 - **Do NOT add `token` to `useEffect` deps** — interceptor reads it live via `readToken()`. Adding it causes re-wrapping on every refresh.
 
@@ -119,6 +126,7 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 
 ### Admin Panel (separate auth system)
 - Uses `adminFetch` from `AdminLogin.jsx` — NOT the global fetch interceptor
+- Session helpers in `auth/adminAuthStore.js` (extracted from AdminLogin.jsx)
 - Session stored in `localStorage["adminSession"]` — NOT `"authSession"`
 - Routes at `/admin/*` bypass `RequireAuth`/`RequireContext`
 - `AdminDashboard.jsx` includes `InfrastructurePanel` — DB connections, cache hit ratio, table health, slow queries (30s auto-refresh)
@@ -151,6 +159,9 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
   - Health check: use simple `/api/health` (no `?deep=true` — no tenant context available)
 - Test log: `tests/live/../../../docs/test-logs/2026-03-28-onboarding-tests.md`
 
-### Other Tests
-- Unit tests: `tests/unit/*.test.jsx`
-- Dev E2E tests: `tests/e2e/*.spec.js` (against local dev server)
+### Unit Tests (37 tests)
+- Location: `tests/unit/` — auth guards, layout, primitives, CurrencyContext, cartMath, POSContext hooks
+- Run: `npx vitest run tests/unit/` (vitest with @vitest/coverage-v8)
+
+### Dev E2E Tests
+- Location: `tests/e2e/*.spec.js` (against local dev server)

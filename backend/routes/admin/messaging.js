@@ -2,6 +2,9 @@
  * Admin messaging — email queue, broadcast, activity logs, security logs,
  * cross-tenant activity, announcements, broadcast history.
  */
+const { validate } = require("../../middleware/validate");
+const { CreateAnnouncementSchema } = require("../../schemas/admin");
+
 module.exports = function registerMessagingRoutes(app, deps) {
   const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager, auditLog, logAdminAction } = deps;
 
@@ -272,7 +275,7 @@ module.exports = function registerMessagingRoutes(app, deps) {
     }
   });
 
-  app.post("/api/admin/announcements", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/announcements", requireAllowedIp, requireSuperAdmin, validate(CreateAnnouncementSchema), async (req, res) => {
     try {
       const { message, type = "info", ends_at } = req.body;
       if (!message || !message.trim()) return res.status(400).json({ error: "Message is required" });

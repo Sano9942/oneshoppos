@@ -24,6 +24,7 @@ archive/
 
 # Generated artifacts
 test_results*.json
+coverage/
 schema_dump.json
 _endpoint_list.txt
 

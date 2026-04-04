@@ -7,11 +7,12 @@ import { AuthProvider } from './auth/AuthProvider.jsx'
 import { CurrencyProvider } from './contexts/CurrencyContext.jsx'
 import { ToastProvider } from './contexts/ToastContext.jsx'
 import { ErrorBoundary } from './ui/ErrorBoundary.jsx'
+import { SENTRY_DSN, ENV_MODE, IS_PROD } from './config.js'
 
-if (import.meta.env.VITE_SENTRY_DSN) {
+if (SENTRY_DSN) {
   Sentry.init({
-    dsn: import.meta.env.VITE_SENTRY_DSN,
-    environment: import.meta.env.MODE,
+    dsn: SENTRY_DSN,
+    environment: ENV_MODE,
     tracesSampleRate: 0,
     replaysSessionSampleRate: 0,
   });
@@ -31,7 +32,7 @@ createRoot(document.getElementById('root')).render(
   </StrictMode>,
 )
 
-if (import.meta.env.PROD && "serviceWorker" in navigator) {
+if (IS_PROD && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   });

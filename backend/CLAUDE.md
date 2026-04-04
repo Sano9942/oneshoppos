@@ -2,30 +2,10 @@
 
 ## DO NOT READ These Files
 
-The following files are **legacy SQLite code** — never executed in production (Postgres-only since Mar 12 2026). Do NOT read, modify, or reference them unless explicitly asked about SQLite rollback.
-
-### SQLite Infrastructure (10 files — skip all)
-- `db.js` → use `db-pg.js` instead
-- `master-db.js` → use `master-db-pg.js` instead
-- `tenant-db-manager.js` → use `tenant-db-manager-pg.js` instead
-- `tenant-db-proxy.js` → use `tenant-db-proxy-pg.js` instead
-- `tenant-provisioner.js` → use `tenant-provisioner-pg.js` instead
-- `tenant-migrate.js` → use `migrate-pg.js` instead
-- `schema-full.js` → use `schema-pg.sql` instead
-- `seed-admin.js` → use `seed-admin-pg.js` instead
-- `run_migrations.js` → use `migrate-pg.js` instead
-- `migrate.js` → obsolete pre-system migration
-
-### 74 SQLite Migration Files (skip all)
-- `migrate1.js` through `migrate74.js` — SQLite DDL, never run in production
-- For schema reference, read `schema-pg.sql` (single source of truth)
-
-### One-Off Scripts (already executed, skip)
-- `cleanup-public-schema.js` — already run Mar 13 2026
-- `seed_e2e.js` — one-off test data helper
-
 ### Stale Directories (skip)
 - `backups/`, `archive/legacy/`, `tenants/`, `exports/`, `uploads_test/`, `uploads_tmp/`
+
+> **Note:** All SQLite infrastructure files (db.js, master-db.js, tenant-db-manager.js, etc.), 74 SQLite migration files (migrate1.js–migrate74.js), and one-off scripts (cleanup-public-schema.js, reset-production.js) were deleted in the Phase 5 audit cleanup (commit `3227600`). The codebase is Postgres-only. Schema source of truth: `schema-pg.sql`.
 
 ## Where to Look Instead
 
@@ -43,7 +23,7 @@ The following files are **legacy SQLite code** — never executed in production 
 | Server entry + middleware | `index.js` |
 | Route registration | `routes/registerAllRoutes.js` (orchestrator only — no route logic here) |
 | Route logic for a domain | `routes/<domain>.js` (e.g., `routes/sales.js`, `routes/products.js`) |
-| Super-admin + infra monitoring | `routes/admin.js` — includes infra, tax rates, FBR health, activity/security logs, revenue stats, worker status, orphaned schemas, tenant notes, announcements, broadcast log, support ticket replies, backup trigger |
+| Super-admin + infra monitoring | `routes/admin/` (8 modules: auth, tenants, monitoring, billing, operations, compliance, messaging, system) — infra, tax rates, FBR health, activity/security logs, revenue stats, worker status, orphaned schemas, tenant notes, announcements, broadcast log, support ticket replies, backup trigger |
 | Report endpoints | `routes/reports/` (11 files, modular) |
 | Shopify integration | `routes/shopify/` (9 files) + `shopify/` (3 files) |
 | Tier4 features | `routes/tier4/` (7 files) |
@@ -63,7 +43,16 @@ The following files are **legacy SQLite code** — never executed in production 
 | Subscription enforcement | `middleware/plan-limits.js` — `requireActiveSubscription` + `requirePlanLimit` |
 | Dead tenant cleanup | `jobs/cleanup-dead-tenants.js` (removes tenants with no setup after 7 days, inline via `CLEANUP_WORKER_ENABLED=1`) |
 | FBR Digital Invoicing | `services/fbr.js` (API client + payload builders), `routes/fbr.js` (config/dashboard/retry), `routes/tax-lookup.js` (HS code search) |
-| FBR background worker | `workers/fbr-worker.js` (polls queue, posts to FBR, inline or standalone) |
+| FBR background worker | `workers/fbr-worker.js` (legacy inline), `workers/fbr-worker-boss.js` (pg-boss backed) |
+| pg-boss job queue | `services/boss.js` — shared pg-boss instance factory |
+| Upload validation | `middleware/upload-validation.js` — centralized MIME + extension whitelist |
+| Rate limiting | `middleware/rate-limit.js` — global, auth endpoint, webhook limiters |
+| JWT auth + tenant resolution | `middleware/tenant-auth.js` — loadTenantAndPerms, resolveTenant, loadCompanyProfile, resolveContext |
+| Permissions | `middleware/permissions.js` — requirePerm, requireAnyPerm, PERMISSION_RULES |
+| Feature flags | `middleware/feature-flags.js` — requireFeature, flag cache, notification helpers |
+| Input validation | `middleware/validate.js` + `schemas/` — Zod schemas for auth, billing, employees, products, sales, returns, customers, purchase-orders, inventory, admin |
+| Worker startup | `boot/workers.js` — all worker init (email, FBR, cleanup, Shopify, scheduled tasks) |
+| Shopify crypto | `shopify/crypto.js` — secret encrypt/decrypt + event logging |
 | Tax rate seed data | `scripts/seed-tax-rates.js` (one-time, ~96 HS codes with Urdu descriptions) |
 
 ## Efficiency Rules
@@ -91,8 +80,10 @@ The following files are **legacy SQLite code** — never executed in production 
 
 ## Test Suites
 
-### Postgres Integration Tests (340 tests — primary)
-- Location: `tests/integration/pg-batch*.test.js` (8 files)
+### Postgres Integration Tests (449 tests — primary) + 125 unit tests
+- Location: `tests/integration/pg-batch*.test.js` (12 files: pg-batch1–12 + tenant isolation)
+- Unit tests: `tests/unit/` (125 tests — utils.test.js, services.test.js, middleware.test.js, tz.test.js)
+- Unit test runner: `vitest` with `@vitest/coverage-v8` (see `vitest.config.js`)
 - Factory: `tests/helpers/createTestApp-pg.js` (isolated schema per test)
 - Schema: `tests/helpers/seedSchema-pg.js`
 - Run: `npx jest tests/integration/pg-batch1-crud.test.js` (requires `DATABASE_URL`)
@@ -156,16 +147,16 @@ The following files are **legacy SQLite code** — never executed in production 
 - Queries: `pg_stat_activity` (connections), `pg_database_size` (DB size), `pg_statio_user_tables` (cache hit ratio), `pg_stat_user_tables` (dead tuples/vacuum), schema sizes, active slow queries (>1s)
 - Optional: `pg_stat_statements` (historical slow queries) — try/catch, skipped if extension unavailable
 
-### Boot Guard (index.js line 2)
-- `require("dotenv").config(...)` loads `.env` BEFORE the conditional import on line 5
-- `const db = process.env.DATABASE_URL ? require("./db-pg") : require("./db")` — Postgres or SQLite based on env
-- Railway has `DATABASE_URL` → runs Postgres. Local dev without `.env` → falls back to SQLite
+### Boot Guard (index.js)
+- `index.js` is now Postgres-only (~230-line orchestrator). SQLite fallback removed.
+- `require("dotenv").config(...)` must remain line 1 so `DATABASE_URL` is set before any require
 
 ### Worker Heartbeat Pattern
 - Email, FBR, and cleanup workers expose `global.__emailWorkerStatus`, `__fbrWorkerStatus`, `__cleanupWorkerStatus`
 - Each object: `{ lastPollAt, processedToday, queueDepth }`
+- `queueDepth` is now a real `SELECT COUNT(*)` from the queue table — no longer always 0
 - `GET /api/admin/worker-status` reads these globals to determine running/stopped state
-- Workers run inline in the Express process (same PID) — globals are shared memory
+- Workers are pg-boss backed — jobs survive server crashes and don't block the HTTP event loop
 
 ## Production Environment
 

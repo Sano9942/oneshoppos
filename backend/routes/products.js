@@ -887,16 +887,11 @@ module.exports = function registerProductRoutes(app, deps) {
   const { uploadToR2 } = require("../utils/r2");
   const sharp = require("sharp");
 
+  const { imageFileFilter } = require("../middleware/upload-validation");
   const productImageUpload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 },
-    fileFilter: (req, file, cb) => {
-      if (!file || !file.mimetype) return cb(new Error("Invalid file"));
-      if (!file.mimetype.startsWith("image/")) {
-        return cb(new Error("Only image uploads are allowed"));
-      }
-      cb(null, true);
-    },
+    fileFilter: imageFileFilter,
   });
 
   app.post(

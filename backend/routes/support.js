@@ -1,12 +1,13 @@
 const crypto = require("crypto");
-const path = require("path");
 const multer = require("multer");
 const { uploadToR2 } = require("../utils/r2");
 const { sendAlertEmail } = require("../utils/alertEmail");
+const { imageFileFilter, safeExtension } = require("../middleware/upload-validation");
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: imageFileFilter,
 });
 
 module.exports = function supportRoutes(app, deps) {
@@ -99,11 +100,7 @@ module.exports = function supportRoutes(app, deps) {
           return res.status(400).json({ error: "No file uploaded" });
         }
 
-        if (!file.mimetype.startsWith("image/")) {
-          return res.status(400).json({ error: "Only image files are allowed" });
-        }
-
-        const ext = path.extname(file.originalname).toLowerCase() || ".png";
+        const ext = safeExtension(file.originalname, file.mimetype);
         const opaqueId = crypto.randomBytes(16).toString("hex");
         const key = `support/${opaqueId}${ext}`;
         const url = await uploadToR2(file.buffer, key, file.mimetype);

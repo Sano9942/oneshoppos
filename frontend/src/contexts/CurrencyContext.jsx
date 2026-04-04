@@ -1,7 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { IS_MULTI_TENANT } from "../config";
-
-const API = import.meta.env.VITE_API_BASE || "";
+import { IS_MULTI_TENANT, API_BASE as API } from "../config";
 
 const CurrencyContext = createContext({
   symbol: "$",

@@ -87,16 +87,22 @@ module.exports = function registerSystemRoutes(app, deps) {
   // ── Backup ─────────────────────────────────────────────────────────────
   app.post("/api/admin/backup", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
-      const { isPgDumpAvailable, backupSchema } = require("../../utils/backup-pg");
+      const { isPgDumpAvailable, backupAllSchemas } = require("../../utils/backup-pg");
       const { uploadToR2 } = require("../../utils/r2");
 
       const available = await isPgDumpAvailable();
       if (!available) return res.status(500).json({ error: "pg_dump not available on this server" });
 
+      // Gather all active tenant schemas + public
+      const { rows: tenants } = await db.query(
+        "SELECT slug FROM tenants WHERE status = 'active' ORDER BY slug"
+      );
+      const schemas = ["public", ...tenants.map(t => `tenant_${t.slug}`)];
+
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const key = `backups/full-backup-${timestamp}.dump`;
 
-      const { stream, process: proc } = backupSchema("public");
+      const { stream, process: proc } = backupAllSchemas(schemas);
       const chunks = [];
       stream.on("data", (chunk) => chunks.push(chunk));
 
@@ -115,8 +121,47 @@ module.exports = function registerSystemRoutes(app, deps) {
         );
       } catch (_) { /* table may not exist */ }
 
-      logAdminAction(req.admin.email, "backup_created", "system", null, { key, size: buffer.length }, req.ip);
-      return res.json({ message: "Backup created", key, size: buffer.length, url });
+      logAdminAction(req.admin.email, "backup_created", "system", null, {
+        key, size: buffer.length, schema_count: schemas.length,
+        tenant_count: tenants.length,
+      }, req.ip);
+      return res.json({
+        message: "Backup created",
+        key, size: buffer.length, url,
+        schemas_included: schemas.length,
+        tenant_schemas: tenants.map(t => t.slug),
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Backup Verification ─────────────────────────────────────────────────
+  app.post("/api/admin/backup/verify", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const { listSchemasInBackup } = require("../../utils/backup-pg");
+      const { filePath } = req.body;
+      if (!filePath) return res.status(400).json({ error: "filePath is required" });
+
+      const schemasInBackup = await listSchemasInBackup(filePath);
+
+      // Expected: public + all active tenant schemas
+      const { rows: tenants } = await db.query(
+        "SELECT slug FROM tenants WHERE status = 'active' ORDER BY slug"
+      );
+      const expectedSchemas = ["public", ...tenants.map(t => `tenant_${t.slug}`)].sort();
+
+      const missing = expectedSchemas.filter(s => !schemasInBackup.includes(s));
+      const extra = schemasInBackup.filter(s => !expectedSchemas.includes(s));
+      const valid = missing.length === 0;
+
+      return res.json({
+        valid,
+        schemas_in_backup: schemasInBackup.length,
+        schemas_expected: expectedSchemas.length,
+        missing,
+        extra,
+      });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }

@@ -6,13 +6,13 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 
 - Backend: Node.js + Express v5 + PostgreSQL (via `pg` pool, `backend/db-pg.js`)
 - Frontend: React 19 + Vite 7 + Tailwind CSS v4
-- **Database: Postgres ONLY** — SQLite legacy files exist in repo but are never executed. See `backend/CLAUDE.md` for the skip list.
+- **Database: Postgres ONLY** — all SQLite legacy files were deleted in the Phase 5 audit cleanup. Schema source of truth: `backend/schema-pg.sql`.
 - **Multi-tenant is LIVE** — `MULTI_TENANT=1` on Railway, `VITE_MULTI_TENANT=1` on Vercel
 - Schema source of truth: `backend/schema-pg.sql`
 
 ## Sub-Guides (loaded automatically when working in those directories)
 
-- **`backend/CLAUDE.md`** — file skip lists, Postgres query patterns, backend gotchas, test suites, production env
+- **`backend/CLAUDE.md`** — Postgres query patterns, backend gotchas, test suites (449 integration + 125 unit), production env
 - **`frontend/CLAUDE.md`** — route wrapper skip list, conventions (Tailwind v4, timestamps, currency, API calls), POS architecture, test suites
 
 ## Efficiency Rules (Read First)
@@ -32,7 +32,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 ### Off-Limits Unless Explicitly Needed
 - `backend/index.js` — middleware order and boot sequence are documented here; don't read unless task is specifically about server config
 - `backend/routes/registerAllRoutes.js` — route mounting is documented here; never read for domain-level changes
-- `frontend/src/App.jsx` — routing is documented in `frontend/CLAUDE.md`; don't read unless task is about routing guards
+- `frontend/src/App.jsx` — composition only; route definitions in `frontend/src/routes/*.jsx`. Don't read unless task is about routing guards
 
 ### Response Style
 - No trailing summaries ("Here's what I did...") — the diff speaks for itself
@@ -43,7 +43,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 ```
 oneshoppos/
 ├── backend/
-│   ├── index.js                  # Main Express server (~770 lines, includes cleanup worker startup)
+│   ├── index.js                  # Main Express server (~230-line orchestrator — worker startup in boot/workers.js, auth/perms/flags in middleware/)
 │   ├── db-pg.js                  # Postgres connection pool (query, transaction, getClient)
 │   ├── schema-pg.sql             # Full DDL — single source of truth
 │   ├── migrate-pg.js             # Postgres migration runner
@@ -51,7 +51,7 @@ oneshoppos/
 │   ├── category-tree.js          # Category tree enrichment + resolveInheritedField (FBR)
 │   ├── routes/
 │   │   ├── registerAllRoutes.js  # Orchestrator only (~324 lines)
-│   │   ├── admin.js              # /api/admin/* (~2200 lines, super-admin, mounted BEFORE tenant middleware)
+│   │   ├── admin/                # /api/admin/* split into 8 modules (auth, tenants, monitoring, billing, operations, compliance, messaging, system) — mounted BEFORE tenant middleware
 │   │   ├── auth.js               # /api/auth/*
 │   │   ├── sales.js              # /api/sales
 │   │   ├── products.js           # /api/products (~912 lines)
@@ -79,6 +79,15 @@ oneshoppos/
 │   │   ├── tier4/                # Tier 4 features (7 files, modular)
 │   │   └── [other domain files]  # taxes, categories, outlets, roles, brands, suppliers, promotions, orders, etc.
 │   ├── middleware/plan-limits.js  # Tenant plan cap + subscription enforcement
+│   ├── middleware/rate-limit.js   # Rate limiter config (global, auth, webhook)
+│   ├── middleware/tenant-auth.js  # JWT auth, tenant resolution, company profile cache, context resolution
+│   ├── middleware/permissions.js  # requirePerm, requireAnyPerm, PERMISSION_RULES, role defaults
+│   ├── middleware/feature-flags.js # Feature flag cache, requireFeature, notification helpers
+│   ├── middleware/validate.js     # Zod validation helper — validate(schema) middleware factory
+│   ├── middleware/upload-validation.js # Centralized MIME + extension whitelist for file uploads
+│   ├── schemas/                   # Zod schemas: auth, billing, employees, products, sales, returns, customers, purchase-orders, inventory, admin
+│   ├── boot/workers.js            # All worker startup (email, FBR, cleanup, Shopify, scheduled tasks)
+│   ├── shopify/crypto.js          # Shopify secret encryption/decryption + event logging
 │   ├── services/payment-gateway.js # Payment gateway adapter (xPay, extensible)
 │   ├── middleware/request-id.js   # Request ID + Pino logging middleware
 │   ├── tenant-db-proxy-pg.js     # AsyncLocalStorage + Proxy for MT DB routing
@@ -92,15 +101,24 @@ oneshoppos/
 │   ├── services/email.js          # Unified sendEmail() + enqueueEmail() orchestrator
 │   ├── services/email-templates.js # HTML builder functions for 14 email types
 │   ├── services/fbr.js           # FBR API client, payload builders, queue helper
-│   ├── workers/email-worker.js    # Email queue worker + trial/paid expiry lifecycle (inline, heartbeat via global.__emailWorkerStatus)
-│   ├── workers/fbr-worker.js     # FBR background worker (inline, heartbeat via global.__fbrWorkerStatus)
+│   ├── services/boss.js            # pg-boss instance factory (shared Postgres-backed job queue)
+│   ├── workers/email-worker.js    # Email queue worker (legacy inline — see email-worker-boss.js)
+│   ├── workers/email-worker-boss.js # Email queue worker (pg-boss backed)
+│   ├── workers/fbr-worker.js     # FBR background worker (legacy inline — see fbr-worker-boss.js)
+│   ├── workers/fbr-worker-boss.js # FBR background worker (pg-boss backed)
+│   ├── workers/cleanup-worker-boss.js # Dead tenant cleanup (pg-boss backed)
 │   ├── scripts/seed-tax-rates.js # One-time seed for tax_rate_reference (~96 HS codes)
+│   ├── shared/constants.js       # Shared permission strings, feature flag keys, billing status enums
 │   └── utils/                    # tz.js, receiptEmail.js, digestEmail.js, backup-pg.js, resendEmail.js, alertEmail.js
 └── frontend/src/
-    ├── App.jsx                   # Route orchestrator
+    ├── App.jsx                   # Route orchestrator (composition only — route defs in routes/*.jsx)
+    ├── api.js                    # Centralized API service layer — api.get/post/put/del/upload/raw (replaces raw fetch, handles URL/auth/JSON/errors)
     ├── auth/AuthProvider.jsx     # Global fetch interceptor + JWT auth
     ├── auth/authStore.js         # Token storage helpers
-    ├── config.js                 # API base URL, IS_MULTI_TENANT
+    ├── config.js                 # API base URL, IS_MULTI_TENANT — sole import.meta.env reader in the frontend
+    ├── types/                    # TypeScript declarations: auth.ts, api.ts (tsconfig: allowJs + noEmit)
+    ├── auth/adminAuthStore.js    # Admin session storage helpers (extracted from AdminLogin.jsx)
+    ├── routes/                   # Route config split: publicRoutes.jsx, appRoutes.jsx, adminRoutes.jsx, RouteLoading.jsx
     ├── contexts/CurrencyContext.jsx  # useCurrency() → { symbol, code, fmt, refresh }
     ├── contexts/ToastContext.jsx    # useToast() → { toast, success, error, warning }
     ├── ui/primitives.jsx         # Design system (PageShell, Button, Input, etc.)
@@ -147,7 +165,7 @@ oneshoppos/
 
 - Most API routes are in `backend/routes/<domain>.js` — read only the relevant file
 - `registerAllRoutes.js` is an orchestrator only — no route logic
-- **Super-admin routes** (`admin.js`) and **webhook routes** (`webhooks.js`) mounted BEFORE `loadTenantAndPerms`/`resolveTenant` middleware
+- **Super-admin routes** (`routes/admin/` — 8 modules) and **webhook routes** (`webhooks.js`) mounted BEFORE `loadTenantAndPerms`/`resolveTenant` middleware
 - **Multi-tenant DB routing**: `deps.db` is a Proxy that delegates to tenant DB via AsyncLocalStorage. Middleware order: `loadTenantAndPerms` → `resolveTenant` → tenant `/uploads` → `loadCompanyProfile` → `resolveContext`
 - Internal product categories are hierarchical; leaf-only assignment
 - Frontend: port 5173 (Vite dev), Backend: port 5000
@@ -174,10 +192,10 @@ oneshoppos/
 - **Cloud printing**: `services/printer.js` has `printToNetwork(host, port, buffer)` via raw TCP socket. `POST /api/print/test` for testing.
 - **Courier dispatch**: `routes/couriers.js` — CRUD couriers, ship orders, get tracking. `services/couriers/` adapter pattern (base → generic → leopards). `courier_integrations` table with 10 pre-seeded Pakistan couriers.
 - **FBR export**: `GET /api/reports/fbr-export?from=X&to=Y` — generates FBR-compliant CSV data.
-- **FBR Digital Invoicing**: Real-time invoice posting to FBR DI API. Feature-flagged per tenant (`fbr_integration`). Sales/returns/voids enqueue payloads to `fbr_invoices` table. Background worker (`workers/fbr-worker.js`, inline or standalone) polls queue with exponential backoff retry (5 attempts). Routes: `routes/fbr.js` (config, dashboard, retry), `routes/tax-lookup.js` (HS code search, suggest corrections). Admin: `routes/admin.js` has tax rate CRUD + FBR health endpoint. Category-level HS code + tax inheritance via `category-tree.js:resolveInheritedField()`. Tax rate reference table (`tax_rate_reference`) in public schema with ~100 seeded HS codes. Migration v9. Frontend: `/settings/fbr` (config), `/fbr` (invoice queue dashboard), `/tax-lookup` (rate search), `/admin/tax-rates` (super-admin CRUD).
+- **FBR Digital Invoicing**: Real-time invoice posting to FBR DI API. Feature-flagged per tenant (`fbr_integration`). Sales/returns/voids enqueue payloads to `fbr_invoices` table. Background worker (`workers/fbr-worker.js`, inline or standalone) polls queue with exponential backoff retry (5 attempts). Routes: `routes/fbr.js` (config, dashboard, retry), `routes/tax-lookup.js` (HS code search, suggest corrections). Admin: `routes/admin/compliance.js` has tax rate CRUD + FBR health endpoint. Category-level HS code + tax inheritance via `category-tree.js:resolveInheritedField()`. Tax rate reference table (`tax_rate_reference`) in public schema with ~100 seeded HS codes. Migration v9. Frontend: `/settings/fbr` (config), `/fbr` (invoice queue dashboard), `/tax-lookup` (rate search), `/admin/tax-rates` (super-admin CRUD).
 - **AI insights**: `GET /api/insights/auto` (5 pre-built analytics cards). `POST /api/insights/ask` (Claude AI chat, feature-flagged `ai_insights`, requires `ANTHROPIC_API_KEY`).
 - **Self-service signup**: `POST /api/auth/signup` — creates tenant + admin employee + welcome email. Gated by `SELF_SERVICE_SIGNUP=1` env var. Rate-limited. 2-tier plans: Free (1 outlet, 3 employees, 100 products) or Pro (unlimited, 45-day trial). Dead tenant cleanup job (`backend/jobs/cleanup-dead-tenants.js`) removes tenants that never complete setup after 7 days.
-- **Subscription lifecycle**: `requireActiveSubscription` middleware gates all business routes. Trial (45 days) → grace (7 days) → expired (read-only). Email worker sends `trial_warning`, `trial_ended`, `account_locked` automatically. Renewal emails (`renewal_due`, `renewal_overdue`) for paid tenants. Global subscription status banner in frontend.
+- **Subscription lifecycle**: `requireActiveSubscription` middleware gates all business routes. Trial (45 days) → grace (7 days) → expired (read-only). Email worker sends `trial_warning`, `trial_ended`, `account_locked` automatically. Renewal emails (`renewal_due`, `renewal_overdue`) for paid tenants. `ui/SubscriptionBanner.jsx` shows trial countdown / grace warning / expired state globally.
 - **Subscription billing**: `routes/billing.js` — `GET /api/billing/status` (includes `payment_enabled`, trial/grace status), `GET /api/billing/pricing`, `GET /api/billing/payment-history`, `POST /api/billing/request-upgrade` (manual path), `POST /api/billing/create-checkout` (gateway path). Admin billing UI in `AdminTenantDetail.jsx`. Tables: `plan_pricing`, `payment_records`, `upgrade_requests` (migration v7), `payment_intents` (migration v11).
 - **Payment integration**: `services/payment-gateway.js` — gateway adapter (xPay implementation, extensible). `routes/webhooks.js` — `POST /api/webhooks/xpay` (HMAC-verified, mounted before tenant middleware). Feature-gated by `PAYMENT_GATEWAY` env var — when unset, system uses manual admin payments. Checkout flow: create intent → gateway redirect → webhook confirms → tenant auto-activated + payment record + confirmation email.
 - **Unified Email Service**: `services/email.js` — single `sendEmail()` for all email types. Tenant->customer emails from `slug@sanopos.com`, platform->tenant from `noreply@sanopos.com`. 14 email types: receipt, digest, 3 drip, 6 billing (payment_recorded, plan_changed, expiry_warning, overdue, renewal_due, renewal_overdue), 3 lifecycle (trial_warning, trial_ended, account_locked), 2 support, 2 broadcast. `email_queue` table + `workers/email-worker.js` (inline, `EMAIL_WORKER_ENABLED=1`). Migration v10.
@@ -193,9 +211,9 @@ oneshoppos/
 - **Uptime monitoring**: UptimeRobot pings `/api/health` every 5 min, emails on downtime.
 - **Support tickets**: `POST /api/support/tickets` + `POST /api/support/upload` (R2). Floating widget on all authenticated pages. Admin viewer at `/admin/support`.
 - **Dead letter queue**: `/admin/dead-letters` — failed webhook events with retry/dismiss actions.
-- **Tenant impersonation**: `POST /api/admin/impersonate/:tenantId` — 1-hour JWT, amber banner, audit trail in `impersonation_sessions` table. Actions tagged "(impersonated by Super-Admin)".
+- **Tenant impersonation**: `POST /api/admin/impersonate/:tenantId` — 1-hour JWT, amber banner, audit trail in `impersonation_sessions` table. Actions tagged "(impersonated by Super-Admin)". Impersonation JWT is verified server-side (not decoded via atob() client-side).
 - **Admin activity logging**: All admin mutations logged to `admin_activity_log` table. Security events (login success/failure) logged to `admin_security_log`. Cross-tenant activity via `GET /api/admin/tenant-activity`.
-- **Worker monitoring**: `GET /api/admin/worker-status` reads `global.__emailWorkerStatus`, `__fbrWorkerStatus`, `__cleanupWorkerStatus` heartbeat globals. Dashboard shows running/stopped status, queue depth, processed today.
+- **Worker monitoring**: `GET /api/admin/worker-status` reads heartbeat globals (`__emailWorkerStatus`, `__fbrWorkerStatus`, `__cleanupWorkerStatus`). `queueDepth` is a real `SELECT COUNT(*)` from the queue table (not always-0). Dashboard shows running/stopped status, real queue depth, processed today.
 - **Cleanup worker**: `CLEANUP_WORKER_ENABLED=1` env var. Runs `jobs/cleanup-dead-tenants.js` every 24h inline.
 - **Orphaned schema detection**: `GET /api/admin/orphaned-schemas` + `POST /api/admin/orphaned-schemas/cleanup`.
 - **Announcements**: `GET/POST/PUT/DELETE /api/admin/announcements` (admin), `GET /api/announcements/active` (public, no auth). Tenant-side banner via `ui/AnnouncementBanner.jsx` in AppLayout.
@@ -204,9 +222,10 @@ oneshoppos/
 
 ## Running Tests
 
-### Postgres Integration Tests (primary — 340 tests)
+### Postgres Integration Tests (primary — 449 integration + 162 unit tests)
 - `npx jest backend/tests/integration/pg-batch1-crud.test.js` (requires `DATABASE_URL`)
-- 8 test files: `pg-batch1` through `pg-batch8`, plus `pg-tenant-isolation`
+- 12 integration files: `pg-batch1` through `pg-batch12` + `pg-tenant-isolation`
+- Unit tests: `backend/tests/unit/` (125 tests) + `frontend/tests/unit/` (37 tests)
 
 ### Live E2E Tests (~120 tests — full stack against production)
 - `cd frontend && npx playwright test tests/live/NN-name.spec.js --config=playwright.config.live.js`
@@ -244,7 +263,7 @@ oneshoppos/
 
 ## Migrations
 
-- **Current version**: 13 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns, v6: setup_token_expires_at, v7: billing tables, v8: support_tickets/impersonation_sessions, v9: FBR digital invoicing — fbr_invoices queue, category tax/HS inheritance, tax_rate_reference, tax_rate_suggestions, v10: email_queue for unified email service, v11: payment_intents for gateway checkout tracking, v12: super admin enhancements — admin_activity_log, admin_security_log, tenant_notes, announcements, broadcast_log, support_tickets reply columns, v13: performance indexes — sales, sale_items, products, customers, cash_shifts, returns; return_items variant_id column)
+- **Current version**: 14 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns, v6: setup_token_expires_at, v7: billing tables, v8: support_tickets/impersonation_sessions, v9: FBR digital invoicing — fbr_invoices queue, category tax/HS inheritance, tax_rate_reference, tax_rate_suggestions, v10: email_queue for unified email service, v11: payment_intents for gateway checkout tracking, v12: super admin enhancements — admin_activity_log, admin_security_log, tenant_notes, announcements, broadcast_log, support_tickets reply columns, v13: performance indexes — sales, sale_items, products, customers, cash_shifts, returns; return_items variant_id column, v14: pin_code column nullable — plaintext PIN storage removed)
 - **migrate-pg.js CLI**: `node backend/migrate-pg.js` — migrates public schema AND all active tenant schemas
 - **Tenant migration gotcha**: existing tenants need `schema_version` table seeded with previous versions before first run
 

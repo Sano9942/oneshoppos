@@ -1,3 +1,6 @@
+const { validate } = require("../middleware/validate");
+const { CreatePOSchema } = require("../schemas/purchase-orders");
+
 module.exports = function registerPurchaseOrderRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification } = deps;
 
@@ -57,7 +60,7 @@ module.exports = function registerPurchaseOrderRoutes(app, deps) {
   });
 
   // Create a new purchase order
-  app.post("/api/purchase-orders", requirePerm("manage_orders"), async (req, res) => {
+  app.post("/api/purchase-orders", requirePerm("manage_orders"), validate(CreatePOSchema), async (req, res) => {
     try {
       const { supplier_id, total_cost, items, due_date } = req.body;
 

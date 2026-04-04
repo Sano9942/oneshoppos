@@ -123,13 +123,33 @@ async function validateConnection(token, environment) {
 
 async function enqueueFbrInvoice(
   db,
-  { saleId, returnId, invoiceType, payload }
+  { saleId, returnId, invoiceType, payload, tenantSlug }
 ) {
-  await db.query(
+  const { rows: [inserted] } = await db.query(
     `INSERT INTO fbr_invoices (sale_id, return_id, invoice_type, payload, status, next_retry_at)
-     VALUES ($1, $2, $3, $4, 'pending', NOW())`,
+     VALUES ($1, $2, $3, $4, 'pending', NOW())
+     RETURNING id`,
     [saleId || null, returnId || null, invoiceType, JSON.stringify(payload)]
   );
+
+  // Dispatch pg-boss job for immediate processing (non-blocking)
+  if (tenantSlug && inserted?.id) {
+    const invoiceId = inserted.id;
+    // eslint-disable-next-line promise/catch-or-return
+    Promise.resolve().then(async () => {
+      try {
+        const { getBoss } = require("./boss");
+        const boss = await getBoss();
+        await boss.send(
+          "fbr-invoice",
+          { tenantSlug, invoiceId },
+          { retryLimit: 5, retryDelay: 60 }
+        );
+      } catch (_) {
+        // Silently ignore — legacy FBR worker will still pick up via fbr_invoices poll
+      }
+    });
+  }
 }
 
 function getNextRetryDelay(retryCount) {

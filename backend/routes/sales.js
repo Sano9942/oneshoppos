@@ -271,7 +271,7 @@ module.exports = function registerSalesRoutes(app, deps) {
           if (sale.fbr_status === "posted") {
             const { buildDebitNotePayload, enqueueFbrInvoice } = require("../services/fbr");
             const payload = buildDebitNotePayload(sale, req.company);
-            await enqueueFbrInvoice(db, { saleId: Number(id), invoiceType: "debit_note", payload });
+            await enqueueFbrInvoice(db, { saleId: Number(id), invoiceType: "debit_note", payload, tenantSlug: req.tenantSlug });
           }
         } catch (fbrErr) {
           logger.error({ err: fbrErr, saleId: id }, "FBR void enqueue failed (non-blocking)");
@@ -583,7 +583,7 @@ module.exports = function registerSalesRoutes(app, deps) {
               { timestamp: new Date(), invoice_number: invoiceNumber },
               saleItems, req.company, cust, categoryTree
             );
-            await enqueueFbrInvoice(db, { saleId, invoiceType: "sale", payload });
+            await enqueueFbrInvoice(db, { saleId, invoiceType: "sale", payload, tenantSlug: req.tenantSlug });
             await db.query("UPDATE sales SET fbr_status = 'pending' WHERE id = $1", [saleId]);
           }
         } catch (fbrErr) {

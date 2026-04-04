@@ -214,38 +214,29 @@ function startAll(deps) {
   // Report schedule worker
   startReportScheduleWorker(deps);
 
-  // FBR Worker — inline mode (runs in same process as Express)
-  if (String(process.env.FBR_WORKER_ENABLED || "0") === "1") {
-    const { startFbrWorker } = require("../workers/fbr-worker");
-    startFbrWorker(db);
-  }
+  // pg-boss workers — email, FBR, and cleanup (requires DATABASE_URL / Postgres)
+  if (process.env.DATABASE_URL) {
+    const { getBoss } = require("../services/boss");
+    getBoss()
+      .then(async (boss) => {
+        const pool = db.pool || db;
 
-  // Email Worker — processes email_queue + daily billing checks
-  if (String(process.env.EMAIL_WORKER_ENABLED || "0") === "1") {
-    const { startEmailWorker } = require("../workers/email-worker");
-    startEmailWorker(db);
-  }
+        if (String(process.env.EMAIL_WORKER_ENABLED || "0") === "1") {
+          const { registerEmailWorker } = require("../workers/email-worker-boss");
+          await registerEmailWorker(boss, pool);
+        }
 
-  // Cleanup Worker — removes dead tenants (incomplete setup > 7 days)
-  if (String(process.env.CLEANUP_WORKER_ENABLED || "0") === "1") {
-    const { cleanupDeadTenants } = require("../jobs/cleanup-dead-tenants");
-    const CLEANUP_INTERVAL = DAY_MS;
-    global.__cleanupWorkerStatus = { lastPollAt: null, processedToday: 0, queueDepth: 0 };
+        if (String(process.env.FBR_WORKER_ENABLED || "0") === "1") {
+          const { registerFbrWorker } = require("../workers/fbr-worker-boss");
+          await registerFbrWorker(boss, pool);
+        }
 
-    async function runCleanup() {
-      try {
-        global.__cleanupWorkerStatus.lastPollAt = Date.now();
-        const result = await cleanupDeadTenants();
-        global.__cleanupWorkerStatus.processedToday += result.deleted;
-        console.log(`[cleanup-worker] Checked: ${result.checked}, Deleted: ${result.deleted}, Skipped: ${result.skipped}`);
-      } catch (err) {
-        console.error("[cleanup-worker] Error:", err.message);
-      }
-    }
-
-    setTimeout(runCleanup, 10_000);
-    setInterval(runCleanup, CLEANUP_INTERVAL);
-    console.log("[cleanup-worker] Scheduled (every 24h)");
+        if (String(process.env.CLEANUP_WORKER_ENABLED || "0") === "1") {
+          const { registerCleanupWorker } = require("../workers/cleanup-worker-boss");
+          await registerCleanupWorker(boss);
+        }
+      })
+      .catch((err) => console.error("[boss] Failed to start pg-boss:", err.message));
   }
 }
 

@@ -1,6 +1,9 @@
 /**
  * Tenant CRUD, stats, feature-usage, setup-token, feature-flags, notes, PIN reset, migrations.
  */
+const { validate } = require("../../middleware/validate");
+const { CreateTenantSchema } = require("../../schemas/admin");
+
 module.exports = function registerTenantRoutes(app, deps) {
   const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager, PLAN_DEFAULTS, provision, bcrypt, BCRYPT_ROUNDS, auditLog, logAdminAction } = deps;
 
@@ -44,7 +47,7 @@ module.exports = function registerTenantRoutes(app, deps) {
   });
 
   // ── Create tenant ──────────────────────────────────────────────────────
-  app.post("/api/admin/tenants", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+  app.post("/api/admin/tenants", requireAllowedIp, requireSuperAdmin, validate(CreateTenantSchema), async (req, res) => {
     const { slug, name, owner_email, timezone, pin, plan } = req.body || {};
     if (!slug || !name || !pin) {
       return res.status(400).json({ error: "slug, name, and pin are required" });

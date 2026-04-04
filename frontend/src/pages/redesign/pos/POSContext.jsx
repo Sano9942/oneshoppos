@@ -14,6 +14,7 @@ import { readContext } from "../../../auth/authStore";
 import { buildReceiptHtml, buildReceiptSections, printToHardware } from "../../../utils/receipt";
 import { useCurrency } from "../../../contexts/CurrencyContext";
 import { getQueue, enqueue, dequeue, WARN_THRESHOLD } from "../../../utils/offlineQueue";
+import { calcGrossTotal, calcDiscountValue, calcTaxTotal, calcTotal } from "./cartMath.js";
 
 const POSContext = createContext();
 const OPENING_DENOMS = [5000, 1000, 500, 100, 50, 20, 10];
@@ -443,30 +444,16 @@ export const POSProvider = ({ children }) => {
     setCart((prev) => prev.filter((x) => x.id !== id));
   removeFromCartRef.current = removeFromCart;
 
-  const grossTotal = useMemo(
-    () => cart.reduce((s, i) => s + Number(i.price || 0) * i.quantity, 0),
-    [cart],
+  const grossTotal = useMemo(() => calcGrossTotal(cart), [cart]);
+
+  const discountValue = useMemo(
+    () => calcDiscountValue(grossTotal, discountType, discountInput),
+    [discountInput, discountType, grossTotal],
   );
 
-  const discountValue = useMemo(() => {
-    const raw = Number(discountInput || 0);
-    if (discountType === "percent") return (grossTotal * raw) / 100;
-    return raw;
-  }, [discountInput, discountType, grossTotal]);
+  const taxTotal = useMemo(() => calcTaxTotal(cart, taxInclusive), [cart, taxInclusive]);
 
-  const taxTotal = useMemo(() => {
-    if (!taxInclusive) return 0;
-    return cart.reduce((s, i) => {
-      const rate = i.effectiveTaxRate || 0;
-      const itemTotal = i.price * i.quantity;
-      return s + (itemTotal - itemTotal / (1 + rate / 100));
-    }, 0);
-  }, [cart, taxInclusive]);
-
-  const total = Math.max(
-    0,
-    grossTotal - discountValue + (taxInclusive ? 0 : taxTotal),
-  );
+  const total = calcTotal(grossTotal, discountValue, taxTotal, taxInclusive);
   const totalPaid = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
 
   // ── Loyalty computations ──────────────────────────────────────────────────

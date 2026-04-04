@@ -1,8 +1,9 @@
 import { Component } from "react";
 import { Button } from "./primitives";
 import * as SentryModule from "@sentry/react";
+import { SENTRY_DSN, IS_DEV } from "../config";
 
-const Sentry = import.meta.env.VITE_SENTRY_DSN ? SentryModule : null;
+const Sentry = SENTRY_DSN ? SentryModule : null;
 
 export class ErrorBoundary extends Component {
   constructor(props) {
@@ -48,7 +49,7 @@ export class ErrorBoundary extends Component {
             <p className="mb-4 text-sm text-(--text-secondary)">
               This section encountered an error. You can try again or reload the page.
             </p>
-            {import.meta.env.DEV && error && (
+            {IS_DEV && error && (
               <pre className="mb-4 max-h-40 overflow-auto rounded-lg bg-red-50 p-3 text-left text-xs text-red-800">
                 {error.message}
                 {"\n"}
@@ -79,7 +80,7 @@ export class ErrorBoundary extends Component {
           <p className="mb-6 text-(--text-secondary)">
             An unexpected error occurred. Please reload the page to continue.
           </p>
-          {import.meta.env.DEV && error && (
+          {IS_DEV && error && (
             <pre className="mb-6 max-h-60 overflow-auto rounded-lg bg-red-50 p-4 text-left text-xs text-red-800">
               {error.message}
               {"\n"}

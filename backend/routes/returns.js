@@ -1,5 +1,7 @@
 const { toUtcStart, toUtcEnd } = require("../utils/tz");
 const logger = require("../services/logger");
+const { validate } = require("../middleware/validate");
+const { CreateReturnSchema } = require("../schemas/returns");
 
 module.exports = function registerReturnsRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale } = deps;
@@ -15,7 +17,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
 // --- ROUTES: RETURNS ---
 
   // Create a new return
-  app.post("/api/returns", requirePerm("manage_orders"), async (req, res) => {
+  app.post("/api/returns", requirePerm("manage_orders"), validate(CreateReturnSchema), async (req, res) => {
     const {
       original_sale_id,
       outlet_id,
@@ -154,7 +156,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
             { id: returnId, timestamp: new Date() },
             returnItems, req.company, cust, categoryTree
           );
-          await enqueueFbrInvoice(db, { returnId, invoiceType: "credit_note", payload });
+          await enqueueFbrInvoice(db, { returnId, invoiceType: "credit_note", payload, tenantSlug: req.tenantSlug });
           await db.query("UPDATE returns SET fbr_status = 'pending' WHERE id = $1", [returnId]);
         }
       } catch (fbrErr) {

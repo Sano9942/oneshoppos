@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
-import { API } from "../../config";
+import { API_BASE as API } from "../../config";
+import { getAdminToken } from "../../auth/adminAuthStore";
 
 const adminFetch = (url, opts = {}) => {
-  const session = JSON.parse(localStorage.getItem("adminSession") || "{}");
   return fetch(url, {
     ...opts,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${session.token}`,
+      Authorization: `Bearer ${getAdminToken()}`,
       ...opts.headers,
     },
   });

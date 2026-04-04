@@ -12,6 +12,10 @@ describe("Batch 9 — Architecture audit fixes (Postgres)", () => {
     require("../../routes/auth")(app, deps);
     require("../../routes/employees")(app, deps);
     require("../../routes/support")(app, deps);
+    require("../../routes/returns")(app, deps);
+    require("../../routes/customers")(app, deps);
+    require("../../routes/purchase-orders")(app, deps);
+    require("../../routes/inventory")(app, deps);
   }, 30000);
 
   afterAll(async () => {
@@ -247,6 +251,193 @@ describe("Batch 9 — Architecture audit fixes (Postgres)", () => {
       for (const [key, value] of Object.entries(DEFAULT_FLAGS)) {
         expect(value).toBe(false);
       }
+    });
+  });
+
+  // ─── Phase 17: Zod expansion — returns ──────────────────────
+
+  describe("Zod validation — returns", () => {
+    it("rejects POST /api/returns with missing outlet_id", async () => {
+      const res = await request(app)
+        .post("/api/returns")
+        .set("x-employee-id", "1")
+        .send({
+          total_refund: 100,
+          refund_method: "cash",
+          items: [{ product_id: 1, quantity: 1, refund_price: 100 }],
+        });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBeDefined();
+    });
+
+    it("rejects POST /api/returns with missing refund_method", async () => {
+      const res = await request(app)
+        .post("/api/returns")
+        .set("x-employee-id", "1")
+        .send({
+          outlet_id: 1,
+          total_refund: 100,
+          items: [{ product_id: 1, quantity: 1, refund_price: 100 }],
+        });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBeDefined();
+    });
+
+    it("rejects POST /api/returns with empty items array", async () => {
+      const res = await request(app)
+        .post("/api/returns")
+        .set("x-employee-id", "1")
+        .send({ outlet_id: 1, total_refund: 100, refund_method: "cash", items: [] });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBeDefined();
+    });
+
+    it("passes valid POST /api/returns through Zod (no 400)", async () => {
+      const res = await request(app)
+        .post("/api/returns")
+        .set("x-employee-id", "1")
+        .send({
+          outlet_id: 1,
+          total_refund: 50,
+          refund_method: "cash",
+          items: [{ product_id: 1, quantity: 1, refund_price: 50 }],
+        });
+      // Zod should not reject — response may be 200 or a DB-level error but not a 400 from Zod
+      expect(res.status).not.toBe(400);
+    });
+  });
+
+  // ─── Phase 17: Zod expansion — customers ────────────────────
+
+  describe("Zod validation — customers", () => {
+    it("rejects POST /api/customers with missing name", async () => {
+      const res = await request(app)
+        .post("/api/customers")
+        .set("x-employee-id", "1")
+        .send({ mobile: "123-456", email: "test@test.com" });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBeDefined();
+    });
+
+    it("rejects POST /api/customers with empty name", async () => {
+      const res = await request(app)
+        .post("/api/customers")
+        .set("x-employee-id", "1")
+        .send({ name: "" });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBeDefined();
+    });
+
+    it("passes valid POST /api/customers through Zod", async () => {
+      const res = await request(app)
+        .post("/api/customers")
+        .set("x-employee-id", "1")
+        .send({ name: "Zod Test Customer", mobile: "999-0001" });
+      expect(res.status).toBe(200);
+      expect(res.body.id).toBeDefined();
+    });
+
+    it("rejects PUT /api/customers/:id with missing name", async () => {
+      const res = await request(app)
+        .put("/api/customers/1")
+        .set("x-employee-id", "1")
+        .send({ mobile: "555-0001" });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBeDefined();
+    });
+  });
+
+  // ─── Phase 17: Zod expansion — purchase-orders ──────────────
+
+  describe("Zod validation — purchase-orders", () => {
+    it("rejects POST /api/purchase-orders with missing supplier_id", async () => {
+      const res = await request(app)
+        .post("/api/purchase-orders")
+        .set("x-employee-id", "1")
+        .send({ items: [{ product_id: 1, quantity: 5, cost_price: 50 }] });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBeDefined();
+    });
+
+    it("rejects POST /api/purchase-orders with empty items array", async () => {
+      const res = await request(app)
+        .post("/api/purchase-orders")
+        .set("x-employee-id", "1")
+        .send({ supplier_id: 1, items: [] });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBeDefined();
+    });
+
+    it("passes valid POST /api/purchase-orders through Zod", async () => {
+      const res = await request(app)
+        .post("/api/purchase-orders")
+        .set("x-employee-id", "1")
+        .send({
+          supplier_id: 1,
+          total_cost: 250,
+          items: [{ product_id: 1, quantity: 5, cost_price: 50 }],
+        });
+      expect(res.status).not.toBe(400);
+      expect(res.body.id).toBeDefined();
+    });
+  });
+
+  // ─── Phase 17: Zod expansion — inventory ────────────────────
+
+  describe("Zod validation — inventory transfers", () => {
+    it("rejects POST /api/transfers with missing product_id", async () => {
+      const res = await request(app)
+        .post("/api/transfers")
+        .set("x-employee-id", "1")
+        .send({ from_outlet_id: 1, to_outlet_id: 2, quantity: 5 });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBeDefined();
+    });
+
+    it("rejects POST /api/transfers with missing to_outlet_id", async () => {
+      const res = await request(app)
+        .post("/api/transfers")
+        .set("x-employee-id", "1")
+        .send({ product_id: 1, from_outlet_id: 1, quantity: 5 });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBeDefined();
+    });
+
+    it("passes valid POST /api/transfers through Zod", async () => {
+      const res = await request(app)
+        .post("/api/transfers")
+        .set("x-employee-id", "1")
+        .send({ product_id: 1, from_outlet_id: 1, to_outlet_id: 2, quantity: 3 });
+      // Zod passes — may succeed or fail at stock check but not 400 from Zod
+      expect(res.status).not.toBe(400);
+    });
+  });
+
+  describe("Zod validation — stock adjustments", () => {
+    it("rejects POST /api/adjustments with missing reason", async () => {
+      const res = await request(app)
+        .post("/api/adjustments")
+        .set("x-employee-id", "1")
+        .send({ product_id: 1, outlet_id: 1, quantity_change: 5 });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBeDefined();
+    });
+
+    it("rejects POST /api/adjustments with missing outlet_id", async () => {
+      const res = await request(app)
+        .post("/api/adjustments")
+        .set("x-employee-id", "1")
+        .send({ product_id: 1, quantity_change: 5, reason: "restock" });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBeDefined();
+    });
+
+    it("passes valid POST /api/adjustments through Zod", async () => {
+      const res = await request(app)
+        .post("/api/adjustments")
+        .set("x-employee-id", "1")
+        .send({ product_id: 1, outlet_id: 1, quantity_change: 3, reason: "restock" });
+      expect(res.status).not.toBe(400);
     });
   });
 });

@@ -8,5 +8,23 @@ module.exports = defineConfig({
     pool: "forks",
     isolate: true,
     globals: true,
+    coverage: {
+      provider: "v8",
+      include: [
+        "utils/**",
+        "services/**",
+        "middleware/**",
+        "category-tree.js",
+      ],
+      exclude: [
+        "routes/**",
+        "workers/**",
+        "jobs/**",
+        "scripts/**",
+        "index.js",
+        "migrate-pg.js",
+        "*.config.js",
+      ],
+    },
   },
 });

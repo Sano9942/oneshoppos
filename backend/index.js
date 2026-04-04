@@ -253,6 +253,16 @@ function ensureCriticalRoutesRegistered(appInstance) {
 
 ensureCriticalRoutesRegistered(app);
 
+// ─── Startup assertions ────────────────────────────────────────────────────
+if (!process.env.ADMIN_ALLOWED_IPS) {
+  const msg = "ADMIN_ALLOWED_IPS is not set — super-admin routes (impersonation, backups, tenant management) are accessible from ANY IP";
+  if (process.env.NODE_ENV === "production") {
+    console.error(`[SECURITY] ${msg}`);
+  } else {
+    console.warn(`[SECURITY] ${msg}`);
+  }
+}
+
 // ─── Start server + workers ─────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);

@@ -509,6 +509,13 @@ const MIGRATIONS = [
       await client.query(`ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_pin_code_key`);
     },
   },
+  {
+    version: 15,
+    description: "pg-boss worker migration — add pgboss_job_id to fbr_invoices for observability",
+    up: async (client) => {
+      await client.query(`ALTER TABLE fbr_invoices ADD COLUMN IF NOT EXISTS pgboss_job_id UUID`);
+    },
+  },
 ];
 
 async function migrate(db) {
