@@ -5,7 +5,7 @@
  * shutdownBoss() — graceful stop (call on SIGTERM)
  */
 
-const PgBoss = require("pg-boss");
+const { PgBoss } = require("pg-boss");
 const logger = require("./logger").child({ component: "pg-boss" });
 
 let _boss = null;

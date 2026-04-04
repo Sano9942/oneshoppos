@@ -189,7 +189,7 @@ module.exports = function registerAllRoutes(app, deps) {
   // Enrich Pino req.log with tenant/employee context now that auth has run
   const requestId = require("../middleware/request-id");
   if (requestId.enrichReqLog) app.use(requestId.enrichReqLog);
-  ensureDefaultRolePermissions();
+  ensureDefaultRolePermissions(db);
 
   // Enforce outlet assignment for non-admin employees on branch-scoped requests.
   app.use(async (req, res, next) => {
