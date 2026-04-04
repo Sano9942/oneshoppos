@@ -13,6 +13,9 @@ async function registerCleanupWorker(boss) {
 
   global.__cleanupWorkerStatus = global.__cleanupWorkerStatus || { lastPollAt: null, processedToday: 0, queueDepth: 0 };
 
+  // Create queue (pg-boss v12+ requires explicit queue creation before work/send)
+  await boss.createQueue("cleanup-dead-tenants");
+
   // Schedule daily at 2am UTC
   await boss.schedule("cleanup-dead-tenants", "0 2 * * *");
 

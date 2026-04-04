@@ -128,6 +128,9 @@ async function registerFbrWorker(boss, pool) {
 
   global.__fbrWorkerStatus = global.__fbrWorkerStatus || { lastPollAt: null, processedToday: 0, queueDepth: 0 };
 
+  // Create queue (pg-boss v12+ requires explicit queue creation before work/send)
+  await boss.createQueue("fbr-invoice");
+
   await boss.work("fbr-invoice", { teamSize: 10, teamConcurrency: 10 }, async (job) => {
     if (global.__fbrWorkerStatus) global.__fbrWorkerStatus.lastPollAt = Date.now();
     await handleFbrInvoiceJob(job, pool, logger);

@@ -211,6 +211,10 @@ async function registerEmailWorker(boss, pool) {
   }
   const resend = new Resend(key);
 
+  // Create queues (pg-boss v12+ requires explicit queue creation before work/send)
+  await boss.createQueue("email");
+  await boss.createQueue("billing-lifecycle-check");
+
   // Worker: send a single email
   await boss.work("email", { teamSize: 5, teamConcurrency: 5 }, async (job) => {
     await handleEmailJob(job, resend, logger);
