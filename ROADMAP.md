@@ -1,7 +1,7 @@
 # SanoPOS — Product Roadmap & Feature Backlog
 
 This file tracks everything we want to build, fix, or improve for SanoPOS.
-_Last updated: April 1 2026 — **Production readiness audit: 12 bugs fixed (auth on 24 GET routes, stock TOCTOU race condition, POS ErrorBoundary, 15 DB indexes, variant stock drift, backup field mismatch, return variant validation, Shopify field names, kiosk 401, approvals feature gate, reconciliation endpoint, bulk fix stub). Migration v13.**_
+_Last updated: April 3 2026 — **Architecture audit: 20 phases completed (security fixes, 88 legacy files deleted, index.js + admin.js + reports split, helmet + Zod validation + api.js service layer, pg-boss workers, TypeScript foundation, 611+ tests). Migration v14.**_
 
 ---
 
@@ -115,7 +115,7 @@ _Last updated: April 1 2026 — **Production readiness audit: 12 bugs fixed (aut
 
 ## ✅ Multi-Tenant Go-Live — COMPLETE (Mar 13 2026)
 
-**Strategy:** Multi-tenant is the ONLY mode going forward. Single-tenant was the development foundation. A "single store" customer = MT customer on Starter plan (`max_outlets=1`). No architectural difference — just plan limits.
+**Strategy:** Multi-tenant is the ONLY mode going forward. Single-tenant was the development foundation. A "single store" customer = MT customer on Free plan (`max_outlets=1`). No architectural difference — just plan limits.
 
 **Business model:** Super-admin provisions tenant → assigns plan → sends setup token → customer onboards → works within plan limits. Upgrade = bump `max_outlets`/`max_employees`/`max_products` in master DB.
 
@@ -174,7 +174,7 @@ All previous blockers resolved:
 
 - **Batches 1-9**: All backend route files converted from SQLite callbacks (`db.run/get/all`) to Postgres async/await (`db.query()` with `$1,$2` params). 340/340 pg tests passing.
 - **Pre-merge tasks**: `migrate-pg.js` (migration runner), `scripts/sqlite-to-pg.js` (data migration), `tenant-db-manager-pg.js` + `tenant-db-proxy-pg.js` (MT Postgres infra), boolean audit across all files.
-- **Boot guard**: `index.js` conditionally loads `db-pg` or `db` based on `DATABASE_URL`. `dotenv` loaded first (line 1) to ensure env vars are available.
+- **Boot guard**: `index.js` loads Postgres only (`db-pg`). SQLite fallback removed in architecture audit Phase 5. `dotenv` loaded first (line 1) to ensure env vars are available.
 - **Cutover**: `DATABASE_URL` set on Railway, `DATA_DIR` removed. Setup wizard created store, outlet, admin account.
 
 ### Key New Files
@@ -304,12 +304,12 @@ Split payment, brute-force throttling, soft deletes, idempotency on sales, end-o
 
 **Branch:** `feature/plan-defaults` — merged to `main`.
 
-- **`PLAN_DEFAULTS` config** in `middleware/plan-limits.js` — single source of truth for plan limits:
-  | | Free | Starter | Pro |
-  |---|---|---|---|
-  | Outlets | 1 | 3 | 10 |
-  | Employees | 3 | 10 | 50 |
-  | Products | 500 | 2,000 | Unlimited |
+- **`PLAN_DEFAULTS` config** in `middleware/plan-limits.js` — single source of truth for plan limits (Starter tier removed Mar 30 2026):
+  | | Free | Pro |
+  |---|---|---|
+  | Outlets | 1 | Unlimited |
+  | Employees | 3 | Unlimited |
+  | Products | 100 | Unlimited |
 - **Auto-apply on provision** — `POST /api/admin/tenants` sets plan limits automatically based on selected plan
 - **Auto-apply on plan change** — `PUT /api/admin/tenants/:id` applies new plan defaults when plan changes; explicit limits in the same request take precedence
 - **`GET /api/admin/plan-defaults`** — read-only endpoint returning plan config for frontend display
@@ -728,7 +728,7 @@ Changed via Railway Settings UI after removing `numReplicas` from `railway.toml`
 | Mar 15 2026 | **CSV export added to 16 pages**                      | Shared `downloadCsv()` utility + Export CSV button on all table pages missing it. Context-aware for multi-tab pages. |
 | Mar 15 2026 | **Performance: code splitting + compression**         | React.lazy on ~50 routes (1.6 MB → 253 KB initial JS, -84%). Dynamic xlsx import. Backend gzip compression. Dead workflow removed. |
 | Mar 15 2026 | **DB cleanup**                                        | 27 orphaned test schemas dropped from Supabase (146 MB → 77 MB, -47%). |
-| Mar 15 2026 | **Plan defaults auto-apply**                          | `PLAN_DEFAULTS` config in `plan-limits.js`. Auto-applied on provision (POST) and plan change (PUT). New `GET /api/admin/plan-defaults` endpoint. Free (1/3/500), Starter (3/10/2000), Pro (10/50/unlimited). |
+| Mar 15 2026 | **Plan defaults auto-apply**                          | `PLAN_DEFAULTS` config in `plan-limits.js`. Auto-applied on provision (POST) and plan change (PUT). New `GET /api/admin/plan-defaults` endpoint. Originally 3 tiers — simplified to Free (1/3/100) + Pro (unlimited) on Mar 30. |
 | Mar 14 2026 | **Live E2E test suite — all 20 specs passed**        | 20 Playwright specs (00–19) run sequentially against live production (`sanopos.vercel.app`, tenant `packagesmall`). ~120 individual tests, all passing. Covered: full POS day (shift open→sale→return→close), inventory, purchasing/GRN, customers/loyalty, gift cards, CRM, HR/payroll, attendance/kiosk, approvals, notifications, reports (dashboard/sales/inventory/P&L), audit log. One real bug found and fixed: kiosk `?tenant=` param needed in MT mode for unauthenticated PIN endpoint (`backend/index.js` resolveTenant + `KioskRedesign.jsx`). All other fixes were test files only — adapting specs to match actual API contracts. |
 | Mar 19 2026 | **Password auth + Resend email shipped**              | `feature/password-auth-resend` branch. Migration v3 (email, password_hash, password_reset_tokens). Resend utility for system emails. Dashboard login accepts password (PIN fallback). Forgot-password + reset-password flow. Admin set-password/send-reset on Employees page. POS re-auth fixed to use validate-pin. |
 | Mar 19 2026 | **Permission guards hardened**                         | Full RBAC audit. Added `requirePerm` to: email config (PUT/test → `all_access`), printer config (PUT → `all_access`), attribute sets (POST/PUT/DELETE → `manage_inventory`), barcode print jobs (POST → `manage_inventory`), action history (GET → `view_reports`, POST log → `all_access`). Roles CRUD confirmed admin-only. Self-role-change guard fixed to allow non-role edits on own profile. |
@@ -747,6 +747,8 @@ Changed via Railway Settings UI after removing `numReplicas` from `railway.toml`
 | Mar 29 2026 | **Railway moved to Singapore**                          | Backend region changed from EU West (Amsterdam) to Asia Southeast (Singapore). API↔DB latency dropped from ~150ms to ~12ms (same region as Supabase). Total API round trip for Pakistan users: ~400-500ms → ~100-160ms. |
 | Mar 31 2026 | **Roadmap items 1, 5, 6, 8 shipped**                    | `feature/roadmap-items-1-5-6-8` branch. (1) Signup auth fix: fetch interceptor excludes public auth endpoints from token injection. (5) Tenant feature-usage analytics: `GET /api/admin/tenants/:id/feature-usage` + bar chart in AdminTenantDetail. (6) Annual pricing toggle on billing + landing pages. (8) Per-outlet breakdown on billing page. Backend `GET /api/billing/status` now returns `max_outlets`. |
 | Apr 1 2026  | **Production readiness audit — 12 bugs fixed**           | `fix/production-readiness-audit` branch (11 commits, 17 files, +249/-93 lines). Auth on 24 GET routes (#1), stock TOCTOU with FOR UPDATE (#2), POS ErrorBoundary (#3), 15 DB indexes via migration v13 (#4), variant stock drift on void (#12), backup field name + sqlite label (#11), return variant validation per variant_id + return_items.variant_id column (#13), Shopify reconciliation field aliases (#6), kiosk 401 graceful handling (#8), approvals feature flag gate (#9), reconciliation approve-fix endpoint (#7/#15), Shopify bulk fix replaces 501 stub (#14). Not fixed: #5 (legacy SQLite tests), #17 (admin migration UI stubs). |
+| Apr 2 2026  | **Architecture audit Phases 1–12 shipped**               | `fix/architecture-audit-fixes` branch (~50 commits, 224 files). Security: CORS, SQL injection, XSS, plaintext PINs, SW cache, uploads, feature flags fail-closed. Cleanup: 88 SQLite legacy files deleted (7,880 lines). Structural: index.js split (1,306→230), admin.js split (2,208→8 modules), ReportsInventory/Sales split (4,496→8 modules), api.js service layer (90 files migrated, -1,100 lines). Zod validation on 17 endpoints. helmet + Vercel security headers. 448 integration tests across 12 suites. Dashboard crash + API prefix bugs fixed. |
+| Apr 3 2026  | **Architecture audit Phases 13–20 shipped**              | `fix/audit-phases-13-21` branch (~48 commits). Phase 13: AdminTaxRates 404 fix, config.js cleanup, onboarding-dismiss perm. Phase 14: ADMIN_ALLOWED_IPS assertion, upload-validation.js middleware, impersonation JWT server-side. Phase 15: admin backup dumps all tenant schemas. Phase 16: App.jsx route split, config.js sole env reader, adminAuthStore.js. Phase 17: Zod on returns, customers, POs, inventory, admin. Phase 18: pg-boss workers (email, FBR, cleanup). Phase 19: TypeScript foundation (tsconfig×2, types, shared/constants.js). Phase 20: 125 backend + 37 frontend unit tests, 29.4% coverage. Migration v14. |
 
 ---
 
@@ -776,7 +778,7 @@ Full audit of the codebase before giving the app to real shops. 17 findings acro
 
 ### 🟢 Low Priority (7 items — 5 fixed, 2 remaining)
 
-- **#5 Legacy SQLite integration tests failing** — Not fixed (only affects abandoned SQLite test harness, not the primary 340-test Postgres suite).
+- **#5 Legacy SQLite integration tests failing** — Not fixed (only affects abandoned SQLite test harness, not the primary 449-test Postgres integration suite + 162 unit tests).
 
 - [x] **#7/#15 Reconciliation approval endpoint missing** — `POST /api/reconciliation/inventory/:id/approve-fix` added to `tier4/approvals.js`. Supports `push_to_shopify` (local wins) and `pull_from_shopify` (update outlet_stock) modes.
 
@@ -787,6 +789,83 @@ Full audit of the codebase before giving the app to real shops. 17 findings acro
 - [x] **#14 Shopify bulk fix returns 501** — 501 stub replaced with real implementation. Supports `pos_wins` (mark resolved, Shopify sync pushes local) and `shopify_wins` (update outlet_stock to match external_qty). Transaction-safe.
 
 - **#17 Tenant migration admin UI stubs** — Not fixed (CLI `migrate-pg.js` works, only admin UI buttons are stubs).
+
+---
+
+## ✅ Architecture Audit — 20 Phases Complete (Apr 2–3 2026)
+
+**Branches:** `fix/architecture-audit-fixes` (Phases 1–12, merged to `main`) + `fix/audit-phases-13-21` (Phases 13–20, in progress). ~110 commits, ~230 files changed.
+
+**Goal:** Pay off all accumulated tech debt — security vulnerabilities, dead code, giant files, missing tests, missing input validation, unreliable workers, no type safety.
+
+### Security (Phases 2–3, 14)
+- CORS origin split bug, SQL injection in admin slug validation, XSS in support ticket emails
+- Plaintext `pin_code` storage removed (migration v14 — column made nullable, only bcrypt `pin_hash` used)
+- Service worker no longer caches authenticated API responses
+- Upload filenames randomized (`crypto.randomBytes(16)`)
+- Feature flags changed from fail-open to fail-closed
+- `ADMIN_ALLOWED_IPS` startup assertion
+- Centralized upload validation (`middleware/upload-validation.js`) — MIME + extension whitelist
+- Impersonation JWT verified server-side (not decoded via `atob()` client-side)
+- `requirePerm("all_access")` added to onboarding-dismiss route
+- `helmet` middleware (v8) added to backend; security headers added to `vercel.json`
+
+### Code Cleanup (Phases 4–5)
+- Duplicate `/api/health` endpoint removed
+- Cleanup worker double-scheduling fixed
+- Worker `queueDepth` now real `SELECT COUNT(*)` (was always 0)
+- Slug validation unified to `[a-z0-9_]` across all entry points
+- **88 legacy files deleted** (73 SQLite migrations, 10 SQLite infra files, 2 seed scripts, 3 test helpers, one-off scripts) — 7,880 lines removed
+- Dead `Login.jsx` deleted
+
+### Structural Refactoring (Phases 6, 8–10)
+- **`index.js`** split from 1,306 → ~230 lines. Extracted: `middleware/rate-limit.js`, `middleware/tenant-auth.js`, `middleware/permissions.js`, `middleware/feature-flags.js`, `shopify/crypto.js`, `boot/workers.js`
+- **`admin.js`** (2,208 lines) split into 8 modules under `routes/admin/`: auth, tenants, monitoring, billing, operations, compliance, messaging, system
+- **`ReportsInventory.jsx`** (2,705 lines) split into 4 domain modules: Core, Analytics, Health, Replenishment
+- **`ReportsSales.jsx`** (1,791 lines) split into 4 domain modules: Overview, Core, Detail, Operations
+- **`frontend/src/api.js`** — centralized API service layer (`api.get/post/put/del/upload/raw`). 90 files migrated, ~1,100 lines of boilerplate removed. Zero raw `fetch()` in non-admin pages.
+- **`App.jsx`** route definitions split into `routes/publicRoutes.jsx`, `routes/appRoutes.jsx`, `routes/adminRoutes.jsx`
+- **`config.js`** — confusing `API` export removed; `API_BASE` is the only URL export. `config.js` is now the sole `import.meta.env` reader.
+- **`auth/adminAuthStore.js`** — admin session helpers extracted from `AdminLogin.jsx`
+- **`SupportWidget.jsx`** — object URL memory leak fixed (`URL.revokeObjectURL()` cleanup)
+
+### Input Validation (Phases 8, 17)
+- **Zod schemas** on all critical routes: auth (6 endpoints), billing (2), employees (5), products (2), sales (1), returns, customers, purchase-orders, inventory, admin modules
+- `middleware/validate.js` — reusable `validate(schema)` middleware factory
+- `AdminTaxRates.jsx` double `/api` prefix fixed (entire page was 404 in production)
+
+### Infrastructure (Phases 15, 18)
+- **Admin backup fixed** — was only dumping `public` schema (zero tenant data). Now dumps all `tenant_*` schemas. Backup verification endpoint added.
+- **pg-boss workers** — `services/boss.js` (shared instance factory), `workers/email-worker-boss.js`, `workers/fbr-worker-boss.js`, `workers/cleanup-worker-boss.js`. Jobs persist across server crashes, don't compete with HTTP event loop.
+
+### TypeScript Foundation (Phase 19 — foundation only)
+- TypeScript 6.0.2 (devDep, `noEmit`), `tsconfig.json` × 2 (backend commonjs + frontend bundler)
+- `shared/constants.js` — permission strings, feature flag keys, billing status enums
+- `backend/types/` — `express.d.ts`, `tenant.d.ts`, `employee.d.ts`
+- `frontend/src/types/` — `auth.ts`, `api.ts`
+- Vite `@shared` path alias configured
+- Zero `.ts` files — opportunistic JSDoc adoption going forward
+
+### Test Coverage (Phases 1, 7, 11, 20)
+- Integration tests: 347 → **449** across 12 suites (pg-batch1–12 + tenant isolation)
+- Unit tests: 37 → **162** (125 backend + 37 frontend)
+- Backend unit tests: `tests/unit/utils.test.js`, `services.test.js`, `middleware.test.js`
+- Frontend unit tests: `tests/unit/contexts.test.jsx` (CurrencyContext, cartMath)
+- `cartMath.js` extracted from `POSContext.jsx` for unit testability
+- `vitest` + `@vitest/coverage-v8` configured; backend coverage: 29.4% statements
+
+### Phase 12 — Dashboard Crash & API Prefix Audit
+- `BackupStatusCard.jsx` crash (undefined `authHeaders` in useEffect deps)
+- `AnnouncementBanner.jsx` 404 (double `/api/api/` prefix)
+- Full audit of all `config.js` imports across 13 files — one additional bug found + fixed in `AdminTaxRates.jsx`
+
+### Phase 21 — Long-term / Trigger-based (not scheduled)
+| Item | Trigger |
+|------|---------|
+| API versioning (`/api/v1/*`) | When mobile app or external API integration is planned |
+| OpenAPI/Swagger documentation | When onboarding a second developer or external integrator |
+| `products.js` split (959 lines) | When it causes merge conflicts or becomes a pain point |
+| WCAG AA compliance | When selling to enterprise or government clients |
 
 ### ❌ Not Real Issues (2 items)
 
