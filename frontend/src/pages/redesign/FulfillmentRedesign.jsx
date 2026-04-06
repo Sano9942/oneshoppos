@@ -4,8 +4,11 @@ import {
   CheckCircle,
   ChevronLeft,
   ClipboardList,
+  Download,
+  FileSpreadsheet,
   Package,
   PackageCheck,
+  Printer,
   RefreshCw,
   ScanBarcode,
   Search,
@@ -40,6 +43,12 @@ const STATUS_CONFIG = {
   cancelled:   { label: "Cancelled",   tone: "danger"  },
 };
 
+const LS_STATUS_CONFIG = {
+  draft:        { label: "Draft",        tone: "default" },
+  finalized:    { label: "Finalized",    tone: "info"    },
+  handed_over:  { label: "Handed Over",  tone: "success" },
+};
+
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
   return <Badge tone={cfg.tone}>{cfg.label}</Badge>;
@@ -68,6 +77,7 @@ const TABS = [
   { key: "queue", label: "Orders Queue", icon: ShoppingCart },
   { key: "picklists", label: "Picklists", icon: ClipboardList },
   { key: "dispatch", label: "Quick Dispatch", icon: Zap },
+  { key: "loadsheets", label: "Loadsheets", icon: FileSpreadsheet },
 ];
 
 // ── Main component ──────────────────────────────────────────────────
@@ -75,6 +85,7 @@ const TABS = [
 export default function FulfillmentRedesign() {
   const [tab, setTab] = useState("queue");
   const [activePicklist, setActivePicklist] = useState(null);
+  const [activeLoadsheet, setActiveLoadsheet] = useState(null);
   const { fmt } = useCurrency();
 
   return (
@@ -82,7 +93,13 @@ export default function FulfillmentRedesign() {
       title="Fulfillment"
       subtitle="Pick, pack, and dispatch e-commerce orders"
     >
-      {activePicklist ? (
+      {activeLoadsheet ? (
+        <LoadsheetDetail
+          loadsheetId={activeLoadsheet}
+          onBack={() => setActiveLoadsheet(null)}
+          fmt={fmt}
+        />
+      ) : activePicklist ? (
         <PicklistDetail
           picklistId={activePicklist}
           onBack={() => setActivePicklist(null)}
@@ -115,6 +132,9 @@ export default function FulfillmentRedesign() {
             <PicklistsTab onOpen={setActivePicklist} fmt={fmt} />
           )}
           {tab === "dispatch" && <QuickDispatchTab />}
+          {tab === "loadsheets" && (
+            <LoadsheetsTab onOpen={setActiveLoadsheet} fmt={fmt} />
+          )}
         </>
       )}
     </PageShell>
@@ -807,6 +827,544 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
                   </tr>
                 );
               })}
+            </tbody>
+          </table>
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
+
+// ── Print helper (DOM-safe) ────────────────────────────────────────
+
+function openPrintableLoadsheet(ls, orders, fmt) {
+  const w = window.open("", "_blank", "width=800,height=600");
+  if (!w) return;
+
+  const doc = w.document;
+  doc.open();
+  doc.close();
+  doc.title = ls.loadsheet_number;
+
+  const style = doc.createElement("style");
+  style.textContent = "body{font-family:Arial,sans-serif;margin:20px}table{border-collapse:collapse;width:100%}th{background:#f5f5f5;text-align:left}th,td{padding:4px 8px;border:1px solid #ddd}@media print{button{display:none}}";
+  doc.head.appendChild(style);
+
+  const h2 = doc.createElement("h2");
+  h2.textContent = ls.loadsheet_number;
+  doc.body.appendChild(h2);
+
+  const info = doc.createElement("p");
+  info.textContent = `Courier: ${ls.courier_name || "\u2014"} \u2022 Outlet: ${ls.outlet_name || "\u2014"} \u2022 Created: ${ls.created_at ? new Date(ls.created_at).toLocaleDateString() : "\u2014"}`;
+  doc.body.appendChild(info);
+
+  const table = doc.createElement("table");
+  const thead = doc.createElement("thead");
+  const headRow = doc.createElement("tr");
+  ["Order #", "Customer", "Address", "Phone", "COD", "Tracking #"].forEach((t) => {
+    const th = doc.createElement("th");
+    th.textContent = t;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = doc.createElement("tbody");
+  orders.forEach((o) => {
+    const tr = doc.createElement("tr");
+    [
+      o.external_order_number || `#${o.web_order_id}`,
+      o.customer_name || "\u2014",
+      o.customer_address || "\u2014",
+      o.customer_phone || "\u2014",
+      o.is_cod ? fmt(o.cod_amount) : "\u2014",
+      o.tracking_number || "\u2014",
+    ].forEach((val) => {
+      const td = doc.createElement("td");
+      td.textContent = val;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  doc.body.appendChild(table);
+
+  const summary = doc.createElement("p");
+  summary.style.marginTop = "16px";
+  const b1 = doc.createElement("strong");
+  b1.textContent = "Total Orders: ";
+  summary.appendChild(b1);
+  summary.appendChild(doc.createTextNode(`${orders.length}  \u2022  `));
+  const b2 = doc.createElement("strong");
+  b2.textContent = "Total COD: ";
+  summary.appendChild(b2);
+  summary.appendChild(doc.createTextNode(fmt(ls.total_cod)));
+  doc.body.appendChild(summary);
+
+  if (ls.handed_over_to) {
+    const ho = doc.createElement("p");
+    const b3 = doc.createElement("strong");
+    b3.textContent = "Handed over to: ";
+    ho.appendChild(b3);
+    ho.appendChild(doc.createTextNode(ls.handed_over_to));
+    doc.body.appendChild(ho);
+  }
+
+  const btn = doc.createElement("button");
+  btn.textContent = "Print";
+  btn.addEventListener("click", () => w.print());
+  doc.body.appendChild(doc.createElement("br"));
+  doc.body.appendChild(btn);
+}
+
+// ── Loadsheets tab ─────────────────────────────────────────────────
+
+function LoadsheetsTab({ onOpen, fmt }) {
+  const [loadsheets, setLoadsheets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const { error } = useToast();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (statusFilter) params.set("status", statusFilter);
+      const data = await api.get(`/fulfillment/loadsheets?${params}`);
+      setLoadsheets(data.loadsheets || []);
+    } catch (err) {
+      error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, error]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (showCreate) {
+    return (
+      <CreateLoadsheet
+        onBack={() => setShowCreate(false)}
+        onCreated={() => { setShowCreate(false); load(); }}
+        fmt={fmt}
+      />
+    );
+  }
+
+  if (loading) {
+    return <SectionCard><p className="py-8 text-center text-gray-400">Loading loadsheets…</p></SectionCard>;
+  }
+
+  return (
+    <SectionCard>
+      <div className="mb-3 flex items-center justify-between">
+        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-40">
+          <option value="">All statuses</option>
+          {Object.entries(LS_STATUS_CONFIG).map(([k, v]) => (
+            <option key={k} value={k}>{v.label}</option>
+          ))}
+        </Select>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={load}>
+            <RefreshCw className="mr-1.5 h-4 w-4" />
+            Refresh
+          </Button>
+          <Button onClick={() => setShowCreate(true)}>
+            <FileSpreadsheet className="mr-1.5 h-4 w-4" />
+            New Loadsheet
+          </Button>
+        </div>
+      </div>
+
+      {!loadsheets.length ? (
+        <EmptyState title="No loadsheets" body="Create a loadsheet from dispatched orders." />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b text-xs uppercase text-gray-500 dark:border-gray-700">
+              <tr>
+                <th className="px-3 py-2">Loadsheet #</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Courier</th>
+                <th className="px-3 py-2">Orders</th>
+                <th className="px-3 py-2">COD Total</th>
+                <th className="px-3 py-2">Outlet</th>
+                <th className="px-3 py-2">Created</th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y dark:divide-gray-700">
+              {loadsheets.map((ls) => {
+                const cfg = LS_STATUS_CONFIG[ls.status] || LS_STATUS_CONFIG.draft;
+                return (
+                  <tr
+                    key={ls.id}
+                    className="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
+                    onClick={() => onOpen(ls.id)}
+                  >
+                    <td className="px-3 py-2 font-medium">{ls.loadsheet_number}</td>
+                    <td className="px-3 py-2"><Badge tone={cfg.tone}>{cfg.label}</Badge></td>
+                    <td className="px-3 py-2">{ls.courier_name || "—"}</td>
+                    <td className="px-3 py-2">{ls.order_count}</td>
+                    <td className="px-3 py-2">{fmt(ls.total_cod)}</td>
+                    <td className="px-3 py-2">{ls.outlet_name || "—"}</td>
+                    <td className="px-3 py-2 text-gray-500">{fmtUtcDateTime(ls.created_at)}</td>
+                    <td className="px-3 py-2">
+                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onOpen(ls.id); }}>
+                        Open
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+// ── Create loadsheet ───────────────────────────────────────────────
+
+function CreateLoadsheet({ onBack, onCreated, fmt }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(new Set());
+  const [creating, setCreating] = useState(false);
+  const { success, error } = useToast();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.get("/fulfillment/dispatched-orders");
+      setOrders(data.orders || []);
+    } catch (err) {
+      error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [error]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const toggle = (id) => {
+    const next = new Set(selected);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelected(next);
+  };
+
+  const create = async () => {
+    if (!selected.size) return;
+    setCreating(true);
+    try {
+      const selectedOrders = orders.filter((o) => selected.has(o.id));
+      const courierId = selectedOrders[0]?.courier_id || null;
+      await api.post("/fulfillment/loadsheets", {
+        order_ids: [...selected],
+        courier_id: courierId,
+        outlet_id: 1,
+      });
+      success("Loadsheet created");
+      onCreated();
+    } catch (err) {
+      error(err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // Group orders by courier for display
+  const courierGroups = orders.reduce((acc, o) => {
+    const key = o.courier_name || "No Courier";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(o);
+    return acc;
+  }, {});
+
+  if (loading) {
+    return <SectionCard><p className="py-8 text-center text-gray-400">Loading dispatched orders…</p></SectionCard>;
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center gap-3">
+        <button onClick={onBack} className="rounded-md p-1 hover:bg-gray-100 dark:hover:bg-gray-800">
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+        <div className="grow">
+          <h2 className="text-lg font-semibold">New Loadsheet</h2>
+          <p className="text-sm text-gray-500">Select dispatched orders to group into a loadsheet</p>
+        </div>
+        <Button onClick={create} disabled={!selected.size || creating}>
+          <FileSpreadsheet className="mr-1.5 h-4 w-4" />
+          Create Loadsheet ({selected.size})
+        </Button>
+      </div>
+
+      {!orders.length ? (
+        <EmptyState title="No dispatched orders" body="Orders must be dispatched before they can be added to a loadsheet." />
+      ) : (
+        Object.entries(courierGroups).map(([courier, groupOrders]) => (
+          <SectionCard key={courier} className="mb-4">
+            <div className="mb-2 flex items-center gap-2">
+              <Truck className="h-4 w-4 text-gray-400" />
+              <h3 className="text-sm font-semibold">{courier}</h3>
+              <span className="text-xs text-gray-400">({groupOrders.length} orders)</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b text-xs uppercase text-gray-500 dark:border-gray-700">
+                  <tr>
+                    <th className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={groupOrders.every((o) => selected.has(o.id))}
+                        onChange={() => {
+                          const next = new Set(selected);
+                          const allChecked = groupOrders.every((o) => next.has(o.id));
+                          groupOrders.forEach((o) => allChecked ? next.delete(o.id) : next.add(o.id));
+                          setSelected(next);
+                        }}
+                      />
+                    </th>
+                    <th className="px-3 py-2">Order #</th>
+                    <th className="px-3 py-2">Customer</th>
+                    <th className="px-3 py-2">Phone</th>
+                    <th className="px-3 py-2">Total</th>
+                    <th className="px-3 py-2">Payment</th>
+                    <th className="px-3 py-2">Tracking</th>
+                    <th className="px-3 py-2">Shipped</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y dark:divide-gray-700">
+                  {groupOrders.map((o) => (
+                    <tr
+                      key={o.id}
+                      className={`cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 ${
+                        selected.has(o.id) ? "bg-blue-50 dark:bg-blue-900/20" : ""
+                      }`}
+                      onClick={() => toggle(o.id)}
+                    >
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(o.id)}
+                          onChange={() => toggle(o.id)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </td>
+                      <td className="px-3 py-2 font-medium">{o.external_order_number || `#${o.id}`}</td>
+                      <td className="px-3 py-2">{o.customer_name || "—"}</td>
+                      <td className="px-3 py-2">{o.customer_phone || "—"}</td>
+                      <td className="px-3 py-2">{fmt(o.grand_total)}</td>
+                      <td className="px-3 py-2">
+                        <Badge tone={o.payment_status === "paid" ? "success" : "warning"}>
+                          {o.payment_status}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs">{o.tracking_number || "—"}</td>
+                      <td className="px-3 py-2 text-gray-500">{o.shipped_at ? fmtUtcDateTime(o.shipped_at) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </SectionCard>
+        ))
+      )}
+    </div>
+  );
+}
+
+// ── Loadsheet detail view ──────────────────────────────────────────
+
+function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
+  const [ls, setLs] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [handoverName, setHandoverName] = useState("");
+  const [showHandover, setShowHandover] = useState(false);
+  const { success, error } = useToast();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.get(`/fulfillment/loadsheets/${loadsheetId}`);
+      setLs(data.loadsheet);
+    } catch (err) {
+      error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadsheetId, error]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const finalize = async () => {
+    try {
+      await api.put(`/fulfillment/loadsheets/${loadsheetId}/finalize`);
+      success("Loadsheet finalized");
+      load();
+    } catch (err) {
+      error(err.message);
+    }
+  };
+
+  const handover = async () => {
+    if (!handoverName.trim()) return;
+    try {
+      await api.put(`/fulfillment/loadsheets/${loadsheetId}/handover`, {
+        handed_over_to: handoverName.trim(),
+      });
+      success("Loadsheet marked as handed over");
+      setShowHandover(false);
+      setHandoverName("");
+      load();
+    } catch (err) {
+      error(err.message);
+    }
+  };
+
+  const exportCsv = async () => {
+    try {
+      const res = await api.raw(`/fulfillment/loadsheets/${loadsheetId}/export`);
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${ls?.loadsheet_number || "loadsheet"}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      error(err.message);
+    }
+  };
+
+  const printLoadsheet = () => {
+    openPrintableLoadsheet(ls, ls.orders || [], fmt);
+  };
+
+  if (loading || !ls) {
+    return <SectionCard><p className="py-8 text-center text-gray-400">Loading…</p></SectionCard>;
+  }
+
+  const orders = ls.orders || [];
+  const cfg = LS_STATUS_CONFIG[ls.status] || LS_STATUS_CONFIG.draft;
+  const codOrders = orders.filter((o) => o.is_cod);
+  const totalCod = codOrders.reduce((s, o) => s + Number(o.cod_amount), 0);
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="mb-4 flex items-center gap-3">
+        <button onClick={onBack} className="rounded-md p-1 hover:bg-gray-100 dark:hover:bg-gray-800">
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+        <div className="grow">
+          <h2 className="text-lg font-semibold">{ls.loadsheet_number}</h2>
+          <p className="text-sm text-gray-500">
+            {ls.courier_name || "No courier"} • {ls.outlet_name} • Created by {ls.created_by_name || "—"} • {fmtUtcDateTime(ls.created_at)}
+          </p>
+        </div>
+        <Badge tone={cfg.tone}>{cfg.label}</Badge>
+      </div>
+
+      {/* Summary cards */}
+      <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <SectionCard>
+          <p className="text-xs text-gray-500">Total Orders</p>
+          <p className="text-2xl font-bold">{orders.length}</p>
+        </SectionCard>
+        <SectionCard>
+          <p className="text-xs text-gray-500">COD Orders</p>
+          <p className="text-2xl font-bold">{codOrders.length}</p>
+        </SectionCard>
+        <SectionCard>
+          <p className="text-xs text-gray-500">Total COD Amount</p>
+          <p className="text-2xl font-bold">{fmt(totalCod)}</p>
+        </SectionCard>
+        <SectionCard>
+          <p className="text-xs text-gray-500">Handed Over To</p>
+          <p className="text-2xl font-bold">{ls.handed_over_to || "—"}</p>
+        </SectionCard>
+      </div>
+
+      {/* Action buttons */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {ls.status === "draft" && (
+          <Button onClick={finalize}>
+            <CheckCircle className="mr-1.5 h-4 w-4" />
+            Finalize
+          </Button>
+        )}
+        {ls.status === "finalized" && !showHandover && (
+          <Button onClick={() => setShowHandover(true)}>
+            <Truck className="mr-1.5 h-4 w-4" />
+            Mark Handed Over
+          </Button>
+        )}
+        <Button variant="ghost" onClick={exportCsv}>
+          <Download className="mr-1.5 h-4 w-4" />
+          Export CSV
+        </Button>
+        <Button variant="ghost" onClick={printLoadsheet}>
+          <Printer className="mr-1.5 h-4 w-4" />
+          Print
+        </Button>
+      </div>
+
+      {/* Handover input */}
+      {showHandover && (
+        <SectionCard className="mb-4">
+          <div className="flex items-center gap-3">
+            <Input
+              placeholder="Driver / recipient name"
+              value={handoverName}
+              onChange={(e) => setHandoverName(e.target.value)}
+              className="grow"
+            />
+            <Button onClick={handover} disabled={!handoverName.trim()}>Confirm Handover</Button>
+            <Button variant="ghost" onClick={() => setShowHandover(false)}>Cancel</Button>
+          </div>
+        </SectionCard>
+      )}
+
+      {/* Orders table */}
+      <SectionCard>
+        <h3 className="mb-2 text-sm font-semibold">Orders ({orders.length})</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b text-xs uppercase text-gray-500 dark:border-gray-700">
+              <tr>
+                <th className="px-3 py-2">Order #</th>
+                <th className="px-3 py-2">Customer</th>
+                <th className="px-3 py-2">Address</th>
+                <th className="px-3 py-2">Phone</th>
+                <th className="px-3 py-2">Total</th>
+                <th className="px-3 py-2">COD</th>
+                <th className="px-3 py-2">Tracking #</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y dark:divide-gray-700">
+              {orders.map((o) => (
+                <tr key={o.id}>
+                  <td className="px-3 py-2 font-medium">{o.external_order_number || `#${o.web_order_id}`}</td>
+                  <td className="px-3 py-2">{o.customer_name || "—"}</td>
+                  <td className="max-w-48 truncate px-3 py-2 text-gray-500">{o.customer_address || "—"}</td>
+                  <td className="px-3 py-2">{o.customer_phone || "—"}</td>
+                  <td className="px-3 py-2">{fmt(o.grand_total)}</td>
+                  <td className="px-3 py-2">
+                    {o.is_cod ? (
+                      <Badge tone="warning">{fmt(o.cod_amount)}</Badge>
+                    ) : (
+                      <span className="text-gray-400">Prepaid</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 font-mono text-xs">{o.tracking_number || "—"}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
