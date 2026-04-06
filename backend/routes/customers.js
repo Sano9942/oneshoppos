@@ -5,6 +5,80 @@ module.exports = function registerCustomerRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm } = deps;
   const { toUtcStart, toUtcEnd } = require("../utils/tz");
 
+  // ── Customer Groups CRUD ───────────────────────────────────────────────────
+
+  app.get("/api/customer-groups", requireAnyPerm(["manage_customers", "all_access"]), async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        `SELECT cg.*, COUNT(c.id)::int AS member_count
+         FROM customer_groups cg
+         LEFT JOIN customers c ON c.customer_group_id = cg.id AND c.deleted_at IS NULL
+         GROUP BY cg.id
+         ORDER BY cg.name ASC`
+      );
+      res.json({ groups: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/customer-groups", requireAnyPerm(["manage_customers", "all_access"]), async (req, res) => {
+    const { name, description, discount_percent } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: "Group name is required" });
+    try {
+      const { rows } = await db.query(
+        `INSERT INTO customer_groups (name, description, discount_percent)
+         VALUES ($1, $2, $3) RETURNING *`,
+        [name.trim(), description || null, discount_percent || 0]
+      );
+      res.json(rows[0]);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/customer-groups/:id", requireAnyPerm(["manage_customers", "all_access"]), async (req, res) => {
+    const { id } = req.params;
+    const { name, description, discount_percent } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: "Group name is required" });
+    try {
+      const { rows, rowCount } = await db.query(
+        `UPDATE customer_groups SET name = $1, description = $2, discount_percent = $3
+         WHERE id = $4 RETURNING *`,
+        [name.trim(), description || null, discount_percent || 0, id]
+      );
+      if (rowCount === 0) return res.status(404).json({ error: "Group not found" });
+      res.json(rows[0]);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/customer-groups/:id", requireAnyPerm(["manage_customers", "all_access"]), async (req, res) => {
+    const { id } = req.params;
+    try {
+      // Unassign customers from this group first
+      await db.query("UPDATE customers SET customer_group_id = NULL WHERE customer_group_id = $1", [id]);
+      const { rowCount } = await db.query("DELETE FROM customer_groups WHERE id = $1", [id]);
+      if (rowCount === 0) return res.status(404).json({ error: "Group not found" });
+      res.json({ message: "Group deleted" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET all tags in use (for autocomplete) — must be before :id routes
+  app.get("/api/customers/tags", requireAnyPerm(["view_reports", "manage_customers"]), async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        "SELECT DISTINCT unnest(tags) AS tag FROM customers WHERE tags IS NOT NULL AND deleted_at IS NULL ORDER BY tag"
+      );
+      res.json({ tags: rows.map((r) => r.tag) });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // GET customer ledger — all financial transactions in one timeline
   app.get("/api/customers/:id/ledger", requireAnyPerm(["view_reports", "manage_customers"]), async (req, res) => {
     const { id } = req.params;
@@ -109,28 +183,35 @@ module.exports = function registerCustomerRoutes(app, deps) {
 
   // GET all customers (with total order count and spend)
   app.get("/api/customers", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
-    const { search = "" } = req.query;
+    const { search = "", group_id } = req.query;
     let query = `
     SELECT c.*,
            COUNT(s.id) as order_count,
            COALESCE(SUM(s.total_amount), 0) as total_spent,
            lt.name AS tier_name, lt.color AS tier_color,
            lt.points_multiplier AS tier_multiplier, lt.discount_percent AS tier_discount,
-           lt.min_spend AS tier_min_spend
+           lt.min_spend AS tier_min_spend,
+           cg.name AS group_name
     FROM customers c
     LEFT JOIN sales s ON c.id = s.customer_id AND s.voided = false
     LEFT JOIN loyalty_tiers lt ON c.loyalty_tier_id = lt.id
+    LEFT JOIN customer_groups cg ON c.customer_group_id = cg.id
   `;
     const params = [];
     let paramIdx = 1;
+    const conditions = ["c.deleted_at IS NULL"];
     if (search) {
-      query += ` WHERE c.deleted_at IS NULL AND (c.name ILIKE $${paramIdx} OR c.mobile ILIKE $${paramIdx + 1} OR c.email ILIKE $${paramIdx + 2})`;
+      conditions.push(`(c.name ILIKE $${paramIdx} OR c.mobile ILIKE $${paramIdx + 1} OR c.email ILIKE $${paramIdx + 2})`);
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
       paramIdx += 3;
-    } else {
-      query += " WHERE c.deleted_at IS NULL";
     }
-    query += " GROUP BY c.id, lt.name, lt.color, lt.points_multiplier, lt.discount_percent, lt.min_spend ORDER BY c.name ASC";
+    if (group_id) {
+      conditions.push(`c.customer_group_id = $${paramIdx}`);
+      params.push(group_id);
+      paramIdx++;
+    }
+    query += " WHERE " + conditions.join(" AND ");
+    query += " GROUP BY c.id, lt.name, lt.color, lt.points_multiplier, lt.discount_percent, lt.min_spend, cg.name ORDER BY c.name ASC";
     try {
       const { rows } = await db.query(query, params);
       res.json({ customers: rows });
@@ -163,37 +244,26 @@ module.exports = function registerCustomerRoutes(app, deps) {
 
   // POST create customer
   app.post("/api/customers", validate(CreateCustomerSchema), async (req, res) => {
-    const { name, mobile, email, address, cnic, occupation, balance, ntn_cnic } =
-      req.body;
+    const { name, mobile, email, address, cnic, occupation, balance, ntn_cnic,
+            date_of_birth, gender, city, customer_group_id, notes, tags,
+            preferred_payment_method, preferred_contact } = req.body;
     if (!name)
       return res.status(400).json({ error: "Customer name is required" });
     try {
       const { rows } = await db.query(
-        "INSERT INTO customers (name, mobile, email, address, cnic, occupation, balance, ntn_cnic) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
+        `INSERT INTO customers (name, mobile, email, address, cnic, occupation, balance, ntn_cnic,
+         date_of_birth, gender, city, customer_group_id, notes, tags, preferred_payment_method, preferred_contact)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
         [
-          name,
-          mobile || null,
-          email || null,
-          address || null,
-          cnic || null,
-          occupation || null,
-          balance || 0,
-          ntn_cnic || null,
+          name, mobile || null, email || null, address || null, cnic || null,
+          occupation || null, balance || 0, ntn_cnic || null,
+          date_of_birth || null, gender || null, city || null,
+          customer_group_id || null, notes || null,
+          tags && tags.length ? tags : null,
+          preferred_payment_method || null, preferred_contact || null,
         ],
       );
-      res.json({
-        id: rows[0].id,
-        name,
-        mobile,
-        email,
-        address,
-        cnic,
-        occupation,
-        balance: balance || 0,
-        ntn_cnic: ntn_cnic || null,
-        order_count: 0,
-        total_spent: 0,
-      });
+      res.json({ ...rows[0], order_count: 0, total_spent: 0 });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -202,23 +272,25 @@ module.exports = function registerCustomerRoutes(app, deps) {
   // PUT update customer
   app.put("/api/customers/:id", requirePerm("manage_customers"), validate(UpdateCustomerSchema), async (req, res) => {
     const { id } = req.params;
-    const { name, mobile, email, address, cnic, occupation, balance, ntn_cnic } =
-      req.body;
+    const { name, mobile, email, address, cnic, occupation, balance, ntn_cnic,
+            date_of_birth, gender, city, customer_group_id, notes, tags,
+            preferred_payment_method, preferred_contact } = req.body;
     if (!name)
       return res.status(400).json({ error: "Customer name is required" });
     try {
       const { rowCount } = await db.query(
-        "UPDATE customers SET name = $1, mobile = $2, email = $3, address = $4, cnic = $5, occupation = $6, balance = COALESCE($7, balance), ntn_cnic = $8 WHERE id = $9",
+        `UPDATE customers SET name = $1, mobile = $2, email = $3, address = $4, cnic = $5,
+         occupation = $6, balance = COALESCE($7, balance), ntn_cnic = $8,
+         date_of_birth = $9, gender = $10, city = $11, customer_group_id = $12,
+         notes = $13, tags = $14, preferred_payment_method = $15, preferred_contact = $16
+         WHERE id = $17`,
         [
-          name,
-          mobile || null,
-          email || null,
-          address || null,
-          cnic || null,
-          occupation || null,
-          balance !== undefined ? balance : null,
-          ntn_cnic || null,
-          id,
+          name, mobile || null, email || null, address || null, cnic || null,
+          occupation || null, balance !== undefined ? balance : null, ntn_cnic || null,
+          date_of_birth || null, gender || null, city || null,
+          customer_group_id || null, notes || null,
+          tags && tags.length ? tags : null,
+          preferred_payment_method || null, preferred_contact || null, id,
         ],
       );
       if (rowCount === 0)
@@ -396,6 +468,87 @@ module.exports = function registerCustomerRoutes(app, deps) {
     } catch (err) {
       const status = err.statusCode || 500;
       res.status(status).json({ error: err.message });
+    }
+  });
+
+  // GET enriched customer profile
+  app.get("/api/customers/:id/profile", requireAnyPerm(["view_reports", "manage_customers"]), async (req, res) => {
+    const { id } = req.params;
+    try {
+      // Basic info + group
+      const { rows: custRows } = await db.query(
+        `SELECT c.*, cg.name AS group_name, cg.discount_percent AS group_discount,
+                lt.name AS tier_name, lt.color AS tier_color,
+                lt.points_multiplier AS tier_multiplier, lt.discount_percent AS tier_discount
+         FROM customers c
+         LEFT JOIN customer_groups cg ON c.customer_group_id = cg.id
+         LEFT JOIN loyalty_tiers lt ON c.loyalty_tier_id = lt.id
+         WHERE c.id = $1`,
+        [id]
+      );
+      if (!custRows.length) return res.status(404).json({ error: "Customer not found" });
+      const customer = custRows[0];
+
+      // Purchase summary
+      const { rows: [summary] } = await db.query(
+        `SELECT COUNT(*)::int AS total_orders,
+                COALESCE(SUM(total_amount), 0) AS total_spend,
+                ROUND(COALESCE(AVG(total_amount), 0)::numeric, 2) AS avg_order_value,
+                MAX(timestamp) AS last_purchase_date
+         FROM sales WHERE customer_id = $1 AND voided = false`,
+        [id]
+      );
+
+      // Top 5 purchased products
+      const { rows: topProducts } = await db.query(
+        `SELECT p.name, p.sku, SUM(si.quantity)::int AS total_qty,
+                SUM(si.subtotal) AS total_value
+         FROM sale_items si
+         JOIN sales s ON si.sale_id = s.id
+         JOIN products p ON si.product_id = p.id
+         WHERE s.customer_id = $1 AND s.voided = false
+         GROUP BY p.id, p.name, p.sku
+         ORDER BY total_qty DESC
+         LIMIT 5`,
+        [id]
+      );
+
+      res.json({
+        customer,
+        purchase_summary: {
+          total_orders: summary.total_orders,
+          total_spend: Number(summary.total_spend),
+          avg_order_value: Number(summary.avg_order_value),
+          last_purchase_date: summary.last_purchase_date,
+        },
+        top_products: topProducts.map((p) => ({
+          name: p.name,
+          sku: p.sku,
+          total_qty: p.total_qty,
+          total_value: Number(p.total_value),
+        })),
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PUT update customer tags
+  app.put("/api/customers/:id/tags", requirePerm("manage_customers"), async (req, res) => {
+    const { id } = req.params;
+    const { tags } = req.body;
+    if (!Array.isArray(tags)) return res.status(400).json({ error: "tags must be an array" });
+    try {
+      const cleaned = tags.map((t) => String(t).trim().toLowerCase()).filter(Boolean);
+      const unique = [...new Set(cleaned)];
+      const { rowCount } = await db.query(
+        "UPDATE customers SET tags = $1 WHERE id = $2",
+        [unique.length ? unique : null, id]
+      );
+      if (rowCount === 0) return res.status(404).json({ error: "Customer not found" });
+      res.json({ tags: unique });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
   });
 

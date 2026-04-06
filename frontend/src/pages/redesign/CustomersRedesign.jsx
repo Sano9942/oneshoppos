@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRightLeft, Award, Ban, BookOpen, Calendar, ChevronLeft, ChevronRight, Download, Plus, Search, ShieldCheck, UserRound, Wallet } from "lucide-react";
+import { ArrowRightLeft, Award, Ban, BookOpen, Calendar, ChevronLeft, ChevronRight, Download, Package, Plus, Search, ShieldCheck, Tag, UserRound, Wallet, X } from "lucide-react";
 import { api } from "../../api";
 import { fmtDate, fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -24,7 +24,19 @@ const EMPTY = {
   cnic: "",
   occupation: "",
   ntn_cnic: "",
+  date_of_birth: "",
+  gender: "",
+  city: "",
+  customer_group_id: "",
+  notes: "",
+  tags: [],
+  preferred_payment_method: "",
+  preferred_contact: "",
 };
+
+const GENDER_OPTIONS = ["", "Male", "Female", "Other"];
+const PAYMENT_OPTIONS = ["", "Cash", "Card", "Bank Transfer", "Mobile Wallet", "Credit"];
+const CONTACT_OPTIONS = ["", "Phone", "Email", "WhatsApp", "SMS"];
 
 function exportCsv(rows) {
   if (!rows.length) return;
@@ -97,6 +109,13 @@ export default function CustomersRedesign() {
   const [ledgerTo, setLedgerTo] = useState("");
   const [ledgerLoading, setLedgerLoading] = useState(false);
 
+  // Customer groups + profile
+  const [customerGroups, setCustomerGroups] = useState([]);
+  const [profileData, setProfileData] = useState(null);
+  const [allTags, setAllTags] = useState([]);
+  const [tagInput, setTagInput] = useState("");
+  const [tagSuggestions, setTagSuggestions] = useState([]);
+
   // Transfer points modal state
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferPoints, setTransferPoints] = useState("");
@@ -132,14 +151,17 @@ export default function CustomersRedesign() {
     setLedger([]);
     setLedgerFrom("");
     setLedgerTo("");
+    setProfileData(null);
     try {
-      const [salesData, walletData] = await Promise.all([
+      const [salesData, walletData, profileRes] = await Promise.all([
         api.get(`/api/customers/${customer.id}/sales`),
         api.get(`/api/customers/${customer.id}/wallet`),
+        api.get(`/api/customers/${customer.id}/profile`),
       ]);
       setCustomerSales(salesData.sales || []);
       setWalletBalance(walletData.balance || 0);
       setWalletLedger(walletData.ledger || []);
+      setProfileData(profileRes);
     } catch {
       setCustomerSales([]);
       setWalletBalance(0);
@@ -150,6 +172,8 @@ export default function CustomersRedesign() {
   useEffect(() => {
     fetchCustomers();
     api.get("/api/loyalty/tiers").then((d) => setLoyaltyTiers(d.tiers || [])).catch(() => {});
+    api.get("/api/customer-groups").then((d) => setCustomerGroups(d.groups || [])).catch(() => {});
+    api.get("/api/customers/tags").then((d) => setAllTags(d.tags || [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -180,6 +204,14 @@ export default function CustomersRedesign() {
       cnic: row.cnic || "",
       occupation: row.occupation || "",
       ntn_cnic: row.ntn_cnic || "",
+      date_of_birth: row.date_of_birth ? row.date_of_birth.slice(0, 10) : "",
+      gender: row.gender || "",
+      city: row.city || "",
+      customer_group_id: row.customer_group_id || "",
+      notes: row.notes || "",
+      tags: row.tags || [],
+      preferred_payment_method: row.preferred_payment_method || "",
+      preferred_contact: row.preferred_contact || "",
     });
     setFormError("");
     setModalOpen(true);
@@ -380,6 +412,45 @@ export default function CustomersRedesign() {
     }
   };
 
+  // --- Tag management ---
+  const addTag = async (tag) => {
+    if (!detail || !tag.trim()) return;
+    const cleaned = tag.trim().toLowerCase();
+    const current = detail.tags || [];
+    if (current.includes(cleaned)) return;
+    const updated = [...current, cleaned];
+    try {
+      await api.put(`/api/customers/${detail.id}/tags`, { tags: updated });
+      setDetail((p) => ({ ...p, tags: updated }));
+      setRows((prev) => prev.map((r) => r.id === detail.id ? { ...r, tags: updated } : r));
+      if (!allTags.includes(cleaned)) setAllTags((prev) => [...prev, cleaned].sort());
+      setTagInput("");
+      setTagSuggestions([]);
+    } catch (e) {
+      toast.error(e.body?.error || "Failed to update tags");
+    }
+  };
+
+  const removeTag = async (tag) => {
+    if (!detail) return;
+    const updated = (detail.tags || []).filter((t) => t !== tag);
+    try {
+      await api.put(`/api/customers/${detail.id}/tags`, { tags: updated });
+      setDetail((p) => ({ ...p, tags: updated }));
+      setRows((prev) => prev.map((r) => r.id === detail.id ? { ...r, tags: updated } : r));
+    } catch (e) {
+      toast.error(e.body?.error || "Failed to update tags");
+    }
+  };
+
+  const handleTagInput = (val) => {
+    setTagInput(val);
+    if (!val.trim()) { setTagSuggestions([]); return; }
+    const q = val.toLowerCase();
+    const current = detail?.tags || [];
+    setTagSuggestions(allTags.filter((t) => t.includes(q) && !current.includes(t)).slice(0, 6));
+  };
+
   const selectedCount = selectedIds.size;
 
   return (
@@ -463,6 +534,11 @@ export default function CustomersRedesign() {
                           {r.tier_name && (
                             <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ backgroundColor: (r.tier_color || "#888") + "22", color: r.tier_color || "#888" }}>
                               <Award size={9} />{r.tier_name}
+                            </span>
+                          )}
+                          {r.group_name && (
+                            <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                              {r.group_name}
                             </span>
                           )}
                           {r.is_blacklisted && (
@@ -599,20 +675,95 @@ export default function CustomersRedesign() {
                     )}
                   </div>
 
+                  {/* Purchase Summary Cards */}
                   <div className="grid grid-cols-2 gap-2">
                     <SectionCard className="p-2 text-center">
                       <p className="text-xs text-(--ui-text-muted)">Orders</p>
                       <p className="text-lg font-semibold text-(--ui-text)">
-                        {detail.order_count || 0}
+                        {profileData?.purchase_summary?.total_orders ?? detail.order_count ?? 0}
                       </p>
                     </SectionCard>
                     <SectionCard className="p-2 text-center">
                       <p className="text-xs text-(--ui-text-muted)">Spent</p>
                       <p className="text-lg font-semibold text-(--ui-text)">
-                        {money(detail.total_spent)}
+                        {money(profileData?.purchase_summary?.total_spend ?? detail.total_spent ?? 0)}
+                      </p>
+                    </SectionCard>
+                    <SectionCard className="p-2 text-center">
+                      <p className="text-xs text-(--ui-text-muted)">Avg Order</p>
+                      <p className="text-lg font-semibold text-(--ui-text)">
+                        {money(profileData?.purchase_summary?.avg_order_value ?? 0)}
+                      </p>
+                    </SectionCard>
+                    <SectionCard className="p-2 text-center">
+                      <p className="text-xs text-(--ui-text-muted)">Last Purchase</p>
+                      <p className="text-sm font-semibold text-(--ui-text)">
+                        {profileData?.purchase_summary?.last_purchase_date ? fmtDate(profileData.purchase_summary.last_purchase_date) : "Never"}
                       </p>
                     </SectionCard>
                   </div>
+
+                  {/* Demographics & Preferences */}
+                  {(detail.gender || detail.date_of_birth || detail.city || detail.preferred_payment_method || detail.preferred_contact || detail.group_name) && (
+                    <SectionCard className="p-2">
+                      <p className="text-xs font-semibold text-(--ui-text-muted) mb-1.5">Demographics & Preferences</p>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                        {detail.gender && <><span className="text-(--ui-text-muted)">Gender</span><span className="text-(--ui-text)">{detail.gender}</span></>}
+                        {detail.date_of_birth && <><span className="text-(--ui-text-muted)">Birthday</span><span className="text-(--ui-text)">{detail.date_of_birth.slice(0, 10)}</span></>}
+                        {detail.city && <><span className="text-(--ui-text-muted)">City</span><span className="text-(--ui-text)">{detail.city}</span></>}
+                        {detail.preferred_payment_method && <><span className="text-(--ui-text-muted)">Payment</span><span className="text-(--ui-text)">{detail.preferred_payment_method}</span></>}
+                        {detail.preferred_contact && <><span className="text-(--ui-text-muted)">Contact</span><span className="text-(--ui-text)">{detail.preferred_contact}</span></>}
+                        {detail.group_name && <><span className="text-(--ui-text-muted)">Group</span><span className="text-(--ui-text)">{detail.group_name}</span></>}
+                      </div>
+                    </SectionCard>
+                  )}
+
+                  {/* Tags */}
+                  <SectionCard className="p-2">
+                    <p className="text-xs font-semibold text-(--ui-text-muted) mb-1.5">
+                      <Tag size={11} className="inline mr-1" />Tags
+                    </p>
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {(detail.tags || []).map((tag) => (
+                        <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
+                          {tag}
+                          <button type="button" onClick={() => removeTag(tag)} className="hover:text-red-600 transition-colors">
+                            <X size={10} />
+                          </button>
+                        </span>
+                      ))}
+                      {(!detail.tags || detail.tags.length === 0) && (
+                        <span className="text-[11px] text-(--ui-text-muted)">No tags</span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <Input
+                        placeholder="Add tag..."
+                        value={tagInput}
+                        onChange={(e) => handleTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && tagInput.trim()) { e.preventDefault(); addTag(tagInput); }
+                        }}
+                      />
+                      {tagSuggestions.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full z-10 mt-1 rounded border border-(--ui-border) bg-(--ui-bg) shadow-lg max-h-32 overflow-auto">
+                          {tagSuggestions.map((t) => (
+                            <button key={t} type="button" className="block w-full px-3 py-1.5 text-left text-xs hover:bg-(--ui-bg-hover)" onClick={() => addTag(t)}>
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </SectionCard>
+
+                  {/* Notes */}
+                  {detail.notes && (
+                    <SectionCard className="p-2">
+                      <p className="text-xs font-semibold text-(--ui-text-muted) mb-1">Notes</p>
+                      <p className="text-xs text-(--ui-text) whitespace-pre-wrap">{detail.notes}</p>
+                    </SectionCard>
+                  )}
 
                   {/* Loyalty Tier Badge + Progress */}
                   {(() => {
@@ -735,6 +886,29 @@ export default function CustomersRedesign() {
                     )}
                   </SectionCard>
 
+                  {/* Top Products */}
+                  {profileData?.top_products?.length > 0 && (
+                    <SectionCard className="p-2">
+                      <p className="text-xs font-semibold text-(--ui-text-muted) mb-1.5">
+                        <Package size={11} className="inline mr-1" />Top Products
+                      </p>
+                      <div className="space-y-1">
+                        {profileData.top_products.map((p, i) => (
+                          <div key={i} className="flex items-center justify-between rounded border border-(--ui-border) px-2 py-1.5 text-xs">
+                            <div className="min-w-0">
+                              <p className="font-medium text-(--ui-text) truncate">{p.name}</p>
+                              {p.sku && <p className="text-[10px] text-(--ui-text-muted)">{p.sku}</p>}
+                            </div>
+                            <div className="text-right shrink-0 ml-2">
+                              <p className="font-semibold text-(--ui-text)">{p.total_qty}x</p>
+                              <p className="text-[10px] text-(--ui-text-muted)">{money(p.total_value)}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </SectionCard>
+                  )}
+
                   <div>
                     <h4 className="mb-2 text-sm font-semibold text-(--ui-text)">
                       Recent Sales
@@ -856,47 +1030,80 @@ export default function CustomersRedesign() {
 
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-md p-4">
+          <SectionCard className="w-full max-w-lg p-4 max-h-[90vh] overflow-auto">
             <h3 className="text-lg font-semibold text-(--ui-text)">
               {editing ? "Edit Customer" : "Add Customer"}
             </h3>
-            <form className="mt-3 space-y-2" onSubmit={submitForm}>
+            <form className="mt-3 space-y-3" onSubmit={submitForm}>
               {formError ? (
                 <p className="rounded bg-rose-50 p-2 text-sm text-rose-700">{formError}</p>
               ) : null}
-              <Input
-                required
-                placeholder="Name"
-                value={form.name}
-                onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+
+              {/* Basic Info */}
+              <p className="text-xs font-semibold text-(--ui-text-muted) uppercase tracking-wide">Basic Info</p>
+              <Input required placeholder="Name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+              <div className="grid grid-cols-2 gap-2">
+                <Input placeholder="Mobile" value={form.mobile} onChange={(e) => setForm((p) => ({ ...p, mobile: e.target.value }))} />
+                <Input placeholder="Email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
+              </div>
+              <Input placeholder="Address" value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} />
+              <Input placeholder="NTN / CNIC (for FBR invoicing)" value={form.ntn_cnic} onChange={(e) => setForm((p) => ({ ...p, ntn_cnic: e.target.value }))} />
+
+              {/* Demographics */}
+              <p className="text-xs font-semibold text-(--ui-text-muted) uppercase tracking-wide pt-1">Demographics</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-medium text-(--ui-text-muted)">Date of Birth</label>
+                  <Input type="date" value={form.date_of_birth} onChange={(e) => setForm((p) => ({ ...p, date_of_birth: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-(--ui-text-muted)">Gender</label>
+                  <select className="w-full rounded border border-(--ui-border) bg-(--ui-bg) px-2.5 py-1.5 text-sm text-(--ui-text)" value={form.gender} onChange={(e) => setForm((p) => ({ ...p, gender: e.target.value }))}>
+                    {GENDER_OPTIONS.map((g) => <option key={g} value={g}>{g || "— Select —"}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Input placeholder="City" value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />
+                <Input placeholder="Occupation" value={form.occupation} onChange={(e) => setForm((p) => ({ ...p, occupation: e.target.value }))} />
+              </div>
+
+              {/* Preferences */}
+              <p className="text-xs font-semibold text-(--ui-text-muted) uppercase tracking-wide pt-1">Preferences</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-medium text-(--ui-text-muted)">Customer Group</label>
+                  <select className="w-full rounded border border-(--ui-border) bg-(--ui-bg) px-2.5 py-1.5 text-sm text-(--ui-text)" value={form.customer_group_id} onChange={(e) => setForm((p) => ({ ...p, customer_group_id: e.target.value || "" }))}>
+                    <option value="">— No Group —</option>
+                    {customerGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-(--ui-text-muted)">Preferred Payment</label>
+                  <select className="w-full rounded border border-(--ui-border) bg-(--ui-bg) px-2.5 py-1.5 text-sm text-(--ui-text)" value={form.preferred_payment_method} onChange={(e) => setForm((p) => ({ ...p, preferred_payment_method: e.target.value }))}>
+                    {PAYMENT_OPTIONS.map((o) => <option key={o} value={o}>{o || "— Select —"}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-(--ui-text-muted)">Preferred Contact</label>
+                <select className="w-full rounded border border-(--ui-border) bg-(--ui-bg) px-2.5 py-1.5 text-sm text-(--ui-text)" value={form.preferred_contact} onChange={(e) => setForm((p) => ({ ...p, preferred_contact: e.target.value }))}>
+                  {CONTACT_OPTIONS.map((o) => <option key={o} value={o}>{o || "— Select —"}</option>)}
+                </select>
+              </div>
+
+              {/* Notes */}
+              <p className="text-xs font-semibold text-(--ui-text-muted) uppercase tracking-wide pt-1">Notes</p>
+              <textarea
+                className="w-full rounded border border-(--ui-border) bg-(--ui-bg) px-2.5 py-1.5 text-sm text-(--ui-text) min-h-16 resize-y"
+                placeholder="Internal notes about this customer..."
+                value={form.notes}
+                onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
               />
-              <Input
-                placeholder="Mobile"
-                value={form.mobile}
-                onChange={(e) => setForm((p) => ({ ...p, mobile: e.target.value }))}
-              />
-              <Input
-                placeholder="Email"
-                value={form.email}
-                onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
-              />
-              <Input
-                placeholder="Address"
-                value={form.address}
-                onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
-              />
-              <Input
-                placeholder="NTN / CNIC (for FBR invoicing)"
-                value={form.ntn_cnic}
-                onChange={(e) => setForm((p) => ({ ...p, ntn_cnic: e.target.value }))}
-              />
+
               <div className="flex gap-2 pt-2">
-                <Button type="button" onClick={() => setModalOpen(false)}>
-                  Cancel
-                </Button>
-                <Button tone="primary" type="submit" disabled={busy}>
-                  {editing ? "Save" : "Create"}
-                </Button>
+                <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
+                <Button tone="primary" type="submit" disabled={busy}>{editing ? "Save" : "Create"}</Button>
               </div>
             </form>
           </SectionCard>
