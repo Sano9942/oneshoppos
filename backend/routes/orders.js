@@ -15,6 +15,47 @@ module.exports = function registerOrderRoutes(app, deps) {
 
 // --- ROUTES: ORDERS (Website order staging before live Shopify integration) ---
 
+  app.get("/api/orders/aging-summary", requireAnyPerm(["manage_orders", "view_reports"]), async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        `SELECT
+           EXTRACT(DAY FROM NOW() - ordered_at)::integer AS age_days,
+           wo.id,
+           wo.external_order_number,
+           c.name AS customer_name,
+           wo.ordered_at
+         FROM web_orders wo
+         LEFT JOIN customers c ON wo.customer_id = c.id
+         WHERE wo.order_status NOT IN ('closed', 'cancelled')`,
+      );
+
+      const buckets = { fresh: 0, aging: 0, stale: 0, critical: 0 };
+      const critical_orders = [];
+
+      for (const r of rows) {
+        const age = Number(r.age_days) || 0;
+        if (age <= 2) buckets.fresh++;
+        else if (age <= 5) buckets.aging++;
+        else if (age <= 10) buckets.stale++;
+        else {
+          buckets.critical++;
+          critical_orders.push({
+            id: r.id,
+            external_order_number: r.external_order_number,
+            customer_name: r.customer_name,
+            ordered_at: r.ordered_at,
+            age_days: age,
+          });
+        }
+      }
+
+      critical_orders.sort((a, b) => b.age_days - a.age_days);
+      res.json({ buckets, critical_orders });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/orders", requirePerm("manage_orders"), async (req, res) => {
     const {
       source,
@@ -24,6 +65,7 @@ module.exports = function registerOrderRoutes(app, deps) {
       date_from,
       date_to,
       search,
+      aging,
     } = req.query;
 
     const where = ["1=1"];
@@ -62,13 +104,19 @@ module.exports = function registerOrderRoutes(app, deps) {
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
       paramIdx += 3;
     }
+    if (aging === "stale") {
+      where.push(`EXTRACT(DAY FROM NOW() - wo.ordered_at)::integer > 3`);
+    } else if (aging === "critical") {
+      where.push(`EXTRACT(DAY FROM NOW() - wo.ordered_at)::integer > 10`);
+    }
 
     try {
       const { rows } = await db.query(
         `SELECT wo.*,
               c.name as customer_name,
               o.name as outlet_name,
-              COUNT(woi.id) as item_count
+              COUNT(woi.id) as item_count,
+              EXTRACT(DAY FROM NOW() - wo.ordered_at)::integer AS aging_days
        FROM web_orders wo
        LEFT JOIN customers c ON wo.customer_id = c.id
        LEFT JOIN outlets o ON wo.outlet_id = o.id

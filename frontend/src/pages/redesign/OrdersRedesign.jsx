@@ -17,6 +17,39 @@ import {
 
 const PAGE_SIZE = 25;
 
+const AGING_BUCKETS = [
+  { key: "fresh", label: "Fresh", color: "bg-green-500", textColor: "text-green-700", sub: "0-2 days" },
+  { key: "aging", label: "Aging", color: "bg-yellow-500", textColor: "text-yellow-700", sub: "3-5 days" },
+  { key: "stale", label: "Stale", color: "bg-orange-500", textColor: "text-orange-700", sub: "6-10 days" },
+  { key: "critical", label: "Critical", color: "bg-red-500", textColor: "text-red-700", sub: "10+ days" },
+];
+
+function agingBucket(days) {
+  const d = Number(days) || 0;
+  if (d <= 2) return "fresh";
+  if (d <= 5) return "aging";
+  if (d <= 10) return "stale";
+  return "critical";
+}
+
+function AgingDot({ days }) {
+  const d = Number(days) || 0;
+  const bucket = agingBucket(d);
+  const dotColor =
+    bucket === "fresh" ? "bg-green-500" :
+    bucket === "aging" ? "bg-yellow-500" :
+    bucket === "stale" ? "bg-orange-500" : "bg-red-500";
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className={`inline-block h-2 w-2 rounded-full ${dotColor}`} />
+      {bucket === "critical" && (
+        <span className="text-xs font-medium text-red-600">{d}d</span>
+      )}
+    </span>
+  );
+}
+
 function pillTone(value) {
   const v = String(value || "").toLowerCase();
   if (["paid", "fulfilled", "closed", "matched"].includes(v)) return "success";
@@ -82,6 +115,17 @@ export default function OrdersRedesign() {
   const [detail, setDetail] = useState(null);
   const [detailTab, setDetailTab] = useState("items");
   const [page, setPage] = useState(1);
+  const [agingSummary, setAgingSummary] = useState({ fresh: 0, aging: 0, stale: 0, critical: 0 });
+  const [agingFilter, setAgingFilter] = useState(null);
+
+  const loadAgingSummary = async () => {
+    try {
+      const data = await api.get("/api/orders/aging-summary");
+      setAgingSummary(data.buckets || { fresh: 0, aging: 0, stale: 0, critical: 0 });
+    } catch {
+      // non-critical, silently ignore
+    }
+  };
 
   const loadOrders = async () => {
     setLoading(true);
@@ -118,6 +162,7 @@ export default function OrdersRedesign() {
 
   useEffect(() => {
     loadOrders();
+    loadAgingSummary();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -130,18 +175,16 @@ export default function OrdersRedesign() {
     filters.fulfillment_status,
   ]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const totals = useMemo(() => {
-    const total = rows.length;
-    const open = rows.filter((r) => r.order_status === "open").length;
-    const paid = rows.filter((r) => r.payment_status === "paid").length;
-    return { total, open, paid };
-  }, [rows]);
+  const filtered = useMemo(() => {
+    if (!agingFilter) return rows;
+    return rows.filter((r) => agingBucket(r.aging_days) === agingFilter);
+  }, [rows, agingFilter]);
 
   const paged = useMemo(
-    () => rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [page, rows],
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [page, filtered],
   );
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
 
   const toggleSelectRow = (id) => {
     setSelectedIds((prev) => {
@@ -250,19 +293,25 @@ export default function OrdersRedesign() {
         </div>
       }
     >
-      <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-        <SectionCard className="p-3">
-          <p className="text-xs uppercase text-(--ui-text-muted)">Total Orders</p>
-          <p className="mt-1 text-2xl font-semibold text-(--ui-text)">{totals.total}</p>
-        </SectionCard>
-        <SectionCard className="p-3">
-          <p className="text-xs uppercase text-(--ui-text-muted)">Open</p>
-          <p className="mt-1 text-2xl font-semibold text-amber-700">{totals.open}</p>
-        </SectionCard>
-        <SectionCard className="p-3">
-          <p className="text-xs uppercase text-(--ui-text-muted)">Paid</p>
-          <p className="mt-1 text-2xl font-semibold text-emerald-700">{totals.paid}</p>
-        </SectionCard>
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        {AGING_BUCKETS.map((b) => (
+          <button
+            key={b.key}
+            onClick={() => { setAgingFilter((prev) => (prev === b.key ? null : b.key)); setPage(1); }}
+            className={`rounded-lg border p-3 text-left transition-all ${
+              agingFilter === b.key
+                ? "border-2 border-(--ui-primary) ring-2 ring-(--ui-primary)/20"
+                : "border-(--ui-border)"
+            } bg-(--ui-surface) hover:shadow-sm`}
+          >
+            <div className="flex items-center gap-2">
+              <span className={`inline-block h-3 w-3 rounded-full ${b.color}`} />
+              <span className="text-xs uppercase text-(--ui-text-muted)">{b.label}</span>
+            </div>
+            <p className={`mt-1 text-2xl font-semibold ${b.textColor}`}>{agingSummary[b.key]}</p>
+            <p className="text-xs text-(--ui-text-muted)">{b.sub}</p>
+          </button>
+        ))}
       </div>
 
       {error ? (
@@ -333,7 +382,7 @@ export default function OrdersRedesign() {
             }
             right={
               <span className="text-xs text-(--ui-text-muted)">
-                {rows.length} orders
+                {filtered.length} orders{agingFilter ? ` (${agingFilter})` : ""}
               </span>
             }
           />
@@ -411,6 +460,7 @@ export default function OrdersRedesign() {
                   <th className="px-3 py-2 text-left">Payment</th>
                   <th className="px-3 py-2 text-left">Fulfillment</th>
                   <th className="px-3 py-2 text-right">Total</th>
+                  <th className="px-3 py-2 text-center">Age</th>
                   <th className="px-3 py-2 text-center">Action</th>
                 </tr>
               </thead>
@@ -449,6 +499,9 @@ export default function OrdersRedesign() {
                       </td>
                       <td className="px-3 py-2 text-right font-semibold text-(--ui-text)">
                         {fmt(r.grand_total)}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <AgingDot days={r.aging_days} />
                       </td>
                       <td className="px-3 py-2 text-center">
                         <Button
