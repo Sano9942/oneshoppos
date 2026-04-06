@@ -28,8 +28,8 @@ Update this as you complete each round. Mark [x] when done.
 | 2B | #9 Cheques, #10 Chart of Accounts | [x] DONE |
 | 2C | #11 Journal Entries (requires #10) | [x] DONE |
 | 3A | #14 Stock Aging, #15 Inventory Audit | [x] DONE |
-| 3B | #13 Bundling, #16 Scan Receive | [ ] IN PROGRESS |
-| 3C | #17 Price Lists | [ ] |
+| 3B | #13 Bundling, #16 Scan Receive | [x] DONE |
+| 3C | #17 Price Lists | [ ] IN PROGRESS |
 | 4A | #18 Tiered Loyalty, #20 Reviews | [ ] |
 | 4B | #19 Customer Profiling | [ ] |
 | 5A | #21 Pick/Pack/Dispatch | [ ] |
