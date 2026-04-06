@@ -801,5 +801,287 @@ module.exports = function createAccountingRouter({
   mountNoteRoutes("credit_notes", "credit-notes");
   mountNoteRoutes("debit_notes", "debit-notes");
 
+  // ── Chart of Accounts ─────────────────────────────────────────────────
+
+  const coaAuth = [
+    requireAnyPerm(["all_access"]),
+    requireFeature("accounting_core"),
+  ];
+
+  // Helper: build nested tree from flat rows
+  function buildCoaTree(rows) {
+    const map = new Map();
+    const roots = [];
+    for (const r of rows) {
+      map.set(r.id, { ...r, children: [] });
+    }
+    for (const node of map.values()) {
+      if (node.parent_id && map.has(node.parent_id)) {
+        map.get(node.parent_id).children.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+    // Sort by code within each level
+    const sortByCode = (arr) => {
+      arr.sort((a, b) => String(a.code).localeCompare(String(b.code)));
+      arr.forEach((n) => sortByCode(n.children));
+    };
+    sortByCode(roots);
+    return roots;
+  }
+
+  // List all accounts as tree
+  router.get("/api/accounting/coa", ...coaAuth, async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        `SELECT id, code, name, type, sub_type, parent_id, is_system, is_active, description, normal_balance, created_at
+         FROM chart_of_accounts
+         ORDER BY code ASC`
+      );
+      res.json({ accounts: rows || [], tree: buildCoaTree(rows || []) });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get single account with computed balance
+  router.get("/api/accounting/coa/:id", ...coaAuth, async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        `SELECT id, code, name, type, sub_type, parent_id, is_system, is_active, description, normal_balance, created_at
+         FROM chart_of_accounts WHERE id = $1`,
+        [req.params.id]
+      );
+      if (!rows.length) return res.status(404).json({ error: "Account not found" });
+      const account = rows[0];
+
+      // Compute balance from journal entry lines (posted entries only)
+      const { rows: [balRow] } = await db.query(
+        `SELECT COALESCE(SUM(jel.debit), 0) AS total_debit,
+                COALESCE(SUM(jel.credit), 0) AS total_credit
+         FROM journal_entry_lines jel
+         JOIN journal_entries je ON je.id = jel.journal_entry_id
+         WHERE jel.account_id = $1 AND je.status = 'posted'`,
+        [req.params.id]
+      );
+      const totalDebit = Number(balRow?.total_debit || 0);
+      const totalCredit = Number(balRow?.total_credit || 0);
+      // Normal balance determines sign: debit-normal accounts = debits - credits
+      account.balance = account.normal_balance === "debit"
+        ? totalDebit - totalCredit
+        : totalCredit - totalDebit;
+
+      res.json(account);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Create custom account
+  router.post("/api/accounting/coa", ...coaAuth, async (req, res) => {
+    try {
+      const { code, name, type, sub_type, parent_id, description } = req.body || {};
+      if (!code || !name || !type) {
+        return res.status(400).json({ error: "code, name, and type are required" });
+      }
+      const validTypes = ["asset", "liability", "equity", "revenue", "expense"];
+      if (!validTypes.includes(type)) {
+        return res.status(400).json({ error: `type must be one of: ${validTypes.join(", ")}` });
+      }
+
+      // Check code uniqueness
+      const { rows: existing } = await db.query(
+        "SELECT id FROM chart_of_accounts WHERE code = $1", [code]
+      );
+      if (existing.length) {
+        return res.status(409).json({ error: "Account code already exists" });
+      }
+
+      // Validate parent exists if provided
+      if (parent_id) {
+        const { rows: parentRows } = await db.query(
+          "SELECT id FROM chart_of_accounts WHERE id = $1", [parent_id]
+        );
+        if (!parentRows.length) {
+          return res.status(400).json({ error: "Parent account not found" });
+        }
+      }
+
+      const normalBalance = ["asset", "expense"].includes(type) ? "debit" : "credit";
+      const { rows } = await db.query(
+        `INSERT INTO chart_of_accounts (code, name, type, sub_type, parent_id, is_system, is_active, description, normal_balance)
+         VALUES ($1, $2, $3, $4, $5, false, true, $6, $7)
+         RETURNING id, code, name`,
+        [code, name, type, sub_type || null, parent_id || null, description || null, normalBalance]
+      );
+      res.json({ message: "Account created", id: rows[0].id, code: rows[0].code, name: rows[0].name });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Seed default Pakistan-standard accounts (idempotent)
+  router.post("/api/accounting/coa/seed", ...coaAuth, async (req, res) => {
+    try {
+      const { rows: [countRow] } = await db.query("SELECT COUNT(*) AS cnt FROM chart_of_accounts");
+      if (Number(countRow.cnt) > 0) {
+        return res.json({ message: "Accounts already exist, seed skipped", seeded: 0 });
+      }
+
+      const defaults = [
+        ["1000", "Cash on Hand", "asset", "current_asset", "debit"],
+        ["1010", "Bank Account", "asset", "current_asset", "debit"],
+        ["1100", "Accounts Receivable", "asset", "current_asset", "debit"],
+        ["1200", "Inventory", "asset", "current_asset", "debit"],
+        ["1300", "Fixed Assets", "asset", "fixed_asset", "debit"],
+        ["2000", "Accounts Payable", "liability", "current_liability", "credit"],
+        ["2100", "Sales Tax Payable", "liability", "current_liability", "credit"],
+        ["2200", "Other Payables", "liability", "current_liability", "credit"],
+        ["3000", "Owner's Equity", "equity", "equity", "credit"],
+        ["3100", "Retained Earnings", "equity", "equity", "credit"],
+        ["4000", "Sales Revenue", "revenue", "operating_revenue", "credit"],
+        ["4100", "Service Revenue", "revenue", "operating_revenue", "credit"],
+        ["4200", "Other Revenue", "revenue", "other_revenue", "credit"],
+        ["5000", "Cost of Goods Sold", "expense", "cost_of_sales", "debit"],
+        ["5100", "Salaries & Wages", "expense", "operating_expense", "debit"],
+        ["5200", "Rent", "expense", "operating_expense", "debit"],
+        ["5300", "Utilities", "expense", "operating_expense", "debit"],
+        ["5400", "Marketing", "expense", "operating_expense", "debit"],
+        ["5500", "Office Supplies", "expense", "operating_expense", "debit"],
+        ["5600", "Depreciation", "expense", "operating_expense", "debit"],
+        ["5900", "Other Expenses", "expense", "operating_expense", "debit"],
+      ];
+
+      for (const [code, name, type, sub_type, normal_balance] of defaults) {
+        await db.query(
+          `INSERT INTO chart_of_accounts (code, name, type, sub_type, is_system, is_active, normal_balance)
+           VALUES ($1, $2, $3, $4, true, true, $5)
+           ON CONFLICT DO NOTHING`,
+          [code, name, type, sub_type, normal_balance]
+        );
+      }
+      res.json({ message: "Default accounts seeded", seeded: defaults.length });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Update account (system accounts: only name/description editable)
+  router.put("/api/accounting/coa/:id", ...coaAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { code, name, type, sub_type, parent_id, description, is_active } = req.body || {};
+
+      const { rows: existing } = await db.query(
+        "SELECT * FROM chart_of_accounts WHERE id = $1", [id]
+      );
+      if (!existing.length) return res.status(404).json({ error: "Account not found" });
+
+      const account = existing[0];
+
+      if (account.is_system) {
+        // System accounts: can only update name and description
+        const { rowCount } = await db.query(
+          `UPDATE chart_of_accounts SET name = COALESCE($1, name), description = $2 WHERE id = $3`,
+          [name, description !== undefined ? description : account.description, id]
+        );
+        return res.json({ message: "System account updated (name/description only)", changed: rowCount || 0 });
+      }
+
+      // Check code uniqueness if changing
+      if (code && code !== account.code) {
+        const { rows: dup } = await db.query(
+          "SELECT id FROM chart_of_accounts WHERE code = $1 AND id != $2", [code, id]
+        );
+        if (dup.length) return res.status(409).json({ error: "Account code already exists" });
+      }
+
+      // Validate parent if changing
+      if (parent_id !== undefined && parent_id !== null) {
+        if (Number(parent_id) === Number(id)) {
+          return res.status(400).json({ error: "Account cannot be its own parent" });
+        }
+        const { rows: parentRows } = await db.query(
+          "SELECT id FROM chart_of_accounts WHERE id = $1", [parent_id]
+        );
+        if (!parentRows.length) return res.status(400).json({ error: "Parent account not found" });
+      }
+
+      const newType = type || account.type;
+      const normalBalance = ["asset", "expense"].includes(newType) ? "debit" : "credit";
+
+      const { rowCount } = await db.query(
+        `UPDATE chart_of_accounts
+         SET code = COALESCE($1, code), name = COALESCE($2, name), type = $3,
+             sub_type = $4, parent_id = $5, description = $6, normal_balance = $7,
+             is_active = COALESCE($8, is_active)
+         WHERE id = $9`,
+        [
+          code || account.code, name || account.name, newType,
+          sub_type !== undefined ? sub_type : account.sub_type,
+          parent_id !== undefined ? (parent_id || null) : account.parent_id,
+          description !== undefined ? description : account.description,
+          normalBalance,
+          is_active !== undefined ? is_active : null,
+          id,
+        ]
+      );
+      res.json({ message: "Account updated", changed: rowCount || 0 });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Soft-delete (set is_active=false). Block if system or has journal entries.
+  router.delete("/api/accounting/coa/:id", ...coaAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { rows: existing } = await db.query(
+        "SELECT is_system FROM chart_of_accounts WHERE id = $1", [id]
+      );
+      if (!existing.length) return res.status(404).json({ error: "Account not found" });
+      if (existing[0].is_system) {
+        return res.status(403).json({ error: "Cannot delete system accounts" });
+      }
+
+      // Block if has journal entries
+      const { rows: [jeCount] } = await db.query(
+        "SELECT COUNT(*) AS cnt FROM journal_entry_lines WHERE account_id = $1", [id]
+      );
+      if (Number(jeCount.cnt) > 0) {
+        return res.status(409).json({ error: "Cannot delete account with journal entries" });
+      }
+
+      await db.query(
+        "UPDATE chart_of_accounts SET is_active = false WHERE id = $1", [id]
+      );
+      res.json({ message: "Account deactivated" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Next code suggestion for a given type
+  router.get("/api/accounting/coa/next-code/:type", ...coaAuth, async (req, res) => {
+    try {
+      const { type } = req.params;
+      const prefixMap = { asset: "1", liability: "2", equity: "3", revenue: "4", expense: "5" };
+      const prefix = prefixMap[type];
+      if (!prefix) return res.status(400).json({ error: "Invalid account type" });
+
+      const { rows: [maxRow] } = await db.query(
+        `SELECT MAX(code) AS max_code FROM chart_of_accounts
+         WHERE code ~ $1`,
+        [`^${prefix}\\d+$`]
+      );
+      const maxCode = maxRow?.max_code ? Number(maxRow.max_code) : Number(prefix + "000") - 10;
+      const next = String(maxCode + 10).padStart(4, "0");
+      res.json({ next_code: next });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return router;
 };
