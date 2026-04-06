@@ -15,6 +15,31 @@ module.exports = function registerBillingRoutes(app, deps) {
   const { validate } = require("../middleware/validate");
   const { RequestUpgradeSchema, CreateCheckoutSchema } = require("../schemas/billing");
 
+  /**
+   * @swagger
+   * /api/billing/pricing:
+   *   get:
+   *     summary: Get subscription pricing
+   *     description: Returns available subscription plans and their pricing tiers. Public endpoint — no auth required.
+   *     tags: [Billing]
+   *     responses:
+   *       200:
+   *         description: Pricing tiers
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 plans:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       plan: { type: string }
+   *                       price_monthly: { type: number }
+   *                       price_yearly: { type: number }
+   *                       features: { type: object }
+   */
   // ── Public Pricing ─────────────────────────────────────────────────────
   // Use db.pool directly (raw pg pool) to query public schema without tenant context
   app.get("/api/billing/pricing", async (req, res) => {
@@ -58,6 +83,31 @@ module.exports = function registerBillingRoutes(app, deps) {
     }
   });
 
+  /**
+   * @swagger
+   * /api/billing/status:
+   *   get:
+   *     summary: Get tenant billing status
+   *     description: Returns current subscription status including plan, trial/grace period, payment history, and whether payment gateway is enabled.
+   *     tags: [Billing]
+   *     security:
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: Billing status
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 plan: { type: string }
+   *                 status: { type: string, enum: [trial, active, grace, expired] }
+   *                 trial_ends_at: { type: string, format: date-time, nullable: true }
+   *                 payment_enabled: { type: boolean }
+   *                 days_remaining: { type: integer }
+   *       401:
+   *         description: Unauthorized
+   */
   // ── Billing Status ─────────────────────────────────────────────────────
   app.get("/api/billing/status", async (req, res) => {
     try {

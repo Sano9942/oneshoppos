@@ -107,6 +107,51 @@ module.exports = function registerProductRoutes(app, deps) {
     });
   }
 
+  /**
+   * @swagger
+   * /api/products:
+   *   get:
+   *     summary: List all products
+   *     description: Returns product list with optional search, category, and status filters. Includes variant and outlet stock data.
+   *     tags: [Products]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: search
+   *         schema: { type: string }
+   *         description: Search by name, SKU, or barcode
+   *       - in: query
+   *         name: category_id
+   *         schema: { type: integer }
+   *         description: Filter by category ID
+   *       - in: query
+   *         name: status
+   *         schema: { type: string, enum: [active, inactive, all] }
+   *         description: Filter by active status
+   *       - in: query
+   *         name: outlet_id
+   *         schema: { type: integer }
+   *         description: Filter stock by outlet
+   *       - in: query
+   *         name: sort
+   *         schema: { type: string }
+   *         description: Sort field (name, price, stock, created_at)
+   *       - in: query
+   *         name: order
+   *         schema: { type: string, enum: [asc, desc] }
+   *     responses:
+   *       200:
+   *         description: Array of products
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/Product'
+   *       401:
+   *         description: Unauthorized
+   */
   // Get all products (with aggregated stock, sort/filter/search support)
   app.get("/api/products", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
@@ -305,6 +350,33 @@ module.exports = function registerProductRoutes(app, deps) {
     }
   });
 
+  /**
+   * @swagger
+   * /api/products/{id}:
+   *   get:
+   *     summary: Get a product by ID
+   *     description: Returns a single product with full details including variants, outlet stock, and category info.
+   *     tags: [Products]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: integer }
+   *         description: Product ID
+   *     responses:
+   *       200:
+   *         description: Product details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Product'
+   *       404:
+   *         description: Product not found
+   *       401:
+   *         description: Unauthorized
+   */
   // Get a single product by id
   app.get("/api/products/:id", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
@@ -413,6 +485,54 @@ module.exports = function registerProductRoutes(app, deps) {
     }
   });
 
+  /**
+   * @swagger
+   * /api/products:
+   *   post:
+   *     summary: Create a product
+   *     description: Create a new product with optional variants and initial outlet stock. Subject to plan product limits.
+   *     tags: [Products]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [name, price]
+   *             properties:
+   *               name: { type: string }
+   *               sku: { type: string }
+   *               barcode: { type: string }
+   *               price: { type: number, format: double }
+   *               cost_price: { type: number, format: double }
+   *               category_id: { type: integer }
+   *               brand_id: { type: integer }
+   *               is_active: { type: boolean, default: true }
+   *               initial_stock: { type: integer, description: "Initial stock for default outlet" }
+   *               outlet_id: { type: integer, description: "Outlet for initial stock" }
+   *               variants:
+   *                 type: array
+   *                 items:
+   *                   type: object
+   *                   properties:
+   *                     name: { type: string }
+   *                     sku: { type: string }
+   *                     price: { type: number }
+   *                     cost_price: { type: number }
+   *     responses:
+   *       201:
+   *         description: Product created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Product'
+   *       400:
+   *         description: Validation error or plan limit reached
+   *       401:
+   *         description: Unauthorized
+   */
   // Add a new product (and optionally set initial stock for a specific outlet)
   app.post("/api/products", requirePerm("manage_inventory"), requirePlanLimit("products"), validate(CreateProductSchema), async (req, res) => {
     const {

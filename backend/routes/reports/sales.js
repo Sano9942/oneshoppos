@@ -477,6 +477,54 @@ module.exports = function (app, deps, helpers) {
     }
   });
 
+  /**
+   * @swagger
+   * /api/reports/item-wise:
+   *   get:
+   *     summary: Item-wise sales report
+   *     description: Sales grouped by product within a date range. Shows quantity sold, revenue, cost, and profit per product.
+   *     tags: [Reports]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: from
+   *         required: true
+   *         schema: { type: string, format: date }
+   *         description: Start date (YYYY-MM-DD)
+   *       - in: query
+   *         name: to
+   *         required: true
+   *         schema: { type: string, format: date }
+   *         description: End date (YYYY-MM-DD)
+   *       - in: query
+   *         name: outlet_id
+   *         schema: { type: integer }
+   *       - in: query
+   *         name: category_id
+   *         schema: { type: integer }
+   *     responses:
+   *       200:
+   *         description: Item-wise sales data
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 rows:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       product_name: { type: string }
+   *                       sku: { type: string }
+   *                       qty_sold: { type: integer }
+   *                       revenue: { type: number }
+   *                       cost: { type: number }
+   *                       profit: { type: number }
+   *       401:
+   *         description: Unauthorized
+   */
   // Item Wise: sales grouped by product
   app.get("/api/reports/item-wise", async (req, res) => {
     try {

@@ -181,6 +181,36 @@ module.exports = function registerCustomerRoutes(app, deps) {
     }
   });
 
+  /**
+   * @swagger
+   * /api/customers:
+   *   get:
+   *     summary: List all customers
+   *     description: Returns all customers with total order count and lifetime spend. Supports search by name/phone/email and group filtering.
+   *     tags: [Customers]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: search
+   *         schema: { type: string }
+   *         description: Search by name, phone, or email
+   *       - in: query
+   *         name: group_id
+   *         schema: { type: integer }
+   *         description: Filter by customer group
+   *     responses:
+   *       200:
+   *         description: Array of customers
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/Customer'
+   *       401:
+   *         description: Unauthorized
+   */
   // GET all customers (with total order count and spend)
   app.get("/api/customers", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
     const { search = "", group_id } = req.query;
@@ -242,6 +272,46 @@ module.exports = function registerCustomerRoutes(app, deps) {
     }
   });
 
+  /**
+   * @swagger
+   * /api/customers:
+   *   post:
+   *     summary: Create a customer
+   *     description: Create a new customer record with optional CRM fields (group, tags, notes, loyalty).
+   *     tags: [Customers]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [name]
+   *             properties:
+   *               name: { type: string }
+   *               mobile: { type: string }
+   *               email: { type: string }
+   *               address: { type: string }
+   *               cnic: { type: string }
+   *               city: { type: string }
+   *               gender: { type: string, enum: [male, female, other] }
+   *               date_of_birth: { type: string, format: date }
+   *               customer_group_id: { type: integer }
+   *               notes: { type: string }
+   *               tags: { type: string }
+   *     responses:
+   *       201:
+   *         description: Customer created
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Customer'
+   *       400:
+   *         description: Validation error
+   *       401:
+   *         description: Unauthorized
+   */
   // POST create customer
   app.post("/api/customers", validate(CreateCustomerSchema), async (req, res) => {
     const { name, mobile, email, address, cnic, occupation, balance, ntn_cnic,

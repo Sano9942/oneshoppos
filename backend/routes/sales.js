@@ -89,6 +89,56 @@ module.exports = function registerSalesRoutes(app, deps) {
 
 // --- SALES HISTORY ROUTES ---
 
+  /**
+   * @swagger
+   * /api/sales:
+   *   get:
+   *     summary: List all sales
+   *     description: Returns paginated sales with optional date range, payment method, employee, and outlet filters.
+   *     tags: [Sales]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: from
+   *         schema: { type: string, format: date }
+   *         description: Start date (YYYY-MM-DD)
+   *       - in: query
+   *         name: to
+   *         schema: { type: string, format: date }
+   *         description: End date (YYYY-MM-DD)
+   *       - in: query
+   *         name: payment_method
+   *         schema: { type: string, enum: [cash, card, credit, split] }
+   *       - in: query
+   *         name: employee_id
+   *         schema: { type: integer }
+   *       - in: query
+   *         name: outlet_id
+   *         schema: { type: integer }
+   *       - in: query
+   *         name: page
+   *         schema: { type: integer, default: 1 }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *     responses:
+   *       200:
+   *         description: Paginated sales list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 sales:
+   *                   type: array
+   *                   items:
+   *                     $ref: '#/components/schemas/Sale'
+   *                 total:
+   *                   type: integer
+   *       401:
+   *         description: Unauthorized
+   */
   // GET all sales (paginated, filterable)
   app.get("/api/sales", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
     try {
@@ -313,6 +363,57 @@ module.exports = function registerSalesRoutes(app, deps) {
     },
   );
 
+  /**
+   * @swagger
+   * /api/sales:
+   *   post:
+   *     summary: Create a sale (POS checkout)
+   *     description: Process a cart checkout. Creates sale record, deducts stock (with FOR UPDATE row locks), generates invoice number, and optionally enqueues FBR invoice.
+   *     tags: [Sales]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [cartItems, payment_method, outlet_id]
+   *             properties:
+   *               cartItems:
+   *                 type: array
+   *                 description: "Cart items (use 'id' not 'product_id', 'price' not 'unit_price')"
+   *                 items:
+   *                   type: object
+   *                   required: [id, quantity, price]
+   *                   properties:
+   *                     id: { type: integer, description: Product ID }
+   *                     variant_id: { type: integer, nullable: true }
+   *                     quantity: { type: integer }
+   *                     price: { type: number, format: double }
+   *                     discount: { type: number, default: 0 }
+   *               payment_method: { type: string, enum: [cash, card, credit, split] }
+   *               outlet_id: { type: integer }
+   *               customer_id: { type: integer, nullable: true }
+   *               discount: { type: number, description: "Overall sale discount" }
+   *               tax: { type: number }
+   *               note: { type: string }
+   *     responses:
+   *       200:
+   *         description: Sale created with invoice number
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 sale:
+   *                   $ref: '#/components/schemas/Sale'
+   *                 invoice_number: { type: string }
+   *       400:
+   *         description: Insufficient stock or validation error
+   *       401:
+   *         description: Unauthorized
+   */
   // Process a Sale (Cart Checkout)
   app.post("/api/sales", validate(CreateSaleSchema), async (req, res) => {
     const {

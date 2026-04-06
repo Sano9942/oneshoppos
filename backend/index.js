@@ -204,6 +204,13 @@ const { processPendingShopifyInventoryEvents, processPendingReportSchedules } =
     logShopifyEvent,
   });
 
+// ─── API Documentation (Swagger UI) ────────────────────────────────────────
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpec = require("./swagger");
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customSiteTitle: "SanoPOS API Documentation",
+}));
+
 // ─── Global error handler ───────────────────────────────────────────────────
 app.use((err, req, res, _next) => {
   const reqId = req.id || "unknown";

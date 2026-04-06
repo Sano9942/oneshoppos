@@ -16,6 +16,45 @@ module.exports = function registerReturnsRoutes(app, deps) {
 
 // --- ROUTES: RETURNS ---
 
+  /**
+   * @swagger
+   * /api/returns:
+   *   post:
+   *     summary: Create a return
+   *     description: Process a sale return. Requires original_sale_id, total_refund, and refund_method. Restores stock to outlet and product variants.
+   *     tags: [Returns]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [original_sale_id, total_refund, refund_method, items]
+   *             properties:
+   *               original_sale_id: { type: integer }
+   *               total_refund: { type: number, format: double }
+   *               refund_method: { type: string, enum: [cash, card, credit, store_credit] }
+   *               reason: { type: string }
+   *               items:
+   *                 type: array
+   *                 items:
+   *                   type: object
+   *                   required: [product_id, quantity, refund_price]
+   *                   properties:
+   *                     product_id: { type: integer }
+   *                     variant_id: { type: integer, nullable: true }
+   *                     quantity: { type: integer }
+   *                     refund_price: { type: number, format: double }
+   *     responses:
+   *       201:
+   *         description: Return created
+   *       400:
+   *         description: Validation error
+   *       401:
+   *         description: Unauthorized
+   */
   // Create a new return
   app.post("/api/returns", requirePerm("manage_orders"), validate(CreateReturnSchema), async (req, res) => {
     const {

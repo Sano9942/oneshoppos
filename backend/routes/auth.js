@@ -4,6 +4,55 @@ module.exports = function registerAuthRoutes(app, deps) {
   const { validate } = require("../middleware/validate");
   const { LoginSchema, MtLoginSchema, KioskLoginSchema, ForgotPasswordSchema, ResetPasswordSchema, SignupSchema } = require("../schemas/auth");
 
+  /**
+   * @swagger
+   * /api/auth/login:
+   *   post:
+   *     summary: Login (single-tenant mode)
+   *     description: Authenticate with username and password/PIN. Returns employee info and permissions. Used in single-tenant deployments.
+   *     tags: [Auth]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [username]
+   *             properties:
+   *               username:
+   *                 type: string
+   *                 description: Employee name
+   *               password:
+   *                 type: string
+   *                 description: Employee password (or PIN for legacy accounts)
+   *               pin:
+   *                 type: string
+   *                 description: PIN code (fallback auth)
+   *     responses:
+   *       200:
+   *         description: Login successful
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 employee:
+   *                   type: object
+   *                   properties:
+   *                     id: { type: integer }
+   *                     name: { type: string }
+   *                     role_id: { type: integer }
+   *                     outlet_id: { type: integer, nullable: true }
+   *                 permissions:
+   *                   type: array
+   *                   items: { type: string }
+   *       401:
+   *         description: Invalid credentials
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   */
   app.post("/api/auth/login", authLimiter, validate(LoginSchema), async (req, res) => {
     const { username, password, pin } = req.body;
 
@@ -172,6 +221,66 @@ module.exports = function registerAuthRoutes(app, deps) {
       ? require("../tenant-db-manager-pg")
       : require("../tenant-db-manager");
 
+    /**
+     * @swagger
+     * /api/auth/mt-login:
+     *   post:
+     *     summary: Login (multi-tenant mode)
+     *     description: Authenticate with tenant slug, username, and password/PIN. Returns JWT access + refresh tokens. This is the primary login endpoint for production.
+     *     tags: [Auth]
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             required: [tenant_slug, username]
+     *             properties:
+     *               tenant_slug:
+     *                 type: string
+     *                 description: Tenant store code (e.g. "mystore")
+     *               username:
+     *                 type: string
+     *                 description: Employee name
+     *               password:
+     *                 type: string
+     *                 description: Employee password
+     *               pin:
+     *                 type: string
+     *                 description: PIN code (fallback for legacy accounts)
+     *     responses:
+     *       200:
+     *         description: Login successful — returns JWT tokens and employee info
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 token:
+     *                   type: string
+     *                   description: JWT access token (short-lived)
+     *                 employee:
+     *                   type: object
+     *                   properties:
+     *                     id: { type: integer }
+     *                     name: { type: string }
+     *                     role_id: { type: integer }
+     *                 permissions:
+     *                   type: array
+     *                   items: { type: string }
+     *                 tenant:
+     *                   type: object
+     *                   properties:
+     *                     id: { type: integer }
+     *                     slug: { type: string }
+     *                     name: { type: string }
+     *       401:
+     *         description: Invalid credentials or inactive tenant
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Error'
+     */
     // POST /api/auth/mt-login — standard login with tenant slug + username + password/PIN
     app.post("/api/auth/mt-login", authLimiter, validate(MtLoginSchema), async (req, res) => {
       const { tenant_slug, username, password, pin } = req.body;

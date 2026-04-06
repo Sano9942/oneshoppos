@@ -70,6 +70,50 @@ module.exports = function (app, deps, helpers) {
     }
   });
 
+  /**
+   * @swagger
+   * /api/reports/inventory-dump:
+   *   get:
+   *     summary: Inventory dump report
+   *     description: Full inventory snapshot — stock per product per outlet. Supports outlet filtering and anomaly detection (negative/zero stock).
+   *     tags: [Reports]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: outlet_id
+   *         schema: { type: integer }
+   *         description: Filter by outlet
+   *       - in: query
+   *         name: aggregate
+   *         schema: { type: string, enum: ["0", "1"] }
+   *         description: Aggregate stock across outlets
+   *       - in: query
+   *         name: anomaly
+   *         schema: { type: string, enum: [negative, zero] }
+   *         description: Filter for stock anomalies
+   *     responses:
+   *       200:
+   *         description: Inventory data
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 rows:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       product_name: { type: string }
+   *                       sku: { type: string }
+   *                       outlet_name: { type: string }
+   *                       stock: { type: integer }
+   *                       cost_price: { type: number }
+   *                       stock_value: { type: number }
+   *       401:
+   *         description: Unauthorized
+   */
   // Inventory Dump: stock per product per outlet with full product info
   app.get("/api/reports/inventory-dump", async (req, res) => {
     try {

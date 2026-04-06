@@ -59,6 +59,43 @@ module.exports = function registerOrderRoutes(app, deps) {
     }
   });
 
+  /**
+   * @swagger
+   * /api/orders:
+   *   get:
+   *     summary: List all orders
+   *     description: Returns orders with optional filtering by source, status, date range, and customer. Includes order items.
+   *     tags: [Orders]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: source
+   *         schema: { type: string, enum: [manual, shopify, woocommerce] }
+   *       - in: query
+   *         name: status
+   *         schema: { type: string, enum: [pending, confirmed, shipped, delivered, cancelled] }
+   *       - in: query
+   *         name: from
+   *         schema: { type: string, format: date }
+   *       - in: query
+   *         name: to
+   *         schema: { type: string, format: date }
+   *       - in: query
+   *         name: customer_id
+   *         schema: { type: integer }
+   *     responses:
+   *       200:
+   *         description: Array of orders
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 $ref: '#/components/schemas/Order'
+   *       401:
+   *         description: Unauthorized
+   */
   app.get("/api/orders", requirePerm("manage_orders"), async (req, res) => {
     const {
       source,
