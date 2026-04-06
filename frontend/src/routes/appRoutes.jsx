@@ -59,6 +59,15 @@ const ReportTabStandaloneRoute = lazy(() =>
 const FBRSettingsRoute = lazy(() => import("../pages/FBRSettingsRoute"));
 const FBRDashboardRoute = lazy(() => import("../pages/FBRDashboardRoute"));
 const TaxLookupRoute = lazy(() => import("../pages/TaxLookupRoute"));
+const ChartOfAccountsRedesign = lazy(() => import("../pages/redesign/ChartOfAccountsRedesign"));
+const JournalEntriesRedesign = lazy(() => import("../pages/redesign/JournalEntriesRedesign"));
+const CreditDebitNotesRedesign = lazy(() => import("../pages/redesign/CreditDebitNotesRedesign"));
+const PostdatedChequesRedesign = lazy(() => import("../pages/redesign/PostdatedChequesRedesign"));
+const StockCountRedesign = lazy(() => import("../pages/redesign/StockCountRedesign"));
+const PriceListsRedesign = lazy(() => import("../pages/redesign/PriceListsRedesign"));
+const CustomerGroupsRedesign = lazy(() => import("../pages/redesign/CustomerGroupsRedesign"));
+const ReviewModerationRedesign = lazy(() => import("../pages/redesign/ReviewModerationRedesign"));
+const FulfillmentRedesign = lazy(() => import("../pages/redesign/FulfillmentRedesign"));
 
 const wrap = (Component) => <Suspense fallback={<RouteLoading />}><Component /></Suspense>;
 const perm = (p, el) => <RequirePerm perm={p}>{el}</RequirePerm>;
@@ -146,5 +155,18 @@ export const appRoutes = [
     <Route path="/reports/product-movement" element={wrap(() => <ReportTabStandaloneRoute tabId="product-movement" />)} />
     <Route path="/reports/parent-report" element={<PlaceholderPage />} />
     <Route path="/reports/product-performance" element={wrap(() => <ReportTabStandaloneRoute tabId="product-performance" />)} />
+    {/* Wave 2 — Accounting */}
+    <Route path="/chart-of-accounts" element={perm("all_access", <ChartOfAccountsRedesign />)} />
+    <Route path="/journal-entries" element={perm("all_access", <JournalEntriesRedesign />)} />
+    <Route path="/credit-debit-notes" element={perm("view_reports", <CreditDebitNotesRedesign />)} />
+    <Route path="/postdated-cheques" element={perm("view_reports", <PostdatedChequesRedesign />)} />
+    {/* Wave 3 — Inventory & Commerce */}
+    <Route path="/stock-counts" element={perm("manage_inventory", <StockCountRedesign />)} />
+    <Route path="/price-lists" element={perm("manage_inventory", <PriceListsRedesign />)} />
+    {/* Wave 4 — Customer & Loyalty */}
+    <Route path="/customer-groups" element={perm("manage_customers", <CustomerGroupsRedesign />)} />
+    <Route path="/review-moderation" element={perm("manage_inventory", <ReviewModerationRedesign />)} />
+    {/* Wave 5 — Fulfillment */}
+    <Route path="/fulfillment" element={perm("manage_orders", <FulfillmentRedesign />)} />
   </Route>,
 ];

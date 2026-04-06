@@ -503,6 +503,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- COURIERS ---
   require("./couriers")(app, deps);
 
+  // --- FULFILLMENT (PICK/PACK/DISPATCH) ---
+  require("./fulfillment")(app, deps);
+
   // --- BULK IMPORT ---
   require("./import")(app, deps);
 

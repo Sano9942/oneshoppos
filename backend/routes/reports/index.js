@@ -29,6 +29,12 @@ module.exports = function registerReportsRoutes(app, deps) {
   // FBR e-invoicing export
   require("./fbr-export")(app, deps);
 
+  // Stock aging report (Wave 3)
+  require("./stock-aging")(app, deps, helpers);
+
+  // Multi-channel reports (Wave 6)
+  require("./multichannel")(app, deps, helpers);
+
   // Return the processPendingReportSchedules function required by registerAllRoutes.js
   return {
     processPendingReportSchedules:
