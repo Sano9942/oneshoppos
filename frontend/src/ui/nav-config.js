@@ -42,6 +42,7 @@ import {
   MessageSquare,
   Star,
   Award,
+  PackageCheck,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -54,6 +55,7 @@ export const SHOPIFY_NAV_GROUPS = [
     items: [
       { name: "POS", path: "/pos", icon: MonitorPlay, newTab: true },
       { name: "Orders", path: "/orders", icon: ShoppingCart, requiredPerm: "manage_orders" },
+      { name: "Fulfillment", path: "/fulfillment", icon: PackageCheck, requiredPerm: "manage_orders" },
       { name: "Parked Sales", path: "/parked-sales", icon: PauseCircle, requiredPerm: "manage_orders" },
       { name: "Customers", path: "/customers", icon: Users },
       { name: "Customer Groups", path: "/customer-groups", icon: Users, requiredPerm: "manage_customers" },
