@@ -95,6 +95,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Accounting", path: "/accounting", icon: BookOpen, requiredPerm: "view_reports", requiredFlag: "accounting_core" },
       { name: "Chart of Accounts", path: "/chart-of-accounts", icon: BookOpen, requiredPerm: "all_access", requiredFlag: "accounting_core" },
       { name: "Credit/Debit Notes", path: "/credit-debit-notes", icon: FileCheck, requiredPerm: "view_reports", requiredFlag: "accounting_core" },
+      { name: "Post-Dated Cheques", path: "/postdated-cheques", icon: Banknote, requiredPerm: "view_reports", requiredFlag: "accounting_core" },
     ],
   },
   {

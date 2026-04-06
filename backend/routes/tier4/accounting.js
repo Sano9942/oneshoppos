@@ -1062,6 +1062,249 @@ module.exports = function createAccountingRouter({
     }
   });
 
+  // ── Post-Dated Cheques ─────────────────────────────────────────────────
+
+  const chequeAuth = [
+    requireAnyPerm(["manage_employees", "all_access"]),
+    requireFeature("accounting_core"),
+  ];
+
+  // List with filters
+  router.get("/api/accounting/cheques", ...chequeAuth, async (req, res) => {
+    try {
+      const { status, type, maturity_from, maturity_to } = req.query || {};
+      const where = ["1=1"];
+      const params = [];
+      let idx = 1;
+      if (status) { where.push(`c.status = $${idx++}`); params.push(status); }
+      if (type) { where.push(`c.type = $${idx++}`); params.push(type); }
+      if (maturity_from) { where.push(`c.maturity_date >= $${idx++}::date`); params.push(maturity_from); }
+      if (maturity_to) { where.push(`c.maturity_date <= $${idx++}::date`); params.push(maturity_to); }
+      const { rows } = await db.query(
+        `SELECT c.*,
+                CASE WHEN c.party_type = 'customer' THEN cu.name ELSE su.name END AS party_name
+         FROM postdated_cheques c
+         LEFT JOIN customers cu ON c.party_type = 'customer' AND cu.id = c.party_id
+         LEFT JOIN suppliers su ON c.party_type = 'supplier' AND su.id = c.party_id
+         WHERE ${where.join(" AND ")}
+         ORDER BY c.maturity_date ASC, c.id DESC`,
+        params
+      );
+      res.json({ cheques: rows || [] });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Upcoming — cheques maturing in next 7 days
+  router.get("/api/accounting/cheques/upcoming", ...chequeAuth, async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        `SELECT c.*,
+                CASE WHEN c.party_type = 'customer' THEN cu.name ELSE su.name END AS party_name
+         FROM postdated_cheques c
+         LEFT JOIN customers cu ON c.party_type = 'customer' AND cu.id = c.party_id
+         LEFT JOIN suppliers su ON c.party_type = 'supplier' AND su.id = c.party_id
+         WHERE c.status = 'pending'
+           AND c.maturity_date >= CURRENT_DATE
+           AND c.maturity_date <= CURRENT_DATE + INTERVAL '7 days'
+         ORDER BY c.maturity_date ASC`
+      );
+      res.json({ cheques: rows || [] });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get by ID
+  router.get("/api/accounting/cheques/:id", ...chequeAuth, async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        `SELECT c.*,
+                CASE WHEN c.party_type = 'customer' THEN cu.name ELSE su.name END AS party_name
+         FROM postdated_cheques c
+         LEFT JOIN customers cu ON c.party_type = 'customer' AND cu.id = c.party_id
+         LEFT JOIN suppliers su ON c.party_type = 'supplier' AND su.id = c.party_id
+         WHERE c.id = $1`,
+        [req.params.id]
+      );
+      if (!rows.length) return res.status(404).json({ error: "Cheque not found" });
+      res.json(rows[0]);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Create
+  router.post("/api/accounting/cheques", ...chequeAuth, async (req, res) => {
+    try {
+      const { cheque_number, type, party_type, party_id, bank_name, amount, issue_date, maturity_date, notes } = req.body || {};
+      if (!cheque_number || !type || !party_type || !party_id || !amount || !issue_date || !maturity_date) {
+        return res.status(400).json({ error: "cheque_number, type, party_type, party_id, amount, issue_date, and maturity_date are required" });
+      }
+      if (Number(amount) <= 0) {
+        return res.status(400).json({ error: "amount must be positive" });
+      }
+      const employeeId = Number(req.headers["x-employee-id"] || 0) || null;
+      const { rows } = await db.query(
+        `INSERT INTO postdated_cheques (cheque_number, type, party_type, party_id, bank_name, amount, issue_date, maturity_date, notes, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING id`,
+        [cheque_number, type, party_type, party_id, bank_name || null, amount, issue_date, maturity_date, notes || null, employeeId]
+      );
+      res.json({ message: "Cheque created", id: rows[0].id });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Update (pending only)
+  router.put("/api/accounting/cheques/:id", ...chequeAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { cheque_number, type, party_type, party_id, bank_name, amount, issue_date, maturity_date, notes } = req.body || {};
+
+      const { rows: existing } = await db.query("SELECT status FROM postdated_cheques WHERE id = $1", [id]);
+      if (!existing.length) return res.status(404).json({ error: "Cheque not found" });
+      if (existing[0].status !== "pending") {
+        return res.status(400).json({ error: "Only pending cheques can be edited" });
+      }
+
+      const { rowCount } = await db.query(
+        `UPDATE postdated_cheques
+         SET cheque_number = COALESCE($1, cheque_number), type = COALESCE($2, type),
+             party_type = COALESCE($3, party_type), party_id = COALESCE($4, party_id),
+             bank_name = $5, amount = COALESCE($6, amount),
+             issue_date = COALESCE($7, issue_date), maturity_date = COALESCE($8, maturity_date),
+             notes = $9
+         WHERE id = $10 AND status = 'pending'`,
+        [cheque_number, type, party_type, party_id, bank_name !== undefined ? bank_name : null, amount, issue_date, maturity_date, notes !== undefined ? notes : null, id]
+      );
+      res.json({ message: "Cheque updated", changed: rowCount || 0 });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Delete (pending only)
+  router.delete("/api/accounting/cheques/:id", ...chequeAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { rows: existing } = await db.query("SELECT status FROM postdated_cheques WHERE id = $1", [id]);
+      if (!existing.length) return res.status(404).json({ error: "Cheque not found" });
+      if (existing[0].status !== "pending") {
+        return res.status(400).json({ error: "Only pending cheques can be deleted" });
+      }
+      await db.query("DELETE FROM postdated_cheques WHERE id = $1 AND status = 'pending'", [id]);
+      res.json({ message: "Cheque deleted" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Status Transitions ──────────────────────────────────────────────
+
+  // Deposit (pending → deposited)
+  router.put("/api/accounting/cheques/:id/deposit", ...chequeAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { rows: existing } = await db.query("SELECT status FROM postdated_cheques WHERE id = $1", [id]);
+      if (!existing.length) return res.status(404).json({ error: "Cheque not found" });
+      if (existing[0].status !== "pending") {
+        return res.status(400).json({ error: "Only pending cheques can be deposited" });
+      }
+      await db.query(
+        "UPDATE postdated_cheques SET status = 'deposited', deposited_at = NOW() WHERE id = $1",
+        [id]
+      );
+      res.json({ message: "Cheque deposited" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Clear (deposited → cleared) — adjusts customer/supplier balance
+  router.put("/api/accounting/cheques/:id/clear", ...chequeAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      await db.transaction(async (client) => {
+        const { rows } = await client.query(
+          "SELECT * FROM postdated_cheques WHERE id = $1 FOR UPDATE", [id]
+        );
+        if (!rows.length) throw Object.assign(new Error("Cheque not found"), { statusCode: 404 });
+        const cheque = rows[0];
+        if (cheque.status !== "deposited") {
+          throw Object.assign(new Error("Only deposited cheques can be cleared"), { statusCode: 400 });
+        }
+
+        await client.query(
+          "UPDATE postdated_cheques SET status = 'cleared', cleared_at = NOW() WHERE id = $1",
+          [id]
+        );
+
+        const amt = Number(cheque.amount);
+
+        if (cheque.type === "receivable" && cheque.party_type === "customer") {
+          // Customer paid us — decrease their balance
+          await client.query(
+            "UPDATE customers SET balance = COALESCE(balance, 0) - $1 WHERE id = $2",
+            [amt, cheque.party_id]
+          );
+        } else if (cheque.type === "payable" && cheque.party_type === "supplier") {
+          // We paid supplier — record payment
+          await client.query(
+            `INSERT INTO supplier_payments (supplier_invoice_id, amount, payment_method, notes, paid_at)
+             VALUES (NULL, $1, 'cheque', $2, NOW())`,
+            [amt, `PDC cleared: ${cheque.cheque_number}`]
+          );
+        }
+      });
+
+      res.json({ message: "Cheque cleared and balance adjusted" });
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // Bounce (deposited → bounced)
+  router.put("/api/accounting/cheques/:id/bounce", ...chequeAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { rows: existing } = await db.query("SELECT status FROM postdated_cheques WHERE id = $1", [id]);
+      if (!existing.length) return res.status(404).json({ error: "Cheque not found" });
+      if (existing[0].status !== "deposited") {
+        return res.status(400).json({ error: "Only deposited cheques can be bounced" });
+      }
+      await db.query(
+        "UPDATE postdated_cheques SET status = 'bounced', bounced_at = NOW() WHERE id = $1",
+        [id]
+      );
+      res.json({ message: "Cheque bounced" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Cancel (pending → cancelled)
+  router.put("/api/accounting/cheques/:id/cancel", ...chequeAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { rows: existing } = await db.query("SELECT status FROM postdated_cheques WHERE id = $1", [id]);
+      if (!existing.length) return res.status(404).json({ error: "Cheque not found" });
+      if (existing[0].status !== "pending") {
+        return res.status(400).json({ error: "Only pending cheques can be cancelled" });
+      }
+      await db.query(
+        "UPDATE postdated_cheques SET status = 'cancelled' WHERE id = $1",
+        [id]
+      );
+      res.json({ message: "Cheque cancelled" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Next code suggestion for a given type
   router.get("/api/accounting/coa/next-code/:type", ...coaAuth, async (req, res) => {
     try {
