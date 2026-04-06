@@ -33,8 +33,8 @@ Update this as you complete each round. Mark [x] when done.
 | 4A | #18 Tiered Loyalty, #20 Reviews | [x] DONE |
 | 4B | #19 Customer Profiling | [x] DONE |
 | 5A | #21 Pick/Pack/Dispatch | [x] DONE |
-| 5B | #22 Loadsheets, #23 Scan Dispatch | [ ] IN PROGRESS |
-| 6A | #24 Multichannel Reports, #25 API Docs | [ ] |
+| 5B | #22 Loadsheets, #23 Scan Dispatch | [x] DONE |
+| 6A | #24 Multichannel Reports, #25 API Docs | [ ] IN PROGRESS |
 
 ### What each round needs
 
