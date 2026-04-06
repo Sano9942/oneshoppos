@@ -22,7 +22,7 @@ Update this as you complete each round. Mark [x] when done.
 |---|---|---|
 | Phase 0 | Migration v16 + schema + skeletons + stubs | [x] DONE |
 | 1A | #1 Blacklisting, #2 Order Aging, #4 Billing Discounts | [x] DONE |
-| 1B | #3 Bulk Order Status, #5 Customer Ledger, #6 Supplier Ledger | [ ] IN PROGRESS |
+| 1B | #3 Bulk Order Status, #5 Customer Ledger, #6 Supplier Ledger | [x] DONE |
 | 1C | #7 Points Transfer | [ ] |
 | 2A | #8 Credit/Debit Notes, #12 Bulk Import | [ ] |
 | 2B | #9 Cheques, #10 Chart of Accounts | [ ] |
@@ -44,6 +44,9 @@ For each round, open a NEW Claude Code conversation and paste the prompt for eac
 
 **Critical rule for ALL prompts**: Every session must start with:
 > "You are working on the `competitive-waves` branch. Phase 0 is done. DO NOT touch migrate-pg.js, schema-pg.sql, registerAllRoutes.js, or index.js."
+
+**Critical rule #2**: Every session must **commit its work** before finishing. Use a commit message like:
+> `feat(waveN): <short description of what was built>`
 
 ### Rollback
 
