@@ -329,6 +329,72 @@ module.exports = function registerCustomerRoutes(app, deps) {
     }
   });
 
+  // POST transfer loyalty points between customers
+  app.post("/api/customers/transfer-points", requirePerm("manage_customers"), async (req, res) => {
+    const { from_customer_id, to_customer_id, points, reason } = req.body;
+
+    if (!from_customer_id || !to_customer_id || from_customer_id === to_customer_id)
+      return res.status(400).json({ error: "Must specify two different customers" });
+
+    const pts = parseInt(points);
+    if (!pts || pts <= 0) return res.status(400).json({ error: "Points must be a positive integer" });
+
+    try {
+      const result = await db.transaction(async (client) => {
+        // Verify both customers exist
+        const { rows: fromRows } = await client.query(
+          "SELECT id, name, loyalty_points FROM customers WHERE id = $1 AND deleted_at IS NULL",
+          [from_customer_id],
+        );
+        if (!fromRows.length) throw Object.assign(new Error("Sender customer not found"), { statusCode: 404 });
+
+        const { rows: toRows } = await client.query(
+          "SELECT id, name, loyalty_points FROM customers WHERE id = $1 AND deleted_at IS NULL",
+          [to_customer_id],
+        );
+        if (!toRows.length) throw Object.assign(new Error("Recipient customer not found"), { statusCode: 404 });
+
+        // Atomic deduction — fails if insufficient points
+        const { rowCount } = await client.query(
+          "UPDATE customers SET loyalty_points = loyalty_points - $1 WHERE id = $2 AND loyalty_points >= $1",
+          [pts, from_customer_id],
+        );
+        if (rowCount === 0) throw Object.assign(new Error("Insufficient loyalty points"), { statusCode: 400 });
+
+        // Credit receiver
+        await client.query(
+          "UPDATE customers SET loyalty_points = loyalty_points + $1 WHERE id = $2",
+          [pts, to_customer_id],
+        );
+
+        const note = reason || "Loyalty points transfer";
+
+        // Ledger: debit sender
+        await client.query(
+          "INSERT INTO customer_wallet_ledger (customer_id, type, amount, reference_type, reference_id, note) VALUES ($1, 'debit', $2, 'points_transfer', $3, $4)",
+          [from_customer_id, pts, to_customer_id, `${note} → ${toRows[0].name}`],
+        );
+
+        // Ledger: credit receiver
+        await client.query(
+          "INSERT INTO customer_wallet_ledger (customer_id, type, amount, reference_type, reference_id, note) VALUES ($1, 'credit', $2, 'points_transfer', $3, $4)",
+          [to_customer_id, pts, from_customer_id, `${note} ← ${fromRows[0].name}`],
+        );
+
+        // Read final balances
+        const { rows: finalFrom } = await client.query("SELECT loyalty_points FROM customers WHERE id = $1", [from_customer_id]);
+        const { rows: finalTo } = await client.query("SELECT loyalty_points FROM customers WHERE id = $1", [to_customer_id]);
+
+        return { from_balance: finalFrom[0].loyalty_points, to_balance: finalTo[0].loyalty_points };
+      });
+
+      res.json({ success: true, from_balance: result.from_balance, to_balance: result.to_balance });
+    } catch (err) {
+      const status = err.statusCode || 500;
+      res.status(status).json({ error: err.message });
+    }
+  });
+
   // Archive a customer (soft delete)
   app.delete("/api/customers/:id", requirePerm("manage_customers"), async (req, res) => {
     const { id } = req.params;

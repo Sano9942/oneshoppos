@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { Ban, BookOpen, Calendar, ChevronLeft, ChevronRight, Download, Plus, Search, ShieldCheck, UserRound, Wallet } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowRightLeft, Ban, BookOpen, Calendar, ChevronLeft, ChevronRight, Download, Plus, Search, ShieldCheck, UserRound, Wallet } from "lucide-react";
 import { api } from "../../api";
 import { fmtDate, fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { useToast } from "../../contexts/ToastContext";
 import {
   Badge,
   Button,
@@ -94,6 +95,17 @@ export default function CustomersRedesign() {
   const [ledgerFrom, setLedgerFrom] = useState("");
   const [ledgerTo, setLedgerTo] = useState("");
   const [ledgerLoading, setLedgerLoading] = useState(false);
+
+  // Transfer points modal state
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferPoints, setTransferPoints] = useState("");
+  const [transferReason, setTransferReason] = useState("");
+  const [transferSearch, setTransferSearch] = useState("");
+  const [transferResults, setTransferResults] = useState([]);
+  const [transferTarget, setTransferTarget] = useState(null);
+  const [transferSearching, setTransferSearching] = useState(false);
+  const transferDebounce = useRef(null);
+  const toast = useToast();
 
   const fetchCustomers = async (query = "") => {
     setLoading(true);
@@ -259,6 +271,59 @@ export default function CustomersRedesign() {
       setWalletNote("");
     } catch (e) {
       setError(e.body?.error || e.message || "Top-up failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // --- Transfer points logic ---
+  const openTransfer = () => {
+    setTransferPoints("");
+    setTransferReason("");
+    setTransferSearch("");
+    setTransferResults([]);
+    setTransferTarget(null);
+    setTransferOpen(true);
+  };
+
+  const searchTransferTarget = useCallback((q) => {
+    setTransferSearch(q);
+    setTransferTarget(null);
+    if (transferDebounce.current) clearTimeout(transferDebounce.current);
+    if (!q.trim()) { setTransferResults([]); return; }
+    transferDebounce.current = setTimeout(async () => {
+      setTransferSearching(true);
+      try {
+        const data = await api.get(`/api/customers?search=${encodeURIComponent(q)}`);
+        setTransferResults((data.customers || []).filter((c) => c.id !== detail?.id));
+      } catch { setTransferResults([]); }
+      finally { setTransferSearching(false); }
+    }, 300);
+  }, [detail?.id]);
+
+  const submitTransfer = async () => {
+    if (!detail || !transferTarget || !transferPoints) return;
+    const pts = parseInt(transferPoints);
+    if (!pts || pts <= 0 || pts > (detail.loyalty_points || 0)) return;
+    setBusy(true);
+    try {
+      const data = await api.post("/api/customers/transfer-points", {
+        from_customer_id: detail.id,
+        to_customer_id: transferTarget.id,
+        points: pts,
+        reason: transferReason || undefined,
+      });
+      // Update sender in list + detail
+      setRows((prev) => prev.map((r) =>
+        r.id === detail.id ? { ...r, loyalty_points: data.from_balance } :
+        r.id === transferTarget.id ? { ...r, loyalty_points: data.to_balance } : r
+      ));
+      setDetail((p) => ({ ...p, loyalty_points: data.from_balance }));
+      setPointsAdjust(String(data.from_balance));
+      setTransferOpen(false);
+      toast.success(`Transferred ${pts} points to ${transferTarget.name}`);
+    } catch (e) {
+      setError(e.body?.error || e.message || "Transfer failed");
     } finally {
       setBusy(false);
     }
@@ -554,6 +619,11 @@ export default function CustomersRedesign() {
                         Set
                       </Button>
                     </div>
+                    {(detail.loyalty_points || 0) > 0 && (
+                      <Button size="sm" variant="secondary" className="mt-2 w-full" onClick={openTransfer}>
+                        <ArrowRightLeft size={13} className="mr-1" /> Transfer Points
+                      </Button>
+                    )}
                   </SectionCard>
 
                   <SectionCard className="p-2">
@@ -807,6 +877,95 @@ export default function CustomersRedesign() {
                 </Button>
                 <Button tone="danger" disabled={busy || !blacklistReason.trim()} onClick={blacklistCustomer}>
                   Confirm Blacklist
+                </Button>
+              </div>
+            </div>
+          </SectionCard>
+        </div>
+      ) : null}
+
+      {transferOpen && detail ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
+          <SectionCard className="w-full max-w-md p-4">
+            <h3 className="text-lg font-semibold text-(--ui-text)">
+              <ArrowRightLeft size={16} className="inline mr-1.5 -mt-0.5" />
+              Transfer Loyalty Points
+            </h3>
+            <p className="mt-1 text-xs text-(--ui-text-muted)">
+              From <strong>{detail.name}</strong> · {detail.loyalty_points || 0} points available
+            </p>
+
+            {/* Target customer search */}
+            <div className="mt-3 space-y-2">
+              <label className="text-xs font-medium text-(--ui-text-muted)">Recipient</label>
+              {transferTarget ? (
+                <div className="flex items-center justify-between rounded border border-(--ui-border) px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-(--ui-text)">{transferTarget.name}</p>
+                    <p className="text-xs text-(--ui-text-muted)">{transferTarget.mobile || transferTarget.email || ""}</p>
+                  </div>
+                  <Button size="sm" variant="secondary" onClick={() => { setTransferTarget(null); setTransferSearch(""); }}>Change</Button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Input
+                    placeholder="Search customer by name or phone..."
+                    value={transferSearch}
+                    onChange={(e) => searchTransferTarget(e.target.value)}
+                    autoFocus
+                  />
+                  {transferSearching && <p className="mt-1 text-xs text-(--ui-text-muted)">Searching...</p>}
+                  {transferResults.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-40 overflow-auto rounded border border-(--ui-border) bg-(--ui-bg) shadow-lg">
+                      {transferResults.slice(0, 8).map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-(--ui-bg-hover) transition-colors"
+                          onClick={() => { setTransferTarget(c); setTransferSearch(c.name); setTransferResults([]); }}
+                        >
+                          <span className="font-medium text-(--ui-text)">{c.name}</span>
+                          <span className="text-xs text-(--ui-text-muted)">{c.mobile || ""}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <label className="text-xs font-medium text-(--ui-text-muted)">Points to transfer</label>
+              <Input
+                type="number"
+                min="1"
+                max={detail.loyalty_points || 0}
+                placeholder={`Max ${detail.loyalty_points || 0}`}
+                value={transferPoints}
+                onChange={(e) => setTransferPoints(e.target.value)}
+              />
+              {transferPoints && Number(transferPoints) > 0 && Number(transferPoints) <= (detail.loyalty_points || 0) && (
+                <p className="text-xs text-(--ui-text-muted)">
+                  Remaining balance: <strong>{(detail.loyalty_points || 0) - Number(transferPoints)}</strong> points
+                </p>
+              )}
+              {transferPoints && Number(transferPoints) > (detail.loyalty_points || 0) && (
+                <p className="text-xs text-red-600">Exceeds available points</p>
+              )}
+
+              <label className="text-xs font-medium text-(--ui-text-muted)">Reason (optional)</label>
+              <Input
+                placeholder="e.g. Family member, reward share"
+                value={transferReason}
+                onChange={(e) => setTransferReason(e.target.value)}
+              />
+
+              <div className="flex gap-2 pt-2">
+                <Button type="button" onClick={() => setTransferOpen(false)}>Cancel</Button>
+                <Button
+                  tone="primary"
+                  disabled={busy || !transferTarget || !transferPoints || Number(transferPoints) <= 0 || Number(transferPoints) > (detail.loyalty_points || 0)}
+                  onClick={submitTransfer}
+                >
+                  Transfer {transferPoints && Number(transferPoints) > 0 ? `${transferPoints} Points` : ""}
                 </Button>
               </div>
             </div>
