@@ -330,21 +330,31 @@ CREATE TABLE IF NOT EXISTS loadsheet_orders (
   UNIQUE(loadsheet_id, web_order_id)
 );
 
--- ── Billing cycle additions (public schema — run via db.pool) ────────
--- NOTE: This INSERT must run against the PUBLIC schema, not tenant schemas.
--- The migration runner runs against tenant schemas. So this INSERT should be
--- wrapped in a try/catch or run separately. Add it but if it fails on tenant
--- schemas (because plan_pricing doesn't exist there), that's expected.
-INSERT INTO plan_pricing (plan, cycle, price, currency_code, is_active)
-VALUES
-  ('pro', 'quarterly', 21600, 'PKR', true),
-  ('pro', 'semi_annual', 40800, 'PKR', true)
-ON CONFLICT DO NOTHING;
+```
+
+**IMPORTANT — billing cycle pricing (SEPARATE from the migration DDL above):**
+
+The `plan_pricing` table lives ONLY in the `public` schema. It does NOT exist in tenant schemas. If you put the INSERT inside the migration's `up()` function, it will CRASH when running against tenant schemas.
+
+Instead, add this as a **separate step AFTER the main DDL** inside the `up()` function, wrapped in try/catch:
+
+```js
+// Billing cycle additions — public schema only, safe to fail on tenant schemas
+try {
+  await client.query(`
+    INSERT INTO plan_pricing (plan, cycle, price, currency_code, is_active)
+    VALUES
+      ('pro', 'quarterly', 21600, 'PKR', true),
+      ('pro', 'semi_annual', 40800, 'PKR', true)
+    ON CONFLICT DO NOTHING
+  `);
+} catch (_) {
+  // Expected to fail on tenant schemas where plan_pricing doesn't exist
+}
 ```
 
 **IMPORTANT migration notes**:
 - The `stock_count_items` table does NOT use `GENERATED ALWAYS AS ... STORED` for variance — Postgres requires the expression to reference only the same row's columns and some tenant schema setups can be finicky with generated columns. Instead, compute variance in queries: `(counted_qty - system_qty) AS variance`.
-- The `plan_pricing` INSERT is for the public schema only. Wrap it in a try/catch — it will fail harmlessly on tenant schemas where that table doesn't exist.
 - The `loyalty_tiers` and `chart_of_accounts` seed data uses `ON CONFLICT DO NOTHING` — safe to re-run.
 - Foreign key for `customers.customer_group_id` → `customer_groups(id)`: add the FK only AFTER creating the `customer_groups` table. Same for `customers.loyalty_tier_id` → `loyalty_tiers(id)` and `customers.price_list_id` → `price_lists(id)`. Use separate ALTER TABLE statements after the CREATE TABLE statements.
 
@@ -441,7 +451,7 @@ module.exports = function registerMultichannelReports(app, deps, helpers) {
   require("./fulfillment")(app, deps);
 ```
 
-**In `backend/routes/reports/index.js`**, add these two lines AFTER the existing report module registrations (after the `governance` line, before any return statement):
+**In `backend/routes/reports/index.js`**, add these two lines AFTER the `require("./fbr-export")(app, deps);` line but BEFORE the `return` statement (the file returns `{ processPendingReportSchedules }` — your new lines must go above that `return`):
 
 ```js
   // Stock aging report (Wave 3)
