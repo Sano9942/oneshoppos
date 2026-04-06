@@ -739,3 +739,144 @@ In **built-in business features**, SanoPOS actually **leads both competitors**:
 - Inventory forecasting (native, not ML-dependent)
 
 The strategy should be: **expand integration surface** (couriers + Daraz) while **marketing existing strengths** that neither competitor matches.
+
+---
+
+## Actionable Build Roadmap — Zero External Dependencies
+
+**Constraint**: No API keys, no paid third-party services, no courier/marketplace credentials available. Everything below is pure code — no external dependencies.
+
+**Date**: 2026-04-06
+
+---
+
+### What We Can vs Cannot Build
+
+#### Buildable Right Now (code only) — ~25 items
+No blockers — just engineering time. These are the items in the waves below.
+
+#### Buildable With an API Key Purchase — ~5 items
+Requires signing up for a third-party service (Twilio, Stripe, OneSignal, Mailchimp, WhatsApp Business API). **Deferred — no budget for paid services currently.**
+
+#### Buildable Once We Get Courier API Access — ~15 couriers
+The adapter pattern is already built in `backend/services/couriers/`. Each courier (TCS, BlueEx, Trax, M&P, CallCourier, etc.) is ~2-3 days of work once we have their API docs + test credentials. **Deferred — need to apply for credentials.**
+
+#### Buildable Once We Get Marketplace Access — ~3 items
+Daraz (priority), Bagallery, Jomo. **Deferred — need Daraz Seller Center API approval.**
+
+#### Cannot Build (business/licensing/infrastructure) — ~25 items
+- **Payment gateway features** (XPay-level): onsite checkout, tokenization, fraud engine, PCI-DSS, Google Pay, BIN discounts, dynamic routing, mobile SDKs — requires building/owning a payment gateway (banking licenses, PCI-DSS certification, card network partnerships). This is a separate company.
+- **Working capital financing / in-app loans**: requires fintech licensing + banking partnership.
+- **ERP integrations** (SAP, NetSuite, Oracle, Dynamics, Linnworks): each is a massive API surface for enterprise customers we don't have.
+- **White-label branded app**: requires React Native/Flutter mobile app + per-tenant build pipeline. Major product line.
+- **AI product recommendations / visual search / shopping assistant**: requires ML infrastructure, training pipelines, image processing. XStak has a dedicated AI team.
+- **Own fleet management / route optimization**: separate logistics product (maps API, driver apps, route algorithms).
+- **IVR call confirmations**: requires IVR telephony provider + call center infrastructure.
+- **BOPIS / BORIS / Ship from Store**: requires e-commerce storefront integration (omnichannel architecture).
+
+#### Not Worth Building for SMB Market — ~10+ items
+Visual loyalty rule builder, loyalty fraud detection, quick commerce fulfillment, performance-based courier selection (premature without multiple couriers), Shopify App Store apps (5 separate products).
+
+---
+
+### Wave 1 — Quick Wins (~3 days, closes 7 gaps)
+
+Small effort, big perception. Each takes 1-2 days and closes a visible gap on any feature comparison sheet.
+
+| # | Feature | Effort | Competitor | Notes |
+|---|---|---|---|---|
+| 1 | **Customer blacklisting** | ~2 hours | Assaan | Boolean flag on customers table + block check at POS checkout. Signals operational maturity. |
+| 2 | **Order aging summary** | ~3 hours | Assaan | Query on order `created_at` with configurable threshold (e.g., flag orders older than 3 days). |
+| 3 | **Bulk order status updates** | ~3 hours | Assaan | Batch PUT endpoint + multi-select UI on orders page. |
+| 4 | **Quarterly/yearly billing discounts** | ~4 hours | Assaan | Discount multiplier in billing logic. Assaan offers 10/15/20% off for quarterly/semi-annual/yearly. |
+| 5 | **Full customer ledger** | ~4 hours | Both | Join sales + returns + wallet + payments by customer. Currently have balance only. Transaction-level history. |
+| 6 | **Full supplier ledger** | ~4 hours | Both | Join POs + GRNs + payments by supplier. Currently have payments only. Transaction-level history. |
+| 7 | **Points transfer between members** | ~2 hours | XStak | Ledger debit/credit between two customers. Simple wallet-style transfer. |
+
+---
+
+### Wave 2 — Accounting Completeness (~9 days, closes 5 more gaps)
+
+SanoPOS's accounting module already leads both competitors in depth. These additions make it genuinely enterprise-grade — neither competitor has all of them natively.
+
+| # | Feature | Effort | Competitor | Notes |
+|---|---|---|---|---|
+| 8 | **Credit & debit notes** | ~2 days | Assaan | Formal documents for purchase/sales adjustments. Standard accounting requirement in Pakistan. |
+| 9 | **Post-dated cheque tracking** | ~1 day | Assaan | Very common in Pakistan retail — suppliers and customers both use post-dated cheques. New table with maturity date, status, alerts. |
+| 10 | **Chart of Accounts** | ~3 days | Assaan (built-in), XStak (via integrations) | Customizable account structure. Links all financial data (expenses, revenues, assets, liabilities). Foundation for journal entries. |
+| 11 | **General journal entries** | ~2 days | Assaan | Manual debit/credit entries. Requires Chart of Accounts first (item #10). |
+| 12 | **Bulk payment & expense importing** | ~1 day | Assaan | CSV/XLSX parser — pattern already exists in `routes/import.js`. Apply same pattern to payments/expenses. |
+
+---
+
+### Wave 3 — Inventory & Commerce (~12 days, closes 5 more gaps)
+
+Core retail features that both competitors have and SanoPOS doesn't.
+
+| # | Feature | Effort | Competitor | Notes |
+|---|---|---|---|---|
+| 13 | **Product bundling / kits** | ~3 days | Both | Combo products (e.g., "Shampoo + Conditioner" as single SKU). New `product_bundles` table + POS cart logic to expand bundle into component items for stock deduction. |
+| 14 | **Stock aging analysis** | ~2 days | XStak | Report showing how long inventory has been sitting (from GRN received date). Aging buckets: 0-30, 30-60, 60-90, 90+ days. Helps avoid clearance losses. |
+| 15 | **Inventory audit via barcode scan** | ~3 days | Both | Physical stock count workflow: create count session → scan items → compare actual vs system → generate variance report. Scanner pattern already exists in POS (`50ms keystroke detection`). |
+| 16 | **Scan & receive (barcode GRN)** | ~1 day | Assaan | Reuse POS barcode scanner pattern on GRN receiving page. Scan barcode → auto-fill item + quantity. |
+| 17 | **Price lists / multi-price per product** | ~3 days | Assaan | Customer-group or volume-based pricing. New `price_lists` + `price_list_items` tables. POS resolves price based on attached customer's group. |
+
+---
+
+### Wave 4 — Customer & Loyalty Depth (~8 days, closes 3 more gaps)
+
+| # | Feature | Effort | Competitor | Notes |
+|---|---|---|---|---|
+| 18 | **Tiered loyalty programs** | ~3 days | XStak | Bronze/Silver/Gold tiers with spend thresholds, auto-upgrade/downgrade logic, per-tier point multipliers. Upgrade from current flat points system. |
+| 19 | **Rich customer profiling** | ~2 days | Assaan | Extended profile fields: preferences, demographics, purchase behavior tags, notes, customer groups/segments. Beyond current basic contact info. |
+| 20 | **Feedback / reviews management** | ~3 days | Assaan | Product ratings/reviews collection (post-purchase), moderation UI, average rating display on product pages. |
+
+---
+
+### Wave 5 — Fulfillment Operations (~8 days, closes 3 more gaps)
+
+| # | Feature | Effort | Competitor | Notes |
+|---|---|---|---|---|
+| 21 | **Pick / Pack / Dispatch workflow** | ~5 days | Both | Largest single item. New tables: `picklists`, `pack_slips`. Flow: order → generate picklist → scan items to pack → mark dispatched. Scan-driven UI. |
+| 22 | **Loadsheet generation** | ~2 days | Both | PDF/CSV export of shipments grouped by courier + route. Used for handover to courier driver. |
+| 23 | **Scan & dispatch** | ~1 day | Assaan | Barcode scan to mark individual orders as dispatched. Quick status update via scanner. |
+
+---
+
+### Wave 6 — Platform Polish (~5 days, closes 2 more gaps)
+
+| # | Feature | Effort | Competitor | Notes |
+|---|---|---|---|---|
+| 24 | **Multi-channel aggregated reports** | ~2 days | Both | Join sales data by channel (POS / Shopify / WooCommerce) into unified report. Channel breakdown, channel comparison, channel trends. |
+| 25 | **Public API documentation (Swagger/OpenAPI)** | ~3 days | XStak | Add `swagger-jsdoc` annotations to existing routes. Auto-generate interactive API docs. Opens door to third-party integrations without engineering support. |
+
+---
+
+### The Full Picture
+
+| Wave | Items | Days | Gaps Closed |
+|---|---|---|---|
+| 1 — Quick Wins | 7 | ~3 | 7 |
+| 2 — Accounting | 5 | ~9 | 12 |
+| 3 — Inventory & Commerce | 5 | ~12 | 17 |
+| 4 — Customer & Loyalty | 3 | ~8 | 20 |
+| 5 — Fulfillment | 3 | ~8 | 23 |
+| 6 — Platform Polish | 2 | ~5 | 25 |
+| **Total** | **25** | **~45 days** | **25 gaps closed** |
+
+That's **25 out of 120 gaps closed** with **zero external dependencies, zero API keys, zero paid services**. These are the 25 that matter most for the SMB retail market SanoPOS targets.
+
+### After These 25 — The Remaining 95 Gaps
+
+| Category | Count | Blocker |
+|---|---|---|
+| Courier/marketplace integrations | ~18 | Need their API access + credentials |
+| Paid third-party services (SMS, WhatsApp, push, email marketing, Stripe) | ~5 | Need budget for API subscriptions |
+| Payment gateway features (XPay-level) | ~9 | Need to own a payment gateway (banking license, PCI-DSS) |
+| Enterprise features (SAP, ERP, white-label, fleet) | ~15 | Not our market (SMB focus) |
+| AI/ML features (recommendations, visual search) | ~8 | Need ML infrastructure + dedicated team |
+| Shopify App Store apps | 5 | Separate products, separate distribution |
+| Not worth building for SMB | ~10+ | Visual rule builders, loyalty fraud detection, quick commerce |
+| Unlocked after Wave 5 (performance-based courier selection) | ~1 | Needs multiple couriers live first |
+
+**Strategy**: Complete all 6 waves (~45 days), then pursue courier API credentials (TCS, BlueEx, Trax — biggest impact) and Daraz Seller API access as the next expansion.
