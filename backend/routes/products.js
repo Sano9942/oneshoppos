@@ -1227,4 +1227,177 @@ module.exports = function registerProductRoutes(app, deps) {
       }
     },
   );
+
+  // ── Product Reviews ─────────────────────────────────────────────────
+
+  const IS_MULTI_TENANT = process.env.MULTI_TENANT === "1";
+  const { reviewLimiter } = require("../middleware/rate-limit");
+
+  async function recalcProductRating(dbConn, productId) {
+    await dbConn.query(
+      `UPDATE products SET
+         avg_rating = (SELECT ROUND(AVG(rating)::numeric, 2) FROM product_reviews WHERE product_id = $1 AND status = 'approved'),
+         review_count = (SELECT COUNT(*) FROM product_reviews WHERE product_id = $1 AND status = 'approved')
+       WHERE id = $1`,
+      [productId],
+    );
+  }
+
+  // GET /api/products/:id/reviews — list reviews (approved only for non-admin, all for admin)
+  app.get("/api/products/:id/reviews", async (req, res) => {
+    try {
+      const productId = Number(req.params.id);
+      const isAdmin = req.employee && (req.employee.role === "admin" || req.employee.role === "Administrator");
+      const statusFilter = isAdmin ? "" : "AND pr.status = 'approved'";
+      const { rows } = await db.query(
+        `SELECT pr.*, c.name AS customer_name_resolved
+         FROM product_reviews pr
+         LEFT JOIN customers c ON c.id = pr.customer_id
+         WHERE pr.product_id = $1 ${statusFilter}
+         ORDER BY pr.created_at DESC`,
+        [productId],
+      );
+      const reviews = rows.map((r) => ({
+        ...r,
+        customer_name: r.customer_name_resolved || r.customer_name || "Anonymous",
+      }));
+      res.json(reviews);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/products/:id/reviews — submit a review (public, rate-limited)
+  app.post("/api/products/:id/reviews", reviewLimiter, async (req, res) => {
+    try {
+      let dbConn = db;
+
+      // In MT mode without auth, resolve tenant from query param
+      if (IS_MULTI_TENANT && !req.employee) {
+        const tenantSlug = req.query.tenant || req.headers["x-tenant-slug"];
+        if (!tenantSlug) {
+          return res.status(400).json({ error: "tenant query param is required" });
+        }
+        const masterDb = require("../master-db-pg");
+        const tenantDbMgr = deps.tenantDbManager || require("../tenant-db-manager-pg");
+        const { rows: [tenant] } = await masterDb.query(
+          "SELECT id, slug, status FROM tenants WHERE slug = $1 AND status = 'active'",
+          [String(tenantSlug).trim()],
+        );
+        if (!tenant) return res.status(404).json({ error: "Store not found" });
+        dbConn = await tenantDbMgr.getDb(tenant.id);
+      }
+
+      const productId = Number(req.params.id);
+      const { rating, title, body, customer_id, customer_name } = req.body;
+
+      if (!rating || rating < 1 || rating > 5) {
+        return res.status(400).json({ error: "Rating must be between 1 and 5" });
+      }
+
+      // Check verified purchase — did this customer buy this product?
+      let saleId = null;
+      if (customer_id) {
+        const { rows: purchases } = await dbConn.query(
+          `SELECT s.id FROM sales s
+           JOIN sale_items si ON si.sale_id = s.id
+           WHERE s.customer_id = $1 AND si.product_id = $2
+           LIMIT 1`,
+          [customer_id, productId],
+        );
+        if (purchases.length > 0) saleId = purchases[0].id;
+      }
+
+      const { rows: [review] } = await dbConn.query(
+        `INSERT INTO product_reviews (product_id, customer_id, customer_name, rating, title, body, sale_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [productId, customer_id || null, customer_name || null, rating, title || null, body || null, saleId],
+      );
+
+      res.status(201).json(review);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/reviews/pending — admin moderation queue
+  app.get("/api/reviews/pending", requirePerm("manage_inventory"), async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        `SELECT pr.*, p.name AS product_name, c.name AS customer_name_resolved
+         FROM product_reviews pr
+         JOIN products p ON p.id = pr.product_id
+         LEFT JOIN customers c ON c.id = pr.customer_id
+         WHERE pr.status = 'pending'
+         ORDER BY pr.created_at ASC`,
+      );
+      res.json(rows.map((r) => ({ ...r, customer_name: r.customer_name_resolved || r.customer_name || "Anonymous" })));
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/reviews — all reviews with optional status filter
+  app.get("/api/reviews", requirePerm("manage_inventory"), async (req, res) => {
+    try {
+      const status = req.query.status;
+      const statusClause = status ? "WHERE pr.status = $1" : "";
+      const params = status ? [status] : [];
+      const { rows } = await db.query(
+        `SELECT pr.*, p.name AS product_name, c.name AS customer_name_resolved
+         FROM product_reviews pr
+         JOIN products p ON p.id = pr.product_id
+         LEFT JOIN customers c ON c.id = pr.customer_id
+         ${statusClause}
+         ORDER BY pr.created_at DESC`,
+        params,
+      );
+      res.json(rows.map((r) => ({ ...r, customer_name: r.customer_name_resolved || r.customer_name || "Anonymous" })));
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PUT /api/reviews/:id/moderate — approve or reject
+  app.put("/api/reviews/:id/moderate", requirePerm("manage_inventory"), async (req, res) => {
+    try {
+      const reviewId = Number(req.params.id);
+      const { status } = req.body;
+      if (!["approved", "rejected"].includes(status)) {
+        return res.status(400).json({ error: "Status must be 'approved' or 'rejected'" });
+      }
+
+      const { rows: [review] } = await db.query(
+        `UPDATE product_reviews
+         SET status = $1, moderated_by = $2, moderated_at = NOW()
+         WHERE id = $3
+         RETURNING *`,
+        [status, req.employee.id, reviewId],
+      );
+      if (!review) return res.status(404).json({ error: "Review not found" });
+
+      await recalcProductRating(db, review.product_id);
+
+      res.json(review);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // DELETE /api/reviews/:id — delete a review
+  app.delete("/api/reviews/:id", requirePerm("manage_inventory"), async (req, res) => {
+    try {
+      const reviewId = Number(req.params.id);
+      const { rows: [review] } = await db.query(
+        "DELETE FROM product_reviews WHERE id = $1 RETURNING product_id",
+        [reviewId],
+      );
+      if (!review) return res.status(404).json({ error: "Review not found" });
+      await recalcProductRating(db, review.product_id);
+      res.json({ message: "Review deleted" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 };

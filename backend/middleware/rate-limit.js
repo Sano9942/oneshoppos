@@ -84,4 +84,17 @@ const webhookLimiter = rateLimit({
   handler: limitExceededHandler,
 });
 
-module.exports = { globalLimiter, authLimiter, webhookLimiter };
+const reviewLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitExceededHandler,
+  skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => {
+    const tenantKey = req.headers["x-tenant-slug"] || req.query?.tenant || "unknown";
+    return `review:${tenantKey}:${req.ip}`;
+  },
+});
+
+module.exports = { globalLimiter, authLimiter, webhookLimiter, reviewLimiter };

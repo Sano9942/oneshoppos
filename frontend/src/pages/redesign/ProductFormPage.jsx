@@ -4,7 +4,8 @@ import { API_BASE as API } from "../../config";
 import { api } from "../../api";
 import { Button, PageShell, Input, SectionCard, Select } from "../../ui/primitives";
 import { sortCategories, indentLabel } from "../../utils/categoryTree";
-import { X, Package, Plus, Trash2, Search } from "lucide-react";
+import { X, Package, Plus, Trash2, Search, ShieldCheck } from "lucide-react";
+import { StarDisplay, StarPicker } from "../../ui/StarRating";
 
 function cartesian(arrays) {
   return arrays.reduce(
@@ -68,6 +69,9 @@ export default function ProductFormPage() {
   const [componentSearch, setComponentSearch] = useState("");
   const [componentResults, setComponentResults] = useState([]);
   const [componentSearching, setComponentSearching] = useState(false);
+  const [reviews, setReviews] = useState([]);
+  const [reviewForm, setReviewForm] = useState({ rating: 0, title: "", body: "", customer_name: "" });
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
 
   const upd = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const updVariant = (key, field, value) =>
@@ -228,6 +232,7 @@ export default function ProductFormPage() {
           api.get(`/api/products/${id}`),
           api.get(`/api/products/${id}/variants`),
           api.get(`/api/products/${id}/stock`),
+          api.get(`/api/products/${id}/reviews`),
         ]
       : base;
 
@@ -237,7 +242,8 @@ export default function ProductFormPage() {
       setAttributeSets(attrD.attributeSets || []);
       setSuppliers(suppD.suppliers || []);
       if (isEdit) {
-        const [prodD, varD, stockD] = editParts;
+        const [prodD, varD, stockD, reviewsD] = editParts;
+        if (Array.isArray(reviewsD)) setReviews(reviewsD);
         const p = prodD.product || prodD;
         if (p?.id) {
           setForm({
@@ -262,6 +268,8 @@ export default function ProductFormPage() {
             is_bundle: Boolean(p.is_bundle),
             attribute_set_id: p.attribute_set_id || "",
             supplier_id: p.supplier_id || "",
+            avg_rating: p.avg_rating || 0,
+            review_count: p.review_count || 0,
           });
           if (p.is_bundle && Array.isArray(p.bundle_components)) {
             setBundleComponents(p.bundle_components.map((c) => ({
@@ -723,6 +731,102 @@ export default function ProductFormPage() {
 
         </div>
       </div>
+
+      {/* Reviews section — edit mode only */}
+      {isEdit && (
+        <SectionCard className="mt-6">
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
+                Reviews
+              </p>
+              {reviews.length > 0 && (
+                <span className="text-sm text-(--ui-text-muted)">
+                  <StarDisplay rating={form.avg_rating || 0} size={14} className="mr-1 align-middle" />
+                  {Number(form.avg_rating || 0).toFixed(1)}/5 ({form.review_count || 0} reviews)
+                </span>
+              )}
+            </div>
+
+            {/* Review list */}
+            {reviews.length === 0 && (
+              <p className="text-sm text-(--ui-text-muted)">No reviews yet.</p>
+            )}
+            {reviews.map((r) => (
+              <div key={r.id} className="border border-(--ui-border) rounded-lg p-3 space-y-1">
+                <div className="flex items-center gap-2">
+                  <StarDisplay rating={r.rating} size={14} />
+                  {r.title && <span className="font-medium text-sm">{r.title}</span>}
+                </div>
+                {r.body && <p className="text-sm text-(--ui-text-muted)">{r.body}</p>}
+                <div className="flex items-center gap-2 text-xs text-(--ui-text-muted)">
+                  <span>{r.customer_name}</span>
+                  {r.sale_id && (
+                    <span className="inline-flex items-center gap-0.5 text-green-600 dark:text-green-400">
+                      <ShieldCheck size={12} /> Verified Purchase
+                    </span>
+                  )}
+                  <span>·</span>
+                  <span>{new Date(r.created_at).toLocaleDateString()}</span>
+                  {r.status && r.status !== "approved" && (
+                    <span className={`ml-auto px-1.5 py-0.5 rounded text-xs font-medium ${r.status === "pending" ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300" : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"}`}>
+                      {r.status}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {/* Write a review form */}
+            <div className="border-t border-(--ui-border) pt-4 space-y-3">
+              <p className="text-sm font-medium">Write a Review</p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-(--ui-text-muted)">Rating:</span>
+                <StarPicker value={reviewForm.rating} onChange={(v) => setReviewForm((p) => ({ ...p, rating: v }))} size={20} />
+              </div>
+              <Input
+                value={reviewForm.customer_name}
+                onChange={(e) => setReviewForm((p) => ({ ...p, customer_name: e.target.value }))}
+                placeholder="Customer name"
+              />
+              <Input
+                value={reviewForm.title}
+                onChange={(e) => setReviewForm((p) => ({ ...p, title: e.target.value }))}
+                placeholder="Review title (optional)"
+              />
+              <textarea
+                className="w-full border border-(--ui-border) rounded-lg p-2 text-sm bg-(--ui-bg) text-(--ui-text) resize-none"
+                rows={3}
+                value={reviewForm.body}
+                onChange={(e) => setReviewForm((p) => ({ ...p, body: e.target.value }))}
+                placeholder="Write your review..."
+              />
+              <Button
+                size="sm"
+                disabled={reviewForm.rating === 0 || reviewSubmitting}
+                onClick={async () => {
+                  setReviewSubmitting(true);
+                  try {
+                    const created = await api.post(`/api/products/${id}/reviews`, {
+                      rating: reviewForm.rating,
+                      title: reviewForm.title || undefined,
+                      body: reviewForm.body || undefined,
+                      customer_name: reviewForm.customer_name || undefined,
+                    });
+                    setReviews((prev) => [created, ...prev]);
+                    setReviewForm({ rating: 0, title: "", body: "", customer_name: "" });
+                  } catch (e) {
+                    setError(e.message || "Failed to submit review");
+                  }
+                  setReviewSubmitting(false);
+                }}
+              >
+                {reviewSubmitting ? "Submitting…" : "Submit Review"}
+              </Button>
+            </div>
+          </div>
+        </SectionCard>
+      )}
     </PageShell>
   );
 }

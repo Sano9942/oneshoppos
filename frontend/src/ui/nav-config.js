@@ -40,6 +40,8 @@ import {
   FileCheck,
   Search,
   MessageSquare,
+  Star,
+  Award,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -54,6 +56,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Orders", path: "/orders", icon: ShoppingCart, requiredPerm: "manage_orders" },
       { name: "Parked Sales", path: "/parked-sales", icon: PauseCircle, requiredPerm: "manage_orders" },
       { name: "Customers", path: "/customers", icon: Users },
+      { name: "Loyalty Tiers", path: "/loyalty-tiers", icon: Award, requiredPerm: "all_access" },
       { name: "Returns", path: "/returns", icon: RotateCcw },
       { name: "Sales History", path: "/sales-history", icon: Receipt },
       { name: "Cash Management", path: "/cash-management", icon: Banknote },
@@ -69,6 +72,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Attribute Sets", path: "/attribute-sets", icon: Layers, requiredPerm: "manage_inventory" },
       { name: "Promotions", path: "/promotions", icon: Percent, requiredPerm: "manage_inventory" },
       { name: "Price Lists", path: "/price-lists", icon: Tag, requiredPerm: "manage_inventory" },
+      { name: "Review Moderation", path: "/review-moderation", icon: Star, requiredPerm: "manage_inventory" },
     ],
   },
   {
