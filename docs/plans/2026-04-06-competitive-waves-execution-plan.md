@@ -30,8 +30,8 @@ Update this as you complete each round. Mark [x] when done.
 | 3A | #14 Stock Aging, #15 Inventory Audit | [x] DONE |
 | 3B | #13 Bundling, #16 Scan Receive | [x] DONE |
 | 3C | #17 Price Lists | [x] DONE |
-| 4A | #18 Tiered Loyalty, #20 Reviews | [ ] IN PROGRESS |
-| 4B | #19 Customer Profiling | [ ] |
+| 4A | #18 Tiered Loyalty, #20 Reviews | [x] DONE |
+| 4B | #19 Customer Profiling | [ ] IN PROGRESS |
 | 5A | #21 Pick/Pack/Dispatch | [ ] |
 | 5B | #22 Loadsheets, #23 Scan Dispatch | [ ] |
 | 6A | #24 Multichannel Reports, #25 API Docs | [ ] |
