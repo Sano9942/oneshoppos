@@ -13,6 +13,9 @@ module.exports = function registerOrderRoutes(app, deps) {
     SHOPIFY_MAX_RETRY_ATTEMPTS, decryptShopifySecret
   } = deps;
 
+  const { validate } = require("../middleware/validate");
+  const { BulkUpdateOrdersSchema, MarkCompleteSchema } = require("../schemas/orders");
+
 // --- ROUTES: ORDERS (Website order staging before live Shopify integration) ---
 
   app.get("/api/orders/aging-summary", requireAnyPerm(["manage_orders", "view_reports"]), async (req, res) => {
@@ -416,6 +419,7 @@ module.exports = function registerOrderRoutes(app, deps) {
   app.post(
     "/api/orders/mark-complete",
     requirePerm("manage_orders"),
+    validate(MarkCompleteSchema),
     async (req, res) => {
       const { ids = [], set_paid = false } = req.body || {};
       if (!Array.isArray(ids) || ids.length === 0) {
@@ -458,6 +462,7 @@ module.exports = function registerOrderRoutes(app, deps) {
   app.post(
     "/api/orders/bulk-update",
     requirePerm("manage_orders"),
+    validate(BulkUpdateOrdersSchema),
     async (req, res) => {
       const {
         ids = [],

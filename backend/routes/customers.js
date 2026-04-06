@@ -3,6 +3,109 @@ const { CreateCustomerSchema, UpdateCustomerSchema } = require("../schemas/custo
 
 module.exports = function registerCustomerRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm } = deps;
+  const { toUtcStart, toUtcEnd } = require("../utils/tz");
+
+  // GET customer ledger — all financial transactions in one timeline
+  app.get("/api/customers/:id/ledger", requireAnyPerm(["view_reports", "manage_customers"]), async (req, res) => {
+    const { id } = req.params;
+    const { from, to, page = 1, per_page = 50 } = req.query;
+    const tz = req.company?.timezone || "UTC";
+    const limit = Math.min(Math.max(parseInt(per_page) || 50, 1), 200);
+    const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit;
+
+    try {
+      // Verify customer exists
+      const { rowCount } = await db.query("SELECT 1 FROM customers WHERE id = $1", [id]);
+      if (rowCount === 0) return res.status(404).json({ error: "Customer not found" });
+
+      const dateFilters = [];
+      const dateParams = [];
+      let pIdx = 2; // $1 is customer_id
+      if (from) {
+        const utcFrom = toUtcStart(from, tz);
+        if (utcFrom) { dateFilters.push(`date >= $${pIdx}`); dateParams.push(utcFrom); pIdx++; }
+      }
+      if (to) {
+        const utcTo = toUtcEnd(to, tz);
+        if (utcTo) { dateFilters.push(`date < $${pIdx}`); dateParams.push(utcTo); pIdx++; }
+      }
+      const dateWhere = dateFilters.length ? " WHERE " + dateFilters.join(" AND ") : "";
+
+      const sql = `
+        WITH ledger AS (
+          SELECT timestamp AS date, 'sale' AS type, total_amount AS amount,
+                 invoice_number AS reference, id AS source_id
+          FROM sales
+          WHERE customer_id = $1 AND voided = false
+
+          UNION ALL
+
+          SELECT timestamp AS date, 'return' AS type, -total_refund AS amount,
+                 'Return #' || id AS reference, id AS source_id
+          FROM returns
+          WHERE customer_id = $1
+
+          UNION ALL
+
+          SELECT created_at AS date,
+                 CASE WHEN type = 'credit' THEN 'wallet_credit' ELSE 'wallet_debit' END AS type,
+                 CASE WHEN type = 'credit' THEN amount ELSE -amount END AS amount,
+                 COALESCE(note, reference_type) AS reference, id AS source_id
+          FROM customer_wallet_ledger
+          WHERE customer_id = $1
+
+          UNION ALL
+
+          SELECT timestamp AS date, 'points_earned' AS type,
+                 points_earned::numeric AS amount,
+                 invoice_number AS reference, id AS source_id
+          FROM sales
+          WHERE customer_id = $1 AND voided = false AND points_earned > 0
+
+          UNION ALL
+
+          SELECT timestamp AS date, 'points_redeemed' AS type,
+                 -points_redeemed::numeric AS amount,
+                 invoice_number AS reference, id AS source_id
+          FROM sales
+          WHERE customer_id = $1 AND voided = false AND points_redeemed > 0
+        ),
+        filtered AS (
+          SELECT * FROM ledger${dateWhere}
+        ),
+        with_balance AS (
+          SELECT *,
+                 SUM(amount) OVER (ORDER BY date ASC, source_id ASC) AS running_balance
+          FROM filtered
+        )
+        SELECT date, type, amount, reference, running_balance,
+               (SELECT COUNT(*) FROM filtered) AS total_count
+        FROM with_balance
+        ORDER BY date DESC, source_id DESC
+        LIMIT $${pIdx} OFFSET $${pIdx + 1}
+      `;
+
+      const params = [id, ...dateParams, limit, offset];
+      const { rows } = await db.query(sql, params);
+
+      const totalCount = rows.length > 0 ? parseInt(rows[0].total_count) : 0;
+      res.json({
+        ledger: rows.map(r => ({
+          date: r.date,
+          type: r.type,
+          amount: Number(r.amount),
+          reference: r.reference,
+          running_balance: Number(r.running_balance),
+        })),
+        total: totalCount,
+        page: Math.max(parseInt(page) || 1, 1),
+        per_page: limit,
+        total_pages: Math.ceil(totalCount / limit),
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // GET all customers (with total order count and spend)
   app.get("/api/customers", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {

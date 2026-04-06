@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckSquare, Download, Eye, Package, RefreshCw, Save, Search, Truck } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { useToast } from "../../contexts/ToastContext";
 import { api } from "../../api";
 import {
   Badge,
@@ -95,6 +96,7 @@ function exportCsv(rows) {
 
 export default function OrdersRedesign() {
   const { fmt } = useCurrency();
+  const toast = useToast();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -221,19 +223,20 @@ export default function OrdersRedesign() {
     setBusy(true);
     setError("");
     try {
-      await api.post("/api/orders/bulk-update", {
+      const result = await api.post("/api/orders/bulk-update", {
         ids,
         order_status: bulkForm.order_status || null,
         payment_status: bulkForm.payment_status || null,
         fulfillment_status: bulkForm.fulfillment_status || null,
       });
       setBulkForm({ order_status: "", payment_status: "", fulfillment_status: "" });
+      toast.success(`${result.updated || ids.length} order(s) updated`);
       await loadOrders();
       if (selectedOrder?.id && ids.includes(selectedOrder.id)) {
         await loadDetail(selectedOrder.id);
       }
     } catch (e) {
-      setError(e.message || "Bulk update failed");
+      toast.error(e.message || "Bulk update failed");
     } finally {
       setBusy(false);
     }
@@ -245,13 +248,14 @@ export default function OrdersRedesign() {
     setBusy(true);
     setError("");
     try {
-      await api.post("/api/orders/mark-complete", { ids });
+      const result = await api.post("/api/orders/mark-complete", { ids });
+      toast.success(`${result.updated || ids.length} order(s) marked complete`);
       await loadOrders();
       if (selectedOrder?.id && ids.includes(selectedOrder.id)) {
         await loadDetail(selectedOrder.id);
       }
     } catch (e) {
-      setError(e.message || "Failed to mark complete");
+      toast.error(e.message || "Failed to mark complete");
     } finally {
       setBusy(false);
     }
@@ -267,10 +271,11 @@ export default function OrdersRedesign() {
         payment_status: selectedOrder.payment_status,
         fulfillment_status: selectedOrder.fulfillment_status,
       });
+      toast.success("Order status updated");
       await loadOrders();
       await loadDetail(selectedOrder.id);
     } catch (e) {
-      setError(e.message || "Failed to update status");
+      toast.error(e.message || "Failed to update status");
     } finally {
       setBusy(false);
     }

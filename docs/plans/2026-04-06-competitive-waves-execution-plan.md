@@ -21,8 +21,8 @@ Update this as you complete each round. Mark [x] when done.
 | Round | Features | Status |
 |---|---|---|
 | Phase 0 | Migration v16 + schema + skeletons + stubs | [x] DONE |
-| 1A | #1 Blacklisting, #2 Order Aging, #4 Billing Discounts | [ ] IN PROGRESS |
-| 1B | #3 Bulk Order Status, #5 Customer Ledger, #6 Supplier Ledger | [ ] |
+| 1A | #1 Blacklisting, #2 Order Aging, #4 Billing Discounts | [x] DONE |
+| 1B | #3 Bulk Order Status, #5 Customer Ledger, #6 Supplier Ledger | [ ] IN PROGRESS |
 | 1C | #7 Points Transfer | [ ] |
 | 2A | #8 Credit/Debit Notes, #12 Bulk Import | [ ] |
 | 2B | #9 Cheques, #10 Chart of Accounts | [ ] |

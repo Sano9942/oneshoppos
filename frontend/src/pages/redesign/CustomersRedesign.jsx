@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Ban, Download, Plus, Search, ShieldCheck, UserRound, Wallet } from "lucide-react";
+import { Ban, BookOpen, Calendar, ChevronLeft, ChevronRight, Download, Plus, Search, ShieldCheck, UserRound, Wallet } from "lucide-react";
 import { api } from "../../api";
 import { fmtDate, fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -86,6 +86,14 @@ export default function CustomersRedesign() {
   const [walletNote, setWalletNote] = useState("");
   const [blacklistModal, setBlacklistModal] = useState(false);
   const [blacklistReason, setBlacklistReason] = useState("");
+  const [detailTab, setDetailTab] = useState("profile");
+  const [ledger, setLedger] = useState([]);
+  const [ledgerTotal, setLedgerTotal] = useState(0);
+  const [ledgerPage, setLedgerPage] = useState(1);
+  const [ledgerPages, setLedgerPages] = useState(1);
+  const [ledgerFrom, setLedgerFrom] = useState("");
+  const [ledgerTo, setLedgerTo] = useState("");
+  const [ledgerLoading, setLedgerLoading] = useState(false);
 
   const fetchCustomers = async (query = "") => {
     setLoading(true);
@@ -104,9 +112,13 @@ export default function CustomersRedesign() {
 
   const loadDetail = async (customer) => {
     setDetail(customer);
+    setDetailTab("profile");
     setPointsAdjust(String(customer.loyalty_points || 0));
     setWalletTopup("");
     setWalletNote("");
+    setLedger([]);
+    setLedgerFrom("");
+    setLedgerTo("");
     try {
       const [salesData, walletData] = await Promise.all([
         api.get(`/api/customers/${customer.id}/sales`),
@@ -249,6 +261,25 @@ export default function CustomersRedesign() {
       setError(e.body?.error || e.message || "Top-up failed");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const fetchLedger = async (customerId, pg = 1, from = "", to = "") => {
+    setLedgerLoading(true);
+    try {
+      const params = new URLSearchParams({ page: pg, per_page: 50 });
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
+      const data = await api.get(`/api/customers/${customerId}/ledger?${params}`);
+      setLedger(data.ledger || []);
+      setLedgerTotal(data.total || 0);
+      setLedgerPage(data.page || 1);
+      setLedgerPages(data.total_pages || 1);
+    } catch {
+      setLedger([]);
+      setLedgerTotal(0);
+    } finally {
+      setLedgerLoading(false);
     }
   };
 
@@ -445,143 +476,263 @@ export default function CustomersRedesign() {
                 </p>
               </div>
 
-              {detail.is_blacklisted && (
-                <div className="rounded-md border border-red-300 bg-red-50 p-2.5">
-                  <p className="flex items-center gap-1.5 text-xs font-semibold text-red-700">
-                    <Ban size={13} /> Blacklisted
-                  </p>
-                  <p className="mt-1 text-xs text-red-600">{detail.blacklist_reason}</p>
-                  {detail.blacklisted_at && (
-                    <p className="mt-0.5 text-[10px] text-red-400">Since {fmtDate(detail.blacklisted_at)}</p>
+              <div className="flex border-b border-(--ui-border)">
+                {[
+                  { key: "profile", label: "Profile" },
+                  { key: "ledger", label: "Ledger", icon: BookOpen },
+                ].map(({ key, label, icon: Icon }) => (
+                  <button
+                    key={key}
+                    className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+                      detailTab === key
+                        ? "border-emerald-600 text-emerald-700"
+                        : "border-transparent text-(--ui-text-muted) hover:text-(--ui-text)"
+                    }`}
+                    onClick={() => {
+                      setDetailTab(key);
+                      if (key === "ledger" && ledger.length === 0) fetchLedger(detail.id);
+                    }}
+                  >
+                    {Icon && <Icon size={12} />}
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {detailTab === "profile" && (
+                <>
+                  {detail.is_blacklisted && (
+                    <div className="rounded-md border border-red-300 bg-red-50 p-2.5">
+                      <p className="flex items-center gap-1.5 text-xs font-semibold text-red-700">
+                        <Ban size={13} /> Blacklisted
+                      </p>
+                      <p className="mt-1 text-xs text-red-600">{detail.blacklist_reason}</p>
+                      {detail.blacklisted_at && (
+                        <p className="mt-0.5 text-[10px] text-red-400">Since {fmtDate(detail.blacklisted_at)}</p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    {detail.is_blacklisted ? (
+                      <Button size="sm" onClick={unblacklistCustomer} disabled={busy}>
+                        <ShieldCheck size={13} className="mr-1 inline text-emerald-600" />
+                        Unblacklist
+                      </Button>
+                    ) : (
+                      <Button size="sm" tone="danger" onClick={() => { setBlacklistReason(""); setBlacklistModal(true); }} disabled={busy}>
+                        <Ban size={13} className="mr-1 inline" />
+                        Blacklist
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <SectionCard className="p-2 text-center">
+                      <p className="text-xs text-(--ui-text-muted)">Orders</p>
+                      <p className="text-lg font-semibold text-(--ui-text)">
+                        {detail.order_count || 0}
+                      </p>
+                    </SectionCard>
+                    <SectionCard className="p-2 text-center">
+                      <p className="text-xs text-(--ui-text-muted)">Spent</p>
+                      <p className="text-lg font-semibold text-(--ui-text)">
+                        {money(detail.total_spent)}
+                      </p>
+                    </SectionCard>
+                  </div>
+
+                  <SectionCard className="p-2">
+                    <p className="mb-2 text-xs text-(--ui-text-muted)">Loyalty points</p>
+                    <div className="flex gap-2">
+                      <Input
+                        type="number"
+                        value={pointsAdjust}
+                        onChange={(e) => setPointsAdjust(e.target.value)}
+                      />
+                      <Button size="sm" disabled={busy} onClick={adjustPoints}>
+                        Set
+                      </Button>
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard className="p-2">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Wallet size={13} className="text-emerald-600" />
+                      <p className="text-xs font-semibold text-(--ui-text)">
+                        Wallet · {money(walletBalance)}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        placeholder="Top-up amount"
+                        value={walletTopup}
+                        onChange={(e) => setWalletTopup(e.target.value)}
+                      />
+                      <Input
+                        placeholder="Top-up note (optional)"
+                        value={walletNote}
+                        onChange={(e) => setWalletNote(e.target.value)}
+                      />
+                      <Button size="sm" disabled={busy || !walletTopup} onClick={topupWallet}>
+                        Top Up Wallet
+                      </Button>
+                    </div>
+                    {walletLedger.length > 0 && (
+                      <div className="mt-3 border-t border-(--ui-border) pt-2">
+                        <p className="text-xs font-semibold text-(--ui-text-muted) mb-1.5">
+                          Wallet History
+                        </p>
+                        <div className="max-h-44 overflow-auto space-y-1">
+                          {walletLedger.slice(0, 10).map((entry, i) => (
+                            <div
+                              key={i}
+                              className="flex items-start justify-between rounded border border-(--ui-border) px-2 py-1.5 text-xs"
+                            >
+                              <div className="min-w-0">
+                                <p
+                                  className={`font-semibold truncate ${
+                                    entry.type === "credit"
+                                      ? "text-emerald-700"
+                                      : "text-rose-600"
+                                  }`}
+                                >
+                                  {entry.type === "credit" ? "+" : "-"}
+                                  {money(Math.abs(entry.amount))}
+                                  {entry.note ? (
+                                    <span className="ml-1 font-normal text-(--ui-text-muted)">
+                                      · {entry.note}
+                                    </span>
+                                  ) : null}
+                                </p>
+                                <p className="text-(--ui-text-muted)">
+                                  {fmtUtcDateTime(entry.created_at)}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </SectionCard>
+
+                  <div>
+                    <h4 className="mb-2 text-sm font-semibold text-(--ui-text)">
+                      Recent Sales
+                    </h4>
+                    <div className="max-h-52 space-y-2 overflow-auto">
+                      {customerSales.length === 0 ? (
+                        <p className="text-xs text-(--ui-text-muted)">No sales yet.</p>
+                      ) : (
+                        customerSales.slice(0, 20).map((s) => (
+                          <div key={s.id} className="rounded border border-(--ui-border) p-2 text-xs">
+                            <p className="font-medium text-(--ui-text)">Sale #{s.id}</p>
+                            <p className="text-(--ui-text-muted)">
+                              {fmtDate(s.timestamp)} | {money(s.total_amount)}
+                            </p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {detailTab === "ledger" && (
+                <div className="space-y-3">
+                  <div className="flex items-end gap-2">
+                    <div className="min-w-0 grow">
+                      <label className="text-[10px] font-medium text-(--ui-text-muted)">From</label>
+                      <Input type="date" value={ledgerFrom} onChange={(e) => setLedgerFrom(e.target.value)} />
+                    </div>
+                    <div className="min-w-0 grow">
+                      <label className="text-[10px] font-medium text-(--ui-text-muted)">To</label>
+                      <Input type="date" value={ledgerTo} onChange={(e) => setLedgerTo(e.target.value)} />
+                    </div>
+                    <Button size="sm" onClick={() => { setLedgerPage(1); fetchLedger(detail.id, 1, ledgerFrom, ledgerTo); }}>
+                      <Calendar size={12} className="mr-1 inline" />
+                      Filter
+                    </Button>
+                  </div>
+
+                  <div className="overflow-auto">
+                    <table className="min-w-full text-xs">
+                      <thead className="bg-(--ui-muted-surface) text-[10px] uppercase text-(--ui-text-muted)">
+                        <tr>
+                          <th className="px-2 py-1.5 text-left">Date</th>
+                          <th className="px-2 py-1.5 text-left">Type</th>
+                          <th className="px-2 py-1.5 text-left">Ref</th>
+                          <th className="px-2 py-1.5 text-right">Debit</th>
+                          <th className="px-2 py-1.5 text-right">Credit</th>
+                          <th className="px-2 py-1.5 text-right">Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ledgerLoading ? (
+                          <tr><td colSpan={6} className="px-2 py-6 text-center text-(--ui-text-muted)">Loading...</td></tr>
+                        ) : ledger.length === 0 ? (
+                          <tr><td colSpan={6} className="px-2 py-6 text-center text-(--ui-text-muted)">No transactions found.</td></tr>
+                        ) : (
+                          ledger.map((entry, i) => {
+                            const isCredit = entry.amount > 0;
+                            const typeColors = {
+                              sale: "text-emerald-700 bg-emerald-50",
+                              return: "text-rose-700 bg-rose-50",
+                              wallet_credit: "text-blue-700 bg-blue-50",
+                              wallet_debit: "text-blue-700 bg-blue-50",
+                              points_earned: "text-amber-700 bg-amber-50",
+                              points_redeemed: "text-amber-700 bg-amber-50",
+                            };
+                            const typeLabels = {
+                              sale: "Sale",
+                              return: "Return",
+                              wallet_credit: "Wallet In",
+                              wallet_debit: "Wallet Out",
+                              points_earned: "Pts Earned",
+                              points_redeemed: "Pts Used",
+                            };
+                            return (
+                              <tr key={i} className="border-t border-(--ui-border)">
+                                <td className="px-2 py-1.5 whitespace-nowrap text-(--ui-text-muted)">{fmtUtcDateTime(entry.date)}</td>
+                                <td className="px-2 py-1.5">
+                                  <span className={`inline-block rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${typeColors[entry.type] || ""}`}>
+                                    {typeLabels[entry.type] || entry.type}
+                                  </span>
+                                </td>
+                                <td className="px-2 py-1.5 text-(--ui-text-muted) truncate max-w-24">{entry.reference || "-"}</td>
+                                <td className="px-2 py-1.5 text-right text-rose-600 font-medium">
+                                  {!isCredit ? money(Math.abs(entry.amount)) : ""}
+                                </td>
+                                <td className="px-2 py-1.5 text-right text-emerald-700 font-medium">
+                                  {isCredit ? money(entry.amount) : ""}
+                                </td>
+                                <td className="px-2 py-1.5 text-right font-semibold text-(--ui-text)">{money(entry.running_balance)}</td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {ledgerPages > 1 && (
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[10px] text-(--ui-text-muted)">{ledgerTotal} entries · Page {ledgerPage}/{ledgerPages}</span>
+                      <div className="flex gap-1">
+                        <Button size="sm" disabled={ledgerPage <= 1} onClick={() => { const p = ledgerPage - 1; setLedgerPage(p); fetchLedger(detail.id, p, ledgerFrom, ledgerTo); }}>
+                          <ChevronLeft size={12} />
+                        </Button>
+                        <Button size="sm" disabled={ledgerPage >= ledgerPages} onClick={() => { const p = ledgerPage + 1; setLedgerPage(p); fetchLedger(detail.id, p, ledgerFrom, ledgerTo); }}>
+                          <ChevronRight size={12} />
+                        </Button>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
-
-              <div className="flex gap-2">
-                {detail.is_blacklisted ? (
-                  <Button size="sm" onClick={unblacklistCustomer} disabled={busy}>
-                    <ShieldCheck size={13} className="mr-1 inline text-emerald-600" />
-                    Unblacklist
-                  </Button>
-                ) : (
-                  <Button size="sm" tone="danger" onClick={() => { setBlacklistReason(""); setBlacklistModal(true); }} disabled={busy}>
-                    <Ban size={13} className="mr-1 inline" />
-                    Blacklist
-                  </Button>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <SectionCard className="p-2 text-center">
-                  <p className="text-xs text-(--ui-text-muted)">Orders</p>
-                  <p className="text-lg font-semibold text-(--ui-text)">
-                    {detail.order_count || 0}
-                  </p>
-                </SectionCard>
-                <SectionCard className="p-2 text-center">
-                  <p className="text-xs text-(--ui-text-muted)">Spent</p>
-                  <p className="text-lg font-semibold text-(--ui-text)">
-                    {money(detail.total_spent)}
-                  </p>
-                </SectionCard>
-              </div>
-
-              <SectionCard className="p-2">
-                <p className="mb-2 text-xs text-(--ui-text-muted)">Loyalty points</p>
-                <div className="flex gap-2">
-                  <Input
-                    type="number"
-                    value={pointsAdjust}
-                    onChange={(e) => setPointsAdjust(e.target.value)}
-                  />
-                  <Button size="sm" disabled={busy} onClick={adjustPoints}>
-                    Set
-                  </Button>
-                </div>
-              </SectionCard>
-
-              <SectionCard className="p-2">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Wallet size={13} className="text-emerald-600" />
-                  <p className="text-xs font-semibold text-(--ui-text)">
-                    Wallet · {money(walletBalance)}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    placeholder="Top-up amount"
-                    value={walletTopup}
-                    onChange={(e) => setWalletTopup(e.target.value)}
-                  />
-                  <Input
-                    placeholder="Top-up note (optional)"
-                    value={walletNote}
-                    onChange={(e) => setWalletNote(e.target.value)}
-                  />
-                  <Button size="sm" disabled={busy || !walletTopup} onClick={topupWallet}>
-                    Top Up Wallet
-                  </Button>
-                </div>
-                {walletLedger.length > 0 && (
-                  <div className="mt-3 border-t border-(--ui-border) pt-2">
-                    <p className="text-xs font-semibold text-(--ui-text-muted) mb-1.5">
-                      Wallet History
-                    </p>
-                    <div className="max-h-44 overflow-auto space-y-1">
-                      {walletLedger.slice(0, 10).map((entry, i) => (
-                        <div
-                          key={i}
-                          className="flex items-start justify-between rounded border border-(--ui-border) px-2 py-1.5 text-xs"
-                        >
-                          <div className="min-w-0">
-                            <p
-                              className={`font-semibold truncate ${
-                                entry.type === "credit"
-                                  ? "text-emerald-700"
-                                  : "text-rose-600"
-                              }`}
-                            >
-                              {entry.type === "credit" ? "+" : "-"}
-                              {money(Math.abs(entry.amount))}
-                              {entry.note ? (
-                                <span className="ml-1 font-normal text-(--ui-text-muted)">
-                                  · {entry.note}
-                                </span>
-                              ) : null}
-                            </p>
-                            <p className="text-(--ui-text-muted)">
-                              {fmtUtcDateTime(entry.created_at)}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </SectionCard>
-
-              <div>
-                <h4 className="mb-2 text-sm font-semibold text-(--ui-text)">
-                  Recent Sales
-                </h4>
-                <div className="max-h-52 space-y-2 overflow-auto">
-                  {customerSales.length === 0 ? (
-                    <p className="text-xs text-(--ui-text-muted)">No sales yet.</p>
-                  ) : (
-                    customerSales.slice(0, 20).map((s) => (
-                      <div key={s.id} className="rounded border border-(--ui-border) p-2 text-xs">
-                        <p className="font-medium text-(--ui-text)">Sale #{s.id}</p>
-                        <p className="text-(--ui-text-muted)">
-                          {fmtDate(s.timestamp)} | {money(s.total_amount)}
-                        </p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
             </div>
           )}
         </SectionCard>

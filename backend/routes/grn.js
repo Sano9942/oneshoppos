@@ -323,6 +323,7 @@ module.exports = function registerGRNRoutes(app, deps) {
   );
 
   // GET /api/supplier-ledger/:supplier_id — full chronological statement with running balance
+  // Includes: supplier invoices (debit), GRN receipts (info), supplier payments (credit), supplier returns (credit)
   app.get(
     "/api/supplier-ledger/:supplier_id",
     requireAnyPerm(["manage_orders", "view_reports", "all_access"]),
@@ -331,38 +332,7 @@ module.exports = function registerGRNRoutes(app, deps) {
       try {
         const { supplier_id } = req.params;
         const { from, to } = req.query || {};
-
-        const dateWhere = [];
-        const invParams = [supplier_id];
-        const payParams = [supplier_id];
-        let invIdx = 2;
-        let payIdx = 2;
-        if (from) {
-          dateWhere.push({ inv: `date(si.created_at) >= $INV_IDX`, pay: `date(sp.paid_at) >= $PAY_IDX` });
-          invParams.push(from); payParams.push(from);
-          invIdx++; payIdx++;
-        }
-        if (to) {
-          dateWhere.push({ inv: `date(si.created_at) <= $INV_IDX`, pay: `date(sp.paid_at) <= $PAY_IDX` });
-          invParams.push(to); payParams.push(to);
-          invIdx++; payIdx++;
-        }
-
-        // Build date filter SQL with correct numbered placeholders
-        let invDateSql = "";
-        let payDateSql = "";
-        if (dateWhere.length) {
-          let invI = 2;
-          let payI = 2;
-          const invParts = [];
-          const payParts = [];
-          for (const d of dateWhere) {
-            invParts.push(d.inv.replace("$INV_IDX", `$${invI++}`));
-            payParts.push(d.pay.replace("$PAY_IDX", `$${payI++}`));
-          }
-          invDateSql = " AND " + invParts.join(" AND ");
-          payDateSql = " AND " + payParts.join(" AND ");
-        }
+        const tz = req.company?.timezone || "Asia/Karachi";
 
         const { rows: [supplier] } = await db.query(
           "SELECT * FROM suppliers WHERE id = $1",
@@ -374,76 +344,110 @@ module.exports = function registerGRNRoutes(app, deps) {
         const page = Math.max(0, parseInt(pageParam, 10) || 0);
         const PAGE_SIZE = 50;
 
-        // For the UNION ALL query, the second half needs re-numbered params
-        // We'll build a single combined params array with correct numbering
-        const allCountParams = [...invParams, ...payParams];
-        const payOffset = invParams.length;
-
-        // Build the pay side with offset param numbers
-        let payDateSqlNumbered = "";
-        if (dateWhere.length) {
-          let payI = payOffset + 2;
-          const payParts = [];
-          for (const d of dateWhere) {
-            payParts.push(d.pay.replace("$PAY_IDX", `$${payI++}`));
-          }
-          payDateSqlNumbered = " AND " + payParts.join(" AND ");
+        // Each UNION branch uses $1 = supplier_id; date filters share $2/$3
+        const baseParams = [supplier_id];
+        let dateSql = "";
+        if (from) {
+          baseParams.push(toUtcStart(from, tz));
+          dateSql += ` AND __COL__ >= $${baseParams.length}`;
+        }
+        if (to) {
+          baseParams.push(toUtcEnd(to, tz));
+          dateSql += ` AND __COL__ <= $${baseParams.length}`;
         }
 
-        // Build inv side with original numbering
-        let invDateSqlNumbered = invDateSql;
+        const invDate = dateSql.replace(/__COL__/g, "si.created_at");
+        const payDate = dateSql.replace(/__COL__/g, "sp.paid_at");
+        const grnDate = dateSql.replace(/__COL__/g, "g.received_at");
+        const retDate = dateSql.replace(/__COL__/g, "sr.return_date");
 
         const unionSql = `
+          -- Supplier invoices (debit — we owe them)
           SELECT si.created_at AS date,
-                  'purchase' AS type,
-                  COALESCE(si.invoice_number, 'INV-' || si.id) AS reference,
-                  si.amount AS amount,
-                  0 AS payment,
-                  si.notes AS notes,
-                  si.status AS status
-           FROM supplier_invoices si
-           WHERE si.supplier_id = $1${invDateSqlNumbered}
+                 'invoice' AS type,
+                 COALESCE(si.invoice_number, 'INV-' || si.id) AS reference,
+                 si.amount AS debit,
+                 0 AS credit,
+                 si.notes AS notes
+          FROM supplier_invoices si
+          WHERE si.supplier_id = $1${invDate}
 
-           UNION ALL
+          UNION ALL
 
-           SELECT sp.paid_at AS date,
-                  'payment' AS type,
-                  COALESCE(si2.invoice_number, 'INV-' || sp.supplier_invoice_id) AS reference,
-                  0 AS amount,
-                  sp.amount AS payment,
-                  COALESCE(sp.notes, sp.payment_method) AS notes,
-                  NULL AS status
-           FROM supplier_payments sp
-           LEFT JOIN supplier_invoices si2 ON si2.id = sp.supplier_invoice_id
-           WHERE sp.supplier_id = $${payOffset + 1}${payDateSqlNumbered}`;
+          -- GRN receipts (informational — goods received)
+          SELECT g.received_at AS date,
+                 'grn' AS type,
+                 g.grn_number AS reference,
+                 0 AS debit,
+                 0 AS credit,
+                 g.notes AS notes
+          FROM goods_received_notes g
+          JOIN purchase_orders po ON po.id = g.po_id
+          WHERE po.supplier_id = $1${grnDate}
 
-        // Count total rows first
+          UNION ALL
+
+          -- Payments (credit — we paid them)
+          SELECT sp.paid_at AS date,
+                 'payment' AS type,
+                 COALESCE(si2.invoice_number, 'PAY-' || sp.id) AS reference,
+                 0 AS debit,
+                 sp.amount AS credit,
+                 COALESCE(sp.notes, sp.payment_method) AS notes
+          FROM supplier_payments sp
+          LEFT JOIN supplier_invoices si2 ON si2.id = sp.supplier_invoice_id
+          WHERE sp.supplier_id = $1 AND (sp.voided IS NOT TRUE)${payDate}
+
+          UNION ALL
+
+          -- Supplier returns (credit — reduces what we owe)
+          SELECT sr.return_date AS date,
+                 'return' AS type,
+                 COALESCE(sr.reference_number, 'RET-' || sr.id) AS reference,
+                 0 AS debit,
+                 sr.total_value AS credit,
+                 sr.reason AS notes
+          FROM supplier_returns sr
+          WHERE sr.supplier_id = $1${retDate}`;
+
+        // Count total
         const { rows: [countRow] } = await db.query(
           `SELECT COUNT(*) AS total FROM (${unionSql}) AS combined`,
-          allCountParams,
+          baseParams,
         );
         const total_count = Number(countRow?.total || 0);
         const total_pages = Math.ceil(total_count / PAGE_SIZE);
 
-        // Fetch paginated rows
-        const limitIdx = allCountParams.length + 1;
-        const offsetIdx = allCountParams.length + 2;
+        // Fetch with window-function running balance so pagination is correct
+        const limitIdx = baseParams.length + 1;
+        const offsetIdx = baseParams.length + 2;
         const { rows } = await db.query(
-          `${unionSql} ORDER BY date ASC, type DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
-          [...allCountParams, PAGE_SIZE, page * PAGE_SIZE],
+          `SELECT *,
+                  SUM(debit - credit) OVER (ORDER BY date ASC, type ASC) AS running_balance
+           FROM (${unionSql}) AS combined
+           ORDER BY date DESC, type ASC
+           LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+          [...baseParams, PAGE_SIZE, page * PAGE_SIZE],
         );
 
-        // Compute running balance for this page's rows
-        let balance = 0;
-        const entries = (rows || []).map((r) => {
-          balance += Number(r.amount || 0) - Number(r.payment || 0);
-          return { ...r, running_balance: Number(balance.toFixed(2)) };
-        });
+        const entries = (rows || []).map((r) => ({
+          ...r,
+          debit: Number(r.debit || 0),
+          credit: Number(r.credit || 0),
+          running_balance: Number(Number(r.running_balance || 0).toFixed(2)),
+        }));
+
+        // Closing balance = total across all entries (not just this page)
+        const { rows: [balRow] } = await db.query(
+          `SELECT COALESCE(SUM(debit - credit), 0) AS balance FROM (${unionSql}) AS combined`,
+          baseParams,
+        );
+        const closing_balance = Number(Number(balRow?.balance || 0).toFixed(2));
 
         res.json({
           supplier,
           entries,
-          closing_balance: Number(balance.toFixed(2)),
+          closing_balance,
           total_count,
           page,
           total_pages,
