@@ -511,8 +511,12 @@ export const POSProvider = ({ children }) => {
     [customers, checkoutCustomerId],
   );
   const checkoutCustomerPoints = checkoutCustomer?.loyalty_points || 0;
-  // Points earned on this sale (1 point per PKR 100)
-  const pointsEarned = Math.floor(total / 100) * LOYALTY_EARN_RATE;
+  const checkoutCustomerTier = checkoutCustomer
+    ? { name: checkoutCustomer.tier_name, color: checkoutCustomer.tier_color, multiplier: Number(checkoutCustomer.tier_multiplier) || 1, discount: Number(checkoutCustomer.tier_discount) || 0 }
+    : null;
+  // Points earned on this sale — preview uses tier multiplier (backend is authoritative)
+  const tierMultiplier = checkoutCustomerTier?.multiplier || 1;
+  const pointsEarned = Math.floor((total / 100) * LOYALTY_EARN_RATE * tierMultiplier);
   // Points discount: floor(points / 100) * PKR 10
   const pointsDiscount = redeemPointsOn
     ? Math.floor(checkoutCustomerPoints / 100) * LOYALTY_REDEEM_RATE
@@ -1183,6 +1187,7 @@ export const POSProvider = ({ children }) => {
     payWithWalletOn,
     setPayWithWalletOn,
     checkoutCustomerPoints,
+    checkoutCustomerTier,
     pointsEarned,
     pointsDiscount,
     pointsRedeemed,

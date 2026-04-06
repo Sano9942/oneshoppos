@@ -68,6 +68,7 @@ const PriceListsRedesign = lazy(() => import("../pages/redesign/PriceListsRedesi
 const CustomerGroupsRedesign = lazy(() => import("../pages/redesign/CustomerGroupsRedesign"));
 const ReviewModerationRedesign = lazy(() => import("../pages/redesign/ReviewModerationRedesign"));
 const FulfillmentRedesign = lazy(() => import("../pages/redesign/FulfillmentRedesign"));
+const LoyaltyTiersRoute = lazy(() => import("../pages/LoyaltyTiersRoute"));
 
 const wrap = (Component) => <Suspense fallback={<RouteLoading />}><Component /></Suspense>;
 const perm = (p, el) => <RequirePerm perm={p}>{el}</RequirePerm>;
@@ -164,6 +165,7 @@ export const appRoutes = [
     <Route path="/stock-counts" element={perm("manage_inventory", <StockCountRedesign />)} />
     <Route path="/price-lists" element={perm("manage_inventory", <PriceListsRedesign />)} />
     {/* Wave 4 — Customer & Loyalty */}
+    <Route path="/loyalty-tiers" element={perm("all_access", <LoyaltyTiersRoute />)} />
     <Route path="/customer-groups" element={perm("manage_customers", <CustomerGroupsRedesign />)} />
     <Route path="/review-moderation" element={perm("manage_inventory", <ReviewModerationRedesign />)} />
     {/* Wave 5 — Fulfillment */}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRightLeft, Ban, BookOpen, Calendar, ChevronLeft, ChevronRight, Download, Plus, Search, ShieldCheck, UserRound, Wallet } from "lucide-react";
+import { ArrowRightLeft, Award, Ban, BookOpen, Calendar, ChevronLeft, ChevronRight, Download, Plus, Search, ShieldCheck, UserRound, Wallet } from "lucide-react";
 import { api } from "../../api";
 import { fmtDate, fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -77,6 +77,7 @@ export default function CustomersRedesign() {
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(1);
 
+  const [loyaltyTiers, setLoyaltyTiers] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY);
@@ -148,6 +149,7 @@ export default function CustomersRedesign() {
 
   useEffect(() => {
     fetchCustomers();
+    api.get("/api/loyalty/tiers").then((d) => setLoyaltyTiers(d.tiers || [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -458,6 +460,11 @@ export default function CustomersRedesign() {
                             <UserRound size={12} />
                           </span>
                           <span className="font-medium text-(--ui-text)">{r.name}</span>
+                          {r.tier_name && (
+                            <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ backgroundColor: (r.tier_color || "#888") + "22", color: r.tier_color || "#888" }}>
+                              <Award size={9} />{r.tier_name}
+                            </span>
+                          )}
                           {r.is_blacklisted && (
                             <span className="ml-1.5 inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
                               Blacklisted
@@ -606,6 +613,45 @@ export default function CustomersRedesign() {
                       </p>
                     </SectionCard>
                   </div>
+
+                  {/* Loyalty Tier Badge + Progress */}
+                  {(() => {
+                    const sorted = [...loyaltyTiers].sort((a, b) => Number(a.min_spend) - Number(b.min_spend));
+                    const spend = Number(detail.total_spend || detail.total_spent || 0);
+                    const currentIdx = sorted.findIndex((t) => t.id === detail.loyalty_tier_id);
+                    const current = currentIdx >= 0 ? sorted[currentIdx] : null;
+                    const next = currentIdx >= 0 && currentIdx < sorted.length - 1 ? sorted[currentIdx + 1] : (currentIdx < 0 && sorted.length ? sorted[0] : null);
+                    const progressTo = next ? Math.min(100, Math.round((spend / Number(next.min_spend)) * 100)) : 100;
+                    const remaining = next ? Math.max(0, Number(next.min_spend) - spend) : 0;
+                    return sorted.length > 0 ? (
+                      <SectionCard className="p-2">
+                        <div className="flex items-center gap-2 mb-2">
+                          {current ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: (current.color || "#8066FF") + "33", color: current.color || "#8066FF" }}>
+                              <Award size={12} />{current.name}
+                              {Number(current.points_multiplier) > 1 && <span className="opacity-70 text-[10px]">{current.points_multiplier}x pts</span>}
+                              {Number(current.discount_percent) > 0 && <span className="opacity-70 text-[10px]">· {current.discount_percent}% off</span>}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-(--ui-text-muted)">No tier yet</span>
+                          )}
+                        </div>
+                        {next && (
+                          <>
+                            <div className="h-1.5 rounded-full bg-(--ui-bg-elevated) overflow-hidden">
+                              <div className="h-full rounded-full transition-all" style={{ width: `${progressTo}%`, backgroundColor: next.color || "#8066FF" }} />
+                            </div>
+                            <p className="text-[10px] text-(--ui-text-muted) mt-1">
+                              {money(remaining)} more to reach <span className="font-semibold" style={{ color: next.color || "#8066FF" }}>{next.name}</span>
+                            </p>
+                          </>
+                        )}
+                        {!next && current && (
+                          <p className="text-[10px] text-(--ui-text-muted)">Highest tier reached</p>
+                        )}
+                      </SectionCard>
+                    ) : null;
+                  })()}
 
                   <SectionCard className="p-2">
                     <p className="mb-2 text-xs text-(--ui-text-muted)">Loyalty points</p>

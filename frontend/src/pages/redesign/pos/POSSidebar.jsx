@@ -1,5 +1,5 @@
 import React from "react";
-import { Search, User, ShoppingCart, Tag, FileText } from "lucide-react";
+import { Award, Search, User, ShoppingCart, Tag, FileText } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { useCurrency } from "../../../contexts/CurrencyContext";
 
@@ -26,6 +26,7 @@ export default function POSSidebar({ mobile }) {
     money,
     cart,
     openCheckout,
+    checkoutCustomerTier,
   } = usePOS();
 
   return (
@@ -71,7 +72,14 @@ export default function POSSidebar({ mobile }) {
                 }}
                 className="px-3 py-2 border-b border-slate-100 last:border-0 cursor-pointer hover:bg-slate-50"
               >
-                <div className="font-bold text-sm text-slate-800">{c.name}</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-sm text-slate-800">{c.name}</span>
+                  {c.tier_name && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: (c.tier_color || "#888") + "22", color: c.tier_color || "#888" }}>
+                      {c.tier_name}
+                    </span>
+                  )}
+                </div>
                 {c.mobile && (
                   <div className="text-xs text-slate-500">{c.mobile}</div>
                 )}
@@ -97,6 +105,18 @@ export default function POSSidebar({ mobile }) {
               </p>
             )}
             <div className="flex justify-center gap-2 mt-2 text-xs">
+              {selectedCustomer.tier_name && (
+                <span
+                  className="rounded-full px-2 py-0.5 font-semibold flex items-center gap-1"
+                  style={{ backgroundColor: (selectedCustomer.tier_color || "#8066FF") + "33", color: selectedCustomer.tier_color || "#8066FF" }}
+                >
+                  <Award size={10} />
+                  {selectedCustomer.tier_name}
+                  {Number(selectedCustomer.tier_multiplier) > 1 && (
+                    <span className="opacity-70 text-[10px]">{selectedCustomer.tier_multiplier}x</span>
+                  )}
+                </span>
+              )}
               <span className="rounded-full bg-[#8066FF]/20 text-[#8066FF] px-2 py-0.5 font-semibold">
                 {selectedCustomer.loyalty_points || 0} pts
               </span>

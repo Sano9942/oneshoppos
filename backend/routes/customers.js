@@ -113,9 +113,13 @@ module.exports = function registerCustomerRoutes(app, deps) {
     let query = `
     SELECT c.*,
            COUNT(s.id) as order_count,
-           COALESCE(SUM(s.total_amount), 0) as total_spent
+           COALESCE(SUM(s.total_amount), 0) as total_spent,
+           lt.name AS tier_name, lt.color AS tier_color,
+           lt.points_multiplier AS tier_multiplier, lt.discount_percent AS tier_discount,
+           lt.min_spend AS tier_min_spend
     FROM customers c
     LEFT JOIN sales s ON c.id = s.customer_id AND s.voided = false
+    LEFT JOIN loyalty_tiers lt ON c.loyalty_tier_id = lt.id
   `;
     const params = [];
     let paramIdx = 1;
@@ -126,7 +130,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
     } else {
       query += " WHERE c.deleted_at IS NULL";
     }
-    query += " GROUP BY c.id ORDER BY c.name ASC";
+    query += " GROUP BY c.id, lt.name, lt.color, lt.points_multiplier, lt.discount_percent, lt.min_spend ORDER BY c.name ASC";
     try {
       const { rows } = await db.query(query, params);
       res.json({ customers: rows });
@@ -392,6 +396,86 @@ module.exports = function registerCustomerRoutes(app, deps) {
     } catch (err) {
       const status = err.statusCode || 500;
       res.status(status).json({ error: err.message });
+    }
+  });
+
+  // ── Loyalty Tier CRUD ──────────────────────────────────────────────────────
+
+  // GET all loyalty tiers
+  app.get("/api/loyalty/tiers", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        `SELECT lt.*,
+                COUNT(c.id)::int AS customer_count
+         FROM loyalty_tiers lt
+         LEFT JOIN customers c ON c.loyalty_tier_id = lt.id AND c.deleted_at IS NULL
+         GROUP BY lt.id
+         ORDER BY lt.sort_order ASC, lt.min_spend ASC`
+      );
+      res.json({ tiers: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST create loyalty tier
+  app.post("/api/loyalty/tiers", requirePerm("all_access"), async (req, res) => {
+    const { name, min_spend, points_multiplier, discount_percent, benefits, color, sort_order } = req.body;
+    if (!name) return res.status(400).json({ error: "Tier name is required" });
+    if (min_spend === undefined || isNaN(min_spend) || min_spend < 0)
+      return res.status(400).json({ error: "min_spend must be a non-negative number" });
+
+    try {
+      const { rows } = await db.query(
+        `INSERT INTO loyalty_tiers (name, min_spend, points_multiplier, discount_percent, benefits, color, sort_order)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [name, min_spend, points_multiplier || 1.0, discount_percent || 0, benefits || null, color || null, sort_order || 0]
+      );
+      res.json(rows[0]);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PUT update loyalty tier
+  app.put("/api/loyalty/tiers/:id", requirePerm("all_access"), async (req, res) => {
+    const { id } = req.params;
+    const { name, min_spend, points_multiplier, discount_percent, benefits, color, sort_order } = req.body;
+    if (!name) return res.status(400).json({ error: "Tier name is required" });
+
+    try {
+      const { rows, rowCount } = await db.query(
+        `UPDATE loyalty_tiers
+         SET name = $1, min_spend = $2, points_multiplier = $3, discount_percent = $4,
+             benefits = $5, color = $6, sort_order = $7
+         WHERE id = $8 RETURNING *`,
+        [name, min_spend, points_multiplier || 1.0, discount_percent || 0, benefits || null, color || null, sort_order || 0, id]
+      );
+      if (rowCount === 0) return res.status(404).json({ error: "Tier not found" });
+      res.json(rows[0]);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // DELETE loyalty tier (block if customers assigned)
+  app.delete("/api/loyalty/tiers/:id", requirePerm("all_access"), async (req, res) => {
+    const { id } = req.params;
+    try {
+      const { rows: [countRow] } = await db.query(
+        "SELECT COUNT(*)::int AS cnt FROM customers WHERE loyalty_tier_id = $1 AND deleted_at IS NULL",
+        [id]
+      );
+      if (countRow.cnt > 0) {
+        return res.status(400).json({
+          error: `Cannot delete tier — ${countRow.cnt} customer(s) are assigned to it. Reassign them first.`,
+        });
+      }
+      const { rowCount } = await db.query("DELETE FROM loyalty_tiers WHERE id = $1", [id]);
+      if (rowCount === 0) return res.status(404).json({ error: "Tier not found" });
+      res.json({ message: "Tier deleted" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
   });
 

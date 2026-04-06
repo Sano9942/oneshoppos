@@ -619,12 +619,56 @@ module.exports = function registerSalesRoutes(app, deps) {
           );
         }
 
-        // Update customer points if applicable
-        if (customer_id && (points_earned > 0 || points_redeemed > 0)) {
-          await client.query(
-            "UPDATE customers SET loyalty_points = loyalty_points + $1 - $2 WHERE id = $3",
-            [points_earned, points_redeemed, customer_id]
+        // Update customer loyalty: tier-aware points + total_spend + auto-upgrade
+        if (customer_id) {
+          // Fetch customer's current tier multiplier (default 1.0 if no tier)
+          const { rows: [custTier] } = await client.query(
+            `SELECT lt.points_multiplier FROM customers c
+             LEFT JOIN loyalty_tiers lt ON c.loyalty_tier_id = lt.id
+             WHERE c.id = $1`,
+            [customer_id]
           );
+          const multiplier = Number(custTier?.points_multiplier) || 1.0;
+          // Backend-authoritative: recalculate points_earned with tier multiplier
+          const effectivePointsEarned = points_earned > 0
+            ? Math.floor(points_earned * multiplier)
+            : 0;
+
+          if (effectivePointsEarned > 0 || points_redeemed > 0) {
+            await client.query(
+              "UPDATE customers SET loyalty_points = loyalty_points + $1 - $2 WHERE id = $3",
+              [effectivePointsEarned, points_redeemed, customer_id]
+            );
+            // Update the sale row with the actual (multiplied) points_earned
+            if (effectivePointsEarned !== points_earned) {
+              await client.query(
+                "UPDATE sales SET points_earned = $1 WHERE id = $2",
+                [effectivePointsEarned, newSaleId]
+              );
+            }
+          }
+
+          // Update total_spend and auto-upgrade tier
+          await client.query(
+            "UPDATE customers SET total_spend = COALESCE(total_spend, 0) + $1 WHERE id = $2",
+            [totalAmount, customer_id]
+          );
+          const { rows: [updated] } = await client.query(
+            "SELECT COALESCE(total_spend, 0) AS total_spend FROM customers WHERE id = $1",
+            [customer_id]
+          );
+          const newSpend = Number(updated.total_spend);
+          // Find the highest tier the customer qualifies for
+          const { rows: [bestTier] } = await client.query(
+            "SELECT id FROM loyalty_tiers WHERE min_spend <= $1 AND is_active = true ORDER BY min_spend DESC LIMIT 1",
+            [newSpend]
+          );
+          if (bestTier) {
+            await client.query(
+              "UPDATE customers SET loyalty_tier_id = $1 WHERE id = $2 AND (loyalty_tier_id IS NULL OR loyalty_tier_id != $1)",
+              [bestTier.id, customer_id]
+            );
+          }
         }
 
         // Debit wallet for any Wallet payments

@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import {
+  Award,
   Banknote,
   X,
   User,
@@ -56,6 +57,7 @@ export default function POSCheckoutModal() {
     payWithWalletOn,
     setPayWithWalletOn,
     checkoutCustomerPoints,
+    checkoutCustomerTier,
     pointsDiscount,
     total,
   } = usePOS();
@@ -136,6 +138,12 @@ export default function POSCheckoutModal() {
                     <span className="text-sm font-bold text-violet-800">
                       {checkoutCustSearch}
                     </span>
+                    {checkoutCustomerTier?.name && (
+                      <span className="inline-flex items-center gap-0.5 ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ backgroundColor: (checkoutCustomerTier.color || "#8066FF") + "33", color: checkoutCustomerTier.color || "#8066FF" }}>
+                        <Award size={9} />{checkoutCustomerTier.name}
+                        {checkoutCustomerTier.multiplier > 1 && <span className="opacity-70">{checkoutCustomerTier.multiplier}x</span>}
+                      </span>
+                    )}
                     {customers.find(
                       (c) => String(c.id) === String(checkoutCustomerId),
                     )?.mobile && (
