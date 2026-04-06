@@ -4,7 +4,50 @@
 **Approach**: Option C (Hybrid) — pre-written prompts, 2-3 parallel sessions per round
 **Branch**: `competitive-waves` (all work here, main is the safe checkpoint)
 **Total**: 25 features across 6 waves, ~12 execution rounds
-**Migration**: All new tables in migration v15 (written in Phase 0 before any features)
+**Migration**: All new tables in migration v16 (written in Phase 0 before any features)
+
+---
+
+## HOW TO RESUME (if you lost your conversation)
+
+Check progress: `git log --oneline competitive-waves | head -20`
+
+Look for commits with `feat(waveN):` prefix. Match against the tracker below to see what's done.
+
+### Progress Tracker
+
+Update this as you complete each round. Mark [x] when done.
+
+| Round | Features | Status |
+|---|---|---|
+| Phase 0 | Migration v16 + schema + skeletons + stubs | [x] DONE |
+| 1A | #1 Blacklisting, #2 Order Aging, #4 Billing Discounts | [ ] IN PROGRESS |
+| 1B | #3 Bulk Order Status, #5 Customer Ledger, #6 Supplier Ledger | [ ] |
+| 1C | #7 Points Transfer | [ ] |
+| 2A | #8 Credit/Debit Notes, #12 Bulk Import | [ ] |
+| 2B | #9 Cheques, #10 Chart of Accounts | [ ] |
+| 2C | #11 Journal Entries (requires #10) | [ ] |
+| 3A | #14 Stock Aging, #15 Inventory Audit | [ ] |
+| 3B | #13 Bundling, #16 Scan Receive | [ ] |
+| 3C | #17 Price Lists | [ ] |
+| 4A | #18 Tiered Loyalty, #20 Reviews | [ ] |
+| 4B | #19 Customer Profiling | [ ] |
+| 5A | #21 Pick/Pack/Dispatch | [ ] |
+| 5B | #22 Loadsheets, #23 Scan Dispatch | [ ] |
+| 6A | #24 Multichannel Reports, #25 API Docs | [ ] |
+
+### What each round needs
+
+For each round, open a NEW Claude Code conversation and paste the prompt for each feature. Prompts for each round are either:
+- In this file (scroll to the wave/feature section below)
+- In dedicated prompt files in `docs/plans/wave*-round*-prompts.md` (if created)
+
+**Critical rule for ALL prompts**: Every session must start with:
+> "You are working on the `competitive-waves` branch. Phase 0 is done. DO NOT touch migrate-pg.js, schema-pg.sql, registerAllRoutes.js, or index.js."
+
+### Rollback
+
+If anything goes wrong: `git checkout main` — you're back to a working app.
 
 ---
 
@@ -14,7 +57,7 @@
 ```
 main (SAFE CHECKPOINT — never touch until final merge)
 └── competitive-waves (ALL work happens here)
-    ├── Phase 0: migration v15 + schema + route skeletons + frontend route stubs
+    ├── Phase 0: migration v16 + schema + route skeletons + frontend route stubs  ✅ DONE
     ├── Wave 1: features #1-#7 (sequential rounds, no parallel file conflicts)
     ├── Wave 2: features #8-#12
     ├── Wave 3: features #13-#17
@@ -23,11 +66,9 @@ main (SAFE CHECKPOINT — never touch until final merge)
     └── Wave 6: features #24-#25
 ```
 
-If anything goes catastrophically wrong: `git checkout main` — you're back to a working app.
-
-### Phase 0 — Foundation (eliminates merge conflicts)
-Before any feature work, we commit:
-1. **Migration v15** — all 13 new tables + all column additions for all 25 features
+### Phase 0 — Foundation ✅ COMPLETED
+Committed in `391add0`. Contains:
+1. **Migration v16** — all 13 new tables + all column additions for all 25 features
 2. **schema-pg.sql** — updated DDL source of truth
 3. **Empty route skeletons** — `routes/fulfillment.js`, new report files, mounted in registerAllRoutes.js
 4. **Frontend route stubs** — all new pages registered in appRoutes.jsx as lazy placeholders
