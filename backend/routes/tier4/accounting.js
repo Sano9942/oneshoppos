@@ -1305,6 +1305,314 @@ module.exports = function createAccountingRouter({
     }
   });
 
+  // ── Journal Entries ────────────────────────────────────────────────
+
+  const jeAuth = [
+    requireAnyPerm(["all_access"]),
+    requireFeature("accounting_core"),
+  ];
+
+  // List with date range, status filter, pagination
+  router.get("/api/accounting/journal-entries", ...jeAuth, async (req, res) => {
+    try {
+      const { from, to, status, page = 1, per_page = 50 } = req.query || {};
+      const where = ["1=1"];
+      const params = [];
+      let idx = 1;
+      if (from) { where.push(`je.entry_date >= $${idx++}::date`); params.push(from); }
+      if (to) { where.push(`je.entry_date <= $${idx++}::date`); params.push(to); }
+      if (status) { where.push(`je.status = $${idx++}`); params.push(status); }
+
+      const offset = (Math.max(1, Number(page)) - 1) * Number(per_page);
+      const { rows: countRows } = await db.query(
+        `SELECT COUNT(*) AS total FROM journal_entries je WHERE ${where.join(" AND ")}`,
+        params
+      );
+      const total = Number(countRows[0]?.total || 0);
+
+      params.push(Number(per_page));
+      params.push(offset);
+      const { rows } = await db.query(
+        `SELECT je.*,
+                e.name AS created_by_name,
+                pb.name AS posted_by_name,
+                vb.name AS voided_by_name,
+                COALESCE(lines.total_debit, 0) AS total_debit,
+                COALESCE(lines.total_credit, 0) AS total_credit,
+                COALESCE(lines.line_count, 0) AS line_count
+         FROM journal_entries je
+         LEFT JOIN employees e ON e.id = je.created_by
+         LEFT JOIN employees pb ON pb.id = je.posted_by
+         LEFT JOIN employees vb ON vb.id = je.voided_by
+         LEFT JOIN (
+           SELECT journal_entry_id,
+                  SUM(debit) AS total_debit,
+                  SUM(credit) AS total_credit,
+                  COUNT(*) AS line_count
+           FROM journal_entry_lines GROUP BY journal_entry_id
+         ) lines ON lines.journal_entry_id = je.id
+         WHERE ${where.join(" AND ")}
+         ORDER BY je.entry_date DESC, je.id DESC
+         LIMIT $${idx++} OFFSET $${idx++}`,
+        params
+      );
+      res.json({ entries: rows || [], total, page: Number(page), per_page: Number(per_page) });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get single entry with lines
+  router.get("/api/accounting/journal-entries/:id", ...jeAuth, async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        `SELECT je.*,
+                e.name AS created_by_name,
+                pb.name AS posted_by_name,
+                vb.name AS voided_by_name
+         FROM journal_entries je
+         LEFT JOIN employees e ON e.id = je.created_by
+         LEFT JOIN employees pb ON pb.id = je.posted_by
+         LEFT JOIN employees vb ON vb.id = je.voided_by
+         WHERE je.id = $1`,
+        [req.params.id]
+      );
+      if (!rows.length) return res.status(404).json({ error: "Journal entry not found" });
+      const entry = rows[0];
+
+      const { rows: lines } = await db.query(
+        `SELECT jel.*, coa.code AS account_code, coa.name AS account_name, coa.type AS account_type
+         FROM journal_entry_lines jel
+         JOIN chart_of_accounts coa ON coa.id = jel.account_id
+         WHERE jel.journal_entry_id = $1
+         ORDER BY jel.id ASC`,
+        [req.params.id]
+      );
+      entry.lines = lines || [];
+      res.json(entry);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Create journal entry with lines
+  router.post("/api/accounting/journal-entries", ...jeAuth, async (req, res) => {
+    try {
+      const { entry_date, description, lines } = req.body || {};
+      if (!entry_date || !description) {
+        return res.status(400).json({ error: "entry_date and description are required" });
+      }
+      if (!Array.isArray(lines) || lines.length < 2) {
+        return res.status(400).json({ error: "At least 2 lines are required" });
+      }
+
+      // Validate balance
+      let totalDebit = 0, totalCredit = 0;
+      for (const line of lines) {
+        totalDebit += Number(line.debit || 0);
+        totalCredit += Number(line.credit || 0);
+      }
+      if (Math.abs(totalDebit - totalCredit) > 0.005) {
+        return res.status(400).json({ error: "Entry is unbalanced: total debits must equal total credits" });
+      }
+
+      // Validate all account_ids exist and are active
+      const accountIds = [...new Set(lines.map((l) => Number(l.account_id)))];
+      const { rows: accounts } = await db.query(
+        `SELECT id, is_active FROM chart_of_accounts WHERE id = ANY($1::int[])`,
+        [accountIds]
+      );
+      const activeSet = new Set(accounts.filter((a) => a.is_active).map((a) => a.id));
+      for (const aid of accountIds) {
+        if (!activeSet.has(aid)) {
+          return res.status(400).json({ error: `Account ID ${aid} not found or inactive` });
+        }
+      }
+
+      // Generate entry_number: JE-YYYYMMDD-NNN
+      const dateStr = entry_date.replace(/-/g, "");
+      const { rows: [seqRow] } = await db.query(
+        `SELECT COUNT(*) AS cnt FROM journal_entries WHERE entry_number LIKE $1`,
+        [`JE-${dateStr}-%`]
+      );
+      const seq = String(Number(seqRow?.cnt || 0) + 1).padStart(3, "0");
+      const entry_number = `JE-${dateStr}-${seq}`;
+
+      const employeeId = Number(req.headers["x-employee-id"] || 0) || null;
+
+      const result = await db.transaction(async (client) => {
+        const { rows: [entry] } = await client.query(
+          `INSERT INTO journal_entries (entry_number, entry_date, description, status, created_by)
+           VALUES ($1, $2, $3, 'draft', $4) RETURNING id`,
+          [entry_number, entry_date, description, employeeId]
+        );
+        for (const line of lines) {
+          await client.query(
+            `INSERT INTO journal_entry_lines (journal_entry_id, account_id, description, debit, credit)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [entry.id, line.account_id, line.description || null, Number(line.debit || 0), Number(line.credit || 0)]
+          );
+        }
+        return entry;
+      });
+
+      res.json({ message: "Journal entry created", id: result.id, entry_number });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Update draft journal entry
+  router.put("/api/accounting/journal-entries/:id", ...jeAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { rows: [existing] } = await db.query(
+        "SELECT id, status FROM journal_entries WHERE id = $1", [id]
+      );
+      if (!existing) return res.status(404).json({ error: "Journal entry not found" });
+      if (existing.status !== "draft") {
+        return res.status(400).json({ error: "Only draft entries can be edited" });
+      }
+
+      const { entry_date, description, lines } = req.body || {};
+      if (!entry_date || !description) {
+        return res.status(400).json({ error: "entry_date and description are required" });
+      }
+      if (!Array.isArray(lines) || lines.length < 2) {
+        return res.status(400).json({ error: "At least 2 lines are required" });
+      }
+
+      let totalDebit = 0, totalCredit = 0;
+      for (const line of lines) {
+        totalDebit += Number(line.debit || 0);
+        totalCredit += Number(line.credit || 0);
+      }
+      if (Math.abs(totalDebit - totalCredit) > 0.005) {
+        return res.status(400).json({ error: "Entry is unbalanced: total debits must equal total credits" });
+      }
+
+      const accountIds = [...new Set(lines.map((l) => Number(l.account_id)))];
+      const { rows: accounts } = await db.query(
+        `SELECT id, is_active FROM chart_of_accounts WHERE id = ANY($1::int[])`,
+        [accountIds]
+      );
+      const activeSet = new Set(accounts.filter((a) => a.is_active).map((a) => a.id));
+      for (const aid of accountIds) {
+        if (!activeSet.has(aid)) {
+          return res.status(400).json({ error: `Account ID ${aid} not found or inactive` });
+        }
+      }
+
+      await db.transaction(async (client) => {
+        await client.query(
+          `UPDATE journal_entries SET entry_date = $1, description = $2 WHERE id = $3`,
+          [entry_date, description, id]
+        );
+        await client.query("DELETE FROM journal_entry_lines WHERE journal_entry_id = $1", [id]);
+        for (const line of lines) {
+          await client.query(
+            `INSERT INTO journal_entry_lines (journal_entry_id, account_id, description, debit, credit)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [id, line.account_id, line.description || null, Number(line.debit || 0), Number(line.credit || 0)]
+          );
+        }
+      });
+
+      res.json({ message: "Journal entry updated" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Post a draft entry
+  router.put("/api/accounting/journal-entries/:id/post", ...jeAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { rows: [entry] } = await db.query(
+        "SELECT id, status FROM journal_entries WHERE id = $1", [id]
+      );
+      if (!entry) return res.status(404).json({ error: "Journal entry not found" });
+      if (entry.status === "posted") return res.status(400).json({ error: "Entry is already posted" });
+      if (entry.status === "voided") return res.status(400).json({ error: "Cannot post a voided entry" });
+
+      const employeeId = Number(req.headers["x-employee-id"] || 0) || null;
+      await db.query(
+        `UPDATE journal_entries SET status = 'posted', posted_by = $1, posted_at = NOW() WHERE id = $2`,
+        [employeeId, id]
+      );
+      res.json({ message: "Journal entry posted" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Void a posted entry
+  router.put("/api/accounting/journal-entries/:id/void", ...jeAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { rows: [entry] } = await db.query(
+        "SELECT id, status FROM journal_entries WHERE id = $1", [id]
+      );
+      if (!entry) return res.status(404).json({ error: "Journal entry not found" });
+      if (entry.status === "voided") return res.status(400).json({ error: "Entry is already voided" });
+      if (entry.status === "draft") return res.status(400).json({ error: "Cannot void a draft entry — delete it instead" });
+
+      const employeeId = Number(req.headers["x-employee-id"] || 0) || null;
+      await db.query(
+        `UPDATE journal_entries SET status = 'voided', voided_by = $1, voided_at = NOW() WHERE id = $2`,
+        [employeeId, id]
+      );
+      res.json({ message: "Journal entry voided" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Trial Balance ──────────────────────────────────────────────────
+  router.get("/api/accounting/trial-balance", ...jeAuth, async (req, res) => {
+    try {
+      const { from, to } = req.query || {};
+      const dateWhere = [];
+      const params = [];
+      let idx = 1;
+      if (from) { dateWhere.push(`je.entry_date >= $${idx++}::date`); params.push(from); }
+      if (to) { dateWhere.push(`je.entry_date <= $${idx++}::date`); params.push(to); }
+      const dateClause = dateWhere.length
+        ? `AND ${dateWhere.join(" AND ")}`
+        : "";
+
+      const { rows } = await db.query(
+        `SELECT coa.id, coa.code, coa.name, coa.type, coa.normal_balance,
+                COALESCE(SUM(jel.debit), 0) AS total_debit,
+                COALESCE(SUM(jel.credit), 0) AS total_credit
+         FROM chart_of_accounts coa
+         LEFT JOIN journal_entry_lines jel ON jel.account_id = coa.id
+         LEFT JOIN journal_entries je ON je.id = jel.journal_entry_id AND je.status = 'posted' ${dateClause}
+         WHERE coa.is_active = true
+         GROUP BY coa.id, coa.code, coa.name, coa.type, coa.normal_balance
+         HAVING COALESCE(SUM(jel.debit), 0) > 0 OR COALESCE(SUM(jel.credit), 0) > 0
+         ORDER BY coa.code ASC`,
+        params
+      );
+
+      const accounts = (rows || []).map((r) => {
+        const td = Number(r.total_debit || 0);
+        const tc = Number(r.total_credit || 0);
+        return {
+          ...r,
+          total_debit: td,
+          total_credit: tc,
+          balance: r.normal_balance === "debit" ? td - tc : tc - td,
+        };
+      });
+      const grandDebit = accounts.reduce((s, a) => s + a.total_debit, 0);
+      const grandCredit = accounts.reduce((s, a) => s + a.total_credit, 0);
+      res.json({ accounts, grand_total_debit: grandDebit, grand_total_credit: grandCredit });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Next code suggestion for a given type
   router.get("/api/accounting/coa/next-code/:type", ...coaAuth, async (req, res) => {
     try {
