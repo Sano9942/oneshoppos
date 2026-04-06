@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, Plus, Search, UserRound, Wallet } from "lucide-react";
+import { Ban, Download, Plus, Search, ShieldCheck, UserRound, Wallet } from "lucide-react";
 import { api } from "../../api";
 import { fmtDate, fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -84,6 +84,8 @@ export default function CustomersRedesign() {
   const [pointsAdjust, setPointsAdjust] = useState("");
   const [walletTopup, setWalletTopup] = useState("");
   const [walletNote, setWalletNote] = useState("");
+  const [blacklistModal, setBlacklistModal] = useState(false);
+  const [blacklistReason, setBlacklistReason] = useState("");
 
   const fetchCustomers = async (query = "") => {
     setLoading(true);
@@ -250,6 +252,36 @@ export default function CustomersRedesign() {
     }
   };
 
+  const blacklistCustomer = async () => {
+    if (!detail || !blacklistReason.trim()) return;
+    setBusy(true);
+    try {
+      const updated = await api.put(`/api/customers/${detail.id}/blacklist`, { reason: blacklistReason.trim() });
+      setDetail((p) => ({ ...p, is_blacklisted: true, blacklist_reason: updated.blacklist_reason, blacklisted_at: updated.blacklisted_at }));
+      setRows((prev) => prev.map((r) => r.id === detail.id ? { ...r, is_blacklisted: true, blacklist_reason: updated.blacklist_reason, blacklisted_at: updated.blacklisted_at } : r));
+      setBlacklistModal(false);
+      setBlacklistReason("");
+    } catch (e) {
+      setError(e.body?.error || e.message || "Failed to blacklist customer");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const unblacklistCustomer = async () => {
+    if (!detail) return;
+    setBusy(true);
+    try {
+      await api.put(`/api/customers/${detail.id}/unblacklist`);
+      setDetail((p) => ({ ...p, is_blacklisted: false, blacklist_reason: null, blacklisted_at: null }));
+      setRows((prev) => prev.map((r) => r.id === detail.id ? { ...r, is_blacklisted: false, blacklist_reason: null, blacklisted_at: null } : r));
+    } catch (e) {
+      setError(e.body?.error || e.message || "Failed to unblacklist customer");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const selectedCount = selectedIds.size;
 
   return (
@@ -330,6 +362,11 @@ export default function CustomersRedesign() {
                             <UserRound size={12} />
                           </span>
                           <span className="font-medium text-(--ui-text)">{r.name}</span>
+                          {r.is_blacklisted && (
+                            <span className="ml-1.5 inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                              Blacklisted
+                            </span>
+                          )}
                         </button>
                       </td>
                       <td className="px-3 py-2 text-(--ui-text-muted)">
@@ -407,6 +444,33 @@ export default function CustomersRedesign() {
                   {detail.email || detail.mobile || "No contact info"}
                 </p>
               </div>
+
+              {detail.is_blacklisted && (
+                <div className="rounded-md border border-red-300 bg-red-50 p-2.5">
+                  <p className="flex items-center gap-1.5 text-xs font-semibold text-red-700">
+                    <Ban size={13} /> Blacklisted
+                  </p>
+                  <p className="mt-1 text-xs text-red-600">{detail.blacklist_reason}</p>
+                  {detail.blacklisted_at && (
+                    <p className="mt-0.5 text-[10px] text-red-400">Since {fmtDate(detail.blacklisted_at)}</p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                {detail.is_blacklisted ? (
+                  <Button size="sm" onClick={unblacklistCustomer} disabled={busy}>
+                    <ShieldCheck size={13} className="mr-1 inline text-emerald-600" />
+                    Unblacklist
+                  </Button>
+                ) : (
+                  <Button size="sm" tone="danger" onClick={() => { setBlacklistReason(""); setBlacklistModal(true); }} disabled={busy}>
+                    <Ban size={13} className="mr-1 inline" />
+                    Blacklist
+                  </Button>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <SectionCard className="p-2 text-center">
                   <p className="text-xs text-(--ui-text-muted)">Orders</p>
@@ -568,6 +632,33 @@ export default function CustomersRedesign() {
                 </Button>
               </div>
             </form>
+          </SectionCard>
+        </div>
+      ) : null}
+
+      {blacklistModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
+          <SectionCard className="w-full max-w-sm p-4">
+            <h3 className="text-lg font-semibold text-red-700">Blacklist Customer</h3>
+            <p className="mt-1 text-xs text-(--ui-text-muted)">
+              This will block {detail?.name} from POS checkout.
+            </p>
+            <div className="mt-3 space-y-2">
+              <Input
+                required
+                placeholder="Reason for blacklisting"
+                value={blacklistReason}
+                onChange={(e) => setBlacklistReason(e.target.value)}
+              />
+              <div className="flex gap-2 pt-1">
+                <Button type="button" onClick={() => setBlacklistModal(false)}>
+                  Cancel
+                </Button>
+                <Button tone="danger" disabled={busy || !blacklistReason.trim()} onClick={blacklistCustomer}>
+                  Confirm Blacklist
+                </Button>
+              </div>
+            </div>
           </SectionCard>
         </div>
       ) : null}

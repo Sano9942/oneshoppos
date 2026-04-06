@@ -383,6 +383,19 @@ module.exports = function registerSalesRoutes(app, deps) {
       mainPaymentMethod = finalPayments[0].method;
     }
 
+    // Blacklist check — reject sale if customer is blacklisted
+    if (customer_id) {
+      const { rows: [custRow] } = await db.query(
+        "SELECT is_blacklisted, blacklist_reason FROM customers WHERE id = $1",
+        [customer_id],
+      );
+      if (custRow && custRow.is_blacklisted) {
+        return res.status(400).json({
+          error: `Customer is blacklisted: ${custRow.blacklist_reason || "No reason provided"}`,
+        });
+      }
+    }
+
     // B3 fix: Check wallet balance before allowing Wallet payment
     const walletPaymentsBefore = (finalPayments || []).filter(
       (p) => p.method === "Wallet",

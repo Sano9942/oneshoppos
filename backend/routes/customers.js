@@ -194,6 +194,38 @@ module.exports = function registerCustomerRoutes(app, deps) {
     }
   });
 
+  // PUT blacklist a customer
+  app.put("/api/customers/:id/blacklist", requireAnyPerm(["manage_customers", "all_access"]), async (req, res) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+    if (!reason) return res.status(400).json({ error: "Blacklist reason is required" });
+    try {
+      const { rows, rowCount } = await db.query(
+        "UPDATE customers SET is_blacklisted = true, blacklist_reason = $1, blacklisted_at = NOW() WHERE id = $2 RETURNING *",
+        [reason, id],
+      );
+      if (rowCount === 0) return res.status(404).json({ error: "Customer not found" });
+      res.json(rows[0]);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PUT unblacklist a customer
+  app.put("/api/customers/:id/unblacklist", requireAnyPerm(["manage_customers", "all_access"]), async (req, res) => {
+    const { id } = req.params;
+    try {
+      const { rows, rowCount } = await db.query(
+        "UPDATE customers SET is_blacklisted = false, blacklist_reason = NULL, blacklisted_at = NULL WHERE id = $1 RETURNING *",
+        [id],
+      );
+      if (rowCount === 0) return res.status(404).json({ error: "Customer not found" });
+      res.json(rows[0]);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Archive a customer (soft delete)
   app.delete("/api/customers/:id", requirePerm("manage_customers"), async (req, res) => {
     const { id } = req.params;
