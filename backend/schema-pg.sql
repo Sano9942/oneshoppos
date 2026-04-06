@@ -244,23 +244,6 @@ CREATE TABLE IF NOT EXISTS product_bundles (
   UNIQUE(product_id, component_product_id, component_variant_id)
 );
 
--- ── Product Reviews ──────────────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS product_reviews (
-  id SERIAL PRIMARY KEY,
-  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  customer_id INTEGER REFERENCES customers(id),
-  customer_name TEXT,
-  rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
-  title TEXT,
-  body TEXT,
-  status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
-  moderated_by INTEGER REFERENCES employees(id),
-  moderated_at TIMESTAMPTZ,
-  sale_id INTEGER REFERENCES sales(id),
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
 -- ── Customer Groups ──────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS customer_groups (
@@ -401,6 +384,23 @@ CREATE TABLE IF NOT EXISTS sale_payments (
 CREATE TABLE IF NOT EXISTS invoice_sequences (
   year INTEGER PRIMARY KEY,
   last_seq INTEGER NOT NULL DEFAULT 0
+);
+
+-- ── Product Reviews ──────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS product_reviews (
+  id SERIAL PRIMARY KEY,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  customer_id INTEGER REFERENCES customers(id),
+  customer_name TEXT,
+  rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
+  title TEXT,
+  body TEXT,
+  status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+  moderated_by INTEGER REFERENCES employees(id),
+  moderated_at TIMESTAMPTZ,
+  sale_id INTEGER REFERENCES sales(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ── Returns ───────────────────────────────────────────────────────────
