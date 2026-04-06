@@ -39,6 +39,7 @@ import {
   FileSpreadsheet,
   PackageX,
   Boxes,
+  Globe,
 } from "lucide-react";
 
 import { api } from "../api";
@@ -142,6 +143,7 @@ import {
   ExceptionsTab,
 } from "./reports/ReportsAudit";
 import FBRExportTab from "./reports/FBRExportTab";
+import MultichannelTab from "./reports/ReportsMultichannel";
 
 function GlobalFilterBar({ filters, setFilters, meta }) {
   const {
@@ -526,6 +528,12 @@ const GROUPS = [
       { id: "exceptions", label: "Exceptions", icon: SearchCheck },
     ],
   },
+  {
+    label: "Multi-Channel",
+    tabs: [
+      { id: "multichannel", label: "Multi-Channel", icon: Globe },
+    ],
+  },
 ];
 
 function TabBreadcrumb({ activeTab }) {
@@ -697,6 +705,8 @@ function TabContent({ activeTab, filters, setFilters, setActiveTab }) {
       return <ExceptionsTab filters={filters} />;
     case "fbr-export":
       return <FBRExportTab />;
+    case "multichannel":
+      return <MultichannelTab filters={filters} />;
     default:
       return null;
   }
