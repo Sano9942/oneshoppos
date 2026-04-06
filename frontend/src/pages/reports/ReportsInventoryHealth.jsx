@@ -362,23 +362,34 @@ export function DeadStockTab({ filters }) {
 }
 
 // --- Tab: Stock Aging --------------------------------------------------------
+
+const BUCKET_CONFIG = [
+  { key: "fresh", label: "Fresh", sub: "0–30 days", bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", ring: "ring-emerald-400" },
+  { key: "aging", label: "Aging", sub: "31–60 days", bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-700", ring: "ring-amber-400" },
+  { key: "old", label: "Old", sub: "61–90 days", bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-700", ring: "ring-orange-400" },
+  { key: "critical", label: "Critical", sub: "90+ days", bg: "bg-rose-50", border: "border-rose-200", text: "text-rose-700", ring: "ring-rose-400" },
+];
+
 export function StockAgingTab({ filters }) {
   const { fmt } = useCurrency();
   const [rows, setRows] = useState([]);
+  const [summary, setSummary] = useState({});
   const [loading, setLoading] = useState(true);
+  const [activeBucket, setActiveBucket] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams({
-        category_id: filters.categoryId,
-        brand_id: filters.brandId,
-        supplier_id: filters.supplierId,
-        search: filters.search,
-      });
+      const p = new URLSearchParams();
+      if (filters.categoryId) p.set("category_id", filters.categoryId);
+      if (filters.brandId) p.set("brand_id", filters.brandId);
+      if (filters.supplierId) p.set("supplier_id", filters.supplierId);
+      if (filters.search) p.set("search", filters.search);
       if (filters.outletIds && filters.outletIds.length) p.set("outlet_id", filters.outletIds.join(","));
+      if (activeBucket) p.set("bucket", activeBucket);
       const d = await api.get(`/api/reports/stock-aging?${p}`);
-      setRows(d.items || d.rows || []);
+      setRows(d.items || []);
+      if (d.summary) setSummary(d.summary);
     } catch {
       setRows([]);
     } finally {
@@ -390,82 +401,112 @@ export function StockAgingTab({ filters }) {
     filters.brandId,
     filters.supplierId,
     filters.search,
+    activeBucket,
   ]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const olderThan90 = rows.filter((row) => Number(row.days_since_sale || 99999) >= 90).length;
-  const olderThan180 = rows.filter((row) => Number(row.days_since_sale || 99999) >= 180).length;
-  const totalCost = rows.reduce((sum, row) => sum + Number(row.stock_cost_value || 0), 0);
+  const handleBucketClick = (key) => {
+    setActiveBucket((prev) => (prev === key ? null : key));
+  };
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <InventoryHealthStat label="Rows" value={rows.length} />
-        <InventoryHealthStat label="90+ Days" value={olderThan90} />
-        <InventoryHealthStat label="180+ Days" value={olderThan180} />
-        <InventoryHealthStat label="Cost at Risk" value={fmt(totalCost)} />
+      {/* Bucket summary cards */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {BUCKET_CONFIG.map((b) => {
+          const s = summary[b.key] || { count: 0, value: 0 };
+          const isActive = activeBucket === b.key;
+          return (
+            <button
+              key={b.key}
+              type="button"
+              onClick={() => handleBucketClick(b.key)}
+              className={`rounded-2xl border p-4 text-left shadow-sm transition-all ${b.bg} ${b.border} ${isActive ? `ring-2 ${b.ring}` : ""}`}
+            >
+              <p className={`text-xs font-semibold uppercase tracking-wide ${b.text}`}>
+                {b.label}
+              </p>
+              <p className="text-[10px] text-slate-500">{b.sub}</p>
+              <p className={`mt-2 text-2xl font-bold ${b.text}`}>{s.count}</p>
+              <p className="mt-0.5 text-xs font-medium text-slate-600">{fmt(s.value)}</p>
+            </button>
+          );
+        })}
       </div>
 
+      {activeBucket && (
+        <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-xs font-medium text-slate-600">
+          Showing only <span className="font-bold">{BUCKET_CONFIG.find((b) => b.key === activeBucket)?.label}</span> items
+          <button type="button" onClick={() => setActiveBucket(null)} className="ml-auto text-slate-400 hover:text-slate-700">✕ Clear</button>
+        </div>
+      )}
+
       <CardShell
-        title="Stock Aging"
-        subtitle="Outlet-level aging ladder by last sale date to identify stale inventory before it turns into dead stock"
+        title="Stock Aging Analysis"
+        subtitle="Age calculated from most recent GRN received date — identifies inventory sitting too long before it becomes dead stock"
         action={
           <ExportButton
             onClick={() =>
               exportCSV(
                 "stock_aging.csv",
                 [
-                  { header: "Product", key: "product_name" },
+                  { header: "Product", key: "name" },
+                  { header: "SKU", key: "sku" },
                   { header: "Barcode", key: "barcode" },
                   { header: "Outlet", key: "outlet_name" },
                   { header: "Category", key: "category" },
                   { header: "Brand", key: "brand" },
                   { header: "Supplier", key: "supplier" },
-                  { header: "Stock Qty", key: "stock_qty" },
-                  { header: "Cost Value", key: "stock_cost_value" },
-                  { header: "Last Sold", key: "last_sold_at" },
-                  { header: "Days Since Sale", key: "days_since_sale" },
+                  { header: "Stock", key: "current_stock" },
+                  { header: "Cost Price", key: "cost_price" },
+                  { header: "Stock Value", key: "stock_value" },
+                  { header: "Age Days", key: "age_days" },
+                  { header: "Bucket", key: "age_bucket" },
                 ],
-        rows,
+                rows,
               )
             }
           />
         }
       >
         <TableShell
-          cols={["Product", "Outlet / Tags", "Stock", "Last Sold", "Age Bucket", "Cost Value"]}
+          cols={["Product", "Outlet / Tags", "Stock", "Cost", "Stock Value", "Age", "Bucket"]}
           loading={loading}
           empty={!rows.length}
           emptyIcon={AlertTriangle}
         >
           {rows.map((row, i) => {
-            const age = Number(row.days_since_sale || 99999);
-            const ageLabel = age >= 180 ? "180+ Days" : age >= 90 ? "90+ Days" : age >= 30 ? "30+ Days" : "< 30 Days";
-            const tone = age >= 180 ? "bg-rose-50 text-rose-700" : age >= 90 ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-700";
+            const days = Number(row.age_days) || 0;
+            const isCritical = row.age_bucket === "critical";
+            const bucketCfg = BUCKET_CONFIG.find((b) => b.key === row.age_bucket) || BUCKET_CONFIG[0];
             return (
-              <tr key={`${row.product_id}-${row.outlet_id}-${i}`} className="hover:bg-slate-50">
+              <tr
+                key={`${row.product_id}-${row.outlet_id}-${i}`}
+                className={isCritical ? "bg-rose-50/50 hover:bg-rose-50" : "hover:bg-slate-50"}
+              >
                 <td className="px-4 py-3">
-                  <div className="text-sm font-semibold text-slate-800">{row.product_name}</div>
-                  <div className="font-mono text-[11px] text-slate-400">{row.barcode}</div>
+                  <div className="text-sm font-semibold text-slate-800">{row.name}</div>
+                  <div className="font-mono text-[11px] text-slate-400">
+                    {row.sku || row.barcode || "—"}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <div className="text-sm font-semibold text-slate-900">{row.outlet_name}</div>
                   <div className="text-[11px] text-slate-400">{row.category}</div>
-                  <div className="text-[11px] text-slate-400">{row.brand} | {row.supplier}</div>
+                  <div className="text-[11px] text-slate-400">{row.brand}{row.supplier ? ` | ${row.supplier}` : ""}</div>
                 </td>
-                <td className="px-4 py-3 text-sm font-bold text-slate-900">{row.stock_qty}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">
-                  {row.last_sold_at ? fmtDate(row.last_sold_at) : "Never sold"}
-                </td>
+                <td className="px-4 py-3 text-sm font-bold text-slate-900">{row.current_stock}</td>
+                <td className="px-4 py-3 text-sm text-slate-600">{fmt(row.cost_price)}</td>
+                <td className="px-4 py-3 text-sm font-semibold text-slate-800">{fmt(row.stock_value)}</td>
+                <td className="px-4 py-3 text-sm font-bold text-slate-700">{days}d</td>
                 <td className="px-4 py-3">
-                  <span className={`rounded-full px-2 py-1 text-xs font-bold ${tone}`}>
-                    {ageLabel}
+                  <span className={`rounded-full px-2 py-1 text-xs font-bold ${bucketCfg.bg} ${bucketCfg.text}`}>
+                    {bucketCfg.label}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-sm font-semibold text-slate-800">{fmt(row.stock_cost_value)}</td>
               </tr>
             );
           })}
