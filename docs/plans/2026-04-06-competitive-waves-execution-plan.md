@@ -24,8 +24,8 @@ Update this as you complete each round. Mark [x] when done.
 | 1A | #1 Blacklisting, #2 Order Aging, #4 Billing Discounts | [x] DONE |
 | 1B | #3 Bulk Order Status, #5 Customer Ledger, #6 Supplier Ledger | [x] DONE |
 | 1C | #7 Points Transfer | [x] DONE |
-| 2A | #8 Credit/Debit Notes, #12 Bulk Import | [ ] IN PROGRESS |
-| 2B | #9 Cheques, #10 Chart of Accounts | [ ] |
+| 2A | #8 Credit/Debit Notes, #12 Bulk Import | [x] DONE |
+| 2B | #9 Cheques, #10 Chart of Accounts | [ ] IN PROGRESS |
 | 2C | #11 Journal Entries (requires #10) | [ ] |
 | 3A | #14 Stock Aging, #15 Inventory Audit | [ ] |
 | 3B | #13 Bundling, #16 Scan Receive | [ ] |
