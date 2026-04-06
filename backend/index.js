@@ -207,7 +207,12 @@ const { processPendingShopifyInventoryEvents, processPendingReportSchedules } =
 // ─── API Documentation (Swagger UI) ────────────────────────────────────────
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger");
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+const apiDocsKey = process.env.API_DOCS_KEY;
+app.use("/api-docs", (req, res, next) => {
+  if (!apiDocsKey) return res.status(404).json({ error: "Not found" });
+  if (req.query.key !== apiDocsKey) return res.status(401).json({ error: "Access denied. Append ?key=YOUR_KEY to the URL." });
+  next();
+}, swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customSiteTitle: "SanoPOS API Documentation",
 }));
 
