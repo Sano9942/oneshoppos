@@ -17,6 +17,7 @@ import {
   Banknote,
   ArrowLeftRight,
   RotateCcw,
+  ClipboardCheck,
   ClipboardList,
   Building2,
   DatabaseBackup,
@@ -73,6 +74,7 @@ export const SHOPIFY_NAV_GROUPS = [
     label: "Stock Control",
     items: [
       { name: "Purchase Orders", path: "/purchase-orders", icon: History, requiredPerm: "manage_orders" },
+      { name: "Inventory Audit", path: "/stock-counts", icon: ClipboardCheck, requiredPerm: "manage_inventory" },
       { name: "Stock Adjustments", path: "/adjustments", icon: RefreshCw, requiredPerm: "manage_inventory" },
       { name: "Transfers", path: "/transfers", icon: ArrowLeftRight, requiredPerm: "manage_inventory" },
       { name: "Returned Stock", path: "/returned-stock", icon: Package, requiredPerm: "manage_orders" },

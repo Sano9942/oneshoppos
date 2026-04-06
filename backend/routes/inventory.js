@@ -277,6 +277,253 @@ module.exports = function registerInventoryRoutes(app, deps) {
     }
   });
 
+  // --- STOCK COUNTS (Inventory Audit) ---
+
+  // List stock count sessions
+  app.get("/api/stock-counts", requirePerm("manage_inventory"), async (req, res) => {
+    try {
+      const { status } = req.query;
+      let sql = `
+        SELECT sc.*, o.name as outlet_name, e.name as started_by_name,
+               ce.name as completed_by_name,
+               (SELECT COUNT(*) FROM stock_count_items sci WHERE sci.stock_count_id = sc.id AND sci.counted_qty > 0) as items_counted,
+               (SELECT COUNT(*) FROM stock_count_items sci WHERE sci.stock_count_id = sc.id) as total_items
+        FROM stock_counts sc
+        JOIN outlets o ON sc.outlet_id = o.id
+        LEFT JOIN employees e ON sc.started_by = e.id
+        LEFT JOIN employees ce ON sc.completed_by = ce.id
+      `;
+      const params = [];
+      if (status) {
+        params.push(status);
+        sql += ` WHERE sc.status = $1`;
+      }
+      sql += ` ORDER BY sc.started_at DESC`;
+      const { rows } = await db.query(sql, params);
+      res.json({ stockCounts: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get single stock count with all items
+  app.get("/api/stock-counts/:id", requirePerm("manage_inventory"), async (req, res) => {
+    try {
+      const { rows: [count] } = await db.query(`
+        SELECT sc.*, o.name as outlet_name, e.name as started_by_name, ce.name as completed_by_name
+        FROM stock_counts sc
+        JOIN outlets o ON sc.outlet_id = o.id
+        LEFT JOIN employees e ON sc.started_by = e.id
+        LEFT JOIN employees ce ON sc.completed_by = ce.id
+        WHERE sc.id = $1
+      `, [req.params.id]);
+      if (!count) return res.status(404).json({ error: "Stock count not found" });
+
+      const { rows: countItems } = await db.query(`
+        SELECT sci.*, p.name as product_name, p.barcode, p.sku,
+               (sci.counted_qty - sci.system_qty) as variance
+        FROM stock_count_items sci
+        JOIN products p ON sci.product_id = p.id
+        WHERE sci.stock_count_id = $1
+        ORDER BY sci.last_scanned_at DESC NULLS LAST, p.name
+      `, [req.params.id]);
+
+      res.json({ stockCount: count, items: countItems });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Create new stock count — snapshots all products at the outlet
+  app.post("/api/stock-counts", requirePerm("manage_inventory"), async (req, res) => {
+    const { outlet_id, notes } = req.body;
+    if (!outlet_id) return res.status(400).json({ error: "outlet_id is required" });
+
+    try {
+      // Generate count number: SC-YYYYMMDD-NNN
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const { rows: [{ cnt }] } = await db.query(
+        `SELECT COUNT(*)::int as cnt FROM stock_counts WHERE count_number LIKE $1`,
+        [`SC-${today}-%`]
+      );
+      const countNumber = `SC-${today}-${String(cnt + 1).padStart(3, "0")}`;
+
+      let countId;
+      await db.transaction(async (client) => {
+        const { rows: [created] } = await client.query(
+          `INSERT INTO stock_counts (count_number, outlet_id, started_by, notes)
+           VALUES ($1, $2, $3, $4) RETURNING id`,
+          [countNumber, outlet_id, req.employee?.id || null, notes || null]
+        );
+        countId = created.id;
+
+        // Snapshot current stock for all products at this outlet
+        await client.query(`
+          INSERT INTO stock_count_items (stock_count_id, product_id, system_qty)
+          SELECT $1, p.id, COALESCE(os.quantity, 0)
+          FROM products p
+          LEFT JOIN outlet_stock os ON os.product_id = p.id AND os.outlet_id = $2
+          WHERE p.deleted_at IS NULL AND p.status = 'active'
+        `, [countId, outlet_id]);
+      });
+
+      const { rows: [count] } = await db.query(
+        `SELECT sc.*, o.name as outlet_name FROM stock_counts sc JOIN outlets o ON sc.outlet_id = o.id WHERE sc.id = $1`,
+        [countId]
+      );
+      res.json({ stockCount: count });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Scan barcode — increment counted_qty for the matching product
+  app.post("/api/stock-counts/:id/scan", requirePerm("manage_inventory"), async (req, res) => {
+    const { barcode } = req.body;
+    if (!barcode) return res.status(400).json({ error: "barcode is required" });
+
+    try {
+      // Verify count exists and is in_progress
+      const { rows: [count] } = await db.query(
+        "SELECT * FROM stock_counts WHERE id = $1", [req.params.id]
+      );
+      if (!count) return res.status(404).json({ error: "Stock count not found" });
+      if (count.status !== "in_progress") return res.status(400).json({ error: "Stock count is not in progress" });
+
+      // Find product by barcode or SKU
+      const { rows: [product] } = await db.query(
+        "SELECT id, name, barcode, sku FROM products WHERE deleted_at IS NULL AND (barcode = $1 OR sku = $1)",
+        [barcode]
+      );
+      if (!product) return res.status(404).json({ error: "Product not found for barcode: " + barcode });
+
+      // Upsert into count items (increment counted_qty)
+      const { rows: [item] } = await db.query(`
+        INSERT INTO stock_count_items (stock_count_id, product_id, system_qty, counted_qty, last_scanned_at)
+        VALUES ($1, $2, 0, 1, NOW())
+        ON CONFLICT (stock_count_id, product_id, variant_id)
+        DO UPDATE SET counted_qty = stock_count_items.counted_qty + 1, last_scanned_at = NOW()
+        RETURNING *, (stock_count_items.counted_qty - stock_count_items.system_qty) as variance
+      `, [req.params.id, product.id]);
+
+      res.json({ item: { ...item, product_name: product.name, barcode: product.barcode, sku: product.sku } });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Manually set counted_qty for a specific item
+  app.put("/api/stock-counts/:id/items/:itemId", requirePerm("manage_inventory"), async (req, res) => {
+    const { counted_qty } = req.body;
+    if (counted_qty === undefined || counted_qty < 0) {
+      return res.status(400).json({ error: "counted_qty must be a non-negative number" });
+    }
+    try {
+      const { rows: [count] } = await db.query(
+        "SELECT status FROM stock_counts WHERE id = $1", [req.params.id]
+      );
+      if (!count) return res.status(404).json({ error: "Stock count not found" });
+      if (count.status !== "in_progress") return res.status(400).json({ error: "Stock count is not in progress" });
+
+      const { rows: [item], rowCount } = await db.query(`
+        UPDATE stock_count_items SET counted_qty = $1, last_scanned_at = NOW()
+        WHERE id = $2 AND stock_count_id = $3
+        RETURNING *, (counted_qty - system_qty) as variance
+      `, [counted_qty, req.params.itemId, req.params.id]);
+      if (!rowCount) return res.status(404).json({ error: "Item not found" });
+      res.json({ item });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Complete count — finalize, calculate variances, optionally auto-adjust
+  app.post("/api/stock-counts/:id/complete", requirePerm("manage_inventory"), async (req, res) => {
+    const autoAdjust = req.query.auto_adjust === "true";
+    try {
+      const { rows: [count] } = await db.query(
+        "SELECT * FROM stock_counts WHERE id = $1", [req.params.id]
+      );
+      if (!count) return res.status(404).json({ error: "Stock count not found" });
+      if (count.status !== "in_progress") return res.status(400).json({ error: "Stock count is not in progress" });
+
+      await db.transaction(async (client) => {
+        // Mark completed
+        await client.query(
+          `UPDATE stock_counts SET status = 'completed', completed_by = $1, completed_at = NOW() WHERE id = $2`,
+          [req.employee?.id || null, req.params.id]
+        );
+
+        if (autoAdjust) {
+          // Get items with variance
+          const { rows: variances } = await client.query(`
+            SELECT sci.product_id, sci.system_qty, sci.counted_qty, (sci.counted_qty - sci.system_qty) as variance
+            FROM stock_count_items sci
+            WHERE sci.stock_count_id = $1 AND sci.counted_qty != sci.system_qty
+          `, [req.params.id]);
+
+          for (const v of variances) {
+            // Create stock adjustment
+            await client.query(
+              `INSERT INTO stock_adjustments (product_id, outlet_id, employee_id, quantity_change, reason)
+               VALUES ($1, $2, $3, $4, $5)`,
+              [v.product_id, count.outlet_id, req.employee?.id || null, v.variance, `Stock count ${count.count_number}`]
+            );
+            // Update outlet_stock
+            await client.query(
+              `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+               VALUES ($1, $2, $3)
+               ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
+              [v.product_id, count.outlet_id, v.variance, v.variance]
+            );
+          }
+        }
+      });
+
+      // Return variance summary
+      const { rows: summary } = await db.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE counted_qty != system_qty)::int as items_with_variance,
+          COUNT(*) FILTER (WHERE counted_qty > system_qty)::int as items_over,
+          COUNT(*) FILTER (WHERE counted_qty < system_qty)::int as items_under,
+          COUNT(*) FILTER (WHERE counted_qty = 0 AND system_qty > 0)::int as items_not_counted,
+          COALESCE(SUM(counted_qty - system_qty) FILTER (WHERE counted_qty > system_qty), 0)::int as total_over,
+          COALESCE(SUM(system_qty - counted_qty) FILTER (WHERE counted_qty < system_qty), 0)::int as total_under,
+          COUNT(*)::int as total_items
+        FROM stock_count_items WHERE stock_count_id = $1
+      `, [req.params.id]);
+
+      res.json({ message: "Stock count completed", autoAdjusted: autoAdjust, summary: summary[0] });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Variance report — export-ready data
+  app.get("/api/stock-counts/:id/variance-report", requirePerm("manage_inventory"), async (req, res) => {
+    try {
+      const { rows: [count] } = await db.query(
+        "SELECT * FROM stock_counts WHERE id = $1", [req.params.id]
+      );
+      if (!count) return res.status(404).json({ error: "Stock count not found" });
+
+      const { rows } = await db.query(`
+        SELECT sci.product_id, p.name as product_name, p.barcode, p.sku,
+               sci.system_qty, sci.counted_qty,
+               (sci.counted_qty - sci.system_qty) as variance,
+               sci.last_scanned_at
+        FROM stock_count_items sci
+        JOIN products p ON sci.product_id = p.id
+        WHERE sci.stock_count_id = $1
+        ORDER BY ABS(sci.counted_qty - sci.system_qty) DESC, p.name
+      `, [req.params.id]);
+
+      res.json({ countNumber: count.count_number, status: count.status, items: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Delete adjustment and reverse stock effect
   app.delete("/api/adjustments/:id", requirePerm("all_access"), async (req, res) => {
     const { id } = req.params;
