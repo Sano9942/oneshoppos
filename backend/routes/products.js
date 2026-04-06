@@ -318,6 +318,25 @@ module.exports = function registerProductRoutes(app, deps) {
         [id]
       );
       if (!row) return res.status(404).json({ error: "Not found" });
+
+      // Attach bundle components if this is a bundle product
+      if (row.is_bundle) {
+        const { rows: components } = await db.query(
+          `SELECT pb.id, pb.component_product_id, pb.component_variant_id, pb.quantity,
+                  p.name as component_name, p.price as component_price, p.sku as component_sku,
+                  pv.sku as variant_sku,
+                  COALESCE(SUM(os.quantity), 0) as component_stock
+           FROM product_bundles pb
+           JOIN products p ON pb.component_product_id = p.id
+           LEFT JOIN product_variants pv ON pb.component_variant_id = pv.id
+           LEFT JOIN outlet_stock os ON pb.component_product_id = os.product_id
+           WHERE pb.product_id = $1
+           GROUP BY pb.id, p.name, p.price, p.sku, pv.sku`,
+          [id]
+        );
+        row.bundle_components = components;
+      }
+
       res.json({ product: row });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -370,6 +389,30 @@ module.exports = function registerProductRoutes(app, deps) {
     }
   });
 
+  // Get bundle components for a product
+  app.get("/api/products/:id/bundle-components", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { rows } = await db.query(
+        `SELECT pb.id, pb.component_product_id, pb.component_variant_id, pb.quantity,
+                p.name as component_name, p.price as component_price, p.sku as component_sku,
+                p.barcode as component_barcode,
+                pv.sku as variant_sku, pv.price as variant_price,
+                COALESCE(SUM(os.quantity), 0) as component_stock
+         FROM product_bundles pb
+         JOIN products p ON pb.component_product_id = p.id
+         LEFT JOIN product_variants pv ON pb.component_variant_id = pv.id
+         LEFT JOIN outlet_stock os ON pb.component_product_id = os.product_id
+         WHERE pb.product_id = $1
+         GROUP BY pb.id, p.name, p.price, p.sku, p.barcode, pv.sku, pv.price`,
+        [id]
+      );
+      res.json({ components: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Add a new product (and optionally set initial stock for a specific outlet)
   app.post("/api/products", requirePerm("manage_inventory"), requirePlanLimit("products"), validate(CreateProductSchema), async (req, res) => {
     const {
@@ -386,6 +429,8 @@ module.exports = function registerProductRoutes(app, deps) {
       has_variants,
       attribute_set_id,
       variants, // Array of variant objects if has_variants is true
+      is_bundle,
+      bundle_components, // Array of { product_id, variant_id?, quantity } if is_bundle
       min_qty,
       max_qty,
       unit,
@@ -416,8 +461,8 @@ module.exports = function registerProductRoutes(app, deps) {
 
       const result = await db.transaction(async (client) => {
         const { rows: [inserted] } = await client.query(
-          `INSERT INTO products (barcode, sku, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit, description_html, compare_at_price, product_type, vendor, tags, status, supplier_id)
-           VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+          `INSERT INTO products (barcode, sku, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit, description_html, compare_at_price, product_type, vendor, tags, status, supplier_id, is_bundle)
+           VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
            RETURNING id`,
           [
             barcode || null,
@@ -441,9 +486,21 @@ module.exports = function registerProductRoutes(app, deps) {
             tags || null,
             status || "active",
             supplier_id || null,
+            is_bundle ? true : false,
           ]
         );
         const newProductId = inserted.id;
+
+        // 1a. If it's a bundle, insert component rows
+        if (is_bundle && Array.isArray(bundle_components) && bundle_components.length > 0) {
+          for (const comp of bundle_components) {
+            await client.query(
+              `INSERT INTO product_bundles (product_id, component_product_id, component_variant_id, quantity)
+               VALUES ($1, $2, $3, $4)`,
+              [newProductId, comp.product_id, comp.variant_id || null, comp.quantity || 1]
+            );
+          }
+        }
 
         // 1. If it has variants, process them
         if (has_variants && variants && variants.length > 0) {
@@ -659,6 +716,7 @@ module.exports = function registerProductRoutes(app, deps) {
       image_urls,
       variants, // Optional array of variants to update
       supplier_id,
+      bundle_components, // Optional array of { product_id, variant_id?, quantity } for bundles
     } = req.body;
     try {
       if (Object.prototype.hasOwnProperty.call(req.body || {}, "category_id")) {
@@ -769,6 +827,18 @@ module.exports = function registerProductRoutes(app, deps) {
               );
             }
             // Ignore new variants in PUT for simplicity
+          }
+        }
+
+        // 3. Update bundle components if provided (delete + re-insert)
+        if (Array.isArray(bundle_components)) {
+          await client.query("DELETE FROM product_bundles WHERE product_id = $1", [id]);
+          for (const comp of bundle_components) {
+            await client.query(
+              `INSERT INTO product_bundles (product_id, component_product_id, component_variant_id, quantity)
+               VALUES ($1, $2, $3, $4)`,
+              [id, comp.product_id, comp.variant_id || null, comp.quantity || 1]
+            );
           }
         }
 

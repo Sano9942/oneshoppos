@@ -1,5 +1,5 @@
 import React from "react";
-import { ShoppingCart, Minus, Plus, Trash2 } from "lucide-react";
+import { ShoppingCart, Minus, Plus, Trash2, Package } from "lucide-react";
 import { usePOS } from "./POSContext";
 
 export default function POSCartTable() {
@@ -43,7 +43,14 @@ export default function POSCartTable() {
                   className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition"
                 >
                   <td className="px-3 md:px-4 py-3">
-                    <div className="font-bold text-slate-800 text-xs md:text-sm">{item.name}</div>
+                    <div className="font-bold text-slate-800 text-xs md:text-sm flex items-center gap-1.5">
+                      {item.name}
+                      {item.is_bundle && (
+                        <span className="inline-flex items-center gap-0.5 bg-violet-100 text-violet-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                          <Package size={9} /> Bundle
+                        </span>
+                      )}
+                    </div>
                     <div className="md:hidden text-[10px] text-slate-400 mt-0.5 flex items-center gap-2">
                       <span>{money(item.price)} ea</span>
                       <button

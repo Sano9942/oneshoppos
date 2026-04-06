@@ -4,7 +4,7 @@ import { API_BASE as API } from "../../config";
 import { api } from "../../api";
 import { Button, PageShell, Input, SectionCard, Select } from "../../ui/primitives";
 import { sortCategories, indentLabel } from "../../utils/categoryTree";
-import { X } from "lucide-react";
+import { X, Package, Plus, Trash2, Search } from "lucide-react";
 
 function cartesian(arrays) {
   return arrays.reduce(
@@ -43,6 +43,7 @@ const BLANK_FORM = {
   barcode: "", sku: "", unit: "pcs",
   status: "active",
   has_variants: false,
+  is_bundle: false,
   attribute_set_id: "",
   supplier_id: "",
 };
@@ -63,16 +64,56 @@ export default function ProductFormPage() {
   const [error, setError] = useState("");
   const [imageUploading, setImageUploading] = useState(false);
   const [newSupplierName, setNewSupplierName] = useState("");
+  const [bundleComponents, setBundleComponents] = useState([]);
+  const [componentSearch, setComponentSearch] = useState("");
+  const [componentResults, setComponentResults] = useState([]);
+  const [componentSearching, setComponentSearching] = useState(false);
 
   const upd = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const updVariant = (key, field, value) =>
     setVariants((prev) => prev.map((v) => v._key === key ? { ...v, [field]: value } : v));
+
+  const searchComponents = async (q) => {
+    setComponentSearch(q);
+    if (!q || q.length < 2) { setComponentResults([]); return; }
+    setComponentSearching(true);
+    try {
+      const data = await api.get(`/api/products/search?query=${encodeURIComponent(q)}`);
+      // Exclude current product (in edit mode) and existing bundle components
+      const existing = new Set(bundleComponents.map((c) => c.product_id));
+      const filtered = (data.products || []).filter(
+        (p) => String(p.id) !== String(id) && !existing.has(p.id) && !p.is_bundle
+      );
+      setComponentResults(filtered);
+    } catch { setComponentResults([]); }
+    setComponentSearching(false);
+  };
+
+  const addComponent = (product) => {
+    setBundleComponents((prev) => [
+      ...prev,
+      { product_id: product.id, variant_id: null, quantity: 1, name: product.name, sku: product.sku, price: product.price },
+    ]);
+    setComponentSearch("");
+    setComponentResults([]);
+  };
+
+  const removeComponent = (productId) => {
+    setBundleComponents((prev) => prev.filter((c) => c.product_id !== productId));
+  };
+
+  const updComponent = (productId, field, value) => {
+    setBundleComponents((prev) =>
+      prev.map((c) => c.product_id === productId ? { ...c, [field]: value } : c)
+    );
+  };
 
   const save = async () => {
     if (!form.name.trim()) { setError("Product name is required."); return; }
     if (form.price === "" || isNaN(Number(form.price))) { setError("Valid price is required."); return; }
     if (form.has_variants && !form.attribute_set_id) { setError("Select an attribute set for variant products."); return; }
     if (form.has_variants && variants.length === 0) { setError("No variants generated. Select an attribute set."); return; }
+    if (form.is_bundle && bundleComponents.length === 0) { setError("Bundle must have at least one component product."); return; }
 
     setSaving(true);
     setError("");
@@ -107,7 +148,16 @@ export default function ProductFormPage() {
         supplier_id: resolvedSupplierId || null,
         has_variants: form.has_variants ? 1 : 0,
         attribute_set_id: form.has_variants ? (form.attribute_set_id || null) : null,
+        is_bundle: form.is_bundle ? true : false,
       };
+
+      if (form.is_bundle && bundleComponents.length > 0) {
+        payload.bundle_components = bundleComponents.map((c) => ({
+          product_id: c.product_id,
+          variant_id: c.variant_id || null,
+          quantity: Number(c.quantity) || 1,
+        }));
+      }
 
       if (!isEdit && form.has_variants && variants.length > 0) {
         payload.variants = variants.map((v) => ({
@@ -209,9 +259,20 @@ export default function ProductFormPage() {
             unit: p.unit || "pcs",
             status: p.status || "active",
             has_variants: Boolean(p.has_variants),
+            is_bundle: Boolean(p.is_bundle),
             attribute_set_id: p.attribute_set_id || "",
             supplier_id: p.supplier_id || "",
           });
+          if (p.is_bundle && Array.isArray(p.bundle_components)) {
+            setBundleComponents(p.bundle_components.map((c) => ({
+              product_id: c.component_product_id,
+              variant_id: c.component_variant_id || null,
+              quantity: c.quantity,
+              name: c.component_name,
+              sku: c.component_sku,
+              price: c.component_price,
+            })));
+          }
         }
         if (varD?.variants?.length) {
           setVariants(varD.variants.map(v => ({
@@ -325,8 +386,112 @@ export default function ProductFormPage() {
             </div>
           </SectionCard>
 
+          {/* Bundle */}
+          <SectionCard>
+            <div className="p-4 space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Bundle / Kit</p>
+
+              {/* Toggle — locked in edit mode, mutually exclusive with variants */}
+              <div
+                className={`flex items-center gap-3 ${isEdit ? "opacity-60 pointer-events-none" : form.has_variants ? "opacity-40 pointer-events-none" : "cursor-pointer"}`}
+                onClick={() => {
+                  if (isEdit || form.has_variants) return;
+                  const next = !form.is_bundle;
+                  upd("is_bundle", next);
+                  if (!next) setBundleComponents([]);
+                }}
+              >
+                <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-0.5 ${form.is_bundle ? "bg-violet-500" : "bg-slate-200"}`}>
+                  <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${form.is_bundle ? "translate-x-4" : ""}`} />
+                </div>
+                <span className="text-sm font-medium text-(--ui-text) flex items-center gap-1.5">
+                  <Package size={14} /> This product is a bundle / kit
+                </span>
+              </div>
+              {form.has_variants && !form.is_bundle && (
+                <p className="text-xs text-(--ui-text-muted)">Bundles cannot have variants.</p>
+              )}
+
+              {form.is_bundle && (
+                <div className="space-y-3">
+                  {/* Component search */}
+                  <div className="relative">
+                    <div className="flex items-center gap-2">
+                      <Search size={14} className="text-(--ui-text-muted)" />
+                      <Input
+                        value={componentSearch}
+                        onChange={(e) => searchComponents(e.target.value)}
+                        placeholder="Search products to add as components…"
+                        className="flex-1"
+                      />
+                    </div>
+                    {componentResults.length > 0 && (
+                      <div className="absolute z-10 mt-1 w-full bg-white border border-(--ui-border) rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {componentResults.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => addComponent(p)}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex justify-between items-center"
+                          >
+                            <span className="font-medium text-(--ui-text)">{p.name}</span>
+                            <span className="text-xs text-(--ui-text-muted)">{p.sku || "—"}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {componentSearching && (
+                      <p className="text-xs text-(--ui-text-muted) mt-1">Searching…</p>
+                    )}
+                  </div>
+
+                  {/* Component list */}
+                  {bundleComponents.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs font-semibold uppercase text-(--ui-text-muted) border-b border-(--ui-border)">
+                            <th className="pb-2 text-left pr-3">Component</th>
+                            <th className="pb-2 text-left pr-3">SKU</th>
+                            <th className="pb-2 text-right pr-3">Qty per bundle</th>
+                            <th className="pb-2"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bundleComponents.map((c) => (
+                            <tr key={c.product_id} className="border-b border-(--ui-border) last:border-0">
+                              <td className="py-2 pr-3 font-medium text-(--ui-text)">{c.name}</td>
+                              <td className="py-2 pr-3 text-(--ui-text-muted) text-xs">{c.sku || "—"}</td>
+                              <td className="py-2 pr-3">
+                                <Input
+                                  type="number" min="1" value={c.quantity}
+                                  onChange={(e) => updComponent(c.product_id, "quantity", e.target.value)}
+                                  className="w-20 text-right"
+                                />
+                              </td>
+                              <td className="py-2 text-center">
+                                <button type="button" onClick={() => removeComponent(c.product_id)}
+                                  className="text-rose-400 hover:text-rose-600 p-1">
+                                  <Trash2 size={14} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {bundleComponents.length === 0 && (
+                    <p className="text-sm text-(--ui-text-muted) py-2">No components added yet. Search above to add products to this bundle.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </SectionCard>
+
           {/* Inventory — only for simple products; variant stock handled in Task 5 */}
-          {!form.has_variants && (
+          {!form.has_variants && !form.is_bundle && (
             <SectionCard>
               <div className="p-4 space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Inventory</p>
@@ -357,11 +522,11 @@ export default function ProductFormPage() {
             <div className="p-4 space-y-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Variants</p>
 
-              {/* Toggle — locked in edit mode */}
+              {/* Toggle — locked in edit mode, mutually exclusive with bundles */}
               <div
-                className={`flex items-center gap-3 ${isEdit ? "opacity-60 pointer-events-none" : "cursor-pointer"}`}
+                className={`flex items-center gap-3 ${isEdit ? "opacity-60 pointer-events-none" : form.is_bundle ? "opacity-40 pointer-events-none" : "cursor-pointer"}`}
                 onClick={() => {
-                  if (isEdit) return;
+                  if (isEdit || form.is_bundle) return;
                   const next = !form.has_variants;
                   upd("has_variants", next);
                   if (!next) {

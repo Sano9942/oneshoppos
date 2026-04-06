@@ -239,18 +239,45 @@ module.exports = function registerSalesRoutes(app, deps) {
 
           // Restore stock for each item back to the outlet
           for (const item of items) {
-            await client.query(
-              `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, $2, $3)
-               ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
-              [item.product_id, sale.outlet_id, item.quantity, item.quantity]
+            // Check if this item is a bundle — restore component stock instead
+            const { rows: [prod] } = await client.query(
+              "SELECT is_bundle FROM products WHERE id = $1",
+              [item.product_id]
             );
 
-            // Restore variant global stock if item has a variant
-            if (item.variant_id) {
-              await client.query(
-                `UPDATE product_variants SET stock = stock + $1 WHERE id = $2`,
-                [item.quantity, item.variant_id]
+            if (prod && prod.is_bundle) {
+              const { rows: comps } = await client.query(
+                "SELECT component_product_id, component_variant_id, quantity FROM product_bundles WHERE product_id = $1",
+                [item.product_id]
               );
+              for (const comp of comps) {
+                const restoreQty = comp.quantity * item.quantity;
+                await client.query(
+                  `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, $2, $3)
+                   ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
+                  [comp.component_product_id, sale.outlet_id, restoreQty, restoreQty]
+                );
+                if (comp.component_variant_id) {
+                  await client.query(
+                    `UPDATE product_variants SET stock = stock + $1 WHERE id = $2`,
+                    [restoreQty, comp.component_variant_id]
+                  );
+                }
+              }
+            } else {
+              await client.query(
+                `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, $2, $3)
+                 ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
+                [item.product_id, sale.outlet_id, item.quantity, item.quantity]
+              );
+
+              // Restore variant global stock if item has a variant
+              if (item.variant_id) {
+                await client.query(
+                  `UPDATE product_variants SET stock = stock + $1 WHERE id = $2`,
+                  [item.quantity, item.variant_id]
+                );
+              }
             }
           }
         });
@@ -439,32 +466,79 @@ module.exports = function registerSalesRoutes(app, deps) {
     try {
       const saleId = await db.transaction(async (client) => {
         // Lock and check stock for each item (FOR UPDATE prevents TOCTOU race)
+        // Pre-fetch bundle components for any bundle items
+        const bundleComponentsMap = new Map();
         for (const item of cartItems) {
-          const variantId = item.variant_id || null;
-          if (variantId) {
-            const { rows: [row] } = await client.query(
-              `SELECT COALESCE(stock, 0) AS available
-               FROM product_variants WHERE id = $1 FOR UPDATE`,
-              [variantId]
+          if (item.is_bundle) {
+            const productId = item.original_product_id || item.id;
+            const { rows: comps } = await client.query(
+              "SELECT component_product_id, component_variant_id, quantity FROM product_bundles WHERE product_id = $1",
+              [productId]
             );
-            if (!row || row.available < item.quantity) {
-              throw Object.assign(
-                new Error(`Insufficient stock for variant ${variantId}`),
-                { statusCode: 400, code: "insufficient_stock" }
-              );
+            bundleComponentsMap.set(productId, comps);
+          }
+        }
+
+        for (const item of cartItems) {
+          if (item.is_bundle) {
+            // For bundles: lock and check each component's stock
+            const productId = item.original_product_id || item.id;
+            const comps = bundleComponentsMap.get(productId) || [];
+            for (const comp of comps) {
+              const neededQty = comp.quantity * item.quantity;
+              if (comp.component_variant_id) {
+                const { rows: [row] } = await client.query(
+                  `SELECT COALESCE(stock, 0) AS available
+                   FROM product_variants WHERE id = $1 FOR UPDATE`,
+                  [comp.component_variant_id]
+                );
+                if (!row || row.available < neededQty) {
+                  throw Object.assign(
+                    new Error(`Insufficient stock for bundle component variant ${comp.component_variant_id}`),
+                    { statusCode: 400, code: "insufficient_stock" }
+                  );
+                }
+              } else {
+                const { rows: [row] } = await client.query(
+                  `SELECT COALESCE(quantity, 0) AS available
+                   FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2 FOR UPDATE`,
+                  [comp.component_product_id, outlet_id]
+                );
+                if (!row || row.available < neededQty) {
+                  throw Object.assign(
+                    new Error(`Insufficient stock for bundle component ${comp.component_product_id}`),
+                    { statusCode: 400, code: "insufficient_stock" }
+                  );
+                }
+              }
             }
           } else {
-            const productId = item.original_product_id || item.id;
-            const { rows: [row] } = await client.query(
-              `SELECT COALESCE(quantity, 0) AS available
-               FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2 FOR UPDATE`,
-              [productId, outlet_id]
-            );
-            if (!row || row.available < item.quantity) {
-              throw Object.assign(
-                new Error(`Insufficient stock for product ${productId}`),
-                { statusCode: 400, code: "insufficient_stock" }
+            const variantId = item.variant_id || null;
+            if (variantId) {
+              const { rows: [row] } = await client.query(
+                `SELECT COALESCE(stock, 0) AS available
+                 FROM product_variants WHERE id = $1 FOR UPDATE`,
+                [variantId]
               );
+              if (!row || row.available < item.quantity) {
+                throw Object.assign(
+                  new Error(`Insufficient stock for variant ${variantId}`),
+                  { statusCode: 400, code: "insufficient_stock" }
+                );
+              }
+            } else {
+              const productId = item.original_product_id || item.id;
+              const { rows: [row] } = await client.query(
+                `SELECT COALESCE(quantity, 0) AS available
+                 FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2 FOR UPDATE`,
+                [productId, outlet_id]
+              );
+              if (!row || row.available < item.quantity) {
+                throw Object.assign(
+                  new Error(`Insufficient stock for product ${productId}`),
+                  { statusCode: 400, code: "insufficient_stock" }
+                );
+              }
             }
           }
         }
@@ -503,7 +577,24 @@ module.exports = function registerSalesRoutes(app, deps) {
             ]
           );
 
-          if (item.variant_id) {
+          if (item.is_bundle) {
+            // Deduct stock from each component product, not the bundle itself
+            const productId = item.original_product_id || item.id;
+            const comps = bundleComponentsMap.get(productId) || [];
+            for (const comp of comps) {
+              const deductQty = comp.quantity * item.quantity;
+              if (comp.component_variant_id) {
+                await client.query(
+                  "UPDATE product_variants SET stock = stock - $1 WHERE id = $2",
+                  [deductQty, comp.component_variant_id]
+                );
+              }
+              await client.query(
+                "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
+                [deductQty, comp.component_product_id, outlet_id]
+              );
+            }
+          } else if (item.variant_id) {
             await client.query(
               "UPDATE product_variants SET stock = stock - $1 WHERE id = $2",
               [item.quantity, item.variant_id]

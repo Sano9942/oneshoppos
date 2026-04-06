@@ -318,18 +318,19 @@ export const POSProvider = ({ children }) => {
 
   const addToCart = (product) => {
     const stock = Number(product.local_stock ?? product.stock ?? 0);
+    const isBundle = Boolean(product.is_bundle);
     setCart((prev) => {
       const found = prev.find((x) => x.id === product.id);
       if (found) {
-        if (stock > 0 && found.quantity >= stock)
+        if (!isBundle && stock > 0 && found.quantity >= stock)
           showNotice(`Note: Selling past available stock (${stock} in stock).`);
         return prev.map((x) =>
           x.id === product.id ? { ...x, quantity: x.quantity + 1 } : x,
         );
       }
-      if (stock <= 0)
+      if (!isBundle && stock <= 0)
         showNotice("Note: Item is out of stock — selling on override.");
-      return [{ ...product, quantity: 1, availableStock: stock }, ...prev];
+      return [{ ...product, quantity: 1, availableStock: isBundle ? 99999 : stock }, ...prev];
     });
     setSearch("");
     setBarcodeSearch("");
