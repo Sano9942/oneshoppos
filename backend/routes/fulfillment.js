@@ -402,6 +402,383 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
     }
   });
 
+  // ── POST /api/fulfillment/scan-dispatch ────────────────────────────
+  // Quick dispatch: scan a tracking number, order number, or order ID
+
+  app.post("/api/fulfillment/scan-dispatch", perm, async (req, res) => {
+    try {
+      const { scan_value } = req.body;
+      if (!scan_value || !scan_value.trim()) {
+        return res.status(400).json({ error: "scan_value required" });
+      }
+
+      const val = scan_value.trim();
+
+      // Try multiple lookups: tracking_number → external_order_number → id
+      let order = null;
+
+      // 1. By tracking_number
+      const { rows: r1 } = await db.query(
+        `SELECT wo.id, wo.external_order_number, wo.fulfillment_status,
+                wo.tracking_number, wo.grand_total, c.name AS customer_name
+         FROM web_orders wo
+         LEFT JOIN customers c ON wo.customer_id = c.id
+         WHERE wo.tracking_number = $1
+         LIMIT 1`,
+        [val]
+      );
+      if (r1.length) order = r1[0];
+
+      // 2. By external_order_number
+      if (!order) {
+        const { rows: r2 } = await db.query(
+          `SELECT wo.id, wo.external_order_number, wo.fulfillment_status,
+                  wo.tracking_number, wo.grand_total, c.name AS customer_name
+           FROM web_orders wo
+           LEFT JOIN customers c ON wo.customer_id = c.id
+           WHERE wo.external_order_number = $1
+           LIMIT 1`,
+          [val]
+        );
+        if (r2.length) order = r2[0];
+      }
+
+      // 3. By id (numeric only)
+      if (!order && /^\d+$/.test(val)) {
+        const { rows: r3 } = await db.query(
+          `SELECT wo.id, wo.external_order_number, wo.fulfillment_status,
+                  wo.tracking_number, wo.grand_total, c.name AS customer_name
+           FROM web_orders wo
+           LEFT JOIN customers c ON wo.customer_id = c.id
+           WHERE wo.id = $1
+           LIMIT 1`,
+          [Number(val)]
+        );
+        if (r3.length) order = r3[0];
+      }
+
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+
+      // Already dispatched?
+      if (order.fulfillment_status === "fulfilled") {
+        return res.json({
+          warning: "Order already dispatched",
+          order: {
+            order_id: order.id,
+            order_number: order.external_order_number || `#${order.id}`,
+            customer_name: order.customer_name || null,
+            status: "fulfilled",
+          },
+        });
+      }
+
+      // Mark as dispatched
+      await db.query(
+        `UPDATE web_orders
+         SET fulfillment_status = 'fulfilled', shipped_at = NOW(), updated_at = NOW()
+         WHERE id = $1`,
+        [order.id]
+      );
+
+      res.json({
+        order: {
+          order_id: order.id,
+          order_number: order.external_order_number || `#${order.id}`,
+          customer_name: order.customer_name || null,
+          status: "fulfilled",
+        },
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Loadsheet helpers ─────────────────────────────────────────────
+
+  async function generateLoadsheetNumber(client) {
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const { rows } = await client.query(
+      `SELECT COUNT(*)::int AS cnt FROM loadsheets WHERE loadsheet_number LIKE $1`,
+      [`LS-${today}-%`]
+    );
+    const seq = String((rows[0].cnt || 0) + 1).padStart(3, "0");
+    return `LS-${today}-${seq}`;
+  }
+
+  // ── POST /api/fulfillment/loadsheets ─────────────────────────────
+
+  app.post("/api/fulfillment/loadsheets", perm, async (req, res) => {
+    try {
+      const { order_ids, courier_id, outlet_id } = req.body;
+      if (!Array.isArray(order_ids) || !order_ids.length) {
+        return res.status(400).json({ error: "order_ids required" });
+      }
+      if (!outlet_id) {
+        return res.status(400).json({ error: "outlet_id required" });
+      }
+
+      const result = await db.transaction(async (client) => {
+        // Verify orders exist and are fulfilled (dispatched)
+        const { rows: orders } = await client.query(
+          `SELECT id, tracking_number, courier_id, grand_total, payment_status
+           FROM web_orders
+           WHERE id = ANY($1) AND fulfillment_status = 'fulfilled'`,
+          [order_ids]
+        );
+        if (!orders.length) {
+          throw Object.assign(new Error("No fulfilled/dispatched orders found"), { statusCode: 400 });
+        }
+
+        const lsNumber = await generateLoadsheetNumber(client);
+
+        const { rows: [ls] } = await client.query(
+          `INSERT INTO loadsheets (loadsheet_number, courier_id, outlet_id, status, created_by)
+           VALUES ($1, $2, $3, 'draft', $4)
+           RETURNING *`,
+          [lsNumber, courier_id || null, outlet_id, req.employee?.id || null]
+        );
+
+        for (const order of orders) {
+          const isCod = order.payment_status === "cod" || order.payment_status === "pending";
+          await client.query(
+            `INSERT INTO loadsheet_orders (loadsheet_id, web_order_id, tracking_number, is_cod, cod_amount)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [ls.id, order.id, order.tracking_number || null, isCod, isCod ? Number(order.grand_total) : 0]
+          );
+        }
+
+        return ls;
+      });
+
+      res.status(201).json({ loadsheet: result });
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /api/fulfillment/loadsheets ──────────────────────────────
+
+  app.get("/api/fulfillment/loadsheets", perm, async (req, res) => {
+    try {
+      const { status } = req.query;
+      const conds = [];
+      const params = [];
+      let idx = 0;
+
+      if (status) { conds.push(`ls.status = $${++idx}`); params.push(status); }
+
+      const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+      const { rows } = await db.query(
+        `SELECT ls.*,
+                ci.name AS courier_name,
+                o.name AS outlet_name,
+                e.name AS created_by_name,
+                (SELECT COUNT(*)::int FROM loadsheet_orders WHERE loadsheet_id = ls.id) AS order_count
+         FROM loadsheets ls
+         LEFT JOIN courier_integrations ci ON ls.courier_id = ci.id
+         LEFT JOIN outlets o ON ls.outlet_id = o.id
+         LEFT JOIN employees e ON ls.created_by = e.id
+         ${where}
+         ORDER BY ls.created_at DESC`,
+        params
+      );
+      res.json({ loadsheets: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /api/fulfillment/loadsheets/:id ──────────────────────────
+
+  app.get("/api/fulfillment/loadsheets/:id", perm, async (req, res) => {
+    try {
+      const { rows: [ls] } = await db.query(
+        `SELECT ls.*, ci.name AS courier_name, o.name AS outlet_name, e.name AS created_by_name
+         FROM loadsheets ls
+         LEFT JOIN courier_integrations ci ON ls.courier_id = ci.id
+         LEFT JOIN outlets o ON ls.outlet_id = o.id
+         LEFT JOIN employees e ON ls.created_by = e.id
+         WHERE ls.id = $1`,
+        [req.params.id]
+      );
+      if (!ls) return res.status(404).json({ error: "Loadsheet not found" });
+
+      const { rows: orders } = await db.query(
+        `SELECT lo.*, wo.external_order_number, wo.grand_total, wo.payment_status,
+                wo.tracking_number AS wo_tracking, wo.fulfillment_status,
+                c.name AS customer_name, c.mobile AS customer_phone, c.address AS customer_address
+         FROM loadsheet_orders lo
+         JOIN web_orders wo ON lo.web_order_id = wo.id
+         LEFT JOIN customers c ON wo.customer_id = c.id
+         WHERE lo.loadsheet_id = $1
+         ORDER BY lo.id`,
+        [req.params.id]
+      );
+
+      res.json({ loadsheet: { ...ls, orders } });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── PUT /api/fulfillment/loadsheets/:id/finalize ─────────────────
+
+  app.put("/api/fulfillment/loadsheets/:id/finalize", perm, async (req, res) => {
+    try {
+      const result = await db.transaction(async (client) => {
+        const { rows: [ls] } = await client.query(
+          `SELECT * FROM loadsheets WHERE id = $1 FOR UPDATE`,
+          [req.params.id]
+        );
+        if (!ls) throw Object.assign(new Error("Loadsheet not found"), { statusCode: 404 });
+        if (ls.status !== "draft") {
+          throw Object.assign(new Error("Only draft loadsheets can be finalized"), { statusCode: 400 });
+        }
+
+        const { rows: [agg] } = await client.query(
+          `SELECT COUNT(*)::int AS total_orders,
+                  COALESCE(SUM(CASE WHEN is_cod THEN cod_amount ELSE 0 END), 0)::numeric AS total_cod
+           FROM loadsheet_orders WHERE loadsheet_id = $1`,
+          [ls.id]
+        );
+
+        const { rows: [updated] } = await client.query(
+          `UPDATE loadsheets
+           SET status = 'finalized', finalized_at = NOW(),
+               total_orders = $2, total_cod = $3
+           WHERE id = $1
+           RETURNING *`,
+          [ls.id, agg.total_orders, agg.total_cod]
+        );
+        return updated;
+      });
+
+      res.json({ loadsheet: result });
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // ── PUT /api/fulfillment/loadsheets/:id/handover ─────────────────
+
+  app.put("/api/fulfillment/loadsheets/:id/handover", perm, async (req, res) => {
+    try {
+      const { handed_over_to } = req.body;
+      if (!handed_over_to?.trim()) {
+        return res.status(400).json({ error: "handed_over_to required" });
+      }
+
+      const result = await db.transaction(async (client) => {
+        const { rows: [ls] } = await client.query(
+          `SELECT * FROM loadsheets WHERE id = $1 FOR UPDATE`,
+          [req.params.id]
+        );
+        if (!ls) throw Object.assign(new Error("Loadsheet not found"), { statusCode: 404 });
+        if (ls.status !== "finalized") {
+          throw Object.assign(new Error("Loadsheet must be finalized before handover"), { statusCode: 400 });
+        }
+
+        const { rows: [updated] } = await client.query(
+          `UPDATE loadsheets
+           SET status = 'handed_over', handed_over_at = NOW(), handed_over_to = $2
+           WHERE id = $1
+           RETURNING *`,
+          [ls.id, handed_over_to.trim()]
+        );
+        return updated;
+      });
+
+      res.json({ loadsheet: result });
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /api/fulfillment/loadsheets/:id/export ───────────────────
+
+  app.get("/api/fulfillment/loadsheets/:id/export", perm, async (req, res) => {
+    try {
+      const { rows: [ls] } = await db.query(
+        `SELECT ls.*, ci.name AS courier_name
+         FROM loadsheets ls
+         LEFT JOIN courier_integrations ci ON ls.courier_id = ci.id
+         WHERE ls.id = $1`,
+        [req.params.id]
+      );
+      if (!ls) return res.status(404).json({ error: "Loadsheet not found" });
+
+      const { rows: orders } = await db.query(
+        `SELECT lo.*, wo.external_order_number, wo.grand_total,
+                c.name AS customer_name, c.mobile AS customer_phone, c.address AS customer_address
+         FROM loadsheet_orders lo
+         JOIN web_orders wo ON lo.web_order_id = wo.id
+         LEFT JOIN customers c ON wo.customer_id = c.id
+         WHERE lo.loadsheet_id = $1
+         ORDER BY lo.id`,
+        [req.params.id]
+      );
+
+      const header = "Order #,Customer,Address,Phone,Items,COD Amount,Tracking #,Courier";
+      const rows = orders.map((o) => {
+        const cols = [
+          o.external_order_number || `#${o.web_order_id}`,
+          (o.customer_name || "").replace(/,/g, " "),
+          (o.customer_address || "").replace(/,/g, " ").replace(/\n/g, " "),
+          o.customer_phone || "",
+          "",
+          o.is_cod ? Number(o.cod_amount).toFixed(2) : "0.00",
+          o.tracking_number || "",
+          ls.courier_name || "",
+        ];
+        return cols.map((c) => `"${c}"`).join(",");
+      });
+
+      const csv = [header, ...rows].join("\n");
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="${ls.loadsheet_number}.csv"`);
+      res.send(csv);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /api/fulfillment/dispatched-orders ───────────────────────
+  // Helper: list fulfilled orders available for loadsheet creation
+
+  app.get("/api/fulfillment/dispatched-orders", perm, async (req, res) => {
+    try {
+      const { outlet_id, courier_id } = req.query;
+      const conds = [
+        `wo.fulfillment_status = 'fulfilled'`,
+        `wo.order_status != 'cancelled'`,
+        `wo.id NOT IN (SELECT web_order_id FROM loadsheet_orders)`,
+      ];
+      const params = [];
+      let idx = 0;
+
+      if (outlet_id) { conds.push(`wo.outlet_id = $${++idx}`); params.push(outlet_id); }
+      if (courier_id) { conds.push(`wo.courier_id = $${++idx}`); params.push(courier_id); }
+
+      const { rows } = await db.query(
+        `SELECT wo.id, wo.external_order_number, wo.grand_total, wo.payment_status,
+                wo.tracking_number, wo.shipped_at, wo.courier_id,
+                c.name AS customer_name, c.mobile AS customer_phone,
+                ci.name AS courier_name
+         FROM web_orders wo
+         LEFT JOIN customers c ON wo.customer_id = c.id
+         LEFT JOIN courier_integrations ci ON wo.courier_id = ci.id
+         WHERE ${conds.join(" AND ")}
+         ORDER BY wo.shipped_at DESC`,
+        params
+      );
+      res.json({ orders: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── GET /api/fulfillment/unfulfilled-orders ───────────────────────
   // Helper: list orders available for picklist creation
 

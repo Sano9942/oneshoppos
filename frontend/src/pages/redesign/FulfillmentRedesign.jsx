@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  AlertTriangle,
   CheckCircle,
   ChevronLeft,
   ClipboardList,
@@ -11,6 +12,7 @@ import {
   ShoppingCart,
   Truck,
   X,
+  Zap,
 } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -65,6 +67,7 @@ function ProgressBar({ current, total, color = "bg-blue-500" }) {
 const TABS = [
   { key: "queue", label: "Orders Queue", icon: ShoppingCart },
   { key: "picklists", label: "Picklists", icon: ClipboardList },
+  { key: "dispatch", label: "Quick Dispatch", icon: Zap },
 ];
 
 // ── Main component ──────────────────────────────────────────────────
@@ -111,6 +114,7 @@ export default function FulfillmentRedesign() {
           {tab === "picklists" && (
             <PicklistsTab onOpen={setActivePicklist} fmt={fmt} />
           )}
+          {tab === "dispatch" && <QuickDispatchTab />}
         </>
       )}
     </PageShell>
@@ -331,6 +335,195 @@ function PicklistsTab({ onOpen }) {
         </div>
       )}
     </SectionCard>
+  );
+}
+
+// ── Quick Dispatch tab ──────────────────────────────────────────────
+
+const BEEP_OK = typeof AudioContext !== "undefined" ? (() => {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = "sine"; osc.frequency.value = 880; gain.gain.value = 0.15;
+    osc.start(); osc.stop(ctx.currentTime + 0.12);
+  } catch {}
+}) : () => {};
+
+const BEEP_ERR = typeof AudioContext !== "undefined" ? (() => {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = "square"; osc.frequency.value = 300; gain.gain.value = 0.15;
+    osc.start(); osc.stop(ctx.currentTime + 0.25);
+  } catch {}
+}) : () => {};
+
+function QuickDispatchTab() {
+  const [scanning, setScanning] = useState(false);
+  const [flash, setFlash] = useState(null); // "success" | "error" | "warning"
+  const [lastResult, setLastResult] = useState(null);
+  const [history, setHistory] = useState([]);
+  const inputRef = useRef(null);
+  const { error: toastError } = useToast();
+
+  const sessionCount = history.filter((h) => h.type === "success").length;
+
+  // Auto-focus on mount
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const doFlash = (type) => {
+    setFlash(type);
+    setTimeout(() => setFlash(null), 800);
+  };
+
+  const handleScan = async (e) => {
+    e.preventDefault();
+    const val = inputRef.current?.value?.trim();
+    if (!val || scanning) return;
+
+    setScanning(true);
+    try {
+      const data = await api.post("/fulfillment/scan-dispatch", { scan_value: val });
+
+      if (data.warning) {
+        // Already dispatched
+        doFlash("warning");
+        BEEP_ERR();
+        setLastResult({ type: "warning", message: data.warning, order: data.order });
+        setHistory((h) => [{ type: "warning", order: data.order, time: new Date(), scan: val }, ...h].slice(0, 20));
+      } else {
+        // Success
+        doFlash("success");
+        BEEP_OK();
+        setLastResult({ type: "success", order: data.order });
+        setHistory((h) => [{ type: "success", order: data.order, time: new Date(), scan: val }, ...h].slice(0, 20));
+      }
+    } catch (err) {
+      doFlash("error");
+      BEEP_ERR();
+      const msg = err.message || "Order not found";
+      setLastResult({ type: "error", message: msg });
+      setHistory((h) => [{ type: "error", message: msg, time: new Date(), scan: val }, ...h].slice(0, 20));
+      if (err.status !== 404) toastError(msg);
+    } finally {
+      setScanning(false);
+      if (inputRef.current) {
+        inputRef.current.value = "";
+        inputRef.current.focus();
+      }
+    }
+  };
+
+  const flashColors = {
+    success: "ring-2 ring-green-500 bg-green-50 dark:bg-green-900/20",
+    error: "ring-2 ring-red-500 bg-red-50 dark:bg-red-900/20",
+    warning: "ring-2 ring-yellow-500 bg-yellow-50 dark:bg-yellow-900/20",
+  };
+
+  return (
+    <div>
+      {/* Scan input */}
+      <SectionCard className={`mb-4 transition-colors ${flash ? flashColors[flash] || "" : ""}`}>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Zap className="h-5 w-5 text-yellow-500" />
+            <h3 className="text-sm font-semibold">Scan & Dispatch</h3>
+          </div>
+          <Badge tone="info">{sessionCount} dispatched this session</Badge>
+        </div>
+
+        <form onSubmit={handleScan} className="flex items-center gap-3">
+          <ScanBarcode className="h-5 w-5 text-gray-400 shrink-0" />
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="Scan tracking number, order number, or order ID…"
+            className="grow rounded-md border border-gray-300 px-4 py-3 text-base focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+            autoFocus
+          />
+          <Button type="submit" disabled={scanning}>
+            <Truck className="mr-1.5 h-4 w-4" />
+            Dispatch
+          </Button>
+        </form>
+      </SectionCard>
+
+      {/* Last result card */}
+      {lastResult && (
+        <SectionCard className={`mb-4 ${
+          lastResult.type === "success" ? "border-l-4 border-l-green-500"
+          : lastResult.type === "warning" ? "border-l-4 border-l-yellow-500"
+          : "border-l-4 border-l-red-500"
+        }`}>
+          <div className="flex items-center gap-3">
+            {lastResult.type === "success" && <CheckCircle className="h-6 w-6 text-green-500 shrink-0" />}
+            {lastResult.type === "warning" && <AlertTriangle className="h-6 w-6 text-yellow-500 shrink-0" />}
+            {lastResult.type === "error" && <X className="h-6 w-6 text-red-500 shrink-0" />}
+            <div>
+              {lastResult.order ? (
+                <>
+                  <p className="font-semibold">
+                    {lastResult.order.order_number}
+                    {lastResult.order.customer_name && (
+                      <span className="ml-2 font-normal text-gray-500">— {lastResult.order.customer_name}</span>
+                    )}
+                  </p>
+                  <p className={`text-sm ${
+                    lastResult.type === "success" ? "text-green-600 dark:text-green-400"
+                    : "text-yellow-600 dark:text-yellow-400"
+                  }`}>
+                    {lastResult.type === "success" ? "Dispatched successfully" : lastResult.message}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm font-medium text-red-600 dark:text-red-400">{lastResult.message}</p>
+              )}
+            </div>
+          </div>
+        </SectionCard>
+      )}
+
+      {/* History */}
+      {history.length > 0 && (
+        <SectionCard>
+          <h3 className="mb-2 text-sm font-semibold">Recent Scans</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b text-xs uppercase text-gray-500 dark:border-gray-700">
+                <tr>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Scanned Value</th>
+                  <th className="px-3 py-2">Order</th>
+                  <th className="px-3 py-2">Customer</th>
+                  <th className="px-3 py-2">Time</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y dark:divide-gray-700">
+                {history.map((h, i) => (
+                  <tr key={i}>
+                    <td className="px-3 py-2">
+                      {h.type === "success" && <Badge tone="success">Dispatched</Badge>}
+                      {h.type === "warning" && <Badge tone="warning">Already Done</Badge>}
+                      {h.type === "error" && <Badge tone="danger">Not Found</Badge>}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs">{h.scan}</td>
+                    <td className="px-3 py-2">{h.order?.order_number || "—"}</td>
+                    <td className="px-3 py-2">{h.order?.customer_name || "—"}</td>
+                    <td className="px-3 py-2 text-gray-500">{h.time.toLocaleTimeString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </SectionCard>
+      )}
+    </div>
   );
 }
 
