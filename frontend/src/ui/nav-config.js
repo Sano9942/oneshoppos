@@ -68,6 +68,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Taxes", path: "/taxes", icon: BarChart2, requiredPerm: "manage_inventory" },
       { name: "Attribute Sets", path: "/attribute-sets", icon: Layers, requiredPerm: "manage_inventory" },
       { name: "Promotions", path: "/promotions", icon: Percent, requiredPerm: "manage_inventory" },
+      { name: "Price Lists", path: "/price-lists", icon: Tag, requiredPerm: "manage_inventory" },
     ],
   },
   {

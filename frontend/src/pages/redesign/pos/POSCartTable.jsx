@@ -1,5 +1,5 @@
 import React from "react";
-import { ShoppingCart, Minus, Plus, Trash2, Package } from "lucide-react";
+import { ShoppingCart, Minus, Plus, Trash2, Package, Tag } from "lucide-react";
 import { usePOS } from "./POSContext";
 
 export default function POSCartTable() {
@@ -50,9 +50,19 @@ export default function POSCartTable() {
                           <Package size={9} /> Bundle
                         </span>
                       )}
+                      {item.originalPrice != null && item.originalPrice !== item.price && (
+                        <span className="inline-flex items-center gap-0.5 bg-emerald-100 text-emerald-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                          <Tag size={9} /> Special Price
+                        </span>
+                      )}
                     </div>
                     <div className="md:hidden text-[10px] text-slate-400 mt-0.5 flex items-center gap-2">
-                      <span>{money(item.price)} ea</span>
+                      <span>
+                        {item.originalPrice != null && item.originalPrice !== item.price && (
+                          <span className="line-through text-slate-300 mr-1">{money(item.originalPrice)}</span>
+                        )}
+                        {money(item.price)} ea
+                      </span>
                       <button
                         onClick={(e) => { e.stopPropagation(); removeFromCart(item.id); }}
                         className="text-red-400 hover:text-red-600 p-0.5"
@@ -93,8 +103,15 @@ export default function POSCartTable() {
                       </button>
                     </div>
                   </td>
-                  <td className="hidden md:table-cell px-3 py-3 text-right text-slate-500 font-bold">
-                    {money(item.price)}
+                  <td className="hidden md:table-cell px-3 py-3 text-right font-bold">
+                    {item.originalPrice != null && item.originalPrice !== item.price ? (
+                      <span>
+                        <span className="line-through text-slate-300 text-xs mr-1">{money(item.originalPrice)}</span>
+                        <span className="text-emerald-600">{money(item.price)}</span>
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">{money(item.price)}</span>
+                    )}
                   </td>
                   <td className="px-2 md:px-3 py-3 text-right font-black text-slate-900">
                     {money(item.price * item.quantity)}

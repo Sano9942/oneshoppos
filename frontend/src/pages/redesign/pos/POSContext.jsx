@@ -75,6 +75,9 @@ export const POSProvider = ({ children }) => {
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDD, setShowCustomerDD] = useState(false);
 
+  // ── Price list (customer-specific pricing) ────────────────────────────────
+  const [priceListItems, setPriceListItems] = useState([]);
+
   // ── Parked sales ──────────────────────────────────────────────────────────
   const [parkedSales, setParkedSales] = useState([]);
   const [showParked, setShowParked] = useState(false);
@@ -324,13 +327,20 @@ export const POSProvider = ({ children }) => {
       if (found) {
         if (!isBundle && stock > 0 && found.quantity >= stock)
           showNotice(`Note: Selling past available stock (${stock} in stock).`);
-        return prev.map((x) =>
-          x.id === product.id ? { ...x, quantity: x.quantity + 1 } : x,
-        );
+        const nextQty = found.quantity + 1;
+        return prev.map((x) => {
+          if (x.id !== product.id) return x;
+          const plMatch = resolvePriceListPrice(x.id, x.variant_id, nextQty);
+          const resolvedPrice = plMatch ? Number(plMatch.price) : x.originalPrice;
+          return { ...x, quantity: nextQty, price: resolvedPrice };
+        });
       }
       if (!isBundle && stock <= 0)
         showNotice("Note: Item is out of stock — selling on override.");
-      return [{ ...product, quantity: 1, availableStock: isBundle ? 99999 : stock }, ...prev];
+      const basePrice = Number(product.price);
+      const plMatch = resolvePriceListPrice(product.id, product.variant_id, 1);
+      const resolvedPrice = plMatch ? Number(plMatch.price) : basePrice;
+      return [{ ...product, quantity: 1, availableStock: isBundle ? 99999 : stock, originalPrice: basePrice, price: resolvedPrice }, ...prev];
     });
     setSearch("");
     setBarcodeSearch("");
@@ -426,6 +436,42 @@ export const POSProvider = ({ children }) => {
       .finally(() => setCheckoutWalletLoading(false));
   }, [checkoutCustomerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Price list fetch on customer change ──────────────────────────────────
+  useEffect(() => {
+    const cust = customers.find((c) => String(c.id) === String(selectedCustomerId));
+    if (!cust?.price_list_id) { setPriceListItems([]); return; }
+    api.get(`/api/price-lists/${cust.price_list_id}/items`)
+      .then((d) => setPriceListItems(d.items || []))
+      .catch(() => setPriceListItems([]));
+  }, [selectedCustomerId, customers]);
+
+  // Re-resolve all cart prices when price list changes (customer selected/deselected)
+  useEffect(() => {
+    setCart((prev) => {
+      if (!prev.length) return prev;
+      return prev.map((item) => {
+        const base = item.originalPrice ?? item.price;
+        const plMatch = priceListItems
+          .filter((i) => i.product_id === item.id &&
+            (String(i.variant_id || "") === String(item.variant_id || "")) &&
+            i.min_qty <= item.quantity)
+          .sort((a, b) => b.min_qty - a.min_qty)[0];
+        const resolvedPrice = plMatch ? Number(plMatch.price) : base;
+        return { ...item, originalPrice: base, price: resolvedPrice };
+      });
+    });
+  }, [priceListItems]);
+
+  const resolvePriceListPrice = useCallback((productId, variantId, qty) => {
+    if (!priceListItems.length) return null;
+    const matches = priceListItems
+      .filter((i) => i.product_id === productId &&
+        (String(i.variant_id || "") === String(variantId || "")) &&
+        i.min_qty <= qty)
+      .sort((a, b) => b.min_qty - a.min_qty);
+    return matches[0] || null;
+  }, [priceListItems]);
+
   const updateQty = (id, delta) => {
     setCart((prev) =>
       prev.map((x) => {
@@ -436,7 +482,9 @@ export const POSProvider = ({ children }) => {
           showNotice(
             `Note: Selling past available stock (${x.availableStock} in stock).`,
           );
-        return { ...x, quantity: next };
+        const plMatch = resolvePriceListPrice(x.id, x.variant_id, next);
+        const resolvedPrice = plMatch ? Number(plMatch.price) : (x.originalPrice ?? x.price);
+        return { ...x, quantity: next, price: resolvedPrice };
       }),
     );
   };
@@ -1150,6 +1198,8 @@ export const POSProvider = ({ children }) => {
     syncQueue,
     showShortcutsOverlay,
     setShowShortcutsOverlay,
+    // Price lists
+    priceListItems,
   };
 
   return <POSContext.Provider value={value}>{children}</POSContext.Provider>;

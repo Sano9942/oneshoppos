@@ -1021,4 +1021,210 @@ module.exports = function registerProductRoutes(app, deps) {
       }
     },
   );
+
+  // ── Price Lists ────────────────────────────────────────────────────────────
+
+  // GET /api/price-lists
+  app.get(
+    "/api/price-lists",
+    requirePerm("manage_inventory"),
+    async (req, res) => {
+      try {
+        const { rows } = await db.query(
+          `SELECT pl.*, COUNT(pli.id)::int AS item_count
+           FROM price_lists pl
+           LEFT JOIN price_list_items pli ON pli.price_list_id = pl.id
+           GROUP BY pl.id
+           ORDER BY pl.name ASC`,
+        );
+        res.json({ priceLists: rows });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
+  // POST /api/price-lists
+  app.post(
+    "/api/price-lists",
+    requirePerm("manage_inventory"),
+    async (req, res) => {
+      try {
+        const { name, description, type, is_active } = req.body;
+        if (!name || !name.trim()) {
+          return res.status(400).json({ error: "name is required" });
+        }
+        const { rows } = await db.query(
+          `INSERT INTO price_lists (name, description, type, is_active)
+           VALUES ($1, $2, $3, $4)
+           RETURNING *`,
+          [name.trim(), description || null, type || "customer_group", is_active !== false],
+        );
+        res.status(201).json(rows[0]);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
+  // PUT /api/price-lists/:id
+  app.put(
+    "/api/price-lists/:id",
+    requirePerm("manage_inventory"),
+    async (req, res) => {
+      try {
+        const { name, description, type, is_active } = req.body;
+        if (!name || !name.trim()) {
+          return res.status(400).json({ error: "name is required" });
+        }
+        const { rows } = await db.query(
+          `UPDATE price_lists
+           SET name = $1, description = $2, type = $3, is_active = $4
+           WHERE id = $5
+           RETURNING *`,
+          [name.trim(), description || null, type || "customer_group", is_active !== false, req.params.id],
+        );
+        if (!rows.length) return res.status(404).json({ error: "Not found" });
+        res.json(rows[0]);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
+  // DELETE /api/price-lists/:id
+  app.delete(
+    "/api/price-lists/:id",
+    requirePerm("manage_inventory"),
+    async (req, res) => {
+      try {
+        const { rowCount } = await db.query(
+          `DELETE FROM price_lists WHERE id = $1`,
+          [req.params.id],
+        );
+        if (!rowCount) return res.status(404).json({ error: "Not found" });
+        res.json({ message: "Deleted" });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
+  // GET /api/price-lists/:id/items
+  app.get(
+    "/api/price-lists/:id/items",
+    requirePerm("manage_inventory"),
+    async (req, res) => {
+      try {
+        const { rows } = await db.query(
+          `SELECT pli.*,
+                  p.name AS product_name,
+                  p.sku,
+                  p.price AS default_price,
+                  pv.name AS variant_name,
+                  pv.sku AS variant_sku,
+                  pv.price AS variant_price
+           FROM price_list_items pli
+           JOIN products p ON p.id = pli.product_id
+           LEFT JOIN product_variants pv ON pv.id = pli.variant_id
+           WHERE pli.price_list_id = $1
+           ORDER BY p.name ASC, pv.name ASC`,
+          [req.params.id],
+        );
+        res.json({ items: rows });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
+  // POST /api/price-lists/:id/items
+  app.post(
+    "/api/price-lists/:id/items",
+    requirePerm("manage_inventory"),
+    async (req, res) => {
+      try {
+        const { product_id, variant_id, price, min_qty } = req.body;
+        const { rows } = await db.query(
+          `INSERT INTO price_list_items (price_list_id, product_id, variant_id, price, min_qty)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (price_list_id, product_id, variant_id, min_qty)
+           DO UPDATE SET price = EXCLUDED.price
+           RETURNING *`,
+          [req.params.id, product_id, variant_id || null, price, min_qty || 1],
+        );
+        res.status(201).json(rows[0]);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
+  // PUT /api/price-list-items/:itemId
+  app.put(
+    "/api/price-list-items/:itemId",
+    requirePerm("manage_inventory"),
+    async (req, res) => {
+      try {
+        const { price, min_qty } = req.body;
+        const { rows } = await db.query(
+          `UPDATE price_list_items
+           SET price = $1, min_qty = $2
+           WHERE id = $3
+           RETURNING *`,
+          [price, min_qty || 1, req.params.itemId],
+        );
+        if (!rows.length) return res.status(404).json({ error: "Not found" });
+        res.json(rows[0]);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
+  // DELETE /api/price-list-items/:itemId
+  app.delete(
+    "/api/price-list-items/:itemId",
+    requirePerm("manage_inventory"),
+    async (req, res) => {
+      try {
+        const { rowCount } = await db.query(
+          `DELETE FROM price_list_items WHERE id = $1`,
+          [req.params.itemId],
+        );
+        if (!rowCount) return res.status(404).json({ error: "Not found" });
+        res.json({ message: "Deleted" });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
+  // POST /api/price-lists/:id/bulk-items
+  app.post(
+    "/api/price-lists/:id/bulk-items",
+    requirePerm("manage_inventory"),
+    async (req, res) => {
+      try {
+        const { items } = req.body;
+        if (!Array.isArray(items) || !items.length) {
+          return res.status(400).json({ error: "items array is required" });
+        }
+        let upserted = 0;
+        for (const item of items) {
+          const { rowCount } = await db.query(
+            `INSERT INTO price_list_items (price_list_id, product_id, variant_id, price, min_qty)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (price_list_id, product_id, variant_id, min_qty)
+             DO UPDATE SET price = EXCLUDED.price`,
+            [req.params.id, item.product_id, item.variant_id || null, item.price, item.min_qty || 1],
+          );
+          upserted += rowCount;
+        }
+        res.json({ upserted });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    },
+  );
 };
