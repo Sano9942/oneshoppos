@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { CreditCard, ArrowUpRight, Clock, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+import { CreditCard, ArrowUpRight, Clock, CheckCircle, AlertTriangle, XCircle, Tag } from "lucide-react";
 import { api } from "../../api";
 import { PageShell } from "../../ui/primitives";
 import { useToast } from "../../contexts/ToastContext";
@@ -7,8 +7,9 @@ import { useToast } from "../../contexts/ToastContext";
 export default function BillingRedesign() {
   const { success, error: showError } = useToast();
   const [billing, setBilling] = useState(null);
+  const [pricing, setPricing] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [cycle, setCycle] = useState("monthly");
+  const [cycle, setCycle] = useState("quarterly");
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [message, setMessage] = useState("");
@@ -20,7 +21,10 @@ export default function BillingRedesign() {
       .catch(() => setLoading(false));
   };
 
-  useEffect(() => { fetchBilling(); }, []);
+  useEffect(() => {
+    fetchBilling();
+    api.get("/api/billing/pricing").then(data => setPricing(data)).catch(() => {});
+  }, []);
 
   const [paymentProcessing, setPaymentProcessing] = useState(false);
 
@@ -106,31 +110,63 @@ export default function BillingRedesign() {
     </PageShell>
   );
 
-  const PRICING = { monthly: 8000, annual: 80000 };
-  const priceLabel = cycle === "annual"
-    ? `PKR ${PRICING.annual.toLocaleString()}/year`
-    : `PKR ${PRICING.monthly.toLocaleString()}/mo`;
+  // Build pricing lookup from API data (pro plan only for upgrade display)
+  const proPricing = pricing.filter(p => p.plan === "pro");
+  const cycleInfo = proPricing.find(p => p.cycle === cycle) || proPricing[0] || {};
+  const CYCLE_LABELS = { monthly: "Monthly", quarterly: "Quarterly", semi_annual: "Semi-Annual", annual: "Annual" };
+  const CYCLE_PERIOD = { monthly: "/mo", quarterly: "/quarter", semi_annual: "/6 months", annual: "/year" };
 
-  const CycleToggle = () => (
-    <div className="inline-flex rounded-lg border border-slate-200 p-0.5 text-sm">
-      {["monthly", "annual"].map(c => (
-        <button key={c} onClick={() => setCycle(c)}
-          className={`px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer ${
-            cycle === c ? "bg-emerald-600 text-white" : "text-slate-600 hover:text-slate-800"
-          }`}>
-          {c === "annual" ? "Annual (save 17%)" : "Monthly"}
-        </button>
-      ))}
+  const priceLabel = cycleInfo.price
+    ? `PKR ${cycleInfo.price.toLocaleString()}${CYCLE_PERIOD[cycle] || ""}`
+    : "PKR 8,000/mo";
+
+  const RECOMMENDED_CYCLE = "annual";
+
+  const CycleCards = () => (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {proPricing.map(p => {
+        const isSelected = cycle === p.cycle;
+        const isRecommended = p.cycle === RECOMMENDED_CYCLE;
+        return (
+          <button key={p.cycle} onClick={() => setCycle(p.cycle)}
+            className={`relative rounded-xl border-2 p-4 text-left transition-all cursor-pointer ${
+              isSelected
+                ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500/30"
+                : "border-slate-200 bg-white hover:border-slate-300"
+            }`}>
+            {isRecommended && (
+              <span className="absolute -top-2.5 right-2 inline-flex items-center gap-0.5 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white uppercase tracking-wide">
+                Best Value
+              </span>
+            )}
+            <div className="text-xs font-medium text-slate-500 mb-1">{CYCLE_LABELS[p.cycle]}</div>
+            <div className="text-base font-bold text-slate-800">PKR {p.price.toLocaleString()}</div>
+            <div className="text-xs text-slate-500 mt-0.5">PKR {p.monthly_equivalent.toLocaleString()}/mo</div>
+            {p.discount_percent > 0 && (
+              <div className="mt-2 flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
+                  <Tag size={10} /> {p.discount_percent}% OFF
+                </span>
+              </div>
+            )}
+            {p.savings > 0 && (
+              <div className="text-[11px] text-emerald-600 font-medium mt-1">
+                Save PKR {p.savings.toLocaleString()}
+              </div>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 
   const OutletBreakdown = () => {
     const outlets = billing?.max_outlets || 1;
     if (outlets <= 1) return null;
-    const unitPrice = cycle === "annual" ? PRICING.annual : PRICING.monthly;
+    const unitPrice = cycleInfo.price || 8000;
     return (
-      <p className="text-xs text-slate-500 mt-1">
-        {outlets} outlets × PKR {unitPrice.toLocaleString()}/{cycle === "annual" ? "yr" : "mo"} = <strong>PKR {(unitPrice * outlets).toLocaleString()}</strong>
+      <p className="text-xs text-slate-500 mt-2">
+        {outlets} outlets × PKR {unitPrice.toLocaleString()} = <strong>PKR {(unitPrice * outlets).toLocaleString()}</strong>
       </p>
     );
   };
@@ -208,12 +244,12 @@ export default function BillingRedesign() {
               <div className={`h-2.5 rounded-full ${billing.trial_days_left <= 7 ? "bg-amber-500" : "bg-blue-500"}`}
                 style={{ width: `${Math.max(2, ((45 - billing.trial_days_left) / 45) * 100)}%` }} />
             </div>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-slate-600 mb-3">
               {billing.trial_days_left <= 7
                 ? "Your trial is ending soon. Subscribe to continue using all features."
-                : "You have full access to all Pro features during your trial."}
+                : "You have full access to all Pro features during your trial. Choose a billing cycle:"}
             </p>
-            <div className="mt-3 mb-2"><CycleToggle /><OutletBreakdown /></div>
+            <div className="mb-3"><CycleCards /><OutletBreakdown /></div>
             {billing.payment_enabled && (
               <button onClick={() => handlePayNow(cycle)} disabled={submitting}
                 className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50 cursor-pointer">
@@ -236,7 +272,7 @@ export default function BillingRedesign() {
               Your account will become read-only after the grace period. Subscribe now to continue selling.
               <strong> Pro plan: {priceLabel} per outlet.</strong>
             </p>
-            <div className="mt-3 mb-2"><CycleToggle /><OutletBreakdown /></div>
+            <div className="mt-3 mb-2"><CycleCards /><OutletBreakdown /></div>
             {billing.payment_enabled && (
               <button onClick={() => handlePayNow(cycle)} disabled={submitting}
                 className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer">
@@ -257,7 +293,7 @@ export default function BillingRedesign() {
               You can still view your data and export reports, but cannot make sales or changes.
               Subscribe to restore full access.
             </p>
-            <div className="mb-3"><CycleToggle /><OutletBreakdown /></div>
+            <div className="mb-3"><CycleCards /><OutletBreakdown /></div>
             {billing.payment_enabled ? (
               <button onClick={() => handlePayNow(cycle)} disabled={submitting}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 cursor-pointer">
@@ -330,9 +366,9 @@ export default function BillingRedesign() {
         {/* Upgrade Options */}
         {Object.keys(upgradePlans).length > 0 && !billing?.pending_request && (
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">Upgrade to Pro</h2>
-            <p className="text-sm text-slate-500 mb-4">{priceLabel} per outlet. Unlimited employees and products. All features included.</p>
-            <div className="mb-4"><CycleToggle /><OutletBreakdown /></div>
+            <h2 className="text-lg font-semibold text-slate-800 mb-2">Upgrade to Pro</h2>
+            <p className="text-sm text-slate-500 mb-4">Unlimited employees, products, and all features included. Choose a billing cycle:</p>
+            <div className="mb-4"><CycleCards /><OutletBreakdown /></div>
             <button
               onClick={() => { setSelectedPlan("pro"); setShowUpgradeModal(true); }}
               className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors flex items-center gap-1"
@@ -365,8 +401,13 @@ export default function BillingRedesign() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
             <h3 className="text-lg font-semibold text-slate-800 mb-2">Request Upgrade to Pro</h3>
-            <p className="text-sm text-slate-500 mb-2">{priceLabel} per outlet</p>
-            <div className="mb-3"><CycleToggle /><OutletBreakdown /></div>
+            <p className="text-sm text-slate-500 mb-1">{priceLabel} per outlet</p>
+            {cycleInfo.discount_percent > 0 && (
+              <p className="text-xs text-emerald-600 font-medium mb-2">
+                {cycleInfo.discount_percent}% OFF — Save PKR {cycleInfo.savings?.toLocaleString()}
+              </p>
+            )}
+            <div className="mb-3"><CycleCards /><OutletBreakdown /></div>
             <div className="mb-4">
               <label className="block text-sm font-medium text-slate-600 mb-1">Message (optional)</label>
               <textarea value={message} onChange={e => setMessage(e.target.value)}

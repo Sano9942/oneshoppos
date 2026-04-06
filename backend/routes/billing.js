@@ -22,7 +22,37 @@ module.exports = function registerBillingRoutes(app, deps) {
       const { rows } = await db.pool.query(
         "SELECT plan, cycle, price, currency_code FROM plan_pricing WHERE is_active = true ORDER BY plan, cycle"
       );
-      res.json(rows);
+
+      // Build a lookup of monthly prices per plan for discount calculation
+      const monthlyPrices = {};
+      for (const r of rows) {
+        if (r.cycle === "monthly") monthlyPrices[r.plan] = Number(r.price);
+      }
+
+      const CYCLE_MONTHS = { monthly: 1, quarterly: 3, semi_annual: 6, annual: 12 };
+
+      const enriched = rows.map(r => {
+        const price = Number(r.price);
+        const months = CYCLE_MONTHS[r.cycle] || 1;
+        const monthly_equivalent = Math.round(price / months);
+        const monthly_price = monthlyPrices[r.plan] || monthly_equivalent;
+        const discount_percent = monthly_price > 0
+          ? Math.round((1 - monthly_equivalent / monthly_price) * 100)
+          : 0;
+        const savings = (monthly_price * months) - price;
+        return {
+          plan: r.plan,
+          cycle: r.cycle,
+          price,
+          currency_code: r.currency_code,
+          months,
+          monthly_equivalent,
+          discount_percent: Math.max(0, discount_percent),
+          savings: Math.max(0, savings),
+        };
+      });
+
+      res.json(enriched);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -59,6 +89,12 @@ module.exports = function registerBillingRoutes(app, deps) {
         grace_days_left = Math.max(0, Math.ceil((new Date(tenant.grace_ends_at) - new Date()) / 86400000));
       }
 
+      // Compute next renewal date from expiry
+      let next_renewal_date = null;
+      if (tenant.plan_expires_at && tenant.payment_status === "active") {
+        next_renewal_date = tenant.plan_expires_at;
+      }
+
       res.json({
         plan: tenant.plan,
         billing_cycle: tenant.billing_cycle || null,
@@ -68,6 +104,7 @@ module.exports = function registerBillingRoutes(app, deps) {
         payment_status: tenant.payment_status || "active",
         trial_days_left,
         grace_days_left,
+        next_renewal_date,
         payment_enabled: paymentGateway.isEnabled(),
         upgrade_options: upgradeOptions,
         pending_request: pendingReq || null,
@@ -133,7 +170,16 @@ module.exports = function registerBillingRoutes(app, deps) {
 
       const plan = "pro";
       const outletCount = Math.max(1, tenant.max_outlets || 1);
-      const pricePerOutlet = cycle === "annual" ? 80000 : 8000;
+
+      // Look up price from plan_pricing table
+      const { rows: [pricingRow] } = await db.pool.query(
+        "SELECT price FROM plan_pricing WHERE plan = $1 AND cycle = $2 AND is_active = true",
+        [plan, cycle]
+      );
+      if (!pricingRow) {
+        return res.status(400).json({ error: `No active pricing found for ${plan}/${cycle}` });
+      }
+      const pricePerOutlet = Number(pricingRow.price);
       const amount = pricePerOutlet * outletCount;
 
       const gateway = process.env.PAYMENT_GATEWAY || "manual";
