@@ -41,6 +41,19 @@ module.exports = function registerGRNRoutes(app, deps) {
     }
   });
 
+  app.get("/api/grn/by-po/:poId", requireAnyPerm(["manage_orders", "view_reports", "all_access"]), async (req, res) => {
+    try {
+      const { rows: [grn] } = await db.query(
+        "SELECT id, grn_number FROM goods_received_notes WHERE po_id = $1 ORDER BY id DESC LIMIT 1",
+        [req.params.poId]
+      );
+      if (!grn) return res.status(404).json({ error: "No GRN found for this PO" });
+      res.json({ grn });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/grn/:id", requireAnyPerm(["manage_orders", "view_reports", "all_access"]), async (req, res) => {
     try {
       const { id } = req.params;
@@ -62,6 +75,87 @@ module.exports = function registerGRNRoutes(app, deps) {
         [id],
       );
       res.json({ grn, items });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- Scan & Receive: increment qty_received for a GRN item by barcode ---
+  app.post("/api/grn/:id/scan-receive", requirePerm("manage_orders"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { barcode, quantity } = req.body;
+      const qty = Math.max(1, parseInt(quantity, 10) || 1);
+
+      if (!barcode || !barcode.trim()) {
+        return res.status(400).json({ error: "Barcode is required" });
+      }
+
+      // 1. Verify GRN exists
+      const { rows: [grn] } = await db.query(
+        "SELECT id FROM goods_received_notes WHERE id = $1", [id]
+      );
+      if (!grn) return res.status(404).json({ error: "GRN not found" });
+
+      // 2. Find product by barcode (products table OR product_variants table)
+      const trimmed = barcode.trim();
+      let productId = null;
+      let productName = null;
+
+      // Try products.barcode or products.sku first
+      const { rows: [prod] } = await db.query(
+        "SELECT id, name FROM products WHERE deleted_at IS NULL AND (barcode = $1 OR sku = $1)",
+        [trimmed]
+      );
+      if (prod) {
+        productId = prod.id;
+        productName = prod.name;
+      } else {
+        // Try product_variants.barcode
+        const { rows: [variant] } = await db.query(
+          `SELECT pv.product_id, p.name FROM product_variants pv
+           JOIN products p ON p.id = pv.product_id
+           WHERE p.deleted_at IS NULL AND pv.barcode = $1`,
+          [trimmed]
+        );
+        if (variant) {
+          productId = variant.product_id;
+          productName = variant.name;
+        }
+      }
+
+      if (!productId) {
+        return res.status(404).json({ error: `No product found for barcode "${trimmed}"` });
+      }
+
+      // 3. Find the matching grn_item
+      const { rows: [grnItem] } = await db.query(
+        "SELECT id, qty_ordered, qty_received FROM grn_items WHERE grn_id = $1 AND product_id = $2",
+        [id, productId]
+      );
+      if (!grnItem) {
+        return res.status(404).json({ error: `Product "${productName}" is not on this GRN` });
+      }
+
+      // 4. Increment qty_received
+      const newReceived = Number(grnItem.qty_received || 0) + qty;
+      await db.query(
+        "UPDATE grn_items SET qty_received = $1 WHERE id = $2",
+        [newReceived, grnItem.id]
+      );
+
+      const overReceived = newReceived > Number(grnItem.qty_ordered);
+
+      res.json({
+        item: {
+          grn_item_id: grnItem.id,
+          product_id: productId,
+          product_name: productName,
+          qty_ordered: Number(grnItem.qty_ordered),
+          qty_received: newReceived,
+          over_received: overReceived,
+        },
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

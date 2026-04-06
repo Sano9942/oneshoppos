@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   BookTemplate,
@@ -9,6 +9,7 @@ import {
   Pencil,
   Plus,
   Save,
+  ScanBarcode,
   Search,
   Send,
   ThumbsUp,
@@ -91,6 +92,15 @@ export default function PurchaseOrdersRedesign() {
   const [grnReceivedBy, setGrnReceivedBy] = useState("");
   const [grnNotes, setGrnNotes] = useState("");
   const [grnQtys, setGrnQtys] = useState({});
+
+  // Scan & Receive state
+  const [scanMode, setScanMode] = useState(false);
+  const [scanGrnId, setScanGrnId] = useState(null); // GRN ID for scan-receive
+  const [scanItems, setScanItems] = useState([]); // current GRN items with live qty
+  const [scanFlash, setScanFlash] = useState(null); // product_id that was just scanned
+  const [scanError, setScanError] = useState("");
+  const [scanLog, setScanLog] = useState([]); // recent scan results
+  const scanInputRef = useRef(null);
 
   // Template state
   const [templates, setTemplates] = useState([]);
@@ -513,6 +523,73 @@ export default function PurchaseOrdersRedesign() {
     }
   };
 
+  // --- Scan & Receive helpers ---
+  const openScanMode = useCallback(async (grnId) => {
+    try {
+      const data = await api.get(`/api/grn/${grnId}`);
+      setScanGrnId(grnId);
+      setScanItems(data.items || []);
+      setScanMode(true);
+      setScanError("");
+      setScanLog([]);
+      setScanFlash(null);
+      setTimeout(() => scanInputRef.current?.focus(), 100);
+    } catch (e) {
+      setError(e.message || "Failed to load GRN for scanning");
+    }
+  }, []);
+
+  const handleScanSubmit = useCallback(async (barcode) => {
+    if (!barcode.trim() || !scanGrnId) return;
+    setScanError("");
+    try {
+      const data = await api.post(`/api/grn/${scanGrnId}/scan-receive`, { barcode: barcode.trim() });
+      const updated = data.item;
+      // Update the item in scanItems
+      setScanItems((prev) =>
+        prev.map((it) =>
+          it.product_id === updated.product_id
+            ? { ...it, qty_received: updated.qty_received }
+            : it
+        )
+      );
+      // Flash the row green
+      setScanFlash(updated.product_id);
+      setTimeout(() => setScanFlash(null), 800);
+      // Add to scan log
+      setScanLog((prev) => [
+        { product_name: updated.product_name, qty_received: updated.qty_received, qty_ordered: updated.qty_ordered, over_received: updated.over_received, time: new Date() },
+        ...prev.slice(0, 19),
+      ]);
+      // Audio beep
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = updated.over_received ? 300 : 880;
+        gain.gain.value = 0.12;
+        osc.start();
+        osc.stop(ctx.currentTime + (updated.over_received ? 0.3 : 0.1));
+      } catch {} // eslint-disable-line no-empty
+    } catch (e) {
+      setScanError(e.message || "Scan failed");
+      // Error beep
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 200;
+        gain.gain.value = 0.15;
+        osc.start();
+        osc.stop(ctx.currentTime + 0.4);
+      } catch {} // eslint-disable-line no-empty
+    }
+  }, [scanGrnId]);
+
   if (view === "create") {
     return (
       <PageShell
@@ -814,6 +891,19 @@ export default function PurchaseOrdersRedesign() {
                     Receive Items
                   </Button>
                 ) : null}
+                {po.status === "Received" ? (
+                  <Button tone="primary" onClick={async () => {
+                    try {
+                      const data = await api.get(`/api/grn/by-po/${po.id}`);
+                      openScanMode(data.grn.id);
+                    } catch (e) {
+                      setError(e.message || "No GRN found for this PO");
+                    }
+                  }}>
+                    <ScanBarcode size={13} className="mr-1 inline" />
+                    Scan to Receive
+                  </Button>
+                ) : null}
               </div>
             }
           />
@@ -914,6 +1004,135 @@ export default function PurchaseOrdersRedesign() {
                 <Button tone="primary" onClick={receivePO} disabled={saving}>
                   <CheckCircle2 size={13} className="mr-1 inline" />
                   {saving ? "Processing..." : "Confirm & Create GRN"}
+                </Button>
+              </div>
+            </SectionCard>
+          </div>
+        ) : null}
+
+        {scanMode ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
+            <SectionCard className="w-full max-w-3xl p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-(--ui-text)">
+                  <ScanBarcode size={18} className="mr-2 inline" />
+                  Scan &amp; Receive
+                </h3>
+                <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={() => setScanMode(false)}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Progress bar */}
+              {(() => {
+                const totalOrdered = scanItems.reduce((s, i) => s + Number(i.qty_ordered || 0), 0);
+                const totalReceived = scanItems.reduce((s, i) => s + Number(i.qty_received || 0), 0);
+                const pct = totalOrdered > 0 ? Math.min(100, Math.round((totalReceived / totalOrdered) * 100)) : 0;
+                return (
+                  <div className="mb-3">
+                    <div className="mb-1 flex justify-between text-xs text-(--ui-text-muted)">
+                      <span>{totalReceived} / {totalOrdered} items received</span>
+                      <span>{pct}%</span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-(--ui-muted-surface)">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${pct >= 100 ? "bg-emerald-500" : "bg-blue-500"}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Barcode input — plain <input> for ref forwarding */}
+              <div className="mb-3">
+                <input
+                  ref={scanInputRef}
+                  className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text) placeholder:text-(--ui-text-muted) dark:bg-(--ui-surface)"
+                  placeholder="Scan barcode or type and press Enter..."
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleScanSubmit(e.target.value);
+                      e.target.value = "";
+                    }
+                  }}
+                />
+              </div>
+
+              {scanError ? (
+                <div className="mb-2 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-300">
+                  {scanError}
+                </div>
+              ) : null}
+
+              {/* Scan log */}
+              {scanLog.length > 0 ? (
+                <div className="mb-3 max-h-20 overflow-auto rounded border border-(--ui-border) bg-(--ui-muted-surface) p-2">
+                  {scanLog.map((entry, i) => (
+                    <div key={i} className={`text-xs ${entry.over_received ? "text-amber-600" : "text-emerald-600"}`}>
+                      {entry.product_name} — {entry.qty_received}/{entry.qty_ordered}
+                      {entry.over_received ? " ⚠ over-received" : ""}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {/* Items table */}
+              <div className="max-h-[40vh] overflow-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="sticky top-0 bg-(--ui-muted-surface) text-xs uppercase text-(--ui-text-muted)">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Product</th>
+                      <th className="px-3 py-2 text-left">Barcode</th>
+                      <th className="px-3 py-2 text-center">Ordered</th>
+                      <th className="px-3 py-2 text-center">Received</th>
+                      <th className="px-3 py-2 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scanItems.map((item) => {
+                      const ordered = Number(item.qty_ordered || 0);
+                      const received = Number(item.qty_received || 0);
+                      const isOver = received > ordered;
+                      const isDone = received >= ordered && !isOver;
+                      const isFlashing = scanFlash === item.product_id;
+                      return (
+                        <tr
+                          key={item.id}
+                          className={`border-t border-(--ui-border) transition-colors duration-300 ${
+                            isFlashing ? "bg-emerald-100 dark:bg-emerald-900" : ""
+                          }`}
+                        >
+                          <td className="px-3 py-2 text-(--ui-text)">{item.product_name}</td>
+                          <td className="px-3 py-2 font-mono text-xs text-(--ui-text-muted)">{item.barcode || "-"}</td>
+                          <td className="px-3 py-2 text-center text-(--ui-text)">{ordered}</td>
+                          <td className={`px-3 py-2 text-center font-semibold ${isOver ? "text-amber-600" : received > 0 ? "text-emerald-600" : "text-(--ui-text)"}`}>
+                            {received}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {isOver ? (
+                              <Badge tone="warning">Over</Badge>
+                            ) : isDone ? (
+                              <Badge tone="success">Done</Badge>
+                            ) : received > 0 ? (
+                              <Badge tone="info">Partial</Badge>
+                            ) : (
+                              <Badge tone="default">Pending</Badge>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-3 flex justify-end">
+                <Button onClick={() => setScanMode(false)}>
+                  <CheckCircle2 size={13} className="mr-1 inline" />
+                  Done
                 </Button>
               </div>
             </SectionCard>
