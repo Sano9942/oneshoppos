@@ -9,6 +9,8 @@ const TABS = [
   { key: "products", label: "Products" },
   { key: "customers", label: "Customers" },
   { key: "suppliers", label: "Suppliers" },
+  { key: "expenses", label: "Expenses" },
+  { key: "payments", label: "Payments" },
 ];
 
 export default function ImportRedesign() {
@@ -86,7 +88,7 @@ export default function ImportRedesign() {
   return (
     <PageShell
       title="Import Data"
-      subtitle="Upload CSV or Excel files to bulk import products, customers, and suppliers."
+      subtitle="Upload CSV or Excel files to bulk import products, customers, suppliers, expenses, and payments."
     >
       {/* Tab bar */}
       <div className="mb-5 flex gap-1 rounded-(--ui-radius-sm) border border-(--ui-border) bg-(--ui-muted-surface) p-1 w-fit">
