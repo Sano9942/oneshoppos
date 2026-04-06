@@ -93,6 +93,7 @@ export const SHOPIFY_NAV_GROUPS = [
     items: [
       { name: "Reports", path: "/reports", icon: Receipt },
       { name: "Accounting", path: "/accounting", icon: BookOpen, requiredPerm: "view_reports", requiredFlag: "accounting_core" },
+      { name: "Credit/Debit Notes", path: "/credit-debit-notes", icon: FileCheck, requiredPerm: "view_reports", requiredFlag: "accounting_core" },
     ],
   },
   {

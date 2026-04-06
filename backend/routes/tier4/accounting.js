@@ -574,5 +574,232 @@ module.exports = function createAccountingRouter({
     },
   );
 
+  // ── Credit & Debit Notes ──────────────────────────────────────────────
+  // Shared CRUD factory for both note types (identical schema)
+  function mountNoteRoutes(table, prefix) {
+    const authMw = [
+      requireAnyPerm(["manage_employees", "all_access"]),
+      requireFeature("accounting_core"),
+    ];
+
+    // List with filters
+    router.get(`/api/accounting/${prefix}`, ...authMw, async (req, res) => {
+      try {
+        const { status, type, from, to } = req.query || {};
+        const where = ["1=1"];
+        const params = [];
+        let idx = 1;
+        if (status) { where.push(`n.status = $${idx++}`); params.push(status); }
+        if (type) { where.push(`n.type = $${idx++}`); params.push(type); }
+        if (from) { where.push(`n.created_at::date >= $${idx++}::date`); params.push(from); }
+        if (to) { where.push(`n.created_at::date <= $${idx++}::date`); params.push(to); }
+        const { rows } = await db.query(
+          `SELECT n.*, c.name AS customer_name, s.name AS supplier_name,
+                  e.name AS created_by_name, a.name AS approved_by_name
+           FROM ${table} n
+           LEFT JOIN customers c ON c.id = n.customer_id
+           LEFT JOIN suppliers s ON s.id = n.supplier_id
+           LEFT JOIN employees e ON e.id = n.created_by
+           LEFT JOIN employees a ON a.id = n.approved_by
+           WHERE ${where.join(" AND ")}
+           ORDER BY n.created_at DESC, n.id DESC`,
+          params
+        );
+        res.json({ notes: rows || [] });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Get by ID
+    router.get(`/api/accounting/${prefix}/:id`, ...authMw, async (req, res) => {
+      try {
+        const { rows } = await db.query(
+          `SELECT n.*, c.name AS customer_name, s.name AS supplier_name,
+                  e.name AS created_by_name, a.name AS approved_by_name
+           FROM ${table} n
+           LEFT JOIN customers c ON c.id = n.customer_id
+           LEFT JOIN suppliers s ON s.id = n.supplier_id
+           LEFT JOIN employees e ON e.id = n.created_by
+           LEFT JOIN employees a ON a.id = n.approved_by
+           WHERE n.id = $1`,
+          [req.params.id]
+        );
+        if (!rows.length) return res.status(404).json({ error: "Note not found" });
+        res.json(rows[0]);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Create
+    router.post(`/api/accounting/${prefix}`, ...authMw, async (req, res) => {
+      try {
+        const { type, customer_id, supplier_id, amount, reason, reference_type, reference_id, notes } = req.body || {};
+        if (!type || !amount || !reason) {
+          return res.status(400).json({ error: "type, amount, and reason are required" });
+        }
+        if (type === "sales" && !customer_id) {
+          return res.status(400).json({ error: "customer_id is required for sales type" });
+        }
+        if (type === "purchase" && !supplier_id) {
+          return res.status(400).json({ error: "supplier_id is required for purchase type" });
+        }
+        if (Number(amount) <= 0) {
+          return res.status(400).json({ error: "amount must be positive" });
+        }
+
+        // Auto-generate note_number: CN-YYYYMMDD-NNN or DN-YYYYMMDD-NNN
+        const tag = prefix === "credit-notes" ? "CN" : "DN";
+        const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+        const likePattern = `${tag}-${today}-%`;
+        const { rows: [countRow] } = await db.query(
+          `SELECT COUNT(*) AS cnt FROM ${table} WHERE note_number LIKE $1`,
+          [likePattern]
+        );
+        const seq = String(Number(countRow.cnt) + 1).padStart(3, "0");
+        const note_number = `${tag}-${today}-${seq}`;
+
+        const employeeId = Number(req.headers["x-employee-id"] || 0) || null;
+        const { rows } = await db.query(
+          `INSERT INTO ${table} (note_number, type, customer_id, supplier_id, amount, reason, reference_type, reference_id, notes, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           RETURNING id, note_number`,
+          [note_number, type, customer_id || null, supplier_id || null, amount, reason, reference_type || null, reference_id || null, notes || null, employeeId]
+        );
+        res.json({ message: "Note created", id: rows[0].id, note_number: rows[0].note_number });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Update (draft only)
+    router.put(`/api/accounting/${prefix}/:id`, ...authMw, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { type, customer_id, supplier_id, amount, reason, reference_type, reference_id, notes } = req.body || {};
+
+        const { rows: existing } = await db.query(`SELECT status FROM ${table} WHERE id = $1`, [id]);
+        if (!existing.length) return res.status(404).json({ error: "Note not found" });
+        if (existing[0].status !== "draft") {
+          return res.status(400).json({ error: "Only draft notes can be edited" });
+        }
+
+        const { rowCount } = await db.query(
+          `UPDATE ${table}
+           SET type = COALESCE($1, type), customer_id = $2, supplier_id = $3,
+               amount = COALESCE($4, amount), reason = COALESCE($5, reason),
+               reference_type = $6, reference_id = $7, notes = $8
+           WHERE id = $9 AND status = 'draft'`,
+          [type, customer_id || null, supplier_id || null, amount, reason, reference_type || null, reference_id || null, notes || null, id]
+        );
+        res.json({ message: "Note updated", changed: rowCount || 0 });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Approve — adjusts customer/supplier balance inside transaction
+    router.put(`/api/accounting/${prefix}/:id/approve`, ...authMw, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const employeeId = Number(req.headers["x-employee-id"] || 0) || null;
+
+        await db.transaction(async (client) => {
+          const { rows } = await client.query(
+            `SELECT * FROM ${table} WHERE id = $1 FOR UPDATE`, [id]
+          );
+          if (!rows.length) throw Object.assign(new Error("Note not found"), { statusCode: 404 });
+          const note = rows[0];
+          if (note.status !== "draft") {
+            throw Object.assign(new Error("Only draft notes can be approved"), { statusCode: 400 });
+          }
+
+          await client.query(
+            `UPDATE ${table} SET status = 'approved', approved_by = $1, approved_at = NOW() WHERE id = $2`,
+            [employeeId, id]
+          );
+
+          const amt = Number(note.amount);
+          const isCreditNote = prefix === "credit-notes";
+
+          // Apply balance adjustment
+          if (note.type === "sales" && note.customer_id) {
+            // Credit note (sales): decrease customer balance (give credit)
+            // Debit note (sales): increase customer balance (customer owes more)
+            const delta = isCreditNote ? -amt : amt;
+            await client.query(
+              `UPDATE customers SET balance = COALESCE(balance, 0) + $1 WHERE id = $2`,
+              [delta, note.customer_id]
+            );
+          } else if (note.type === "purchase" && note.supplier_id) {
+            // Credit note (purchase): decrease supplier running_balance (supplier gives discount)
+            // Debit note (purchase): increase supplier running_balance (you owe more)
+            const delta = isCreditNote ? -amt : amt;
+            await client.query(
+              `UPDATE suppliers SET running_balance = COALESCE(running_balance, 0) + $1 WHERE id = $2`,
+              [delta, note.supplier_id]
+            );
+          }
+        });
+
+        res.json({ message: "Note approved and balance adjusted" });
+      } catch (err) {
+        res.status(err.statusCode || 500).json({ error: err.message });
+      }
+    });
+
+    // Cancel (draft or approved)
+    router.put(`/api/accounting/${prefix}/:id/cancel`, ...authMw, async (req, res) => {
+      try {
+        const { id } = req.params;
+
+        await db.transaction(async (client) => {
+          const { rows } = await client.query(
+            `SELECT * FROM ${table} WHERE id = $1 FOR UPDATE`, [id]
+          );
+          if (!rows.length) throw Object.assign(new Error("Note not found"), { statusCode: 404 });
+          const note = rows[0];
+          if (note.status === "cancelled") {
+            throw Object.assign(new Error("Note is already cancelled"), { statusCode: 400 });
+          }
+
+          const wasApproved = note.status === "approved";
+
+          await client.query(
+            `UPDATE ${table} SET status = 'cancelled' WHERE id = $1`, [id]
+          );
+
+          // Reverse balance adjustment if it was approved
+          if (wasApproved) {
+            const amt = Number(note.amount);
+            const isCreditNote = prefix === "credit-notes";
+
+            if (note.type === "sales" && note.customer_id) {
+              const delta = isCreditNote ? amt : -amt; // reverse of approve
+              await client.query(
+                `UPDATE customers SET balance = COALESCE(balance, 0) + $1 WHERE id = $2`,
+                [delta, note.customer_id]
+              );
+            } else if (note.type === "purchase" && note.supplier_id) {
+              const delta = isCreditNote ? amt : -amt; // reverse of approve
+              await client.query(
+                `UPDATE suppliers SET running_balance = COALESCE(running_balance, 0) + $1 WHERE id = $2`,
+                [delta, note.supplier_id]
+              );
+            }
+          }
+        });
+
+        res.json({ message: "Note cancelled" });
+      } catch (err) {
+        res.status(err.statusCode || 500).json({ error: err.message });
+      }
+    });
+  }
+
+  mountNoteRoutes("credit_notes", "credit-notes");
+  mountNoteRoutes("debit_notes", "debit-notes");
+
   return router;
 };
