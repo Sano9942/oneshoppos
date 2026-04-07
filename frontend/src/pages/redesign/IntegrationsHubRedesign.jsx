@@ -27,81 +27,106 @@ const TABS = [
 ];
 
 const PROVIDER_META = {
-  daraz: { name: "Daraz", category: "marketplace", icon: ShoppingBag, color: "text-orange-500", fields: ["api_key", "api_secret", "oauth_token"], labels: { api_key: "App Key", api_secret: "App Secret", oauth_token: "Access Token" } },
+  daraz: { name: "Daraz", category: "marketplace", icon: ShoppingBag, color: "text-orange-500", fields: ["api_key", "api_secret", "oauth_token"], labels: { api_key: "App Key", api_secret: "App Secret", oauth_token: "Access Token" }, actions: ["sync-products", "pull-orders", "push-inventory"] },
   shopify: { name: "Shopify", category: "marketplace", icon: ShoppingBag, color: "text-green-600", link: "/integrations/shopify" },
   woocommerce: { name: "WooCommerce", category: "marketplace", icon: ShoppingBag, color: "text-purple-600", link: "/integrations/woocommerce" },
-  facebook: { name: "Facebook Shop", category: "social", icon: MessageCircle, color: "text-blue-600", fields: ["oauth_token"], labels: { oauth_token: "Page Access Token" }, configFields: ["catalog_id", "commerce_account_id"] },
+  facebook: { name: "Facebook Shop", category: "social", icon: MessageCircle, color: "text-blue-600", fields: ["oauth_token"], labels: { oauth_token: "Page Access Token" }, configFields: ["catalog_id", "commerce_account_id"], actions: ["sync-products", "pull-orders", "push-inventory"] },
   instagram: { name: "Instagram Shopping", category: "social", icon: MessageCircle, color: "text-pink-500", note: "Managed via Facebook Shop connection" },
-  whatsapp: { name: "WhatsApp Business", category: "messaging", icon: MessageCircle, color: "text-green-500", fields: ["api_key"], labels: { api_key: "API Token" }, configFields: ["phone_number_id", "business_account_id"] },
-  google_merchant: { name: "Google Merchant Center", category: "feeds", icon: Rss, color: "text-blue-500", fields: ["oauth_token"], labels: { oauth_token: "OAuth Token" }, configFields: ["merchant_id"] },
+  whatsapp: { name: "WhatsApp Business", category: "messaging", icon: MessageCircle, color: "text-green-500", fields: ["api_key"], labels: { api_key: "API Token" }, configFields: ["phone_number_id", "business_account_id"], costWarning: "WhatsApp Business API charges per conversation. First 1,000 service conversations/month are free." },
+  google_merchant: { name: "Google Merchant Center", category: "feeds", icon: Rss, color: "text-blue-500", fields: ["oauth_token"], labels: { oauth_token: "OAuth Token" }, configFields: ["merchant_id"], actions: ["sync-products"] },
 };
 
-function IntegrationCard({ provider, meta, channel, onConnect, onDisconnect, onTest, navigate }) {
+function IntegrationCard({ provider, meta, channel, onConnect, onDisconnect, onTest, onSync, navigate }) {
   const isConnected = channel?.is_active || channel?.has_credentials;
   const hasLink = meta.link;
 
   return (
-    <div className="flex items-start justify-between rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
-      <div className="flex items-start gap-3">
-        <div className={`mt-0.5 ${meta.color}`}>
-          <meta.icon size={24} />
-        </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-slate-900 dark:text-white">{meta.name}</span>
-            {isConnected && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                <Check size={12} /> Connected
-              </span>
+    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+      <div className="flex items-start justify-between">
+        <div className="flex items-start gap-3">
+          <div className={`mt-0.5 ${meta.color}`}>
+            <meta.icon size={24} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-slate-900 dark:text-white">{meta.name}</span>
+              {isConnected && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                  <Check size={12} /> Connected
+                </span>
+              )}
+              {channel?.last_error && (
+                <span className="inline-flex items-center gap-1 text-xs text-red-500">
+                  <AlertCircle size={12} /> Error
+                </span>
+              )}
+            </div>
+            {channel?.last_sync_at && (
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                Last sync: {new Date(channel.last_sync_at).toLocaleString()}
+              </p>
             )}
-            {channel?.last_error && (
-              <span className="inline-flex items-center gap-1 text-xs text-red-500">
-                <AlertCircle size={12} /> Error
-              </span>
+            {meta.note && (
+              <p className="mt-0.5 text-xs text-slate-400 italic">{meta.note}</p>
             )}
           </div>
-          {channel?.last_sync_at && (
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              Last sync: {new Date(channel.last_sync_at).toLocaleString()}
-            </p>
-          )}
-          {meta.note && (
-            <p className="mt-0.5 text-xs text-slate-400 italic">{meta.note}</p>
-          )}
         </div>
-      </div>
-      <div className="flex items-center gap-2">
-        {hasLink ? (
-          <button
-            onClick={() => navigate(meta.link)}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
-          >
-            Manage <ExternalLink size={12} />
-          </button>
-        ) : isConnected ? (
-          <>
+        <div className="flex items-center gap-2">
+          {hasLink ? (
             <button
-              onClick={() => onTest(provider)}
+              onClick={() => navigate(meta.link)}
               className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
             >
-              <RefreshCw size={12} /> Test
+              Manage <ExternalLink size={12} />
             </button>
+          ) : isConnected ? (
+            <>
+              <button
+                onClick={() => onTest(provider)}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+              >
+                <RefreshCw size={12} /> Test
+              </button>
+              <button
+                onClick={() => onDisconnect(provider)}
+                className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+              >
+                <X size={12} /> Disconnect
+              </button>
+            </>
+          ) : meta.fields ? (
             <button
-              onClick={() => onDisconnect(provider)}
-              className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+              onClick={() => onConnect(provider)}
+              className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
             >
-              <X size={12} /> Disconnect
+              <Plug size={12} /> Connect
             </button>
-          </>
-        ) : meta.fields ? (
-          <button
-            onClick={() => onConnect(provider)}
-            className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-          >
-            <Plug size={12} /> Connect
-          </button>
-        ) : null}
+          ) : null}
+        </div>
       </div>
+
+      {/* Cost warning banner */}
+      {meta.costWarning && (
+        <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
+          <AlertCircle size={12} className="mb-0.5 mr-1 inline" />
+          {meta.costWarning}
+        </div>
+      )}
+
+      {/* Quick sync actions for connected integrations */}
+      {isConnected && meta.actions?.length > 0 && (
+        <div className="mt-3 flex gap-2 border-t border-slate-100 pt-3 dark:border-slate-700">
+          {meta.actions.map((action) => (
+            <button
+              key={action}
+              onClick={() => onSync(provider, action)}
+              className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
+            >
+              {action.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -250,6 +275,24 @@ export default function IntegrationsHubRedesign() {
     }
   };
 
+  const handleSync = async (provider, action) => {
+    try {
+      const result = await api.post(`/api/integrations/${provider}/${action}`);
+      if (result.synced !== undefined) {
+        toast.success(`${provider}: ${result.synced} synced, ${result.failed || 0} failed`);
+      } else if (result.imported !== undefined) {
+        toast.success(`${provider}: ${result.imported} imported, ${result.skipped || 0} skipped`);
+      } else if (result.updated !== undefined) {
+        toast.success(`${provider}: ${result.updated} updated`);
+      } else {
+        toast.success(`${provider} ${action} completed`);
+      }
+      loadHub();
+    } catch (err) {
+      toast.error(err.message || `${action} failed`);
+    }
+  };
+
   // Build channel map from hub data
   const channelMap = {};
   if (hub) {
@@ -313,6 +356,7 @@ export default function IntegrationsHubRedesign() {
               onConnect={setConnectProvider}
               onDisconnect={handleDisconnect}
               onTest={handleTest}
+              onSync={handleSync}
               navigate={navigate}
             />
           ))}
