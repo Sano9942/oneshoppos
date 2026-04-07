@@ -855,6 +855,19 @@ const MIGRATIONS = [
     version: 17,
     description: "integrations hub — extend integration_settings, add marketplace mapping tables, seed new couriers",
     up: async (client) => {
+      // Create integration_settings if it doesn't exist (may not exist in older tenant schemas)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS integration_settings (
+          id SERIAL PRIMARY KEY,
+          provider TEXT NOT NULL UNIQUE,
+          store_url TEXT,
+          api_key TEXT,
+          api_secret TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
       // Extend integration_settings
       await client.query(`
         ALTER TABLE integration_settings
