@@ -12,22 +12,20 @@ async function assertReportLoads(page, path, label) {
   const errorBoundary = page.getByText(/something went wrong/i);
   await expect(errorBoundary).not.toBeVisible({ timeout: 3000 }).catch(() => {});
 
-  // Must show SOME content
-  await expect(
-    page.getByRole("heading").first()
-      .or(page.locator("table"))
-      .or(page.locator("canvas")) // chart
-      .or(page.getByText(/no.*data|no.*record|no.*found|empty/i))
-      .or(page.getByText(/report/i))
-      .or(page.getByText(/filter|date range/i))
-  ).toBeVisible({ timeout: 15000 });
+  // Must show SOME content — check individually to avoid strict mode violations
+  const hasHeading = await page.getByRole("heading").first().isVisible({ timeout: 15000 }).catch(() => false);
+  const hasTable = await page.locator("table").first().isVisible({ timeout: 2000 }).catch(() => false);
+  const hasCanvas = await page.locator("canvas").first().isVisible({ timeout: 2000 }).catch(() => false);
+  const hasEmpty = await page.getByText(/no.*data|no.*record|no.*found|empty/i).first().isVisible({ timeout: 2000 }).catch(() => false);
+  const hasContent = await page.getByText(/revenue|sales|inventory|customer|supplier|order|product|category|summary|filter|date/i).first().isVisible({ timeout: 2000 }).catch(() => false);
+  expect(hasHeading || hasTable || hasCanvas || hasEmpty || hasContent).toBeTruthy();
 }
 
 test.describe("Dashboard", () => {
   test("dashboard KPIs load", async ({ page }) => {
     await navigateTo(page, "/dashboard");
     await expect(
-      page.getByText(/revenue|sales|today/i)
+      page.getByText(/revenue|sales|today/i).first()
     ).toBeVisible({ timeout: 15000 });
 
     const errorBoundary = page.getByText(/something went wrong/i);

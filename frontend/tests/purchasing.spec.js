@@ -46,7 +46,8 @@ test.describe("Suppliers", () => {
     const { get } = await import("./helpers/api.js");
     const r = await get("/api/suppliers");
     expect(r.ok).toBeTruthy();
-    expect(Array.isArray(r.data)).toBeTruthy();
+    const list = r.data.suppliers || r.data;
+    expect(Array.isArray(list)).toBeTruthy();
   });
 });
 
@@ -72,13 +73,15 @@ test.describe("Purchase Orders", () => {
     // Get a supplier
     const suppliers = await get("/api/suppliers");
     expect(suppliers.ok).toBeTruthy();
-    if (suppliers.data.length === 0) return;
-    const supplierId = suppliers.data[0].id;
+    const supplierList = suppliers.data.suppliers || suppliers.data;
+    if (supplierList.length === 0) return;
+    const supplierId = supplierList[0].id;
     // Get a product
     const products = await get("/api/products?limit=1");
     expect(products.ok).toBeTruthy();
-    if (products.data.length === 0) return;
-    const product = products.data[0];
+    const prodList = products.data.products || products.data;
+    if (prodList.length === 0) return;
+    const product = prodList[0];
 
     const r = await post("/api/purchase-orders", {
       supplier_id: supplierId,
@@ -107,7 +110,8 @@ test.describe("Purchase Orders", () => {
     const { get } = await import("./helpers/api.js");
     const r = await get("/api/purchase-orders");
     expect(r.ok).toBeTruthy();
-    expect(Array.isArray(r.data)).toBeTruthy();
+    const list = r.data.purchaseOrders || r.data;
+    expect(Array.isArray(list)).toBeTruthy();
   });
 });
 
@@ -122,7 +126,8 @@ test.describe("Supplier Payables", () => {
     const { get } = await import("./helpers/api.js");
     const r = await get("/api/grn");
     expect(r.ok).toBeTruthy();
-    expect(Array.isArray(r.data)).toBeTruthy();
+    const list = r.data.grns || r.data;
+    expect(Array.isArray(list)).toBeTruthy();
   });
 });
 
@@ -141,6 +146,7 @@ test.describe("Returned Stock", () => {
     const { get } = await import("./helpers/api.js");
     const r = await get("/api/supplier-returns");
     expect(r.ok).toBeTruthy();
-    expect(Array.isArray(r.data)).toBeTruthy();
+    const list = r.data.returns || r.data.supplierReturns || r.data;
+    expect(Array.isArray(list)).toBeTruthy();
   });
 });

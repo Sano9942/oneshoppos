@@ -27,8 +27,9 @@ test.describe("Stock Adjustments", () => {
     // Get a product to adjust
     const products = await get("/api/products?limit=1");
     expect(products.ok).toBeTruthy();
-    if (products.data.length === 0) return;
-    const productId = products.data[0].id;
+    const prodList = products.data.products || products.data;
+    if (prodList.length === 0) return;
+    const productId = prodList[0].id;
     const r = await post("/api/adjustments", {
       outlet_id: 1,
       reason: "PW test adjustment",
@@ -60,7 +61,8 @@ test.describe("Stock Transfers", () => {
     const { get } = await import("./helpers/api.js");
     const r = await get("/api/transfers");
     expect(r.ok).toBeTruthy();
-    expect(Array.isArray(r.data)).toBeTruthy();
+    const list = r.data.transfers || r.data;
+    expect(Array.isArray(list)).toBeTruthy();
   });
 });
 
@@ -115,9 +117,10 @@ test.describe("Inventory API Validation", () => {
     const { get } = await import("./helpers/api.js");
     const r = await get("/api/products?limit=5");
     expect(r.ok).toBeTruthy();
-    expect(Array.isArray(r.data)).toBeTruthy();
-    if (r.data.length > 0) {
-      const product = r.data[0];
+    const list = r.data.products || r.data;
+    expect(Array.isArray(list)).toBeTruthy();
+    if (list.length > 0) {
+      const product = list[0];
       expect(product).toHaveProperty("id");
       expect(product).toHaveProperty("name");
     }

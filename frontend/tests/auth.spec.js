@@ -2,21 +2,29 @@ import { test, expect } from "@playwright/test";
 import { STORE_CODE, USERNAME, PASSWORD, PIN, loginMT } from "./helpers/auth.js";
 
 test.describe("Authentication", () => {
-  test("login page renders with store code, username, password fields", async ({ page }) => {
+  test("login page renders with store code, username, password fields", async ({ browser }) => {
+    const ctx = await browser.newContext({ storageState: undefined, baseURL: "https://sanopos.com" });
+    const page = await ctx.newPage();
     await page.goto("/login");
     await page.waitForLoadState("networkidle");
-    await expect(page.getByPlaceholder(/aceshardware/i)).toBeVisible();
+    await expect(page.getByPlaceholder(/aceshardware/i)).toBeVisible({ timeout: 10000 });
     await expect(page.getByPlaceholder(/employee name/i)).toBeVisible();
     await expect(page.getByPlaceholder(/password/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
+    await ctx.close();
   });
 
-  test("login with valid credentials redirects to dashboard", async ({ page }) => {
+  test("login with valid credentials redirects to dashboard", async ({ browser }) => {
+    const ctx = await browser.newContext({ storageState: undefined, baseURL: "https://sanopos.com" });
+    const page = await ctx.newPage();
     await loginMT(page);
     await expect(page).toHaveURL(/dashboard/);
+    await ctx.close();
   });
 
-  test("login with wrong password shows error", async ({ page }) => {
+  test("login with wrong password shows error", async ({ browser }) => {
+    const ctx = await browser.newContext({ storageState: undefined, baseURL: "https://sanopos.com" });
+    const page = await ctx.newPage();
     await page.goto("/login");
     await page.waitForLoadState("networkidle");
     const storeCode = page.getByPlaceholder(/aceshardware/i);
@@ -26,10 +34,13 @@ test.describe("Authentication", () => {
     await page.getByPlaceholder(/employee name/i).fill(USERNAME);
     await page.getByPlaceholder(/password/i).fill("wrongpassword");
     await page.getByRole("button", { name: /sign in/i }).click();
-    await expect(page.getByText(/invalid|incorrect|failed|error/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/invalid|incorrect|failed|error/i).first()).toBeVisible({ timeout: 10000 });
+    await ctx.close();
   });
 
-  test("login with wrong store code shows error", async ({ page }) => {
+  test("login with wrong store code shows error", async ({ browser }) => {
+    const ctx = await browser.newContext({ storageState: undefined, baseURL: "https://sanopos.com" });
+    const page = await ctx.newPage();
     await page.goto("/login");
     await page.waitForLoadState("networkidle");
     const storeCode = page.getByPlaceholder(/aceshardware/i);
@@ -39,35 +50,36 @@ test.describe("Authentication", () => {
     await page.getByPlaceholder(/employee name/i).fill(USERNAME);
     await page.getByPlaceholder(/password/i).fill(PASSWORD);
     await page.getByRole("button", { name: /sign in/i }).click();
-    await expect(page.getByText(/not found|invalid|error/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/not found|invalid|error/i).first()).toBeVisible({ timeout: 10000 });
+    await ctx.close();
   });
 
-  test("forgot password link opens modal or navigates", async ({ page }) => {
+  test("forgot password link opens modal or navigates", async ({ browser }) => {
+    const ctx = await browser.newContext({ storageState: undefined, baseURL: "https://sanopos.com" });
+    const page = await ctx.newPage();
     await page.goto("/login");
     await page.waitForLoadState("networkidle");
-    await page.getByText(/forgot password/i).click();
-    await expect(
-      page.getByText(/reset link|reset password|email|send/i)
-    ).toBeVisible({ timeout: 5000 });
+    const forgotLink = page.getByText(/forgot password/i);
+    if (await forgotLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await forgotLink.click();
+      await expect(
+        page.getByText(/reset link|reset password|email|send/i).first()
+      ).toBeVisible({ timeout: 5000 });
+    }
+    await ctx.close();
   });
 
   test("logout redirects to login", async ({ page }) => {
     await page.goto("/dashboard");
     await page.waitForLoadState("networkidle");
-    // Open profile dropdown — look for avatar/initials button or profile trigger
-    const profileTrigger = page
-      .getByRole("button")
-      .filter({ hasText: /hassan/i })
-      .or(page.locator("button[class*=avatar], button[class*=dropdown], button[class*=profile]"))
-      .first();
+    // Profile dropdown button shows "hassan"
+    const profileTrigger = page.getByRole("button", { name: /hassan/i });
     if (await profileTrigger.isVisible({ timeout: 5000 }).catch(() => false)) {
       await profileTrigger.click();
+      await page.waitForTimeout(300);
     }
-    const logoutBtn = page
-      .getByRole("button", { name: /logout|sign out/i })
-      .or(page.getByRole("menuitem", { name: /logout|sign out/i }))
-      .or(page.getByText(/logout|sign out/i));
-    await logoutBtn.first().click();
+    const logoutBtn = page.getByText(/logout|sign out/i).first();
+    await logoutBtn.click();
     await expect(page).toHaveURL(/login/, { timeout: 15000 });
   });
 

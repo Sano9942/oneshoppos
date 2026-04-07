@@ -7,7 +7,7 @@ test.describe("CRM", () => {
     // CRM might show as pipeline/kanban or list, or might redirect if feature-flagged
     const heading = page.getByRole("heading", { name: /crm|lead|pipeline|customer relationship/i }).first();
     const featureGated = page.getByText(/feature|upgrade|not available|plan/i).first();
-    await expect(heading.or(featureGated)).toBeVisible({ timeout: 15000 });
+    await expect(heading.or(featureGated).first()).toBeVisible({ timeout: 15000 });
   });
 
   test("lead list or kanban renders", async ({ page }) => {
@@ -29,37 +29,26 @@ test.describe("CRM", () => {
 
   test("create new lead — fill form and submit", async ({ page }) => {
     await navigateTo(page, "/crm");
-    const addBtn = page.getByRole("button", { name: /add|new|create/i }).first();
+    const addBtn = page.getByRole("button", { name: /add lead/i }).first();
     await addBtn.click();
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(500);
 
-    // Fill company/name field
-    const nameField = page.getByLabel(/company|name|title/i)
-      .or(page.getByPlaceholder(/company|name|title|lead/i))
-      .first();
-    await nameField.fill("Test Lead " + Date.now());
+    // Fill fields inside the modal
+    const modal = page.locator(".fixed");
+    await modal.getByPlaceholder("Lead name").fill("Test Lead " + Date.now());
 
-    // Fill contact if visible
-    const contactField = page.getByLabel(/phone|contact|email/i)
-      .or(page.getByPlaceholder(/phone|contact|email/i))
-      .first();
-    if (await contactField.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await contactField.fill("0300-1234567");
+    const phoneField = modal.getByPlaceholder("Phone");
+    if (await phoneField.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await phoneField.fill("0300-1234567");
     }
 
-    // Fill value if visible
-    const valueField = page.getByLabel(/value|amount|deal/i)
-      .or(page.getByPlaceholder(/value|amount/i))
-      .first();
+    const valueField = modal.getByPlaceholder("Expected Value");
     if (await valueField.isVisible({ timeout: 3000 }).catch(() => false)) {
       await valueField.fill("50000");
     }
 
-    // Submit
-    const saveBtn = page.getByRole("button", { name: /save|submit|create|add/i })
-      .filter({ hasNotText: /cancel/i })
-      .first();
-    await saveBtn.click();
+    // Submit — button text is "Add Lead" inside the modal
+    await modal.getByRole("button", { name: /add lead/i }).click();
     await page.waitForLoadState("networkidle");
 
     // Confirm success — toast, redirect, or new entry visible
@@ -132,10 +121,9 @@ test.describe("CRM", () => {
       await searchInput.fill("test");
       await page.waitForLoadState("networkidle");
       // Results should update
-      await expect(
-        page.getByText(/test/i).first()
-          .or(page.getByText(/no result|no match/i).first())
-      ).toBeVisible({ timeout: 10000 });
+      const hasResults = await page.getByText(/test/i).first().isVisible({ timeout: 10000 }).catch(() => false);
+      const hasNoResults = await page.getByText(/no result|no match/i).first().isVisible({ timeout: 3000 }).catch(() => false);
+      expect(hasResults || hasNoResults).toBeTruthy();
     }
   });
 });

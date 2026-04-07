@@ -7,9 +7,9 @@ test.describe("Admin Panel", () => {
   test("admin login page renders with email and password fields", async ({ page }) => {
     await page.goto("/admin/login");
     await page.waitForLoadState("networkidle");
-    await expect(page.getByPlaceholder(/email/i).or(page.getByLabel(/email/i))).toBeVisible({ timeout: 15000 });
-    await expect(page.getByPlaceholder(/password/i).or(page.getByLabel(/password/i))).toBeVisible({ timeout: 15000 });
-    await expect(page.getByRole("button", { name: /sign in|login|log in/i })).toBeVisible();
+    await expect(page.getByPlaceholder(/email/i).or(page.getByLabel(/email/i)).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByPlaceholder(/password/i).or(page.getByLabel(/password/i)).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole("button", { name: /sign in|login|log in/i }).first()).toBeVisible();
   });
 
   test("admin login page has branding or title", async ({ page }) => {
@@ -23,11 +23,11 @@ test.describe("Admin Panel", () => {
   test("admin login with invalid credentials shows error", async ({ page }) => {
     await page.goto("/admin/login");
     await page.waitForLoadState("networkidle");
-    await page.getByPlaceholder(/email/i).or(page.getByLabel(/email/i)).fill("invalid@example.com");
-    await page.getByPlaceholder(/password/i).or(page.getByLabel(/password/i)).fill("wrongpassword");
-    await page.getByRole("button", { name: /sign in|login|log in/i }).click();
+    await page.getByPlaceholder(/email/i).or(page.getByLabel(/email/i)).first().fill("invalid@example.com");
+    await page.getByPlaceholder(/password/i).or(page.getByLabel(/password/i)).first().fill("wrongpassword");
+    await page.getByRole("button", { name: /sign in|login|log in/i }).first().click();
     await expect(
-      page.getByText(/invalid|incorrect|failed|error|unauthorized/i)
+      page.getByText(/invalid|incorrect|failed|error|unauthorized/i).first()
     ).toBeVisible({ timeout: 10000 });
   });
 
@@ -39,7 +39,7 @@ test.describe("Admin Panel", () => {
     const isLogin = url.includes("login") || url.includes("admin");
     expect(isLogin).toBeTruthy();
     await expect(
-      page.getByPlaceholder(/email/i).or(page.getByLabel(/email/i)).or(page.getByRole("button", { name: /sign in|login/i }))
+      page.getByPlaceholder(/email/i).or(page.getByLabel(/email/i)).or(page.getByRole("button", { name: /sign in|login/i })).first()
     ).toBeVisible({ timeout: 10000 });
   });
 

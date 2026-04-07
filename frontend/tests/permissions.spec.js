@@ -7,7 +7,7 @@ test.describe("Permissions — Admin user", () => {
   test("admin sees inventory sidebar link", async ({ page }) => {
     await navigateTo(page, "/dashboard");
     await expect(
-      page.getByRole("link", { name: /inventory/i }).first()
+      page.getByRole("link", { name: /products|inventory/i }).first()
     ).toBeVisible({ timeout: 15000 });
   });
 
@@ -29,7 +29,7 @@ test.describe("Permissions — Admin user", () => {
   test("admin can access company settings", async ({ page }) => {
     await navigateTo(page, "/company-settings");
     await expect(
-      page.getByRole("heading", { name: /company|settings/i }).first()
+      page.getByRole("heading", { name: /company settings/i }).first()
     ).toBeVisible({ timeout: 15000 });
     expect(page.url()).toContain("/company-settings");
   });
@@ -50,12 +50,12 @@ test.describe("Permissions — Admin user", () => {
     expect(page.url()).toContain("/settings/integrations");
   });
 
-  test("admin can access roles page", async ({ page }) => {
-    await navigateTo(page, "/roles");
+  test("admin can access administrator page", async ({ page }) => {
+    await navigateTo(page, "/administrator");
     await expect(
-      page.getByRole("heading", { name: /role/i }).first()
+      page.getByRole("heading", { name: /administrator/i }).first()
     ).toBeVisible({ timeout: 15000 });
-    expect(page.url()).toContain("/roles");
+    expect(page.url()).toContain("/administrator");
   });
 
   test("admin can access all reports", async ({ page }) => {

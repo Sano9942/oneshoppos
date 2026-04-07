@@ -30,19 +30,19 @@ test.describe("Products & Inventory Page", () => {
   test("add new product form loads", async ({ page }) => {
     await page.goto("/products/new");
     await page.waitForLoadState("networkidle");
-    // Should have product name field
+    // Product name placeholder is "e.g. Blue T-Shirt"
     await expect(
-      page.getByPlaceholder(/product name|name/i).or(page.getByLabel(/product name|name/i)).first()
+      page.getByPlaceholder(/blue t-shirt/i).or(page.getByLabel(/product name|name/i)).first()
     ).toBeVisible({ timeout: 15000 });
   });
 
   test("create simple product via form", async ({ page }) => {
     await page.goto("/products/new");
     await page.waitForLoadState("networkidle");
-    const nameInput = page.getByPlaceholder(/product name|name/i).or(page.getByLabel(/product name|name/i)).first();
+    const nameInput = page.getByPlaceholder(/blue t-shirt/i).or(page.getByLabel(/product name|name/i)).first();
     await nameInput.fill(`Test Product PW ${Date.now()}`);
-    // Fill price
-    const priceInput = page.getByPlaceholder(/price|selling/i).or(page.getByLabel(/price|selling/i)).first();
+    // Fill price — find the first number input with placeholder "0.00" (Selling Price)
+    const priceInput = page.locator('input[type="number"][placeholder="0.00"]').first();
     if (await priceInput.isVisible({ timeout: 3000 }).catch(() => false)) {
       await priceInput.fill("999");
     }
@@ -67,12 +67,16 @@ test.describe("Products & Inventory Page", () => {
     const { get } = await import("./helpers/api.js");
     const r = await get("/api/products?limit=1");
     expect(r.ok).toBeTruthy();
-    if (r.data.length === 0) return test.skip();
-    const productId = r.data[0].id;
-    await page.goto(`/products/${productId}/edit`);
+    const products = r.data.products || r.data;
+    if (products.length === 0) return test.skip();
+    const productId = products[0].id;
+    // Route is /products/:id (not /products/:id/edit)
+    await page.goto(`/products/${productId}`);
     await page.waitForLoadState("networkidle");
     await expect(
-      page.getByPlaceholder(/product name|name/i).or(page.getByLabel(/product name|name/i)).first()
+      page.getByPlaceholder(/blue t-shirt|product name|name/i)
+        .or(page.getByLabel(/product name/i))
+        .first()
     ).toBeVisible({ timeout: 15000 });
   });
 });
@@ -191,15 +195,16 @@ test.describe("Promotions", () => {
     const { post, del } = await import("./helpers/api.js");
     const r = await post("/api/promotions", {
       name: `PW Promo ${Date.now()}`,
-      type: "percentage",
+      type: "percent",
       value: 10,
-      start_date: new Date().toISOString(),
-      end_date: new Date(Date.now() + 86400000).toISOString(),
+      starts_at: new Date().toISOString(),
+      ends_at: new Date(Date.now() + 86400000).toISOString(),
     });
     // Promotion creation may require more fields — check if it succeeded or returned validation error
     if (r.ok) {
-      expect(r.data.id).toBeTruthy();
-      await del(`/api/promotions/${r.data.id}`);
+      const id = r.data.id || r.data.promotion?.id;
+      expect(id).toBeTruthy();
+      if (id) await del(`/api/promotions/${id}`);
     } else {
       // Validation error is acceptable — means the endpoint exists
       expect(r.status).toBeLessThan(500);

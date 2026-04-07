@@ -11,16 +11,16 @@ test.describe("Settings", () => {
   test("company settings page loads with form", async ({ page }) => {
     await navigateTo(page, "/company-settings");
     await expect(
-      page.getByRole("heading", { name: /company|settings/i }).or(page.getByLabel(/company/i)).or(page.locator("form"))
+      page.getByRole("heading", { name: /company settings/i })
     ).toBeVisible({ timeout: 15000 });
     await noErrorBoundary(page);
   });
 
   test("company name field is populated", async ({ page }) => {
     await navigateTo(page, "/company-settings");
-    const nameField = page.getByLabel(/company.*name|business.*name/i)
-      .or(page.getByPlaceholder(/company.*name|business.*name/i))
-      .or(page.locator("input").first());
+    // The form uses plain text labels like "Company Name", not <label> elements
+    const nameField = page.getByRole("textbox", { name: /company name/i })
+      .or(page.locator("#company-settings-form input").first());
     await expect(nameField).toBeVisible({ timeout: 15000 });
     const value = await nameField.inputValue();
     expect(value.length).toBeGreaterThan(0);
@@ -29,7 +29,7 @@ test.describe("Settings", () => {
   test("outlets page loads", async ({ page }) => {
     await navigateTo(page, "/outlets");
     await expect(
-      page.getByRole("heading", { name: /outlet/i }).or(page.locator("table")).or(page.getByText(/outlet/i))
+      page.getByRole("heading", { name: /outlet/i }).first()
     ).toBeVisible({ timeout: 15000 });
     await noErrorBoundary(page);
   });
@@ -37,9 +37,7 @@ test.describe("Settings", () => {
   test("printer settings page loads", async ({ page }) => {
     await navigateTo(page, "/printer-settings");
     await expect(
-      page.getByRole("heading", { name: /printer/i })
-        .or(page.getByText(/printer/i))
-        .or(page.getByText(/no.*printer/i))
+      page.getByRole("heading", { name: /printer settings/i })
     ).toBeVisible({ timeout: 15000 });
     await noErrorBoundary(page);
   });
@@ -47,9 +45,7 @@ test.describe("Settings", () => {
   test("receipt templates page loads", async ({ page }) => {
     await navigateTo(page, "/receipt-templates");
     await expect(
-      page.getByRole("heading", { name: /receipt.*template/i })
-        .or(page.getByText(/template/i))
-        .or(page.getByText(/receipt/i))
+      page.getByRole("heading", { name: /receipt/i }).first()
     ).toBeVisible({ timeout: 15000 });
     await noErrorBoundary(page);
   });
@@ -57,9 +53,7 @@ test.describe("Settings", () => {
   test("barcode templates page loads", async ({ page }) => {
     await navigateTo(page, "/barcode-templates");
     await expect(
-      page.getByRole("heading", { name: /barcode/i })
-        .or(page.getByText(/barcode/i))
-        .or(page.getByText(/template/i))
+      page.getByRole("heading", { name: /barcode/i }).first()
     ).toBeVisible({ timeout: 15000 });
     await noErrorBoundary(page);
   });
@@ -67,8 +61,7 @@ test.describe("Settings", () => {
   test("courier settings page loads with courier list", async ({ page }) => {
     await navigateTo(page, "/courier-settings");
     await expect(
-      page.getByRole("heading", { name: /courier/i })
-        .or(page.getByText(/courier/i))
+      page.getByRole("heading", { name: /courier|delivery/i }).first()
     ).toBeVisible({ timeout: 15000 });
     await noErrorBoundary(page);
   });
@@ -80,7 +73,7 @@ test.describe("Settings", () => {
     const courierNames = [/leopards/i, /tcs/i, /trax/i, /call.*courier/i, /dhl/i];
     let found = 0;
     for (const name of courierNames) {
-      if (await page.getByText(name).isVisible({ timeout: 2000 }).catch(() => false)) {
+      if (await page.getByText(name).first().isVisible({ timeout: 2000 }).catch(() => false)) {
         found++;
       }
     }
@@ -90,8 +83,7 @@ test.describe("Settings", () => {
   test("backup/restore page loads", async ({ page }) => {
     await navigateTo(page, "/backup-restore");
     await expect(
-      page.getByRole("heading", { name: /backup|restore/i })
-        .or(page.getByText(/backup/i))
+      page.getByRole("heading", { name: /backup/i }).first()
     ).toBeVisible({ timeout: 15000 });
     await noErrorBoundary(page);
   });
@@ -99,9 +91,7 @@ test.describe("Settings", () => {
   test("administrator page loads", async ({ page }) => {
     await navigateTo(page, "/administrator");
     await expect(
-      page.getByRole("heading", { name: /admin/i })
-        .or(page.getByText(/admin/i))
-        .or(page.locator("table"))
+      page.getByRole("heading", { name: /administrator/i })
     ).toBeVisible({ timeout: 15000 });
     await noErrorBoundary(page);
   });
@@ -109,9 +99,7 @@ test.describe("Settings", () => {
   test("import page loads with tabs", async ({ page }) => {
     await navigateTo(page, "/import");
     await expect(
-      page.getByRole("heading", { name: /import/i })
-        .or(page.getByText(/product/i))
-        .or(page.getByRole("tab").first())
+      page.getByRole("heading", { name: /import/i }).first()
     ).toBeVisible({ timeout: 15000 });
     await noErrorBoundary(page);
   });
@@ -119,9 +107,7 @@ test.describe("Settings", () => {
   test("profile page loads", async ({ page }) => {
     await navigateTo(page, "/profile");
     await expect(
-      page.getByRole("heading", { name: /profile/i })
-        .or(page.getByText(/profile/i))
-        .or(page.getByLabel(/name/i))
+      page.getByRole("heading", { name: /profile/i }).first()
     ).toBeVisible({ timeout: 15000 });
     await noErrorBoundary(page);
   });
@@ -132,14 +118,13 @@ test.describe("Settings", () => {
     await page.waitForLoadState("networkidle");
 
     const emailTab = page.getByRole("tab", { name: /email/i })
-      .or(page.getByRole("button", { name: /email/i }))
-      .or(page.getByText(/smtp|email.*config/i));
+      .or(page.getByRole("button", { name: /email/i }));
 
-    if (await emailTab.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await emailTab.first().isVisible({ timeout: 5000 }).catch(() => false)) {
       await emailTab.first().click();
       await page.waitForLoadState("networkidle");
       await expect(
-        page.getByText(/smtp|email|host|port/i)
+        page.getByText(/smtp|email|host|port/i).first()
       ).toBeVisible({ timeout: 10000 });
     } else {
       // Try direct route
@@ -151,19 +136,15 @@ test.describe("Settings", () => {
 
   test("dark mode toggle in profile dropdown", async ({ page }) => {
     await navigateTo(page, "/dashboard");
-    // Open profile dropdown
-    const profileBtn = page.getByRole("button", { name: /profile|avatar/i })
-      .or(page.locator("[class*=avatar]"))
-      .or(page.locator("header button").last());
+    // Profile dropdown button shows employee name "hassan"
+    const profileBtn = page.locator("header").getByRole("button", { name: /hassan/i });
 
     if (await profileBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
       await profileBtn.click();
       await page.waitForTimeout(500);
-      const darkToggle = page.getByText(/dark.*mode/i)
-        .or(page.getByRole("switch", { name: /dark/i }))
-        .or(page.getByRole("button", { name: /dark|theme/i }));
+      const darkToggle = page.getByText(/dark mode|light mode/i).first();
       if (await darkToggle.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await expect(darkToggle.first()).toBeVisible();
+        await expect(darkToggle).toBeVisible();
       }
     }
   });

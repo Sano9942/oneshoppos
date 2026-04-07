@@ -12,14 +12,14 @@ test.describe("FBR Integration", () => {
   test("config form has NTN field", async ({ page }) => {
     await navigateTo(page, "/settings/fbr");
     await expect(
-      page.getByLabel(/ntn/i).or(page.getByPlaceholder(/ntn/i)).or(page.getByText(/ntn/i))
+      page.getByLabel(/ntn/i).or(page.getByPlaceholder(/ntn/i)).or(page.getByText(/ntn/i)).first()
     ).toBeVisible({ timeout: 15000 });
   });
 
   test("config form has token field", async ({ page }) => {
     await navigateTo(page, "/settings/fbr");
     await expect(
-      page.getByLabel(/token/i).or(page.getByPlaceholder(/token/i)).or(page.getByText(/token|pos id/i))
+      page.getByLabel(/token/i).or(page.getByPlaceholder(/token/i)).or(page.getByText(/token|pos id/i)).first()
     ).toBeVisible({ timeout: 15000 });
   });
 
@@ -69,6 +69,8 @@ test.describe("FBR Integration", () => {
     // Should show results or a "no results" message
     const results = page.getByRole("row").or(page.locator("tr")).or(page.getByText(/garment|textile|cloth/i));
     const noResults = page.getByText(/no result|not found|no match/i);
-    await expect(results.first().or(noResults.first())).toBeVisible({ timeout: 15000 });
+    const hasResults = await results.first().isVisible({ timeout: 10000 }).catch(() => false);
+    const hasNoResults = await noResults.first().isVisible({ timeout: 3000 }).catch(() => false);
+    expect(hasResults || hasNoResults).toBeTruthy();
   });
 });

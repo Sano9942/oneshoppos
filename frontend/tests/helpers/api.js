@@ -33,3 +33,30 @@ export const get = (path) => api("GET", path);
 export const post = (path, body) => api("POST", path, body);
 export const put = (path, body) => api("PUT", path, body);
 export const del = (path) => api("DELETE", path);
+
+/**
+ * Ensure POS is ready: open shift if needed, clock in if needed.
+ * Call this before navigating to /pos to bypass the gate modal entirely.
+ */
+export async function ensurePOSReady(outletId = 1) {
+  // 1. Check for active shift
+  const shiftRes = await get(`/api/shifts/active?outlet_id=${outletId}`);
+  if (!shiftRes.data?.shift) {
+    // Open a shift with a minimal opening float
+    await post("/api/shifts/open", {
+      outlet_id: outletId,
+      opening_float: 1000,
+      denominations: [{ denomination: 1000, count: 1 }],
+    });
+  }
+
+  // 2. Check attendance status — clock in if not already
+  const statusRes = await get(`/api/attendance/my-status?outlet_id=${outletId}`);
+  const code = statusRes.data?.status || statusRes.data?.attendance_code;
+  if (code !== "clocked_in") {
+    await post(`/api/attendance/pin-checkin?tenant=packagesmall`, {
+      pin_code: "2580",
+      outlet_id: outletId,
+    });
+  }
+}

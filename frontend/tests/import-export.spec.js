@@ -62,7 +62,7 @@ test.describe("Import & Export", () => {
   test("CSV export button visible on inventory page", async ({ page }) => {
     await navigateTo(page, "/inventory");
     await expect(
-      page.getByRole("heading", { name: /inventory/i }).first()
+      page.getByRole("heading", { name: /products|inventory/i }).first()
     ).toBeVisible({ timeout: 15000 });
     const exportBtn = page.getByRole("button", { name: /export|csv|download/i })
       .or(page.getByText(/export csv|download csv/i));

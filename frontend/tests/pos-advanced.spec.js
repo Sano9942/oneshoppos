@@ -1,33 +1,23 @@
 import { test, expect } from "@playwright/test";
+import { ensurePOSReady } from "./helpers/api.js";
 
 /**
- * Helper: navigate to POS, handle shift gate, add a product to cart.
+ * Ensure shift is open + employee clocked in via API before each test,
+ * so the POS gate modal never appears.
+ */
+test.beforeAll(async () => {
+  await ensurePOSReady();
+});
+
+/**
+ * Navigate to POS, wait for ready, add a product to cart.
  */
 async function posWithProduct(page, query = "LEGO") {
   await page.goto("/pos");
   await page.waitForLoadState("networkidle");
-
-  // Handle shift gate modal if present
-  const shiftModal = page.getByText(/open.*shift|start.*shift|no.*active.*shift/i);
-  if (await shiftModal.isVisible({ timeout: 5000 }).catch(() => false)) {
-    const openBtn = page.getByRole("button", { name: /open shift|start shift/i }).first();
-    if (await openBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await openBtn.click();
-      const cashInput = page.getByPlaceholder(/amount|cash|opening/i).first();
-      if (await cashInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await cashInput.fill("1000");
-      }
-      const confirmBtn = page.getByRole("button", { name: /confirm|open|start|save/i }).first();
-      if (await confirmBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await confirmBtn.click();
-      }
-      await page.waitForLoadState("networkidle");
-    }
-  }
-
-  // Wait for search bar
-  const searchInput = page.getByPlaceholder(/search|scan|barcode/i).first();
-  await expect(searchInput).toBeVisible({ timeout: 15000 });
+  // Wait for search bar — gate modal should not appear
+  const searchInput = page.getByPlaceholder(/Search by Name/i).first();
+  await expect(searchInput).toBeVisible({ timeout: 20000 });
 
   // Add product
   await searchInput.fill(query);
@@ -56,7 +46,8 @@ test.describe("POS Advanced Features", () => {
     }
     await page.waitForTimeout(500);
     // Look for discount input and apply
-    const discInput = page.getByPlaceholder(/discount|percentage|%/i).or(page.locator("input[type=number]")).first();
+    const discInput = page.getByPlaceholder(/discount|percentage|%/i)
+      .or(page.locator("input[type=number]")).first();
     if (await discInput.isVisible({ timeout: 3000 }).catch(() => false)) {
       await discInput.fill("10");
       const applyBtn = page.getByRole("button", { name: /apply|save|ok|confirm/i }).first();
@@ -76,7 +67,7 @@ test.describe("POS Advanced Features", () => {
     await page.waitForTimeout(1000);
     // Parked confirmation or cart should be cleared
     const parkedMsg = page.getByText(/parked|saved|held/i).first();
-    const emptyCart = page.getByText(/empty|no items|add products/i).first();
+    const emptyCart = page.getByText(/cart is empty|no items|add products/i).first();
     const isParked = await parkedMsg.isVisible({ timeout: 5000 }).catch(() => false);
     const isEmpty = await emptyCart.isVisible({ timeout: 5000 }).catch(() => false);
     expect(isParked || isEmpty).toBeTruthy();
@@ -85,19 +76,7 @@ test.describe("POS Advanced Features", () => {
   test("F5 opens parked sales list", async ({ page }) => {
     await page.goto("/pos");
     await page.waitForLoadState("networkidle");
-    // Handle shift gate
-    const shiftModal = page.getByText(/open.*shift|start.*shift|no.*active.*shift/i);
-    if (await shiftModal.isVisible({ timeout: 5000 }).catch(() => false)) {
-      const openBtn = page.getByRole("button", { name: /open shift|start shift/i }).first();
-      if (await openBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await openBtn.click();
-        const cashInput = page.getByPlaceholder(/amount|cash|opening/i).first();
-        if (await cashInput.isVisible({ timeout: 3000 }).catch(() => false)) await cashInput.fill("1000");
-        const confirmBtn = page.getByRole("button", { name: /confirm|open|start|save/i }).first();
-        if (await confirmBtn.isVisible({ timeout: 3000 }).catch(() => false)) await confirmBtn.click();
-        await page.waitForLoadState("networkidle");
-      }
-    }
+    await page.getByPlaceholder(/Search by Name/i).first().waitFor({ timeout: 20000 });
     await page.keyboard.press("F5");
     await expect(
       page.getByText(/parked|held|saved/i).first()
@@ -126,7 +105,7 @@ test.describe("POS Advanced Features", () => {
         await result.click();
       }
     }
-    // Customer should now be attached — name visible in cart header
+    // Customer should now be attached — name visible in cart area
     await expect(
       page.getByText(/walk|customer/i).first()
     ).toBeVisible({ timeout: 5000 });
@@ -153,31 +132,30 @@ test.describe("POS Advanced Features", () => {
     } else {
       // Split payment may not be available — checkout modal should still be open
       await expect(
-        page.getByText(/cash|card|payment|amount/i).first()
+        page.getByText(/cash|card|payment|amount|total due/i).first()
       ).toBeVisible({ timeout: 5000 });
     }
   });
 
   test("add note to sale", async ({ page }) => {
     await posWithProduct(page);
-    // Look for note button or area
-    const noteBtn = page
-      .getByRole("button", { name: /note|comment/i })
-      .or(page.getByText(/add note/i))
-      .first();
+    // Click "Add Note" button in sidebar
+    const noteBtn = page.getByRole("button", { name: /add note/i }).first();
     if (await noteBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
       await noteBtn.click();
-      const noteInput = page.getByPlaceholder(/note|comment/i).or(page.locator("textarea")).first();
-      if (await noteInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await noteInput.fill("Test note from Playwright");
-        const saveBtn = page.getByRole("button", { name: /save|add|ok|confirm/i }).first();
-        if (await saveBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-          await saveBtn.click();
-        }
-      }
-      await expect(page.getByText(/test note|note added/i).first()).toBeVisible({ timeout: 5000 });
+      // Fill the note textarea in the "Order Note" modal
+      const noteInput = page.locator("textarea").first();
+      await expect(noteInput).toBeVisible({ timeout: 3000 });
+      await noteInput.fill("Test note from Playwright");
+      // Click "Save Note" button
+      const saveBtn = page.getByRole("button", { name: /save note/i }).first();
+      await saveBtn.click();
+      await page.waitForTimeout(500);
+      // After saving, button changes from "Add Note" to "Edit Note"
+      await expect(
+        page.getByRole("button", { name: /edit note/i }).first()
+      ).toBeVisible({ timeout: 5000 });
     } else {
-      // Note feature may be inline — just verify POS is still functional
       await expect(page.getByText(/subtotal|total/i).first()).toBeVisible({ timeout: 5000 });
     }
   });
@@ -185,19 +163,7 @@ test.describe("POS Advanced Features", () => {
   test("F1 shortcuts overlay shows all keys", async ({ page }) => {
     await page.goto("/pos");
     await page.waitForLoadState("networkidle");
-    // Handle shift gate quickly
-    const shiftModal = page.getByText(/open.*shift|start.*shift|no.*active.*shift/i);
-    if (await shiftModal.isVisible({ timeout: 5000 }).catch(() => false)) {
-      const openBtn = page.getByRole("button", { name: /open shift|start shift/i }).first();
-      if (await openBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await openBtn.click();
-        const cashInput = page.getByPlaceholder(/amount|cash|opening/i).first();
-        if (await cashInput.isVisible({ timeout: 3000 }).catch(() => false)) await cashInput.fill("1000");
-        const confirmBtn = page.getByRole("button", { name: /confirm|open|start|save/i }).first();
-        if (await confirmBtn.isVisible({ timeout: 3000 }).catch(() => false)) await confirmBtn.click();
-        await page.waitForLoadState("networkidle");
-      }
-    }
+    await page.getByPlaceholder(/Search by Name/i).first().waitFor({ timeout: 20000 });
     await page.keyboard.press("F1");
     await page.waitForTimeout(500);
     // Should show multiple shortcut descriptions
@@ -208,28 +174,23 @@ test.describe("POS Advanced Features", () => {
 
   test("F10 clears the cart", async ({ page }) => {
     await posWithProduct(page);
+    // F10 triggers window.confirm("Clear entire cart?") — accept it
+    page.on("dialog", (dialog) => dialog.accept());
     await page.keyboard.press("F10");
     await page.waitForTimeout(1000);
     // Cart should be empty
-    const emptyCart = page.getByText(/empty|no items|add products/i).first();
-    const zeroTotal = page.getByText(/0\.00|0,00/i).first();
-    const confirmClear = page.getByRole("button", { name: /confirm|yes|clear/i }).first();
-    // May need confirmation
-    if (await confirmClear.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await confirmClear.click();
-      await page.waitForTimeout(500);
-    }
-    const isEmpty = await emptyCart.isVisible({ timeout: 5000 }).catch(() => false);
-    const isZero = await zeroTotal.isVisible({ timeout: 3000 }).catch(() => false);
-    expect(isEmpty || isZero).toBeTruthy();
+    const emptyCart = page.getByText(/cart is empty/i).first();
+    await expect(emptyCart).toBeVisible({ timeout: 5000 });
   });
 
   test("return from recent sales via API", async () => {
     const { get } = await import("./helpers/api.js");
     const salesRes = await get("/api/sales?limit=1");
     expect(salesRes.ok).toBeTruthy();
-    expect(salesRes.data.length).toBeGreaterThan(0);
-    const saleId = salesRes.data[0].id;
+    const sales = salesRes.data.sales || salesRes.data;
+    expect(Array.isArray(sales)).toBeTruthy();
+    expect(sales.length).toBeGreaterThan(0);
+    const saleId = sales[0].id;
     // Fetch sale details
     const detailRes = await get(`/api/sales/${saleId}`);
     expect(detailRes.ok).toBeTruthy();
@@ -239,7 +200,8 @@ test.describe("POS Advanced Features", () => {
     const { get } = await import("./helpers/api.js");
     const r = await get("/api/parked-sales");
     expect(r.ok).toBeTruthy();
-    expect(Array.isArray(r.data)).toBeTruthy();
+    const parked = r.data.parkedSales || r.data;
+    expect(Array.isArray(parked)).toBeTruthy();
   });
 
   test("wallet payment option exists in checkout", async ({ page }) => {
@@ -251,11 +213,8 @@ test.describe("POS Advanced Features", () => {
       await page.keyboard.press("F9");
     }
     await page.waitForTimeout(1000);
-    // Check for wallet/mobile payment option
-    const walletBtn = page.getByRole("button", { name: /wallet|mobile|easypaisa|jazzcash/i }).first();
-    const cardBtn = page.getByRole("button", { name: /card/i }).first();
-    const cashBtn = page.getByRole("button", { name: /cash/i }).first();
     // At minimum, cash should be visible
+    const cashBtn = page.getByRole("button", { name: /cash/i }).first();
     await expect(cashBtn).toBeVisible({ timeout: 5000 });
   });
 
@@ -268,7 +227,7 @@ test.describe("POS Advanced Features", () => {
     await page.keyboard.press("Escape");
     await page.waitForTimeout(500);
     // Modal should be gone — search bar should be accessible again
-    const searchInput = page.getByPlaceholder(/search|scan|barcode/i).first();
+    const searchInput = page.getByPlaceholder(/Search by Name/i).first();
     await expect(searchInput).toBeVisible({ timeout: 5000 });
   });
 });

@@ -12,7 +12,7 @@ test.describe("Orders", () => {
   test("orders page loads", async ({ page }) => {
     await navigateTo(page, "/orders");
     await expect(
-      page.getByRole("heading", { name: /order/i }).or(page.getByText(/no.*order/i)).or(page.locator("table"))
+      page.getByRole("heading", { name: /order/i }).first()
     ).toBeVisible({ timeout: 15000 });
     await noErrorBoundary(page);
   });
@@ -20,7 +20,7 @@ test.describe("Orders", () => {
   test("quotations page loads", async ({ page }) => {
     await navigateTo(page, "/quotations");
     await expect(
-      page.getByRole("heading", { name: /quotation/i }).or(page.getByText(/no.*quotation/i)).or(page.locator("table"))
+      page.getByRole("heading", { name: /quotation/i }).first()
     ).toBeVisible({ timeout: 15000 });
     await noErrorBoundary(page);
   });
@@ -47,7 +47,7 @@ test.describe("Orders", () => {
   test("fulfillment page loads", async ({ page }) => {
     await navigateTo(page, "/fulfillment");
     await expect(
-      page.getByRole("heading", { name: /fulfillment|fulfil/i }).or(page.getByText(/no.*order/i)).or(page.locator("table"))
+      page.getByRole("heading", { name: /fulfillment|fulfil/i }).first()
     ).toBeVisible({ timeout: 15000 });
     await noErrorBoundary(page);
   });
@@ -55,15 +55,15 @@ test.describe("Orders", () => {
   test("unfulfilled orders visible or empty state", async ({ page }) => {
     await navigateTo(page, "/fulfillment");
     await page.waitForLoadState("networkidle");
-    await expect(
-      page.locator("table").or(page.getByText(/no.*unfulfilled/i)).or(page.getByText(/no.*order/i)).or(page.getByText(/empty/i))
-    ).toBeVisible({ timeout: 15000 });
+    const hasTable = await page.locator("table").first().isVisible({ timeout: 15000 }).catch(() => false);
+    const hasEmpty = await page.getByText(/no.*unfulfilled|no.*order|empty/i).first().isVisible({ timeout: 2000 }).catch(() => false);
+    expect(hasTable || hasEmpty).toBeTruthy();
   });
 
   test("parked sales page loads", async ({ page }) => {
     await navigateTo(page, "/parked-sales");
     await expect(
-      page.getByRole("heading", { name: /parked/i }).or(page.getByText(/no.*parked/i)).or(page.locator("table"))
+      page.getByRole("heading", { name: /parked/i }).first()
     ).toBeVisible({ timeout: 15000 });
     await noErrorBoundary(page);
   });
@@ -71,17 +71,16 @@ test.describe("Orders", () => {
   test("order aging summary visible or empty state", async ({ page }) => {
     await navigateTo(page, "/orders");
     await page.waitForLoadState("networkidle");
-    // Check for aging data, summary cards, or just the orders table
-    await expect(
-      page.locator("table").or(page.getByText(/aging|overdue/i)).or(page.getByText(/no.*order/i))
-    ).toBeVisible({ timeout: 15000 });
+    const hasTable = await page.locator("table").first().isVisible({ timeout: 15000 }).catch(() => false);
+    const hasEmpty = await page.getByText(/no.*order|aging|overdue/i).first().isVisible({ timeout: 2000 }).catch(() => false);
+    expect(hasTable || hasEmpty).toBeTruthy();
   });
 
   test("order search/filter works", async ({ page }) => {
     await navigateTo(page, "/orders");
-    const searchInput = page.getByPlaceholder(/search/i).or(page.getByRole("searchbox"));
+    const searchInput = page.getByPlaceholder(/search/i).or(page.getByRole("searchbox")).first();
     if (await searchInput.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await searchInput.first().fill("test");
+      await searchInput.fill("test");
       await page.waitForLoadState("networkidle");
       await noErrorBoundary(page);
     }
@@ -91,9 +90,9 @@ test.describe("Orders", () => {
     await navigateTo(page, "/fulfillment");
     await page.waitForLoadState("networkidle");
     const picklistBtn = page.getByRole("button", { name: /picklist|pick list/i })
-      .or(page.getByRole("link", { name: /picklist/i }));
+      .or(page.getByRole("link", { name: /picklist/i })).first();
     if (await picklistBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await picklistBtn.first().click();
+      await picklistBtn.click();
       await page.waitForLoadState("networkidle");
       await noErrorBoundary(page);
     }
@@ -104,9 +103,9 @@ test.describe("Orders", () => {
     await page.waitForLoadState("networkidle");
     const loadsheetTab = page.getByRole("button", { name: /loadsheet/i })
       .or(page.getByRole("tab", { name: /loadsheet/i }))
-      .or(page.getByText(/loadsheet/i));
+      .or(page.getByText(/loadsheet/i)).first();
     if (await loadsheetTab.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await loadsheetTab.first().click();
+      await loadsheetTab.click();
       await page.waitForLoadState("networkidle");
       await noErrorBoundary(page);
     }
@@ -130,12 +129,9 @@ test.describe("Orders", () => {
     if (await row.isVisible({ timeout: 5000 }).catch(() => false)) {
       await row.click();
       await page.waitForLoadState("networkidle");
-      await expect(
-        page.getByText(/order.*detail/i)
-          .or(page.getByText(/invoice/i))
-          .or(page.getByRole("dialog"))
-          .or(page.getByText(/total/i))
-      ).toBeVisible({ timeout: 10000 });
+      const hasDetail = await page.getByText(/order.*detail|invoice|total/i).first().isVisible({ timeout: 10000 }).catch(() => false);
+      const hasDialog = await page.getByRole("dialog").isVisible({ timeout: 2000 }).catch(() => false);
+      expect(hasDetail || hasDialog).toBeTruthy();
     }
   });
 });

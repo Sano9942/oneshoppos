@@ -9,11 +9,10 @@ const noErrorBoundary = async (page) => {
 
 const pageLoadsOk = async (page, path, headingPattern) => {
   await navigateTo(page, path);
-  await expect(
-    page.getByRole("heading", { name: headingPattern })
-      .or(page.locator("table"))
-      .or(page.getByText(/no.*data|empty|no.*found|not available|feature/i))
-  ).toBeVisible({ timeout: 15000 });
+  const hasHeading = await page.getByRole("heading", { name: headingPattern }).first().isVisible({ timeout: 15000 }).catch(() => false);
+  const hasTable = await page.locator("table").first().isVisible({ timeout: 2000 }).catch(() => false);
+  const hasEmpty = await page.getByText(/no.*data|empty|no.*found|not available|feature/i).first().isVisible({ timeout: 2000 }).catch(() => false);
+  expect(hasHeading || hasTable || hasEmpty).toBeTruthy();
   await noErrorBoundary(page);
 };
 
@@ -41,10 +40,7 @@ test.describe("Accounting", () => {
   test("expenses page loads", async ({ page }) => {
     await navigateTo(page, "/expenses");
     await expect(
-      page.getByRole("heading", { name: /expense/i })
-        .or(page.locator("table"))
-        .or(page.getByText(/no.*expense/i))
-        .or(page.getByText(/categor/i))
+      page.getByRole("heading", { name: /expense/i }).first()
     ).toBeVisible({ timeout: 15000 });
     await noErrorBoundary(page);
   });
@@ -53,24 +49,20 @@ test.describe("Accounting", () => {
     await navigateTo(page, "/expenses");
     await page.waitForLoadState("networkidle");
 
-    // Look for category tab or section
-    const categoryTab = page.getByRole("tab", { name: /categor/i })
-      .or(page.getByRole("button", { name: /categor/i }));
-    if (await categoryTab.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await categoryTab.first().click();
-      await page.waitForLoadState("networkidle");
+    // Click "Categories" button to open the categories modal
+    const categoryBtn = page.getByRole("button", { name: /categor/i }).first();
+    if (await categoryBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await categoryBtn.click();
+      await page.waitForTimeout(500);
     }
 
-    const addBtn = page.getByRole("button", { name: /add|new|create/i });
-    if (await addBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await addBtn.first().click();
+    // Inside the categories modal, fill the "New category name" input and click "Add"
+    const modal = page.locator(".fixed");
+    const nameField = modal.getByPlaceholder("New category name");
+    if (await nameField.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await nameField.fill(`ExpCat ${Date.now()}`);
+      await modal.getByRole("button", { name: /^add$/i }).click();
       await page.waitForLoadState("networkidle");
-      const nameField = page.getByPlaceholder(/name/i).or(page.getByLabel(/name/i)).first();
-      if (await nameField.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await nameField.fill(`ExpCat ${Date.now()}`);
-        await page.getByRole("button", { name: /save|submit|create/i }).click();
-        await page.waitForLoadState("networkidle");
-      }
     }
   });
 
@@ -78,22 +70,27 @@ test.describe("Accounting", () => {
     await navigateTo(page, "/expenses");
     await page.waitForLoadState("networkidle");
 
-    const addBtn = page.getByRole("button", { name: /add|new|create|record/i });
+    // Click "Add Expense" to open modal
+    const addBtn = page.getByRole("button", { name: /add expense/i }).first();
     if (await addBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await addBtn.first().click();
-      await page.waitForLoadState("networkidle");
+      await addBtn.click();
+      await page.waitForTimeout(500);
 
-      const amountField = page.getByPlaceholder(/amount/i).or(page.getByLabel(/amount/i));
+      // Fill fields inside the modal
+      const modal = page.locator(".fixed");
+      // Amount is an input[type=number] with label "Amount"
+      const amountField = modal.locator("input[type=number]").first();
       if (await amountField.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await amountField.first().fill("500");
+        await amountField.fill("500");
       }
 
-      const descField = page.getByPlaceholder(/description|note|detail/i).or(page.getByLabel(/description/i));
+      const descField = modal.getByPlaceholder("What was this expense for?");
       if (await descField.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await descField.first().fill("Test expense");
+        await descField.fill("Test expense");
       }
 
-      await page.getByRole("button", { name: /save|submit|create/i }).click();
+      // Submit — button text is "Add Expense"
+      await modal.getByRole("button", { name: /add expense/i }).click();
       await page.waitForLoadState("networkidle");
     }
   });
@@ -102,23 +99,20 @@ test.describe("Accounting", () => {
     await navigateTo(page, "/expenses");
     await page.waitForLoadState("networkidle");
     // Check for summary stats, totals, or chart
-    await expect(
-      page.getByText(/total/i)
-        .or(page.getByText(/summary/i))
-        .or(page.locator("table"))
-        .or(page.getByText(/no.*expense/i))
-    ).toBeVisible({ timeout: 15000 });
+    const hasTotal = await page.getByText(/total/i).first().isVisible({ timeout: 10000 }).catch(() => false);
+    const hasSummary = await page.getByText(/summary/i).first().isVisible({ timeout: 2000 }).catch(() => false);
+    const hasTable = await page.locator("table").first().isVisible({ timeout: 2000 }).catch(() => false);
+    const hasEmpty = await page.getByText(/no.*expense/i).first().isVisible({ timeout: 2000 }).catch(() => false);
+    expect(hasTotal || hasSummary || hasTable || hasEmpty).toBeTruthy();
   });
 
   test("accounting feature flag check", async ({ page }) => {
     await navigateTo(page, "/accounting");
     await page.waitForLoadState("networkidle");
     // Accounting may be feature-gated — either loads normally or shows gated message
-    await expect(
-      page.getByRole("heading").first()
-        .or(page.getByText(/feature|upgrade|not available|accounting/i))
-        .or(page.locator("table"))
-    ).toBeVisible({ timeout: 15000 });
+    const hasHeading = await page.getByRole("heading").first().isVisible({ timeout: 15000 }).catch(() => false);
+    const hasGated = await page.getByText(/feature|upgrade|not available|accounting/i).first().isVisible({ timeout: 2000 }).catch(() => false);
+    expect(hasHeading || hasGated).toBeTruthy();
     await noErrorBoundary(page);
   });
 });

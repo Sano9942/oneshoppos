@@ -5,44 +5,63 @@ test.describe.serial("Onboarding — Pro Plan", () => {
   test.use({ storageState: undefined });
   test.setTimeout(120000);
 
-  const tenantName = `Test Pro ${Date.now()}`;
+  const ts = Date.now();
+  const tenantName = `Test Pro ${ts}`;
   const ownerName = "Test Owner Pro";
-  const email = `testpro${Date.now()}@test.example.com`;
+  const email = `testpro${ts}@test.example.com`;
   const password = "TestPass123!";
   let storeCode;
 
   test("1 — signup with Pro plan", async ({ page }) => {
-    await page.goto("/signup");
+    // Navigate to signup with plan pre-selected via URL param
+    await page.goto("/signup?plan=pro");
     await page.waitForLoadState("networkidle");
 
-    await page.getByPlaceholder(/store name/i).or(page.getByLabel(/store name/i)).first().fill(tenantName);
-    await page.getByPlaceholder(/owner|your name/i).or(page.getByLabel(/owner|your name/i)).first().fill(ownerName);
-    await page.getByPlaceholder(/email/i).or(page.getByLabel(/email/i)).first().fill(email);
-    await page.getByPlaceholder(/password/i).or(page.getByLabel(/password/i)).first().fill(password);
+    // Fill form fields using exact placeholders from SignupPage.jsx
+    await page.getByPlaceholder("My Awesome Store").fill(tenantName);
+    await page.getByPlaceholder("John Doe").fill(ownerName);
+    await page.getByPlaceholder("you@example.com").fill(email);
+    await page.getByPlaceholder("Min 8 characters").fill(password);
 
-    // Select Pro plan
-    const proPlan = page.getByLabel(/pro/i)
-      .or(page.locator("input[value*=pro]"))
-      .or(page.getByText(/pro/i).first());
-    await proPlan.click();
+    // Verify Pro plan is selected (pre-selected via ?plan=pro URL param)
+    const proRadio = page.locator('input[name="plan"][value="pro"]');
+    await expect(proRadio).toBeChecked();
 
-    await page.getByRole("button", { name: /sign up|create|get started|register/i }).first().click();
+    // Intercept the signup API response to capture the slug
+    const signupResponsePromise = page.waitForResponse(
+      (resp) => resp.url().includes("/api/auth/signup") && resp.request().method() === "POST"
+    );
 
-    await expect(
-      page.getByText(/success|created|welcome|store code/i).first()
-    ).toBeVisible({ timeout: 30000 });
+    // Click the submit button
+    await page.getByRole("button", { name: "Create Store" }).click();
 
-    const pageText = await page.textContent("body");
-    const codeMatch = pageText.match(/store\s*code[:\s]*([a-z0-9-]+)/i)
-      || pageText.match(/code[:\s]*([a-z0-9-]+)/i);
-    if (codeMatch) {
-      storeCode = codeMatch[1].trim();
-    } else {
-      const codeEl = page.locator("[class*=mono], [class*=code], code, strong").first();
-      if (await codeEl.isVisible({ timeout: 3000 }).catch(() => false)) {
-        storeCode = (await codeEl.textContent()).trim();
-      }
+    // Wait for the API response and extract slug
+    const signupResponse = await signupResponsePromise;
+    const responseBody = await signupResponse.json();
+
+    if (signupResponse.ok() && responseBody.slug) {
+      storeCode = responseBody.slug;
     }
+
+    // If setupToken was returned, the page redirects to /setup?tenant=slug
+    // Otherwise it shows "Store Created!" with the store code
+    if (!storeCode) {
+      // Fallback: try to get slug from redirect URL
+      await page.waitForURL(/setup\?.*tenant=|\/login/, { timeout: 30000 });
+      const url = new URL(page.url());
+      const tenantParam = url.searchParams.get("tenant");
+      if (tenantParam) storeCode = tenantParam;
+    }
+
+    if (!storeCode) {
+      // Final fallback: success screen with "Your store code is: <slug>"
+      await expect(
+        page.getByText(/store created/i).first()
+      ).toBeVisible({ timeout: 15000 });
+      const slugEl = page.locator("span.font-mono");
+      storeCode = (await slugEl.textContent()).trim();
+    }
+
     expect(storeCode).toBeTruthy();
   });
 
