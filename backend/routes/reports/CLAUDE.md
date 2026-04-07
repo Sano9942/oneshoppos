@@ -1,6 +1,6 @@
 # Report Routes — Claude Guide
 
-- **13 report files**: dashboard, sales, inventory, analytics, purchasing, finance, staff, shifts, governance, fbr-export, stock-aging, multichannel, helpers (shared utilities)
+- **14 report files**: dashboard, sales, inventory, analytics, purchasing, finance, staff, shifts, governance, fbr-export, stock-aging, multichannel, helpers (shared utilities), index (orchestrator)
 - **All require** `view_reports` permission (some need additional feature flags)
 - **Feature-gated reports**:
   - `reports_profit_layer` → sales profit margins, analytics profit

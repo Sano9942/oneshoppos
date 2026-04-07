@@ -54,6 +54,12 @@ frontend/eslint_output.txt
 frontend/kiosk_out.txt
 backend/_endpoint_list.txt
 
+# Playwright test artifacts (auth tokens, reports)
+frontend/tests/auth.json
+frontend/tests/token.json
+frontend/playwright-report/
+frontend/test-results/
+
 # Frontend build output
 frontend/dist/
 .claude/.last-service-check

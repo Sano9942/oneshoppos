@@ -51,7 +51,7 @@ oneshoppos/
 │   ├── category-tree.js          # Category tree enrichment + resolveInheritedField (FBR)
 │   ├── routes/
 │   │   ├── registerAllRoutes.js  # Orchestrator only (~324 lines)
-│   │   ├── admin/                # /api/admin/* split into 8 modules (auth, tenants, monitoring, billing, operations, compliance, messaging, system) — mounted BEFORE tenant middleware
+│   │   ├── admin/                # /api/admin/* — 10 files (auth, tenants, monitoring, billing, operations, compliance, messaging, system, helpers, index) — mounted BEFORE tenant middleware
 │   │   ├── auth.js               # /api/auth/*
 │   │   ├── sales.js              # /api/sales
 │   │   ├── products.js           # /api/products (~912 lines)
@@ -78,7 +78,7 @@ oneshoppos/
 │   │   ├── receipt-templates.js  # /api/receipt-templates
 │   │   ├── supplier-returns.js   # /api/supplier-returns
 │   │   ├── customer-display.js   # /api/customer-display
-│   │   ├── reports/              # /api/reports/* (13 report files + helpers, modular — includes fbr-export)
+│   │   ├── reports/              # /api/reports/* (14 report files incl. helpers + index, modular — includes fbr-export)
 │   │   ├── integrations/          # /api/integrations/* (hub, credentials, daraz, facebook, whatsapp, google-merchant)
 │   │   ├── shopify/              # /api/integrations/shopify* (9 files, modular)
 │   │   ├── tier4/                # Tier 4 features (7 files, modular)
@@ -90,7 +90,7 @@ oneshoppos/
 │   ├── middleware/feature-flags.js # Feature flag cache, requireFeature, notification helpers
 │   ├── middleware/validate.js     # Zod validation helper — validate(schema) middleware factory
 │   ├── middleware/upload-validation.js # Centralized MIME + extension whitelist for file uploads
-│   ├── schemas/                   # Zod schemas: auth, billing, employees, products, sales, returns, customers, purchase-orders, inventory, orders, admin
+│   ├── schemas/                   # Zod schemas: auth, billing, employees, products, sales, returns, customers, purchase-orders, inventory, orders, admin, integrations
 │   ├── boot/workers.js            # All worker startup (email, FBR, cleanup, Shopify, scheduled tasks)
 │   ├── shopify/crypto.js          # Shopify secret encryption/decryption + event logging
 │   ├── services/crypto.js          # Generalized AES-256-GCM encryption (all integrations)
@@ -174,7 +174,7 @@ oneshoppos/
 
 - Most API routes are in `backend/routes/<domain>.js` — read only the relevant file
 - `registerAllRoutes.js` is an orchestrator only — no route logic
-- **Super-admin routes** (`routes/admin/` — 8 modules) and **webhook routes** (`webhooks.js`) mounted BEFORE `loadTenantAndPerms`/`resolveTenant` middleware
+- **Super-admin routes** (`routes/admin/` — 10 files) and **webhook routes** (`webhooks.js`) mounted BEFORE `loadTenantAndPerms`/`resolveTenant` middleware
 - **Multi-tenant DB routing**: `deps.db` is a Proxy that delegates to tenant DB via AsyncLocalStorage. Middleware order: `loadTenantAndPerms` → `resolveTenant` → tenant `/uploads` → `loadCompanyProfile` → `resolveContext`
 - Internal product categories are hierarchical; leaf-only assignment
 - Frontend: port 5173 (Vite dev), Backend: port 5000
@@ -237,16 +237,13 @@ oneshoppos/
 - 12 integration files: `pg-batch1` through `pg-batch12` + `pg-tenant-isolation`
 - Unit tests: `backend/tests/unit/` (125 tests) + `frontend/tests/unit/` (37 tests)
 
-### Live E2E Tests (~120 tests — full stack against production)
-- `cd frontend && npx playwright test tests/live/NN-name.spec.js --config=playwright.config.live.js`
-- 20 Playwright specs (00–19), targets `sanopos.com` (tenant `packagesmall`)
-
-### Onboarding E2E Tests (45 tests — full signup→sale flow, all 3 plans)
-- `cd frontend && npx playwright test tests/live/2N-onboard-*.spec.js --config=playwright.config.onboarding.js`
-- 3 specs: `21-onboard-free`, `22-onboard-starter`, `23-onboard-pro` (15 steps each)
-- No globalSetup required — creates real test tenants from scratch each run
-- After each run, delete test tenants from `/admin` before re-running
-- Test log: `docs/test-logs/2026-03-28-onboarding-tests.md`
+### Production E2E Tests (24 specs, ~290 tests — full system audit against production)
+- `cd frontend && npx playwright test tests/auth.spec.js`
+- 24 self-contained Playwright specs at `frontend/tests/*.spec.js`, targets `sanopos.com` (tenant `packagesmall`)
+- Single config: `playwright.config.js` (no separate live/onboarding configs)
+- Global setup: `global-setup.js` logs in once, saves `auth.json` + `token.json`
+- Helpers: `helpers/auth.js`, `helpers/api.js`, `helpers/nav.js`
+- Includes 3 onboarding specs (`onboard-free`, `onboard-starter`, `onboard-pro`) — create real test tenants, delete from `/admin` after each run
 
 ### Legacy SQLite Tests (do not use unless explicitly asked)
 - `smoke-gate.test.js` has **22/25 pre-existing failures on main** — do NOT investigate

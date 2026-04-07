@@ -46,7 +46,7 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 | Dashboard modules | `pages/dashboard/*.jsx` |
 | Report modules | `pages/reports/*.jsx` |
 | Shopify modules | `pages/shopify/*.jsx` |
-| Admin panel | `pages/admin/*.jsx` (11 files — dashboard, tenants, activity, emails, support, dead-letters, tax-rates) |
+| Admin panel | `pages/admin/*.jsx` (10 files — login, layout, dashboard, tenant-list, tenant-detail, activity, emails, support-tickets, dead-letters, tax-rates) |
 | Error boundary | `ui/ErrorBoundary.jsx` — global + page-level |
 | Support widget | `ui/SupportWidget.jsx` — floating ticket form |
 | Impersonation banner | `ui/ImpersonationBanner.jsx` — amber bar during impersonation |
@@ -199,30 +199,20 @@ ToastProvider          → useToast()     — available everywhere
 
 ## Test Suites
 
-### Live E2E Tests (~120 tests — full stack against production)
-- Location: `tests/live/` (20 Playwright specs, 00–19)
-- Config: `playwright.config.live.js`
+### Production E2E Tests (24 specs, ~290 tests — full system audit)
+- Location: `tests/*.spec.js` (24 self-contained Playwright specs)
+- Config: `playwright.config.js` (single config, production target)
 - Target: `https://sanopos.com` (tenant `packagesmall`)
-- Run: `npx playwright test tests/live/NN-name.spec.js --config=playwright.config.live.js`
-- Auth: global-setup saves token to `live-token.json` + `live-auth.json` (gitignored)
-- State: shared across specs via `tests/live/helpers/state.js` → `state.json` (gitignored)
-- Covers full POS day: shift→sale→return→gift card→shift close, plus inventory, purchasing, GRN, customers, loyalty, CRM, HR, attendance, kiosk, approvals, notifications, reports, accounting, audit log
-
-### Onboarding E2E Tests (45 tests — 3 plans × 15 steps, confirmed 45/45 PASS Mar 28 2026)
-- Location: `tests/live/` (specs 21–23: `21-onboard-free`, `22-onboard-starter`, `23-onboard-pro`)
-- Config: `playwright.config.onboarding.js` (no globalSetup — works without existing tenant)
-- Run: `npx playwright test tests/live/2N-onboard-*.spec.js --config=playwright.config.onboarding.js`
-- Shared helpers: `tests/live/helpers/onboarding.js` (all step functions), `tests/live/helpers/state.js` (state.json)
-- Creates real test tenants — **delete from `/admin` after each run**
+- Run: `npx playwright test tests/auth.spec.js`
+- Global setup: `global-setup.js` logs in once, saves `auth.json` + `token.json` (gitignored)
+- Helpers: `helpers/auth.js` (credentials), `helpers/api.js` (REST), `helpers/nav.js` (navigation)
+- Self-contained: each spec sets up its own data via API, no shared state
+- Includes 3 onboarding specs (`onboard-free`, `onboard-starter`, `onboard-pro`) — create real test tenants, **delete from `/admin` after each run**
 - Key gotchas:
   - Login form is `LandingPage.jsx` — placeholders are `"e.g. aceshardware"` / `"Enter your password"` / button `"Sign In"`
   - Clock-in: use `/api/attendance/pin-checkin?tenant=${slug}` with `{ pin_code, outlet_id }` — NOT `/clock-in`
   - Health check: use simple `/api/health` (no `?deep=true` — no tenant context available)
-- Test log: `tests/live/../../../docs/test-logs/2026-03-28-onboarding-tests.md`
 
 ### Unit Tests (37 tests)
 - Location: `tests/unit/` — auth guards, layout, primitives, CurrencyContext, cartMath, POSContext hooks
 - Run: `npx vitest run tests/unit/` (vitest with @vitest/coverage-v8)
-
-### Dev E2E Tests
-- Location: `tests/e2e/*.spec.js` (against local dev server)

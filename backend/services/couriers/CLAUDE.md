@@ -1,6 +1,6 @@
 # Courier Adapters — Claude Guide
 
-- **14 files**: `index.js`, `base-adapter.js`, `generic-adapter.js` + 13 courier adapters
+- **16 files**: `index.js`, `base-adapter.js`, `generic-adapter.js` + 13 courier adapters
 - **Adapter pattern**: `BaseCourierAdapter` (abstract) → `GenericAdapter` (manual tracking) / specific adapters
 - **Factory**: `getAdapter(key, config)` from `index.js` — returns adapter instance. Falls back to `GenericAdapter` for unknown keys
 - **Interface**: `bookShipment(order, sender, receiver, options)`, `getTracking(trackingNumber)`, `cancelShipment(trackingNumber)`
