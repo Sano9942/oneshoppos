@@ -9,6 +9,9 @@ const PostExAdapter = require("./postex-adapter");
 const RiderAdapter = require("./rider-adapter");
 const SwyftAdapter = require("./swyft-adapter");
 const BykeaAdapter = require("./bykea-adapter");
+const PakPostAdapter = require("./pakpost-adapter");
+const DHLAdapter = require("./dhl-adapter");
+const FedExAdapter = require("./fedex-adapter");
 
 const ADAPTERS = {
   generic: GenericAdapter,
@@ -22,6 +25,9 @@ const ADAPTERS = {
   rider: RiderAdapter,
   swyft: SwyftAdapter,
   bykea: BykeaAdapter,
+  pakpost: PakPostAdapter,
+  dhl: DHLAdapter,
+  fedex: FedExAdapter,
 };
 
 function getAdapter(adapterKey, config) {
