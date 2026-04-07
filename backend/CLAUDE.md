@@ -26,6 +26,10 @@
 | Super-admin + infra monitoring | `routes/admin/` (8 modules: auth, tenants, monitoring, billing, operations, compliance, messaging, system) — infra, tax rates, FBR health, activity/security logs, revenue stats, worker status, orphaned schemas, tenant notes, announcements, broadcast log, support ticket replies, backup trigger |
 | Report endpoints | `routes/reports/` (11 files, modular) |
 | Shopify integration | `routes/shopify/` (9 files) + `shopify/` (3 files) |
+| Integrations hub | `routes/integrations/` (hub, credentials, daraz, facebook, whatsapp, google-merchant) |
+| Marketplace clients | `services/marketplace/` (base, daraz, meta-commerce, whatsapp, google-merchant) |
+| Courier adapters | `services/couriers/` (13 adapters: leopards, tcs, blueex, trax, callcourier, mnp, postex, rider, swyft, bykea, pakpost, dhl, fedex) |
+| Generalized crypto | `services/crypto.js` — AES-256-GCM for all integration secrets |
 | Tier4 features | `routes/tier4/` (7 files) |
 | Timezone utilities | `utils/tz.js` |
 | Receipt email builder | `utils/receiptEmail.js` |
@@ -233,6 +237,7 @@
 | `reports_exceptions` | `routes/reports/analytics.js` | ReportsAnalytics |
 | `reports_scheduled_exports` | `routes/reports/governance.js` | ReportsGovernance |
 | `shopify_integration` | `routes/shopify/*` | ShopifyIntegrationRedesign |
+| `marketplace_integrations` | `routes/integrations/*` | IntegrationsHubRedesign |
 | `context_selection_required` | context middleware | ContextSelect page |
 | `context_header_enforced` | context middleware | — |
 | `kiosk_context_locked` | kiosk context | KioskRedesign |

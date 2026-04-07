@@ -135,6 +135,18 @@ loadsheets → courier_integrations (courier_id), outlets (outlet_id), employees
 loadsheet_orders → loadsheets (loadsheet_id), web_orders (web_order_id)
 ```
 
+## Marketplace Integrations
+
+```
+daraz_product_map → products (product_id), product_variants (variant_id)
+daraz_order_map → web_orders (web_order_id)
+facebook_product_map → products (product_id), product_variants (variant_id)
+facebook_order_map → web_orders (web_order_id)
+whatsapp_conversations → customers (customer_id), web_orders (web_order_id)
+whatsapp_messages → whatsapp_conversations (conversation_id)
+google_merchant_feed_log → products (product_id)
+```
+
 ## Shopify
 
 ```
@@ -184,6 +196,10 @@ company_profile, feature_flags, schema_version
 printer_config, email_config, integration_settings
 barcode_templates, receipt_templates
 courier_integrations
+daraz_product_map, daraz_order_map
+facebook_product_map, facebook_order_map
+whatsapp_conversations, whatsapp_messages
+google_merchant_feed_log
 gift_cards
 notifications, action_history, backup_log
 approval_requests, approval_actions

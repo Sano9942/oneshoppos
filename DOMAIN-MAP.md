@@ -524,8 +524,24 @@
 - **Frontend page**: `pages/redesign/CourierSettingsRedesign.jsx`
 - **Route path**: `/courier-settings`
 - **Nav entry**: "Delivery Couriers"
-- **DB tables**: `courier_integrations` (10 pre-seeded Pakistan couriers)
-- **Services**: `services/couriers/` (base-adapter, generic-adapter, leopards-adapter, index)
+- **DB tables**: `courier_integrations` (13 pre-seeded couriers)
+- **Services**: `services/couriers/` (base-adapter, generic-adapter, 13 adapters, index)
+
+---
+
+## Integrations Hub
+
+- **Backend route**: `routes/integrations/` (hub.js, credentials.js, daraz.js, facebook.js, whatsapp.js, google-merchant.js)
+- **Schemas**: `schemas/integrations.js` (Zod: connectProvider, disconnectProvider)
+- **Permissions**: `manage_inventory` (read), `all_access` (connect/disconnect)
+- **Feature flag**: `marketplace_integrations`
+- **Frontend page**: `pages/redesign/IntegrationsHubRedesign.jsx`
+- **Route path**: `/settings/integrations`
+- **Nav entry**: "Integrations"
+- **DB tables**: `integration_settings` (extended v17), `daraz_product_map`, `daraz_order_map`, `facebook_product_map`, `facebook_order_map`, `whatsapp_conversations`, `whatsapp_messages`, `google_merchant_feed_log`
+- **Services**: `services/marketplace/` (base, daraz-client, meta-commerce, whatsapp-client, google-merchant), `services/crypto.js`
+- **Worker**: `workers/marketplace-sync-worker-boss.js` (pg-boss, `MARKETPLACE_SYNC_WORKER_ENABLED=1`)
+- **Webhooks**: `POST /api/webhooks/{daraz,meta,whatsapp}` (mounted before tenant middleware)
 
 ---
 
