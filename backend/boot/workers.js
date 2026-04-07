@@ -235,6 +235,11 @@ function startAll(deps) {
           const { registerCleanupWorker } = require("../workers/cleanup-worker-boss");
           await registerCleanupWorker(boss);
         }
+
+        if (String(process.env.MARKETPLACE_SYNC_WORKER_ENABLED || "0") === "1") {
+          const { registerMarketplaceSyncWorker } = require("../workers/marketplace-sync-worker-boss");
+          await registerMarketplaceSyncWorker(boss, pool);
+        }
       })
       .catch((err) => console.error("[boss] Failed to start pg-boss:", err.message));
   }
