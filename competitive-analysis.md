@@ -1,6 +1,7 @@
 # Competitive Analysis — SanoPOS vs Pakistan Market
 
-**Date**: 2026-04-03 (audited against actual codebase)
+**Date**: 2026-04-07 (updated after competitive-waves merge — 25 features shipped)
+**Previous audit**: 2026-04-03
 
 ---
 
@@ -57,15 +58,15 @@ Assaan Retail is an **omnichannel OMS (Order Management System)** first, POS sec
 |---|---|---|
 | Multi-channel order sync (Daraz + Shopify + WooCommerce) | Yes | Shopify + Woo only, **no Daraz** |
 | Automated order confirmations (SMS, WhatsApp, Email, **IVR calls**) | Yes | WhatsApp link only, email receipts |
-| Pick, Pack & Dispatch (scan-driven workflow with picklists + loadsheets) | Yes | **No** |
-| Order aging summary (flag stale orders) | Yes | **No** |
+| Pick, Pack & Dispatch (scan-driven workflow with picklists + loadsheets) | Yes | **Yes** — `routes/fulfillment.js` with picklists, pick-scan, pack-scan, dispatch + loadsheet generation + CSV export |
+| Order aging summary (flag stale orders) | Yes | **Yes** — `GET /api/orders/aging-summary` with 4 buckets (fresh/aging/stale/critical) + per-order aging_days |
 | Order split (split fulfillment across locations) | Yes | **No** |
 | Shipper advice management | Yes | **No** |
-| Bulk order status updates | Yes | **No** |
+| Bulk order status updates | Yes | **Yes** — `PATCH /api/orders/bulk-status` with multi-select UI, Zod validation, max 100 orders |
 | Returns, Refunds & Exchanges | Yes | **Yes** — full return + exchange flow (`POSReturnExchangeModal.jsx` with refund/exchange mode toggle, exchange creates return credit + new sale) |
-| Customer blacklisting | Yes | **No** |
-| Customer profiling (preferences, demographics) | Yes | **Basic** (name, mobile, email, address, CNIC, occupation, loyalty points, wallet balance, NTN) |
-| Feedback & reviews management | Yes | **No** |
+| Customer blacklisting | Yes | **Yes** — `PUT /api/customers/:id/blacklist` + POS checkout block + red badge UI |
+| Customer profiling (preferences, demographics) | Yes | **Yes** — extended fields (DOB, gender, city, tags[], customer groups, notes, preferred payment/contact), enriched profile endpoint with purchase summary + top products |
+| Feedback & reviews management | Yes | **Yes** — `product_reviews` table, moderation queue, star ratings, verified purchase badges |
 | Order tracking (real-time courier status sync) | Yes | Basic (Leopards only) |
 | Duplicate order detection | Unknown | **Yes** — idempotency key on sales prevents duplicate submissions |
 
@@ -73,8 +74,8 @@ Assaan Retail is an **omnichannel OMS (Order Management System)** first, POS sec
 | Feature | Assaan Retail | SanoPOS |
 |---|---|---|
 | Real-time multi-location sync | Yes | **Yes** (stock transfers between outlets) |
-| Inventory audit / stock counts via scan | Yes | **No** (manual adjustments only) |
-| Product bundling / kits | Yes | **No** |
+| Inventory audit / stock counts via scan | Yes | **Yes** — `stock_counts` + `stock_count_items` tables, barcode scan-to-count, variance report, auto-adjust option |
+| Product bundling / kits | Yes | **Yes** — `product_bundles` table, bundle components with qty, POS badge, stock deducted from components on sale |
 | Inventory forecasting (predict stockouts) | Yes | **Yes** — `GET /api/reports/forecast-demand` (moving average velocity) + `GET /api/reports/replenishment-smart` (days_of_cover, suggested_reorder_qty, configurable 7–90 day lookback) |
 | Low stock alerts | Yes | **Yes** — `notifyLowStockForSale()` in `feature-flags.js` creates in-app notifications when outlet stock <= 10 after sale. Shown in NotificationBell + DashboardInventoryAlerts |
 | Multi-channel inventory sync (marketplace <-> warehouse) | Yes | Shopify/Woo only, **no Daraz** |
@@ -84,14 +85,14 @@ Assaan Retail is an **omnichannel OMS (Order Management System)** first, POS sec
 #### Accounting & Finances
 | Feature | Assaan Retail | SanoPOS |
 |---|---|---|
-| Chart of Accounts (customizable) | Yes | **No** |
+| Chart of Accounts (customizable) | Yes | **Yes** — `chart_of_accounts` table with tree structure, 20 seeded Pakistan-standard accounts, CRUD + balance computation |
 | Profit & Loss statements | Yes | **Yes** — `GET /api/accounting/pnl` (gross sales, discounts, returns, COGS, operating expenses by category, net profit, gross/net margins) |
 | Balance sheets | Yes | **Yes** — `GET /api/accounting/balance-sheet` (assets: inventory value + cash on hand; liabilities: supplier AP + customer credit; equity) |
 | Cash flow statements | Yes | **Yes** — `GET /api/accounting/cashflow` (inflows by payment method, outflows: expenses + supplier payments) + `GET /api/accounting/cashflow/daily` (per-day breakdown with outlet filter) |
-| General journal entries | Yes | **No** |
-| Credit & debit notes | Yes | **No** |
-| Post-dated cheque tracking | Yes | **No** |
-| Supplier & customer ledgers | Yes | **Partial** — supplier payment history (`GET /api/accounting/supplier-payments`), AP detail with outstanding amounts, customer balance tracking. Missing: full transaction-level ledger view |
+| General journal entries | Yes | **Yes** — `journal_entries` + `journal_entry_lines` tables, double-entry validation (debits=credits), post/void lifecycle, trial balance report |
+| Credit & debit notes | Yes | **Yes** — `credit_notes` + `debit_notes` tables, auto-numbering, approve/cancel workflow, customer/supplier balance adjustment |
+| Post-dated cheque tracking | Yes | **Yes** — `postdated_cheques` table, status pipeline (pending→deposited→cleared/bounced), maturity alerts, upcoming cheques dashboard |
+| Supplier & customer ledgers | Yes | **Yes** — `GET /api/customers/:id/ledger` (UNION ALL sales+returns+wallet+points with running balance), `GET /api/suppliers/:id/ledger` (POs+GRNs+payments with running balance) |
 | Tax ledger | Yes | **Yes** — `GET /api/accounting/tax-ledger` (tax collected per rate, taxable amounts, transaction counts) |
 | AP/AR summary | Yes | **Yes** — `GET /api/accounting/ap-ar` (total AP, total AR, net position) |
 | AP aging buckets | Unknown | **Yes** — `GET /api/accounting/ap-aging` (current/30/60/90/90+ day buckets with totals) |
@@ -100,7 +101,7 @@ Assaan Retail is an **omnichannel OMS (Order Management System)** first, POS sec
 | Tax management (VAT/GST auto-calculations) | Yes | **Yes** — FBR tax + per-product tax assignment + category-level HS code inheritance |
 | Payment reconciliation (auto-fetch courier COD payments) | Yes | **No** |
 | Daraz payment cycle reconciliation | Yes | **No** |
-| Bulk payment & expense file importing | Yes | **No** |
+| Bulk payment & expense file importing | Yes | **Yes** — `POST /api/import/expenses` + `POST /api/import/payments` with preview mode, XLSX templates, same pattern as product/customer import |
 | Product costing / profitability analysis | Yes | **Yes** — COGS tracked per sale item (`cost_price_at_sale`), included in P&L. Item-wise reports show cost vs revenue |
 
 #### Shipment Management
@@ -109,8 +110,8 @@ Assaan Retail is an **omnichannel OMS (Order Management System)** first, POS sec
 | **16 Pakistan couriers** (TCS, BlueEx, PostEx, CallCourier, Swyft, Rider, Trax, Steadfast, DoDeliver, Leopards, M&P, Fardar Express, eCourier, Smartlane, ShipNOC, InstaWorld) | Yes | **Leopards only** (adapter pattern built for easy additions) |
 | Bulk courier booking | Yes | **No** |
 | Courier payment reconciliation (COD) | Yes | **No** |
-| Loadsheet generation | Yes | **No** |
-| Scan & dispatch | Yes | **No** |
+| Loadsheet generation | Yes | **Yes** — `loadsheets` + `loadsheet_orders` tables, courier grouping, finalize/handover workflow, CSV export |
+| Scan & dispatch | Yes | **Yes** — `POST /api/fulfillment/scan-dispatch` with multi-field lookup (tracking#, order#, ID), session counter |
 | Courier performance reports | Yes | **No** |
 
 #### Reporting & Analytics
@@ -124,7 +125,7 @@ Assaan Retail is an **omnichannel OMS (Order Management System)** first, POS sec
 | Supplier performance reports | Yes | **Partial** — purchase reports with supplier filtering, total/itemwise purchases. No dedicated performance KPIs |
 | Purchase reports | Yes | **Yes** — total purchases, itemwise purchases, PO reports with supplier_id filtering |
 | Location-based reports | Yes | **Yes** — ALL reports support `outlet_id` filtering (260+ references across report endpoints) |
-| Multi-channel aggregated reports | Yes | **No** |
+| Multi-channel aggregated reports | Yes | **Yes** — `routes/reports/multichannel.js` with summary, daily trends, and cross-channel product breakdown (POS+Shopify+WooCommerce) |
 | Financial reports (P&L, balance sheet, cash flow) | Yes | **Yes** — full accounting module (see Accounting section above) |
 | Customer RFM segmentation | Unknown | **Yes** — `GET /api/reports/customer-rfm` + frontend with 11 segments (Champions, Loyal, Potential Loyalist, New, Promising, Need Attention, At Risk, Can't Lose, Hibernating, Lost) with R/F scoring |
 | Inventory forecasting reports | Unknown | **Yes** — forecast demand + smart replenishment with days_of_cover |
@@ -136,8 +137,8 @@ Assaan Retail is an **omnichannel OMS (Order Management System)** first, POS sec
 | GRN (Goods Received Notes) | Yes | **Yes** — `GET/POST /api/grn` with item-level receipt tracking |
 | Supplier management | Yes | **Yes** — full CRUD + credit_days/credit_limit + running_balance |
 | Supplier payables / ledger | Yes | **Yes** — supplier invoices, supplier payments, AP aging, AP detail |
-| Price lists management | Yes | **No** |
-| Scan & receive (barcode GRN) | Yes | **No** |
+| Price lists management | Yes | **Yes** — `price_lists` + `price_list_items` tables, customer/volume/promotional types, POS price resolution, bulk item management |
+| Scan & receive (barcode GRN) | Yes | **Yes** — `POST /api/grn/:id/scan-receive` with barcode lookup, over-received flagging, progress tracking |
 
 #### Additional Features SanoPOS Has (Assaan Retail doesn't advertise)
 | Feature | SanoPOS | Assaan Retail |
@@ -255,9 +256,9 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 |---|---|---|
 | Real-time multi-location sync | Yes | **Yes** (transfers + outlet stock) |
 | Inventory forecasting (ML-based) | Yes (ML) | **Yes** (moving average — `forecast-demand` + `replenishment-smart` endpoints with configurable lookback) |
-| Stock aging analysis | Yes | **No** |
-| Inventory audit via scan | Yes | **No** (manual adjustments only) |
-| Product bundling | Yes | **No** |
+| Stock aging analysis | Yes | **Yes** — `GET /api/reports/stock-aging` with 4 aging buckets (0-30/31-60/61-90/90+ days), stock value per bucket |
+| Inventory audit via scan | Yes | **Yes** — barcode scan-to-count, variance report, auto-adjust |
+| Product bundling | Yes | **Yes** — bundle components, POS stock deduction from components |
 | Low stock alerts | Yes | **Yes** — auto-notification when outlet stock <= 10 after sale, shown in dashboard + notification bell |
 | Multi-channel inventory sync | Yes | Shopify/Woo only |
 
@@ -318,18 +319,18 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 | Points/rewards program | Yes (full engine) | **Yes** — `loyalty_points` on customers, `points_earned`/`points_redeemed` on sales, earn+redeem at POS |
 | RFM customer segmentation | Yes | **Yes** — `GET /api/reports/customer-rfm` + 11-segment frontend (Champions, Loyal, At Risk, Lost, etc.) with R/F scoring |
 | Visual rule builder (no-code) | Yes | **No** |
-| Points transfer between members | Yes | **No** |
-| Tiered loyalty programs | Yes | **No** (flat points only) |
+| Points transfer between members | Yes | **Yes** — `POST /api/customers/transfer-points` with atomic transaction, wallet ledger entries |
+| Tiered loyalty programs | Yes | **Yes** — `loyalty_tiers` table (Bronze/Silver/Gold/Platinum), spend thresholds, points multipliers, auto-upgrade on sale, tier badges |
 | Cross-channel loyalty (POS + online) | Yes | **Partial** (POS-based only) |
 | Fraud detection on loyalty | Yes | **No** |
 
 #### Warehouse Management
 | Feature | XStak | SanoPOS |
 |---|---|---|
-| Pick/pack/dispatch workflow | Yes | **No** |
+| Pick/pack/dispatch workflow | Yes | **Yes** — `picklists` + `picklist_items`, scan-driven picking/packing, status pipeline (pending→picking→packed→dispatched) |
 | Route optimization for delivery | Yes | **No** |
 | Quick commerce fulfillment | Yes | **No** |
-| Loadsheet generation | Yes | **No** |
+| Loadsheet generation | Yes | **Yes** — courier grouping, finalize/handover, CSV export |
 | Own fleet management | Yes | **No** |
 
 #### Logistics (26+ couriers)
@@ -348,7 +349,7 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 | Email/SMS marketing automation (Mailchimp, Klaviyo) | Yes | **No** |
 | Promotions across web + email + print + in-store | Yes | **Yes** — promotions engine (percentage, fixed amount, BOGO buy-X-get-Y, min order, category/product scoping, date-based activation). `POST /api/promotions/quote` evaluates cart |
 | Customer RFM segmentation | Yes | **Yes** — 11-segment RFM with R/F scoring |
-| Tier-based customer rewards | Yes | **No** (flat loyalty points only) |
+| Tier-based customer rewards | Yes | **Yes** — Bronze/Silver/Gold/Platinum tiers with auto-upgrade, points multipliers, tier discounts |
 
 #### Credit Book / Working Capital Financing
 | Feature | XStak | SanoPOS |
@@ -383,7 +384,7 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 #### Platform & Infrastructure
 | Feature | XStak | SanoPOS |
 |---|---|---|
-| API-first architecture (public docs) | Yes | Internal API only (no Swagger/OpenAPI) |
+| API-first architecture (public docs) | Yes | **Yes** — Swagger UI at `/api-docs` with 15+ annotated endpoints, OpenAPI 3.0 spec |
 | Usage-based pricing (no upfront) | Yes | Fixed transparent plans |
 | White-label omnichannel app | Yes | **No** |
 | Enterprise clients (Maria B, Alkaram, etc.) | Yes | SMB focus |
@@ -433,8 +434,8 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 | **Total integrations** | 70+ | 22 | ~4 |
 | **Payment gateway** | Own (XPay) | None | Adapter (xPay) |
 | **AI capabilities** | Recommendation engine, visual search, shopping assistant | None | Claude-powered analytics chat + auto-insights |
-| **Accounting** | QuickBooks/Xero/SAP integration | Built-in P&L, ledgers | **Built-in** (P&L, balance sheet, cash flow daily, AP/AR, AP aging, tax ledger, expense ledger, accounting periods) |
-| **Loyalty program** | Full engine (points, tiers, RFM, visual builder) | None | **Yes** — loyalty points + RFM segmentation (11 segments) |
+| **Accounting** | QuickBooks/Xero/SAP integration | Built-in P&L, ledgers | **Built-in** (P&L, balance sheet, cash flow daily, AP/AR, AP aging, tax ledger, expense ledger, accounting periods, **chart of accounts, journal entries, credit/debit notes, cheque tracking, customer+supplier ledgers**) |
+| **Loyalty program** | Full engine (points, tiers, RFM, visual builder) | None | **Yes** — loyalty points + **tiered loyalty (Bronze/Silver/Gold/Platinum)** + points transfer + RFM segmentation (11 segments) |
 | **Promotions** | Unknown | Unknown | **Yes** — %, fixed, BOGO, date-based, category/product scoping |
 | **Gift cards + wallet** | Unknown | None | **Yes** — gift card CRUD + customer wallet ledger |
 | **HR / Payroll** | None | None | **Yes** — payroll + attendance + kiosk |
@@ -452,24 +453,28 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 
 1. **FBR Digital Invoicing** — deepest implementation: real-time posting, queue + retry, HS code inheritance via category tree, tax rate reference with ~96 codes
 2. **POS UX** — keyboard shortcuts (F1–F10), kiosk mode, offline queuing, employee PIN auth, parked sales, customer display, barcode scanning, mobile-responsive tabs
-3. **Built-in accounting** — P&L, balance sheet, cash flow (summary + daily), AP/AR, AP aging (30/60/90+ day buckets), tax ledger, expense ledger, supplier payment history, accounting periods — all native, no third-party integration required
-4. **Customer engagement stack** — loyalty points (earn/redeem at POS), customer wallet/store credit, gift cards, promotions engine (%, BOGO, date-based), RFM segmentation (11 segments)
+3. **Built-in accounting** — P&L, balance sheet, cash flow (summary + daily), AP/AR, AP aging (30/60/90+ day buckets), tax ledger, expense ledger, supplier payment history, accounting periods, **chart of accounts, journal entries (double-entry), credit/debit notes, post-dated cheque tracking, customer + supplier ledgers** — all native, no third-party integration required
+4. **Customer engagement stack** — **tiered loyalty (Bronze/Silver/Gold/Platinum with auto-upgrade)**, loyalty points (earn/redeem at POS), **points transfer**, customer wallet/store credit, gift cards, promotions engine (%, BOGO, date-based), RFM segmentation (11 segments), **customer profiling (demographics, tags, groups, preferences)**, **customer blacklisting**, **product reviews & ratings**
 5. **HR module** — payroll (hourly/daily/monthly with attendance-based calculation, leave deductions), attendance tracking, kiosk PIN check-in — neither competitor has this
 6. **CRM** — leads management, quotation lifecycle, quotation-to-sale conversion — neither competitor has this
 7. **Exchanges** — full exchange flow in POS (return credit → new sale), not just refunds
-8. **Inventory intelligence** — demand forecasting (configurable lookback), smart replenishment (days_of_cover, suggested_reorder_qty), low stock auto-notifications
-9. **Self-service onboarding** — signup → 45-day trial → grace → expired lifecycle, fully automated
-10. **AI Insights** — Claude-powered analytics chat (neither competitor has this)
-11. **Custom receipt templates** — configurable header/footer/barcode/logo per template
-12. **Simpler pricing** — transparent PKR 8k/mo vs custom enterprise quotes or per-add-on pricing
-13. **Dark mode + PWA** — installable app with theme support
-14. **Operational tooling** — support tickets, tenant impersonation, worker monitoring, dead letter queue, action history audit log
+8. **Inventory intelligence** — demand forecasting (configurable lookback), smart replenishment (days_of_cover, suggested_reorder_qty), low stock auto-notifications, **stock aging analysis (4 buckets)**, **barcode-driven inventory audit/stock counts**, **product bundling/kits**
+9. **Fulfillment operations** — **pick/pack/dispatch workflow (scan-driven)**, **loadsheet generation (courier grouping + CSV export)**, **scan & dispatch**, **scan & receive (barcode GRN)**
+10. **Self-service onboarding** — signup → 45-day trial → grace → expired lifecycle, fully automated
+11. **AI Insights** — Claude-powered analytics chat (neither competitor has this)
+12. **Multi-channel reports** — **cross-channel summary, daily trends, product breakdown across POS + Shopify + WooCommerce**
+13. **Commerce features** — **price lists (customer/volume/promotional pricing)**, **bulk order status updates**, **order aging summary**, **quarterly/yearly billing discounts**, **bulk import for expenses & payments**
+14. **Public API docs** — **Swagger UI at /api-docs with OpenAPI 3.0 spec**
+15. **Custom receipt templates** — configurable header/footer/barcode/logo per template
+16. **Simpler pricing** — transparent PKR 8k/mo vs custom enterprise quotes or per-add-on pricing
+17. **Dark mode + PWA** — installable app with theme support
+18. **Operational tooling** — support tickets, tenant impersonation, worker monitoring, dead letter queue, action history audit log
 
 ---
 
 ## Complete Remaining Gaps — Every Feature Either Competitor Has That SanoPOS Doesn't
 
-**Total: 120 features/integrations across all categories.**
+**Total: 120 features/integrations identified (Apr 3). After competitive-waves merge (Apr 7): 25 closed, 95 remaining.**
 
 ### Integrations (52 items)
 
@@ -535,10 +540,10 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 | 53 | Buy Online Pickup In-Store (BOPIS) | No | Yes | |
 | 54 | Buy Online Return In-Store (BORIS) | No | Yes | |
 | 55 | Ship from Store | No | Yes | |
-| 56 | Pick / Pack / Dispatch workflow (scan-driven) | Yes | Yes | Picklists, loadsheets |
+| 56 | ~~Pick / Pack / Dispatch workflow (scan-driven)~~ | Yes | Yes | **CLOSED** — picklists, pick-scan, pack-scan, dispatch, loadsheets |
 | 57 | Order split across locations | Yes | Yes | Partial fulfillment |
-| 58 | Bulk order status updates | Yes | No | |
-| 59 | Order aging summary (flag stale orders) | Yes | No | |
+| 58 | ~~Bulk order status updates~~ | Yes | No | **CLOSED** — `PATCH /api/orders/bulk-status` |
+| 59 | ~~Order aging summary (flag stale orders)~~ | Yes | No | **CLOSED** — `GET /api/orders/aging-summary` |
 | 60 | Shipper advice management | Yes | No | |
 | 61 | Performance-based courier selection | No | Yes | Auto-route to best courier |
 | 62 | Own fleet management | No | Yes | Non-3PL delivery |
@@ -552,9 +557,9 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 | 65 | Bulk courier booking | Yes | Yes | |
 | 66 | COD payment reconciliation (auto-fetch) | Yes | Yes | Auto-fetch courier COD settlements |
 | 67 | Daraz payment cycle reconciliation | Yes | No | |
-| 68 | Loadsheet generation | Yes | Yes | |
+| 68 | ~~Loadsheet generation~~ | Yes | Yes | **CLOSED** — courier grouping, finalize/handover, CSV export |
 | 69 | Courier performance analytics | Yes | Yes | On-time, cost, success rate |
-| 70 | Scan & dispatch | Yes | No | |
+| 70 | ~~Scan & dispatch~~ | Yes | No | **CLOSED** — `POST /api/fulfillment/scan-dispatch` |
 
 ### Notifications (3 items)
 
@@ -568,46 +573,46 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 
 | # | Feature | Assaan Retail | XStak | Notes |
 |---|---|---|---|---|
-| 74 | Product bundling / kits | Yes | Yes | Combo products |
-| 75 | Inventory audit via barcode scan | Yes | Yes | Physical stock count |
-| 76 | Stock aging analysis | No | Yes | Age inventory to avoid clearance |
+| 74 | ~~Product bundling / kits~~ | Yes | Yes | **CLOSED** — `product_bundles` table, POS bundle badge, component stock deduction |
+| 75 | ~~Inventory audit via barcode scan~~ | Yes | Yes | **CLOSED** — `stock_counts` + scan-to-count + variance report |
+| 76 | ~~Stock aging analysis~~ | No | Yes | **CLOSED** — `GET /api/reports/stock-aging` with 4 buckets |
 
 ### Accounting Gaps (7 items)
 
 | # | Feature | Assaan Retail | XStak | Notes |
 |---|---|---|---|---|
-| 77 | Chart of Accounts (customizable account structure) | Yes | Via integrations | |
-| 78 | General journal entries | Yes | Via integrations | |
-| 79 | Credit & debit notes | Yes | No | |
-| 80 | Post-dated cheque tracking | Yes | No | |
-| 81 | Full customer ledger (transaction-level history) | Yes | Yes | SanoPOS has balance only |
-| 82 | Full supplier ledger (transaction-level history) | Yes | Yes | SanoPOS has payments only |
-| 83 | Bulk payment & expense file importing | Yes | No | |
+| 77 | ~~Chart of Accounts (customizable account structure)~~ | Yes | Via integrations | **CLOSED** — `chart_of_accounts` with tree structure, 20 seeded accounts |
+| 78 | ~~General journal entries~~ | Yes | Via integrations | **CLOSED** — double-entry validation, post/void, trial balance |
+| 79 | ~~Credit & debit notes~~ | Yes | No | **CLOSED** — auto-numbering, approve/cancel workflow |
+| 80 | ~~Post-dated cheque tracking~~ | Yes | No | **CLOSED** — status pipeline, maturity alerts |
+| 81 | ~~Full customer ledger (transaction-level history)~~ | Yes | Yes | **CLOSED** — UNION ALL with running balance |
+| 82 | ~~Full supplier ledger (transaction-level history)~~ | Yes | Yes | **CLOSED** — POs+GRNs+payments with running balance |
+| 83 | ~~Bulk payment & expense file importing~~ | Yes | No | **CLOSED** — expenses + payments import with preview mode |
 
 ### Customer (7 items)
 
 | # | Feature | Assaan Retail | XStak | Notes |
 |---|---|---|---|---|
-| 84 | Customer blacklisting | Yes | No | Block/suspend customers |
-| 85 | Rich customer profiling (preferences, demographics) | Yes | No | Beyond basic contact info |
-| 86 | Feedback / reviews management | Yes | No | Product ratings/reviews |
-| 87 | Tiered loyalty programs (bronze/silver/gold) | No | Yes | SanoPOS has flat points only |
+| 84 | ~~Customer blacklisting~~ | Yes | No | **CLOSED** — blacklist/unblacklist + POS checkout block |
+| 85 | ~~Rich customer profiling (preferences, demographics)~~ | Yes | No | **CLOSED** — extended fields, tags, groups, enriched profile |
+| 86 | ~~Feedback / reviews management~~ | Yes | No | **CLOSED** — product_reviews, moderation queue, star ratings |
+| 87 | ~~Tiered loyalty programs (bronze/silver/gold)~~ | No | Yes | **CLOSED** — 4 tiers, auto-upgrade, points multipliers |
 | 88 | Visual loyalty rule builder (no-code) | No | Yes | Drag-and-drop offer creation |
-| 89 | Points transfer between members | No | Yes | |
+| 89 | ~~Points transfer between members~~ | No | Yes | **CLOSED** — atomic transfer with wallet ledger entries |
 | 90 | Loyalty fraud detection | No | Yes | |
 
 ### Pricing / Commerce (2 items)
 
 | # | Feature | Assaan Retail | XStak | Notes |
 |---|---|---|---|---|
-| 91 | Price lists / multi-price per product | Yes | No | Customer-specific or volume pricing |
-| 92 | Scan & receive (barcode-driven GRN) | Yes | No | |
+| 91 | ~~Price lists / multi-price per product~~ | Yes | No | **CLOSED** — customer/volume/promotional pricing, POS resolution |
+| 92 | ~~Scan & receive (barcode-driven GRN)~~ | Yes | No | **CLOSED** — `POST /api/grn/:id/scan-receive` |
 
 ### Multi-channel Reports (2 items)
 
 | # | Feature | Assaan Retail | XStak | Notes |
 |---|---|---|---|---|
-| 93 | Multi-channel aggregated reports | Yes | Yes | Combined online + offline |
+| 93 | ~~Multi-channel aggregated reports~~ | Yes | Yes | **CLOSED** — summary, daily trends, product breakdown |
 | 94 | Courier-specific reports (shipment details, payment status) | Yes | Yes | |
 
 ### Payment Gateway — XPay-level Features (9 items)
@@ -647,14 +652,14 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 | # | Feature | Assaan Retail | XStak | Notes |
 |---|---|---|---|---|
 | 112 | White-label / branded app | No | Yes | |
-| 113 | Public API documentation (Swagger/OpenAPI) | No | Yes | |
+| 113 | ~~Public API documentation (Swagger/OpenAPI)~~ | No | Yes | **CLOSED** — Swagger UI at `/api-docs`, OpenAPI 3.0 |
 | 114 | Working capital financing (in-app loans) | No | Yes | Business partnership |
 
 ### Billing (1 item)
 
 | # | Feature | Assaan Retail | XStak | Notes |
 |---|---|---|---|---|
-| 115 | Quarterly/yearly billing discounts | Yes | N/A | 10–20% off |
+| 115 | ~~Quarterly/yearly billing discounts~~ | Yes | N/A | **CLOSED** — quarterly (10%), semi-annual (15%), annual (17%) |
 
 ### Shopify Apps (5 items)
 
@@ -666,16 +671,16 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 | 119 | Shipstak (shipping management) | No | Yes | Shopify App Store |
 | 120 | Simstak (order verification) | No | Yes | Shopify App Store |
 
-### Breakdown of 120 Gaps
+### Breakdown of 120 Gaps (updated Apr 7)
 
-| Category | Count | Nature |
-|---|---|---|
-| Courier/payment/platform integrations | ~45 | Connector work — each is a separate adapter |
-| XPay payment gateway features | ~9 | Requires owning a payment gateway (business, not code) |
-| Enterprise/omnichannel | ~15 | BOPIS, PIM, white-label, ERP, fleet management |
-| AI/ML features | ~8 | Recommendation engine, visual search, shopping assistant |
-| Shopify App Store apps | 5 | Separate Shopify apps |
-| **Buildable product features** | **~40** | Bundling, pick/pack, SMS, COD reconciliation, blacklisting, tiered loyalty, billing discounts, accounting additions, etc. |
+| Category | Original | Closed | Remaining | Nature |
+|---|---|---|---|---|
+| Courier/payment/platform integrations | ~45 | 0 | ~45 | Connector work — each is a separate adapter |
+| XPay payment gateway features | ~9 | 0 | ~9 | Requires owning a payment gateway (business, not code) |
+| Enterprise/omnichannel | ~15 | 0 | ~15 | BOPIS, PIM, white-label, ERP, fleet management |
+| AI/ML features | ~8 | 0 | ~8 | Recommendation engine, visual search, shopping assistant |
+| Shopify App Store apps | 5 | 0 | 5 | Separate Shopify apps |
+| **Buildable product features** | **~40** | **25** | **~15** | SMS, COD reconciliation, courier reports, order splitting, etc. |
 
 ---
 
@@ -721,24 +726,27 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 
 ---
 
-## Summary: The Real Picture
+## Summary: The Real Picture (updated Apr 7, post-competitive-waves)
 
-SanoPOS is **not as far behind as initially assessed**. The gap is concentrated in **two areas**:
+SanoPOS has **closed 25 of the 40 buildable product feature gaps** identified on Apr 3. The remaining gap is concentrated in **one area**:
 
-1. **Integration breadth** — couriers (1 vs 16–26), marketplaces (0 vs Daraz), e-commerce platforms (2 vs 6)
-2. **Omnichannel fulfillment** — BOPIS, pick/pack/dispatch, order splitting, COD reconciliation
+1. **Integration breadth** — couriers (1 vs 16–26), marketplaces (0 vs Daraz), e-commerce platforms (2 vs 6), SMS/WhatsApp APIs
 
-In **built-in business features**, SanoPOS actually **leads both competitors**:
-- Accounting (native vs integration-dependent)
+**Omnichannel fulfillment** — previously a major gap — is now **closed**: pick/pack/dispatch, loadsheets, scan & dispatch, scan & receive are all live.
+
+In **built-in business features**, SanoPOS now **leads both competitors across every category**:
+- **Accounting** — native P&L, balance sheet, cash flow, AP/AR, AP aging, tax ledger, **plus chart of accounts, journal entries (double-entry), credit/debit notes, post-dated cheques, full customer + supplier ledgers**
+- **Inventory** — stock transfers, adjustments, forecasting, low stock alerts, **plus stock aging analysis, barcode inventory audit, product bundling, scan & receive, price lists**
+- **Fulfillment** — **pick/pack/dispatch, loadsheets, scan & dispatch** (previously zero)
+- **Customer engagement** — loyalty points, wallet/store credit, gift cards, promotions, RFM segmentation, **plus tiered loyalty (4 tiers with auto-upgrade), points transfer, customer profiling (demographics, tags, groups), customer blacklisting, product reviews & ratings**
+- **Commerce** — **bulk order status, order aging, billing discounts, bulk import (expenses + payments), multichannel reports, public API docs**
 - HR/Payroll (neither competitor has this)
 - CRM/Quotations (neither competitor has this)
-- Loyalty + wallet + gift cards + promotions (comprehensive customer engagement)
 - FBR compliance (deepest implementation)
 - POS depth (best in class)
 - AI analytics (unique to SanoPOS)
-- Inventory forecasting (native, not ML-dependent)
 
-The strategy should be: **expand integration surface** (couriers + Daraz) while **marketing existing strengths** that neither competitor matches.
+The strategy going forward: **expand integration surface** (courier APIs: TCS, BlueEx, Trax + Daraz Seller API) while **marketing the comprehensive built-in feature set** that neither competitor matches.
 
 ---
 
@@ -747,6 +755,7 @@ The strategy should be: **expand integration surface** (couriers + Daraz) while 
 **Constraint**: No API keys, no paid third-party services, no courier/marketplace credentials available. Everything below is pure code — no external dependencies.
 
 **Date**: 2026-04-06
+**Status**: ✅ **ALL 25 ITEMS COMPLETE** — merged to main 2026-04-07, deployed to production (Railway + Vercel)
 
 ---
 
@@ -779,7 +788,7 @@ Visual loyalty rule builder, loyalty fraud detection, quick commerce fulfillment
 
 ---
 
-### Wave 1 — Quick Wins (~3 days, closes 7 gaps)
+### Wave 1 — Quick Wins (~3 days, closes 7 gaps) ✅ COMPLETE
 
 Small effort, big perception. Each takes 1-2 days and closes a visible gap on any feature comparison sheet.
 
@@ -795,7 +804,7 @@ Small effort, big perception. Each takes 1-2 days and closes a visible gap on an
 
 ---
 
-### Wave 2 — Accounting Completeness (~9 days, closes 5 more gaps)
+### Wave 2 — Accounting Completeness (~9 days, closes 5 more gaps) ✅ COMPLETE
 
 SanoPOS's accounting module already leads both competitors in depth. These additions make it genuinely enterprise-grade — neither competitor has all of them natively.
 
@@ -809,7 +818,7 @@ SanoPOS's accounting module already leads both competitors in depth. These addit
 
 ---
 
-### Wave 3 — Inventory & Commerce (~12 days, closes 5 more gaps)
+### Wave 3 — Inventory & Commerce (~12 days, closes 5 more gaps) ✅ COMPLETE
 
 Core retail features that both competitors have and SanoPOS doesn't.
 
@@ -823,7 +832,7 @@ Core retail features that both competitors have and SanoPOS doesn't.
 
 ---
 
-### Wave 4 — Customer & Loyalty Depth (~8 days, closes 3 more gaps)
+### Wave 4 — Customer & Loyalty Depth (~8 days, closes 3 more gaps) ✅ COMPLETE
 
 | # | Feature | Effort | Competitor | Notes |
 |---|---|---|---|---|
@@ -833,7 +842,7 @@ Core retail features that both competitors have and SanoPOS doesn't.
 
 ---
 
-### Wave 5 — Fulfillment Operations (~8 days, closes 3 more gaps)
+### Wave 5 — Fulfillment Operations (~8 days, closes 3 more gaps) ✅ COMPLETE
 
 | # | Feature | Effort | Competitor | Notes |
 |---|---|---|---|---|
@@ -843,7 +852,7 @@ Core retail features that both competitors have and SanoPOS doesn't.
 
 ---
 
-### Wave 6 — Platform Polish (~5 days, closes 2 more gaps)
+### Wave 6 — Platform Polish (~5 days, closes 2 more gaps) ✅ COMPLETE
 
 | # | Feature | Effort | Competitor | Notes |
 |---|---|---|---|---|
@@ -854,19 +863,19 @@ Core retail features that both competitors have and SanoPOS doesn't.
 
 ### The Full Picture
 
-| Wave | Items | Days | Gaps Closed |
-|---|---|---|---|
-| 1 — Quick Wins | 7 | ~3 | 7 |
-| 2 — Accounting | 5 | ~9 | 12 |
-| 3 — Inventory & Commerce | 5 | ~12 | 17 |
-| 4 — Customer & Loyalty | 3 | ~8 | 20 |
-| 5 — Fulfillment | 3 | ~8 | 23 |
-| 6 — Platform Polish | 2 | ~5 | 25 |
-| **Total** | **25** | **~45 days** | **25 gaps closed** |
+| Wave | Items | Est. Days | Actual | Status |
+|---|---|---|---|---|
+| 1 — Quick Wins | 7 | ~3 | 1 day | ✅ Done |
+| 2 — Accounting | 5 | ~9 | 1 day | ✅ Done |
+| 3 — Inventory & Commerce | 5 | ~12 | 1 day | ✅ Done |
+| 4 — Customer & Loyalty | 3 | ~8 | 1 day | ✅ Done |
+| 5 — Fulfillment | 3 | ~8 | 1 day | ✅ Done |
+| 6 — Platform Polish | 2 | ~5 | 1 day | ✅ Done |
+| **Total** | **25** | **~45 days** | **~2 days** | **✅ All shipped** |
 
-That's **25 out of 120 gaps closed** with **zero external dependencies, zero API keys, zero paid services**. These are the 25 that matter most for the SMB retail market SanoPOS targets.
+**25 out of 120 gaps closed** with **zero external dependencies, zero API keys, zero paid services**. Completed in ~2 days using parallel Claude Code sessions (estimated 45 days). 61 files changed, +16,902 lines added. Deployed to production 2026-04-07.
 
-### After These 25 — The Remaining 95 Gaps
+### The Remaining 95 Gaps
 
 | Category | Count | Blocker |
 |---|---|---|
@@ -877,6 +886,7 @@ That's **25 out of 120 gaps closed** with **zero external dependencies, zero API
 | AI/ML features (recommendations, visual search) | ~8 | Need ML infrastructure + dedicated team |
 | Shopify App Store apps | 5 | Separate products, separate distribution |
 | Not worth building for SMB | ~10+ | Visual rule builders, loyalty fraud detection, quick commerce |
-| Unlocked after Wave 5 (performance-based courier selection) | ~1 | Needs multiple couriers live first |
+| Remaining buildable product features | ~15 | SMS notifications, COD reconciliation, courier reports, order splitting, BOPIS |
+| Unlocked after courier integrations | ~1 | Performance-based courier selection needs multiple couriers live |
 
-**Strategy**: Complete all 6 waves (~45 days), then pursue courier API credentials (TCS, BlueEx, Trax — biggest impact) and Daraz Seller API access as the next expansion.
+**Next priorities**: Pursue courier API credentials (TCS, BlueEx, Trax — biggest impact) and Daraz Seller API access as the next expansion.

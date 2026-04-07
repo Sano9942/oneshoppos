@@ -247,7 +247,7 @@ const FEATURES = [
   {
     icon: Heart,
     title: "Customer Loyalty & Wallet",
-    desc: "Built-in points earning and redemption, customer wallet deposits. No paid add-on needed.",
+    desc: "Built-in points, wallet credit, tiered loyalty, points transfer, RFM segmentation, and customer profiling.",
   },
   {
     icon: Building2,
@@ -274,6 +274,26 @@ const FEATURES = [
     title: "Shopify + WooCommerce Sync",
     desc: "Import products, sync inventory, manage orders from one dashboard. Multi-channel from day one.",
   },
+  {
+    icon: BarChart3,
+    title: "Built-in Accounting",
+    desc: "P&L, balance sheet, cash flow, AP/AR, chart of accounts, journal entries, ledgers, and cheque tracking.",
+  },
+  {
+    icon: Building2,
+    title: "Fulfillment & Warehouse",
+    desc: "Pick, pack, dispatch, loadsheets, scan dispatch, barcode GRN receiving, and order aging in one workflow.",
+  },
+  {
+    icon: Heart,
+    title: "Tiered Loyalty + RFM",
+    desc: "Bronze to Platinum auto-upgrades, points transfer, 11-segment RFM analysis, and rich customer profiles.",
+  },
+  {
+    icon: Zap,
+    title: "Promotions + Price Lists",
+    desc: "BOGO, percentage and fixed promos, date-based campaigns, and customer or volume pricing built in.",
+  },
 ];
 
 /* ─── Pain Points ────────────────────────────────────────── */
@@ -297,6 +317,12 @@ const PAIN_POINTS = [
     problem: "Competitors charge PKR 5,000-15,000/month and lock features behind paid tiers.",
     solution: "Every feature is included on every plan — Free and Pro. No feature locks. No surprises. Pro removes capacity limits at PKR 8,000/mo per outlet — add as many outlets as your business needs.",
   },
+  {
+    icon: BarChart3,
+    title: "Still Paying for Separate Accounting?",
+    problem: "Many POS systems still need QuickBooks, Xero, or manual spreadsheets to close the books.",
+    solution: "SanoPOS includes P&L, balance sheet, cash flow, AP/AR, journal entries, ledgers, and cheque tracking — built in from day one.",
+  },
 ];
 
 /* ─── Device Compatibility ───────────────────────────────── */
@@ -313,10 +339,19 @@ const COMPARISON = [
   { feature: "FBR digital invoicing (real-time)", us: true, them: "Extra cost or not available" },
   { feature: "Offline sale queuing", us: true, them: "Not available" },
   { feature: "Report tabs", us: "67+", them: "15-25 typical" },
+  { feature: "Built-in accounting", us: "P&L + ledgers + journal entries", them: "Requires QuickBooks/Xero" },
   { feature: "Customer loyalty & wallet", us: true, them: "Paid add-on" },
+  { feature: "Tiered loyalty + RFM segmentation", us: true, them: "Paid add-on or not available" },
+  { feature: "Promotions engine + price lists", us: true, them: "Limited or enterprise tier" },
+  { feature: "Returns + exchanges in POS", us: true, them: "Returns only" },
   { feature: "HR + attendance + kiosk", us: true, them: "Not available" },
   { feature: "Multi-outlet stock transfers", us: true, them: "Enterprise tier only" },
+  { feature: "Product bundling / kits", us: true, them: "Enterprise tier only" },
+  { feature: "Pick / pack / dispatch workflow", us: true, them: "Requires separate WMS" },
+  { feature: "Barcode GRN receiving + scan dispatch", us: true, them: "Manual workflow" },
   { feature: "Shopify + WooCommerce sync", us: true, them: "Enterprise tier only" },
+  { feature: "Multi-channel aggregated reports", us: true, them: "Limited or extra module" },
+  { feature: "Public API docs", us: "OpenAPI + Swagger UI", them: "Usually sales-led or unavailable" },
   { feature: "Self-service signup", us: "5 minutes", them: "Requires sales call" },
   { feature: "Free plan with all features", us: true, them: "Limited or trial only" },
   { feature: "Thermal printer support", us: "ESC/POS + network", them: "Browser print only" },
@@ -326,8 +361,9 @@ const COMPARISON = [
 
 const STATS = [
   { value: "67+", label: "Reports" },
-  { value: "50+", label: "Features" },
+  { value: "90+", label: "Features" },
   { value: "F1-F10", label: "Shortcuts" },
+  { value: "11", label: "RFM Segments" },
   { value: "100%", label: "Works Offline" },
   { value: "5 min", label: "Setup Time" },
   { value: "0", label: "Feature Locks" },
@@ -344,6 +380,7 @@ const FULL_FEATURES = [
       "Keyboard shortcuts (F1-F10)",
       "Park and recall sales",
       "Offline sale queuing",
+      "Returns and exchanges in POS",
       "Customer-facing display",
       "Gift cards and vouchers",
       "Quotation to sale conversion",
@@ -357,6 +394,12 @@ const FULL_FEATURES = [
       "Stock transfers between outlets",
       "Stock adjustments with reasons",
       "Reorder alerts",
+      "Product bundling / kits",
+      "Barcode stock counts",
+      "Stock aging analysis",
+      "Demand forecasting",
+      "Smart replenishment",
+      "Price lists (customer / volume / promo)",
       "Serial number tracking",
       "Bulk CSV/XLSX import with preview",
       "Dead stock reporting",
@@ -367,6 +410,7 @@ const FULL_FEATURES = [
     items: [
       "Purchase orders (create/edit/approve)",
       "GRN with partial receiving",
+      "Barcode GRN scan receiving",
       "Supplier payables + aging ledger",
       "Multi-level approval workflow",
       "Supplier returns (RMA)",
@@ -374,10 +418,44 @@ const FULL_FEATURES = [
     ],
   },
   {
+    category: "Accounting",
+    items: [
+      "Chart of accounts",
+      "Profit & loss statement",
+      "Balance sheet",
+      "Cash flow statement",
+      "General journal entries",
+      "Credit & debit notes",
+      "Post-dated cheque tracking",
+      "AP / AR summary",
+      "Tax ledger",
+      "Customer & supplier ledgers",
+    ],
+  },
+  {
+    category: "Fulfillment",
+    items: [
+      "Pick / pack / dispatch workflow",
+      "Loadsheet generation",
+      "Scan & dispatch",
+      "Order aging summary",
+      "Bulk order status updates",
+      "Cross-channel order handling",
+    ],
+  },
+  {
     category: "Customers & CRM",
     items: [
       "Loyalty points (earn/redeem)",
+      "Tiered loyalty (Bronze / Silver / Gold / Platinum)",
+      "Points transfer between members",
       "Customer wallet (deposit/debit)",
+      "Customer blacklisting",
+      "Rich customer profiling (tags, groups, demographics)",
+      "RFM segmentation (11 segments)",
+      "Product reviews & ratings",
+      "Promotions engine (%, fixed, BOGO, date-based)",
+      "Leads + quotations",
       "CRM with activity timeline",
       "Email receipts (SMTP + Resend)",
       "WhatsApp sharing",
@@ -403,6 +481,7 @@ const FULL_FEATURES = [
       "AI chat for data questions",
       "FBR export (CSV)",
       "Inventory forecasting",
+      "Multi-channel reports (POS + Shopify + Woo)",
       "Shrinkage report",
       "Pricing margin analysis",
     ],
@@ -414,6 +493,8 @@ const FULL_FEATURES = [
       "WooCommerce sync",
       "FBR digital invoicing (real-time)",
       "10 Pakistan courier integrations",
+      "Bulk import (expenses + payments)",
+      "API docs (OpenAPI / Swagger UI)",
       "Thermal + cloud printing (ESC/POS)",
       "PWA (installable on any device)",
     ],
@@ -826,7 +907,7 @@ export default function LandingPage() {
       {/* ── Numbers Bar ─────────────────────────────────────── */}
       <section className="py-8 bg-emerald-600">
         <div className="max-w-6xl mx-auto px-5">
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-6 text-center">
+          <div className="grid grid-cols-3 md:grid-cols-7 gap-6 text-center">
             {STATS.map(({ value, label }) => (
               <div key={label}>
                 <div className="text-2xl font-extrabold text-white">{value}</div>
