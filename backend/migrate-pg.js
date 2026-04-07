@@ -851,6 +851,131 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 17,
+    description: "integrations hub — extend integration_settings, add marketplace mapping tables, seed new couriers",
+    up: async (client) => {
+      // Extend integration_settings
+      await client.query(`
+        ALTER TABLE integration_settings
+          ADD COLUMN IF NOT EXISTS display_name TEXT,
+          ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'marketplace',
+          ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT false,
+          ADD COLUMN IF NOT EXISTS oauth_token TEXT,
+          ADD COLUMN IF NOT EXISTS oauth_refresh_token TEXT,
+          ADD COLUMN IF NOT EXISTS oauth_expires_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS webhook_secret TEXT,
+          ADD COLUMN IF NOT EXISTS config_json TEXT DEFAULT '{}',
+          ADD COLUMN IF NOT EXISTS last_sync_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS last_error TEXT,
+          ADD COLUMN IF NOT EXISTS sync_enabled BOOLEAN DEFAULT false
+      `);
+
+      // Daraz mapping tables
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS daraz_product_map (
+          id SERIAL PRIMARY KEY,
+          product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+          variant_id INTEGER REFERENCES product_variants(id) ON DELETE SET NULL,
+          daraz_item_id TEXT NOT NULL,
+          daraz_sku TEXT,
+          last_synced_at TIMESTAMPTZ,
+          UNIQUE(daraz_item_id)
+        );
+        CREATE TABLE IF NOT EXISTS daraz_order_map (
+          id SERIAL PRIMARY KEY,
+          web_order_id INTEGER REFERENCES web_orders(id) ON DELETE CASCADE,
+          daraz_order_id TEXT NOT NULL UNIQUE,
+          daraz_order_number TEXT,
+          daraz_status TEXT,
+          last_synced_at TIMESTAMPTZ
+        );
+      `);
+
+      // Facebook/Instagram mapping tables
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS facebook_product_map (
+          id SERIAL PRIMARY KEY,
+          product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+          variant_id INTEGER REFERENCES product_variants(id) ON DELETE SET NULL,
+          fb_product_id TEXT NOT NULL,
+          fb_catalog_id TEXT,
+          ig_product_id TEXT,
+          last_synced_at TIMESTAMPTZ,
+          UNIQUE(fb_product_id)
+        );
+        CREATE TABLE IF NOT EXISTS facebook_order_map (
+          id SERIAL PRIMARY KEY,
+          web_order_id INTEGER REFERENCES web_orders(id) ON DELETE CASCADE,
+          fb_order_id TEXT NOT NULL UNIQUE,
+          source TEXT DEFAULT 'facebook',
+          fb_status TEXT,
+          last_synced_at TIMESTAMPTZ
+        );
+      `);
+
+      // WhatsApp tables
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS whatsapp_conversations (
+          id SERIAL PRIMARY KEY,
+          customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+          wa_conversation_id TEXT,
+          phone_number TEXT NOT NULL,
+          last_message_at TIMESTAMPTZ,
+          status TEXT DEFAULT 'active',
+          web_order_id INTEGER REFERENCES web_orders(id) ON DELETE SET NULL,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS whatsapp_messages (
+          id SERIAL PRIMARY KEY,
+          conversation_id INTEGER REFERENCES whatsapp_conversations(id) ON DELETE CASCADE,
+          direction TEXT NOT NULL,
+          message_type TEXT DEFAULT 'text',
+          content TEXT,
+          wa_message_id TEXT UNIQUE,
+          status TEXT DEFAULT 'sent',
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      // Google Merchant feed log
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS google_merchant_feed_log (
+          id SERIAL PRIMARY KEY,
+          product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+          gmc_offer_id TEXT,
+          feed_status TEXT DEFAULT 'pending',
+          disapproval_reason TEXT,
+          last_pushed_at TIMESTAMPTZ,
+          last_checked_at TIMESTAMPTZ
+        );
+      `);
+
+      // Indexes
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_daraz_product_map_product ON daraz_product_map(product_id);
+        CREATE INDEX IF NOT EXISTS idx_daraz_order_map_web_order ON daraz_order_map(web_order_id);
+        CREATE INDEX IF NOT EXISTS idx_facebook_product_map_product ON facebook_product_map(product_id);
+        CREATE INDEX IF NOT EXISTS idx_facebook_order_map_web_order ON facebook_order_map(web_order_id);
+        CREATE INDEX IF NOT EXISTS idx_whatsapp_conversations_customer ON whatsapp_conversations(customer_id);
+        CREATE INDEX IF NOT EXISTS idx_whatsapp_conversations_phone ON whatsapp_conversations(phone_number);
+        CREATE INDEX IF NOT EXISTS idx_google_merchant_feed_product ON google_merchant_feed_log(product_id);
+      `);
+
+      // Seed new couriers
+      try {
+        await client.query(`
+          INSERT INTO courier_integrations (name, adapter_key, tracking_url_template) VALUES
+            ('Pakistan Post', 'pakpost', 'https://ep.gov.pk/track/{tracking}'),
+            ('DHL Express', 'dhl', 'https://www.dhl.com/pk-en/home/tracking.html?tracking-id={tracking}'),
+            ('FedEx', 'fedex', 'https://www.fedex.com/fedextrack/?trknbr={tracking}')
+          ON CONFLICT DO NOTHING
+        `);
+      } catch (_) {
+        // courier_integrations may not exist in all schemas
+      }
+    },
+  },
 ];
 
 async function migrate(db) {

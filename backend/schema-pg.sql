@@ -1082,7 +1082,10 @@ INSERT INTO courier_integrations (name, adapter_key, tracking_url_template) VALU
   ('Call Courier', 'callcourier', 'https://callcourier.com.pk/tracking/{tracking}'),
   ('M&P', 'mnp', 'https://www.mulphico.com/tracking/{tracking}'),
   ('Bykea', 'bykea', ''),
-  ('Swyft', 'swyft', 'https://swyft.pk/tracking/{tracking}')
+  ('Swyft', 'swyft', 'https://swyft.pk/tracking/{tracking}'),
+  ('Pakistan Post', 'pakpost', 'https://ep.gov.pk/track/{tracking}'),
+  ('DHL Express', 'dhl', 'https://www.dhl.com/pk-en/home/tracking.html?tracking-id={tracking}'),
+  ('FedEx', 'fedex', 'https://www.fedex.com/fedextrack/?trknbr={tracking}')
 ON CONFLICT DO NOTHING;
 
 -- ── Web Orders ────────────────────────────────────────────────────────
@@ -1181,7 +1184,10 @@ INSERT INTO courier_integrations (name, adapter_key, tracking_url_template) VALU
   ('Call Courier', 'callcourier', 'https://callcourier.com.pk/tracking/{tracking}'),
   ('M&P', 'mnp', 'https://www.mulphico.com/tracking/{tracking}'),
   ('Bykea', 'bykea', ''),
-  ('Swyft', 'swyft', 'https://swyft.pk/tracking/{tracking}')
+  ('Swyft', 'swyft', 'https://swyft.pk/tracking/{tracking}'),
+  ('Pakistan Post', 'pakpost', 'https://ep.gov.pk/track/{tracking}'),
+  ('DHL Express', 'dhl', 'https://www.dhl.com/pk-en/home/tracking.html?tracking-id={tracking}'),
+  ('FedEx', 'fedex', 'https://www.fedex.com/fedextrack/?trknbr={tracking}')
 ON CONFLICT DO NOTHING;
 
 -- ── Shopify tables ────────────────────────────────────────────────────
@@ -1382,8 +1388,92 @@ CREATE TABLE IF NOT EXISTS integration_settings (
   store_url TEXT,
   api_key TEXT,
   api_secret TEXT,
+  display_name TEXT,
+  category TEXT DEFAULT 'marketplace',
+  is_active BOOLEAN DEFAULT false,
+  oauth_token TEXT,
+  oauth_refresh_token TEXT,
+  oauth_expires_at TIMESTAMPTZ,
+  webhook_secret TEXT,
+  config_json TEXT DEFAULT '{}',
+  last_sync_at TIMESTAMPTZ,
+  last_error TEXT,
+  sync_enabled BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── Marketplace Mapping Tables ──────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS daraz_product_map (
+  id SERIAL PRIMARY KEY,
+  product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+  variant_id INTEGER REFERENCES product_variants(id) ON DELETE SET NULL,
+  daraz_item_id TEXT NOT NULL,
+  daraz_sku TEXT,
+  last_synced_at TIMESTAMPTZ,
+  UNIQUE(daraz_item_id)
+);
+
+CREATE TABLE IF NOT EXISTS daraz_order_map (
+  id SERIAL PRIMARY KEY,
+  web_order_id INTEGER REFERENCES web_orders(id) ON DELETE CASCADE,
+  daraz_order_id TEXT NOT NULL UNIQUE,
+  daraz_order_number TEXT,
+  daraz_status TEXT,
+  last_synced_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS facebook_product_map (
+  id SERIAL PRIMARY KEY,
+  product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+  variant_id INTEGER REFERENCES product_variants(id) ON DELETE SET NULL,
+  fb_product_id TEXT NOT NULL,
+  fb_catalog_id TEXT,
+  ig_product_id TEXT,
+  last_synced_at TIMESTAMPTZ,
+  UNIQUE(fb_product_id)
+);
+
+CREATE TABLE IF NOT EXISTS facebook_order_map (
+  id SERIAL PRIMARY KEY,
+  web_order_id INTEGER REFERENCES web_orders(id) ON DELETE CASCADE,
+  fb_order_id TEXT NOT NULL UNIQUE,
+  source TEXT DEFAULT 'facebook',
+  fb_status TEXT,
+  last_synced_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS whatsapp_conversations (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+  wa_conversation_id TEXT,
+  phone_number TEXT NOT NULL,
+  last_message_at TIMESTAMPTZ,
+  status TEXT DEFAULT 'active',
+  web_order_id INTEGER REFERENCES web_orders(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS whatsapp_messages (
+  id SERIAL PRIMARY KEY,
+  conversation_id INTEGER REFERENCES whatsapp_conversations(id) ON DELETE CASCADE,
+  direction TEXT NOT NULL,
+  message_type TEXT DEFAULT 'text',
+  content TEXT,
+  wa_message_id TEXT UNIQUE,
+  status TEXT DEFAULT 'sent',
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS google_merchant_feed_log (
+  id SERIAL PRIMARY KEY,
+  product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+  gmc_offer_id TEXT,
+  feed_status TEXT DEFAULT 'pending',
+  disapproval_reason TEXT,
+  last_pushed_at TIMESTAMPTZ,
+  last_checked_at TIMESTAMPTZ
 );
 
 -- ── Token Revocation ──────────────────────────────────────────────────
@@ -1407,6 +1497,13 @@ CREATE INDEX IF NOT EXISTS idx_eo_outlet ON employee_outlets(outlet_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_idempotency_key ON sales(idempotency_key) WHERE idempotency_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_products_deleted_at ON products(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_customers_deleted_at ON customers(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_daraz_product_map_product ON daraz_product_map(product_id);
+CREATE INDEX IF NOT EXISTS idx_daraz_order_map_web_order ON daraz_order_map(web_order_id);
+CREATE INDEX IF NOT EXISTS idx_facebook_product_map_product ON facebook_product_map(product_id);
+CREATE INDEX IF NOT EXISTS idx_facebook_order_map_web_order ON facebook_order_map(web_order_id);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_conversations_customer ON whatsapp_conversations(customer_id);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_conversations_phone ON whatsapp_conversations(phone_number);
+CREATE INDEX IF NOT EXISTS idx_google_merchant_feed_product ON google_merchant_feed_log(product_id);
 CREATE INDEX IF NOT EXISTS idx_employees_deleted_at ON employees(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_revoked_tokens_jti ON revoked_tokens(token_jti);
 
