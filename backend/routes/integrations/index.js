@@ -17,6 +17,7 @@ module.exports = function mountIntegrationRoutes(app, deps) {
   require("./daraz")(router, integrationDeps);
   require("./facebook")(router, integrationDeps);
   require("./whatsapp")(router, integrationDeps);
+  require("./google-merchant")(router, integrationDeps);
 
   app.use("/api/integrations", router);
 };
