@@ -46,6 +46,7 @@ const DEFAULT_FEATURE_FLAGS = {
   context_selection_required: false,
   context_header_enforced: false,
   kiosk_context_locked: false,
+  marketplace_integrations: true,
 };
 
 // Per-tenant feature flag cache
