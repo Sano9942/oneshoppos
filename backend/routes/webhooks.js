@@ -162,6 +162,39 @@ module.exports = function registerWebhookRoutes(app, deps) {
     }
   });
 
+  // GET /api/webhooks/whatsapp — WhatsApp webhook verification
+  app.get("/api/webhooks/whatsapp", (req, res) => {
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
+
+    if (mode === "subscribe" && token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
+      logger.info("WhatsApp webhook verified");
+      return res.status(200).send(challenge);
+    }
+    return res.sendStatus(403);
+  });
+
+  // POST /api/webhooks/whatsapp — receive WhatsApp messages
+  app.post("/api/webhooks/whatsapp", async (req, res) => {
+    try {
+      const { entry } = req.body || {};
+      const changes = entry?.[0]?.changes || [];
+
+      for (const change of changes) {
+        const messages = change.value?.messages || [];
+        for (const msg of messages) {
+          logger.info({ from: msg.from, type: msg.type }, "WhatsApp message received");
+        }
+      }
+
+      res.json({ success: true });
+    } catch (err) {
+      logger.error({ err }, "WhatsApp webhook processing error");
+      res.status(500).json({ error: "Internal error" });
+    }
+  });
+
   // POST /api/webhooks/daraz — Daraz order status push notifications
   app.post("/api/webhooks/daraz", async (req, res) => {
     try {
