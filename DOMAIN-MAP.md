@@ -525,13 +525,13 @@
 - **Route path**: `/courier-settings`
 - **Nav entry**: "Delivery Couriers"
 - **DB tables**: `courier_integrations` (13 pre-seeded couriers)
-- **Services**: `services/couriers/` (base-adapter, generic-adapter, 13 adapters, index)
+- **Services**: `services/couriers/` (base-adapter, generic-adapter, 13 adapters: leopards, tcs, blueex, trax, callcourier, mnp, postex, rider, swyft, bykea, pakpost, dhl, fedex, index)
 
 ---
 
 ## Integrations Hub
 
-- **Backend route**: `routes/integrations/` (hub.js, credentials.js, daraz.js, facebook.js, whatsapp.js, google-merchant.js)
+- **Backend route**: `routes/integrations/` (hub.js, credentials.js, daraz.js, facebook.js, whatsapp.js, google-merchant.js, index.js)
 - **Schemas**: `schemas/integrations.js` (Zod: connectProvider, disconnectProvider)
 - **Permissions**: `manage_inventory` (read), `all_access` (connect/disconnect)
 - **Feature flag**: `marketplace_integrations`

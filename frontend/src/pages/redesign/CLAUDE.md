@@ -7,6 +7,7 @@
 - **Dark mode** works automatically via CSS variables — no special handling needed
 - **Permission gating**: Use `hasPerm("perm")` from `useAuth()` to conditionally show/hide UI
 - **Feature flag gating**: Use `useFeatureFlags()` hook, check flag inside component, redirect if off
+- **`IntegrationsHubRedesign.jsx`** — unified integrations hub (`/settings/integrations`). Requires `manage_inventory` perm + `marketplace_integrations` feature flag. Shows marketplace channels + courier integrations in one page
 - **CSV export**: Use `downloadCsv(headers, rows, filename)` from `utils/csvExport.js`
 - **Currency**: Always `const { fmt } = useCurrency()` — never hardcode symbols
 - **Timestamps**: Use `fmtUtcDateTime`/`fmtLocalDateTime` from `utils/dates.js` — never raw `new Date()`

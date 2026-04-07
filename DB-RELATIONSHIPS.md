@@ -138,6 +138,7 @@ loadsheet_orders → loadsheets (loadsheet_id), web_orders (web_order_id)
 ## Marketplace Integrations
 
 ```
+integration_settings — standalone (no FKs, keyed by provider name)
 daraz_product_map → products (product_id), product_variants (variant_id)
 daraz_order_map → web_orders (web_order_id)
 facebook_product_map → products (product_id), product_variants (variant_id)
@@ -193,13 +194,9 @@ email_queue — standalone (tenant_id informational)
 
 ```
 company_profile, feature_flags, schema_version
-printer_config, email_config, integration_settings
+printer_config, email_config
 barcode_templates, receipt_templates
 courier_integrations
-daraz_product_map, daraz_order_map
-facebook_product_map, facebook_order_map
-whatsapp_conversations, whatsapp_messages
-google_merchant_feed_log
 gift_cards
 notifications, action_history, backup_log
 approval_requests, approval_actions

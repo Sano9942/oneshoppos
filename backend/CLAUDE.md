@@ -156,7 +156,7 @@
 - `require("dotenv").config(...)` must remain line 1 so `DATABASE_URL` is set before any require
 
 ### Worker Heartbeat Pattern
-- Email, FBR, and cleanup workers expose `global.__emailWorkerStatus`, `__fbrWorkerStatus`, `__cleanupWorkerStatus`
+- Email, FBR, cleanup, and marketplace sync workers expose `global.__emailWorkerStatus`, `__fbrWorkerStatus`, `__cleanupWorkerStatus`, `__marketplaceSyncWorkerStatus`
 - Each object: `{ lastPollAt, processedToday, queueDepth }`
 - `queueDepth` is now a real `SELECT COUNT(*)` from the queue table — no longer always 0
 - `GET /api/admin/worker-status` reads these globals to determine running/stopped state
@@ -313,6 +313,7 @@
 - `REPORT_RUNS_RETENTION_DAYS` — Days to keep old report runs (default: 45)
 - `REPORT_DELIVERY_RETENTION_DAYS` — Days to keep deliveries (default: 60)
 - `REPORT_EXPORT_FILES_RETENTION_DAYS` — Days to keep export files (default: 30)
+- `MARKETPLACE_SYNC_WORKER_ENABLED` — "1" enables marketplace sync worker
 
 ### Payments
 - `PAYMENT_GATEWAY` — Active processor: "manual" (default), "xpay", "stripe"
@@ -328,6 +329,11 @@
 ### Shopify
 - `SHOPIFY_SECRET_KEY` — Webhook signature verification
 - `SHOPIFY_MAX_RETRY_ATTEMPTS` — Inventory sync retries (default: 5)
+
+### Integrations
+- `INTEGRATION_SECRET_KEY` — AES-256-GCM key for integration credential encryption (falls back to SHOPIFY_SECRET_KEY)
+- `META_WEBHOOK_VERIFY_TOKEN` — Meta/Facebook webhook verification token
+- `WHATSAPP_WEBHOOK_VERIFY_TOKEN` — WhatsApp webhook verification token
 
 ### Rate Limiting
 - `RATE_LIMIT_WINDOW_MS` — Sliding window (default: 60000ms)

@@ -1,6 +1,6 @@
 # Competitive Analysis — SanoPOS vs Pakistan Market
 
-**Date**: 2026-04-07 (updated after competitive-waves merge — 25 features shipped)
+**Date**: 2026-04-07 (updated after competitive-waves + integrations-hub merge — 25 features + integrations hub shipped)
 **Previous audit**: 2026-04-03
 
 ---
@@ -56,7 +56,7 @@ Assaan Retail is an **omnichannel OMS (Order Management System)** first, POS sec
 #### Order Management
 | Feature | Assaan Retail | SanoPOS |
 |---|---|---|
-| Multi-channel order sync (Daraz + Shopify + WooCommerce) | Yes | Shopify + Woo only, **no Daraz** |
+| Multi-channel order sync (Daraz + Shopify + WooCommerce) | Yes | **Yes** — Shopify + WooCommerce + **Daraz** (product sync, order pull, inventory push via `routes/integrations/daraz.js`) |
 | Automated order confirmations (SMS, WhatsApp, Email, **IVR calls**) | Yes | WhatsApp link only, email receipts |
 | Pick, Pack & Dispatch (scan-driven workflow with picklists + loadsheets) | Yes | **Yes** — `routes/fulfillment.js` with picklists, pick-scan, pack-scan, dispatch + loadsheet generation + CSV export |
 | Order aging summary (flag stale orders) | Yes | **Yes** — `GET /api/orders/aging-summary` with 4 buckets (fresh/aging/stale/critical) + per-order aging_days |
@@ -67,7 +67,7 @@ Assaan Retail is an **omnichannel OMS (Order Management System)** first, POS sec
 | Customer blacklisting | Yes | **Yes** — `PUT /api/customers/:id/blacklist` + POS checkout block + red badge UI |
 | Customer profiling (preferences, demographics) | Yes | **Yes** — extended fields (DOB, gender, city, tags[], customer groups, notes, preferred payment/contact), enriched profile endpoint with purchase summary + top products |
 | Feedback & reviews management | Yes | **Yes** — `product_reviews` table, moderation queue, star ratings, verified purchase badges |
-| Order tracking (real-time courier status sync) | Yes | Basic (Leopards only) |
+| Order tracking (real-time courier status sync) | Yes | **Yes** — 13 courier adapters (Leopards, TCS, BlueEx, Trax, CallCourier, M&P, PostEx, Rider, Swyft, Bykea, PakPost, DHL, FedEx) with tracking URL templates |
 | Duplicate order detection | Unknown | **Yes** — idempotency key on sales prevents duplicate submissions |
 
 #### Inventory Management
@@ -78,7 +78,7 @@ Assaan Retail is an **omnichannel OMS (Order Management System)** first, POS sec
 | Product bundling / kits | Yes | **Yes** — `product_bundles` table, bundle components with qty, POS badge, stock deducted from components on sale |
 | Inventory forecasting (predict stockouts) | Yes | **Yes** — `GET /api/reports/forecast-demand` (moving average velocity) + `GET /api/reports/replenishment-smart` (days_of_cover, suggested_reorder_qty, configurable 7–90 day lookback) |
 | Low stock alerts | Yes | **Yes** — `notifyLowStockForSale()` in `feature-flags.js` creates in-app notifications when outlet stock <= 10 after sale. Shown in NotificationBell + DashboardInventoryAlerts |
-| Multi-channel inventory sync (marketplace <-> warehouse) | Yes | Shopify/Woo only, **no Daraz** |
+| Multi-channel inventory sync (marketplace <-> warehouse) | Yes | **Yes** — Shopify + WooCommerce + **Daraz** (inventory push via `daraz-client.js`) + **Google Merchant Center** feed sync |
 | Stock adjustments (shrinkage, damage) | Yes | **Yes** — full CRUD at `GET/POST/PUT/DELETE /api/adjustments` |
 | Stock transfers between locations | Yes | **Yes** — `GET/POST /api/transfers` + reverse transfers |
 
@@ -107,7 +107,7 @@ Assaan Retail is an **omnichannel OMS (Order Management System)** first, POS sec
 #### Shipment Management
 | Feature | Assaan Retail | SanoPOS |
 |---|---|---|
-| **16 Pakistan couriers** (TCS, BlueEx, PostEx, CallCourier, Swyft, Rider, Trax, Steadfast, DoDeliver, Leopards, M&P, Fardar Express, eCourier, Smartlane, ShipNOC, InstaWorld) | Yes | **Leopards only** (adapter pattern built for easy additions) |
+| **16 Pakistan couriers** (TCS, BlueEx, PostEx, CallCourier, Swyft, Rider, Trax, Steadfast, DoDeliver, Leopards, M&P, Fardar Express, eCourier, Smartlane, ShipNOC, InstaWorld) | Yes | **13 couriers** — Leopards, TCS, BlueEx, Trax, CallCourier, M&P, PostEx, Rider, Swyft, Bykea, PakPost, DHL, FedEx (adapter pattern for easy additions) |
 | Bulk courier booking | Yes | **No** |
 | Courier payment reconciliation (COD) | Yes | **No** |
 | Loadsheet generation | Yes | **Yes** — `loadsheets` + `loadsheet_orders` tables, courier grouping, finalize/handover workflow, CSV export |
@@ -240,14 +240,14 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 #### Order Management System
 | Feature | XStak | SanoPOS |
 |---|---|---|
-| Multi-channel order sync (Daraz, Shopify, WooCommerce, Magento, BigCommerce) | Yes | Shopify + Woo only |
-| Automated courier booking | Yes | Leopards only |
+| Multi-channel order sync (Daraz, Shopify, WooCommerce, Magento, BigCommerce) | Yes | **Yes** — Shopify + WooCommerce + **Daraz** + Facebook/Instagram Shop (Magento, BigCommerce not yet) |
+| Automated courier booking | Yes | **Yes** — 13 courier adapters with `createShipment()` + tracking via unified courier service |
 | Duplicate / fake order flagging | Yes (fraud scoring) | **Partial** — idempotency-based duplicate detection on sales, no fraud scoring |
 | Buy Online Pickup In-Store (BOPIS) | Yes | **No** |
 | Buy Online Return In-Store (BORIS) | Yes | **No** |
 | Ship from Store | Yes | **No** |
 | Order split across locations | Yes | **No** |
-| SMS/email customer notifications (automated) | Yes | Email receipts only, WhatsApp link sharing |
+| SMS/email customer notifications (automated) | Yes | Email receipts + **WhatsApp Business API** (catalog sync, order notifications via `whatsapp-client.js`) + WhatsApp link sharing |
 | Performance-based courier selection | Yes | **No** |
 | Returns & exchanges | Yes | **Yes** — full return + exchange flow with exchange mode in POS |
 
@@ -260,7 +260,7 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 | Inventory audit via scan | Yes | **Yes** — barcode scan-to-count, variance report, auto-adjust |
 | Product bundling | Yes | **Yes** — bundle components, POS stock deduction from components |
 | Low stock alerts | Yes | **Yes** — auto-notification when outlet stock <= 10 after sale, shown in dashboard + notification bell |
-| Multi-channel inventory sync | Yes | Shopify/Woo only |
+| Multi-channel inventory sync | Yes | **Yes** — Shopify + WooCommerce + Daraz + Google Merchant Center |
 
 #### Cloud POS
 | Feature | XStak | SanoPOS |
@@ -336,7 +336,7 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 #### Logistics (26+ couriers)
 | Feature | XStak | SanoPOS |
 |---|---|---|
-| 26+ Pakistan & international couriers | Yes | **Leopards only** (adapter pattern built for easy additions) |
+| 26+ Pakistan & international couriers | Yes | **13 couriers** (Leopards, TCS, BlueEx, Trax, CallCourier, M&P, PostEx, Rider, Swyft, Bykea, PakPost, DHL, FedEx) |
 | Courier performance analytics | Yes | **No** |
 | Own fleet OR 3PL fulfillment | Yes | **No** |
 | COD reconciliation | Yes | **No** |
@@ -344,7 +344,7 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 #### MarTech / Marketing
 | Feature | XStak | SanoPOS |
 |---|---|---|
-| Facebook/Instagram/Google ad integration | Yes | **No** |
+| Facebook/Instagram/Google ad integration | Yes | **Partial** — Facebook/Instagram Shop integration (`meta-commerce.js`) + Google Merchant Center feed (`google-merchant.js`). No ad platform integration yet |
 | Lookalike audience creation | Yes | **No** |
 | Email/SMS marketing automation (Mailchimp, Klaviyo) | Yes | **No** |
 | Promotions across web + email + print + in-store | Yes | **Yes** — promotions engine (percentage, fixed amount, BOGO buy-X-get-Y, min order, category/product scoping, date-based activation). `POST /api/promotions/quote` evaluates cart |
@@ -373,13 +373,13 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 | Category | XStak | SanoPOS |
 |---|---|---|
 | Payments | 10 (Stripe, JazzCash, Easypaisa, HBL, MCB, Alfalah, PayFast, 2Checkout, NiftePay, Cyber) | 1 (xPay adapter, Stripe schema prepped) |
-| Ecommerce | 6 (Shopify, Magento, WooCommerce, BigCommerce, Volusion, Fabric) | 2 (Shopify, WooCommerce) |
+| Ecommerce | 6 (Shopify, Magento, WooCommerce, BigCommerce, Volusion, Fabric) | 2 (Shopify, WooCommerce) + 4 channels (Daraz, Facebook/Instagram, WhatsApp, Google Merchant) |
 | ERP/Accounting | 8 (SAP, NetSuite, Oracle, QuickBooks, Xero, Dynamics, Linnworks, Technosys) | **0** (but built-in accounting module) |
-| Marketing | 9 (Facebook, Google, Mailchimp, Klaviyo, Twilio, OneSignal, etc.) | **0** |
-| Couriers | 26+ | 1 (Leopards, adapter pattern ready) |
-| Marketplaces | 3 (Daraz, Bagallery, Jomo) | **0** |
+| Marketing | 9 (Facebook, Google, Mailchimp, Klaviyo, Twilio, OneSignal, etc.) | **Partial** — Facebook Shop + Google Merchant Center (no email/SMS marketing automation yet) |
+| Couriers | 26+ | **13** (Leopards, TCS, BlueEx, Trax, CallCourier, M&P, PostEx, Rider, Swyft, Bykea, PakPost, DHL, FedEx) |
+| Marketplaces | 3 (Daraz, Bagallery, Jomo) | **1** (Daraz) + Facebook/Instagram Shop + WhatsApp Business + Google Merchant Center |
 | POS systems | 7 (Salesforce, Dynamics 365, Vend, Clover, etc.) | N/A (is POS) |
-| **Total** | **70+** | **~4** (but deep built-in features vs shallow integrations) |
+| **Total** | **70+** | **~20** (13 couriers + 2 ecommerce + 4 channels + xPay — plus deep built-in features) |
 
 #### Platform & Infrastructure
 | Feature | XStak | SanoPOS |
@@ -430,8 +430,8 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 |---|---|---|---|
 | **Target market** | Enterprise retail + D2C brands | Mid-market e-commerce + retail | SMB retail stores |
 | **Core strength** | Full-stack commerce (payments, AI, loyalty, PIM) | E-commerce OMS + fulfillment | POS + FBR + built-in business tools |
-| **Couriers** | 26+ | 16 | 1 (adapter pattern ready) |
-| **Total integrations** | 70+ | 22 | ~4 |
+| **Couriers** | 26+ | 16 | **13** (Leopards, TCS, BlueEx, Trax, CallCourier, M&P, PostEx, Rider, Swyft, Bykea, PakPost, DHL, FedEx) |
+| **Total integrations** | 70+ | 22 | **~20** (13 couriers + 2 ecommerce + 4 channels + xPay) |
 | **Payment gateway** | Own (XPay) | None | Adapter (xPay) |
 | **AI capabilities** | Recommendation engine, visual search, shopping assistant | None | Claude-powered analytics chat + auto-insights |
 | **Accounting** | QuickBooks/Xero/SAP integration | Built-in P&L, ledgers | **Built-in** (P&L, balance sheet, cash flow daily, AP/AR, AP aging, tax ledger, expense ledger, accounting periods, **chart of accounts, journal entries, credit/debit notes, cheque tracking, customer+supplier ledgers**) |
@@ -469,30 +469,31 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 16. **Simpler pricing** — transparent PKR 8k/mo vs custom enterprise quotes or per-add-on pricing
 17. **Dark mode + PWA** — installable app with theme support
 18. **Operational tooling** — support tickets, tenant impersonation, worker monitoring, dead letter queue, action history audit log
+19. **Integrations Hub** — unified settings page with 5 marketplace/channel integrations (Daraz, Facebook/Instagram, WhatsApp Business, Google Merchant Center + Shopify/WooCommerce) + 13 courier adapters, AES-256-GCM credential encryption, pg-boss background sync worker
 
 ---
 
 ## Complete Remaining Gaps — Every Feature Either Competitor Has That SanoPOS Doesn't
 
-**Total: 120 features/integrations identified (Apr 3). After competitive-waves merge (Apr 7): 25 closed, 95 remaining.**
+**Total: 120 features/integrations identified (Apr 3). After competitive-waves + integrations-hub merge (Apr 7): 40 closed, 80 remaining.**
 
 ### Integrations (52 items)
 
 | # | Feature | Assaan Retail | XStak | Notes |
 |---|---|---|---|---|
-| 1 | Daraz marketplace integration | Yes | Yes | Pakistan's #1 e-commerce platform |
+| 1 | ~~Daraz marketplace integration~~ | Yes | Yes | **CLOSED** — `routes/integrations/daraz.js` + `daraz-client.js` (product sync, order pull, inventory push, webhook) |
 | 2 | Magento integration | No | Yes | |
 | 3 | BigCommerce integration | No | Yes | |
 | 4 | Volusion integration | No | Yes | |
 | 5 | Fabric integration | No | Yes | |
-| 6 | TCS courier | Yes | Yes | |
-| 7 | BlueEx courier | Yes | Yes | |
-| 8 | CallCourier | Yes | Yes | |
-| 9 | Trax courier | Yes | Yes | |
-| 10 | M&P courier | Yes | Yes | |
-| 11 | Swyft courier | Yes | Yes | |
-| 12 | PostEx courier | Yes | Yes | |
-| 13 | Rider courier | Yes | Yes | |
+| 6 | ~~TCS courier~~ | Yes | Yes | **CLOSED** — `services/couriers/tcs-adapter.js` |
+| 7 | ~~BlueEx courier~~ | Yes | Yes | **CLOSED** — `services/couriers/blueex-adapter.js` |
+| 8 | ~~CallCourier~~ | Yes | Yes | **CLOSED** — `services/couriers/callcourier-adapter.js` |
+| 9 | ~~Trax courier~~ | Yes | Yes | **CLOSED** — `services/couriers/trax-adapter.js` |
+| 10 | ~~M&P courier~~ | Yes | Yes | **CLOSED** — `services/couriers/mnp-adapter.js` |
+| 11 | ~~Swyft courier~~ | Yes | Yes | **CLOSED** — `services/couriers/swyft-adapter.js` |
+| 12 | ~~PostEx courier~~ | Yes | Yes | **CLOSED** — `services/couriers/postex-adapter.js` |
+| 13 | ~~Rider courier~~ | Yes | Yes | **CLOSED** — `services/couriers/rider-adapter.js` |
 | 14 | Steadfast courier | Yes | No | |
 | 15 | DoDeliver courier | Yes | Yes | |
 | 16 | Fardar Express | Yes | No | |
@@ -500,8 +501,8 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 | 18 | Smartlane | Yes | Yes | |
 | 19 | ShipNOC | Yes | No | |
 | 20 | InstaWorld | Yes | Yes | |
-| 21 | DHL | No | Yes | International |
-| 22 | FedEx | No | Yes | International |
+| 21 | ~~DHL~~ | No | Yes | **CLOSED** — `services/couriers/dhl-adapter.js` |
+| 22 | ~~FedEx~~ | No | Yes | **CLOSED** — `services/couriers/fedex-adapter.js` |
 | 23 | UPS | No | Yes | International |
 | 24 | Aramex | No | Yes | International |
 | 25 | Cheetay | No | Yes | |
@@ -524,8 +525,8 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 | 42 | Xero integration | No | Yes | ERP/Accounting |
 | 43 | Microsoft Dynamics integration | No | Yes | ERP |
 | 44 | Linnworks integration | No | Yes | ERP |
-| 45 | Facebook/Instagram ad integration | No | Yes | Marketing |
-| 46 | Google ads integration | No | Yes | Marketing |
+| 45 | ~~Facebook/Instagram integration~~ | No | Yes | **CLOSED** — `routes/integrations/facebook.js` + `meta-commerce.js` (catalog sync, order pull, Instagram Shopping). Ad platform integration not yet |
+| 46 | ~~Google Merchant Center integration~~ | No | Yes | **CLOSED** — `routes/integrations/google-merchant.js` + `google-merchant.js` (product feed, status checks). Google Ads integration not yet |
 | 47 | Mailchimp integration | No | Yes | Email marketing |
 | 48 | Klaviyo integration | No | Yes | Email marketing |
 | 49 | Twilio integration | No | Yes | SMS |
@@ -566,7 +567,7 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 | # | Feature | Assaan Retail | XStak | Notes |
 |---|---|---|---|---|
 | 71 | SMS order confirmations (API-based) | Yes | Yes | |
-| 72 | WhatsApp Business API notifications | Yes | No | SanoPOS has link-sharing only |
+| 72 | ~~WhatsApp Business API notifications~~ | Yes | No | **CLOSED** — `routes/integrations/whatsapp.js` + `whatsapp-client.js` (send messages, catalog sync, conversation tracking) |
 | 73 | IVR call confirmations | Yes | No | |
 
 ### Inventory (3 items)
@@ -671,11 +672,11 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 | 119 | Shipstak (shipping management) | No | Yes | Shopify App Store |
 | 120 | Simstak (order verification) | No | Yes | Shopify App Store |
 
-### Breakdown of 120 Gaps (updated Apr 7)
+### Breakdown of 120 Gaps (updated Apr 7, post-integrations-hub)
 
 | Category | Original | Closed | Remaining | Nature |
 |---|---|---|---|---|
-| Courier/payment/platform integrations | ~45 | 0 | ~45 | Connector work — each is a separate adapter |
+| Courier/payment/platform integrations | ~45 | **15** | ~30 | 12 courier adapters closed + Daraz + Facebook + Google Merchant. Remaining: ~20 niche couriers, payment gateways, ERP/accounting integrations |
 | XPay payment gateway features | ~9 | 0 | ~9 | Requires owning a payment gateway (business, not code) |
 | Enterprise/omnichannel | ~15 | 0 | ~15 | BOPIS, PIM, white-label, ERP, fleet management |
 | AI/ML features | ~8 | 0 | ~8 | Recommendation engine, visual search, shopping assistant |
@@ -690,8 +691,8 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 
 | # | Feature | Who Has It | Notes |
 |---|---|---|---|
-| 1 | **More courier integrations** — TCS, Trax, M&P, BlueEx, CallCourier minimum | Both (16–26+) | Adapter pattern already built. Each courier is medium effort |
-| 2 | **Daraz integration** — Pakistan's #1 marketplace | Both | Essential for omnichannel. Need Daraz Seller API access |
+| 1 | ~~**More courier integrations** — TCS, Trax, M&P, BlueEx, CallCourier minimum~~ | Both (16–26+) | **CLOSED** — 12 new adapters shipped (TCS, BlueEx, Trax, CallCourier, M&P, PostEx, Rider, Swyft, Bykea, PakPost, DHL, FedEx) |
+| 2 | ~~**Daraz integration** — Pakistan's #1 marketplace~~ | Both | **CLOSED** — `routes/integrations/daraz.js` + `daraz-client.js` (product sync, order pull, inventory push, webhook) |
 | 3 | **COD payment reconciliation** — auto-fetch courier COD settlements | Both | Critical for e-commerce operations |
 | 4 | **SMS notifications** — order confirmations via SMS API | Both | Twilio or local provider (Monty Mobile) |
 
@@ -699,14 +700,14 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 
 | # | Feature | Who Has It | Notes |
 |---|---|---|---|
-| 5 | **Product bundling / kits** | Both | Combo products for FMCG/retail |
-| 6 | **Pick / Pack / Dispatch workflow** | Both | Scan-driven fulfillment for e-commerce orders |
+| 5 | ~~**Product bundling / kits**~~ | Both | **CLOSED** — competitive-waves |
+| 6 | ~~**Pick / Pack / Dispatch workflow**~~ | Both | **CLOSED** — competitive-waves |
 | 7 | **BOPIS** (Buy Online Pickup In-Store) | XStak | Omnichannel feature |
-| 8 | **Tiered loyalty programs** | XStak | Upgrade from flat points to tier-based rewards |
-| 9 | **Customer blacklisting** | Assaan | Simple but signals operational maturity |
-| 10 | **Stock aging analysis** | XStak | Age inventory to avoid clearance |
-| 11 | **Inventory audit via scan** | Both | Barcode-driven physical stock counts |
-| 12 | **Accounting gaps** — chart of accounts, journal entries, credit/debit notes | Assaan (built-in), XStak (integrations) | Core module already strong; these are additions |
+| 8 | ~~**Tiered loyalty programs**~~ | XStak | **CLOSED** — competitive-waves |
+| 9 | ~~**Customer blacklisting**~~ | Assaan | **CLOSED** — competitive-waves |
+| 10 | ~~**Stock aging analysis**~~ | XStak | **CLOSED** — competitive-waves |
+| 11 | ~~**Inventory audit via scan**~~ | Both | **CLOSED** — competitive-waves |
+| 12 | ~~**Accounting gaps**~~ | Assaan (built-in), XStak (integrations) | **CLOSED** — competitive-waves |
 
 ### Tier 3 — Aspirational (enterprise features)
 
@@ -718,19 +719,25 @@ PriceOye, Nature Hedonist, Republic, Zara Shahjahan, Lazurde, MLS, Designer Baza
 | 16 | **ERP integrations** (QuickBooks, Xero) | XStak | For enterprises with existing accounting |
 | 17 | **Working capital financing partnerships** | XStak | Business partnership, not code |
 | 18 | **White-label app** | XStak | For chains wanting own branding |
-| 19 | **Price lists / multi-price per product** | Assaan | Customer-specific or volume pricing |
-| 20 | **API documentation** (Swagger/OpenAPI) | XStak | For third-party integrations |
-| 21 | **Quarterly/yearly billing discounts** | Assaan | Small revenue optimization |
+| 19 | ~~**Price lists / multi-price per product**~~ | Assaan | **CLOSED** — competitive-waves |
+| 20 | ~~**API documentation** (Swagger/OpenAPI)~~ | XStak | **CLOSED** — competitive-waves |
+| 21 | ~~**Quarterly/yearly billing discounts**~~ | Assaan | **CLOSED** — competitive-waves |
 | 22 | **Visual search / image similarity** | XStak | AI-powered product discovery |
-| 23 | **Feedback / reviews management** | Assaan | Customer review system |
+| 23 | ~~**Feedback / reviews management**~~ | Assaan | **CLOSED** — competitive-waves |
 
 ---
 
-## Summary: The Real Picture (updated Apr 7, post-competitive-waves)
+## Summary: The Real Picture (updated Apr 7, post-competitive-waves + integrations-hub)
 
-SanoPOS has **closed 25 of the 40 buildable product feature gaps** identified on Apr 3. The remaining gap is concentrated in **one area**:
+SanoPOS has **closed 40 of the 120 total gaps** identified on Apr 3 — 25 buildable product features (competitive-waves) + 15 integration gaps (integrations-hub).
 
-1. **Integration breadth** — couriers (1 vs 16–26), marketplaces (0 vs Daraz), e-commerce platforms (2 vs 6), SMS/WhatsApp APIs
+**Integration breadth** — previously the biggest gap — has been **dramatically narrowed**:
+- **Couriers**: 1 → **13** (Leopards, TCS, BlueEx, Trax, CallCourier, M&P, PostEx, Rider, Swyft, Bykea, PakPost, DHL, FedEx) — covers ~80% of Pakistan courier volume
+- **Marketplaces**: 0 → **1** (Daraz — Pakistan's #1 e-commerce platform)
+- **Social commerce**: 0 → **3** (Facebook/Instagram Shop, WhatsApp Business API, Google Merchant Center)
+- **Integrations Hub UI**: unified settings page at `/settings/integrations` showing all 5 channels + 13 couriers with connect/disconnect/status
+- **Background sync**: pg-boss worker for marketplace order polling + feed status checks
+- **Credential security**: AES-256-GCM encryption for all integration secrets via `services/crypto.js`
 
 **Omnichannel fulfillment** — previously a major gap — is now **closed**: pick/pack/dispatch, loadsheets, scan & dispatch, scan & receive are all live.
 
@@ -746,7 +753,13 @@ In **built-in business features**, SanoPOS now **leads both competitors across e
 - POS depth (best in class)
 - AI analytics (unique to SanoPOS)
 
-The strategy going forward: **expand integration surface** (courier APIs: TCS, BlueEx, Trax + Daraz Seller API) while **marketing the comprehensive built-in feature set** that neither competitor matches.
+The remaining gaps are concentrated in:
+1. **Niche couriers** (~15 remaining — Steadfast, DoDeliver, Fardar, eCourier, Smartlane, ShipNOC, InstaWorld, UPS, Aramex, Cheetay, Daewoo, etc.)
+2. **Payment gateways** (~9 — Stripe, JazzCash, Easypaisa, HBL, MCB, etc.)
+3. **Enterprise features** (~15 — BOPIS, PIM, white-label, ERP integrations, fleet management)
+4. **AI/ML** (~8 — recommendation engine, visual search, shopping assistant)
+5. **Marketing automation** (~5 — Mailchimp, Klaviyo, Twilio, OneSignal, SMS)
+6. **Buildable product features** (~15 — SMS notifications, COD reconciliation, courier reports, order splitting)
 
 ---
 
@@ -890,3 +903,47 @@ Core retail features that both competitors have and SanoPOS doesn't.
 | Unlocked after courier integrations | ~1 | Performance-based courier selection needs multiple couriers live |
 
 **Next priorities**: Pursue courier API credentials (TCS, BlueEx, Trax — biggest impact) and Daraz Seller API access as the next expansion.
+
+---
+
+## Integration Security & Trust — Gaps to Address
+
+The Integrations Hub stores third-party API keys (Daraz, Facebook, WhatsApp, Google, courier APIs) using AES-256-GCM encryption. To earn tenant trust with their credentials, these gaps need closing.
+
+### What We Have (baseline security)
+- Helmet security headers
+- CORS locked to our domains only
+- Rate limiting (global, auth, webhook)
+- AES-256-GCM encrypted credential storage (`services/crypto.js`)
+- Per-tenant schema isolation
+- HTTPS only (Railway + Vercel)
+
+### What's Missing (gaps that matter)
+
+1. **No audit trail on credential operations** — connect/disconnect/test actions don't write to `action_history`. Tenants can't see who added or removed an API key.
+2. **No credential access logging** — when the system decrypts a key to make an API call, there's no record. If there's a breach, we can't trace what was accessed or when.
+3. **No "show once" pattern** — after connecting, API keys should be completely hidden. Currently `maskSecret` shows last 4 chars, but there's no server-side guarantee the full key can't be retrieved via API.
+4. **No privacy policy / security page** — no public documentation explaining how we handle third-party credentials.
+5. **No SOC 2 / ISO 27001** — enterprise customers expect compliance certifications.
+6. **Super-admin impersonation access** — operators can technically access any tenant's decrypted credentials through impersonation. No technical barrier prevents this.
+
+### Short-Term Fixes (high trust impact, low effort)
+
+- [ ] Add `action_history` logging to all credential connect/disconnect/test operations in `routes/integrations/credentials.js`
+- [ ] Add a security explainer section to the Integrations Hub UI (inline banner explaining "Your credentials are encrypted with AES-256-GCM and never stored in plaintext")
+- [ ] Make credentials truly write-only — remove any endpoint that could return decrypted keys, only ever return masked values
+
+### Medium-Term Improvements (serious trust)
+
+- [ ] Add a `/security` page on the landing site explaining encryption, isolation, and data handling practices
+- [ ] BYOK (Bring Your Own Key) option — let tenants supply their own encryption key so even we can't read their secrets
+- [ ] Two-factor auth requirement for credential management operations (connect/disconnect)
+- [ ] Credential access logging — log every decrypt operation with timestamp, purpose, and requesting employee
+
+### Market Reality
+
+Most Pakistani SMBs using Daraz/TCS/BlueEx won't ask about SOC 2. They'll trust us if:
+1. The UI looks professional and clearly explains what happens with their keys
+2. They can see an audit trail of who connected/disconnected credentials
+3. There's a clear "we encrypt your credentials, we can't see them" message
+4. Other businesses they know are already using SanoPOS integrations

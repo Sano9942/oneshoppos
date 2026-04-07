@@ -147,7 +147,12 @@
       "WebFetch(domain:gist.github.com)",
       "WebFetch(domain:docs.xstak.com)",
       "WebFetch(domain:www.asaanretail.com)",
-      "WebFetch(domain:api.sanopos.com)"
+      "WebFetch(domain:api.sanopos.com)",
+      "WebFetch(domain:gopayfast.com)",
+      "WebFetch(domain:sandbox.jazzcash.com.pk)",
+      "WebFetch(domain:paypro.com.pk)",
+      "WebFetch(domain:apidocs.getsafepay.com)",
+      "WebFetch(domain:getsafepay.pk)"
     ],
     "additionalDirectories": [
       "\\tmp",
