@@ -34,6 +34,7 @@ const SupplierPayablesRoute = lazy(() => import("../pages/SupplierPayablesRoute"
 const SuppliersRoute = lazy(() => import("../pages/SuppliersRoute"));
 const ShopifyIntegrationRoute = lazy(() => import("../pages/ShopifyIntegrationRoute"));
 const WooCommerceIntegrationRedesign = lazy(() => import("../pages/redesign/WooCommerceIntegrationRedesign"));
+const IntegrationsHubRedesign = lazy(() => import("../pages/redesign/IntegrationsHubRedesign"));
 const TaxesRoute = lazy(() => import("../pages/TaxesRoute"));
 const TransfersRoute = lazy(() => import("../pages/TransfersRoute"));
 const CRMRoute = lazy(() => import("../pages/CRMRoute"));
@@ -125,6 +126,7 @@ export const appRoutes = [
     <Route path="/action-history" element={perm("all_access", <ActionHistoryRoute />)} />
     <Route path="/import" element={perm("all_access", <ImportRedesign />)} />
     <Route path="/backup-restore" element={perm("all_access", <BackupRestoreRoute />)} />
+    <Route path="/settings/integrations" element={perm("manage_inventory", <IntegrationsHubRedesign />)} />
     <Route path="/integrations/shopify" element={perm("manage_inventory", <ShopifyIntegrationRoute />)} />
     <Route path="/integrations/woocommerce" element={perm("manage_inventory", <WooCommerceIntegrationRedesign />)} />
     <Route path="/notifications" element={<NotificationsRedesign />} />
