@@ -158,6 +158,191 @@
 - `GET /api/admin/worker-status` reads these globals to determine running/stopped state
 - Workers are pg-boss backed — jobs survive server crashes and don't block the HTTP event loop
 
+## Common Patterns (checklists — don't re-research these)
+
+### Adding a new API route
+1. Create route handler in `routes/<domain>.js`
+2. Add Zod schema in `schemas/<domain>.js` (if validating request body)
+3. Register in `routes/registerAllRoutes.js` — one `app.use('/api/<prefix>', require('./routes/<domain>')(deps))` line
+4. Add permission string to `middleware/permissions.js` if introducing a new permission
+5. Add permission rule to `middleware/permissions.js` PERMISSION_RULES array if needed
+6. Update `DOMAIN-MAP.md` with the new domain entry
+
+### Adding a new feature-flagged route
+1. Follow "Adding a new API route" steps 1–6
+2. Add `requireFeature('<flag_name>')` middleware to the route
+3. Add the flag key to `middleware/feature-flags.js` DEFAULT_FEATURE_FLAGS if new
+4. Seed the flag in `schema-pg.sql` DEFAULT_FEATURE_FLAGS and in migration
+5. Frontend: check flag via `useFeatureFlags()` hook and redirect if off
+
+### Adding a new admin route
+1. Create module in `routes/admin/<module>.js`
+2. Register in `routes/admin/index.js` (or registerAllRoutes.js admin section)
+3. Guard with `requireSuperAdmin` — these mount BEFORE tenant middleware
+4. Log mutations to `admin_activity_log` via `logAdminActivity()`
+
+### Adding a new worker
+1. Create worker in `workers/<name>-worker-boss.js` (use pg-boss pattern)
+2. Register startup in `boot/workers.js`
+3. Add env var toggle: `<NAME>_WORKER_ENABLED=1`
+4. Expose heartbeat global: `global.__<name>WorkerStatus`
+5. Add to `GET /api/admin/worker-status` in `routes/admin/monitoring.js`
+
+## Middleware Chain (request lifecycle order)
+
+```
+1. requestId            — UUID per request (X-Request-Id header)
+2. rateLimiter          — global rate limit (600/min default)
+3. Sentry requestHandler — error tracking context
+
+--- admin routes (routes/admin/) mount here — NO tenant context ---
+--- webhook routes (routes/webhooks.js) mount here — NO auth, signature-verified ---
+
+4. loadTenantAndPerms   — decode JWT, look up tenant, attach req.employee + req.permissions
+5. resolveTenant        — SET search_path to tenant schema, attach deps.db proxy
+6. tenant /uploads      — serve tenant-specific uploaded files
+7. loadCompanyProfile   — cache company_profile row → req.company (currency, timezone, FBR config)
+8. resolveContext       — attach req.context (outlet, employee context from headers)
+
+--- all tenant routes mount here ---
+
+9. requirePerm / requireAnyPerm  — per-route permission check
+10. requireFeature               — per-route feature flag check
+11. validate(schema)             — per-route Zod request body validation
+12. requirePlanLimit(resource)    — per-route plan cap check (POST only)
+13. requireActiveSubscription    — blocks all writes if payment_status = 'expired'
+```
+
+## Feature Flags Registry
+
+| Flag | Routes | Frontend |
+|------|--------|----------|
+| `fbr_integration` | `routes/fbr.js` | FBRSettingsRedesign, FBRDashboardRedesign |
+| `ai_insights` | `routes/insights-ai.js` | AIChatPanel (dashboard) |
+| `accounting_core` | `routes/tier4/accounting.js` | ChartOfAccounts, JournalEntries, CreditDebitNotes, PostdatedCheques |
+| `backup_restore` | backup endpoints | BackupRestoreRedesign |
+| `supplier_payables` | `routes/grn.js` | SupplierPayablesRedesign |
+| `approvals` | `routes/tier4/approvals.js` | ApprovalsRedesign |
+| `notifications` | `routes/tier4/notifications.js` | NotificationsRedesign |
+| `crm_quotations` | `routes/tier4/crm.js` | CRMRedesign, QuotationsRedesign |
+| `advanced_hr` | `routes/tier4/hr.js` | HRManagementRedesign |
+| `multi_company` | (future) | — |
+| `e_invoicing_export` | `routes/reports/fbr-export.js` | FBRExportTab |
+| `reports_profit_layer` | `routes/reports/sales.js`, `analytics.js` | ReportsSalesDetail |
+| `reports_inventory_health_plus` | `routes/reports/inventory.js` | ReportsInventoryHealth |
+| `reports_exceptions` | `routes/reports/analytics.js` | ReportsAnalytics |
+| `reports_scheduled_exports` | `routes/reports/governance.js` | ReportsGovernance |
+| `shopify_integration` | `routes/shopify/*` | ShopifyIntegrationRedesign |
+| `context_selection_required` | context middleware | ContextSelect page |
+| `context_header_enforced` | context middleware | — |
+| `kiosk_context_locked` | kiosk context | KioskRedesign |
+| `ui_redesign_enabled` | — | Global redesign toggle |
+| `ui_redesign_inventory` | — | Inventory page redesign |
+| `ui_redesign_orders` | — | Orders page redesign |
+| `ui_redesign_pos` | — | POS page redesign |
+| `ui_redesign_reports` | — | Reports page redesign |
+| `ui_redesign_admin` | — | Admin page redesign |
+| `ui_redesign_customers` | — | Customers page redesign |
+| `ui_redesign_sales_history` | — | Sales History page redesign |
+| `ui_redesign_cash_management` | — | Cash Management page redesign |
+| `ui_redesign_returns` | — | Returns page redesign |
+| `ui_redesign_categories` | — | Categories page redesign |
+| `ui_redesign_brands` | — | Brands page redesign |
+| `ui_redesign_taxes` | — | Taxes page redesign |
+| `ui_redesign_attribute_sets` | — | Attribute Sets page redesign |
+| `ui_redesign_stock_adjustments` | — | Stock Adjustments page redesign |
+| `ui_redesign_transfers` | — | Transfers page redesign |
+| `ui_redesign_returned_stock` | — | Returned Stock page redesign |
+| `ui_redesign_suppliers` | — | Suppliers page redesign |
+| `ui_redesign_purchase_orders` | — | Purchase Orders page redesign |
+| `ui_redesign_supplier_payables` | — | Supplier Payables page redesign |
+| `ui_redesign_promotions` | — | Promotions page redesign |
+| `ui_redesign_expenses` | — | Expenses page redesign |
+| `reports_enhanced_filters` | `routes/reports/*` | Enhanced report filter UI |
+
+### Plan Limits
+
+| Plan | Outlets | Employees | Products |
+|------|---------|-----------|----------|
+| Free | 1 | 3 | 100 |
+| Pro | unlimited | unlimited | unlimited |
+
+- Enforced by `requirePlanLimit(resource)` on POST routes
+- `requireActiveSubscription()` blocks all writes when `payment_status = 'expired'`
+- Trial: 45 days → Grace: 7 days → Expired (read-only)
+
+## Environment Variables
+
+### Core
+- `DATABASE_URL` — Postgres connection string (required)
+- `JWT_SECRET` — JWT signing key (required)
+- `JWT_REFRESH_SECRET` — Refresh token signing key (required)
+- `JWT_EXPIRES_IN` — Access token TTL (default: "24h")
+- `JWT_REFRESH_EXPIRES_IN` — Refresh token TTL (default: "7d")
+- `PORT` — HTTP listen port (default: 5000, Railway overrides to 8080)
+- `NODE_ENV` — "development" or "production"
+- `CORS_ORIGIN` — Allowed origins CSV
+- `MULTI_TENANT` — "1" enables multi-tenant mode
+- `SELF_SERVICE_SIGNUP` — "1" enables public signup
+- `DATA_DIR` — Local data directory (default: backend/)
+- `LOG_LEVEL` — Pino log level (default: "info")
+- `FRONTEND_URL` — Frontend base URL for email links
+- `APP_PUBLIC_BASE_URL` — Shopify health check base URL
+
+### Email
+- `RESEND_API_KEY` — Resend API key for system emails
+- `RESEND_FROM_EMAIL` — Sender address (default: "SanoPOS <noreply@sanopos.com>")
+- `EMAIL_WORKER_ENABLED` — "1" enables email queue processing
+
+### Monitoring
+- `SENTRY_DSN` — Sentry error tracking
+- `ALERT_EMAIL` — Receives error spike / DB pressure alerts
+- `API_DOCS_KEY` — Auth key for /api-docs endpoint
+
+### Workers
+- `FBR_WORKER_ENABLED` — "1" enables FBR invoice worker
+- `FBR_WORKER_PORT` — FBR worker HTTP port (default: 8081)
+- `CLEANUP_WORKER_ENABLED` — "1" enables dead tenant cleanup (24h cycle)
+- `SHOPIFY_SYNC_WORKER_DISABLED` — "1" disables Shopify sync polling
+- `REPORT_SCHEDULE_WORKER_DISABLED` — "1" disables scheduled report generation
+- `REPORT_RUNS_RETENTION_DAYS` — Days to keep old report runs (default: 45)
+- `REPORT_DELIVERY_RETENTION_DAYS` — Days to keep deliveries (default: 60)
+- `REPORT_EXPORT_FILES_RETENTION_DAYS` — Days to keep export files (default: 30)
+
+### Payments
+- `PAYMENT_GATEWAY` — Active processor: "manual" (default), "xpay", "stripe"
+- `XPAY_API_KEY` — xPay merchant API key
+- `XPAY_WEBHOOK_SECRET` — xPay HMAC verification secret
+
+### AI
+- `ANTHROPIC_API_KEY` — Claude API key for AI insights
+
+### Cloud Storage (R2)
+- `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_ENDPOINT`, `R2_PUBLIC_URL`
+
+### Shopify
+- `SHOPIFY_SECRET_KEY` — Webhook signature verification
+- `SHOPIFY_MAX_RETRY_ATTEMPTS` — Inventory sync retries (default: 5)
+
+### Rate Limiting
+- `RATE_LIMIT_WINDOW_MS` — Sliding window (default: 60000ms)
+- `RATE_LIMIT_GLOBAL_MAX` — Global limit (default: 600/window)
+- `RATE_LIMIT_AUTH_MAX` — Auth endpoint limit (default: 20/window)
+- `RATE_LIMIT_WEBHOOK_MAX` — Webhook limit (default: 120/window)
+
+### Admin
+- `ADMIN_ALLOWED_IPS` — Comma-separated IPs for /api/admin (empty = all blocked in prod)
+
+## Error Conventions
+
+- **Success**: `res.json({ ... })` or `res.status(201).json({ ... })`
+- **Client error**: `res.status(4xx).json({ error: "Human-readable message" })`
+- **Validation error**: `validate(schema)` middleware returns `400` with `{ error: "...", details: [...] }` automatically
+- **Auth failures**: `401` (no/expired token), `403` (insufficient permissions or feature not enabled)
+- **Not found**: `res.status(404).json({ error: "X not found" })`
+- **Never throw raw strings** — always `{ error: string }`
+- **Transaction errors**: Use `try/catch` inside `db.transaction()`, re-throw with statusCode for custom HTTP codes
+
 ## Production Environment
 
 - **Database**: Supabase Postgres (production is Postgres-only)

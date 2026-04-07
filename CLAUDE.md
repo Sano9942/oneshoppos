@@ -74,10 +74,14 @@ oneshoppos/
 │   │   ├── webhooks.js           # /api/webhooks/* (payment gateway webhooks, no auth)
 │   │   ├── fbr.js                # /api/fbr/* (FBR config, dashboard, retry)
 │   │   ├── tax-lookup.js         # /api/tax-lookup (HS code search, suggest)
-│   │   ├── reports/              # /api/reports/* (12 files, modular — includes fbr-export)
+│   │   ├── fulfillment.js        # /api/fulfillment/* (picklists, loadsheets, dispatch)
+│   │   ├── receipt-templates.js  # /api/receipt-templates
+│   │   ├── supplier-returns.js   # /api/supplier-returns
+│   │   ├── customer-display.js   # /api/customer-display
+│   │   ├── reports/              # /api/reports/* (13 report files + helpers, modular — includes fbr-export)
 │   │   ├── shopify/              # /api/integrations/shopify* (9 files, modular)
 │   │   ├── tier4/                # Tier 4 features (7 files, modular)
-│   │   └── [other domain files]  # taxes, categories, outlets, roles, brands, suppliers, promotions, orders, etc.
+│   │   └── [other domain files]  # taxes, categories, outlets, roles, brands, suppliers, promotions, orders, attribute-sets, barcode-expenses, parked-sales, shifts, etc.
 │   ├── middleware/plan-limits.js  # Tenant plan cap + subscription enforcement
 │   ├── middleware/rate-limit.js   # Rate limiter config (global, auth, webhook)
 │   ├── middleware/tenant-auth.js  # JWT auth, tenant resolution, company profile cache, context resolution
@@ -85,7 +89,7 @@ oneshoppos/
 │   ├── middleware/feature-flags.js # Feature flag cache, requireFeature, notification helpers
 │   ├── middleware/validate.js     # Zod validation helper — validate(schema) middleware factory
 │   ├── middleware/upload-validation.js # Centralized MIME + extension whitelist for file uploads
-│   ├── schemas/                   # Zod schemas: auth, billing, employees, products, sales, returns, customers, purchase-orders, inventory, admin
+│   ├── schemas/                   # Zod schemas: auth, billing, employees, products, sales, returns, customers, purchase-orders, inventory, orders, admin
 │   ├── boot/workers.js            # All worker startup (email, FBR, cleanup, Shopify, scheduled tasks)
 │   ├── shopify/crypto.js          # Shopify secret encryption/decryption + event logging
 │   ├── services/payment-gateway.js # Payment gateway adapter (xPay, extensible)
@@ -108,7 +112,7 @@ oneshoppos/
 │   ├── workers/fbr-worker-boss.js # FBR background worker (pg-boss backed)
 │   ├── workers/cleanup-worker-boss.js # Dead tenant cleanup (pg-boss backed)
 │   ├── scripts/seed-tax-rates.js # One-time seed for tax_rate_reference (~96 HS codes)
-│   ├── shared/constants.js       # Shared permission strings, feature flag keys, billing status enums
+│   ├── shared/                   # (reserved — constants currently inline in middleware/permissions.js + middleware/feature-flags.js)
 │   └── utils/                    # tz.js, receiptEmail.js, digestEmail.js, backup-pg.js, resendEmail.js, alertEmail.js
 └── frontend/src/
     ├── App.jsx                   # Route orchestrator (composition only — route defs in routes/*.jsx)
@@ -150,15 +154,15 @@ oneshoppos/
         │   ├── TaxLookupRedesign.jsx # Tax rate lookup (province-aware search)
         │   └── [all other *Redesign.jsx]
         ├── reports/              # Report domain modules (includes FBRExportTab)
-        ├── dashboard/            # Dashboard components (15 files — includes InsightCards, AIChatPanel, BackupStatusCard)
+        ├── dashboard/            # Dashboard components (17 files — includes InsightCards, AIChatPanel, BackupStatusCard)
         ├── shopify/              # Shopify tab modules
-        ├── admin/                # Super-admin panel (11 files — AdminLogin, AdminLayout, AdminDashboard, AdminTenantList, AdminTenantDetail, AdminActivity, AdminEmails, AdminSupportTickets, AdminDeadLetters, AdminTaxRates)
+        ├── admin/                # Super-admin panel (10 files — AdminLogin, AdminLayout, AdminDashboard, AdminTenantList, AdminTenantDetail, AdminActivity, AdminEmails, AdminSupportTickets, AdminDeadLetters, AdminTaxRates)
         ├── LandingPage.jsx       # Public landing page (competitive positioning, pricing, login)
         ├── ResetPassword.jsx     # Public password reset page (/reset-password?token=xxx)
         ├── ReceiptPublicPage.jsx # Public shareable receipt (/receipt/:invoiceNumber)
         ├── SignupPage.jsx        # Public self-service signup (/signup)
         ├── Reports.jsx           # Reports orchestrator (NOT legacy)
-        └── [*Route.jsx]          # 32 thin wrappers — never edit (includes MyTicketsRoute.jsx)
+        └── [*Route.jsx]          # 38 thin wrappers — never edit (includes MyTicketsRoute.jsx)
 ```
 
 ## Key Architecture Facts

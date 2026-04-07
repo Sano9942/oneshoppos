@@ -11,8 +11,8 @@
 
 ## DO NOT READ These Files (token waste)
 
-### Route Wrappers (35 files — skip all, they are 5-line pass-throughs)
-`AccountingRoute.jsx`, `ActionHistoryRoute.jsx`, `AdministratorRoute.jsx`, `AttributeSetsRoute.jsx`, `BackupRestoreRoute.jsx`, `BrandsRoute.jsx`, `CRMRoute.jsx`, `CashManagementRoute.jsx`, `CategoriesRoute.jsx`, `CompanySettingsRoute.jsx`, `CustomersRoute.jsx`, `DashboardRoute.jsx`, `EmployeesRoute.jsx`, `ExpensesRoute.jsx`, `FBRDashboardRoute.jsx`, `FBRSettingsRoute.jsx`, `HRManagementRoute.jsx`, `InventoryRoute.jsx`, `OrdersRoute.jsx`, `OutletsRoute.jsx`, `POSRoute.jsx`, `PromotionsRoute.jsx`, `PurchaseOrdersRoute.jsx`, `QuotationsRoute.jsx`, `ReturnedStockRoute.jsx`, `ReturnsRoute.jsx`, `SalesHistoryRoute.jsx`, `ShopifyIntegrationRoute.jsx`, `StockAdjustmentsRoute.jsx`, `SupplierPayablesRoute.jsx`, `SuppliersRoute.jsx`, `TaxesRoute.jsx`, `TaxLookupRoute.jsx`, `TransfersRoute.jsx`
+### Route Wrappers (38 files — skip all, they are 5-line pass-throughs)
+`AccountingRoute.jsx`, `ActionHistoryRoute.jsx`, `AdministratorRoute.jsx`, `AttributeSetsRoute.jsx`, `BackupRestoreRoute.jsx`, `BillingRoute.jsx`, `BrandsRoute.jsx`, `CRMRoute.jsx`, `CashManagementRoute.jsx`, `CategoriesRoute.jsx`, `CompanySettingsRoute.jsx`, `CustomersRoute.jsx`, `DashboardRoute.jsx`, `EmployeesRoute.jsx`, `ExpensesRoute.jsx`, `FBRDashboardRoute.jsx`, `FBRSettingsRoute.jsx`, `HRManagementRoute.jsx`, `InventoryRoute.jsx`, `LoyaltyTiersRoute.jsx`, `MyTicketsRoute.jsx`, `OrdersRoute.jsx`, `OutletsRoute.jsx`, `POSRoute.jsx`, `PromotionsRoute.jsx`, `PurchaseOrdersRoute.jsx`, `QuotationsRoute.jsx`, `ReportsRoute.jsx`, `ReturnedStockRoute.jsx`, `ReturnsRoute.jsx`, `SalesHistoryRoute.jsx`, `ShopifyIntegrationRoute.jsx`, `StockAdjustmentsRoute.jsx`, `SupplierPayablesRoute.jsx`, `SuppliersRoute.jsx`, `TaxesRoute.jsx`, `TaxLookupRoute.jsx`, `TransfersRoute.jsx`
 
 Each one just does: `import XRedesign from './redesign/XRedesign'; export default function XRoute() { return <XRedesign />; }`
 
@@ -135,6 +135,67 @@ Each one just does: `import XRedesign from './redesign/XRedesign'; export defaul
 - `AdminTenantDetail.jsx` — includes impersonation, payment recording, billing, feature flag toggles, tenant notes, plan pricing editor
 - `AdminActivity.jsx` — 3-tab activity log (admin actions, tenant activity, security log) with CSV export
 - `AdminEmails.jsx` — email queue with delete, send now, purge, retry, broadcasts tab, CSV export
+
+## Common Patterns (checklists — don't re-research these)
+
+### Adding a new page
+1. Create `pages/redesign/<Name>Redesign.jsx` — use `PageShell`, `api.js`, `useCurrency()`, `useAuth()`
+2. Create `pages/<Name>Route.jsx` — 5-line thin wrapper: `import X from './redesign/XRedesign'; export default function XRoute() { return <X />; }`
+3. Add route to `routes/appRoutes.jsx` — lazy import + `<Route path="/<path>" element={<RequireAuth><RequirePerm perm="..."><XRoute /></RequirePerm></RequireAuth>} />`
+4. Add nav entry to `ui/nav-config.js` — `{ label: "Name", path: "/<path>", icon: LucideIcon }`
+5. Add breadcrumb label to `ui/Breadcrumbs.jsx` — add `"<path>": "Display Name"` to LABELS object
+6. Update `DOMAIN-MAP.md` with the new domain entry
+
+### Adding a new admin page
+1. Create `pages/admin/Admin<Name>.jsx` — use `adminFetch` (NOT `api.js`), separate auth system
+2. Add route to `routes/adminRoutes.jsx`
+3. Add nav entry to `AdminLayout.jsx` sidebar
+4. Backend: add to `routes/admin/<module>.js`, guard with `requireSuperAdmin`
+
+### Adding a new report tab
+1. Create `pages/reports/Reports<Name>.jsx`
+2. Register in `pages/Reports.jsx` tab config
+3. Backend: add to `routes/reports/<name>.js`, guard with `view_reports`
+
+### Adding a new Shopify tab
+1. Create `pages/shopify/Shopify<Name>.jsx`
+2. Register in `ShopifyIntegrationRedesign.jsx` tab config
+3. Use `ShopifyContext` for shared state
+
+## Provider Hierarchy & Hooks
+
+```
+ToastProvider          → useToast()     — available everywhere
+  └─ CurrencyProvider  → useCurrency()  — available everywhere
+       └─ AuthProvider  → useAuth()     — available inside authenticated routes
+            └─ RouterProvider
+```
+
+### Available hooks
+| Hook | Source | Returns |
+|------|--------|---------|
+| `useToast()` | `contexts/ToastContext.jsx` | `{ toast, success, error, warning }` — max 3 visible, 4s auto-dismiss |
+| `useCurrency()` | `contexts/CurrencyContext.jsx` | `{ symbol, code, fmt, refresh }` |
+| `useAuth()` | `auth/AuthProvider.jsx` | `{ user, hasPerm, logout, token, employee }` |
+| `useFeatureFlags()` | `hooks/useFeatureFlags.js` | `{ flags, loading }` |
+
+### API patterns
+| Pattern | Usage |
+|---------|-------|
+| `api.get('/products')` | Authenticated tenant API call |
+| `api.post('/sales', body)` | POST with JSON body |
+| `api.put('/products/1', body)` | PUT with JSON body |
+| `api.del('/products/1')` | DELETE |
+| `api.upload('/support/upload', formData)` | Multipart file upload |
+| `adminFetch('/admin/tenants')` | Admin-only API call (separate auth) |
+
+## Error Handling Conventions
+
+- **api.js** intercepts `401` responses → auto-logout (or silent token refresh if `TOKEN_EXPIRED`)
+- **All other errors** throw with `err.message` containing the server's `{ error }` string
+- **Page-level pattern**: `catch(err) { toast.error(err.message || "Something went wrong") }`
+- **ErrorBoundary** (`ui/ErrorBoundary.jsx`) catches React render errors — global (full-page) + page-level (compact card)
+- **Never swallow errors silently** — always show toast or log to console
 
 ## Test Suites
 

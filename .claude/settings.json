@@ -142,11 +142,17 @@
       "mcp__claude_ai_Supabase__execute_sql",
       "WebFetch(domain:asaanretail.io)",
       "WebFetch(domain:www.xstak.com)",
-      "WebFetch(domain:xpay.postexglobal.com)"
+      "WebFetch(domain:xpay.postexglobal.com)",
+      "WebFetch(domain:howborisusesclaudecode.com)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:docs.xstak.com)",
+      "WebFetch(domain:www.asaanretail.com)",
+      "WebFetch(domain:api.sanopos.com)"
     ],
     "additionalDirectories": [
       "\\tmp",
-      "d:\\newprojects\\oneshoppos\\.claude"
+      "d:\\newprojects\\oneshoppos\\.claude",
+      "C:\\Users\\HP\\.claude"
     ]
   },
   "hooks": {
