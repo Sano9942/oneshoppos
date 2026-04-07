@@ -1,10 +1,36 @@
-# Frontend Tests — Claude Guide
+# Test Suite Guide
 
-- **Three test suites**, two frameworks:
-  - **Live E2E** (`tests/live/`): Playwright, 24 specs, targets `https://sanopos.com`. Sequentially numbered + stateful (state.json threading). API-first (no browser UI for data setup)
-  - **Dev E2E** (`tests/e2e/`): Playwright, 8 specs, targets `http://localhost:5000`. Mix of browser + direct API
-  - **Unit** (`tests/unit/`): Vitest + React Testing Library, 4 files, pure component/function tests
-- **Live specs are order-dependent** — running out of sequence fails because each spec reads IDs written by earlier specs
-- **File naming**: Live/E2E use `*.spec.js`, unit tests use `*.test.jsx`
-- **Config files**: `playwright.config.live.js` (live), `playwright.config.js` (dev e2e), `vitest.config.js` (unit)
-- **Run**: `npx playwright test tests/live/ --config=playwright.config.live.js` (live), `npx vitest run tests/unit/` (unit)
+## Overview
+24 self-contained Playwright specs (~290 tests) auditing every page and feature against production.
+
+## Running Tests
+
+```bash
+# All specs
+cd frontend && npx playwright test
+
+# Single spec
+cd frontend && npx playwright test tests/auth.spec.js
+
+# With headed browser
+cd frontend && npx playwright test tests/auth.spec.js --headed
+
+# Show report
+cd frontend && npx playwright show-report
+```
+
+## Test Tenant
+- Store: `packagesmall`
+- User: `hassan` / `Danish11`
+- PIN: `2580`
+
+## Architecture
+- **Production-only**: all tests hit `sanopos.com` + `api.sanopos.com`
+- **Self-contained**: each spec sets up its own data via API, no shared state
+- **Global setup**: `global-setup.js` logs in once, saves `auth.json` + `token.json`
+- **Helpers**: `helpers/auth.js` (credentials), `helpers/api.js` (REST), `helpers/nav.js` (navigation)
+- **Unit tests**: `unit/` directory — Vitest, 4 files, unchanged
+
+## Config
+- Single config: `playwright.config.js` (production target)
+- No separate live/onboarding configs
