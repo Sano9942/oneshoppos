@@ -8,7 +8,7 @@ const ENC_PREFIX = "enc:v1";
 
 function getKeyBuffer() {
   const raw = String(process.env.INTEGRATION_SECRET_KEY || process.env.SHOPIFY_SECRET_KEY || "").trim();
-  if (!raw) throw new Error("INTEGRATION_SECRET_KEY or SHOPIFY_SECRET_KEY env var required");
+  if (!raw) return null; // no key configured — caller decides behavior
   if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, "hex");
   try {
     const b64 = Buffer.from(raw, "base64");
@@ -23,6 +23,7 @@ function encryptSecret(plainText) {
   if (!value) return null;
   if (value.startsWith(ENC_PREFIX + ":")) return value; // already encrypted
   const key = getKeyBuffer();
+  if (!key) return value; // no encryption key configured — store plaintext
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
   const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
@@ -35,6 +36,7 @@ function decryptSecret(storedText) {
   const stored = String(storedText).trim();
   if (!stored.startsWith(ENC_PREFIX + ":")) return stored; // plaintext fallback
   const key = getKeyBuffer();
+  if (!key) throw new Error("INTEGRATION_SECRET_KEY or SHOPIFY_SECRET_KEY required to decrypt secrets");
   const parts = stored.split(":");
   if (parts.length < 5) throw new Error("Invalid encrypted format");
   const iv = Buffer.from(parts[2], "base64");

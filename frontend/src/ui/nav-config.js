@@ -36,7 +36,6 @@ import {
   Bell,
   PauseCircle,
   Upload,
-  ShoppingBag,
   FileCheck,
   Search,
   MessageSquare,
