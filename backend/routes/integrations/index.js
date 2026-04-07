@@ -15,6 +15,7 @@ module.exports = function mountIntegrationRoutes(app, deps) {
   require("./hub")(router, integrationDeps);
   require("./credentials")(router, integrationDeps);
   require("./daraz")(router, integrationDeps);
+  require("./facebook")(router, integrationDeps);
 
   app.use("/api/integrations", router);
 };

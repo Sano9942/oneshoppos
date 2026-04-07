@@ -137,6 +137,31 @@ module.exports = function registerWebhookRoutes(app, deps) {
     }
   });
 
+  // GET /api/webhooks/meta — Facebook/Instagram webhook verification
+  app.get("/api/webhooks/meta", (req, res) => {
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
+
+    if (mode === "subscribe" && token === process.env.META_WEBHOOK_VERIFY_TOKEN) {
+      logger.info("Meta webhook verified");
+      return res.status(200).send(challenge);
+    }
+    return res.sendStatus(403);
+  });
+
+  // POST /api/webhooks/meta — Facebook/Instagram order webhooks
+  app.post("/api/webhooks/meta", async (req, res) => {
+    try {
+      const { object, entry } = req.body || {};
+      logger.info({ object, entries: entry?.length }, "Meta webhook received");
+      res.json({ success: true });
+    } catch (err) {
+      logger.error({ err }, "Meta webhook processing error");
+      res.status(500).json({ error: "Internal error" });
+    }
+  });
+
   // POST /api/webhooks/daraz — Daraz order status push notifications
   app.post("/api/webhooks/daraz", async (req, res) => {
     try {
