@@ -136,4 +136,19 @@ module.exports = function registerWebhookRoutes(app, deps) {
       return res.status(500).json({ error: "Internal error" });
     }
   });
+
+  // POST /api/webhooks/daraz — Daraz order status push notifications
+  app.post("/api/webhooks/daraz", async (req, res) => {
+    try {
+      const { trade_order_id, status, timestamp } = req.body || {};
+      if (!trade_order_id) return res.status(400).json({ error: "Missing order ID" });
+
+      logger.info({ trade_order_id, status, timestamp }, "Daraz webhook received");
+
+      res.json({ success: true });
+    } catch (err) {
+      logger.error({ err }, "Daraz webhook processing error");
+      res.status(500).json({ error: "Internal error" });
+    }
+  });
 };
