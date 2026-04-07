@@ -500,6 +500,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ATTENDANCE ---
   require("./attendance")(app, deps);
 
+  // --- INTEGRATIONS HUB ---
+  require("./integrations")(app, deps);
+
   // --- COURIERS ---
   require("./couriers")(app, deps);
 

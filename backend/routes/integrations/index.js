@@ -1,0 +1,19 @@
+const { Router } = require("express");
+
+module.exports = function mountIntegrationRoutes(app, deps) {
+  const router = Router();
+
+  const { encryptSecret, decryptSecret, maskSecret } = require("../../services/crypto");
+
+  const integrationDeps = {
+    ...deps,
+    encryptSecret,
+    decryptSecret,
+    maskSecret,
+  };
+
+  require("./hub")(router, integrationDeps);
+  require("./credentials")(router, integrationDeps);
+
+  app.use("/api/integrations", router);
+};
