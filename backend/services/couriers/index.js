@@ -6,6 +6,9 @@ const TraxAdapter = require("./trax-adapter");
 const CallCourierAdapter = require("./callcourier-adapter");
 const MnPAdapter = require("./mnp-adapter");
 const PostExAdapter = require("./postex-adapter");
+const RiderAdapter = require("./rider-adapter");
+const SwyftAdapter = require("./swyft-adapter");
+const BykeaAdapter = require("./bykea-adapter");
 
 const ADAPTERS = {
   generic: GenericAdapter,
@@ -16,6 +19,9 @@ const ADAPTERS = {
   callcourier: CallCourierAdapter,
   mnp: MnPAdapter,
   postex: PostExAdapter,
+  rider: RiderAdapter,
+  swyft: SwyftAdapter,
+  bykea: BykeaAdapter,
 };
 
 function getAdapter(adapterKey, config) {
