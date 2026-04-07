@@ -153,7 +153,7 @@ function OrdersQueue({ onPicklistCreated, fmt }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get("/fulfillment/unfulfilled-orders");
+      const data = await api.get("/api/fulfillment/unfulfilled-orders");
       setOrders(data.orders || []);
     } catch (err) {
       error(err.message);
@@ -181,7 +181,7 @@ function OrdersQueue({ onPicklistCreated, fmt }) {
     try {
       // Use outlet from first selected order (or 1 as fallback)
       const firstOrder = orders.find((o) => selected.has(o.id));
-      await api.post("/fulfillment/picklists", {
+      await api.post("/api/fulfillment/picklists", {
         order_ids: [...selected],
         outlet_id: firstOrder?.outlet_id || 1,
       });
@@ -280,7 +280,7 @@ function PicklistsTab({ onOpen }) {
     try {
       const params = new URLSearchParams();
       if (statusFilter) params.set("status", statusFilter);
-      const data = await api.get(`/fulfillment/picklists?${params}`);
+      const data = await api.get(`/api/fulfillment/picklists?${params}`);
       setPicklists(data.picklists || []);
     } catch (err) {
       error(err.message);
@@ -409,7 +409,7 @@ function QuickDispatchTab() {
 
     setScanning(true);
     try {
-      const data = await api.post("/fulfillment/scan-dispatch", { scan_value: val });
+      const data = await api.post("/api/fulfillment/scan-dispatch", { scan_value: val });
 
       if (data.warning) {
         // Already dispatched
@@ -560,7 +560,7 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get(`/fulfillment/picklists/${picklistId}`);
+      const data = await api.get(`/api/fulfillment/picklists/${picklistId}`);
       setPl(data.picklist);
     } catch (err) {
       error(err.message);
@@ -594,8 +594,8 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
       }
 
       const endpoint = isPicking
-        ? `/fulfillment/picklists/${picklistId}/pick-scan`
-        : `/fulfillment/picklists/${picklistId}/pack-scan`;
+        ? `/api/fulfillment/picklists/${picklistId}/pick-scan`
+        : `/api/fulfillment/picklists/${picklistId}/pack-scan`;
 
       await api.post(endpoint, { barcode });
 
@@ -620,7 +620,7 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
 
   const completePicking = async () => {
     try {
-      await api.post(`/fulfillment/picklists/${picklistId}/complete-picking`);
+      await api.post(`/api/fulfillment/picklists/${picklistId}/complete-picking`);
       success("Picking complete");
       load();
     } catch (err) {
@@ -630,7 +630,7 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
 
   const completePacking = async () => {
     try {
-      await api.post(`/fulfillment/picklists/${picklistId}/complete-packing`);
+      await api.post(`/api/fulfillment/picklists/${picklistId}/complete-packing`);
       success("Packing complete");
       load();
     } catch (err) {
@@ -640,7 +640,7 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
 
   const dispatch = async () => {
     try {
-      await api.post(`/fulfillment/picklists/${picklistId}/dispatch`);
+      await api.post(`/api/fulfillment/picklists/${picklistId}/dispatch`);
       success("Dispatched — orders marked as fulfilled");
       load();
     } catch (err) {
@@ -650,7 +650,7 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
 
   const cancel = async () => {
     try {
-      await api.del(`/fulfillment/picklists/${picklistId}`);
+      await api.del(`/api/fulfillment/picklists/${picklistId}`);
       success("Picklist cancelled");
       onBack();
     } catch (err) {
@@ -931,7 +931,7 @@ function LoadsheetsTab({ onOpen, fmt }) {
     try {
       const params = new URLSearchParams();
       if (statusFilter) params.set("status", statusFilter);
-      const data = await api.get(`/fulfillment/loadsheets?${params}`);
+      const data = await api.get(`/api/fulfillment/loadsheets?${params}`);
       setLoadsheets(data.loadsheets || []);
     } catch (err) {
       error(err.message);
@@ -1038,7 +1038,7 @@ function CreateLoadsheet({ onBack, onCreated, fmt }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get("/fulfillment/dispatched-orders");
+      const data = await api.get("/api/fulfillment/dispatched-orders");
       setOrders(data.orders || []);
     } catch (err) {
       error(err.message);
@@ -1061,7 +1061,7 @@ function CreateLoadsheet({ onBack, onCreated, fmt }) {
     try {
       const selectedOrders = orders.filter((o) => selected.has(o.id));
       const courierId = selectedOrders[0]?.courier_id || null;
-      await api.post("/fulfillment/loadsheets", {
+      await api.post("/api/fulfillment/loadsheets", {
         order_ids: [...selected],
         courier_id: courierId,
         outlet_id: 1,
@@ -1190,7 +1190,7 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get(`/fulfillment/loadsheets/${loadsheetId}`);
+      const data = await api.get(`/api/fulfillment/loadsheets/${loadsheetId}`);
       setLs(data.loadsheet);
     } catch (err) {
       error(err.message);
@@ -1203,7 +1203,7 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
 
   const finalize = async () => {
     try {
-      await api.put(`/fulfillment/loadsheets/${loadsheetId}/finalize`);
+      await api.put(`/api/fulfillment/loadsheets/${loadsheetId}/finalize`);
       success("Loadsheet finalized");
       load();
     } catch (err) {
@@ -1214,7 +1214,7 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
   const handover = async () => {
     if (!handoverName.trim()) return;
     try {
-      await api.put(`/fulfillment/loadsheets/${loadsheetId}/handover`, {
+      await api.put(`/api/fulfillment/loadsheets/${loadsheetId}/handover`, {
         handed_over_to: handoverName.trim(),
       });
       success("Loadsheet marked as handed over");
@@ -1228,7 +1228,7 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
 
   const exportCsv = async () => {
     try {
-      const res = await api.raw(`/fulfillment/loadsheets/${loadsheetId}/export`);
+      const res = await api.raw(`/api/fulfillment/loadsheets/${loadsheetId}/export`);
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
