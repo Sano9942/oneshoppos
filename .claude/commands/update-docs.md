@@ -1,183 +1,171 @@
 ---
 name: update-docs
-description: Scan the codebase and update all documentation files (DOMAIN-MAP, DB-RELATIONSHIPS, all 38 CLAUDE.md files) to reflect current state
+description: Fast diff-based docs update — reads only changed files since last docs commit, updates affected CLAUDE.md files. Run after feature work. (~$0.20/run)
 user_invocable: true
 ---
 
-# Update Documentation
+# Update Documentation (Diff-Based)
 
-You are updating the SanoPOS documentation suite to reflect the current state of the codebase. This command scans all source files, compares against existing docs, and updates them.
+Fast, targeted documentation update. Only reads files that changed — not the entire codebase.
 
-## Files to Update (38 CLAUDE.md + 2 reference docs = 40 total)
+## Step 1 — Find What Changed
 
-### Tier 1 — Core Reference Docs (always scan)
-| File | What to scan |
-|------|-------------|
-| `DOMAIN-MAP.md` | Every domain's backend route, schema, permissions, flags, frontend page, tables, workers |
-| `DB-RELATIONSHIPS.md` | FK relationships from `backend/schema-pg.sql` |
-| `CLAUDE.md` (root) | Project structure tree, file counts, integration list, migration version |
-| `backend/CLAUDE.md` | Env vars (grep `process.env`), feature flags, middleware chain, common patterns, error conventions |
-| `frontend/CLAUDE.md` | Provider hierarchy, hooks, API patterns, common patterns, error conventions |
+Run these commands to identify changed files:
 
-### Tier 2 — Backend Directory Guides (16 files)
-| File | What to scan |
-|------|-------------|
-| `backend/routes/admin/CLAUDE.md` | Admin route modules, auth pattern, logging |
-| `backend/routes/reports/CLAUDE.md` | Report files, feature flag gates, governance tables |
-| `backend/routes/shopify/CLAUDE.md` | Shopify route files, tables, worker config |
-| `backend/routes/tier4/CLAUDE.md` | Tier 4 modules, feature flags, permissions |
-| `backend/services/CLAUDE.md` | Service files, exports, patterns |
-| `backend/services/couriers/CLAUDE.md` | Adapter pattern, known adapters |
-| `backend/middleware/CLAUDE.md` | Middleware files, init patterns, cache durations |
-| `backend/schemas/CLAUDE.md` | Schema files, key exports, validation gotchas |
-| `backend/workers/CLAUDE.md` | Worker files, pg-boss jobs, heartbeat globals |
-| `backend/utils/CLAUDE.md` | Utility files, exports |
-| `backend/boot/CLAUDE.md` | Boot sequence, worker startup |
-| `backend/jobs/CLAUDE.md` | Job files, schedules |
-| `backend/scripts/CLAUDE.md` | Script files, usage |
-| `backend/shopify/CLAUDE.md` | Client, crypto, order-service, utils |
-| `backend/types/CLAUDE.md` | TypeScript declarations |
-| `backend/tests/CLAUDE.md` | Test frameworks, run commands |
-| `backend/tests/helpers/CLAUDE.md` | Test helper files |
-| `backend/tests/integration/CLAUDE.md` | Integration test files, batch coverage |
-| `backend/tests/unit/CLAUDE.md` | Unit test files |
+```bash
+# Find the last docs update commit
+LAST_DOCS=$(git log --oneline --all --grep="docs:" --grep="update.*doc\|doc.*update" -n 1 --format="%H" 2>/dev/null)
 
-### Tier 3 — Frontend Directory Guides (15 files)
-| File | What to scan |
-|------|-------------|
-| `frontend/src/pages/redesign/CLAUDE.md` | Conventions, primitives API, required patterns |
-| `frontend/src/pages/redesign/pos/CLAUDE.md` | POS module files, context exports, modal list |
-| `frontend/src/pages/reports/CLAUDE.md` | Report tab files, shared utilities, feature gates |
-| `frontend/src/pages/dashboard/CLAUDE.md` | Dashboard widget files |
-| `frontend/src/pages/shopify/CLAUDE.md` | Shopify tab files, context |
-| `frontend/src/pages/admin/CLAUDE.md` | Admin page files, auth pattern |
-| `frontend/src/pages/CLAUDE.md` | Route wrappers, special pages |
-| `frontend/src/ui/CLAUDE.md` | Primitives exports, nav-config, banners |
-| `frontend/src/components/CLAUDE.md` | Layout shell, auth guards |
-| `frontend/src/auth/CLAUDE.md` | AuthProvider, stores, fetch interceptor |
-| `frontend/src/utils/CLAUDE.md` | Utility files, gotchas |
-| `frontend/src/contexts/CLAUDE.md` | Context providers |
-| `frontend/src/hooks/CLAUDE.md` | Custom hooks |
-| `frontend/src/types/CLAUDE.md` | TypeScript declarations |
-| `frontend/src/routes/CLAUDE.md` | Route config files |
-| `frontend/tests/CLAUDE.md` | Test suites, frameworks, run commands |
+# If no docs commit found, use last 10 commits as fallback
+if [ -z "$LAST_DOCS" ]; then
+  LAST_DOCS="HEAD~10"
+fi
 
-## Step 1 — Scan the Codebase
-
-Run these scans in PARALLEL using subagents:
-
-### Scan A: Backend structure
-- List all files in `backend/routes/` (including subdirs: admin/, shopify/, tier4/, reports/)
-- For each route file: identify URL prefix, permissions (grep `requirePerm`/`requireAnyPerm`/`requireFeature`), DB tables touched
-- List all files in `backend/schemas/`, `backend/services/` (incl. couriers/), `backend/workers/`, `backend/middleware/`, `backend/utils/`, `backend/boot/`, `backend/jobs/`, `backend/scripts/`, `backend/shopify/`, `backend/types/`
-- Count files per directory for comparison with docs
-
-### Scan B: Frontend structure
-- List all files in `frontend/src/pages/redesign/` (incl. `pos/` subdir)
-- List all files in `frontend/src/pages/admin/`, `pages/reports/`, `pages/shopify/`, `pages/dashboard/`
-- List all files in `frontend/src/ui/`, `components/`, `auth/`, `utils/`, `contexts/`, `hooks/`, `types/`, `routes/`
-- Read `frontend/src/routes/appRoutes.jsx` for route path ↔ component mapping
-- Read `frontend/src/ui/nav-config.js` for sidebar entries
-- Count files per directory for comparison with docs
-
-### Scan C: Database & config
-- Read `backend/schema-pg.sql` — extract all CREATE TABLE + REFERENCES relationships
-- Grep `process.env.` across all backend files for env vars
-- Read `backend/middleware/feature-flags.js` for feature flag list
-- Read `backend/middleware/plan-limits.js` for plan limit definitions
-- Read `backend/middleware/permissions.js` for permission rules
-
-### Scan D: Read current docs
-- Read ALL 40 documentation files listed above
-- Note their current content for comparison (file counts, module lists, exports)
-
-## Step 2 — Compare & Report Changes
-
-Before writing any files, output a change summary:
-
-```
-━━━ Documentation Update Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Tier 1 (core):
-    DOMAIN-MAP.md: [changes or "No changes"]
-    DB-RELATIONSHIPS.md: [changes or "No changes"]
-    CLAUDE.md (root): [changes or "No changes"]
-    backend/CLAUDE.md: [changes or "No changes"]
-    frontend/CLAUDE.md: [changes or "No changes"]
-
-  Tier 2 (backend dirs):
-    [file]: [changes or "No changes"] (for each of 16 files)
-
-  Tier 3 (frontend dirs):
-    [file]: [changes or "No changes"] (for each of 15 files)
-
-  Overall: X files need updates, Y files unchanged
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# List all changed source files (not CLAUDE.md, not node_modules)
+git diff --name-only "$LAST_DOCS"...HEAD -- \
+  '*.js' '*.jsx' '*.ts' '*.sql' '*.css' \
+  ':!node_modules' ':!*CLAUDE.md' ':!*.test.js' ':!*.spec.js'
 ```
 
-If NOTHING changed, say "All documentation is up to date. No changes needed." and stop.
+Also run:
+```bash
+# Detect added/deleted files (these always need doc updates)
+git diff --diff-filter=AD --name-only "$LAST_DOCS"...HEAD -- \
+  '*.js' '*.jsx' '*.ts' ':!node_modules' ':!*.test.js' ':!*.spec.js'
+```
 
-## Step 3 — Update Files
+If **no files changed**, say "No source changes since last docs update. Nothing to do." and stop.
 
-For each file that needs changes:
-- Use **Edit** (not Write) for existing files — preserve unchanged sections
-- Only modify sections where the codebase diverged from docs
-- Keep the same formatting, structure, and style as the existing docs
-- Do NOT rewrite sections that are still accurate
+## Step 2 — Map Changes to Directories
 
-### Important rules:
+Group the changed files by their documentation owner:
 
-**DOMAIN-MAP.md:**
-- One section per domain (same format as existing entries)
-- Every domain must have: backend route, permissions, frontend page, route path, nav entry, DB tables
-- Remove domains whose route files no longer exist; add new domains for new route files
+| Changed file path pattern | CLAUDE.md to update |
+|--------------------------|-------------------|
+| `backend/routes/*.js` | Root routes don't have own CLAUDE.md — update `backend/CLAUDE.md` if new route added |
+| `backend/routes/admin/*.js` | `backend/routes/admin/CLAUDE.md` |
+| `backend/routes/reports/*.js` | `backend/routes/reports/CLAUDE.md` |
+| `backend/routes/shopify/*.js` | `backend/routes/shopify/CLAUDE.md` |
+| `backend/routes/tier4/*.js` | `backend/routes/tier4/CLAUDE.md` |
+| `backend/routes/integrations/*.js` | `backend/routes/integrations/CLAUDE.md` |
+| `backend/schemas/*.js` | `backend/schemas/CLAUDE.md` |
+| `backend/services/*.js` | `backend/services/CLAUDE.md` |
+| `backend/services/couriers/*.js` | `backend/services/couriers/CLAUDE.md` |
+| `backend/services/marketplace/*.js` | `backend/services/CLAUDE.md` (marketplace section) |
+| `backend/workers/*.js` | `backend/workers/CLAUDE.md` |
+| `backend/middleware/*.js` | `backend/middleware/CLAUDE.md` + possibly `backend/CLAUDE.md` (middleware chain) |
+| `backend/utils/*.js` | `backend/utils/CLAUDE.md` |
+| `backend/boot/*.js` | `backend/boot/CLAUDE.md` |
+| `backend/jobs/*.js` | `backend/jobs/CLAUDE.md` |
+| `backend/scripts/*.js` | `backend/scripts/CLAUDE.md` |
+| `backend/shopify/*.js` | `backend/shopify/CLAUDE.md` |
+| `backend/types/*.d.ts` | `backend/types/CLAUDE.md` |
+| `backend/schema-pg.sql` | `DB-RELATIONSHIPS.md` + root `CLAUDE.md` (migration version) |
+| `backend/middleware/feature-flags.js` | `backend/CLAUDE.md` (feature flags registry) |
+| `backend/middleware/permissions.js` | `backend/CLAUDE.md` (permission rules) |
+| `backend/migrate-pg.js` | Root `CLAUDE.md` (migration version) |
+| `frontend/src/pages/redesign/*.jsx` | `frontend/src/pages/redesign/CLAUDE.md` |
+| `frontend/src/pages/redesign/pos/*.jsx` | `frontend/src/pages/redesign/pos/CLAUDE.md` |
+| `frontend/src/pages/admin/*.jsx` | `frontend/src/pages/admin/CLAUDE.md` |
+| `frontend/src/pages/reports/*.jsx` | `frontend/src/pages/reports/CLAUDE.md` |
+| `frontend/src/pages/dashboard/*.jsx` | `frontend/src/pages/dashboard/CLAUDE.md` |
+| `frontend/src/pages/shopify/*.jsx` | `frontend/src/pages/shopify/CLAUDE.md` |
+| `frontend/src/pages/*.jsx` | `frontend/src/pages/CLAUDE.md` |
+| `frontend/src/ui/*.jsx` | `frontend/src/ui/CLAUDE.md` |
+| `frontend/src/components/*.jsx` | `frontend/src/components/CLAUDE.md` |
+| `frontend/src/auth/*.jsx` | `frontend/src/auth/CLAUDE.md` |
+| `frontend/src/utils/*.js` | `frontend/src/utils/CLAUDE.md` |
+| `frontend/src/contexts/*.jsx` | `frontend/src/contexts/CLAUDE.md` |
+| `frontend/src/hooks/*.js` | `frontend/src/hooks/CLAUDE.md` |
+| `frontend/src/types/*.ts` | `frontend/src/types/CLAUDE.md` |
+| `frontend/src/routes/*.jsx` | `frontend/src/routes/CLAUDE.md` |
+| `frontend/tests/*.spec.js` | `frontend/tests/CLAUDE.md` |
 
-**DB-RELATIONSHIPS.md:**
-- Parse `backend/schema-pg.sql` for REFERENCES clauses
-- Group by domain (same grouping as existing). Add new tables, remove deleted tables
+**Build a list of affected CLAUDE.md files.** Only these will be updated.
 
-**Root CLAUDE.md:**
-- "Project Structure" tree — add new files/directories, fix file counts
-- "Integrations" section — add new integrations
-- "Migrations" — update version number if changed
-- Do NOT touch: "Efficiency Rules", "UX Features", "Authentication System" unless actually changed
+## Step 3 — Verify File Counts for Affected Directories
 
-**backend/CLAUDE.md (specific sections only):**
-- "Feature Flags Registry" — add/remove flags
-- "Environment Variables" — add new `process.env.*` vars found in codebase
-- "Middleware Chain" — only if new middleware added
-- Do NOT touch: "Database is Postgres", "Test Suites", "Common Gotchas", "Production Environment"
+For EACH affected directory, run a shell count to get ground truth:
 
-**frontend/CLAUDE.md (specific sections only):**
-- "Provider Hierarchy & Hooks" — update if new providers/hooks added
-- "Common Patterns" — only if conventions changed
-- Do NOT touch: "Key Conventions", "Test Suites", "Architecture Quick Reference"
+```bash
+# Example for backend/services/couriers/:
+ls backend/services/couriers/*.js 2>/dev/null | wc -l
+```
 
-**Tier 2 & 3 directory CLAUDE.md files:**
-- Update file counts, module lists, export names, flag references if they changed
-- These are small (5-15 lines) — review and update the full content
-- Check: did files get added/removed/renamed in the directory?
-- Check: did key exports or patterns change?
+Use the appropriate glob pattern:
+- Backend: `*.js`
+- Frontend: `*.jsx` (and `*.js` where applicable)
+- Tests: `*.test.js` or `*.spec.js`
+- Types: `*.d.ts` or `*.ts`
 
-## Step 4 — Final Output
+**NEVER trust subagent counts. Shell counts are the source of truth.**
 
-After all updates, output:
+## Step 4 — Read & Update (Bottom-Up)
+
+### Phase A — Tier 3 (directory docs)
+For each affected directory, launch a subagent IN PARALLEL (use `model: "sonnet"`):
+
+Each agent's task:
+1. Read the CHANGED files in that directory (from git diff, not all files)
+2. Read the current CLAUDE.md for that directory
+3. Check if file count changed (compare shell count vs doc's stated count)
+4. Check if new files were added or old files removed
+5. Check if the changed files affect the doc's description (new exports, renamed functions, changed permissions)
+6. If changes needed: Edit the CLAUDE.md. If not: report "no changes needed"
+
+**CRITICAL agent instructions:**
+- Only read files that appear in the git diff, NOT the entire directory
+- If a file was ADDED: read it fully to understand what it does, add to the doc
+- If a file was DELETED: remove from the doc
+- If a file was MODIFIED: read the diff (not full file) to understand what changed
+- Do NOT change file counts without verifying via shell command first
+- Preserve the existing doc format and style exactly
+
+### Phase B — Tier 2 (backend/frontend master docs)
+Only run if any Tier 3 doc was updated. Launch 2 agents in parallel:
+
+**Backend agent**: Read all updated backend Tier 3 CLAUDE.md files. Check if `backend/CLAUDE.md` needs updates:
+- New env vars? (grep `process.env` in changed files only)
+- New feature flags? (check if feature-flags.js changed)
+- New middleware? (check if middleware/ changed)
+- New route file added? (update project structure if needed)
+
+**Frontend agent**: Read all updated frontend Tier 3 CLAUDE.md files. Check if `frontend/CLAUDE.md` needs updates:
+- New hooks or contexts?
+- New route wrappers?
+- Changed conventions?
+
+### Phase C — Tier 1 (root docs)
+Only run if Tier 2 docs were updated OR if `schema-pg.sql` / `migrate-pg.js` changed:
+
+- Update root `CLAUDE.md` project structure tree if new files/directories added
+- Update migration version if changed
+- Update `DOMAIN-MAP.md` if new routes added
+- Update `DB-RELATIONSHIPS.md` if schema-pg.sql changed
+
+## Step 5 — Final Output
 
 ```
-━━━ Documentation Updated ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Updated: [list of files that were modified]
-  Unchanged: [list of files that needed no updates]
+━━━ Documentation Updated (diff-based) ━━━━━━━━━━━━━━━━━━━━
+  Changed files detected: X source files across Y directories
   
-  Total: X/40 files updated
-  Review the changes with: git diff
+  Updated:
+    [list of CLAUDE.md files that were modified]
+  
+  Skipped (no changes in directory):
+    [list of CLAUDE.md files not affected]
+
+  Total: X/40 docs updated
+  Review: git diff -- "*.md"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-## Important
+## Rules
 
-- Use **parallel subagents** for the 4 scans in Step 1 — this is the most time-consuming part
-- Do NOT modify any source code files — this is a documentation-only command
-- Do NOT add commentary or explanations to the doc files — keep them reference-style
-- Do NOT read files unnecessarily — grep first, read only if grep is insufficient
-- Keep existing formatting and style — consistency matters more than personal preference
+- **Do NOT read files that didn't change** — this is the whole point of the diff approach
+- **Do NOT modify source code files** — documentation only
+- **Do NOT rewrite docs from scratch** — use Edit to change specific lines
+- **Use `model: "sonnet"` for all subagents** — keeps cost low
+- **Shell counts are the ONLY source of truth for file counts** — never trust agent counts
 - If a section is ambiguous or you're unsure whether something changed, keep the existing content
-- The goal is accuracy, not creativity — these docs must reflect what the code actually does
+- Keep existing formatting and style — consistency over preference

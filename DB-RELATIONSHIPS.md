@@ -193,9 +193,10 @@ email_queue — standalone (tenant_id informational)
 ## Config (standalone tables)
 
 ```
-company_profile, feature_flags, schema_version
+company_profile, companies, feature_flags, schema_version
 printer_config, email_config
 barcode_templates, receipt_templates
+barcode_print_jobs → barcode_templates (template_id), products (product_id)
 courier_integrations
 gift_cards
 notifications, action_history, backup_log

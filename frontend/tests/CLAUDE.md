@@ -29,7 +29,9 @@ cd frontend && npx playwright show-report
 - **Self-contained**: each spec sets up its own data via API, no shared state
 - **Global setup**: `global-setup.js` logs in once, saves `auth.json` + `token.json`
 - **Helpers**: `helpers/auth.js` (credentials), `helpers/api.js` (REST), `helpers/nav.js` (navigation)
-- **Unit tests**: `unit/` directory — Vitest, 4 files, unchanged
+
+## Spec Files (24 specs)
+`auth`, `products`, `customers`, `inventory`, `purchasing`, `orders`, `pos-core`, `pos-advanced`, `employees-hr`, `crm`, `reports`, `accounting`, `settings`, `billing`, `fbr`, `integrations`, `import-export`, `permissions`, `navigation-ux`, `admin-panel`, `public-pages`, `onboard-free`, `onboard-starter`, `onboard-pro`
 
 ## Config
 - Single config: `playwright.config.js` (production target)

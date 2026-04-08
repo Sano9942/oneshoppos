@@ -13,7 +13,7 @@
 
 ## Subdirectories
 
-- **`couriers/`** (14 files) — courier adapter pattern. See `couriers/CLAUDE.md`
+- **`couriers/`** (16 files) — courier adapter pattern. See `couriers/CLAUDE.md`
 - **`marketplace/`** (5 files) — marketplace API clients for integrations hub:
   - `base-marketplace.js` — abstract base class with common HTTP, retry, rate-limit logic
   - `daraz-client.js` — Daraz Seller Center API (Open Platform SDK)

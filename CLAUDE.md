@@ -12,7 +12,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 
 ## Sub-Guides (loaded automatically when working in those directories)
 
-- **`backend/CLAUDE.md`** — Postgres query patterns, backend gotchas, test suites (449 integration + 125 unit), production env
+- **`backend/CLAUDE.md`** — Postgres query patterns, backend gotchas, test suites (56 integration files ~850 tests + 4 unit files ~134 tests), production env
 - **`frontend/CLAUDE.md`** — route wrapper skip list, conventions (Tailwind v4, timestamps, currency, API calls), POS architecture, test suites
 
 ## Efficiency Rules (Read First)
@@ -232,10 +232,10 @@ oneshoppos/
 
 ## Running Tests
 
-### Postgres Integration Tests (primary — 449 integration + 162 unit tests)
+### Postgres Integration Tests (primary — 56 files, ~850 tests) + Unit Tests (~134 backend + ~37 frontend)
 - `npx jest backend/tests/integration/pg-batch1-crud.test.js` (requires `DATABASE_URL`)
-- 12 integration files: `pg-batch1` through `pg-batch12` + `pg-tenant-isolation`
-- Unit tests: `backend/tests/unit/` (125 tests) + `frontend/tests/unit/` (37 tests)
+- 56 integration files: 12 pg-batch, 36 full-audit domain tests, 7 pg-standalone, 1 legacy smoke-gate
+- Unit tests: `backend/tests/unit/` (4 files, ~134 tests) + `frontend/tests/unit/` (37 tests)
 
 ### Production E2E Tests (24 specs, ~290 tests — full system audit against production)
 - `cd frontend && npx playwright test tests/auth.spec.js`

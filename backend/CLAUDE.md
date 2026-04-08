@@ -84,26 +84,22 @@
 
 ## Test Suites
 
-### Postgres Integration Tests (449 tests — primary) + 125 unit tests
-- Location: `tests/integration/pg-batch*.test.js` (12 files: pg-batch1–12 + tenant isolation)
-- Unit tests: `tests/unit/` (125 tests — utils.test.js, services.test.js, middleware.test.js, tz.test.js)
+### Postgres Integration Tests (56 files — primary) + unit tests
+- Location: `tests/integration/` (56 files): 12 pg-batch files, 36 full-audit domain tests, 7 pg-standalone, 1 legacy smoke-gate
+- Unit tests: `tests/unit/` (4 files — utils.test.js, services.test.js, middleware.test.js, tz.test.js)
 - Unit test runner: `vitest` with `@vitest/coverage-v8` (see `vitest.config.js`)
 - Factory: `tests/helpers/createTestApp-pg.js` (isolated schema per test)
 - Schema: `tests/helpers/seedSchema-pg.js`
 - Run: `npx jest tests/integration/pg-batch1-crud.test.js` (requires `DATABASE_URL`)
 
-### Live E2E Tests (~120 tests — full stack against production)
-- Location: `frontend/tests/live/` (20 Playwright specs, 00–19)
-- Config: `frontend/playwright.config.live.js`
+### Production E2E Tests (24 specs, ~290 tests — full system audit)
+- Location: `frontend/tests/*.spec.js` (24 self-contained Playwright specs)
+- Config: `frontend/playwright.config.js` (single config, production target)
 - Target: `https://sanopos.com` (tenant `packagesmall`)
-- Run: `cd frontend && npx playwright test tests/live/NN-name.spec.js --config=playwright.config.live.js`
-- Covers: shift→sale→return→gift card→shift close, inventory, purchasing, GRN, customers, loyalty, CRM, HR, attendance, kiosk, approvals, notifications, reports, accounting, audit log
-
-### Onboarding E2E Tests (45 tests — full signup→sale for all 3 plans)
-- Location: `frontend/tests/live/` (specs 21–23)
-- Config: `frontend/playwright.config.onboarding.js` (no globalSetup)
-- Run: `cd frontend && npx playwright test tests/live/2N-onboard-*.spec.js --config=playwright.config.onboarding.js`
-- Creates real tenants from scratch — delete from `/admin` after each run
+- Run: `cd frontend && npx playwright test tests/auth.spec.js`
+- Global setup: `global-setup.js` logs in once, saves `auth.json` + `token.json`
+- Helpers: `helpers/auth.js` (credentials), `helpers/api.js` (REST), `helpers/nav.js` (navigation)
+- Includes 3 onboarding specs (`onboard-free`, `onboard-starter`, `onboard-pro`) — create real test tenants, delete from `/admin` after each run
 - **Key gotcha**: clock-in uses `/api/attendance/pin-checkin?tenant=${slug}` (NOT `/clock-in`) — writes `attendance_sessions` which POS checkout validates
 
 ### Legacy (do not use)

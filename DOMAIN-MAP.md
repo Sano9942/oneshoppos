@@ -242,7 +242,7 @@
 
 ## Supplier Returns
 
-- **Backend route**: `routes/grn.js` (supplier return endpoints)
+- **Backend route**: `routes/supplier-returns.js`
 - **Permissions**: `manage_orders`
 - **Frontend page**: `pages/redesign/ReturnedStockRedesign.jsx`
 - **Route path**: `/returned-stock`
@@ -455,7 +455,7 @@
 
 ## Reports
 
-- **Backend routes**: `routes/reports/` (12 files: dashboard, sales, inventory, analytics, purchasing, finance, staff, shifts, governance, fbr-export, stock-aging, multichannel)
+- **Backend routes**: `routes/reports/` (14 files: dashboard, sales, inventory, analytics, purchasing, finance, staff, shifts, governance, fbr-export, stock-aging, multichannel, helpers, index)
 - **Permissions**: `view_reports` (all), some feature-gated (see below)
 - **Feature flags**: `reports_profit_layer` (sales profit), `reports_inventory_health_plus` (inventory advanced), `reports_exceptions` (analytics exceptions), `reports_scheduled_exports` (governance schedules), `e_invoicing_export` (FBR export)
 - **Frontend orchestrator**: `pages/Reports.jsx` (delegates to `pages/reports/*.jsx` — 23 module files)
@@ -694,6 +694,16 @@
 - **Public pages**: `pages/LandingPage.jsx` (login), `pages/SignupPage.jsx`, `pages/ResetPassword.jsx`
 - **DB tables**: `employees`, `password_reset_tokens`, `revoked_tokens`
 - **Env vars**: `JWT_SECRET`, `JWT_REFRESH_SECRET`, `SELF_SERVICE_SIGNUP`
+
+---
+
+## Customer Display
+
+- **Backend route**: `routes/customer-display.js`
+- **Permissions**: POST requires auth, GET is public (no auth)
+- **Route path**: `/customer-display` (public route)
+- **Endpoints**: `POST /api/pos/customer-display` (POS pushes cart state), `GET /api/pos/customer-display` (display polls)
+- **Storage**: In-memory Map keyed by shift_id, auto-cleaned after 8 hours
 
 ---
 
