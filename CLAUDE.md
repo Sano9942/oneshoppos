@@ -313,3 +313,101 @@ Claude has authenticated CLI access to the full production stack. Credentials st
 | **Sentry** | `sentry-cli` | Error tracking, issues, releases (org: `sanopos`, projects: `node-express` + `sanopos-frontend`) |
 | **UptimeRobot** | REST API via curl | Monitor status, uptime history (monitor-specific key) |
 | **Cloudflare** | REST API via curl | DNS management for `sanopos.com` (token in `settings.local.json`) |
+
+## Infrastructure Capacity (as of Apr 2026)
+
+### Current Stack Tier
+
+| Service | Plan | Key Limit |
+|---------|------|-----------|
+| **Supabase** | Free | 60 max Postgres connections, 500MB DB storage, pauses after 7 days inactivity |
+| **Railway** | Hobby/Pro | Single Node.js instance, single-threaded event loop |
+| **Vercel** | Pro | 100GB bandwidth/mo — not a bottleneck |
+| **Cloudflare R2** | Free tier | 10M reads/mo free, then $0.015/M — negligible at current scale |
+
+### DB Connection Pool
+
+- Pool size: **20 connections** (hardcoded in `backend/db-pg.js`)
+- All tenants share this pool — no per-tenant pooling
+- Supabase Free allows 60 total connections; ~5 reserved internally → ~55 usable
+- Current pool leaves ~35 headroom for future Railway instances or worker connections
+
+### Realistic Pro Tenant Capacity
+
+| Scenario | Tenant Count |
+|----------|-------------|
+| Safe, no changes | 10–20 Pro tenants |
+| Stretched (peak spikes) | 20–40 tenants |
+| With Supabase PgBouncer enabled | 80–150 tenants |
+
+**When to upgrade Supabase to Pro ($25/mo):** before hitting 15 paying tenants — Free tier pauses after 7 days inactivity (kills production) and 500MB fills within 6–12 months of moderate use.
+
+**Quick win:** Enable PgBouncer in Supabase dashboard → Settings → Database → Connection Pooling, then update Railway `DATABASE_URL` to use port 6543 instead of 5432. Free, no code changes, ~4–5x effective capacity.
+
+### Supabase 500MB Budget Estimate
+
+| Source | Estimated Size |
+|--------|---------------|
+| Schema overhead per tenant | ~50–100KB |
+| Sales data (1000 sales/tenant) | ~2–5MB |
+| Email queue HTML bodies | ~50KB/email (clears after delivery) |
+| FBR payloads | ~5KB/invoice (unbounded growth) |
+| Shopify raw_payload JSONB | ~20KB/order |
+| WhatsApp messages | ~1KB/message |
+
+At 20 active Pro tenants: estimated **200–350MB within 6–12 months**.
+
+## Storage Destination Map
+
+### Supabase PostgreSQL — all transactional and config data
+
+- **Sales**: `sales`, `sale_items`, `sale_payments` — every transaction, FBR IRN + QR code
+- **Customers**: personal info, loyalty points, wallet balance, CRM notes, purchase history
+- **Products**: data, variants, pricing — `image_url` is a text column pointing to R2 URL
+- **Inventory**: stock levels per outlet, transfers, adjustments, stock counts
+- **HR**: employee records, hashed PINs (`pin_hash`), hashed passwords (`password_hash`), attendance, leave, payroll
+- **Finance**: POs, GRNs, supplier invoices/payments, expenses, journal entries, chart of accounts, postdated cheques
+- **Encrypted credentials** (AES-256-GCM in DB): Shopify tokens, Daraz/Facebook/WooCommerce API keys, courier API keys — format: `enc:v1:{iv}:{tag}:{ciphertext}`
+- **Background queues** (public schema, cross-tenant): `email_queue` (full HTML body stored until sent), `fbr_invoices` (FBR API payloads), `pgboss` job tables
+- **Logs**: `admin_activity_log`, `admin_security_log`, `action_history`, `impersonation_sessions`, `backup_log` (metadata only)
+- **JSONB blobs**: `support_tickets.screenshots` (R2 URLs), `fbr_invoices.payload/fbr_response`, `web_orders.raw_payload`, `integration_settings.config_json`
+
+### Cloudflare R2 — binary files only
+
+Bucket: `sanopos-uploads` (env var `R2_BUCKET`)
+
+| File Type | Path Pattern | Size Limit |
+|-----------|-------------|-----------|
+| Product images (WebP converted) | `products/{product_id}.webp` | 10MB |
+| Additional product media | `products/{variant_id}/{filename}` | 10MB |
+| Company/store logo | `company/{account_id}/logo.{ext}` | 5MB |
+| Support ticket screenshots | `support/{random_id}.{ext}` | 5MB |
+| Database backups | `backups/tenant_{slug}/backup_YYYYMMDD.sql.gz` | — |
+
+**⚠️ Fallback risk:** if R2 env vars missing on Railway, files fall to `backend/exports/` on the local filesystem — wiped on every Railway deploy. Always verify `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` are set.
+
+### Resend — transient delivery only, no permanent storage
+
+Fires and forgets. Email HTML is stored in `email_queue` (Postgres) pre-send, then deleted after delivery.
+
+| Email Type | Trigger |
+|-----------|---------|
+| Receipt | Customer purchase |
+| Password reset | Forgot password |
+| Welcome | New tenant signup |
+| Trial warning / ended / locked | Subscription lifecycle (auto) |
+| Payment recorded / expiry warning | Billing events |
+| Renewal due / overdue | Billing cycle |
+| Support ticket received / reply | Ticket flow |
+| Daily digest | Scheduled report worker |
+| Alert emails | Error spikes, DB pressure |
+
+### What is NOT stored anywhere (by design)
+
+| Thing | Why |
+|-------|-----|
+| Receipt PDFs | Rendered on-the-fly from DB data — no file saved |
+| Report CSVs | Generated on demand, streamed to browser — not saved |
+| Payment card data | Never touched — handled entirely by xPay gateway |
+| Raw passwords/PINs | bcrypt hashes only |
+| Resend email history | Not archived — `email_queue` is pre-send only |

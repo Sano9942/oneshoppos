@@ -96,7 +96,7 @@ export default function AdminSupportTickets() {
       setTickets((prev) =>
         prev.map((t) =>
           t.id === ticketId && t.tenant_id === tenantId
-            ? { ...t, admin_reply: data.ticket.admin_reply, replied_at: data.ticket.replied_at }
+            ? { ...t, admin_reply: data.admin_reply, replied_at: data.replied_at, status: data.status }
             : t
         )
       );
