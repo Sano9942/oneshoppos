@@ -951,3 +951,177 @@ Most Pakistani SMBs using Daraz/TCS/BlueEx won't ask about SOC 2. They'll trust 
 2. They can see an audit trail of who connected/disconnected credentials
 3. There's a clear "we encrypt your credentials, we can't see them" message
 4. Other businesses they know are already using SanoPOS integrations
+
+---
+
+## Multi-Industry Expansion Strategy
+
+**Date**: 2026-04-08
+
+SanoPOS's core engine — multi-tenant POS + inventory + employees + customers + payments + reports + FBR compliance — is a horizontal platform that can serve many verticals. The approach is **one codebase, many faces**: the backend stays the same, the frontend adapts per industry via configuration (labels, nav visibility, POS layout, dashboard widgets).
+
+### Implementation Approach: Industry Config (Not Code Forks)
+
+During onboarding, tenants select their business type. An `industry_type` field on the tenant record drives the entire frontend adaptation:
+
+```js
+const INDUSTRY_CONFIG = {
+  restaurant: {
+    labels: { product: "Menu Item", sale: "Order", customer: "Guest" },
+    nav: { show: ["tables", "kitchen"], hide: ["transfers", "purchase-orders"] },
+    pos: { layout: "grid", showModifiers: true },
+    receipt: { title: "Order", showTable: true },
+    features: ["table_management", "kitchen_display"],
+    onboarding: { sampleItems: "menu" },
+  },
+  salon: {
+    labels: { product: "Service", sale: "Appointment", customer: "Client" },
+    nav: { show: ["appointments", "staff-schedule"], hide: ["inventory", "suppliers"] },
+    pos: { layout: "staff-first", showDuration: true },
+    receipt: { title: "Receipt", showStylist: true },
+    features: ["appointments", "staff_commission"],
+    onboarding: { sampleItems: "services" },
+  },
+  retail: { /* current default — everything as-is */ },
+};
+```
+
+Existing `feature_flags` system already toggles features per tenant — `industry_type` is a natural extension.
+
+---
+
+### Tier 1 — Works Today (Zero Code Changes)
+
+| # | Industry | Example Businesses |
+|---|----------|--------------------|
+| 1 | **General Retail** | Clothing, shoes, accessories, bags |
+| 2 | **Grocery / Supermarket** | Corner stores, mini marts, supermarkets |
+| 3 | **Electronics** | Mobile shops, computer stores, appliance dealers |
+| 4 | **Pharmacy / Medical Store** | Pharmacies, surgical supply shops |
+| 5 | **Bookstore / Stationery** | Book shops, office supply stores |
+| 6 | **Hardware / Building Materials** | Paint shops, electrical supply, plumbing |
+| 7 | **Cosmetics / Beauty Supply** | Makeup stores, skincare, perfume shops |
+| 8 | **Pet Shop** | Pet food, accessories, aquarium supplies |
+| 9 | **Toy Store** | Toy shops, hobby stores |
+| 10 | **Sports / Fitness Equipment** | Sports goods, gym equipment |
+| 11 | **Furniture / Home Decor** | Furniture showrooms, home accessories |
+| 12 | **Jewelry Store** | Gold, silver, artificial jewelry |
+| 13 | **Optical / Eyewear** | Glasses shops (without prescription tracking) |
+| 14 | **Gift Shop / Souvenir** | Gift stores, handicraft shops |
+| 15 | **Auto Parts** | Car accessories, spare parts shops |
+| 16 | **Wholesale / Distribution** | Distributors, cash-and-carry |
+| 17 | **Tobacco / Vape Shop** | Cigarette, hookah, vape retailers |
+| 18 | **Art Supply** | Canvas, paint, craft materials |
+| 19 | **Musical Instruments** | Instrument shops, audio equipment |
+| 20 | **Garden / Nursery** | Plant nurseries, garden supply stores |
+| 21 | **Printing / Copy Shop** | Print shops selling supplies (paper, ink, toner) |
+
+### Tier 2 — Small Additions (1-3 Weeks Each)
+
+| # | Industry | What to Add |
+|---|----------|-------------|
+| 22 | **Bakery / Cafe / Juice Bar** | Order type (dine-in/takeaway), modifier notes, quick-add grid |
+| 23 | **Fast Food / Counter Service** | Same as above + kitchen ticket printing |
+| 24 | **Food Truck / Kiosk** | Simplified POS (no tables), quick-tap menu |
+| 25 | **Sweet Shop / Mithai** | Weight-based pricing (per kg), box/packaging charges |
+| 26 | **Ice Cream / Dessert Parlor** | Modifier-heavy (toppings, sizes, cones), combo deals |
+| 27 | **Florist** | Perishable inventory tracking, delivery scheduling |
+| 28 | **Butcher / Meat Shop** | Weight-based pricing, scale integration |
+| 29 | **Dry Fruits / Spice Shop** | Weight-based pricing, loose/packed variants |
+| 30 | **Convenience Store / Kiryana** | Quick POS, Urdu labels, simple credit book (udhar) |
+| 31 | **Tailor / Alteration Shop** | Measurement fields on order, status workflow (ordered → in-progress → ready) |
+| 32 | **Laundry / Dry Cleaning** | Item count per garment type, status tracking, collection date |
+| 33 | **Car Wash** | Service items, vehicle info (plate #, type), membership packages |
+| 34 | **Photography Studio** | Service packages, event date booking, delivery tracking |
+
+### Tier 3 — Medium Additions (3-6 Weeks Each)
+
+| # | Industry | What to Add | Effort | Market Size in PK |
+|---|----------|------------|--------|-------------------|
+| 35 | **Full-Service Restaurant** | Table management, KDS, modifiers, course firing, tip handling | 4-6 weeks | Huge — thousands of restaurants |
+| 36 | **Salon / Barbershop / Spa** | Service items, appointment booking, staff commission, time slots | 3-4 weeks | Large |
+| 37 | **Medical Clinic / Doctor** | Patient records, appointment scheduling, prescription printing, consultation fee | 4-5 weeks | Large |
+| 38 | **Dental Clinic** | Treatment plans, tooth chart (visual), appointment scheduling | 4-5 weeks | Medium |
+| 39 | **Veterinary Clinic** | Pet patient records, vaccination tracking, appointment booking | 3-4 weeks | Small |
+| 40 | **Gym / Fitness Studio** | Membership plans (recurring billing), check-in, class scheduling, freeze/transfer | 4-6 weeks | Medium |
+| 41 | **Repair Shop** (mobile, laptop, appliance) | Repair ticket workflow (intake → diagnose → quote → repair → collect), parts from stock | 3-4 weeks | Large |
+| 42 | **Tuition Center / Academy** | Student records, monthly fee billing, attendance, fee slip as receipt | 3-4 weeks | Huge in PK |
+| 43 | **Driving School** | Student enrollment, lesson scheduling, instructor assignment, package billing | 3-4 weeks | Small |
+| 44 | **Coworking Space** | Desk/room booking, hourly/daily/monthly billing, access management | 4-6 weeks | Small |
+| 45 | **Rental Business** (event, costume, equipment) | Check-out/check-in, rental duration billing, deposit, damage assessment | 4 weeks | Niche |
+| 46 | **Hotel / Guest House** | Room inventory, check-in/check-out, night billing, minibar charges | 5-6 weeks | Medium |
+| 47 | **Event Venue / Banquet Hall** | Date-based booking, package pricing, advance deposits, event timeline | 4 weeks | Medium |
+| 48 | **Courier / Logistics Office** | Parcel intake, weight-based pricing, tracking number, delivery status | 3 weeks | Small |
+
+### Tier 4 — Niche but High Value in Pakistan
+
+| # | Industry | Why It Matters in PK |
+|---|----------|---------------------|
+| 49 | **Kiryana (credit book / udhar)** | Millions of shops, all paper-based. Simple credit tracking per customer would be revolutionary |
+| 50 | **Textile / Fabric Shop** | Meter-based pricing, roll tracking, wholesale + retail pricing |
+| 51 | **Fertilizer / Agri Supply** | Seasonal stock, bulk pricing, farmer credit accounts |
+| 52 | **Medical Lab** | Test catalog as products, patient info, result printing, doctor referral tracking |
+| 53 | **Atta Chakki (flour mill)** | Weight-based billing, customer wheat storage tracking |
+| 54 | **Dastarkhwan / Charity Kitchen** | Meal tracking (not billing), donor management, daily distribution reports |
+
+---
+
+### The 6 Business Models (Build Modules, Not Industries)
+
+All 54 industries map to just **6 core business models**. Building 6 feature modules covers every vertical:
+
+| Model | Industries That Use It | Core Feature Needed | Status |
+|-------|----------------------|-------------------|--------|
+| **Buy & Sell** | #1–21 | Current POS | ✅ Done |
+| **Order & Prepare** | #22–28, #35 | Order type + kitchen/prep queue | Not started |
+| **Service & Appointment** | #36–40, #43–44 | Service items + time booking | Not started |
+| **Intake & Workflow** | #31–33, #41, #45–48 | Status-tracked tickets/jobs | Not started |
+| **Billing & Membership** | #42, #40, #44 | Recurring billing + enrollment | Not started |
+| **Credit & Ledger** | #30, #49–51 | Customer credit book (udhar) | Not started |
+
+### Cross-Cutting Features That Unlock Multiple Verticals
+
+| Feature | Verticals Unlocked | Effort |
+|---------|-------------------|--------|
+| **Weight-based pricing** | Butcher, dry fruits, fabric, spices, flour mill | 1 week |
+| **Service items (non-stock)** | Salon, clinic, car wash, repair, laundry | 1 week |
+| **Appointment/booking module** | Salon, clinic, gym, driving school, coworking | 3 weeks |
+| **Status workflow engine** | Tailor, laundry, repair shop, rental, hotel | 2 weeks |
+| **Customer credit book (udhar)** | Kiryana, agri supply, fabric shop, wholesale | 2 weeks |
+| **Table management** | Full-service restaurant, cafe, hotel dining | 3 weeks |
+| **Kitchen Display System** | Restaurant, fast food, bakery, hotel kitchen | 2 weeks |
+| **Recurring billing** | Gym, tuition, coworking, membership clubs | 2 weeks |
+
+### SanoPOS Differentiators Across All Verticals
+
+These advantages apply regardless of industry — no competitor in Pakistan offers this combination:
+
+1. **FBR compliance** — mandatory for all businesses, very few local POS systems handle it
+2. **Multi-tenant SaaS** — no installation, works on any browser, mobile-ready (PWA)
+3. **Urdu-ready** (tax rates already have Urdu descriptions, expandable to full Urdu UI)
+4. **13 local courier integrations** — pre-built for Pakistani logistics
+5. **WhatsApp integration** — the dominant communication channel in PK
+6. **Affordable** — Free tier + Pro at PKR 8k/mo, vs competitors charging PKR 12-50k/mo or sales-led pricing
+7. **Self-service onboarding** — signup and start in minutes, no sales call required
+8. **AI insights** — Claude-powered analytics chat, unique in the PK market
+9. **Offline-capable POS** — works without internet, syncs when back online
+10. **Complete HR/payroll** — attendance, shifts, payroll — no competitor has this built-in
+
+### Pakistan-Specific Market Opportunities
+
+| Opportunity | Why Now |
+|-------------|---------|
+| **Kiryana digital udhar** | Millions of shops, all paper. WhatsApp balance reminders would drive viral adoption |
+| **Tuition center fee management** | Parents want printed fee receipts (our receipt system), centers need FBR compliance |
+| **Medical clinic billing** | FBR is pushing clinic compliance. Being the affordable FBR-ready option is a massive opportunity |
+| **Restaurant POS** | Largest POS vertical globally. No affordable FBR-compliant option exists in PK |
+| **Salon appointment booking** | Growing urban market, currently using paper or WhatsApp groups |
+
+### Recommended Expansion Sequence
+
+1. **Phase 1**: Add `industry_type` to tenant + label/nav config system (1 week) — enables Tier 1 industries to feel purpose-built
+2. **Phase 2**: Weight-based pricing + service items (2 weeks) — unlocks bakeries, butchers, salons, clinics
+3. **Phase 3**: Customer credit book / udhar (2 weeks) — unlocks kiryana, wholesale, agri — massive PK market
+4. **Phase 4**: Table management + KDS (4 weeks) — unlocks restaurant vertical
+5. **Phase 5**: Appointment booking module (3 weeks) — unlocks salons, clinics, gyms
+6. **Phase 6**: Status workflow engine (2 weeks) — unlocks repair shops, laundry, tailors, rentals
