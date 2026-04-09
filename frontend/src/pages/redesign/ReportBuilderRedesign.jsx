@@ -7,7 +7,7 @@ import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
 import { Play, Save, Download, Trash2, FolderOpen, X } from "lucide-react";
 import { downloadCsv } from "../../utils/csvExport";
-import api from "../../api";
+import { api } from "../../api";
 
 export default function ReportBuilderRedesign() {
   const { authHeaders } = useAuth();

@@ -6,7 +6,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
 import { Plus, Send, Clock, Eye, Pencil, Trash2, X, Mail } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
-import api from "../../api";
+import { api } from "../../api";
 
 const STATUS_TONES = { draft: "default", scheduled: "warning", sending: "warning", sent: "success", partial: "warning", failed: "danger" };
 const FILTER_TYPES = [

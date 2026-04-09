@@ -7,7 +7,7 @@ import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
 import { Plus, Pencil, Pause, Play, XCircle, X } from "lucide-react";
 import { fmtUtcDateTime, fmtUtcDate } from "../../utils/dates";
-import api from "../../api";
+import { api } from "../../api";
 
 const STATUS_TONES = { draft: "default", active: "success", paused: "warning", cancelled: "danger", expired: "danger" };
 const INTERVALS = [

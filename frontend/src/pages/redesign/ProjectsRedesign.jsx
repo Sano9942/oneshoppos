@@ -6,7 +6,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge, Input, EmptyState } from "../../ui/primitives";
 import { Plus, ArrowLeft, X, CheckCircle, Clock, FileText } from "lucide-react";
-import api from "../../api";
+import { api } from "../../api";
 
 const STATUS_TONES = { draft: "default", active: "success", on_hold: "warning", completed: "success", cancelled: "danger" };
 const STATUSES = ["draft", "active", "on_hold", "completed", "cancelled"];

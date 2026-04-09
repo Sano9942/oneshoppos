@@ -275,21 +275,21 @@ module.exports = function (app, deps, helpers) {
     ORDER BY s.discount_amount DESC
     LIMIT 1000
     `;
+    // Custom report builder definitions (Phase 2B)
+    if (reportKey.startsWith("builder:")) {
+      const defId = parseInt(reportKey.split(":")[1], 10);
+      const { rows: defRows } = await db.query("SELECT * FROM custom_report_definitions WHERE id = $1", [defId]);
+      if (!defRows.length) throw new Error(`Builder definition ${defId} not found`);
+      const def = defRows[0];
+      const { buildQuery } = require("../report-builder");
+      const parsedFilters = typeof def.filters_json === "string" ? JSON.parse(def.filters_json || "{}") : (def.filters_json || {});
+      const { sql: builderSql, params: builderParams } = buildQuery(def.dataset, def.dimensions, def.measures, parsedFilters, def.sort_by, def.sort_order);
+      const { rows: builderRows } = await db.query(builderSql, builderParams);
+      return builderRows;
+    }
+
     const { rows } = await db.query(sql, []);
     return rows;
-  }
-
-  // Custom report builder definitions (Phase 2B)
-  if (reportKey.startsWith("builder:")) {
-    const defId = parseInt(reportKey.split(":")[1], 10);
-    const { rows: defRows } = await db.query("SELECT * FROM custom_report_definitions WHERE id = $1", [defId]);
-    if (!defRows.length) throw new Error(`Builder definition ${defId} not found`);
-    const def = defRows[0];
-    const { buildQuery } = require("../report-builder");
-    const parsedFilters = typeof def.filters_json === "string" ? JSON.parse(def.filters_json || "{}") : (def.filters_json || {});
-    const { sql: builderSql, params: builderParams } = buildQuery(def.dataset, def.dimensions, def.measures, parsedFilters, def.sort_by, def.sort_order);
-    const { rows: builderRows } = await db.query(builderSql, builderParams);
-    return builderRows;
   }
 
   async function runSingleSchedule(schedule) {

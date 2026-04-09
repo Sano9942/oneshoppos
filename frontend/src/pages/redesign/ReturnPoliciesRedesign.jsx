@@ -5,7 +5,7 @@ import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
 import { Plus, Shield, Tag, X } from "lucide-react";
-import api from "../../api";
+import { api } from "../../api";
 
 export default function ReturnPoliciesRedesign() {
   const { authHeaders } = useAuth();

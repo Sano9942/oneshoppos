@@ -6,7 +6,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
 import { ShoppingCart, Plus, Minus, Trash2, ChevronRight, ArrowLeft } from "lucide-react";
-import api from "../../api";
+import { api } from "../../api";
 
 export default function KioskOrderingRedesign() {
   const { authHeaders } = useAuth();

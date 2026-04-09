@@ -5,7 +5,7 @@ import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
 import { Plus, Layers, Trash2, Pencil, Eye, X } from "lucide-react";
-import api from "../../api";
+import { api } from "../../api";
 
 const FIELDS = [
   { value: "category_id", label: "Category" },

@@ -6,7 +6,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
 import { Receipt, Split, Flame, X } from "lucide-react";
-import api from "../../api";
+import { api } from "../../api";
 
 const STATUS_TONES = { open: "warning", split: "warning", closed: "success", voided: "danger" };
 

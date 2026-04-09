@@ -5,7 +5,7 @@ import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge, Input, Select, EmptyState } from "../../ui/primitives";
 import { Search, Filter, X } from "lucide-react";
-import api from "../../api";
+import { api } from "../../api";
 
 const STATUS_TONES = { pending: "warning", confirmed: "default", in_progress: "warning", completed: "success", no_show: "danger", cancelled: "danger" };
 const STATUSES = ["pending", "confirmed", "in_progress", "completed", "no_show", "cancelled"];

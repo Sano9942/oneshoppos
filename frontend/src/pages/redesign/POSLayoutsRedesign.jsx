@@ -5,7 +5,7 @@ import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
 import { Plus, Trash2, Pencil, X, LayoutGrid } from "lucide-react";
-import api from "../../api";
+import { api } from "../../api";
 
 const SCOPE_TYPES = [
   { value: "global", label: "Global" },

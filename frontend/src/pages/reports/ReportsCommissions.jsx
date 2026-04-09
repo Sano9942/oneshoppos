@@ -5,7 +5,7 @@ import { Badge } from "../../ui/primitives";
 import { Download } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { downloadCsv } from "../../utils/csvExport";
-import api from "../../api";
+import { api } from "../../api";
 
 const STATUS_TONES = { pending: "warning", approved: "success", paid: "default", reversed: "danger" };
 

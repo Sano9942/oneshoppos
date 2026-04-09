@@ -7,7 +7,7 @@ import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
 import { Plus, X, Ban } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
-import api from "../../api";
+import { api } from "../../api";
 
 const STATUS_TONES = { pending: "warning", applied: "success", cancelled: "default", failed: "danger" };
 const CHANGE_TYPES = ["price", "visibility", "status", "tax"];

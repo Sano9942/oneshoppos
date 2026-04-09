@@ -5,7 +5,7 @@ import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
 import { LayoutGrid, Plus, Users, Clock, X } from "lucide-react";
-import api from "../../api";
+import { api } from "../../api";
 
 const STATUS_TONES = { seated: "warning", ordering: "warning", served: "success", check_requested: "danger", closed: "default" };
 

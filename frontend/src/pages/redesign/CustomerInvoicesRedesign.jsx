@@ -8,7 +8,7 @@ import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
 import { Plus, Send, CreditCard, Ban, FileText, Link2, Download, X, Trash2 } from "lucide-react";
 import { fmtUtcDateTime, fmtUtcDate } from "../../utils/dates";
 import { downloadCsv } from "../../utils/csvExport";
-import api from "../../api";
+import { api } from "../../api";
 
 const STATUS_TONES = { draft: "default", sent: "warning", partial: "warning", paid: "success", overdue: "danger", void: "default" };
 

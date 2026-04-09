@@ -8,7 +8,7 @@ import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
 import { Plus, Trash2, Pencil, Users, X } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { downloadCsv } from "../../utils/csvExport";
-import api from "../../api";
+import { api } from "../../api";
 
 const PLAN_TYPES = [
   { value: "percentage", label: "Percentage of sale" },

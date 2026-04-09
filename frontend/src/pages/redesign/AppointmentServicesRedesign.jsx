@@ -6,7 +6,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge, Input } from "../../ui/primitives";
 import { Plus, Pencil, Clock, Users, X } from "lucide-react";
-import api from "../../api";
+import { api } from "../../api";
 
 export default function AppointmentServicesRedesign() {
   const { authHeaders } = useAuth();

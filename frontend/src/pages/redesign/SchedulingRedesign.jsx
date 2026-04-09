@@ -6,7 +6,7 @@ import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge, EmptyState } from "../../ui/primitives";
 import { Calendar, Plus, Send, AlertTriangle, Clock, X } from "lucide-react";
-import api from "../../api";
+import { api } from "../../api";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 

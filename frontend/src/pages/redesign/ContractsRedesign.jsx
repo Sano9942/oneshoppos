@@ -5,7 +5,7 @@ import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge, Input, EmptyState } from "../../ui/primitives";
 import { Plus, ArrowLeft, X, Send, FileText, Pen } from "lucide-react";
-import api from "../../api";
+import { api } from "../../api";
 
 const STATUS_TONES = { draft: "default", sent: "warning", viewed: "warning", signed: "success", expired: "danger", cancelled: "danger" };
 const STATUSES = ["draft", "sent", "viewed", "signed", "expired", "cancelled"];

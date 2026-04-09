@@ -5,7 +5,7 @@ import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
 import { ChefHat, Check, Clock } from "lucide-react";
-import api from "../../api";
+import { api } from "../../api";
 
 function elapsedMinutes(createdAt) {
   if (!createdAt) return 0;

@@ -6,7 +6,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
 import { Send, X, User, Phone, MessageSquare } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
-import api from "../../api";
+import { api } from "../../api";
 
 const STATUS_TONES = { open: "success", closed: "default", snoozed: "warning" };
 

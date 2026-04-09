@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { X, ShieldCheck, ShieldAlert } from "lucide-react";
-import api from "../../../api";
+import { api } from "../../../api";
 
 /**
  * POS Approval Modal — requires manager PIN authorization.
