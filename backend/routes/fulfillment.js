@@ -5,7 +5,7 @@
  * All endpoints require manage_orders permission.
  */
 module.exports = function registerFulfillmentRoutes(app, deps) {
-  const { db, requirePerm } = deps;
+  const { db, requirePerm, requireFeature } = deps;
 
   const perm = requirePerm("manage_orders");
 
