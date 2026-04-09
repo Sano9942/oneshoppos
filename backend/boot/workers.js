@@ -240,6 +240,11 @@ function startAll(deps) {
           const { registerMarketplaceSyncWorker } = require("../workers/marketplace-sync-worker-boss");
           await registerMarketplaceSyncWorker(boss, pool);
         }
+
+        if (String(process.env.RESERVATION_WORKER_ENABLED || "0") === "1") {
+          const { registerReservationWorker } = require("../workers/reservation-worker-boss");
+          await registerReservationWorker(boss, pool);
+        }
       })
       .catch((err) => console.error("[boss] Failed to start pg-boss:", err.message));
   }
