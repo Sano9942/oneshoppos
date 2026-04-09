@@ -2,47 +2,16 @@ const crypto = require("crypto");
 const { getOrCreateCart, addItem, updateItem, removeItem, getCartWithItems } = require("../services/storefront-cart");
 const { calculateQuote } = require("../services/quote");
 const { allocateOrder } = require("../services/allocation");
+const { resolvePublicTenantDb } = require("../services/public-tenant-context");
 
 module.exports = function mountStorefrontRoutes(app, deps) {
-  const IS_MULTI_TENANT = process.env.MULTI_TENANT === "1";
-
-  /**
-   * Resolve tenant DB for public storefront requests.
-   * Reads tenant slug from query param or header.
-   * Returns { db } or { error, status }.
-   */
-  async function resolveStorefrontDb(req) {
-    if (!IS_MULTI_TENANT) return { db: deps.db };
-
-    const tenantSlug =
-      req.query.tenant || req.headers["x-tenant-slug"];
-    if (!tenantSlug) {
-      return { error: "tenant query param or x-tenant-slug header is required", status: 400 };
-    }
-
-    const masterDb = require("../master-db-pg");
-    const tenantDbMgr = deps.tenantDbManager || require("../tenant-db-manager-pg");
-
-    const {
-      rows: [tenant],
-    } = await masterDb.query(
-      "SELECT id, slug, status FROM tenants WHERE slug = $1 AND status = 'active'",
-      [String(tenantSlug).trim()]
-    );
-    if (!tenant) {
-      return { error: "Store not found", status: 404 };
-    }
-
-    const db = await tenantDbMgr.getDb(tenant.id);
-    return { db };
-  }
 
   // ---------------------------------------------------------------------------
   // GET /api/storefront/config — tenant branding & storefront settings
   // ---------------------------------------------------------------------------
   app.get("/api/storefront/config", async (req, res) => {
     try {
-      const resolved = await resolveStorefrontDb(req);
+      const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const { db } = resolved;
 
@@ -70,7 +39,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.get("/api/storefront/categories", async (req, res) => {
     try {
-      const resolved = await resolveStorefrontDb(req);
+      const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const { db } = resolved;
 
@@ -96,7 +65,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.get("/api/storefront/products", async (req, res) => {
     try {
-      const resolved = await resolveStorefrontDb(req);
+      const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const { db } = resolved;
 
@@ -205,7 +174,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.get("/api/storefront/products/:id", async (req, res) => {
     try {
-      const resolved = await resolveStorefrontDb(req);
+      const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const { db } = resolved;
 
@@ -332,7 +301,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.get("/api/storefront/pickup-locations", async (req, res) => {
     try {
-      const resolved = await resolveStorefrontDb(req);
+      const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const { db } = resolved;
 
@@ -363,7 +332,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.post("/api/storefront/cart", async (req, res) => {
     try {
-      const resolved = await resolveStorefrontDb(req);
+      const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const { db } = resolved;
 
@@ -387,7 +356,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.get("/api/storefront/cart/:token", async (req, res) => {
     try {
-      const resolved = await resolveStorefrontDb(req);
+      const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const { db } = resolved;
 
@@ -410,7 +379,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.post("/api/storefront/cart/:token/items", async (req, res) => {
     try {
-      const resolved = await resolveStorefrontDb(req);
+      const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const { db } = resolved;
 
@@ -442,7 +411,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.put("/api/storefront/cart/:token/items/:itemId", async (req, res) => {
     try {
-      const resolved = await resolveStorefrontDb(req);
+      const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const { db } = resolved;
 
@@ -473,7 +442,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.delete("/api/storefront/cart/:token/items/:itemId", async (req, res) => {
     try {
-      const resolved = await resolveStorefrontDb(req);
+      const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const { db } = resolved;
 
@@ -501,7 +470,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.post("/api/storefront/cart/:token/quote", async (req, res) => {
     try {
-      const resolved = await resolveStorefrontDb(req);
+      const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const { db } = resolved;
 
@@ -549,7 +518,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.post("/api/storefront/checkout", async (req, res) => {
     try {
-      const resolved = await resolveStorefrontDb(req);
+      const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const { db } = resolved;
 
@@ -805,7 +774,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.get("/api/storefront/orders/:orderToken", async (req, res) => {
     try {
-      const resolved = await resolveStorefrontDb(req);
+      const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const { db } = resolved;
 
@@ -872,7 +841,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
   // ---------------------------------------------------------------------------
   app.post("/api/storefront/orders/:orderToken/arrive", async (req, res) => {
     try {
-      const resolved = await resolveStorefrontDb(req);
+      const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const { db } = resolved;
 
