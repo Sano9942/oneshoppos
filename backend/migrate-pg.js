@@ -2669,6 +2669,29 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 26,
+    description: "Backfill missing Phase 2 feature flags (never seeded by earlier migrations)",
+    up: async (client) => {
+      await client.query(`
+        INSERT INTO feature_flags (key, enabled, description) VALUES
+          ('phase2_scheduling', false, 'Employee shift scheduling'),
+          ('phase2_outlet_pricing', false, 'Per-outlet price list assignments'),
+          ('phase2_draft_orders', false, 'Draft orders / quotes from POS'),
+          ('phase2_pos_approvals', false, 'POS approval policies'),
+          ('phase2_returns_policy', false, 'Configurable return policies'),
+          ('phase2_smart_collections', false, 'Smart product collections'),
+          ('phase2_outlet_visibility', false, 'Per-outlet product visibility'),
+          ('phase2_outlet_tax', false, 'Per-outlet tax profiles'),
+          ('phase2_scheduled_changes', false, 'Scheduled catalog changes'),
+          ('phase2_commissions', false, 'Sales commission plans'),
+          ('phase2_report_builder', false, 'Custom report builder'),
+          ('phase2_pos_layouts', false, 'Customizable POS layouts'),
+          ('phase2_item_suggestions', false, 'AI item suggestions at POS')
+        ON CONFLICT (key) DO NOTHING
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {
