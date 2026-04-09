@@ -217,6 +217,7 @@ async function registerEmailWorker(boss, pool) {
   await boss.createQueue("campaign-email");
   await boss.createQueue("campaign-scheduled-send");
   await boss.createQueue("invoice-reminder");
+  await boss.createQueue("subscription-renewal");
 
   // Worker: send a single email
   await boss.work("email", { teamSize: 5, teamConcurrency: 5 }, async (job) => {
@@ -349,6 +350,20 @@ async function registerEmailWorker(boss, pool) {
       logger.info({ campaignId }, "Scheduled campaign send triggered");
     } catch (err) {
       logger.error({ err, campaignId }, "Scheduled campaign send failed");
+      throw err;
+    }
+  });
+
+  // ── Subscription renewal worker ─────────────────────────────────────────
+  await boss.work("subscription-renewal", async (job) => {
+    const { subscriptionId } = job.data;
+    try {
+      const { processRenewal } = require("../services/subscriptions");
+      const db = { query: (sql, params) => pool.query(sql, params) };
+      await processRenewal(db, boss, subscriptionId);
+      logger.info({ subscriptionId }, "Subscription renewal processed");
+    } catch (err) {
+      logger.error({ err, subscriptionId }, "Subscription renewal failed");
       throw err;
     }
   });

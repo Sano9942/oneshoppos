@@ -578,6 +578,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- CUSTOMER INVOICES ---
   require("./customer-invoices")(app, deps);
 
+  // --- SUBSCRIPTIONS ---
+  require("./subscriptions")(app, deps);
+
   return {
     processPendingShopifyInventoryEvents:
       typeof processPendingShopifyInventoryEvents === "function"
