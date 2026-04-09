@@ -794,6 +794,7 @@ const MIGRATIONS = [
           qty_picked INTEGER DEFAULT 0,
           qty_packed INTEGER DEFAULT 0,
           barcode TEXT,
+          allocation_id INTEGER,
           picked_at TIMESTAMPTZ,
           packed_at TIMESTAMPTZ
         );
@@ -1072,6 +1073,20 @@ const MIGRATIONS = [
         );
         CREATE INDEX IF NOT EXISTS idx_web_order_allocations_order ON web_order_allocations(web_order_id);
         CREATE INDEX IF NOT EXISTS idx_web_order_allocations_outlet ON web_order_allocations(fulfillment_outlet_id);
+      `);
+
+      // Add FK from picklist_items.allocation_id → web_order_allocations now that both tables exist
+      await client.query(`
+        DO $$ BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE constraint_name = 'picklist_items_allocation_id_fkey' AND table_name = 'picklist_items'
+          ) THEN
+            ALTER TABLE picklist_items
+              ADD CONSTRAINT picklist_items_allocation_id_fkey
+              FOREIGN KEY (allocation_id) REFERENCES web_order_allocations(id);
+          END IF;
+        END $$;
       `);
 
       // ── Customer Addresses ────────────────────────────────────────

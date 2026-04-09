@@ -1727,6 +1727,7 @@ CREATE TABLE IF NOT EXISTS picklist_items (
   qty_picked INTEGER DEFAULT 0,
   qty_packed INTEGER DEFAULT 0,
   barcode TEXT,
+  allocation_id INTEGER REFERENCES web_order_allocations(id),
   picked_at TIMESTAMPTZ,
   packed_at TIMESTAMPTZ
 );

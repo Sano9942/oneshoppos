@@ -49,12 +49,13 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
 
   app.post("/api/fulfillment/picklists", perm, async (req, res) => {
     try {
-      const { order_ids, outlet_id } = req.body;
-      if (!Array.isArray(order_ids) || !order_ids.length) {
-        return res.status(400).json({ error: "order_ids required" });
-      }
+      const { order_ids, outlet_id, include_shipping_allocations } = req.body;
       if (!outlet_id) {
         return res.status(400).json({ error: "outlet_id required" });
+      }
+      const hasOrderIds = Array.isArray(order_ids) && order_ids.length > 0;
+      if (!hasOrderIds && !include_shipping_allocations) {
+        return res.status(400).json({ error: "order_ids or include_shipping_allocations required" });
       }
 
       const result = await db.transaction(async (client) => {
@@ -67,25 +68,68 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
           [plNumber, outlet_id, req.employee?.id || null]
         );
 
-        // Gather items from web_order_items for the selected orders
-        const { rows: orderItems } = await client.query(
-          `SELECT woi.*, wo.id AS wo_id
-           FROM web_order_items woi
-           JOIN web_orders wo ON woi.web_order_id = wo.id
-           WHERE wo.id = ANY($1) AND wo.fulfillment_status = 'unfulfilled'`,
-          [order_ids]
-        );
+        let totalItems = 0;
 
-        if (!orderItems.length) {
-          throw Object.assign(new Error("No unfulfilled order items found"), { statusCode: 400 });
+        // Gather items from web_order_items for the selected orders
+        if (hasOrderIds) {
+          const { rows: orderItems } = await client.query(
+            `SELECT woi.*, wo.id AS wo_id
+             FROM web_order_items woi
+             JOIN web_orders wo ON woi.web_order_id = wo.id
+             WHERE wo.id = ANY($1) AND wo.fulfillment_status = 'unfulfilled'`,
+            [order_ids]
+          );
+
+          for (const item of orderItems) {
+            await client.query(
+              `INSERT INTO picklist_items (picklist_id, web_order_id, product_id, variant_id, qty_to_pick, barcode)
+               VALUES ($1, $2, $3, $4, $5, $6)`,
+              [pl.id, item.wo_id, item.product_id, item.variant_id, item.qty, item.barcode]
+            );
+          }
+          totalItems += orderItems.length;
         }
 
-        for (const item of orderItems) {
-          await client.query(
-            `INSERT INTO picklist_items (picklist_id, web_order_id, product_id, variant_id, qty_to_pick, barcode)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [pl.id, item.wo_id, item.product_id, item.variant_id, item.qty, item.barcode]
+        // Include storefront shipping orders allocated to this outlet
+        if (include_shipping_allocations) {
+          const { rows: allocItems } = await client.query(
+            `SELECT woa.id AS allocation_id, woa.web_order_id, woa.web_order_item_id,
+                    woa.allocated_qty, woa.fulfillment_method,
+                    woi.product_id, woi.variant_id, woi.title, woi.qty, woi.barcode,
+                    wo.external_order_id
+             FROM web_order_allocations woa
+             JOIN web_order_items woi ON woi.id = woa.web_order_item_id
+             JOIN web_orders wo ON wo.id = woa.web_order_id
+             WHERE woa.fulfillment_outlet_id = $1
+               AND woa.fulfillment_method = 'ship_to_customer'
+               AND woa.status = 'pending'
+               AND wo.fulfillment_status IN ('unfulfilled', 'partially_fulfilled')`,
+            [outlet_id]
           );
+
+          const allocationIds = [];
+          for (const item of allocItems) {
+            await client.query(
+              `INSERT INTO picklist_items (picklist_id, web_order_id, product_id, variant_id, qty_to_pick, barcode, allocation_id)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+              [pl.id, item.web_order_id, item.product_id, item.variant_id, item.allocated_qty, item.barcode, item.allocation_id]
+            );
+            allocationIds.push(item.allocation_id);
+          }
+
+          // Advance allocation status to 'picking'
+          if (allocationIds.length) {
+            await client.query(
+              `UPDATE web_order_allocations SET status = 'picking', updated_at = NOW()
+               WHERE id = ANY($1)`,
+              [allocationIds]
+            );
+          }
+          totalItems += allocItems.length;
+        }
+
+        if (!totalItems) {
+          throw Object.assign(new Error("No unfulfilled order items found"), { statusCode: 400 });
         }
 
         return pl;
@@ -149,11 +193,13 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
       const { rows: items } = await db.query(
         `SELECT pi.*, p.name AS product_name, p.barcode AS product_barcode,
                 pv.name AS variant_name, pv.barcode AS variant_barcode,
-                wo.external_order_number
+                wo.external_order_number,
+                woa.fulfillment_method AS allocation_method, woa.status AS allocation_status
          FROM picklist_items pi
          LEFT JOIN products p ON pi.product_id = p.id
          LEFT JOIN product_variants pv ON pi.variant_id = pv.id
          LEFT JOIN web_orders wo ON pi.web_order_id = wo.id
+         LEFT JOIN web_order_allocations woa ON pi.allocation_id = woa.id
          WHERE pi.picklist_id = $1
          ORDER BY pi.id`,
         [req.params.id]
@@ -370,6 +416,20 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
           );
         }
 
+        // Advance any linked shipping allocations to 'shipped'
+        const { rows: allocRows } = await client.query(
+          `SELECT DISTINCT allocation_id FROM picklist_items
+           WHERE picklist_id = $1 AND allocation_id IS NOT NULL`,
+          [pl.id]
+        );
+        if (allocRows.length) {
+          await client.query(
+            `UPDATE web_order_allocations SET status = 'shipped', updated_at = NOW()
+             WHERE id = ANY($1)`,
+            [allocRows.map((r) => r.allocation_id)]
+          );
+        }
+
         return updated;
       });
 
@@ -390,6 +450,20 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
       if (!pl) return res.status(404).json({ error: "Picklist not found" });
       if (pl.status !== "pending") {
         return res.status(400).json({ error: "Only pending picklists can be cancelled" });
+      }
+
+      // Revert any linked shipping allocations back to 'pending'
+      const { rows: allocRows } = await db.query(
+        `SELECT DISTINCT allocation_id FROM picklist_items
+         WHERE picklist_id = $1 AND allocation_id IS NOT NULL`,
+        [req.params.id]
+      );
+      if (allocRows.length) {
+        await db.query(
+          `UPDATE web_order_allocations SET status = 'pending', updated_at = NOW()
+           WHERE id = ANY($1)`,
+          [allocRows.map((r) => r.allocation_id)]
+        );
       }
 
       await db.query(
@@ -819,6 +893,43 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
       sql += ` ORDER BY wo.ordered_at DESC`;
 
       const { rows } = await db.query(sql, params);
+      res.json({ orders: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /api/fulfillment/shipping-orders ────────────────────────────
+  // Returns storefront shipping orders allocated to an outlet (pending picking)
+
+  app.get("/api/fulfillment/shipping-orders", perm, async (req, res) => {
+    try {
+      const { outlet_id } = req.query;
+      if (!outlet_id) {
+        return res.status(400).json({ error: "outlet_id required" });
+      }
+
+      const { rows } = await db.query(
+        `SELECT woa.id AS allocation_id, woa.web_order_id, woa.web_order_item_id,
+                woa.allocated_qty, woa.fulfillment_method, woa.status AS allocation_status,
+                woi.product_id, woi.variant_id, woi.title, woi.qty AS ordered_qty, woi.unit_price,
+                wo.external_order_id, wo.external_order_number, wo.fulfillment_status,
+                wo.customer_name_snapshot AS customer_name,
+                wo.ordered_at, wo.grand_total,
+                p.name AS product_name, p.barcode AS product_barcode,
+                pv.name AS variant_name
+         FROM web_order_allocations woa
+         JOIN web_order_items woi ON woi.id = woa.web_order_item_id
+         JOIN web_orders wo ON wo.id = woa.web_order_id
+         LEFT JOIN products p ON woi.product_id = p.id
+         LEFT JOIN product_variants pv ON woi.variant_id = pv.id
+         WHERE woa.fulfillment_outlet_id = $1
+           AND woa.fulfillment_method = 'ship_to_customer'
+           AND woa.status = 'pending'
+           AND wo.fulfillment_status IN ('unfulfilled', 'partially_fulfilled')
+         ORDER BY wo.ordered_at ASC`,
+        [outlet_id]
+      );
       res.json({ orders: rows });
     } catch (err) {
       res.status(500).json({ error: err.message });
