@@ -216,6 +216,7 @@ async function registerEmailWorker(boss, pool) {
   await boss.createQueue("billing-lifecycle-check");
   await boss.createQueue("campaign-email");
   await boss.createQueue("campaign-scheduled-send");
+  await boss.createQueue("invoice-reminder");
 
   // Worker: send a single email
   await boss.work("email", { teamSize: 5, teamConcurrency: 5 }, async (job) => {
@@ -283,6 +284,57 @@ async function registerEmailWorker(boss, pool) {
           );
         }
       } catch { /* non-critical */ }
+    }
+  });
+
+  // ── Invoice reminder worker ────────────────────────────────────────────
+  await boss.work("invoice-reminder", async (job) => {
+    const { reminderId, invoiceId } = job.data;
+    try {
+      // Load invoice + customer
+      const { rows: [invoice] } = await pool.query(
+        `SELECT ci.*, c.email AS customer_email, c.name AS customer_name
+         FROM customer_invoices ci
+         LEFT JOIN customers c ON c.id = ci.customer_id
+         WHERE ci.id = $1`,
+        [invoiceId]
+      );
+      if (!invoice || invoice.status === "paid" || invoice.status === "void") {
+        logger.info({ invoiceId, reminderId }, "Invoice reminder skipped — invoice paid or void");
+        await pool.query(
+          "UPDATE customer_invoice_reminders SET status = 'skipped' WHERE id = $1",
+          [reminderId]
+        );
+        return;
+      }
+      if (!invoice.customer_email) {
+        logger.warn({ invoiceId, reminderId }, "Invoice reminder skipped — no customer email");
+        return;
+      }
+
+      // Enqueue reminder email
+      await boss.send("email", {
+        to: invoice.customer_email,
+        from: process.env.RESEND_FROM_EMAIL || "SanoPOS <noreply@sanopos.com>",
+        subject: `Reminder: Invoice ${invoice.invoice_number} — ${Number(invoice.balance_due).toLocaleString()} due`,
+        html: require("../services/email-templates").TEMPLATES.invoice_reminder({
+          invoice_number: invoice.invoice_number,
+          customer_name: invoice.customer_name,
+          balance_due: invoice.balance_due,
+          due_date: invoice.due_date,
+          company_name: "Our Store",
+        }).html,
+        type: "invoice_reminder",
+      });
+
+      await pool.query(
+        "UPDATE customer_invoice_reminders SET status = 'sent', sent_at = NOW() WHERE id = $1",
+        [reminderId]
+      );
+      logger.info({ invoiceId, reminderId }, "Invoice reminder sent");
+    } catch (err) {
+      logger.error({ err, invoiceId, reminderId }, "Invoice reminder failed");
+      throw err;
     }
   });
 
