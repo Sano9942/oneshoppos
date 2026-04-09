@@ -172,6 +172,7 @@ async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, cha
     items.push({
       productId,
       variantId: variantId || null,
+      categoryId: product.category_id || null,
       qty,
       productName: product.name,
       variantName: variant ? variant.variant_name : null,
@@ -185,11 +186,14 @@ async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, cha
     });
   }
 
-  // ── 8. Compute totals ─────────────────────────────────────────────
+  // ── 8. Compute subtotals ───────────────────────────────────────────
   const subtotal = round2(items.reduce((sum, i) => sum + (i.unitPrice * i.qty), 0));
-  const discountTotal = 0;
   const taxTotal = round2(items.reduce((sum, i) => sum + i.taxAmount, 0));
   const shippingTotal = 0; // v1 free shipping placeholder
+
+  // ── 9. Evaluate promotions ────────────────────────────────────────
+  const { totalDiscount, appliedPromotions } = await evaluatePromotions(db, items, subtotal);
+  const discountTotal = round2(totalDiscount);
   const grandTotal = round2(subtotal + taxTotal + shippingTotal - discountTotal);
 
   return {
@@ -199,11 +203,113 @@ async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, cha
     taxTotal,
     shippingTotal,
     grandTotal,
+    appliedPromotions,
     deliveryMethod,
     pickupOutletId: deliveryMethod === 'pickup' ? pickupOutletId : null,
     currency: 'PKR',
     availabilityErrors
   };
+}
+
+/**
+ * Evaluate active promotions against quote line items.
+ *
+ * Mirrors the logic in POST /api/promotions/quote (routes/promotions.js)
+ * so storefront quotes apply the same discounts as the POS.
+ *
+ * @param {object} db       – tenant db proxy
+ * @param {Array}  items    – quote line items (from step 7)
+ * @param {number} orderTotal – cart subtotal (pre-discount)
+ * @returns {Promise<{ totalDiscount: number, appliedPromotions: Array }>}
+ */
+async function evaluatePromotions(db, items, orderTotal) {
+  const now = new Date().toISOString().slice(0, 10);
+
+  const { rows: promos } = await db.query(
+    `SELECT * FROM promotions WHERE active = true
+     AND (starts_at IS NULL OR starts_at <= $1)
+     AND (ends_at IS NULL OR ends_at >= $2)
+     ORDER BY id ASC`,
+    [now, now]
+  );
+
+  const appliedPromotions = [];
+  let totalDiscount = 0;
+
+  // Map quote items to the shape the promo matcher expects
+  const promoItems = items.map(i => ({
+    product_id: i.productId,
+    category_id: i.categoryId || null,
+    quantity: i.qty,
+    price: i.unitPrice
+  }));
+
+  for (const promo of promos) {
+    const itemMatches = (item) => {
+      if (promo.applies_to === 'all') return true;
+      if (promo.applies_to === 'product' && promo.product_id)
+        return item.product_id === promo.product_id;
+      if (promo.applies_to === 'category' && promo.category_id)
+        return item.category_id === promo.category_id;
+      return false;
+    };
+
+    const matchedItems = promoItems.filter(itemMatches);
+    const matchedTotal = matchedItems.reduce((s, i) => s + i.price * i.quantity, 0);
+    let discount = 0;
+
+    if (promo.type === 'percent') {
+      discount = matchedTotal * (promo.value / 100);
+    } else if (promo.type === 'fixed') {
+      discount = Math.min(promo.value, matchedTotal);
+    } else if (promo.type === 'threshold_percent') {
+      if (orderTotal >= promo.min_order_amount)
+        discount = matchedTotal * (promo.value / 100);
+    } else if (promo.type === 'threshold_fixed') {
+      if (orderTotal >= promo.min_order_amount)
+        discount = Math.min(promo.value, matchedTotal);
+    } else if (promo.type === 'bxgy') {
+      if (promo.buy_qty > 0 && promo.get_qty > 0) {
+        const aggregated = {};
+        matchedItems.forEach((item) => {
+          const pid = item.product_id;
+          if (!aggregated[pid]) {
+            aggregated[pid] = { quantity: 0, totalValue: 0 };
+          }
+          aggregated[pid].quantity += item.quantity;
+          aggregated[pid].totalValue += item.quantity * item.price;
+        });
+        Object.values(aggregated).forEach((agg) => {
+          const sets = Math.floor(agg.quantity / (promo.buy_qty + promo.get_qty));
+          const avgPrice = agg.totalValue / agg.quantity;
+          discount += sets * promo.get_qty * avgPrice;
+        });
+      }
+    }
+
+    if (discount > 0) {
+      totalDiscount += discount;
+      appliedPromotions.push({
+        promotionId: promo.id,
+        name: promo.name,
+        type: promo.type,
+        discount: round2(discount)
+      });
+    }
+  }
+
+  // Distribute discount proportionally across line items
+  if (totalDiscount > 0 && items.length > 0) {
+    const subtotal = items.reduce((s, i) => s + i.unitPrice * i.qty, 0);
+    for (const item of items) {
+      const lineSubtotal = item.unitPrice * item.qty;
+      const proportion = subtotal > 0 ? lineSubtotal / subtotal : 0;
+      item.discount = round2(totalDiscount * proportion);
+      item.lineTotal = round2(lineSubtotal + item.taxAmount - item.discount);
+    }
+  }
+
+  return { totalDiscount: round2(totalDiscount), appliedPromotions };
 }
 
 /** Round to 2 decimal places */
@@ -220,6 +326,7 @@ function emptyQuote(deliveryMethod, pickupOutletId) {
     taxTotal: 0,
     shippingTotal: 0,
     grandTotal: 0,
+    appliedPromotions: [],
     deliveryMethod,
     pickupOutletId: deliveryMethod === 'pickup' ? pickupOutletId : null,
     currency: 'PKR',
