@@ -47,6 +47,11 @@ const DEFAULT_FEATURE_FLAGS = {
   context_header_enforced: false,
   kiosk_context_locked: false,
   marketplace_integrations: true,
+  phase2_scheduling: false,
+  phase2_outlet_pricing: false,
+  phase2_draft_orders: false,
+  phase2_pos_approvals: false,
+  phase2_returns_policy: false,
 };
 
 // Per-tenant feature flag cache

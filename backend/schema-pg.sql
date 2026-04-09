@@ -1958,6 +1958,131 @@ INSERT INTO chart_of_accounts (code, name, type, sub_type, is_system, normal_bal
   ('5900', 'Other Expenses', 'expense', 'operating_expense', true, 'debit')
 ON CONFLICT DO NOTHING;
 
+-- ── Phase 2A: Workforce Scheduling ──────────────────────────────────
+CREATE TABLE IF NOT EXISTS scheduled_shifts (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+  shift_date DATE NOT NULL,
+  start_time TIME NOT NULL,
+  end_time TIME NOT NULL,
+  break_minutes INTEGER DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published','cancelled')),
+  notes TEXT,
+  created_by INTEGER REFERENCES employees(id),
+  published_at TIMESTAMPTZ,
+  publish_notification TEXT DEFAULT 'affected' CHECK (publish_notification IN ('affected','all','none')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_scheduled_shifts_outlet_date ON scheduled_shifts(outlet_id, shift_date);
+CREATE INDEX IF NOT EXISTS idx_scheduled_shifts_employee ON scheduled_shifts(employee_id, shift_date);
+
+-- ── Phase 2A: Price List Assignments ────────────────────────────────
+CREATE TABLE IF NOT EXISTS price_list_assignments (
+  id SERIAL PRIMARY KEY,
+  price_list_id INTEGER NOT NULL REFERENCES price_lists(id) ON DELETE CASCADE,
+  scope_type TEXT NOT NULL CHECK (scope_type IN ('outlet','channel','customer','customer_group')),
+  scope_id INTEGER NOT NULL,
+  priority INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE,
+  starts_at TIMESTAMPTZ,
+  ends_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(price_list_id, scope_type, scope_id)
+);
+CREATE INDEX IF NOT EXISTS idx_price_list_assignments_scope ON price_list_assignments(scope_type, scope_id);
+
+-- ── Phase 2A: Draft Orders ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS draft_orders (
+  id SERIAL PRIMARY KEY,
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+  customer_id INTEGER REFERENCES customers(id),
+  created_by INTEGER NOT NULL REFERENCES employees(id),
+  claimed_by INTEGER REFERENCES employees(id),
+  claimed_at TIMESTAMPTZ,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','claimed','completed','cancelled')),
+  notes TEXT,
+  subtotal NUMERIC(12,2) DEFAULT 0,
+  tax_total NUMERIC(12,2) DEFAULT 0,
+  discount_total NUMERIC(12,2) DEFAULT 0,
+  total NUMERIC(12,2) DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_draft_orders_outlet_status ON draft_orders(outlet_id, status);
+CREATE INDEX IF NOT EXISTS idx_draft_orders_claimed ON draft_orders(claimed_by) WHERE status = 'claimed';
+
+CREATE TABLE IF NOT EXISTS draft_order_items (
+  id SERIAL PRIMARY KEY,
+  draft_order_id INTEGER NOT NULL REFERENCES draft_orders(id) ON DELETE CASCADE,
+  product_id INTEGER REFERENCES products(id),
+  variant_id INTEGER,
+  product_name TEXT NOT NULL,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  price NUMERIC(12,2) NOT NULL,
+  discount NUMERIC(12,2) DEFAULT 0,
+  effective_tax_rate NUMERIC(6,4) DEFAULT 0,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── Phase 2A: Approval Policies (generic) ───────────────────────────
+CREATE TABLE IF NOT EXISTS approval_policies (
+  id SERIAL PRIMARY KEY,
+  action_type TEXT NOT NULL,
+  outlet_id INTEGER REFERENCES outlets(id),
+  role_id INTEGER REFERENCES roles(id),
+  policy TEXT NOT NULL DEFAULT 'allowed' CHECK (policy IN ('allowed','denied','approval_required')),
+  threshold_value NUMERIC(12,2),
+  threshold_type TEXT CHECK (threshold_type IN ('amount','percent')),
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(action_type, outlet_id, role_id)
+);
+CREATE INDEX IF NOT EXISTS idx_approval_policies_action ON approval_policies(action_type, outlet_id);
+
+CREATE TABLE IF NOT EXISTS approval_events (
+  id SERIAL PRIMARY KEY,
+  policy_id INTEGER REFERENCES approval_policies(id),
+  action_type TEXT NOT NULL,
+  reference_type TEXT NOT NULL,
+  reference_id INTEGER,
+  requested_by INTEGER NOT NULL REFERENCES employees(id),
+  approved_by INTEGER REFERENCES employees(id),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','denied')),
+  reason TEXT,
+  metadata JSONB,
+  outlet_id INTEGER REFERENCES outlets(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_approval_events_ref ON approval_events(reference_type, reference_id);
+
+-- ── Phase 2A: Return Policies ───────────────────────────────────────
+CREATE TABLE IF NOT EXISTS return_policies (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  return_window_days INTEGER,
+  receipt_required BOOLEAN DEFAULT TRUE,
+  restocking_fee_percent NUMERIC(5,2) DEFAULT 0,
+  allowed_refund_methods TEXT[] DEFAULT '{cash,card,store_credit}',
+  is_default BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS return_reasons (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  label TEXT NOT NULL,
+  requires_note BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT TRUE,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ── Schema versioning ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schema_version (
   version    INTEGER PRIMARY KEY,
