@@ -105,6 +105,8 @@ import {
 import {
   AttendanceTab,
   LaborPerformanceTab,
+  LaborVsSalesTab,
+  StaffAttributionTab,
   LossPreventionTab,
 } from "./reports/ReportsStaff";
 import {
@@ -517,6 +519,8 @@ const GROUPS = [
     tabs: [
       { id: "attendance", label: "Attendance", icon: Clock },
       { id: "labor-performance", label: "Labor Performance", icon: Activity },
+      { id: "labor-vs-sales", label: "Labor vs Sales", icon: Activity },
+      { id: "staff-attribution", label: "Staff Attribution", icon: Activity },
       { id: "loss-prevention", label: "Loss Prevention", icon: ShieldAlert },
     ],
   },
@@ -575,6 +579,10 @@ function TabContent({ activeTab, filters, setFilters, setActiveTab }) {
       return <LaborPerformanceTab filters={filters} />;
     case "loss-prevention":
       return <LossPreventionTab filters={filters} />;
+    case "labor-vs-sales":
+      return <LaborVsSalesTab filters={filters} />;
+    case "staff-attribution":
+      return <StaffAttributionTab filters={filters} />;
     case "overview":
       return <OverviewTab filters={filters} />;
     case "daily-operations":

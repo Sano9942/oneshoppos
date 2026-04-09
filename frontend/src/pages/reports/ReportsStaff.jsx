@@ -212,6 +212,142 @@ export function LaborPerformanceTab({ filters }) {
   );
 }
 
+export function LaborVsSalesTab({ filters }) {
+  const { fmt } = useCurrency();
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams({ date_from: filters.dateFrom, date_to: filters.dateTo });
+      if (filters.outletIds?.length) p.set("outlet_id", filters.outletIds.join(","));
+      const d = await api.get(`/api/reports/labor-vs-sales?${p}`);
+      setData(d.labor_vs_sales || []);
+    } catch {
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const totalHours = data.reduce((s, r) => s + Number(r.hours_worked || 0), 0);
+  const totalRevenue = data.reduce((s, r) => s + Number(r.revenue || 0), 0);
+  const totalLabor = data.reduce((s, r) => s + Number(r.labor_cost || 0), 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <CardShell title="Staff" subtitle={null}>
+          <div className="px-4 py-5 text-2xl font-bold text-slate-900">{data.length}</div>
+        </CardShell>
+        <CardShell title="Hours Worked" subtitle={null}>
+          <div className="px-4 py-5 text-2xl font-bold text-slate-900">{totalHours.toFixed(1)}</div>
+        </CardShell>
+        <CardShell title="Revenue" subtitle={null}>
+          <div className="px-4 py-5 text-2xl font-bold text-slate-900">{fmt(totalRevenue)}</div>
+        </CardShell>
+        <CardShell title="Labor Cost" subtitle={null}>
+          <div className="px-4 py-5 text-2xl font-bold text-slate-900">{fmt(totalLabor)}</div>
+        </CardShell>
+      </div>
+      <CardShell
+        title="Labor vs Sales"
+        subtitle="Revenue generated per labor hour and cost"
+        action={
+          <ExportButton onClick={() => exportCSV("labor_vs_sales.csv", [
+            { header: "Staff", key: "employee_name" },
+            { header: "Hours", key: "hours_worked" },
+            { header: "Sales", key: "sale_count" },
+            { header: "Revenue", key: "revenue" },
+            { header: "Rev/Hour", key: "revenue_per_hour" },
+            { header: "Labor Cost", key: "labor_cost" },
+          ], data)} />
+        }
+      >
+        <TableShell cols={["Employee", "Hours", "Sales", "Revenue", "Rev/Hour", "Labor Cost"]} loading={loading} empty={!data.length}>
+          {data.map((r, i) => (
+            <tr key={i} className="hover:bg-slate-50 text-sm">
+              <td className="p-4 font-bold text-slate-800">{r.employee_name}</td>
+              <td className="p-4 text-slate-600">{Number(r.hours_worked || 0).toFixed(1)}h</td>
+              <td className="p-4 text-slate-600">{r.sale_count}</td>
+              <td className="p-4 font-bold text-slate-800">{fmt(r.revenue)}</td>
+              <td className="p-4 font-bold text-amber-600">{fmt(r.revenue_per_hour)}/hr</td>
+              <td className="p-4 text-slate-600">{fmt(r.labor_cost)}</td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
+  );
+}
+
+export function StaffAttributionTab({ filters }) {
+  const { fmt } = useCurrency();
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const p = new URLSearchParams({ date_from: filters.dateFrom, date_to: filters.dateTo });
+      if (filters.outletIds?.length) p.set("outlet_id", filters.outletIds.join(","));
+      const d = await api.get(`/api/reports/staff-attribution?${p}`);
+      setData(d.staff_attribution || []);
+    } catch {
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.dateFrom, filters.dateTo, filters.outletIds]);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <div className="space-y-4">
+      <CardShell
+        title="Staff Attribution"
+        subtitle="Per-employee breakdown of sales, discounts, returns, voids, and approvals"
+        action={
+          <ExportButton onClick={() => exportCSV("staff_attribution.csv", [
+            { header: "Staff", key: "employee_name" },
+            { header: "Sales", key: "sale_count" },
+            { header: "Revenue", key: "revenue" },
+            { header: "Discounts", key: "discount_total" },
+            { header: "Voids", key: "void_count" },
+            { header: "Returns", key: "return_count" },
+            { header: "Return Value", key: "return_total" },
+            { header: "Approvals", key: "approval_count" },
+          ], data)} />
+        }
+      >
+        <TableShell
+          cols={["Employee", "Sales", "Revenue", "Discounts", "Voids", "Returns", "Approvals"]}
+          loading={loading}
+          empty={!data.length}
+        >
+          {data.map((r, i) => (
+            <tr key={i} className="hover:bg-slate-50 text-sm">
+              <td className="p-4 font-bold text-slate-800">{r.employee_name}</td>
+              <td className="p-4 text-slate-600">{r.sale_count}</td>
+              <td className="p-4 font-bold text-slate-800">{fmt(r.revenue)}</td>
+              <td className="p-4 text-amber-600">{fmt(r.discount_total)}</td>
+              <td className="p-4 text-rose-500">{r.void_count}</td>
+              <td className="p-4">
+                <span className="text-orange-500">{r.return_count}</span>
+                <span className="text-xs text-slate-400 ml-1">({fmt(r.return_total)})</span>
+              </td>
+              <td className="p-4 text-blue-600">{r.approval_count}</td>
+            </tr>
+          ))}
+        </TableShell>
+      </CardShell>
+    </div>
+  );
+}
+
 export function LossPreventionTab({ filters }) {
   const { fmt } = useCurrency();
   const [data, setData] = useState([]);

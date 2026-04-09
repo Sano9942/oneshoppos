@@ -210,4 +210,160 @@ module.exports = function (app, deps, helpers) {
       res.status(500).json({ error: "Failed to load loss prevention data" });
     }
   });
+
+  // ── Labor vs Sales Report (Phase 2) ──────────────────────────────────────
+  app.get("/api/reports/labor-vs-sales", async (req, res) => {
+    try {
+      const { date_from, date_to, outlet_id } = req.query;
+      const tz = req.company?.timezone || "UTC";
+
+      const params = [];
+      let idx = 1;
+      const dateFromUtc = date_from ? toUtcStart(date_from, tz) : toUtcStart(
+        new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 30 * 86400000)), tz
+      );
+      const dateToUtc = date_to ? toUtcEnd(date_to, tz) : toUtcEnd(
+        new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date()), tz
+      );
+      params.push(dateFromUtc, dateToUtc, date_from || new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 30 * 86400000)), date_to || new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date()));
+
+      let outletFilter = "";
+      if (outlet_id) {
+        outletFilter = `AND s.outlet_id = $5 AND a.outlet_id = $5`;
+        params.push(outlet_id);
+      }
+
+      const sql = `
+        WITH emp_sales AS (
+          SELECT s.employee_id,
+                 COUNT(s.id) AS sale_count,
+                 SUM(s.total_amount) AS revenue
+          FROM sales s
+          WHERE s.voided = false AND s.employee_id IS NOT NULL
+            AND s.timestamp >= $1 AND s.timestamp < $2
+            ${outlet_id ? "AND s.outlet_id = $5" : ""}
+          GROUP BY s.employee_id
+        ),
+        emp_hours AS (
+          SELECT a.employee_id,
+                 COALESCE(SUM(
+                   EXTRACT(EPOCH FROM (COALESCE(a.session_end, NOW()) - a.session_start)) / 3600.0
+                 ), 0)::numeric(10,2) AS hours_worked
+          FROM attendance_sessions a
+          WHERE a.session_type = 'work'
+            AND a.session_start::date >= $3::date
+            AND a.session_start::date <= $4::date
+            ${outlet_id ? "AND a.outlet_id = $5" : ""}
+          GROUP BY a.employee_id
+        )
+        SELECT
+          e.id AS employee_id,
+          e.name AS employee_name,
+          COALESCE(eh.hours_worked, 0) AS hours_worked,
+          COALESCE(es.sale_count, 0)::int AS sale_count,
+          COALESCE(es.revenue, 0) AS revenue,
+          CASE WHEN COALESCE(eh.hours_worked, 0) > 0
+            THEN ROUND((COALESCE(es.revenue, 0) / eh.hours_worked)::numeric, 2)
+            ELSE 0
+          END AS revenue_per_hour,
+          COALESCE(e.hourly_rate, 0) AS hourly_rate,
+          CASE WHEN COALESCE(e.hourly_rate, 0) > 0
+            THEN ROUND((COALESCE(eh.hours_worked, 0) * e.hourly_rate)::numeric, 2)
+            ELSE 0
+          END AS labor_cost
+        FROM employees e
+        LEFT JOIN emp_sales es ON e.id = es.employee_id
+        LEFT JOIN emp_hours eh ON e.id = eh.employee_id
+        WHERE es.revenue > 0 OR eh.hours_worked > 0
+        ORDER BY revenue_per_hour DESC
+      `;
+      const { rows } = await db.query(sql, params);
+      res.json({ labor_vs_sales: rows });
+    } catch (err) {
+      console.error("Labor vs Sales Error:", err);
+      res.status(500).json({ error: "Failed to load labor vs sales report" });
+    }
+  });
+
+  // ── Staff Attribution Report (Phase 2) ───────────────────────────────────
+  app.get("/api/reports/staff-attribution", async (req, res) => {
+    try {
+      const { date_from, date_to, outlet_id } = req.query;
+      const tz = req.company?.timezone || "UTC";
+
+      const dateFromUtc = date_from ? toUtcStart(date_from, tz) : toUtcStart(
+        new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(Date.now() - 30 * 86400000)), tz
+      );
+      const dateToUtc = date_to ? toUtcEnd(date_to, tz) : toUtcEnd(
+        new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date()), tz
+      );
+
+      const params = [dateFromUtc, dateToUtc];
+      let outletCond = "";
+      if (outlet_id) {
+        outletCond = "AND outlet_id = $3";
+        params.push(outlet_id);
+      }
+
+      const sql = `
+        WITH emp_sales AS (
+          SELECT employee_id,
+                 COUNT(id) AS sale_count,
+                 SUM(total_amount) AS revenue,
+                 SUM(discount_amount) AS discount_total
+          FROM sales
+          WHERE voided = false AND employee_id IS NOT NULL
+            AND timestamp >= $1 AND timestamp < $2
+            ${outletCond}
+          GROUP BY employee_id
+        ),
+        emp_voids AS (
+          SELECT employee_id, COUNT(id) AS void_count
+          FROM sales
+          WHERE voided = true AND employee_id IS NOT NULL
+            AND timestamp >= $1 AND timestamp < $2
+            ${outletCond}
+          GROUP BY employee_id
+        ),
+        emp_returns AS (
+          SELECT employee_id,
+                 COUNT(id) AS return_count,
+                 SUM(total_refund) AS return_total
+          FROM returns
+          WHERE employee_id IS NOT NULL
+            AND timestamp >= $1 AND timestamp < $2
+            ${outletCond}
+          GROUP BY employee_id
+        ),
+        emp_approvals AS (
+          SELECT requested_by AS employee_id, COUNT(id) AS approval_count
+          FROM approval_events
+          WHERE created_at >= $1 AND created_at < $2
+          GROUP BY requested_by
+        )
+        SELECT
+          e.id AS employee_id,
+          e.name AS employee_name,
+          COALESCE(es.sale_count, 0)::int AS sale_count,
+          COALESCE(es.revenue, 0) AS revenue,
+          COALESCE(es.discount_total, 0) AS discount_total,
+          COALESCE(ev.void_count, 0)::int AS void_count,
+          COALESCE(er.return_count, 0)::int AS return_count,
+          COALESCE(er.return_total, 0) AS return_total,
+          COALESCE(ea.approval_count, 0)::int AS approval_count
+        FROM employees e
+        LEFT JOIN emp_sales es ON e.id = es.employee_id
+        LEFT JOIN emp_voids ev ON e.id = ev.employee_id
+        LEFT JOIN emp_returns er ON e.id = er.employee_id
+        LEFT JOIN emp_approvals ea ON e.id = ea.employee_id
+        WHERE es.sale_count > 0 OR ev.void_count > 0 OR er.return_count > 0 OR ea.approval_count > 0
+        ORDER BY COALESCE(es.revenue, 0) DESC
+      `;
+      const { rows } = await db.query(sql, params);
+      res.json({ staff_attribution: rows });
+    } catch (err) {
+      console.error("Staff Attribution Error:", err);
+      res.status(500).json({ error: "Failed to load staff attribution report" });
+    }
+  });
 };
