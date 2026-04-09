@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRightLeft, Award, Ban, BookOpen, Calendar, ChevronLeft, ChevronRight, Download, Package, Plus, Search, ShieldCheck, Tag, UserRound, Wallet, X } from "lucide-react";
+import { ArrowRightLeft, Award, Ban, BookOpen, Calendar, ChevronLeft, ChevronRight, Clock, Download, Package, Plus, Search, ShieldCheck, Tag, UserRound, Wallet, X } from "lucide-react";
 import { api } from "../../api";
 import { fmtDate, fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -109,6 +109,13 @@ export default function CustomersRedesign() {
   const [ledgerTo, setLedgerTo] = useState("");
   const [ledgerLoading, setLedgerLoading] = useState(false);
 
+  // Order history
+  const [orderHistory, setOrderHistory] = useState([]);
+  const [ohPage, setOhPage] = useState(1);
+  const [ohTotal, setOhTotal] = useState(0);
+  const [ohLoading, setOhLoading] = useState(false);
+  const OH_LIMIT = 20;
+
   // Customer groups + profile
   const [customerGroups, setCustomerGroups] = useState([]);
   const [profileData, setProfileData] = useState(null);
@@ -151,6 +158,9 @@ export default function CustomersRedesign() {
     setLedger([]);
     setLedgerFrom("");
     setLedgerTo("");
+    setOrderHistory([]);
+    setOhPage(1);
+    setOhTotal(0);
     setProfileData(null);
     try {
       const [salesData, walletData, profileRes] = await Promise.all([
@@ -379,6 +389,21 @@ export default function CustomersRedesign() {
       setLedgerTotal(0);
     } finally {
       setLedgerLoading(false);
+    }
+  };
+
+  const fetchOrderHistory = async (customerId, pg = 1) => {
+    setOhLoading(true);
+    try {
+      const data = await api.get(`/api/customers/${customerId}/order-history?page=${pg}&limit=${OH_LIMIT}`);
+      setOrderHistory(data.orders || []);
+      setOhTotal(data.pagination?.total || 0);
+      setOhPage(data.pagination?.page || pg);
+    } catch {
+      setOrderHistory([]);
+      setOhTotal(0);
+    } finally {
+      setOhLoading(false);
     }
   };
 
@@ -628,6 +653,7 @@ export default function CustomersRedesign() {
                 {[
                   { key: "profile", label: "Profile" },
                   { key: "ledger", label: "Ledger", icon: BookOpen },
+                  { key: "orders", label: "Order History", icon: Clock },
                 ].map(({ key, label, icon: Icon }) => (
                   <button
                     key={key}
@@ -639,6 +665,7 @@ export default function CustomersRedesign() {
                     onClick={() => {
                       setDetailTab(key);
                       if (key === "ledger" && ledger.length === 0) fetchLedger(detail.id);
+                      if (key === "orders" && orderHistory.length === 0) fetchOrderHistory(detail.id);
                     }}
                   >
                     {Icon && <Icon size={12} />}
@@ -1023,6 +1050,81 @@ export default function CustomersRedesign() {
                   )}
                 </div>
               )}
+
+              {detailTab === "orders" && (() => {
+                const ohTotalPages = Math.max(1, Math.ceil(ohTotal / OH_LIMIT));
+                const channelBadge = (ch) => {
+                  const map = {
+                    pos: "bg-gray-100 text-gray-700",
+                    storefront: "bg-blue-100 text-blue-700",
+                    shopify: "bg-green-100 text-green-700",
+                    daraz: "bg-orange-100 text-orange-700",
+                    facebook: "bg-blue-100 text-blue-600",
+                    instagram: "bg-pink-100 text-pink-700",
+                    whatsapp: "bg-green-100 text-green-600",
+                  };
+                  return map[ch] || "bg-gray-100 text-gray-600";
+                };
+                const statusColor = (s) => {
+                  if (s === "completed" || s === "closed") return "text-emerald-700";
+                  if (s === "open") return "text-amber-600";
+                  return "text-(--ui-text-muted)";
+                };
+                return (
+                  <div className="space-y-3">
+                    <div className="overflow-auto">
+                      <table className="min-w-full text-xs">
+                        <thead className="bg-(--ui-muted-surface) text-[10px] uppercase text-(--ui-text-muted)">
+                          <tr>
+                            <th className="px-2 py-1.5 text-left">Date</th>
+                            <th className="px-2 py-1.5 text-left">Order #</th>
+                            <th className="px-2 py-1.5 text-left">Channel</th>
+                            <th className="px-2 py-1.5 text-right">Total</th>
+                            <th className="px-2 py-1.5 text-left">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ohLoading ? (
+                            <tr><td colSpan={5} className="px-2 py-6 text-center text-(--ui-text-muted)">Loading...</td></tr>
+                          ) : orderHistory.length === 0 ? (
+                            <tr><td colSpan={5} className="px-2 py-6 text-center text-(--ui-text-muted)">No orders found for this customer.</td></tr>
+                          ) : (
+                            orderHistory.map((o) => (
+                              <tr key={`${o.type}-${o.id}`} className="border-t border-(--ui-border)">
+                                <td className="px-2 py-1.5 whitespace-nowrap text-(--ui-text-muted)">{fmtUtcDateTime(o.date)}</td>
+                                <td className="px-2 py-1.5 font-medium text-(--ui-text)">{o.orderNumber}</td>
+                                <td className="px-2 py-1.5">
+                                  <span className={`inline-block rounded-full px-1.5 py-0.5 text-[10px] font-semibold capitalize ${channelBadge(o.channel)}`}>
+                                    {o.channel === "pos" ? "POS" : o.channel}
+                                  </span>
+                                </td>
+                                <td className="px-2 py-1.5 text-right font-medium text-(--ui-text)">{money(o.total)}</td>
+                                <td className="px-2 py-1.5">
+                                  <span className={`text-[10px] font-semibold capitalize ${statusColor(o.status)}`}>{o.status}</span>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {ohTotalPages > 1 && (
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[10px] text-(--ui-text-muted)">{ohTotal} orders · Page {ohPage}/{ohTotalPages}</span>
+                        <div className="flex gap-1">
+                          <Button size="sm" disabled={ohPage <= 1} onClick={() => { const p = ohPage - 1; setOhPage(p); fetchOrderHistory(detail.id, p); }}>
+                            <ChevronLeft size={12} />
+                          </Button>
+                          <Button size="sm" disabled={ohPage >= ohTotalPages} onClick={() => { const p = ohPage + 1; setOhPage(p); fetchOrderHistory(detail.id, p); }}>
+                            <ChevronRight size={12} />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </SectionCard>
