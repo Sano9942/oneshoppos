@@ -2641,6 +2641,186 @@ ALTER TABLE draft_order_items
   ADD COLUMN IF NOT EXISTS course_name TEXT DEFAULT 'main',
   ADD COLUMN IF NOT EXISTS kitchen_status TEXT DEFAULT 'pending';
 
+-- ═══════════════════════════════════════════════════════════════
+-- Phase 4B — Appointment Booking
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS booking_services (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  duration_minutes INTEGER NOT NULL DEFAULT 30,
+  padding_minutes INTEGER DEFAULT 0,
+  price NUMERIC(12,2) DEFAULT 0,
+  outlet_id INTEGER REFERENCES outlets(id),
+  is_active BOOLEAN DEFAULT TRUE,
+  requires_confirmation BOOLEAN DEFAULT FALSE,
+  max_advance_days INTEGER DEFAULT 90,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS booking_service_variants (
+  id SERIAL PRIMARY KEY,
+  service_id INTEGER NOT NULL REFERENCES booking_services(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  duration_minutes INTEGER NOT NULL,
+  price NUMERIC(12,2) DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS booking_staff_assignments (
+  id SERIAL PRIMARY KEY,
+  service_id INTEGER NOT NULL REFERENCES booking_services(id) ON DELETE CASCADE,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  is_primary BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(service_id, employee_id)
+);
+
+CREATE TABLE IF NOT EXISTS booking_resources (
+  id SERIAL PRIMARY KEY,
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+  name TEXT NOT NULL,
+  resource_type TEXT DEFAULT 'room',
+  capacity INTEGER DEFAULT 1,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS booking_resource_assignments (
+  id SERIAL PRIMARY KEY,
+  service_id INTEGER NOT NULL REFERENCES booking_services(id) ON DELETE CASCADE,
+  resource_id INTEGER NOT NULL REFERENCES booking_resources(id) ON DELETE CASCADE,
+  UNIQUE(service_id, resource_id)
+);
+
+CREATE TABLE IF NOT EXISTS booking_availability_rules (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER REFERENCES employees(id),
+  outlet_id INTEGER REFERENCES outlets(id),
+  service_id INTEGER REFERENCES booking_services(id),
+  day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+  start_time TIME NOT NULL,
+  end_time TIME NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_availability_rules_employee ON booking_availability_rules(employee_id, day_of_week);
+
+CREATE TABLE IF NOT EXISTS appointment_blocks (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER REFERENCES employees(id),
+  outlet_id INTEGER REFERENCES outlets(id),
+  block_type TEXT NOT NULL DEFAULT 'unavailable' CHECK (block_type IN ('unavailable','break','closure')),
+  start_at TIMESTAMPTZ NOT NULL,
+  end_at TIMESTAMPTZ NOT NULL,
+  reason TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_appointment_blocks_employee ON appointment_blocks(employee_id, start_at, end_at);
+
+CREATE TABLE IF NOT EXISTS appointments (
+  id SERIAL PRIMARY KEY,
+  service_id INTEGER NOT NULL REFERENCES booking_services(id),
+  variant_id INTEGER REFERENCES booking_service_variants(id),
+  customer_id INTEGER REFERENCES customers(id),
+  employee_id INTEGER REFERENCES employees(id),
+  resource_id INTEGER REFERENCES booking_resources(id),
+  outlet_id INTEGER REFERENCES outlets(id),
+  status TEXT NOT NULL DEFAULT 'confirmed' CHECK (status IN ('pending','confirmed','in_progress','completed','cancelled','no_show')),
+  start_at TIMESTAMPTZ NOT NULL,
+  end_at TIMESTAMPTZ NOT NULL,
+  customer_name TEXT,
+  customer_phone TEXT,
+  customer_email TEXT,
+  notes TEXT,
+  source TEXT DEFAULT 'admin' CHECK (source IN ('admin','public','import')),
+  cancelled_at TIMESTAMPTZ,
+  cancellation_reason TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_appointments_employee_time ON appointments(employee_id, start_at, end_at) WHERE status NOT IN ('cancelled','no_show');
+CREATE INDEX IF NOT EXISTS idx_appointments_customer ON appointments(customer_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_status ON appointments(status);
+
+CREATE TABLE IF NOT EXISTS appointment_segments (
+  id SERIAL PRIMARY KEY,
+  appointment_id INTEGER NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
+  service_id INTEGER NOT NULL REFERENCES booking_services(id),
+  employee_id INTEGER REFERENCES employees(id),
+  start_at TIMESTAMPTZ NOT NULL,
+  end_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS appointment_reminders (
+  id SERIAL PRIMARY KEY,
+  appointment_id INTEGER NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
+  reminder_type TEXT NOT NULL DEFAULT 'before' CHECK (reminder_type IN ('before','followup')),
+  minutes_before INTEGER NOT NULL DEFAULT 60,
+  channel TEXT NOT NULL DEFAULT 'email' CHECK (channel IN ('email','sms')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','sent','failed')),
+  scheduled_for TIMESTAMPTZ NOT NULL,
+  sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_appointment_reminders_scheduled ON appointment_reminders(scheduled_for) WHERE status = 'pending';
+
+CREATE TABLE IF NOT EXISTS appointment_waitlist_entries (
+  id SERIAL PRIMARY KEY,
+  service_id INTEGER NOT NULL REFERENCES booking_services(id),
+  customer_id INTEGER REFERENCES customers(id),
+  employee_id INTEGER REFERENCES employees(id),
+  preferred_date DATE,
+  preferred_time_start TIME,
+  preferred_time_end TIME,
+  status TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting','offered','booked','expired')),
+  customer_name TEXT,
+  customer_phone TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS class_sessions (
+  id SERIAL PRIMARY KEY,
+  service_id INTEGER NOT NULL REFERENCES booking_services(id),
+  employee_id INTEGER REFERENCES employees(id),
+  outlet_id INTEGER REFERENCES outlets(id),
+  start_at TIMESTAMPTZ NOT NULL,
+  end_at TIMESTAMPTZ NOT NULL,
+  max_capacity INTEGER NOT NULL DEFAULT 10,
+  status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','in_progress','completed','cancelled')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS class_session_bookings (
+  id SERIAL PRIMARY KEY,
+  class_session_id INTEGER NOT NULL REFERENCES class_sessions(id) ON DELETE CASCADE,
+  customer_id INTEGER REFERENCES customers(id),
+  appointment_id INTEGER REFERENCES appointments(id),
+  status TEXT NOT NULL DEFAULT 'confirmed' CHECK (status IN ('confirmed','cancelled','no_show')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS calendar_sync_accounts (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  provider TEXT NOT NULL DEFAULT 'google',
+  access_token TEXT,
+  refresh_token TEXT,
+  token_expires_at TIMESTAMPTZ,
+  calendar_id TEXT,
+  sync_enabled BOOLEAN DEFAULT FALSE,
+  last_synced_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ── Schema versioning ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schema_version (
   version    INTEGER PRIMARY KEY,
