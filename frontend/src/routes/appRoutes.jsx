@@ -74,6 +74,8 @@ const FulfillmentRedesign = lazy(() => import("../pages/redesign/FulfillmentRede
 const LoyaltyTiersRoute = lazy(() => import("../pages/LoyaltyTiersRoute"));
 const SmartCollectionsRoute = lazy(() => import("../pages/SmartCollectionsRoute"));
 const CommissionPlansRoute = lazy(() => import("../pages/CommissionPlansRoute"));
+const ReportBuilderRoute = lazy(() => import("../pages/ReportBuilderRoute"));
+const POSLayoutsRoute = lazy(() => import("../pages/POSLayoutsRoute"));
 const OutletTaxProfilesRoute = lazy(() => import("../pages/OutletTaxProfilesRoute"));
 const ScheduledChangesRoute = lazy(() => import("../pages/ScheduledChangesRoute"));
 
@@ -180,6 +182,9 @@ export const appRoutes = [
     <Route path="/review-moderation" element={perm("manage_inventory", <ReviewModerationRedesign />)} />
     {/* Wave 5 — Fulfillment */}
     <Route path="/fulfillment" element={perm("manage_orders", <FulfillmentRedesign />)} />
+    {/* Phase 2B — Report Builder, POS Layouts */}
+    <Route path="/report-builder" element={perm("view_reports", <ReportBuilderRoute />)} />
+    <Route path="/settings/pos-layouts" element={perm("all_access", <POSLayoutsRoute />)} />
     {/* Phase 2B — Commissions */}
     <Route path="/commissions" element={perm("all_access", <CommissionPlansRoute />)} />
     {/* Phase 2B — Catalog Depth */}

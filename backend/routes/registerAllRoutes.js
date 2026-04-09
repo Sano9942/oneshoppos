@@ -504,6 +504,15 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: COMMISSIONS (Phase 2B) ---
   require("./commissions")(app, deps);
 
+  // --- ROUTES: REPORT BUILDER (Phase 2B) ---
+  require("./report-builder")(app, deps);
+
+  // --- ROUTES: POS LAYOUTS (Phase 2B) ---
+  require("./pos-layouts")(app, deps);
+
+  // --- ROUTES: ITEM SUGGESTIONS (Phase 2B) ---
+  require("./item-suggestions")(app, deps);
+
   // --- ROUTES: PARKED SALES ---
   require("./parked-sales")(app, deps);
 

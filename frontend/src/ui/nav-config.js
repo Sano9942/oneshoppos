@@ -43,6 +43,7 @@ import {
   Award,
   PackageCheck,
   Calendar,
+  LayoutGrid,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -105,6 +106,7 @@ export const SHOPIFY_NAV_GROUPS = [
     label: "Insights",
     items: [
       { name: "Reports", path: "/reports", icon: Receipt },
+      { name: "Report Builder", path: "/report-builder", icon: BarChart2, requiredPerm: "view_reports", requiredFlag: "phase2_report_builder" },
       { name: "Accounting", path: "/accounting", icon: BookOpen, requiredPerm: "view_reports", requiredFlag: "accounting_core" },
       { name: "Chart of Accounts", path: "/chart-of-accounts", icon: BookOpen, requiredPerm: "all_access", requiredFlag: "accounting_core" },
       { name: "Journal Entries", path: "/journal-entries", icon: ClipboardList, requiredPerm: "all_access", requiredFlag: "accounting_core" },
@@ -138,6 +140,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Import Data", path: "/import", icon: Upload, requiredPerm: "all_access" },
       { name: "Backup & Restore", path: "/backup-restore", icon: DatabaseBackup, requiredPerm: "all_access", requiredFlag: "backup_restore" },
       { name: "Outlet Tax Profiles", path: "/settings/outlet-tax-profiles", icon: Receipt, requiredPerm: "all_access", requiredFlag: "phase2_outlet_tax" },
+      { name: "POS Layouts", path: "/settings/pos-layouts", icon: LayoutGrid, requiredPerm: "all_access", requiredFlag: "phase2_pos_layouts" },
     ],
   },
   {

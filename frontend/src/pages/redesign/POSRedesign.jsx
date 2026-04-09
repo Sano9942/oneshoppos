@@ -28,7 +28,7 @@ const MOBILE_TABS = [
 ];
 
 function POSContent() {
-  const { isLocked, notice, error, cart, total, money, openCheckout, offlineQueueCount, offlineSyncing, offlineSyncResult, syncQueue } = usePOS();
+  const { isLocked, notice, error, cart, total, money, openCheckout, offlineQueueCount, offlineSyncing, offlineSyncResult, syncQueue, posLayout, suggestions, addToCart } = usePOS();
   const [activeTab, setActiveTab] = useState("cart");
 
   if (isLocked) {
@@ -81,7 +81,35 @@ function POSContent() {
         <div className="flex-1 flex flex-col p-6 overflow-hidden">
           <POSSubHeader />
           <POSSearchArea />
+          {/* POS Layout Tiles (Phase 2B) */}
+          {posLayout?.layout_json?.length > 0 && (
+            <div className="grid grid-cols-4 gap-2 mb-3">
+              {posLayout.layout_json.map((tile, i) => (
+                <button key={tile.id || i}
+                  className={`rounded-lg p-2 text-white text-center text-xs font-medium hover:opacity-80 transition ${tile.size === "2x1" ? "col-span-2" : ""}`}
+                  style={{ backgroundColor: tile.color || "#8066FF" }}
+                  onClick={() => {
+                    if (tile.type === "product" && tile.product_id) addToCart({ id: tile.product_id, name: tile.label });
+                  }}>
+                  {tile.label || tile.type}
+                </button>
+              ))}
+            </div>
+          )}
           <POSCartTable />
+          {/* Item Suggestions (Phase 2B) */}
+          {suggestions.length > 0 && (
+            <div className="flex gap-2 mt-2 overflow-x-auto pb-1">
+              {suggestions.slice(0, 4).map(s => (
+                <button key={s.product_id}
+                  onClick={() => addToCart({ id: s.product_id, name: s.name, price: Number(s.price) })}
+                  className="shrink-0 bg-slate-700 hover:bg-slate-600 rounded-lg p-2 text-xs text-white text-center w-28">
+                  <div className="truncate font-medium">{s.name}</div>
+                  <div className="text-slate-300 mt-0.5">{Number(s.price).toFixed(2)}</div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <POSSidebar />
       </div>

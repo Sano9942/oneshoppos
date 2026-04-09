@@ -137,6 +137,10 @@ export const POSProvider = ({ children }) => {
   const handleEndlessAisle = (product) => setEndlessAisleProduct(product);
   const closeEndlessAisle = () => setEndlessAisleProduct(null);
 
+  // ── POS Layout + Item Suggestions (Phase 2B) ─────────────────────────
+  const [posLayout, setPosLayout] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
+
   // ── Return / Exchange Modal ───────────────────────────────────────────────
   const [returnModalOpen, setReturnModalOpen] = useState(false);
   // Pre-loaded sale when opened from Recent Sales panel (null = no-bill mode)
@@ -475,6 +479,24 @@ export const POSProvider = ({ children }) => {
       })
       .catch(() => setOutletPriceListItems([]));
   }, [selectedOutletId]);
+
+  // ── POS Layout fetch (phase2_pos_layouts) ──────────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (selectedOutletId) params.set("outlet_id", selectedOutletId);
+    api.get(`/pos-layouts?${params}`).then(d => setPosLayout(d.layout)).catch(() => {});
+  }, [selectedOutletId]);
+
+  // ── Item suggestions fetch (phase2_item_suggestions, debounced) ───────
+  useEffect(() => {
+    if (!cart.length) { setSuggestions([]); return; }
+    const timer = setTimeout(() => {
+      const ids = cart.map(c => c.id).filter(Boolean).join(",");
+      if (!ids) return;
+      api.get(`/pos/suggestions?product_ids=${ids}`).then(d => setSuggestions(d.suggestions || [])).catch(() => {});
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [cart.map(c => c.id).join(",")]);
 
   // Re-resolve all cart prices when price list changes (customer selected/deselected)
   useEffect(() => {
@@ -1253,6 +1275,9 @@ export const POSProvider = ({ children }) => {
     closeEndlessAisle,
     // Price lists
     priceListItems,
+    // POS layout + suggestions (Phase 2B)
+    posLayout,
+    suggestions,
   };
 
   return <POSContext.Provider value={value}>{children}</POSContext.Provider>;
