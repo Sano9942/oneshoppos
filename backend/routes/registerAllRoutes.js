@@ -501,6 +501,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: SCHEDULED CATALOG CHANGES (Phase 2B) ---
   require("./scheduled-changes")(app, deps);
 
+  // --- ROUTES: COMMISSIONS (Phase 2B) ---
+  require("./commissions")(app, deps);
+
   // --- ROUTES: PARKED SALES ---
   require("./parked-sales")(app, deps);
 

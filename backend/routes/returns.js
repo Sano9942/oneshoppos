@@ -356,6 +356,15 @@ module.exports = function registerReturnsRoutes(app, deps) {
         logger.error({ err: fbrErr, returnId }, "FBR return enqueue failed (non-blocking)");
       }
 
+      // Reverse pending/approved commissions for the original sale
+      if (original_sale_id) {
+        db.query(
+          `UPDATE commission_earnings SET status = 'reversed', reversed_at = NOW(), reversal_reason = 'Sale returned'
+           WHERE sale_id = $1 AND status IN ('pending','approved')`,
+          [original_sale_id]
+        ).catch(err => console.error("[commission] return reversal error:", err.message));
+      }
+
       res.json({
         message: "Return processed successfully",
         id: returnId,

@@ -44,6 +44,7 @@ const LABELS = {
   "smart-collections": "Smart Collections",
   "scheduled-changes": "Scheduled Changes",
   "outlet-tax-profiles": "Outlet Tax Profiles",
+  commissions: "Commissions",
   inventory: "Inventory",
   returns: "Returns",
   profile: "My Profile",

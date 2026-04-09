@@ -354,6 +354,13 @@ module.exports = function registerSalesRoutes(app, deps) {
           logger.error({ err: fbrErr, saleId: id }, "FBR void enqueue failed (non-blocking)");
         }
 
+        // Reverse any pending/approved commissions
+        db.query(
+          `UPDATE commission_earnings SET status = 'reversed', reversed_at = NOW(), reversal_reason = 'Sale voided'
+           WHERE sale_id = $1 AND status IN ('pending','approved')`,
+          [id]
+        ).catch(err => console.error("[commission] void reversal error:", err.message));
+
         res.json({
           message: "Sale voided successfully. Stock has been restored.",
         });
@@ -837,6 +844,29 @@ module.exports = function registerSalesRoutes(app, deps) {
           }
         } catch (fbrErr) {
           logger.error({ err: fbrErr, saleId }, "FBR enqueue failed (non-blocking)");
+        }
+
+        // Auto-calculate commissions (fire-and-forget, don't block sale response)
+        if (authenticatedEmployeeId) {
+          db.query(
+            `INSERT INTO commission_earnings (employee_id, sale_id, plan_id, rule_id, sale_amount, commission_amount)
+             SELECT $1, $2, cpr.plan_id, cpr.id, $3,
+               CASE cp.type
+                 WHEN 'percentage' THEN LEAST($3 * cpr.rate / 100, COALESCE(cpr.max_cap, $3 * cpr.rate / 100))
+                 WHEN 'fixed_per_sale' THEN LEAST(cpr.rate, COALESCE(cpr.max_cap, cpr.rate))
+                 ELSE 0
+               END
+             FROM employees e
+             JOIN commission_plans cp ON cp.id = e.commission_plan_id
+             JOIN commission_plan_rules cpr ON cpr.plan_id = cp.id
+             WHERE e.id = $1 AND e.commission_plan_id IS NOT NULL AND cp.is_active = TRUE
+               AND (cp.starts_at IS NULL OR cp.starts_at <= NOW())
+               AND (cp.ends_at IS NULL OR cp.ends_at >= NOW())
+               AND $3 >= cpr.min_threshold
+             ORDER BY cpr.priority DESC
+             LIMIT 1`,
+            [authenticatedEmployeeId, saleId, totalAmount]
+          ).catch(err => console.error("[commission] auto-calc error:", err.message));
         }
 
         res.json({

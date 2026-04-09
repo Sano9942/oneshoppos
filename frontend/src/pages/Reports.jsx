@@ -146,6 +146,7 @@ import {
 } from "./reports/ReportsAudit";
 import FBRExportTab from "./reports/FBRExportTab";
 import MultichannelTab from "./reports/ReportsMultichannel";
+import CommissionSummaryTab from "./reports/ReportsCommissions";
 
 function GlobalFilterBar({ filters, setFilters, meta }) {
   const {
@@ -522,6 +523,7 @@ const GROUPS = [
       { id: "labor-vs-sales", label: "Labor vs Sales", icon: Activity },
       { id: "staff-attribution", label: "Staff Attribution", icon: Activity },
       { id: "loss-prevention", label: "Loss Prevention", icon: ShieldAlert },
+      { id: "commission-summary", label: "Commission Summary", icon: Activity },
     ],
   },
   {
@@ -583,6 +585,8 @@ function TabContent({ activeTab, filters, setFilters, setActiveTab }) {
       return <LaborVsSalesTab filters={filters} />;
     case "staff-attribution":
       return <StaffAttributionTab filters={filters} />;
+    case "commission-summary":
+      return <CommissionSummaryTab filters={filters} />;
     case "overview":
       return <OverviewTab filters={filters} />;
     case "daily-operations":

@@ -316,14 +316,37 @@ module.exports = function createHRRouter({
               }
               deductions = Number((leaveDeduction + absenceDeduction).toFixed(2));
             }
-            const netPay = Number((grossPay - deductions).toFixed(2));
+            // Commission earnings from Phase 2B commission_earnings table
+            let commissionAmount = 0;
+            try {
+              const { rows: commRows } = await client.query(
+                `SELECT COALESCE(SUM(commission_amount), 0) AS total_commission
+                 FROM commission_earnings
+                 WHERE employee_id = $1 AND status IN ('pending','approved')
+                   AND created_at >= $2 AND created_at < $3`,
+                [emp.id, period.start_date, period.end_date]
+              );
+              commissionAmount = Number(commRows[0]?.total_commission || 0);
+              if (commissionAmount > 0) {
+                noteParts.push(`Commission: ${commissionAmount.toFixed(2)}`);
+                // Auto-approve pending commissions included in payroll
+                await client.query(
+                  `UPDATE commission_earnings SET status = 'approved', approved_at = NOW()
+                   WHERE employee_id = $1 AND status = 'pending'
+                     AND created_at >= $2 AND created_at < $3`,
+                  [emp.id, period.start_date, period.end_date]
+                );
+              }
+            } catch (_) { /* commission_earnings table may not exist yet */ }
+
+            const netPay = Number((grossPay + commissionAmount - deductions).toFixed(2));
             const notes = noteParts.length > 0 ? noteParts.join("; ") : null;
 
             await client.query(
               `INSERT INTO payroll_lines
                (period_id, employee_id, salary_type, base_rate, total_hours, total_days, leave_days, gross_pay, deductions, net_pay, notes)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-              [id, emp.id, salaryType, baseRate, totalHours, totalDays, leaveDays, grossPay, deductions, netPay, notes]
+              [id, emp.id, salaryType, baseRate, totalHours, totalDays, leaveDays, Number((grossPay + commissionAmount).toFixed(2)), deductions, netPay, notes]
             );
           }
         });
