@@ -2472,6 +2472,175 @@ CREATE INDEX IF NOT EXISTS idx_customer_subscriptions_customer ON customer_subsc
 CREATE INDEX IF NOT EXISTS idx_customer_subscriptions_plan ON customer_subscriptions(plan_id);
 CREATE INDEX IF NOT EXISTS idx_subscription_runs_sub ON subscription_runs(subscription_id);
 
+-- ═══════════════════════════════════════════════════════════════
+-- Phase 4A — Restaurant Mode
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS restaurant_floor_plans (
+  id SERIAL PRIMARY KEY,
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+  name TEXT NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  layout_json JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS restaurant_floor_sections (
+  id SERIAL PRIMARY KEY,
+  floor_plan_id INTEGER NOT NULL REFERENCES restaurant_floor_plans(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS restaurant_tables (
+  id SERIAL PRIMARY KEY,
+  floor_plan_id INTEGER NOT NULL REFERENCES restaurant_floor_plans(id) ON DELETE CASCADE,
+  section_id INTEGER REFERENCES restaurant_floor_sections(id) ON DELETE SET NULL,
+  label TEXT NOT NULL,
+  capacity INTEGER NOT NULL DEFAULT 4,
+  shape TEXT DEFAULT 'square' CHECK (shape IN ('square','round','rectangle')),
+  pos_x INTEGER DEFAULT 0,
+  pos_y INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_restaurant_tables_floor ON restaurant_tables(floor_plan_id);
+
+CREATE TABLE IF NOT EXISTS restaurant_table_sessions (
+  id SERIAL PRIMARY KEY,
+  table_id INTEGER NOT NULL REFERENCES restaurant_tables(id),
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+  server_id INTEGER REFERENCES employees(id),
+  guest_count INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'seated' CHECK (status IN ('seated','ordering','served','check_requested','closed')),
+  seated_at TIMESTAMPTZ DEFAULT NOW(),
+  closed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_restaurant_sessions_table ON restaurant_table_sessions(table_id) WHERE status != 'closed';
+CREATE INDEX IF NOT EXISTS idx_restaurant_sessions_outlet ON restaurant_table_sessions(outlet_id, status);
+
+CREATE TABLE IF NOT EXISTS restaurant_check_seats (
+  id SERIAL PRIMARY KEY,
+  table_session_id INTEGER NOT NULL REFERENCES restaurant_table_sessions(id) ON DELETE CASCADE,
+  draft_order_id INTEGER NOT NULL REFERENCES draft_orders(id) ON DELETE CASCADE,
+  seat_number INTEGER NOT NULL,
+  label TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_check_seats_unique ON restaurant_check_seats(table_session_id, seat_number);
+
+CREATE TABLE IF NOT EXISTS restaurant_check_adjustments (
+  id SERIAL PRIMARY KEY,
+  draft_order_id INTEGER NOT NULL REFERENCES draft_orders(id) ON DELETE CASCADE,
+  adjustment_type TEXT NOT NULL CHECK (adjustment_type IN ('service_charge','gratuity','rounding','discount')),
+  label TEXT,
+  amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+  is_percentage BOOLEAN DEFAULT FALSE,
+  percentage_value NUMERIC(6,4),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_check_adjustments_order ON restaurant_check_adjustments(draft_order_id);
+
+CREATE TABLE IF NOT EXISTS restaurant_course_fires (
+  id SERIAL PRIMARY KEY,
+  draft_order_id INTEGER NOT NULL REFERENCES draft_orders(id) ON DELETE CASCADE,
+  course_name TEXT NOT NULL DEFAULT 'main',
+  status TEXT NOT NULL DEFAULT 'held' CHECK (status IN ('held','fired','completed')),
+  fired_at TIMESTAMPTZ,
+  fired_by INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_course_fires_order ON restaurant_course_fires(draft_order_id);
+
+CREATE TABLE IF NOT EXISTS restaurant_tabs (
+  id SERIAL PRIMARY KEY,
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+  customer_id INTEGER REFERENCES customers(id),
+  customer_name TEXT,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')),
+  opened_by INTEGER REFERENCES employees(id),
+  closed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_restaurant_tabs_outlet ON restaurant_tabs(outlet_id) WHERE status = 'open';
+
+CREATE TABLE IF NOT EXISTS restaurant_preauth_holds (
+  id SERIAL PRIMARY KEY,
+  tab_id INTEGER NOT NULL REFERENCES restaurant_tabs(id) ON DELETE CASCADE,
+  gateway_ref TEXT,
+  amount NUMERIC(12,2),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','captured','voided','expired')),
+  provider TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS kds_stations (
+  id SERIAL PRIMARY KEY,
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+  name TEXT NOT NULL,
+  station_role TEXT NOT NULL DEFAULT 'prep' CHECK (station_role IN ('prep','expo')),
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_kds_stations_outlet ON kds_stations(outlet_id);
+
+CREATE TABLE IF NOT EXISTS kds_station_routes (
+  id SERIAL PRIMARY KEY,
+  station_id INTEGER NOT NULL REFERENCES kds_stations(id) ON DELETE CASCADE,
+  category_id INTEGER REFERENCES categories(id),
+  match_all BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS kds_tickets (
+  id SERIAL PRIMARY KEY,
+  station_id INTEGER NOT NULL REFERENCES kds_stations(id),
+  draft_order_id INTEGER NOT NULL REFERENCES draft_orders(id),
+  table_label TEXT,
+  seat_label TEXT,
+  course_name TEXT DEFAULT 'main',
+  status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','in_progress','ready','bumped')),
+  priority INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_kds_tickets_station_status ON kds_tickets(station_id, status);
+CREATE INDEX IF NOT EXISTS idx_kds_tickets_order ON kds_tickets(draft_order_id);
+
+CREATE TABLE IF NOT EXISTS kds_ticket_events (
+  id SERIAL PRIMARY KEY,
+  ticket_id INTEGER NOT NULL REFERENCES kds_tickets(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL CHECK (event_type IN ('created','started','ready','bumped','recalled')),
+  actor_id INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_kds_ticket_events_ticket ON kds_ticket_events(ticket_id);
+
+-- Extend draft_orders for restaurant context
+ALTER TABLE draft_orders
+  ADD COLUMN IF NOT EXISTS order_context TEXT DEFAULT 'retail' CHECK (order_context IN ('retail','dine_in','takeout','delivery','bar')),
+  ADD COLUMN IF NOT EXISTS table_id INTEGER REFERENCES restaurant_tables(id),
+  ADD COLUMN IF NOT EXISTS table_session_id INTEGER REFERENCES restaurant_table_sessions(id),
+  ADD COLUMN IF NOT EXISTS tab_id INTEGER REFERENCES restaurant_tabs(id),
+  ADD COLUMN IF NOT EXISTS seat_count INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS dining_option TEXT CHECK (dining_option IN ('dine_in','takeout','delivery')),
+  ADD COLUMN IF NOT EXISTS source_token_id TEXT;
+
+-- Extend draft_order_items for seat/course tracking
+ALTER TABLE draft_order_items
+  ADD COLUMN IF NOT EXISTS seat_number INTEGER,
+  ADD COLUMN IF NOT EXISTS course_name TEXT DEFAULT 'main',
+  ADD COLUMN IF NOT EXISTS kitchen_status TEXT DEFAULT 'pending';
+
 -- ── Schema versioning ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schema_version (
   version    INTEGER PRIMARY KEY,
