@@ -214,6 +214,8 @@ async function registerEmailWorker(boss, pool) {
   // Create queues (pg-boss v12+ requires explicit queue creation before work/send)
   await boss.createQueue("email");
   await boss.createQueue("billing-lifecycle-check");
+  await boss.createQueue("campaign-email");
+  await boss.createQueue("campaign-scheduled-send");
 
   // Worker: send a single email
   await boss.work("email", { teamSize: 5, teamConcurrency: 5 }, async (job) => {
@@ -238,6 +240,64 @@ async function registerEmailWorker(boss, pool) {
     } catch (err) {
       logger.error({ err }, "Billing lifecycle check error");
       throw err; // let pg-boss record the failure
+    }
+  });
+
+  // ── Campaign email delivery worker ──────────────────────────────────────
+  await boss.work("campaign-email", { teamSize: 5, teamConcurrency: 5 }, async (job) => {
+    const { deliveryId, to, subject, html } = job.data;
+    try {
+      const fromAddr = process.env.RESEND_FROM_EMAIL || "SanoPOS <noreply@sanopos.com>";
+      await resend.emails.send({ from: fromAddr, to, subject, html });
+      await pool.query(
+        "UPDATE marketing_campaign_deliveries SET status = 'sent', sent_at = NOW() WHERE id = $1",
+        [deliveryId]
+      );
+      logger.info({ deliveryId, to }, "Campaign email sent");
+    } catch (err) {
+      await pool.query(
+        "UPDATE marketing_campaign_deliveries SET status = 'failed', error = $1 WHERE id = $2",
+        [err.message, deliveryId]
+      );
+      logger.error({ err, deliveryId }, "Campaign email failed");
+      throw err;
+    }
+
+    // Check if all deliveries for campaign are complete — update campaign status
+    if (job.data.campaignId) {
+      try {
+        const { rows: [stats] } = await pool.query(
+          `SELECT
+             COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE status = 'sent')::int AS sent,
+             COUNT(*) FILTER (WHERE status = 'failed')::int AS failed,
+             COUNT(*) FILTER (WHERE status = 'pending')::int AS pending
+           FROM marketing_campaign_deliveries WHERE campaign_id = $1`,
+          [job.data.campaignId]
+        );
+        if (stats.pending === 0) {
+          const newStatus = stats.failed === 0 ? "sent" : stats.sent === 0 ? "failed" : "partial";
+          await pool.query(
+            "UPDATE marketing_campaigns SET status = $1, sent_at = NOW(), updated_at = NOW() WHERE id = $2",
+            [newStatus, job.data.campaignId]
+          );
+        }
+      } catch { /* non-critical */ }
+    }
+  });
+
+  // ── Scheduled campaign send (delayed job) ─────────────────────────────
+  await boss.work("campaign-scheduled-send", async (job) => {
+    const { campaignId } = job.data;
+    try {
+      const { enqueueCampaignSend } = require("../services/marketing");
+      // Use pool directly since scheduled jobs run without tenant context
+      const db = { query: (sql, params) => pool.query(sql, params) };
+      await enqueueCampaignSend(boss, campaignId, db);
+      logger.info({ campaignId }, "Scheduled campaign send triggered");
+    } catch (err) {
+      logger.error({ err, campaignId }, "Scheduled campaign send failed");
+      throw err;
     }
   });
 

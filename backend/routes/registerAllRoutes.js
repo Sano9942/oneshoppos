@@ -569,6 +569,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: TAX LOOKUP ---
   require("./tax-lookup")(app, deps);
 
+  // --- MARKETING CAMPAIGNS ---
+  require("./marketing")(app, deps);
+
   return {
     processPendingShopifyInventoryEvents:
       typeof processPendingShopifyInventoryEvents === "function"

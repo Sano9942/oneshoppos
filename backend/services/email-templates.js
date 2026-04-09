@@ -282,8 +282,19 @@ function renewalOverdue({ storeName, plan, expiredAt }) {
   };
 }
 
+function campaignTest(data) {
+  return {
+    subject: `[TEST] ${data.subject || data.campaign_name || "Campaign Preview"}`,
+    html: wrapEmailHtml(
+      `Test: ${data.campaign_name || "Campaign"}`,
+      data.html || "<p>No content</p>"
+    ),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
+  campaign_test: campaignTest,
   drip_getting_started: dripGettingStarted,
   drip_features: dripFeatures,
   billing_payment_recorded: billingPaymentRecorded,
