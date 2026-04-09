@@ -61,6 +61,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Customer Groups", path: "/customer-groups", icon: Users, requiredPerm: "manage_customers" },
       { name: "Loyalty Tiers", path: "/loyalty-tiers", icon: Award, requiredPerm: "all_access" },
       { name: "Returns", path: "/returns", icon: RotateCcw },
+      { name: "Return Policies", path: "/return-policies", icon: Shield, requiredPerm: "all_access", requiredFlag: "phase2_returns_policy" },
       { name: "Sales History", path: "/sales-history", icon: Receipt },
       { name: "Cash Management", path: "/cash-management", icon: Banknote },
     ],

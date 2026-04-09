@@ -450,6 +450,9 @@ module.exports = function registerAllRoutes(app, deps) {
   const { processPendingReportSchedules } =
     require("./reports/index")(app, deps) || {};
 
+  // --- ROUTES: RETURN POLICIES (Phase 2) ---
+  require("./return-policies")(app, deps);
+
   // --- ROUTES: RETURNS ---
   require("./returns")(app, deps);
 

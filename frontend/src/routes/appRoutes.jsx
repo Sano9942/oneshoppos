@@ -41,6 +41,7 @@ const CRMRoute = lazy(() => import("../pages/CRMRoute"));
 const QuotationsRoute = lazy(() => import("../pages/QuotationsRoute"));
 const HRManagementRoute = lazy(() => import("../pages/HRManagementRoute"));
 const SchedulingRoute = lazy(() => import("../pages/SchedulingRoute"));
+const ReturnPoliciesRoute = lazy(() => import("../pages/ReturnPoliciesRoute"));
 const CompanySettingsRoute = lazy(() => import("../pages/CompanySettingsRoute"));
 const OrdersRoute = lazy(() => import("../pages/OrdersRoute"));
 const CustomersRoute = lazy(() => import("../pages/CustomersRoute"));
@@ -103,6 +104,7 @@ export const appRoutes = [
     <Route path="/shopcast" element={<PlaceholderPage />} />
     <Route path="/reports" element={wrap(ReportsRoute)} />
     <Route path="/returns" element={<ReturnsRoute />} />
+    <Route path="/return-policies" element={perm("all_access", <ReturnPoliciesRoute />)} />
     <Route path="/inventory" element={perm("manage_inventory", <InventoryRoute />)} />
     <Route path="/products/new" element={perm("manage_inventory", <ProductFormPage />)} />
     <Route path="/products/:id" element={perm("manage_inventory", <ProductFormPage />)} />

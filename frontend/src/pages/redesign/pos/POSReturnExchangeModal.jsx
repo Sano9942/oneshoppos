@@ -27,6 +27,17 @@ export default function POSReturnExchangeModal() {
   const [reason, setReason] = useState("");
   const [mode, setMode] = useState("refund");
 
+  // Phase 2: Return policy fields
+  const [returnReasons, setReturnReasons] = useState([]);
+  const [selectedReasonId, setSelectedReasonId] = useState("");
+  const [policyQuote, setPolicyQuote] = useState(null);
+  const [showApproval, setShowApproval] = useState(false);
+  const [approvalEventId, setApprovalEventId] = useState(null);
+
+  useEffect(() => {
+    api.get("/return-reasons").then(r => setReturnReasons(r.reasons || [])).catch(() => {});
+  }, []);
+
   // Separate search state for no-bill return items vs exchange replacement items
   const [returnSearch, setReturnSearch] = useState("");
   const [returnSearchResults, setReturnSearchResults] = useState([]);
@@ -239,6 +250,11 @@ export default function POSReturnExchangeModal() {
             refund_method: mode === "exchange" ? "Return Credit" : settleMethod,
             reason: reason || null,
             items: selectedItems,
+            // Phase 2 fields
+            policy_id: policyQuote?.policy_id || null,
+            return_reason_id: selectedReasonId ? Number(selectedReasonId) : null,
+            processed_by_employee_id: employee?.id || null,
+            approval_event_id: approvalEventId || null,
           });
       }
 

@@ -55,6 +55,97 @@ module.exports = function registerReturnsRoutes(app, deps) {
    *       401:
    *         description: Unauthorized
    */
+  // ── Return Quote (preflight check) ─────────────────────────────────────────
+  app.post("/api/returns/quote", requirePerm("manage_orders"), async (req, res) => {
+    const { original_sale_id, items } = req.body;
+    try {
+      // Find default return policy
+      let policy = null;
+      try {
+        const { rows } = await db.query(
+          "SELECT * FROM return_policies WHERE is_default = TRUE AND is_active = TRUE LIMIT 1"
+        );
+        policy = rows[0] || null;
+      } catch (_) { /* table may not exist */ }
+
+      // If no policy, allow by default
+      if (!policy) {
+        return res.json({
+          eligible: true,
+          policy_result: "allowed",
+          reason: "No return policy configured",
+          suggested_refund: null,
+          restocking_fee: 0,
+          allowed_refund_methods: ["cash", "card", "store_credit"],
+        });
+      }
+
+      // Check time window
+      let withinWindow = true;
+      if (original_sale_id && policy.return_window_days) {
+        const { rows: saleRows } = await db.query(
+          'SELECT "timestamp" FROM sales WHERE id = $1',
+          [original_sale_id]
+        );
+        if (saleRows[0]) {
+          const saleDate = new Date(saleRows[0].timestamp);
+          const daysSince = Math.floor((Date.now() - saleDate.getTime()) / 86400000);
+          if (daysSince > policy.return_window_days) {
+            withinWindow = false;
+          }
+        }
+      }
+
+      // Check receipt requirement
+      const hasReceipt = !!original_sale_id;
+      if (policy.receipt_required && !hasReceipt) {
+        return res.json({
+          eligible: false,
+          policy_result: "approval_required",
+          reason: "Receipt is required for returns under this policy",
+          suggested_refund: null,
+          restocking_fee: 0,
+          allowed_refund_methods: policy.allowed_refund_methods || [],
+        });
+      }
+
+      // Calculate suggested refund
+      let suggestedRefund = 0;
+      if (items && items.length > 0 && original_sale_id) {
+        const { rows: saleItems } = await db.query(
+          "SELECT product_id, variant_id, price, quantity FROM sale_items WHERE sale_id = $1",
+          [original_sale_id]
+        );
+        for (const item of items) {
+          const match = saleItems.find(s =>
+            s.product_id === item.product_id &&
+            (String(s.variant_id || "") === String(item.variant_id || ""))
+          );
+          if (match) {
+            suggestedRefund += Number(match.price) * Number(item.quantity);
+          }
+        }
+      }
+
+      const restockingFee = Number(policy.restocking_fee_percent || 0) / 100 * suggestedRefund;
+      const netRefund = Math.max(0, suggestedRefund - restockingFee);
+
+      const policyResult = !withinWindow ? "approval_required" : "allowed";
+
+      res.json({
+        eligible: withinWindow,
+        policy_result: policyResult,
+        reason: !withinWindow ? `Return window of ${policy.return_window_days} days has expired` : null,
+        suggested_refund: Math.round(netRefund * 100) / 100,
+        restocking_fee: Math.round(restockingFee * 100) / 100,
+        allowed_refund_methods: policy.allowed_refund_methods || [],
+        policy_id: policy.id,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Create a new return
   app.post("/api/returns", requirePerm("manage_orders"), validate(CreateReturnSchema), async (req, res) => {
     const {
@@ -67,6 +158,12 @@ module.exports = function registerReturnsRoutes(app, deps) {
       refund_method,
       reason,
       items,
+      // Phase 2 optional fields
+      policy_id,
+      return_reason_id,
+      processed_by_employee_id,
+      approved_by_employee_id,
+      approval_event_id,
     } = req.body;
 
     if (!items || items.length === 0) {
@@ -175,7 +272,9 @@ module.exports = function registerReturnsRoutes(app, deps) {
 
       const returnId = await db.transaction(async (client) => {
         const { rows } = await client.query(
-          "INSERT INTO returns (original_sale_id, web_order_id, outlet_id, employee_id, customer_id, total_refund, refund_method, reason, shift_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
+          `INSERT INTO returns (original_sale_id, web_order_id, outlet_id, employee_id, customer_id, total_refund, refund_method, reason, shift_id,
+           policy_id, return_reason_id, processed_by_employee_id, approved_by_employee_id, approval_event_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id`,
           [
             original_sale_id || null,
             web_order_id || null,
@@ -186,6 +285,11 @@ module.exports = function registerReturnsRoutes(app, deps) {
             refund_method,
             reason || null,
             shiftId,
+            policy_id || null,
+            return_reason_id || null,
+            processed_by_employee_id || null,
+            approved_by_employee_id || null,
+            approval_event_id || null,
           ],
         );
         const retId = rows[0].id;
