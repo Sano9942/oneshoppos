@@ -52,6 +52,14 @@ const DEFAULT_FEATURE_FLAGS = {
   phase2_draft_orders: false,
   phase2_pos_approvals: false,
   phase2_returns_policy: false,
+  phase2_smart_collections: false,
+  phase2_outlet_visibility: false,
+  phase2_outlet_tax: false,
+  phase2_scheduled_changes: false,
+  phase2_commissions: false,
+  phase2_report_builder: false,
+  phase2_pos_layouts: false,
+  phase2_item_suggestions: false,
 };
 
 // Per-tenant feature flag cache

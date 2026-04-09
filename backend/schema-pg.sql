@@ -2083,6 +2083,183 @@ CREATE TABLE IF NOT EXISTS return_reasons (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ── Phase 2B: Smart Collections ─────────────────────────────────────
+CREATE TABLE IF NOT EXISTS smart_collections (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  disjunctive BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT TRUE,
+  sort_order TEXT DEFAULT 'manual',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS smart_collection_rules (
+  id SERIAL PRIMARY KEY,
+  collection_id INTEGER NOT NULL REFERENCES smart_collections(id) ON DELETE CASCADE,
+  field TEXT NOT NULL,
+  operator TEXT NOT NULL,
+  value TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_smart_collection_rules_collection ON smart_collection_rules(collection_id);
+
+-- ── Phase 2B: Outlet Product Visibility ─────────────────────────────
+CREATE TABLE IF NOT EXISTS outlet_product_visibility (
+  id SERIAL PRIMARY KEY,
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  is_visible BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(outlet_id, product_id)
+);
+CREATE INDEX IF NOT EXISTS idx_opv_outlet ON outlet_product_visibility(outlet_id);
+CREATE INDEX IF NOT EXISTS idx_opv_product ON outlet_product_visibility(product_id);
+
+-- ── Phase 2B: Outlet Tax Profiles ───────────────────────────────────
+CREATE TABLE IF NOT EXISTS outlet_tax_profiles (
+  id SERIAL PRIMARY KEY,
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(outlet_id)
+);
+
+CREATE TABLE IF NOT EXISTS outlet_tax_profile_lines (
+  id SERIAL PRIMARY KEY,
+  profile_id INTEGER NOT NULL REFERENCES outlet_tax_profiles(id) ON DELETE CASCADE,
+  category_id INTEGER REFERENCES categories(id),
+  product_id INTEGER REFERENCES products(id),
+  tax_id INTEGER NOT NULL REFERENCES taxes(id),
+  priority INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_otpl_profile ON outlet_tax_profile_lines(profile_id);
+
+-- ── Phase 2B: Scheduled Catalog Changes ─────────────────────────────
+CREATE TABLE IF NOT EXISTS scheduled_catalog_changes (
+  id SERIAL PRIMARY KEY,
+  change_type TEXT NOT NULL CHECK (change_type IN ('price','visibility','status','tax')),
+  entity_type TEXT NOT NULL CHECK (entity_type IN ('product','variant','collection','price_list')),
+  entity_id INTEGER NOT NULL,
+  field_name TEXT NOT NULL,
+  old_value TEXT,
+  new_value TEXT NOT NULL,
+  scheduled_at TIMESTAMPTZ NOT NULL,
+  applied_at TIMESTAMPTZ,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','applied','cancelled','failed')),
+  created_by INTEGER REFERENCES employees(id),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_scc_status_scheduled ON scheduled_catalog_changes(status, scheduled_at) WHERE status = 'pending';
+
+-- ── Phase 2B: Commission Plans ──────────────────────────────────────
+CREATE TABLE IF NOT EXISTS commission_plans (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  type TEXT NOT NULL DEFAULT 'percentage' CHECK (type IN ('percentage','fixed_per_sale','fixed_per_item','tiered')),
+  is_active BOOLEAN DEFAULT TRUE,
+  starts_at TIMESTAMPTZ,
+  ends_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS commission_plan_rules (
+  id SERIAL PRIMARY KEY,
+  plan_id INTEGER NOT NULL REFERENCES commission_plans(id) ON DELETE CASCADE,
+  scope_type TEXT NOT NULL DEFAULT 'all' CHECK (scope_type IN ('all','category','product','brand')),
+  scope_id INTEGER,
+  rate NUMERIC(8,4) NOT NULL,
+  min_threshold NUMERIC(12,2) DEFAULT 0,
+  max_cap NUMERIC(12,2),
+  priority INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_cpr_plan ON commission_plan_rules(plan_id);
+
+CREATE TABLE IF NOT EXISTS commission_earnings (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  sale_id INTEGER NOT NULL REFERENCES sales(id),
+  plan_id INTEGER NOT NULL REFERENCES commission_plans(id),
+  rule_id INTEGER REFERENCES commission_plan_rules(id),
+  sale_amount NUMERIC(12,2) NOT NULL,
+  commission_amount NUMERIC(12,2) NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','paid','reversed')),
+  approved_at TIMESTAMPTZ,
+  paid_at TIMESTAMPTZ,
+  reversed_at TIMESTAMPTZ,
+  reversal_reason TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_ce_employee ON commission_earnings(employee_id);
+CREATE INDEX IF NOT EXISTS idx_ce_sale ON commission_earnings(sale_id);
+CREATE INDEX IF NOT EXISTS idx_ce_status ON commission_earnings(status);
+
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS commission_plan_id INTEGER REFERENCES commission_plans(id);
+
+-- ── Phase 2B: Custom Report Definitions ─────────────────────────────
+CREATE TABLE IF NOT EXISTS custom_report_definitions (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  dataset TEXT NOT NULL,
+  dimensions TEXT[] NOT NULL DEFAULT '{}',
+  measures TEXT[] NOT NULL DEFAULT '{}',
+  filters_json TEXT DEFAULT '{}',
+  sort_by TEXT,
+  sort_order TEXT DEFAULT 'desc',
+  created_by INTEGER REFERENCES employees(id),
+  is_shared BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS custom_report_widgets (
+  id SERIAL PRIMARY KEY,
+  definition_id INTEGER NOT NULL REFERENCES custom_report_definitions(id) ON DELETE CASCADE,
+  widget_type TEXT NOT NULL DEFAULT 'table' CHECK (widget_type IN ('table','bar_chart','line_chart','pie_chart','metric_card')),
+  title TEXT,
+  config_json TEXT DEFAULT '{}',
+  position INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_crw_definition ON custom_report_widgets(definition_id);
+
+-- ── Phase 2B: POS Layouts ───────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS pos_layouts (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  scope_type TEXT NOT NULL DEFAULT 'global' CHECK (scope_type IN ('global','outlet','role','employee')),
+  scope_id INTEGER,
+  layout_json TEXT NOT NULL DEFAULT '[]',
+  is_active BOOLEAN DEFAULT TRUE,
+  created_by INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(scope_type, scope_id)
+);
+
+-- ── Phase 2B: Product Affinities ────────────────────────────────────
+CREATE TABLE IF NOT EXISTS product_affinities (
+  id SERIAL PRIMARY KEY,
+  source_product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  target_product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  affinity_type TEXT NOT NULL DEFAULT 'frequently_bought_together' CHECK (affinity_type IN ('frequently_bought_together','complementary','upsell','cross_sell')),
+  score NUMERIC(5,2) DEFAULT 1.0,
+  is_manual BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(source_product_id, target_product_id, affinity_type)
+);
+CREATE INDEX IF NOT EXISTS idx_pa_source ON product_affinities(source_product_id);
+
 -- ── Schema versioning ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schema_version (
   version    INTEGER PRIMARY KEY,
