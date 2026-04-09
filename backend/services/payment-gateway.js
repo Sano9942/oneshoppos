@@ -119,4 +119,19 @@ async function xpayVerifyWebhook(headers, rawBody) {
   };
 }
 
-module.exports = { createCheckout, verifyWebhook, isEnabled };
+/**
+ * Create a checkout session for a customer invoice payment link.
+ * Same adapter pattern as createCheckout but with invoice-specific context.
+ */
+async function createInvoiceCheckout({ invoiceId, amount, currency = "PKR", description, returnUrl, cancelUrl, linkToken }) {
+  return createCheckout({
+    amount,
+    currency,
+    reference: `inv-link-${linkToken}`,
+    description: description || `Invoice payment`,
+    returnUrl,
+    cancelUrl,
+  });
+}
+
+module.exports = { createCheckout, createInvoiceCheckout, verifyWebhook, isEnabled };

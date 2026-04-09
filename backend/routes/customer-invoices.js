@@ -10,6 +10,7 @@
  * POST   /api/customer-invoices/:id/reminders/run   — Manually trigger reminder
  * POST   /api/customer-invoices/from-quotation/:qid — Convert quotation
  * PUT    /api/customer-invoices/:id/void            — Void invoice
+ * POST   /api/customer-invoices/:id/payment-link   — Generate payment link
  */
 
 module.exports = function registerCustomerInvoiceRoutes(app, deps) {
@@ -300,6 +301,56 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
     try {
       const invoice = await convertQuotationToInvoice(deps.db, Number(req.params.quotationId), req.employee.id);
       res.status(201).json(invoice);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // ── Payment link ───────────────────────────────────────────────────────
+
+  app.post("/api/customer-invoices/:id/payment-link", ...gate, requireFeature("payment_links"), async (req, res) => {
+    try {
+      const paymentGateway = require("../services/payment-gateway");
+      if (!paymentGateway.isEnabled()) {
+        return res.status(400).json({ error: "Online payments are not configured. Set PAYMENT_GATEWAY env var." });
+      }
+
+      const { id } = req.params;
+      const { rows: [invoice] } = await deps.db.query(
+        "SELECT * FROM customer_invoices WHERE id = $1",
+        [id]
+      );
+      if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+      if (invoice.status === "paid" || invoice.status === "void") {
+        return res.status(400).json({ error: "Invoice is already paid or voided" });
+      }
+      if (Number(invoice.balance_due) <= 0) {
+        return res.status(400).json({ error: "No balance due" });
+      }
+
+      const crypto = require("crypto");
+      const linkToken = crypto.randomBytes(24).toString("hex");
+      const amount = Number(invoice.balance_due);
+      const frontendUrl = process.env.FRONTEND_URL || "https://sanopos.com";
+
+      const { checkout_url, gateway_ref } = await paymentGateway.createInvoiceCheckout({
+        invoiceId: invoice.id,
+        amount,
+        description: `Invoice ${invoice.invoice_number}`,
+        returnUrl: `${frontendUrl}/invoice-paid?token=${linkToken}`,
+        cancelUrl: `${frontendUrl}/customer-invoices`,
+        linkToken,
+      });
+
+      const expiresAt = new Date(Date.now() + 7 * 86400000); // 7 days
+
+      await deps.db.query(
+        `INSERT INTO customer_invoice_payment_links (invoice_id, link_token, gateway_ref, amount, status, expires_at)
+         VALUES ($1, $2, $3, $4, 'active', $5)`,
+        [id, linkToken, gateway_ref, amount, expiresAt]
+      );
+
+      res.json({ link_url: checkout_url, link_token: linkToken, expires_at: expiresAt });
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }

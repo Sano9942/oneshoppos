@@ -37,6 +37,29 @@ module.exports = function registerWebhookRoutes(app, deps) {
       );
 
       if (!intent) {
+        // Check if this is an invoice payment link
+        const db = require("../db-pg");
+        const { rows: [link] } = await db.query(
+          "SELECT * FROM customer_invoice_payment_links WHERE gateway_ref = $1",
+          [transaction_id]
+        );
+        if (link && (status === "completed" || event_type === "payment.completed")) {
+          try {
+            await db.query("UPDATE customer_invoice_payment_links SET status = 'completed' WHERE id = $1", [link.id]);
+            await db.query(
+              `INSERT INTO customer_invoice_payments (invoice_id, amount, payment_method, payment_type, reference)
+               VALUES ($1, $2, 'online', 'payment', $3)`,
+              [link.invoice_id, link.amount, `gateway:${transaction_id}`]
+            );
+            const { recomputeBalance } = require("../services/customer-invoicing");
+            await recomputeBalance(db, link.invoice_id);
+            logger.info({ invoiceId: link.invoice_id, linkId: link.id }, "Invoice payment link completed");
+          } catch (linkErr) {
+            logger.error({ err: linkErr }, "Invoice payment link processing failed");
+          }
+          return res.json({ ok: true });
+        }
+
         logger.warn({ transaction_id }, "xPay webhook: unknown transaction");
         return res.status(404).json({ error: "Unknown transaction" });
       }
