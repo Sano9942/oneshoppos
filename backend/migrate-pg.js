@@ -1075,6 +1075,18 @@ const MIGRATIONS = [
         CREATE INDEX IF NOT EXISTS idx_web_order_allocations_outlet ON web_order_allocations(fulfillment_outlet_id);
       `);
 
+      // Ensure allocation_id column exists on picklist_items (table may pre-exist from v16 without it)
+      await client.query(`
+        DO $$ BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'picklist_items' AND column_name = 'allocation_id'
+          ) THEN
+            ALTER TABLE picklist_items ADD COLUMN allocation_id INTEGER;
+          END IF;
+        END $$;
+      `);
+
       // Add FK from picklist_items.allocation_id → web_order_allocations now that both tables exist
       await client.query(`
         DO $$ BEGIN
