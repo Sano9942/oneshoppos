@@ -59,6 +59,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
   app.post("/api/returns", requirePerm("manage_orders"), validate(CreateReturnSchema), async (req, res) => {
     const {
       original_sale_id,
+      web_order_id,
       outlet_id,
       employee_id,
       customer_id,
@@ -116,6 +117,54 @@ module.exports = function registerReturnsRoutes(app, deps) {
       }
     }
 
+    // Validate web_order_id when provided (web order return flow)
+    if (web_order_id && !original_sale_id) {
+      try {
+        const { rows: woRows } = await db.query(
+          "SELECT id FROM web_orders WHERE id = $1",
+          [web_order_id],
+        );
+        if (!woRows.length) {
+          return res.status(400).json({ error: "Web order not found" });
+        }
+
+        // Validate returned items against web order items
+        const { rows: woItems } = await db.query(
+          `SELECT product_id, variant_id, SUM(quantity) AS ordered_qty
+           FROM web_order_items WHERE web_order_id = $1
+           GROUP BY product_id, variant_id`,
+          [web_order_id],
+        );
+        if (!woItems.length) {
+          return res.status(400).json({ error: "Web order has no items" });
+        }
+
+        const orderedMap = {};
+        woItems.forEach((r) => {
+          const key = `${r.product_id}_${r.variant_id ?? "null"}`;
+          orderedMap[key] = Number(r.ordered_qty);
+        });
+
+        for (const item of items) {
+          const key = `${item.product_id}_${item.variant_id ?? "null"}`;
+          if (!(key in orderedMap)) {
+            return res.status(400).json({
+              error: item.variant_id
+                ? `Variant ${item.variant_id} of product ${item.product_id} was not part of the web order`
+                : `Product ${item.product_id} was not part of the web order`,
+            });
+          }
+          if (item.quantity > orderedMap[key]) {
+            return res.status(400).json({
+              error: `Return quantity ${item.quantity} exceeds ordered quantity for this item`,
+            });
+          }
+        }
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+
     try {
       // Look up the open shift for this outlet
       const { rows: shiftRows } = await db.query(
@@ -126,9 +175,10 @@ module.exports = function registerReturnsRoutes(app, deps) {
 
       const returnId = await db.transaction(async (client) => {
         const { rows } = await client.query(
-          "INSERT INTO returns (original_sale_id, outlet_id, employee_id, customer_id, total_refund, refund_method, reason, shift_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
+          "INSERT INTO returns (original_sale_id, web_order_id, outlet_id, employee_id, customer_id, total_refund, refund_method, reason, shift_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
           [
             original_sale_id || null,
+            web_order_id || null,
             outlet_id,
             employee_id || null,
             customer_id || null,
@@ -279,6 +329,34 @@ module.exports = function registerReturnsRoutes(app, deps) {
         [id],
       );
       res.json({ returnData: returnRows[0], items });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Lookup web orders for return initiation
+  app.get("/api/returns/lookup-web-order", requireAnyPerm(["manage_returns", "view_reports"]), async (req, res) => {
+    const { q } = req.query;
+    if (!q || !q.trim()) {
+      return res.status(400).json({ error: "Search query is required" });
+    }
+    const search = q.trim();
+    const likeTerm = `%${search}%`;
+
+    try {
+      const { rows } = await db.query(
+        `SELECT wo.id, wo.external_order_id, wo.external_order_number,
+                wo.customer_name_snapshot AS customer_name,
+                wo.grand_total, wo.ordered_at, wo.source, wo.order_status,
+                wo.delivery_method, wo.fulfillment_status
+         FROM web_orders wo
+         WHERE wo.external_order_id ILIKE $1
+            OR wo.external_order_number ILIKE $1
+            OR wo.public_order_token = $2
+         LIMIT 10`,
+        [likeTerm, search],
+      );
+      res.json({ orders: rows });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
