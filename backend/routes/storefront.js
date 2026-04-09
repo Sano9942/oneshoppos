@@ -866,4 +866,44 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       res.status(500).json({ error: "Internal server error" });
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/storefront/orders/:orderToken/arrive — curbside arrival signal
+  // ---------------------------------------------------------------------------
+  app.post("/api/storefront/orders/:orderToken/arrive", async (req, res) => {
+    try {
+      const resolved = await resolveStorefrontDb(req);
+      if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+      const { db } = resolved;
+
+      const { rows } = await db.query(
+        `SELECT id, delivery_method, curbside_arrived_at
+         FROM web_orders
+         WHERE public_order_token = $1`,
+        [req.params.orderToken]
+      );
+
+      if (!rows.length) return res.status(404).json({ error: "Order not found" });
+
+      const order = rows[0];
+      if (order.delivery_method !== "pickup") {
+        return res.status(400).json({ error: "Order is not a pickup order" });
+      }
+
+      if (order.curbside_arrived_at) {
+        return res.json({ success: true, arrivedAt: order.curbside_arrived_at });
+      }
+
+      const { rows: updated } = await db.query(
+        `UPDATE web_orders SET curbside_arrived_at = NOW(), updated_at = NOW()
+         WHERE id = $1 RETURNING curbside_arrived_at`,
+        [order.id]
+      );
+
+      res.json({ success: true, arrivedAt: updated[0].curbside_arrived_at });
+    } catch (err) {
+      console.error("Storefront curbside arrive error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
 };

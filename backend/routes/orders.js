@@ -631,6 +631,67 @@ module.exports = function registerOrderRoutes(app, deps) {
     },
   );
 
+  // ---------------------------------------------------------------------------
+  // PUT /api/orders/:id/pickup-ready — mark order ready for pickup
+  // ---------------------------------------------------------------------------
+  app.put("/api/orders/:id/pickup-ready", requirePerm("manage_orders"), async (req, res) => {
+    const { id } = req.params;
+    try {
+      const { rows } = await db.query(
+        `SELECT id, delivery_method FROM web_orders WHERE id = $1`,
+        [id]
+      );
+      if (!rows.length) return res.status(404).json({ error: "Order not found" });
+      if (rows[0].delivery_method !== "pickup") {
+        return res.status(400).json({ error: "Order is not a pickup order" });
+      }
+
+      const { rows: updated } = await db.query(
+        `UPDATE web_orders
+         SET pickup_ready_at = NOW(),
+             fulfillment_status = 'ready_for_pickup',
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING *`,
+        [id]
+      );
+      res.json(updated[0]);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // PUT /api/orders/:id/picked-up — mark order as picked up
+  // ---------------------------------------------------------------------------
+  app.put("/api/orders/:id/picked-up", requirePerm("manage_orders"), async (req, res) => {
+    const { id } = req.params;
+    try {
+      const { rows } = await db.query(
+        `SELECT id, delivery_method FROM web_orders WHERE id = $1`,
+        [id]
+      );
+      if (!rows.length) return res.status(404).json({ error: "Order not found" });
+      if (rows[0].delivery_method !== "pickup") {
+        return res.status(400).json({ error: "Order is not a pickup order" });
+      }
+
+      const { rows: updated } = await db.query(
+        `UPDATE web_orders
+         SET picked_up_at = NOW(),
+             fulfillment_status = 'fulfilled',
+             order_status = 'closed',
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING *`,
+        [id]
+      );
+      res.json(updated[0]);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   function maskSecret(secret) {
     let value = String(secret || "");
     try {
