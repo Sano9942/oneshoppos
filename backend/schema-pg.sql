@@ -298,7 +298,10 @@ CREATE TABLE IF NOT EXISTS customers (
   preferred_contact TEXT,
   loyalty_tier_id INTEGER REFERENCES loyalty_tiers(id),
   total_spend NUMERIC(12,2) DEFAULT 0,
-  price_list_id INTEGER
+  price_list_id INTEGER,
+  email_consent BOOLEAN DEFAULT false,
+  sms_consent BOOLEAN DEFAULT false,
+  whatsapp_consent BOOLEAN DEFAULT false
 );
 
 CREATE TABLE IF NOT EXISTS customer_wallet_ledger (
@@ -829,6 +832,7 @@ CREATE TABLE IF NOT EXISTS quotations (
   valid_until TEXT,
   notes TEXT,
   converted_sale_id INTEGER REFERENCES sales(id),
+  converted_invoice_id INTEGER,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -2259,6 +2263,214 @@ CREATE TABLE IF NOT EXISTS product_affinities (
   UNIQUE(source_product_id, target_product_id, affinity_type)
 );
 CREATE INDEX IF NOT EXISTS idx_pa_source ON product_affinities(source_product_id);
+
+-- ── Phase 3: Marketing Campaigns ───────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS marketing_templates (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  channel TEXT NOT NULL DEFAULT 'email',
+  subject TEXT,
+  body_html TEXT,
+  body_text TEXT,
+  created_by INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS marketing_campaigns (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  channel TEXT NOT NULL DEFAULT 'email',
+  template_id INTEGER REFERENCES marketing_templates(id),
+  status TEXT NOT NULL DEFAULT 'draft',
+  subject TEXT,
+  body_html TEXT,
+  scheduled_at TIMESTAMPTZ,
+  sent_at TIMESTAMPTZ,
+  created_by INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS marketing_campaign_audiences (
+  id SERIAL PRIMARY KEY,
+  campaign_id INTEGER NOT NULL REFERENCES marketing_campaigns(id) ON DELETE CASCADE,
+  filter_type TEXT NOT NULL,
+  filter_value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS marketing_campaign_deliveries (
+  id SERIAL PRIMARY KEY,
+  campaign_id INTEGER NOT NULL REFERENCES marketing_campaigns(id) ON DELETE CASCADE,
+  customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+  channel TEXT NOT NULL DEFAULT 'email',
+  recipient TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  sent_at TIMESTAMPTZ,
+  error TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_marketing_campaigns_status ON marketing_campaigns(status);
+CREATE INDEX IF NOT EXISTS idx_marketing_deliveries_campaign ON marketing_campaign_deliveries(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_marketing_deliveries_customer ON marketing_campaign_deliveries(customer_id);
+
+-- ── Phase 3: Messaging Inbox ───────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS message_threads (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+  channel TEXT NOT NULL DEFAULT 'whatsapp',
+  channel_identifier TEXT NOT NULL,
+  subject TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  assigned_to INTEGER REFERENCES employees(id),
+  unread_count INTEGER DEFAULT 0,
+  last_message_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS message_entries (
+  id SERIAL PRIMARY KEY,
+  thread_id INTEGER NOT NULL REFERENCES message_threads(id) ON DELETE CASCADE,
+  direction TEXT NOT NULL,
+  content TEXT,
+  message_type TEXT DEFAULT 'text',
+  external_id TEXT,
+  sender_type TEXT DEFAULT 'customer',
+  sender_id INTEGER,
+  status TEXT DEFAULT 'delivered',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_message_threads_customer ON message_threads(customer_id);
+CREATE INDEX IF NOT EXISTS idx_message_threads_channel ON message_threads(channel, channel_identifier);
+CREATE INDEX IF NOT EXISTS idx_message_entries_thread ON message_entries(thread_id);
+
+-- ── Phase 3: Customer Invoicing ────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS customer_invoices (
+  id SERIAL PRIMARY KEY,
+  invoice_number TEXT UNIQUE,
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  quotation_id INTEGER REFERENCES quotations(id),
+  outlet_id INTEGER REFERENCES outlets(id),
+  employee_id INTEGER REFERENCES employees(id),
+  status TEXT NOT NULL DEFAULT 'draft',
+  subtotal NUMERIC(12,2) DEFAULT 0,
+  tax_total NUMERIC(12,2) DEFAULT 0,
+  discount_amount NUMERIC(12,2) DEFAULT 0,
+  total_amount NUMERIC(12,2) DEFAULT 0,
+  amount_paid NUMERIC(12,2) DEFAULT 0,
+  balance_due NUMERIC(12,2) DEFAULT 0,
+  due_date DATE,
+  notes TEXT,
+  sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS customer_invoice_items (
+  id SERIAL PRIMARY KEY,
+  invoice_id INTEGER NOT NULL REFERENCES customer_invoices(id) ON DELETE CASCADE,
+  product_id INTEGER REFERENCES products(id),
+  variant_id INTEGER REFERENCES product_variants(id),
+  description TEXT NOT NULL,
+  quantity NUMERIC(10,2) NOT NULL DEFAULT 1,
+  unit_price NUMERIC(12,2) NOT NULL DEFAULT 0,
+  tax_rate NUMERIC(8,4) DEFAULT 0,
+  line_total NUMERIC(12,2) DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS customer_invoice_payments (
+  id SERIAL PRIMARY KEY,
+  invoice_id INTEGER NOT NULL REFERENCES customer_invoices(id) ON DELETE CASCADE,
+  amount NUMERIC(12,2) NOT NULL,
+  payment_method TEXT NOT NULL DEFAULT 'cash',
+  payment_type TEXT NOT NULL DEFAULT 'payment',
+  reference TEXT,
+  notes TEXT,
+  recorded_by INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS customer_invoice_payment_links (
+  id SERIAL PRIMARY KEY,
+  invoice_id INTEGER NOT NULL REFERENCES customer_invoices(id) ON DELETE CASCADE,
+  link_token TEXT NOT NULL UNIQUE,
+  gateway_ref TEXT,
+  amount NUMERIC(12,2) NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS customer_invoice_reminders (
+  id SERIAL PRIMARY KEY,
+  invoice_id INTEGER NOT NULL REFERENCES customer_invoices(id) ON DELETE CASCADE,
+  reminder_type TEXT NOT NULL DEFAULT 'before_due',
+  days_offset INTEGER NOT NULL DEFAULT 0,
+  channel TEXT NOT NULL DEFAULT 'email',
+  sent_at TIMESTAMPTZ,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_invoices_customer ON customer_invoices(customer_id);
+CREATE INDEX IF NOT EXISTS idx_customer_invoices_status ON customer_invoices(status);
+CREATE INDEX IF NOT EXISTS idx_customer_invoice_items_invoice ON customer_invoice_items(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_customer_invoice_payments_invoice ON customer_invoice_payments(invoice_id);
+
+-- ── Phase 3: Subscriptions ─────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS subscription_plans (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  price NUMERIC(12,2) NOT NULL,
+  currency TEXT DEFAULT 'PKR',
+  billing_interval TEXT NOT NULL DEFAULT 'monthly',
+  billing_interval_count INTEGER DEFAULT 1,
+  trial_days INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS customer_subscriptions (
+  id SERIAL PRIMARY KEY,
+  plan_id INTEGER NOT NULL REFERENCES subscription_plans(id),
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  status TEXT NOT NULL DEFAULT 'draft',
+  current_period_start TIMESTAMPTZ,
+  current_period_end TIMESTAMPTZ,
+  trial_end TIMESTAMPTZ,
+  cancelled_at TIMESTAMPTZ,
+  paused_at TIMESTAMPTZ,
+  auto_charge BOOLEAN DEFAULT false,
+  gateway_token TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS subscription_runs (
+  id SERIAL PRIMARY KEY,
+  subscription_id INTEGER NOT NULL REFERENCES customer_subscriptions(id) ON DELETE CASCADE,
+  period_start TIMESTAMPTZ NOT NULL,
+  period_end TIMESTAMPTZ NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  invoice_id INTEGER REFERENCES customer_invoices(id),
+  charge_amount NUMERIC(12,2),
+  charge_status TEXT,
+  error TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_subscriptions_customer ON customer_subscriptions(customer_id);
+CREATE INDEX IF NOT EXISTS idx_customer_subscriptions_plan ON customer_subscriptions(plan_id);
+CREATE INDEX IF NOT EXISTS idx_subscription_runs_sub ON subscription_runs(subscription_id);
 
 -- ── Schema versioning ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schema_version (

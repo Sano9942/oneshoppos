@@ -60,6 +60,13 @@ const DEFAULT_FEATURE_FLAGS = {
   phase2_report_builder: false,
   phase2_pos_layouts: false,
   phase2_item_suggestions: false,
+  marketing_campaigns: false,
+  customer_messaging: false,
+  customer_invoicing: false,
+  payment_links: false,
+  subscription_billing: false,
+  sms_campaigns: false,
+  subscription_autocharge: false,
 };
 
 // Per-tenant feature flag cache
