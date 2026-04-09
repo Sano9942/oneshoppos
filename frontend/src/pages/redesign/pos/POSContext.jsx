@@ -121,6 +121,11 @@ export const POSProvider = ({ children }) => {
   const [recentSalesLoading, setRecentSalesLoading] = useState(false);
   const [recentSalesSearch, setRecentSalesSearch] = useState("");
 
+  // ── Endless Aisle ─────────────────────────────────────────────────────────
+  const [endlessAisleProduct, setEndlessAisleProduct] = useState(null);
+  const handleEndlessAisle = (product) => setEndlessAisleProduct(product);
+  const closeEndlessAisle = () => setEndlessAisleProduct(null);
+
   // ── Return / Exchange Modal ───────────────────────────────────────────────
   const [returnModalOpen, setReturnModalOpen] = useState(false);
   // Pre-loaded sale when opened from Recent Sales panel (null = no-bill mode)
@@ -1203,6 +1208,10 @@ export const POSProvider = ({ children }) => {
     syncQueue,
     showShortcutsOverlay,
     setShowShortcutsOverlay,
+    // Endless aisle
+    endlessAisleProduct,
+    handleEndlessAisle,
+    closeEndlessAisle,
     // Price lists
     priceListItems,
   };

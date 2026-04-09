@@ -18,6 +18,7 @@ import POSRecentSalesPanel from "./pos/POSRecentSalesPanel";
 import POSReturnExchangeModal from "./pos/POSReturnExchangeModal";
 import POSSessionExpiredModal from "./pos/POSSessionExpiredModal";
 import POSShortcutsOverlay from "./pos/POSShortcutsOverlay";
+import EndlessAisleModal from "./pos/EndlessAisleModal";
 import { ErrorBoundary } from "../../ui/ErrorBoundary";
 
 const MOBILE_TABS = [
@@ -153,6 +154,7 @@ function POSContent() {
       <POSRecentSalesPanel />
       <POSReturnExchangeModal />
       <POSSessionExpiredModal />
+      <EndlessAisleModal />
       <POSShortcutsOverlay />
     </div>
   );
