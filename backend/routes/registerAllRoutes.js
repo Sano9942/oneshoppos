@@ -572,6 +572,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- MARKETING CAMPAIGNS ---
   require("./marketing")(app, deps);
 
+  // --- CUSTOMER MESSAGING INBOX ---
+  require("./messaging")(app, deps);
+
   return {
     processPendingShopifyInventoryEvents:
       typeof processPendingShopifyInventoryEvents === "function"

@@ -185,6 +185,26 @@ module.exports = function registerWebhookRoutes(app, deps) {
         const messages = change.value?.messages || [];
         for (const msg of messages) {
           logger.info({ from: msg.from, type: msg.type }, "WhatsApp message received");
+
+          // Dual-write into generic messaging inbox
+          try {
+            const { findOrCreateThread, addMessage } = require("../services/messaging");
+            const db = require("../db-pg");
+            const thread = await findOrCreateThread(db, {
+              channel: "whatsapp",
+              channelIdentifier: msg.from,
+            });
+            await addMessage(db, {
+              threadId: thread.id,
+              direction: "inbound",
+              content: msg.text?.body || msg.caption || `[${msg.type}]`,
+              messageType: msg.type || "text",
+              externalId: msg.id,
+              senderType: "customer",
+            });
+          } catch (inboxErr) {
+            logger.error({ err: inboxErr }, "Failed to write WhatsApp message to inbox");
+          }
         }
       }
 
