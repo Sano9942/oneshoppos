@@ -20,6 +20,9 @@ const StorefrontLayout = lazy(() => import("../pages/storefront/StorefrontLayout
 const StorefrontHome = lazy(() => import("../pages/storefront/StorefrontHome"));
 const StorefrontProducts = lazy(() => import("../pages/storefront/StorefrontProducts"));
 const StorefrontProductDetail = lazy(() => import("../pages/storefront/StorefrontProductDetail"));
+const StorefrontCart = lazy(() => import("../pages/storefront/StorefrontCart"));
+const StorefrontCheckout = lazy(() => import("../pages/storefront/StorefrontCheckout"));
+const StorefrontOrderStatus = lazy(() => import("../pages/storefront/StorefrontOrderStatus"));
 
 function HomeRedirect() {
   const { isAuthenticated, isBootstrapping } = useAuth();
@@ -86,5 +89,8 @@ export const publicRoutes = [
     <Route index element={<StorefrontHome />} />
     <Route path="products" element={<StorefrontProducts />} />
     <Route path="products/:productId" element={<StorefrontProductDetail />} />
+    <Route path="cart" element={<StorefrontCart />} />
+    <Route path="checkout" element={<StorefrontCheckout />} />
+    <Route path="order/:orderToken" element={<StorefrontOrderStatus />} />
   </Route>,
 ];

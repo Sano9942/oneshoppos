@@ -1,0 +1,462 @@
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { API_BASE } from "../../config";
+import { useStorefront } from "./StorefrontLayout";
+import { useStorefrontCart } from "./useStorefrontCart";
+
+export default function StorefrontCheckout() {
+  const { tenantSlug, config, setCartItemCount } = useStorefront();
+  const navigate = useNavigate();
+  const { items, loading: cartLoading, fetchCart, getQuote, cartToken, clearCart } =
+    useStorefrontCart(tenantSlug);
+  const currencySymbol = config?.currency_symbol || "Rs";
+
+  const [deliveryMethod, setDeliveryMethod] = useState("pickup");
+  const [pickupLocations, setPickupLocations] = useState([]);
+  const [pickupOutletId, setPickupOutletId] = useState(null);
+  const [shippingAddress, setShippingAddress] = useState({
+    address_line_1: "",
+    address_line_2: "",
+    city: "",
+    province: "",
+    postal_code: "",
+    country_code: "PK",
+  });
+  const [contact, setContact] = useState({ name: "", phone: "", email: "" });
+  const [quote, setQuote] = useState(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Load cart on mount
+  useEffect(() => {
+    if (cartToken) fetchCart();
+  }, [cartToken, fetchCart]);
+
+  // Fetch pickup locations
+  useEffect(() => {
+    fetch(`${API_BASE}/api/storefront/pickup-locations?tenant=${tenantSlug}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        const locs = Array.isArray(data) ? data : [];
+        setPickupLocations(locs);
+        if (locs.length > 0 && !pickupOutletId) {
+          setPickupOutletId(locs[0].id);
+        }
+      })
+      .catch(() => {});
+  }, [tenantSlug]);
+
+  // Fetch quote when delivery method or pickup outlet changes
+  const refreshQuote = useCallback(async () => {
+    if (!cartToken || items.length === 0) return;
+    setQuoteLoading(true);
+    const q = await getQuote(
+      deliveryMethod,
+      deliveryMethod === "pickup" ? pickupOutletId : null
+    );
+    setQuote(q);
+    setQuoteLoading(false);
+  }, [cartToken, items.length, deliveryMethod, pickupOutletId, getQuote]);
+
+  useEffect(() => {
+    refreshQuote();
+  }, [refreshQuote]);
+
+  function handleAddressChange(field, value) {
+    setShippingAddress((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function handleContactChange(field, value) {
+    setContact((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function handlePlaceOrder() {
+    setError(null);
+
+    if (!contact.name.trim() || !contact.phone.trim() || !contact.email.trim()) {
+      setError("Please fill in all contact information fields.");
+      return;
+    }
+    if (deliveryMethod === "shipping") {
+      if (!shippingAddress.address_line_1.trim() || !shippingAddress.city.trim()) {
+        setError("Please fill in the required shipping address fields.");
+        return;
+      }
+    }
+    if (deliveryMethod === "pickup" && !pickupOutletId) {
+      setError("Please select a pickup location.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const body = {
+        delivery_method: deliveryMethod,
+        customer_name: contact.name.trim(),
+        customer_phone: contact.phone.trim(),
+        customer_email: contact.email.trim(),
+      };
+
+      if (deliveryMethod === "pickup") {
+        body.pickup_outlet_id = pickupOutletId;
+      } else {
+        body.shipping_address = {
+          address_line_1: shippingAddress.address_line_1.trim(),
+          address_line_2: shippingAddress.address_line_2.trim(),
+          city: shippingAddress.city.trim(),
+          province: shippingAddress.province.trim(),
+          postal_code: shippingAddress.postal_code.trim(),
+          country_code: shippingAddress.country_code,
+        };
+      }
+
+      const res = await fetch(
+        `${API_BASE}/api/storefront/checkout?tenant=${tenantSlug}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cart_token: cartToken, ...body }),
+        }
+      );
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Checkout failed. Please try again.");
+      }
+
+      const result = await res.json();
+      clearCart();
+      setCartItemCount(0);
+      navigate(`/store/${tenantSlug}/order/${result.order_token}`, { replace: true });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // Redirect if no cart
+  if (!cartLoading && (!cartToken || items.length === 0)) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Your cart is empty</h2>
+        <p className="text-gray-500 mb-6">Add some items before checking out.</p>
+        <Link
+          to={`/store/${tenantSlug}/products`}
+          className="inline-flex items-center px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+        >
+          Browse Products
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6">
+        <Link to={`/store/${tenantSlug}`} className="hover:text-indigo-600">Store</Link>
+        <span>/</span>
+        <Link to={`/store/${tenantSlug}/cart`} className="hover:text-indigo-600">Cart</Link>
+        <span>/</span>
+        <span className="text-gray-900 font-medium">Checkout</span>
+      </nav>
+
+      <h1 className="text-2xl font-bold text-gray-900 mb-8">Checkout</h1>
+
+      {error && (
+        <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Form sections */}
+        <div className="lg:col-span-2 space-y-8">
+          {/* 1. Delivery Method */}
+          <section className="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Delivery Method</h2>
+            <div className="space-y-3">
+              <label className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                deliveryMethod === "pickup" ? "border-indigo-600 bg-indigo-50" : "border-gray-200 hover:border-gray-300"
+              }`}>
+                <input
+                  type="radio"
+                  name="delivery"
+                  value="pickup"
+                  checked={deliveryMethod === "pickup"}
+                  onChange={() => setDeliveryMethod("pickup")}
+                  className="text-indigo-600 focus:ring-indigo-500"
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Pick Up in Store</p>
+                  <p className="text-xs text-gray-500">Collect from a store location</p>
+                </div>
+              </label>
+              <label className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                deliveryMethod === "shipping" ? "border-indigo-600 bg-indigo-50" : "border-gray-200 hover:border-gray-300"
+              }`}>
+                <input
+                  type="radio"
+                  name="delivery"
+                  value="shipping"
+                  checked={deliveryMethod === "shipping"}
+                  onChange={() => setDeliveryMethod("shipping")}
+                  className="text-indigo-600 focus:ring-indigo-500"
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Ship to My Address</p>
+                  <p className="text-xs text-gray-500">Delivered to your doorstep</p>
+                </div>
+              </label>
+            </div>
+          </section>
+
+          {/* 2. Pickup Outlet Selector */}
+          {deliveryMethod === "pickup" && (
+            <section className="bg-white rounded-xl border border-gray-200 p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Pickup Location</h2>
+              {pickupLocations.length === 0 ? (
+                <p className="text-sm text-gray-500">No pickup locations available.</p>
+              ) : (
+                <div className="space-y-3">
+                  {pickupLocations.map((loc) => (
+                    <label
+                      key={loc.id}
+                      className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                        pickupOutletId === loc.id ? "border-indigo-600 bg-indigo-50" : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="pickup_outlet"
+                        value={loc.id}
+                        checked={pickupOutletId === loc.id}
+                        onChange={() => setPickupOutletId(loc.id)}
+                        className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{loc.name}</p>
+                        {loc.address && <p className="text-xs text-gray-500 mt-0.5">{loc.address}</p>}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* 3. Shipping Address Form */}
+          {deliveryMethod === "shipping" && (
+            <section className="bg-white rounded-xl border border-gray-200 p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Shipping Address</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 1 *</label>
+                  <input
+                    type="text"
+                    value={shippingAddress.address_line_1}
+                    onChange={(e) => handleAddressChange("address_line_1", e.target.value)}
+                    placeholder="Street address"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 2</label>
+                  <input
+                    type="text"
+                    value={shippingAddress.address_line_2}
+                    onChange={(e) => handleAddressChange("address_line_2", e.target.value)}
+                    placeholder="Apt, suite, floor (optional)"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
+                    <input
+                      type="text"
+                      value={shippingAddress.city}
+                      onChange={(e) => handleAddressChange("city", e.target.value)}
+                      placeholder="City"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Province</label>
+                    <input
+                      type="text"
+                      value={shippingAddress.province}
+                      onChange={(e) => handleAddressChange("province", e.target.value)}
+                      placeholder="Province / State"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Postal Code</label>
+                    <input
+                      type="text"
+                      value={shippingAddress.postal_code}
+                      onChange={(e) => handleAddressChange("postal_code", e.target.value)}
+                      placeholder="Postal code"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                    <select
+                      value={shippingAddress.country_code}
+                      onChange={(e) => handleAddressChange("country_code", e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
+                    >
+                      <option value="PK">Pakistan</option>
+                      <option value="AE">United Arab Emirates</option>
+                      <option value="SA">Saudi Arabia</option>
+                      <option value="US">United States</option>
+                      <option value="GB">United Kingdom</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* 4. Contact Information */}
+          <section className="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Contact Information</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+                <input
+                  type="text"
+                  value={contact.name}
+                  onChange={(e) => handleContactChange("name", e.target.value)}
+                  placeholder="Your full name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
+                  <input
+                    type="tel"
+                    value={contact.phone}
+                    onChange={(e) => handleContactChange("phone", e.target.value)}
+                    placeholder="03XX-XXXXXXX"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                  <input
+                    type="email"
+                    value={contact.email}
+                    onChange={(e) => handleContactChange("email", e.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        {/* 5. Order Summary sidebar */}
+        <div className="lg:col-span-1">
+          <div className="bg-white rounded-xl border border-gray-200 p-6 sticky top-24">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Order Summary</h2>
+
+            {/* Items list */}
+            <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
+              {items.map((item) => (
+                <div key={item.id} className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded bg-gray-100 overflow-hidden shrink-0">
+                    {item.image_url ? (
+                      <img src={item.image_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-300 text-xs">
+                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                  <div className="grow min-w-0">
+                    <p className="text-xs font-medium text-gray-900 truncate">
+                      {item.product_name || item.name}
+                    </p>
+                    <p className="text-xs text-gray-500">Qty: {item.quantity}</p>
+                  </div>
+                  <span className="text-xs font-medium text-gray-900 shrink-0">
+                    {currencySymbol} {(Number(item.unit_price || item.price || 0) * item.quantity).toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Totals */}
+            <div className="border-t border-gray-200 pt-4 space-y-2">
+              {quoteLoading ? (
+                <div className="space-y-2 animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-full" />
+                  <div className="h-4 bg-gray-200 rounded w-3/4" />
+                  <div className="h-5 bg-gray-200 rounded w-1/2" />
+                </div>
+              ) : quote ? (
+                <>
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>Subtotal</span>
+                    <span>{currencySymbol} {Number(quote.subtotal || 0).toLocaleString()}</span>
+                  </div>
+                  {Number(quote.tax || 0) > 0 && (
+                    <div className="flex justify-between text-sm text-gray-600">
+                      <span>Tax</span>
+                      <span>{currencySymbol} {Number(quote.tax).toLocaleString()}</span>
+                    </div>
+                  )}
+                  {Number(quote.shipping || 0) > 0 && (
+                    <div className="flex justify-between text-sm text-gray-600">
+                      <span>Shipping</span>
+                      <span>{currencySymbol} {Number(quote.shipping).toLocaleString()}</span>
+                    </div>
+                  )}
+                  {deliveryMethod === "pickup" && (
+                    <div className="flex justify-between text-sm text-gray-600">
+                      <span>Pickup</span>
+                      <span className="text-green-600 font-medium">Free</span>
+                    </div>
+                  )}
+                  <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between text-base font-bold text-gray-900">
+                    <span>Total</span>
+                    <span>{currencySymbol} {Number(quote.total || 0).toLocaleString()}</span>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-gray-500">
+                  Select a delivery method to see totals.
+                </p>
+              )}
+            </div>
+
+            {/* Place Order */}
+            <button
+              onClick={handlePlaceOrder}
+              disabled={submitting || quoteLoading || items.length === 0}
+              className="mt-6 w-full px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting ? "Placing Order..." : "Place Order"}
+            </button>
+
+            <p className="text-xs text-gray-500 text-center mt-3">
+              Payment will be collected at {deliveryMethod === "pickup" ? "pickup" : "delivery"}.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -124,7 +124,8 @@ export default function StorefrontLayout() {
               {/* Cart + Mobile menu */}
               <div className="flex items-center gap-3">
                 {/* Cart icon */}
-                <button
+                <Link
+                  to={`/store/${tenantSlug}/cart`}
                   className="relative p-2 text-gray-700 hover:text-indigo-600 transition-colors"
                   aria-label="Cart"
                 >
@@ -136,7 +137,7 @@ export default function StorefrontLayout() {
                       {cartItemCount > 99 ? "99+" : cartItemCount}
                     </span>
                   )}
-                </button>
+                </Link>
 
                 {/* Mobile hamburger */}
                 <button
