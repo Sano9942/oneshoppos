@@ -32,6 +32,9 @@ const EMPTY = {
   tags: [],
   preferred_payment_method: "",
   preferred_contact: "",
+  email_consent: false,
+  sms_consent: false,
+  whatsapp_consent: false,
 };
 
 const GENDER_OPTIONS = ["", "Male", "Female", "Other"];
@@ -222,6 +225,9 @@ export default function CustomersRedesign() {
       tags: row.tags || [],
       preferred_payment_method: row.preferred_payment_method || "",
       preferred_contact: row.preferred_contact || "",
+      email_consent: !!row.email_consent,
+      sms_consent: !!row.sms_consent,
+      whatsapp_consent: !!row.whatsapp_consent,
     });
     setFormError("");
     setModalOpen(true);
@@ -745,6 +751,20 @@ export default function CustomersRedesign() {
                     </SectionCard>
                   )}
 
+                  {/* Consent & Quick Actions */}
+                  <SectionCard className="p-2">
+                    <div className="flex gap-2 mb-2">
+                      {detail.email_consent && <Badge tone="success">Email OK</Badge>}
+                      {detail.sms_consent && <Badge tone="success">SMS OK</Badge>}
+                      {detail.whatsapp_consent && <Badge tone="success">WhatsApp OK</Badge>}
+                      {!detail.email_consent && !detail.sms_consent && !detail.whatsapp_consent && <span className="text-xs text-(--ui-text-muted)">No communication consent</span>}
+                    </div>
+                    <div className="flex gap-2">
+                      <a href={`/customer-invoices?customer_id=${detail.id}`} className="text-xs text-blue-600 hover:underline">View Invoices</a>
+                      <a href={`/messaging/inbox`} className="text-xs text-blue-600 hover:underline">View Messages</a>
+                    </div>
+                  </SectionCard>
+
                   {/* Tags */}
                   <SectionCard className="p-2">
                     <p className="text-xs font-semibold text-(--ui-text-muted) mb-1.5">
@@ -1192,6 +1212,23 @@ export default function CustomersRedesign() {
                 <select className="w-full rounded border border-(--ui-border) bg-(--ui-bg) px-2.5 py-1.5 text-sm text-(--ui-text)" value={form.preferred_contact} onChange={(e) => setForm((p) => ({ ...p, preferred_contact: e.target.value }))}>
                   {CONTACT_OPTIONS.map((o) => <option key={o} value={o}>{o || "— Select —"}</option>)}
                 </select>
+              </div>
+
+              {/* Communication Consent */}
+              <p className="text-xs font-semibold text-(--ui-text-muted) uppercase tracking-wide pt-1">Communication Consent</p>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={form.email_consent} onChange={(e) => setForm((p) => ({ ...p, email_consent: e.target.checked }))} />
+                  Email
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={form.sms_consent} onChange={(e) => setForm((p) => ({ ...p, sms_consent: e.target.checked }))} />
+                  SMS
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={form.whatsapp_consent} onChange={(e) => setForm((p) => ({ ...p, whatsapp_consent: e.target.checked }))} />
+                  WhatsApp
+                </label>
               </div>
 
               {/* Notes */}
