@@ -16,6 +16,10 @@ const CustomerDisplayPage = lazy(() => import("../pages/CustomerDisplayPage"));
 const ReceiptPublicPage = lazy(() => import("../pages/ReceiptPublicPage"));
 const ResetPassword = lazy(() => import("../pages/ResetPassword"));
 const SignupPage = lazy(() => import("../pages/SignupPage"));
+const StorefrontLayout = lazy(() => import("../pages/storefront/StorefrontLayout"));
+const StorefrontHome = lazy(() => import("../pages/storefront/StorefrontHome"));
+const StorefrontProducts = lazy(() => import("../pages/storefront/StorefrontProducts"));
+const StorefrontProductDetail = lazy(() => import("../pages/storefront/StorefrontProductDetail"));
 
 function HomeRedirect() {
   const { isAuthenticated, isBootstrapping } = useAuth();
@@ -74,4 +78,13 @@ export const publicRoutes = [
     path="/customer-display"
     element={<Suspense fallback={<RouteLoading />}><CustomerDisplayPage /></Suspense>}
   />,
+  <Route
+    key="storefront"
+    path="/store/:tenantSlug"
+    element={<Suspense fallback={<RouteLoading />}><StorefrontLayout /></Suspense>}
+  >
+    <Route index element={<StorefrontHome />} />
+    <Route path="products" element={<StorefrontProducts />} />
+    <Route path="products/:productId" element={<StorefrontProductDetail />} />
+  </Route>,
 ];

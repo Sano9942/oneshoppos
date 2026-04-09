@@ -1,0 +1,206 @@
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { Outlet, useParams, Link, useLocation } from "react-router-dom";
+import { API_BASE } from "../../config";
+
+const StorefrontContext = createContext(null);
+export const useStorefront = () => useContext(StorefrontContext);
+
+export default function StorefrontLayout() {
+  const { tenantSlug } = useParams();
+  const location = useLocation();
+  const [config, setConfig] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [cartItemCount, setCartItemCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const [cfgRes, catRes] = await Promise.all([
+          fetch(`${API_BASE}/api/storefront/config?tenant=${tenantSlug}`),
+          fetch(`${API_BASE}/api/storefront/categories?tenant=${tenantSlug}`),
+        ]);
+        if (!cfgRes.ok) throw new Error("Store not found");
+        const cfgData = await cfgRes.json();
+        const catData = catRes.ok ? await catRes.json() : [];
+        if (!cancelled) {
+          setConfig(cfgData);
+          setCategories(Array.isArray(catData) ? catData : []);
+          setLoading(false);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message);
+          setLoading(false);
+        }
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [tenantSlug]);
+
+  const incrementCart = useCallback((n = 1) => {
+    setCartItemCount((prev) => prev + n);
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Store Not Found</h1>
+          <p className="text-gray-500">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const storeName = config?.company_name || tenantSlug;
+  const logoUrl = config?.logo_url;
+
+  return (
+    <StorefrontContext.Provider
+      value={{ config, categories, tenantSlug, cartItemCount, setCartItemCount, incrementCart }}
+    >
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        {/* Header */}
+        <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+              {/* Logo + Store Name */}
+              <Link
+                to={`/store/${tenantSlug}`}
+                className="flex items-center gap-3 shrink-0"
+              >
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt={storeName}
+                    className="h-8 w-8 rounded object-cover"
+                  />
+                ) : (
+                  <div className="h-8 w-8 rounded bg-indigo-600 flex items-center justify-center text-white font-bold text-sm">
+                    {storeName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <span className="text-lg font-semibold text-gray-900 hidden sm:block">
+                  {storeName}
+                </span>
+              </Link>
+
+              {/* Desktop category nav */}
+              <nav className="hidden md:flex items-center gap-6">
+                <Link
+                  to={`/store/${tenantSlug}/products`}
+                  className="text-sm font-medium text-gray-700 hover:text-indigo-600 transition-colors"
+                >
+                  All Products
+                </Link>
+                {categories.slice(0, 6).map((cat) => (
+                  <Link
+                    key={cat.id}
+                    to={`/store/${tenantSlug}/products?category=${cat.id}`}
+                    className="text-sm font-medium text-gray-700 hover:text-indigo-600 transition-colors"
+                  >
+                    {cat.name}
+                  </Link>
+                ))}
+              </nav>
+
+              {/* Cart + Mobile menu */}
+              <div className="flex items-center gap-3">
+                {/* Cart icon */}
+                <button
+                  className="relative p-2 text-gray-700 hover:text-indigo-600 transition-colors"
+                  aria-label="Cart"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 0 0-16.536-1.84M7.5 14.25 5.106 5.272M6 20.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm12.75 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
+                  </svg>
+                  {cartItemCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                      {cartItemCount > 99 ? "99+" : cartItemCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Mobile hamburger */}
+                <button
+                  className="md:hidden p-2 text-gray-700 hover:text-indigo-600"
+                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                  aria-label="Toggle menu"
+                >
+                  {mobileMenuOpen ? (
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                  ) : (
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile menu */}
+          {mobileMenuOpen && (
+            <div className="md:hidden border-t border-gray-200 bg-white">
+              <div className="px-4 py-3 space-y-2">
+                <Link
+                  to={`/store/${tenantSlug}/products`}
+                  className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md"
+                >
+                  All Products
+                </Link>
+                {categories.map((cat) => (
+                  <Link
+                    key={cat.id}
+                    to={`/store/${tenantSlug}/products?category=${cat.id}`}
+                    className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md"
+                  >
+                    {cat.name}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </header>
+
+        {/* Main content */}
+        <main className="grow">
+          <Outlet />
+        </main>
+
+        {/* Footer */}
+        <footer className="bg-white border-t border-gray-200 mt-auto">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <p className="text-sm text-gray-500">
+                {storeName}
+              </p>
+              <p className="text-xs text-gray-400">
+                Powered by SanoPOS
+              </p>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </StorefrontContext.Provider>
+  );
+}
