@@ -1059,5 +1059,232 @@ module.exports = function registerOrderRoutes(app, deps) {
     return { processed, failed, skipped };
   }
 
+  // ── Endless Aisle: create a routed web_order from POS ──────────────
+  app.post("/api/orders/endless-aisle", requirePerm("manage_orders"), async (req, res) => {
+    const crypto = require("crypto");
+    const {
+      items, customerId, deliveryMethod, pickupOutletId,
+      shippingAddress, customerContact,
+    } = req.body || {};
+
+    if (!items || !items.length) {
+      return res.status(400).json({ error: "items array is required" });
+    }
+    if (!deliveryMethod) {
+      return res.status(400).json({ error: "deliveryMethod is required" });
+    }
+    if (deliveryMethod === "ship_to_customer" && !shippingAddress) {
+      return res.status(400).json({ error: "shippingAddress is required for ship_to_customer" });
+    }
+    if (deliveryMethod === "pickup" && !pickupOutletId) {
+      return res.status(400).json({ error: "pickupOutletId is required for pickup orders" });
+    }
+
+    try {
+      const result = await db.transaction(async (client) => {
+        // Look up POS sales channel
+        const { rows: [posChannel] } = await client.query(
+          "SELECT id FROM sales_channels WHERE code = 'pos' LIMIT 1"
+        );
+        const channelId = posChannel ? posChannel.id : null;
+
+        // Resolve product prices and check cross-outlet availability
+        const enrichedItems = [];
+        for (const item of items) {
+          let unitPrice = 0;
+          let sku = null;
+          let barcode = null;
+          let title = null;
+
+          if (item.variantId) {
+            const { rows: [variant] } = await client.query(
+              "SELECT price, sku, barcode, name FROM product_variants WHERE id = $1 AND product_id = $2",
+              [item.variantId, item.productId]
+            );
+            if (variant) {
+              unitPrice = parseFloat(variant.price || 0);
+              sku = variant.sku;
+              barcode = variant.barcode;
+              title = variant.name;
+            }
+          }
+          if (!unitPrice) {
+            const { rows: [product] } = await client.query(
+              "SELECT price, sku, barcode, name FROM products WHERE id = $1",
+              [item.productId]
+            );
+            if (!product) {
+              throw Object.assign(new Error(`Product ${item.productId} not found`), { statusCode: 400 });
+            }
+            unitPrice = parseFloat(product.price || 0);
+            sku = sku || product.sku;
+            barcode = barcode || product.barcode;
+            title = title || product.name;
+          }
+
+          // Check cross-outlet availability
+          const { rows: stockRows } = await client.query(
+            `SELECT os.outlet_id, os.quantity
+             FROM outlet_stock os
+             JOIN outlets o ON o.id = os.outlet_id AND o.is_active = true
+             WHERE os.product_id = $1 AND os.quantity >= $2
+             ORDER BY os.quantity DESC`,
+            [item.productId, item.qty]
+          );
+          if (!stockRows.length) {
+            throw Object.assign(
+              new Error(`No outlet has sufficient stock for "${title}" (product ${item.productId})`),
+              { statusCode: 400 }
+            );
+          }
+
+          enrichedItems.push({
+            productId: item.productId,
+            variantId: item.variantId || null,
+            qty: item.qty,
+            unitPrice,
+            sku,
+            barcode,
+            title,
+            lineTotal: unitPrice * item.qty,
+          });
+        }
+
+        const subtotal = enrichedItems.reduce((sum, i) => sum + i.lineTotal, 0);
+        const externalOrderId = `ea_${crypto.randomUUID()}`;
+        const publicOrderToken = crypto.randomUUID();
+
+        // Create the web_order
+        const { rows: [order] } = await client.query(
+          `INSERT INTO web_orders (
+            source, external_order_id, customer_id, channel_id,
+            delivery_method, pickup_outlet_id, shipping_address_json,
+            customer_name_snapshot, customer_phone_snapshot, customer_email_snapshot,
+            currency, subtotal, grand_total,
+            payment_status, fulfillment_status, order_status,
+            ordered_at, public_order_token
+          ) VALUES (
+            'pos_endless_aisle', $1, $2, $3,
+            $4, $5, $6,
+            $7, $8, $9,
+            'PKR', $10, $10,
+            'pending', 'unfulfilled', 'open',
+            NOW(), $11
+          ) RETURNING id, external_order_id, public_order_token`,
+          [
+            externalOrderId,
+            customerId || null,
+            channelId,
+            deliveryMethod,
+            pickupOutletId || null,
+            shippingAddress ? JSON.stringify(shippingAddress) : null,
+            customerContact?.name || null,
+            customerContact?.phone || null,
+            customerContact?.email || null,
+            subtotal,
+            publicOrderToken,
+          ]
+        );
+
+        // Create web_order_items
+        const insertedItems = [];
+        for (const item of enrichedItems) {
+          const { rows: [row] } = await client.query(
+            `INSERT INTO web_order_items
+               (web_order_id, product_id, variant_id, sku, barcode, title, qty, unit_price, line_total)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             RETURNING id`,
+            [order.id, item.productId, item.variantId, item.sku, item.barcode, item.title, item.qty, item.unitPrice, item.lineTotal]
+          );
+          insertedItems.push({ ...item, webOrderItemId: row.id });
+        }
+
+        // Allocate each item to the best outlet, decrement stock, create reservations
+        const reservationKey = `ea_${order.id}`;
+        const allocations = [];
+
+        for (const item of insertedItems) {
+          let fulfillmentOutletId;
+
+          if (deliveryMethod === "pickup") {
+            fulfillmentOutletId = pickupOutletId;
+          } else {
+            // Ship-to-customer: pick active outlet with most stock
+            const { rows: stockCandidates } = await client.query(
+              `SELECT os.outlet_id, os.quantity
+               FROM outlet_stock os
+               JOIN outlets o ON o.id = os.outlet_id AND o.is_active = true
+               WHERE os.product_id = $1 AND os.quantity >= $2
+               ORDER BY os.quantity DESC
+               LIMIT 1`,
+              [item.productId, item.qty]
+            );
+            if (!stockCandidates.length) {
+              throw Object.assign(
+                new Error(`No outlet has sufficient stock for "${item.title}"`),
+                { statusCode: 400 }
+              );
+            }
+            fulfillmentOutletId = stockCandidates[0].outlet_id;
+          }
+
+          // Create allocation record
+          const { rows: [alloc] } = await client.query(
+            `INSERT INTO web_order_allocations
+               (web_order_id, web_order_item_id, fulfillment_outlet_id,
+                fulfillment_method, status, allocated_qty)
+             VALUES ($1, $2, $3, $4, 'pending', $5)
+             RETURNING *`,
+            [order.id, item.webOrderItemId, fulfillmentOutletId, deliveryMethod, item.qty]
+          );
+
+          // Lock and decrement outlet_stock
+          const { rows: [stock] } = await client.query(
+            "SELECT id, quantity FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2 FOR UPDATE",
+            [item.productId, fulfillmentOutletId]
+          );
+          if (!stock || stock.quantity < item.qty) {
+            throw Object.assign(
+              new Error(`Insufficient stock at fulfillment outlet for "${item.title}"`),
+              { statusCode: 400 }
+            );
+          }
+          await client.query(
+            "UPDATE outlet_stock SET quantity = quantity - $1 WHERE id = $2",
+            [item.qty, stock.id]
+          );
+
+          // Create converted reservation record
+          await client.query(
+            `INSERT INTO inventory_reservations
+               (reservation_key, channel_id, web_order_id, product_id, variant_id, outlet_id, quantity, status, expires_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'converted', NOW())`,
+            [reservationKey, channelId, order.id, item.productId, item.variantId, fulfillmentOutletId, item.qty]
+          );
+
+          allocations.push(alloc);
+        }
+
+        return {
+          orderId: order.id,
+          externalOrderId: order.external_order_id,
+          publicOrderToken: order.public_order_token,
+          items: insertedItems.length,
+          subtotal,
+          allocations: allocations.map(a => ({
+            itemId: a.web_order_item_id,
+            outletId: a.fulfillment_outlet_id,
+            method: a.fulfillment_method,
+          })),
+        };
+      });
+
+      res.status(201).json(result);
+    } catch (err) {
+      const status = err.statusCode || 500;
+      res.status(status).json({ error: err.message });
+    }
+  });
+
   return { processPendingShopifyInventoryEvents, enqueueInventorySyncEvents, upsertWebOrderFromShopifyPayload };
 };
