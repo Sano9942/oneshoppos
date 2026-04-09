@@ -1,3 +1,8 @@
+const crypto = require("crypto");
+const { getOrCreateCart, addItem, updateItem, removeItem, getCartWithItems } = require("../services/storefront-cart");
+const { calculateQuote } = require("../services/quote");
+const { allocateOrder } = require("../services/allocation");
+
 module.exports = function mountStorefrontRoutes(app, deps) {
   const IS_MULTI_TENANT = process.env.MULTI_TENANT === "1";
 
@@ -349,6 +354,515 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       });
     } catch (err) {
       console.error("Storefront pickup locations error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/storefront/cart — create or retrieve a cart
+  // ---------------------------------------------------------------------------
+  app.post("/api/storefront/cart", async (req, res) => {
+    try {
+      const resolved = await resolveStorefrontDb(req);
+      if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+      const { db } = resolved;
+
+      let { cartToken } = req.body || {};
+
+      // If no token provided, generate one
+      if (!cartToken) {
+        cartToken = crypto.randomUUID();
+      }
+
+      const cart = await getOrCreateCart(db, cartToken);
+      res.json({ cartToken: cart.cart_token, cart });
+    } catch (err) {
+      console.error("Storefront create cart error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /api/storefront/cart/:token — get cart with items
+  // ---------------------------------------------------------------------------
+  app.get("/api/storefront/cart/:token", async (req, res) => {
+    try {
+      const resolved = await resolveStorefrontDb(req);
+      if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+      const { db } = resolved;
+
+      const { rows } = await db.query(
+        "SELECT * FROM storefront_carts WHERE cart_token = $1",
+        [req.params.token]
+      );
+      if (!rows.length) return res.status(404).json({ error: "Cart not found" });
+
+      const result = await getCartWithItems(db, rows[0].id);
+      res.json(result);
+    } catch (err) {
+      console.error("Storefront get cart error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/storefront/cart/:token/items — add item to cart
+  // ---------------------------------------------------------------------------
+  app.post("/api/storefront/cart/:token/items", async (req, res) => {
+    try {
+      const resolved = await resolveStorefrontDb(req);
+      if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+      const { db } = resolved;
+
+      const { rows } = await db.query(
+        "SELECT * FROM storefront_carts WHERE cart_token = $1",
+        [req.params.token]
+      );
+      if (!rows.length) return res.status(404).json({ error: "Cart not found" });
+      const cart = rows[0];
+
+      const { productId, variantId, qty } = req.body || {};
+      if (!productId) return res.status(400).json({ error: "productId is required" });
+      if (!qty || qty < 1) return res.status(400).json({ error: "qty must be >= 1" });
+
+      await addItem(db, cart.id, productId, variantId || null, qty);
+      const result = await getCartWithItems(db, cart.id);
+      res.json(result);
+    } catch (err) {
+      console.error("Storefront add item error:", err);
+      if (err.message === "Product not found") {
+        return res.status(404).json({ error: err.message });
+      }
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // PUT /api/storefront/cart/:token/items/:itemId — update item quantity
+  // ---------------------------------------------------------------------------
+  app.put("/api/storefront/cart/:token/items/:itemId", async (req, res) => {
+    try {
+      const resolved = await resolveStorefrontDb(req);
+      if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+      const { db } = resolved;
+
+      const { rows } = await db.query(
+        "SELECT * FROM storefront_carts WHERE cart_token = $1",
+        [req.params.token]
+      );
+      if (!rows.length) return res.status(404).json({ error: "Cart not found" });
+      const cart = rows[0];
+
+      const { qty } = req.body || {};
+      if (qty == null) return res.status(400).json({ error: "qty is required" });
+
+      await updateItem(db, cart.id, parseInt(req.params.itemId, 10), qty);
+      const result = await getCartWithItems(db, cart.id);
+      res.json(result);
+    } catch (err) {
+      console.error("Storefront update item error:", err);
+      if (err.message === "Cart item not found") {
+        return res.status(404).json({ error: err.message });
+      }
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // DELETE /api/storefront/cart/:token/items/:itemId — remove item from cart
+  // ---------------------------------------------------------------------------
+  app.delete("/api/storefront/cart/:token/items/:itemId", async (req, res) => {
+    try {
+      const resolved = await resolveStorefrontDb(req);
+      if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+      const { db } = resolved;
+
+      const { rows } = await db.query(
+        "SELECT * FROM storefront_carts WHERE cart_token = $1",
+        [req.params.token]
+      );
+      if (!rows.length) return res.status(404).json({ error: "Cart not found" });
+      const cart = rows[0];
+
+      await removeItem(db, cart.id, parseInt(req.params.itemId, 10));
+      const result = await getCartWithItems(db, cart.id);
+      res.json(result);
+    } catch (err) {
+      console.error("Storefront remove item error:", err);
+      if (err.message === "Cart item not found") {
+        return res.status(404).json({ error: err.message });
+      }
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/storefront/cart/:token/quote — run quote engine on cart
+  // ---------------------------------------------------------------------------
+  app.post("/api/storefront/cart/:token/quote", async (req, res) => {
+    try {
+      const resolved = await resolveStorefrontDb(req);
+      if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+      const { db } = resolved;
+
+      const { rows } = await db.query(
+        "SELECT * FROM storefront_carts WHERE cart_token = $1",
+        [req.params.token]
+      );
+      if (!rows.length) return res.status(404).json({ error: "Cart not found" });
+      const cart = rows[0];
+
+      const { deliveryMethod, pickupOutletId } = req.body || {};
+      const method = deliveryMethod || "pickup";
+
+      // Load cart items for quote
+      const cartData = await getCartWithItems(db, cart.id);
+      const cartItems = cartData.items.map((i) => ({
+        productId: i.product_id,
+        variantId: i.variant_id,
+        qty: i.quantity,
+      }));
+
+      const quote = await calculateQuote(
+        db,
+        cartItems,
+        method,
+        pickupOutletId || null,
+        cart.channel_id
+      );
+
+      // Save quote snapshot to cart for later checkout reference
+      await db.query(
+        "UPDATE storefront_carts SET quote_payload = $1, updated_at = NOW() WHERE id = $2",
+        [JSON.stringify(quote), cart.id]
+      );
+
+      res.json(quote);
+    } catch (err) {
+      console.error("Storefront quote error:", err);
+      res.status(400).json({ error: err.message || "Quote failed" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/storefront/checkout — atomic checkout
+  // ---------------------------------------------------------------------------
+  app.post("/api/storefront/checkout", async (req, res) => {
+    try {
+      const resolved = await resolveStorefrontDb(req);
+      if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+      const { db } = resolved;
+
+      const {
+        cartToken,
+        deliveryMethod,
+        pickupOutletId,
+        customerContact,
+        shippingAddress,
+      } = req.body || {};
+
+      if (!cartToken) return res.status(400).json({ error: "cartToken is required" });
+      if (!deliveryMethod) return res.status(400).json({ error: "deliveryMethod is required" });
+      if (!customerContact || !customerContact.name || !customerContact.phone) {
+        return res.status(400).json({ error: "customerContact with name and phone is required" });
+      }
+      if (deliveryMethod === "pickup" && !pickupOutletId) {
+        return res.status(400).json({ error: "pickupOutletId is required for pickup orders" });
+      }
+      if (deliveryMethod === "ship_to_customer" && (!shippingAddress || !shippingAddress.addressLine1 || !shippingAddress.city)) {
+        return res.status(400).json({ error: "shippingAddress with addressLine1 and city is required for shipping" });
+      }
+
+      // 1. Validate cart exists and has items
+      const { rows: cartRows } = await db.query(
+        "SELECT * FROM storefront_carts WHERE cart_token = $1",
+        [cartToken]
+      );
+      if (!cartRows.length) return res.status(404).json({ error: "Cart not found" });
+      const cart = cartRows[0];
+
+      const cartData = await getCartWithItems(db, cart.id);
+      if (!cartData.items.length) {
+        return res.status(400).json({ error: "Cart is empty" });
+      }
+
+      // 2. Run final quote
+      const cartItems = cartData.items.map((i) => ({
+        productId: i.product_id,
+        variantId: i.variant_id,
+        qty: i.quantity,
+      }));
+      const quote = await calculateQuote(
+        db,
+        cartItems,
+        deliveryMethod,
+        pickupOutletId || null,
+        cart.channel_id
+      );
+
+      // 3. Check for availability errors
+      if (quote.availabilityErrors && quote.availabilityErrors.length > 0) {
+        return res.status(400).json({
+          error: "Some items are unavailable",
+          availabilityErrors: quote.availabilityErrors,
+        });
+      }
+
+      // 4-13. Atomic transaction
+      const result = await db.transaction(async (client) => {
+        // 5-6. Generate tokens
+        const externalOrderId = "sf_" + crypto.randomUUID().replace(/-/g, "").slice(0, 20);
+        const publicOrderToken = crypto.randomUUID();
+
+        // 7. Look up storefront channel
+        const { rows: chRows } = await client.query(
+          "SELECT id FROM sales_channels WHERE code = 'storefront' LIMIT 1"
+        );
+        const channelId = chRows.length ? chRows[0].id : null;
+
+        // Determine fulfillment outlet
+        let fulfillmentOutletId = null;
+        if (deliveryMethod === "pickup") {
+          fulfillmentOutletId = pickupOutletId;
+        }
+
+        // 8. Insert web_orders
+        const { rows: [order] } = await client.query(
+          `INSERT INTO web_orders (
+            source, external_order_id, channel_id,
+            delivery_method, pickup_outlet_id, fulfillment_outlet_id,
+            customer_name_snapshot, customer_phone_snapshot, customer_email_snapshot,
+            shipping_address_json,
+            subtotal, discount_total, tax_total, shipping_total, grand_total,
+            currency, payment_status, fulfillment_status, order_status,
+            public_order_token, ordered_at
+          ) VALUES (
+            'storefront', $1, $2,
+            $3, $4, $5,
+            $6, $7, $8,
+            $9,
+            $10, $11, $12, $13, $14,
+            'PKR', 'pending', 'unfulfilled', 'open',
+            $15, NOW()
+          ) RETURNING *`,
+          [
+            externalOrderId, channelId,
+            deliveryMethod, pickupOutletId || null, fulfillmentOutletId,
+            customerContact.name, customerContact.phone, customerContact.email || null,
+            shippingAddress ? JSON.stringify(shippingAddress) : null,
+            quote.subtotal, quote.discountTotal, quote.taxTotal, quote.shippingTotal, quote.grandTotal,
+            publicOrderToken,
+          ]
+        );
+
+        // 9. Insert web_order_items
+        const insertedItems = [];
+        for (const qi of quote.items) {
+          const { rows: [orderItem] } = await client.query(
+            `INSERT INTO web_order_items (
+              web_order_id, product_id, variant_id, sku, title,
+              qty, unit_price, discount, tax, line_total
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING *`,
+            [
+              order.id, qi.productId, qi.variantId,
+              null, qi.productName,
+              qi.qty, qi.unitPrice, qi.discount, qi.taxAmount, qi.lineTotal,
+            ]
+          );
+          insertedItems.push(orderItem);
+        }
+
+        // 10. Create inventory reservations (converted) and decrement stock
+        for (let idx = 0; idx < quote.items.length; idx++) {
+          const qi = quote.items[idx];
+          const orderItem = insertedItems[idx];
+
+          // Determine which outlet to decrement stock from
+          let stockOutletId;
+          if (deliveryMethod === "pickup") {
+            stockOutletId = pickupOutletId;
+          } else {
+            // Ship-to-customer: pick outlet with most stock
+            const { rows: stockRows } = await client.query(
+              `SELECT os.outlet_id, os.quantity
+               FROM outlet_stock os
+               JOIN outlets o ON o.id = os.outlet_id AND o.is_active = true
+               WHERE os.product_id = $1 AND os.quantity >= $2
+               ORDER BY os.quantity DESC
+               LIMIT 1`,
+              [qi.productId, qi.qty]
+            );
+            if (!stockRows.length) {
+              throw Object.assign(
+                new Error(`Insufficient stock for ${qi.productName}`),
+                { statusCode: 400 }
+              );
+            }
+            stockOutletId = stockRows[0].outlet_id;
+          }
+
+          // Lock and decrement outlet_stock
+          const { rows: lockRows } = await client.query(
+            `SELECT id, quantity FROM outlet_stock
+             WHERE outlet_id = $1 AND product_id = $2
+             FOR UPDATE`,
+            [stockOutletId, qi.productId]
+          );
+
+          if (!lockRows.length || lockRows[0].quantity < qi.qty) {
+            throw Object.assign(
+              new Error(`Insufficient stock for ${qi.productName}`),
+              { statusCode: 400 }
+            );
+          }
+
+          await client.query(
+            `UPDATE outlet_stock SET quantity = quantity - $1
+             WHERE outlet_id = $2 AND product_id = $3`,
+            [qi.qty, stockOutletId, qi.productId]
+          );
+
+          // Insert reservation as 'converted' (already decremented)
+          const reservationKey = `order_${order.id}_item_${orderItem.id}`;
+          await client.query(
+            `INSERT INTO inventory_reservations (
+              reservation_key, channel_id, web_order_id, product_id, variant_id,
+              outlet_id, quantity, status, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'converted', NOW(), NOW())`,
+            [
+              reservationKey, channelId, order.id,
+              qi.productId, qi.variantId,
+              stockOutletId, qi.qty,
+            ]
+          );
+
+          // Update fulfillment_outlet_id on order if ship_to_customer and not yet set
+          if (deliveryMethod === "ship_to_customer" && !fulfillmentOutletId) {
+            fulfillmentOutletId = stockOutletId;
+            await client.query(
+              "UPDATE web_orders SET fulfillment_outlet_id = $1 WHERE id = $2",
+              [fulfillmentOutletId, order.id]
+            );
+          }
+        }
+
+        // 11. Create allocations
+        const allocItems = insertedItems.map((oi, idx) => ({
+          webOrderItemId: oi.id,
+          productId: quote.items[idx].productId,
+          variantId: quote.items[idx].variantId,
+          qty: quote.items[idx].qty,
+        }));
+        // allocateOrder uses its own transaction internally, but we need to use
+        // the same client. Insert allocations directly here instead.
+        for (const ai of allocItems) {
+          let outletId;
+          if (deliveryMethod === "pickup") {
+            outletId = pickupOutletId;
+          } else {
+            // Use the outlet we already determined during stock decrement
+            const { rows } = await client.query(
+              `SELECT outlet_id FROM inventory_reservations
+               WHERE web_order_id = $1 AND product_id = $2
+               LIMIT 1`,
+              [order.id, ai.productId]
+            );
+            outletId = rows.length ? rows[0].outlet_id : fulfillmentOutletId;
+          }
+
+          await client.query(
+            `INSERT INTO web_order_allocations (
+              web_order_id, web_order_item_id, fulfillment_outlet_id,
+              fulfillment_method, status, allocated_qty
+            ) VALUES ($1, $2, $3, $4, 'pending', $5)`,
+            [order.id, ai.webOrderItemId, outletId, deliveryMethod, ai.qty]
+          );
+        }
+
+        // 12. Delete the cart (cascade deletes cart items)
+        await client.query("DELETE FROM storefront_carts WHERE id = $1", [cart.id]);
+
+        // 13. Return result
+        return {
+          orderId: order.id,
+          orderToken: publicOrderToken,
+          orderNumber: externalOrderId,
+          grandTotal: Number(order.grand_total),
+        };
+      });
+
+      res.status(201).json(result);
+    } catch (err) {
+      console.error("Storefront checkout error:", err);
+      const status = err.statusCode || 500;
+      res.status(status).json({ error: err.message || "Checkout failed" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /api/storefront/orders/:orderToken — public order status lookup
+  // ---------------------------------------------------------------------------
+  app.get("/api/storefront/orders/:orderToken", async (req, res) => {
+    try {
+      const resolved = await resolveStorefrontDb(req);
+      if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+      const { db } = resolved;
+
+      const { rows: orderRows } = await db.query(
+        `SELECT id, external_order_id, order_status, payment_status, fulfillment_status,
+                delivery_method, grand_total, subtotal, tax_total, shipping_total, discount_total,
+                customer_name_snapshot, ordered_at,
+                pickup_ready_at, picked_up_at, curbside_arrived_at, currency
+         FROM web_orders
+         WHERE public_order_token = $1`,
+        [req.params.orderToken]
+      );
+
+      if (!orderRows.length) return res.status(404).json({ error: "Order not found" });
+      const order = orderRows[0];
+
+      const { rows: items } = await db.query(
+        `SELECT woi.id, woi.title, woi.qty, woi.unit_price, woi.discount, woi.tax, woi.line_total,
+                woi.product_id, woi.variant_id, woi.sku
+         FROM web_order_items woi
+         WHERE woi.web_order_id = $1
+         ORDER BY woi.id`,
+        [order.id]
+      );
+
+      res.json({
+        orderNumber: order.external_order_id,
+        status: order.order_status,
+        paymentStatus: order.payment_status,
+        fulfillmentStatus: order.fulfillment_status,
+        deliveryMethod: order.delivery_method,
+        grandTotal: Number(order.grand_total),
+        subtotal: Number(order.subtotal),
+        taxTotal: Number(order.tax_total),
+        shippingTotal: Number(order.shipping_total),
+        discountTotal: Number(order.discount_total),
+        currency: order.currency,
+        customerName: order.customer_name_snapshot,
+        orderedAt: order.ordered_at,
+        pickupReadyAt: order.pickup_ready_at,
+        pickedUpAt: order.picked_up_at,
+        curbsideArrivedAt: order.curbside_arrived_at,
+        items: items.map((i) => ({
+          id: i.id,
+          title: i.title,
+          qty: i.qty,
+          unitPrice: Number(i.unit_price),
+          discount: Number(i.discount),
+          tax: Number(i.tax),
+          lineTotal: Number(i.line_total),
+          productId: i.product_id,
+          variantId: i.variant_id,
+          sku: i.sku,
+        })),
+      });
+    } catch (err) {
+      console.error("Storefront order lookup error:", err);
       res.status(500).json({ error: "Internal server error" });
     }
   });
