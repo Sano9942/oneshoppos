@@ -253,7 +253,8 @@ Seed flags:
 - Modify: `frontend/src/ui/nav-config.js`
 - Modify: `frontend/src/ui/Breadcrumbs.jsx`
 - Create: `backend/services/phase4-polling.js`
-- Create: `backend/services/public-tenant-context.js` if current storefront resolver cannot be cleanly reused
+- Create: `backend/services/public-tenant-context.js` — extract `resolveStorefrontDb()` from `storefront.js` into a shared helper
+- Modify: `backend/routes/storefront.js` — refactor to import from `public-tenant-context.js`
 
 ### Required outcomes
 
