@@ -2821,6 +2821,148 @@ CREATE TABLE IF NOT EXISTS calendar_sync_accounts (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ═══════════════════════════════════════════════════════════════
+-- Phase 4C — Service Workspace
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS service_projects (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER REFERENCES customers(id),
+  outlet_id INTEGER REFERENCES outlets(id),
+  name TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','active','on_hold','completed','cancelled')),
+  start_date DATE,
+  target_end_date DATE,
+  actual_end_date DATE,
+  budget NUMERIC(12,2),
+  created_by INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_service_projects_customer ON service_projects(customer_id);
+CREATE INDEX IF NOT EXISTS idx_service_projects_status ON service_projects(status);
+
+CREATE TABLE IF NOT EXISTS project_contacts (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES service_projects(id) ON DELETE CASCADE,
+  customer_id INTEGER REFERENCES customers(id),
+  name TEXT NOT NULL,
+  email TEXT,
+  phone TEXT,
+  role TEXT DEFAULT 'client',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS project_milestones (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES service_projects(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  due_date DATE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','in_progress','completed','skipped')),
+  sort_order INTEGER DEFAULT 0,
+  amount NUMERIC(12,2),
+  invoice_on_completion BOOLEAN DEFAULT FALSE,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_project_milestones_project ON project_milestones(project_id);
+
+CREATE TABLE IF NOT EXISTS project_activities (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES service_projects(id) ON DELETE CASCADE,
+  actor_id INTEGER REFERENCES employees(id),
+  activity_type TEXT NOT NULL CHECK (activity_type IN ('note','status_change','milestone_update','file_upload','invoice_created','payment_received')),
+  description TEXT,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_project_activities_project ON project_activities(project_id);
+
+CREATE TABLE IF NOT EXISTS contract_templates (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  body_html TEXT NOT NULL DEFAULT '',
+  variables JSONB DEFAULT '[]',
+  is_active BOOLEAN DEFAULT TRUE,
+  created_by INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS contracts (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER REFERENCES service_projects(id),
+  customer_id INTEGER REFERENCES customers(id),
+  template_id INTEGER REFERENCES contract_templates(id),
+  title TEXT NOT NULL,
+  body_html TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','sent','viewed','signed','countersigned','expired','cancelled')),
+  sent_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  signed_at TIMESTAMPTZ,
+  created_by INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_contracts_project ON contracts(project_id);
+CREATE INDEX IF NOT EXISTS idx_contracts_customer ON contracts(customer_id);
+
+CREATE TABLE IF NOT EXISTS contract_signers (
+  id SERIAL PRIMARY KEY,
+  contract_id INTEGER NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  email TEXT,
+  role TEXT DEFAULT 'signer',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','signed','declined')),
+  signed_at TIMESTAMPTZ,
+  signature_data TEXT,
+  ip_address TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS contract_events (
+  id SERIAL PRIMARY KEY,
+  contract_id INTEGER NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL CHECK (event_type IN ('created','sent','viewed','signed','countersigned','expired','cancelled')),
+  actor TEXT,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_contract_events_contract ON contract_events(contract_id);
+
+CREATE TABLE IF NOT EXISTS project_files (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES service_projects(id) ON DELETE CASCADE,
+  file_name TEXT NOT NULL,
+  file_url TEXT NOT NULL,
+  file_size INTEGER,
+  mime_type TEXT,
+  uploaded_by INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_project_files_project ON project_files(project_id);
+
+-- Extend quotations for project billing
+ALTER TABLE quotations
+  ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES service_projects(id),
+  ADD COLUMN IF NOT EXISTS estimate_status TEXT DEFAULT 'draft' CHECK (estimate_status IN ('draft','sent','approved','rejected')),
+  ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS approved_by INTEGER REFERENCES employees(id);
+
+-- Extend customer_invoices for project billing
+ALTER TABLE customer_invoices
+  ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES service_projects(id),
+  ADD COLUMN IF NOT EXISTS milestone_id INTEGER REFERENCES project_milestones(id),
+  ADD COLUMN IF NOT EXISTS invoice_kind TEXT DEFAULT 'standard' CHECK (invoice_kind IN ('standard','milestone','retainer','final'));
+
+-- Extend customer_subscriptions for project billing
+ALTER TABLE customer_subscriptions
+  ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES service_projects(id),
+  ADD COLUMN IF NOT EXISTS billing_template_id INTEGER;
+
 -- ── Schema versioning ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schema_version (
   version    INTEGER PRIMARY KEY,
