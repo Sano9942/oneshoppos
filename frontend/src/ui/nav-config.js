@@ -44,6 +44,7 @@ import {
   PackageCheck,
   Calendar,
   LayoutGrid,
+  Mail,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -141,6 +142,15 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Backup & Restore", path: "/backup-restore", icon: DatabaseBackup, requiredPerm: "all_access", requiredFlag: "backup_restore" },
       { name: "Outlet Tax Profiles", path: "/settings/outlet-tax-profiles", icon: Receipt, requiredPerm: "all_access", requiredFlag: "phase2_outlet_tax" },
       { name: "POS Layouts", path: "/settings/pos-layouts", icon: LayoutGrid, requiredPerm: "all_access", requiredFlag: "phase2_pos_layouts" },
+    ],
+  },
+  {
+    label: "Marketing & Billing",
+    items: [
+      { name: "Campaigns", path: "/marketing/campaigns", icon: Mail, requiredPerm: "all_access", requiredFlag: "marketing_campaigns" },
+      { name: "Inbox", path: "/messaging/inbox", icon: MessageSquare, requiredPerm: "manage_orders", requiredFlag: "customer_messaging" },
+      { name: "Customer Invoices", path: "/customer-invoices", icon: FileText, requiredPerm: "manage_orders", requiredFlag: "customer_invoicing" },
+      { name: "Subscriptions", path: "/subscriptions", icon: RefreshCw, requiredPerm: "all_access", requiredFlag: "subscription_billing" },
     ],
   },
   {

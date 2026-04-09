@@ -55,6 +55,10 @@ const ProfileRedesign = lazy(() => import("../pages/redesign/ProfileRedesign"));
 const MyTicketsRoute = lazy(() => import("../pages/MyTicketsRoute"));
 const ImportRedesign = lazy(() => import("../pages/redesign/ImportRedesign"));
 const CourierSettingsRedesign = lazy(() => import("../pages/redesign/CourierSettingsRedesign"));
+const MarketingCampaignsRoute = lazy(() => import("../pages/MarketingCampaignsRoute"));
+const MessagingInboxRoute = lazy(() => import("../pages/MessagingInboxRoute"));
+const CustomerInvoicesRoute = lazy(() => import("../pages/CustomerInvoicesRoute"));
+const SubscriptionsRoute = lazy(() => import("../pages/SubscriptionsRoute"));
 const ReportsRoute = lazy(() => import("../pages/ReportsRoute"));
 const ReportTabStandaloneRoute = lazy(() =>
   import("../pages/ReportsRoute").then((mod) => ({ default: mod.ReportTabStandaloneRoute }))
@@ -191,5 +195,10 @@ export const appRoutes = [
     <Route path="/smart-collections" element={perm("all_access", <SmartCollectionsRoute />)} />
     <Route path="/settings/outlet-tax-profiles" element={perm("all_access", <OutletTaxProfilesRoute />)} />
     <Route path="/scheduled-changes" element={perm("all_access", <ScheduledChangesRoute />)} />
+    {/* Phase 3 — Marketing, Engagement & Financial Tools */}
+    <Route path="/marketing/campaigns" element={perm("all_access", <MarketingCampaignsRoute />)} />
+    <Route path="/messaging/inbox" element={perm("manage_orders", <MessagingInboxRoute />)} />
+    <Route path="/customer-invoices" element={perm("manage_orders", <CustomerInvoicesRoute />)} />
+    <Route path="/subscriptions" element={perm("all_access", <SubscriptionsRoute />)} />
   </Route>,
 ];

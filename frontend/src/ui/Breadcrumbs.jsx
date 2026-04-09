@@ -50,6 +50,12 @@ const LABELS = {
   inventory: "Inventory",
   returns: "Returns",
   profile: "My Profile",
+  marketing: "Marketing",
+  campaigns: "Campaigns",
+  messaging: "Messaging",
+  inbox: "Inbox",
+  "customer-invoices": "Customer Invoices",
+  subscriptions: "Subscriptions",
 };
 
 const SKIP = ["/dashboard", "/pos", "/kiosk", "/customer-display"];
