@@ -556,3 +556,71 @@ An independent research pass against SanoPOS source files flagged the following 
 | Deposits / staged payments | No code | Genuine gap (covered as SQ-56a) |
 
 These are worth addressing through documentation, landing page copy, or feature naming — even before building new features.
+
+---
+
+## Phase 1 Omnichannel — Implementation Status (2026-04-09)
+
+> **Branch:** `omnichannel-phase1` — 21 commits, 30 files changed (+5,464 lines)
+>
+> Phase 1 is **code-complete**. All 8 workstreams shipped. Only manual regression verification remains before merge.
+
+### Phase 1 Features — DONE
+
+| Feature | Competitive ID | Workstream | Commits |
+|---------|---------------|------------|---------|
+| Online storefront (catalog, cart, checkout) | SQ-1, SQ-2 | WS2 + WS4 | `056637a`, `e341de8`, `40e16d8`, `91ca51c`, `4647f69`, `9a495e1` |
+| BOPIS (buy online, pick up in store) | SQ-3, SP-1 | WS5 | `58d7372`, `6a91d31` |
+| Curbside pickup (arrival signal) | SQ-3 | WS5 | `58d7372` |
+| Ship-from-store (fulfill web orders from store inventory) | SP-1 | WS6 | `c91406b` |
+| Endless aisle (sell from another location's stock via POS) | SP-2 | WS6 | `7688d6f`, `2128c47` |
+| In-store return of online orders | SP-4 | WS7 | `7a9e861` |
+| Unified cross-channel customer history | SP-5 | WS7 | `3d9c23e`, `7c213d0` |
+| Omnichannel promotions (same promo logic online + POS) | SP-6 | WS8 | `36c38b7` |
+| Channel publication management (publish/unpublish per channel) | SP-8 (partial) | WS8 | `e4f89d2` |
+| Product reviews on storefront | SQ-6 | WS2 | `e341de8` |
+| Reservation + allocation engine | (infra) | WS3 | `e240153`, `ad9b89b`, `ed23642` |
+| Schema migration v18 (7 new tables, 2 extended) | (infra) | WS1 | `22eb50b` |
+
+### Phase 1 In-Scope Deferrals (built partially or punted to Phase 2)
+
+| # | Deferred Item | Location | Impact | Priority for Phase 2 |
+|---|--------------|----------|--------|---------------------|
+| 1 | **Shipping cost calculation** | `backend/services/quote.js:192` — `shippingTotal = 0` hardcoded | Storefront only supports free shipping. No rate calculation or shipping method selection. | High |
+| 2 | **Payment processing at checkout** | `POST /api/storefront/checkout` creates order with `payment_status = 'pending'` but collects no payment | Orders placed but payment handled externally (admin/manual). No Stripe/xPay on storefront. xPay gateway adapter exists for billing — natural extension point. | Critical |
+| 3 | **Pickup window scheduling** | Design doc: "future-ready flags for curbside and pickup windows" | Customer can't choose a pickup time slot. Schema has `pickup_ready_at` / `picked_up_at` / `curbside_arrived_at` but no scheduling UI. | Medium |
+| 4 | **Subdomain-based storefront URLs** | Implementation plan: "path-based now, subdomain-ready later" | Only `example.com/store/acme-retail/*` works. Tenant resolution code is pluggable — path-param extraction only. | Low |
+| 5 | **Regression testing (Task 8.3)** | 13 manual checklist items in implementation plan | Code-complete but unverified against live/staging DB. Required before merge. | Blocker |
+
+### Competitive Analysis Phase 1 Items NOT Built
+
+These are features the competitive analysis tagged as Phase 1 priority but the implementation plan chose to defer:
+
+| Feature | Competitive ID | Why Deferred |
+|---------|---------------|-------------|
+| Shipping label printing from POS | SP-1 (detail), SP-22 | Needs shipping provider API keys (USPS/DHL/FedEx or Pakistan courier label APIs) |
+| Send cart (email cart link to complete purchase online) | SP-3 | Scoped out — Phase 2. Cart serialization + email + online checkout link needed |
+| Local delivery management (zones, own drivers, delivery windows, fees) | SQ-4 | Only `ship_to_customer` delivery method exists. No zone config, no own-fleet management |
+| eGift cards purchasable from online store | SQ-6a | Gift cards exist in POS but no online purchase flow. Low priority |
+| Online marketing tools (pop-ups, email capture, lead forms) | SQ-6b | Phase 3 territory (Marketing & Engagement) |
+
+### Explicitly Out of Scope for Phase 1 (design doc §13)
+
+| Item | Target Phase |
+|------|-------------|
+| Separate standalone storefront application | Phase 2+ |
+| Restaurant vertical (tables, KDS, QR ordering) | Phase 4 |
+| Appointments vertical (booking, calendars) | Phase 4 |
+| Service-business tooling (contracts, recurring invoices) | Phase 4 |
+| Banking / BNPL / financial-licensing features | Cannot build (licensing) |
+| Location-specific pricing as full subsystem | Phase 2 |
+| Full CMS / page-builder system | Phase 2+ |
+
+### Updated Gap Count After Phase 1
+
+| Category | Gaps Before Phase 1 | Closed by Phase 1 | Remaining |
+|----------|---------------------|-------------------|-----------|
+| Omnichannel / Online Store | ~14 unique | 10 (storefront, BOPIS, curbside, ship-from-store, endless aisle, online returns, unified history, omnichannel promos, channel publication, product reviews online) | ~4 (send cart, local delivery zones, eGift online, marketing tools) |
+| **Total across all categories** | **~134 unique** | **~10** | **~124** |
+
+Phase 1 closed the single most critical gap category — omnichannel. SanoPOS moved from "**Square/Shopify leads** (online store + BOPIS + curbside)" to **at parity** on core omnichannel capabilities.

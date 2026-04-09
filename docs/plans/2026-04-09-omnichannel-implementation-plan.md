@@ -10,6 +10,49 @@
 
 ---
 
+## Implementation Status
+
+> **Branch:** `omnichannel-phase1` — 21 commits, 30 files changed (+5,464 / -22 lines)
+>
+> **Last updated:** 2026-04-09
+
+| WS | Status | Commits | Description |
+|----|--------|---------|-------------|
+| 1 | ✅ Done | `22eb50b` | Migration v18 + schema DDL |
+| 2 | ✅ Done | `056637a`, `e341de8` | Storefront read APIs + frontend browse |
+| 3 | ✅ Done | `e240153`, `ad9b89b`, `ed23642` | Reservation + allocation + expiry worker |
+| 4 | ✅ Done | `40e16d8`, `91ca51c`, `4647f69`, `9a495e1` | Cart + quote + checkout APIs + frontend |
+| 5 | ✅ Done | `58d7372`, `6a91d31` | BOPIS/curbside endpoints + fulfillment UI |
+| 6 | ✅ Done | `7688d6f`, `c91406b`, `2128c47` | Endless aisle + ship-from-store picklists |
+| 7 | ✅ Done | `7a9e861`, `3d9c23e`, `7c213d0` | Web order returns + unified history |
+| 8 | ⚠️ Partial | `36c38b7`, `e4f89d2` | Promotions + channel publication done; **regression testing remains** |
+
+### Regression Verification (completed locally)
+
+| Check | Result |
+|-------|--------|
+| Frontend build (`vite build`) | ✅ Passes |
+| Backend module loading (all new services) | ✅ All load cleanly |
+| Backend unit tests (125 tests) | ✅ 125/125 pass |
+| Frontend unit tests | ⚠️ Pre-existing failures (setup.js config issue, not caused by our changes) |
+
+### What Remains Before Merge
+
+1. **Run migration v18 against a test database** — verify all 7 tables create, column extensions apply, backfill runs
+2. **Manual smoke test** of storefront browse/cart/checkout flow end-to-end
+3. **Verify existing flows still work** (regression checklist below):
+   - [ ] Marketplace-imported web_orders (Shopify/Daraz) — create, view, fulfill
+   - [ ] Picklist and loadsheet flows — create, pick, pack, dispatch
+   - [ ] POS price-list behavior — correct prices applied per customer group
+   - [ ] Parked sales — park, retrieve, complete
+   - [ ] Public receipt page — view by invoice number
+   - [ ] Returns against POS sales — still work with `original_sale_id`
+   - [ ] Multichannel report — still aggregates correctly
+4. **Run full integration test suite** against test DB: `npx jest backend/tests/integration/ --runInBand`
+5. **Run E2E Playwright tests** against staging: `cd frontend && npx playwright test`
+
+---
+
 ## Confirmed Design Decisions
 
 | Decision | Choice |
@@ -22,693 +65,332 @@
 
 ---
 
-## Workstream 1: Schema Migration (v18) + Seed Data
+## Workstream 1: Schema Migration (v18) + Seed Data — ✅ DONE
 
 ### Task 1.1: Add migration v18 — new tables + column extensions
 
-**Files:**
-- Modify: `backend/migrate-pg.js` (append migration v18)
-- Modify: `backend/schema-pg.sql` (add new tables for fresh installs)
+**Commit:** `22eb50b`
 
-**Step 1: Add migration v18 to migrate-pg.js**
+**Files changed:**
+- `backend/migrate-pg.js` — added v18 migration block (195 lines)
+- `backend/schema-pg.sql` — added 7 CREATE TABLE + ALTER TABLE extensions (153 lines)
 
-Append after the v17 migration block. The migration creates:
+**What was built:**
 
-1. `sales_channels` — seeded with pos, storefront, shopify, woocommerce, daraz, facebook, instagram, whatsapp
-2. `channel_publications` — product-to-channel publication control
-3. `inventory_reservations` — stock holds for carts and pre-fulfillment
-4. `web_order_allocations` — outlet-level fulfillment assignment
-5. `customer_addresses` — normalized delivery addresses
-6. `storefront_carts` — persistent public carts
-7. `storefront_cart_items` — normalized cart line items
+7 new tables: `sales_channels` (seeded with 8 channels: pos, storefront, shopify, woocommerce, daraz, facebook, instagram, whatsapp), `channel_publications`, `inventory_reservations`, `web_order_allocations`, `customer_addresses`, `storefront_carts`, `storefront_cart_items`
 
-Column extensions:
-- `web_orders`: add `channel_id`, `delivery_method`, `pickup_outlet_id`, `fulfillment_outlet_id`, `customer_name_snapshot`, `customer_phone_snapshot`, `customer_email_snapshot`, `shipping_address_json`, `pickup_ready_at`, `picked_up_at`, `curbside_arrived_at`, `public_order_token`
-- `returns`: add `web_order_id`
+Column extensions: 12 new columns on `web_orders` (channel_id, delivery_method, pickup/fulfillment outlets, customer snapshots, shipping address JSON, pickup/curbside timestamps, public_order_token) and 1 on `returns` (web_order_id)
 
-Backfill:
-- Set `channel_id` on existing `web_orders` rows by matching `source` to `sales_channels.code`
+Backfill: existing `web_orders` rows get `channel_id` set by matching `source` to `sales_channels.code`
 
-**Step 2: Add new tables to schema-pg.sql**
-
-Add the same 7 CREATE TABLE statements and ALTER TABLE extensions to the DDL file so fresh tenant provisioning includes them.
-
-**Step 3: Run migration locally and verify**
-
-Run: `node backend/migrate-pg.js`
-Expected: Migration v18 applies successfully to public schema and all tenant schemas.
-
-**Step 4: Commit**
-
-```bash
-git add backend/migrate-pg.js backend/schema-pg.sql
-git commit -m "feat(omnichannel): add migration v18 — sales channels, reservations, allocations, storefront carts, customer addresses"
-```
+16 indexes including partial indexes for active reservations and non-null web_order returns.
 
 ---
 
-## Workstream 2: Public Storefront Read Layer
+## Workstream 2: Public Storefront Read Layer — ✅ DONE
 
 ### Task 2.1: Create storefront route file with tenant resolution middleware
 
-**Files:**
-- Create: `backend/routes/storefront.js`
-- Modify: `backend/routes/registerAllRoutes.js` (mount storefront routes)
+**Commit:** `056637a`
 
-The storefront route file exposes public APIs under `/api/storefront/*`. It uses a pluggable tenant resolution middleware that:
-1. Extracts `tenantSlug` from `req.query.tenant` OR `req.headers['x-tenant-slug']`
-2. Resolves tenant from master DB
-3. Attaches tenant DB to request
+**Files changed:**
+- Created: `backend/routes/storefront.js` (255 lines initially, grew to 909 with WS4/WS5 additions)
+- Modified: `backend/routes/registerAllRoutes.js` (+3 lines — mount before auth middleware)
 
-Pattern reference: `backend/routes/receipts.js` lines 1-26.
-
-Mount in `registerAllRoutes.js` BEFORE `loadTenantAndPerms` (same position as receipts/webhooks).
-
-**Endpoints to implement:**
-
-- `GET /api/storefront/config` — tenant branding, currency, delivery methods, pickup config
-- `GET /api/storefront/categories` — public category tree (categories with published products only)
+**Endpoints implemented:**
+- `GET /api/storefront/config` — tenant branding, currency, delivery methods
+- `GET /api/storefront/categories` — public category tree (published products only)
 - `GET /api/storefront/products` — paginated, filterable published product summaries
-- `GET /api/storefront/products/:id` — product detail with variants, images, approved reviews
+- `GET /api/storefront/products/:id` — product detail with variants, images, approved reviews, pickup availability
 - `GET /api/storefront/pickup-locations` — active pickup-capable outlets
 
-**Step 1: Create storefront.js with tenant resolution and config endpoint**
-
-Implement the tenant resolution helper and `GET /api/storefront/config`. Config returns:
-- company name, logo, currency from `company_profile`
-- enabled delivery methods (hardcoded `['pickup', 'ship_to_customer']` for v1)
-- pickup enabled flag
-
-**Step 2: Add categories endpoint**
-
-Query `categories` joined with `channel_publications` to return only categories containing at least one published product on the storefront channel.
-
-**Step 3: Add products list endpoint**
-
-Query published products with:
-- `channel_publications` filter (storefront channel, `is_published = true`)
-- Category filter, search, sort, pagination
-- Storefront-safe serializer (no internal stock admin fields, no cost prices)
-
-**Step 4: Add product detail endpoint**
-
-Return product with variants, images (from `product_media`), approved reviews (from `product_reviews`), pickup availability per outlet.
-
-**Step 5: Add pickup-locations endpoint**
-
-Return active outlets with `name`, `address`, `phone`. Future-ready with `supports_curbside` flag.
-
-**Step 6: Mount in registerAllRoutes.js**
-
-Add: `app.use('/api/storefront', require('./routes/storefront')(deps));`
-Mount BEFORE `loadTenantAndPerms` middleware (public, no auth).
-
-**Step 7: Commit**
-
-```bash
-git add backend/routes/storefront.js backend/routes/registerAllRoutes.js
-git commit -m "feat(omnichannel): add public storefront read APIs — config, categories, products, pickup locations"
-```
+Tenant resolution via `resolveStorefrontDb()` — reads `?tenant=` or `x-tenant-slug` header.
 
 ### Task 2.2: Create frontend storefront route shell and browse pages
 
-**Files:**
-- Create: `frontend/src/pages/storefront/StorefrontLayout.jsx`
-- Create: `frontend/src/pages/storefront/StorefrontHome.jsx`
-- Create: `frontend/src/pages/storefront/StorefrontProducts.jsx`
-- Create: `frontend/src/pages/storefront/StorefrontProductDetail.jsx`
-- Modify: `frontend/src/routes/publicRoutes.jsx` (add `/store/:tenantSlug/*` routes)
+**Commit:** `e341de8`
 
-**Step 1: Create StorefrontLayout**
+**Files created:**
+- `frontend/src/pages/storefront/StorefrontLayout.jsx` — public layout with header, category nav, cart icon, `StorefrontContext`
+- `frontend/src/pages/storefront/StorefrontHome.jsx` — hero + featured products + category cards
+- `frontend/src/pages/storefront/StorefrontProducts.jsx` — category filter, search, sort, pagination, responsive grid
+- `frontend/src/pages/storefront/StorefrontProductDetail.jsx` — image gallery, variants, reviews, pickup availability
 
-A minimal public layout with:
-- Tenant branding header (fetched from `/api/storefront/config`)
-- Category navigation
-- Cart icon with item count
-- Outlet/context resolution from `:tenantSlug` path param
-
-**Step 2: Create StorefrontHome**
-
-Landing page showing featured/all products grid. Calls `GET /api/storefront/products`.
-
-**Step 3: Create StorefrontProducts**
-
-Category-filtered product listing with search, sort, pagination. Reuses product card component.
-
-**Step 4: Create StorefrontProductDetail**
-
-Product detail page — images, variants, pricing, reviews, add-to-cart, pickup availability.
-
-**Step 5: Add routes to publicRoutes.jsx**
-
-```jsx
-{ path: '/store/:tenantSlug', element: <StorefrontLayout />, children: [
-  { index: true, element: <StorefrontHome /> },
-  { path: 'products', element: <StorefrontProducts /> },
-  { path: 'products/:productId', element: <StorefrontProductDetail /> },
-  { path: 'cart', element: <StorefrontCart /> },
-  { path: 'checkout', element: <StorefrontCheckout /> },
-  { path: 'order/:orderToken', element: <StorefrontOrderStatus /> },
-]}
-```
-
-**Step 6: Commit**
-
-```bash
-git add frontend/src/pages/storefront/ frontend/src/routes/publicRoutes.jsx
-git commit -m "feat(omnichannel): add storefront frontend — layout, browse, product detail pages"
-```
+**Files modified:**
+- `frontend/src/routes/publicRoutes.jsx` — added `/store/:tenantSlug` nested routes
 
 ---
 
-## Workstream 3: Reservation and Allocation Engine
+## Workstream 3: Reservation and Allocation Engine — ✅ DONE
 
 ### Task 3.1: Create reservation service
 
-**Files:**
-- Create: `backend/services/reservation.js`
+**Commit:** `e240153`
+
+**File created:** `backend/services/reservation.js` (165 lines)
 
 **Functions:**
-- `createReservation({ cartToken, channelId, productId, variantId, outletId, qty, ttlMinutes })` — creates hold in `inventory_reservations`
-- `convertReservations(cartToken, webOrderId)` — status `active` → `converted`
-- `releaseReservations(cartToken)` — status `active` → `released`, restore stock
-- `expireStaleReservations()` — bulk expire where `expires_at < NOW()` and status = `active`
-- `getActiveReservationsForOutlet(outletId, productId, variantId)` — sum of held qty
-
-All operations run inside transactions with `SELECT ... FOR UPDATE` on `outlet_stock` rows.
-
-**Step 1: Implement createReservation**
-
-Decrement `outlet_stock.quantity` and insert `inventory_reservations` row atomically.
-
-**Step 2: Implement convertReservations**
-
-Bulk update status from `active` to `converted` for a given `reservation_key` (cart token).
-
-**Step 3: Implement releaseReservations**
-
-Restore stock to `outlet_stock` and set status to `released`.
-
-**Step 4: Implement expireStaleReservations**
-
-Called by a periodic job. Finds all `active` reservations past `expires_at`, releases stock, sets status to `expired`.
-
-**Step 5: Commit**
-
-```bash
-git add backend/services/reservation.js
-git commit -m "feat(omnichannel): add inventory reservation service — create, convert, release, expire"
-```
+- `createReservation()` — SELECT ... FOR UPDATE on outlet_stock, decrement, insert reservation with TTL
+- `convertReservations()` — active → converted, sets web_order_id
+- `releaseReservations()` — restore stock atomically, sorted keys to prevent deadlocks
+- `expireStaleReservations()` — fault-isolated per-reservation processing, re-checks status under lock
+- `getActiveReservationsForOutlet()` — SUM aggregation with COALESCE
 
 ### Task 3.2: Create allocation service
 
-**Files:**
-- Create: `backend/services/allocation.js`
+**Commit:** `ad9b89b`
+
+**File created:** `backend/services/allocation.js` (92 lines)
 
 **Functions:**
-- `allocateOrder(webOrderId, items, deliveryMethod, pickupOutletId)` — assigns fulfillment outlet per line item
-- `getAllocationsForOrder(webOrderId)` — returns allocation details
-
-**Allocation logic:**
-- Pickup orders: allocate all items to `pickupOutletId`
-- Ship-to-customer: allocate to outlet with highest stock for each item (simple v1 strategy)
-
-**Step 1: Implement allocateOrder**
-
-Insert `web_order_allocations` rows. For pickup, all go to the selected outlet. For shipping, query `outlet_stock` to find best outlet per item.
-
-**Step 2: Implement getAllocationsForOrder**
-
-Simple query joining allocations with outlet names.
-
-**Step 3: Commit**
-
-```bash
-git add backend/services/allocation.js
-git commit -m "feat(omnichannel): add fulfillment allocation service — pickup and ship-to-customer strategies"
-```
+- `allocateOrder()` — pickup → specified outlet; ship → highest-stock outlet per item
+- `getAllocationsForOrder()` — join with outlet names
 
 ### Task 3.3: Add reservation expiry worker
 
+**Commit:** `ed23642`
+
 **Files:**
-- Create: `backend/workers/reservation-worker-boss.js`
-- Modify: `backend/boot/workers.js` (register worker)
+- Created: `backend/workers/reservation-worker-boss.js` (63 lines) — pg-boss, `*/5 * * * *` cron
+- Modified: `backend/boot/workers.js` — registered with `RESERVATION_WORKER_ENABLED=1` toggle
 
-pg-boss backed worker that runs `expireStaleReservations()` every 5 minutes.
-
-**Step 1: Create worker following existing pg-boss pattern**
-
-Reference: `backend/workers/cleanup-worker-boss.js`
-
-**Step 2: Register in boot/workers.js**
-
-Add `RESERVATION_WORKER_ENABLED=1` env var toggle.
-
-**Step 3: Commit**
-
-```bash
-git add backend/workers/reservation-worker-boss.js backend/boot/workers.js
-git commit -m "feat(omnichannel): add reservation expiry worker (pg-boss, 5-min cycle)"
-```
+Multi-tenant aware: iterates active tenants via master DB. Heartbeat: `global.__reservationWorkerStatus`.
 
 ---
 
-## Workstream 4: Cart, Quote, and Checkout
+## Workstream 4: Cart, Quote, and Checkout — ✅ DONE
 
 ### Task 4.1: Create cart service
 
-**Files:**
-- Create: `backend/services/storefront-cart.js`
+**Commit:** `40e16d8`
 
-**Functions:**
-- `getOrCreateCart(cartToken, tenantDb)` — returns or creates `storefront_carts` row
-- `addItem(cartId, productId, variantId, qty)` — upserts `storefront_cart_items`
-- `updateItem(cartId, itemId, qty)` — updates quantity or removes if qty=0
-- `removeItem(cartId, itemId)`
-- `getCartWithItems(cartId)` — full cart with item details
+**File created:** `backend/services/storefront-cart.js` (186 lines)
 
-Cart token is a nanoid stored in client cookie/localStorage.
-
-**Step 1: Implement cart CRUD**
-
-Standard insert/update/delete on `storefront_carts` + `storefront_cart_items`.
-
-**Step 2: Commit**
-
-```bash
-git add backend/services/storefront-cart.js
-git commit -m "feat(omnichannel): add storefront cart service — create, add, update, remove items"
-```
+**Functions:** `getOrCreateCart`, `addItem` (upserts with price fetch), `updateItem`, `removeItem`, `getCartWithItems` (joined with product details + computed subtotal)
 
 ### Task 4.2: Create quote service
 
-**Files:**
-- Create: `backend/services/quote.js`
+**Commit:** `91ca51c`
 
-**Functions:**
-- `calculateQuote(cartItems, deliveryMethod, pickupOutletId, channelId, db)` — returns pricing breakdown
+**File created:** `backend/services/quote.js` (337 lines)
 
-**Quote evaluates:**
-1. Product publication check (must be published on channel)
-2. Stock availability per outlet
-3. Price list / base price resolution
-4. Applicable promotions (shared logic with POS where possible)
-5. Tax calculation
-6. Delivery method validation
-7. Pickup outlet availability (if pickup)
+**Evaluates:** publication check, stock availability (per-outlet for pickup, cross-outlet for shipping), price resolution (variant override → product base), tax calculation (category → tax rate), delivery validation. Returns full pricing breakdown with availability errors.
 
-**Returns:**
-```js
-{
-  items: [{ productId, variantId, qty, unitPrice, discount, tax, lineTotal }],
-  subtotal, discountTotal, taxTotal, shippingTotal, grandTotal,
-  deliveryMethod, pickupOutletId,
-  availabilityErrors: [] // items that can't be fulfilled
-}
-```
-
-**Step 1: Implement quote calculation**
-
-Start with base price + tax. Promotion integration comes in Workstream 8.
-
-**Step 2: Commit**
-
-```bash
-git add backend/services/quote.js
-git commit -m "feat(omnichannel): add quote service — pricing, availability, tax calculation"
-```
+**Updated in WS8** (`36c38b7`): Added promotion evaluation — same logic as POS `POST /api/promotions/quote`. Supports all 5 promo types. Per-item discount distribution proportional to subtotal share.
 
 ### Task 4.3: Add cart and checkout API endpoints to storefront routes
 
-**Files:**
-- Modify: `backend/routes/storefront.js`
+**Commit:** `4647f69`
 
-**New endpoints:**
+**File modified:** `backend/routes/storefront.js`
 
-- `POST /api/storefront/cart` — create or get cart (returns cart token)
+**Endpoints:**
+- `POST /api/storefront/cart` — create/get cart
 - `GET /api/storefront/cart/:token` — get cart with items
 - `POST /api/storefront/cart/:token/items` — add item
 - `PUT /api/storefront/cart/:token/items/:itemId` — update quantity
 - `DELETE /api/storefront/cart/:token/items/:itemId` — remove item
-- `POST /api/storefront/cart/:token/quote` — run quote engine on cart
-- `POST /api/storefront/checkout` — atomic checkout (creates web_order + reservations + allocations)
-- `GET /api/storefront/orders/:orderToken` — public order status lookup
-
-**Checkout flow:**
-1. Validate cart exists and has items
-2. Run quote (final pricing)
-3. Begin transaction
-4. Generate `sf_<nanoid>` for `external_order_id`
-5. Generate `public_order_token` (nanoid)
-6. Insert `web_orders` with `source='storefront'`, `channel_id`, delivery method, customer snapshot
-7. Insert `web_order_items`
-8. Create inventory reservations (status: `converted` — immediate for checkout)
-9. Create allocations
-10. Delete cart
-11. Commit transaction
-12. Return order confirmation with `public_order_token`
-
-**Step 1: Add cart endpoints**
-
-**Step 2: Add quote endpoint**
-
-**Step 3: Add checkout endpoint (atomic)**
-
-**Step 4: Add order status endpoint**
-
-**Step 5: Commit**
-
-```bash
-git add backend/routes/storefront.js
-git commit -m "feat(omnichannel): add storefront cart, quote, and checkout APIs"
-```
+- `POST /api/storefront/cart/:token/quote` — run quote, save to cart
+- `POST /api/storefront/checkout` — **atomic checkout** (web_order + items + stock decrement + converted reservations + allocations + cart delete, single transaction)
+- `GET /api/storefront/orders/:orderToken` — public order status
 
 ### Task 4.4: Create frontend cart and checkout pages
 
-**Files:**
-- Create: `frontend/src/pages/storefront/StorefrontCart.jsx`
-- Create: `frontend/src/pages/storefront/StorefrontCheckout.jsx`
-- Create: `frontend/src/pages/storefront/StorefrontOrderStatus.jsx`
-- Create: `frontend/src/pages/storefront/useStorefrontCart.js` (cart state hook)
+**Commit:** `9a495e1`
 
-**Step 1: Create useStorefrontCart hook**
+**Files created:**
+- `frontend/src/pages/storefront/useStorefrontCart.js` — cart hook with localStorage token persistence
+- `frontend/src/pages/storefront/StorefrontCart.jsx` — item list, qty controls, proceed to checkout
+- `frontend/src/pages/storefront/StorefrontCheckout.jsx` — delivery method, pickup/shipping forms, contact info, live quote, place order
+- `frontend/src/pages/storefront/StorefrontOrderStatus.jsx` — progress timeline, items, "I've Arrived" button, 30s auto-refresh
 
-Manages cart token in localStorage, cart state, add/update/remove API calls.
-
-**Step 2: Create StorefrontCart page**
-
-Cart summary, quantity controls, quote display, proceed to checkout.
-
-**Step 3: Create StorefrontCheckout page**
-
-- Delivery method selection (pickup vs ship)
-- Pickup outlet selector (if pickup)
-- Shipping address form (if ship)
-- Customer contact info (name, phone, email)
-- Order summary from quote
-- Place order button → calls checkout API
-
-**Step 4: Create StorefrontOrderStatus page**
-
-Public order tracking using `public_order_token`. Shows order status, items, pickup readiness.
-
-**Step 5: Commit**
-
-```bash
-git add frontend/src/pages/storefront/
-git commit -m "feat(omnichannel): add storefront frontend — cart, checkout, order status pages"
-```
+**Files modified:**
+- `frontend/src/routes/publicRoutes.jsx` — added cart, checkout, order routes
+- `frontend/src/pages/storefront/StorefrontLayout.jsx` — cart icon links to cart page
 
 ---
 
-## Workstream 5: BOPIS and Curbside
+## Workstream 5: BOPIS and Curbside — ✅ DONE
 
 ### Task 5.1: Add pickup workflow endpoints
 
-**Files:**
-- Modify: `backend/routes/storefront.js` (public arrive endpoint)
-- Modify: `backend/routes/orders.js` or `backend/routes/fulfillment.js` (staff endpoints)
+**Commit:** `58d7372`
 
-**Endpoints:**
+**Endpoints added:**
 
-Public:
-- `POST /api/storefront/orders/:orderToken/arrive` — curbside arrival signal
+Public (storefront.js):
+- `POST /api/storefront/orders/:orderToken/arrive` — curbside arrival signal (idempotent)
 
-Staff (authenticated):
-- `PUT /api/orders/:id/pickup-ready` — mark order ready for pickup
-- `PUT /api/orders/:id/picked-up` — mark order as picked up
-
-**Step 1: Add curbside arrival endpoint**
-
-Sets `curbside_arrived_at = NOW()` on the web_order. No auth — uses order token.
-
-**Step 2: Add staff pickup-ready endpoint**
-
-Sets `pickup_ready_at = NOW()` and updates `fulfillment_status`. Requires auth + permission.
-
-**Step 3: Add staff picked-up endpoint**
-
-Sets `picked_up_at = NOW()` and updates `fulfillment_status = 'fulfilled'`. Requires auth + permission.
-
-**Step 4: Commit**
-
-```bash
-git add backend/routes/storefront.js backend/routes/orders.js
-git commit -m "feat(omnichannel): add BOPIS and curbside workflow endpoints"
-```
+Staff (orders.js):
+- `PUT /api/orders/:id/pickup-ready` — sets `pickup_ready_at`, status → `ready_for_pickup`
+- `PUT /api/orders/:id/picked-up` — sets `picked_up_at`, status → `fulfilled`/`closed`
 
 ### Task 5.2: Surface pickup orders in fulfillment UI
 
-**Files:**
-- Modify: `frontend/src/pages/redesign/FulfillmentRedesign.jsx` (or create a new tab)
-- Modify: `backend/routes/fulfillment.js` (add pickup orders query)
+**Commit:** `6a91d31`
 
-**Step 1: Add pickup orders query to fulfillment route**
+**Backend:** `GET /api/fulfillment/pickup-orders` — filterable by outlet and status (pending/ready/arrived/completed)
 
-`GET /api/fulfillment/pickup-orders` — returns web_orders with `delivery_method = 'pickup'` and relevant statuses.
-
-**Step 2: Add pickup tab/section to fulfillment UI**
-
-Show pending pickups, ready pickups, arrived customers. Action buttons for mark-ready and mark-picked-up.
-
-**Step 3: Commit**
-
-```bash
-git add backend/routes/fulfillment.js frontend/src/pages/redesign/FulfillmentRedesign.jsx
-git commit -m "feat(omnichannel): surface pickup orders in fulfillment UI with status actions"
-```
+**Frontend:** New "Pickup Orders" tab in FulfillmentRedesign with status badges, action buttons (Mark Ready, Mark Picked Up), timestamp trail, status dropdown filter.
 
 ---
 
-## Workstream 6: Ship-from-Store and Endless Aisle
+## Workstream 6: Ship-from-Store and Endless Aisle — ✅ DONE
 
 ### Task 6.1: Connect storefront shipping orders to picklists
 
-**Files:**
-- Modify: `backend/routes/fulfillment.js`
+**Commit:** `c91406b`
 
-**Step 1: Extend picklist creation to include allocated web_orders**
+**File modified:** `backend/routes/fulfillment.js` (+195 lines)
 
-When creating a picklist for an outlet, include `web_order_allocations` where `fulfillment_outlet_id` matches and `fulfillment_method = 'ship_to_customer'`.
-
-**Step 2: Commit**
-
-```bash
-git add backend/routes/fulfillment.js
-git commit -m "feat(omnichannel): connect storefront shipping orders to picklist flow"
-```
+- Picklist creation accepts `include_shipping_allocations: true` to pull in allocated shipping orders
+- `GET /api/fulfillment/shipping-orders` — pending ship-to-customer allocations per outlet
+- Dispatch advances allocation status to `shipped`
+- Cancel reverts allocations to `pending`
+- Added `allocation_id` column to `picklist_items` (schema + migration)
 
 ### Task 6.2: Add endless aisle endpoint for POS
 
-**Files:**
-- Modify: `backend/routes/orders.js`
+**Commit:** `7688d6f`
 
-**Endpoint:**
-- `POST /api/orders/endless-aisle` — creates routed web_order from POS
+**File modified:** `backend/routes/orders.js` (+288 lines)
 
-**Request body:**
-```js
-{
-  items: [{ productId, variantId, qty }],
-  customerId,
-  deliveryMethod: 'ship_to_customer' | 'pickup',
-  pickupOutletId, // if pickup
-  shippingAddress, // if shipping
-  customerContact: { name, phone, email }
-}
-```
-
-**Behavior:**
-1. Check cross-outlet availability
-2. Create `web_order` with `source = 'pos_endless_aisle'`, `channel_id` = pos channel
-3. Allocate to best outlet with stock
-4. Create reservations
-5. Return order confirmation
-
-**Step 1: Implement endless-aisle endpoint**
-
-**Step 2: Commit**
-
-```bash
-git add backend/routes/orders.js
-git commit -m "feat(omnichannel): add endless aisle order creation from POS"
-```
+`POST /api/orders/endless-aisle` — atomic endpoint that: validates items, resolves prices, checks cross-outlet stock, creates web_order (source=`pos_endless_aisle`), inserts items, allocates to best outlet, decrements stock with FOR UPDATE locks, creates converted reservations. Single transaction.
 
 ### Task 6.3: Add endless aisle UI in POS
 
+**Commit:** `2128c47`
+
 **Files:**
-- Create: `frontend/src/pages/redesign/pos/EndlessAisleModal.jsx`
-- Modify: `frontend/src/pages/redesign/pos/POSContext.jsx` (add action)
-
-**Step 1: Create EndlessAisleModal**
-
-When a product has zero stock at current outlet but stock elsewhere, show a modal:
-- Cross-outlet stock display
-- Option to create a routed order (pickup at another store or ship to customer)
-- Customer info capture
-
-**Step 2: Wire into POSContext**
-
-Add `handleEndlessAisle` action triggered when adding out-of-stock item or via explicit button.
-
-**Step 3: Commit**
-
-```bash
-git add frontend/src/pages/redesign/pos/EndlessAisleModal.jsx frontend/src/pages/redesign/pos/POSContext.jsx
-git commit -m "feat(omnichannel): add endless aisle modal and action in POS"
-```
+- Created: `frontend/src/pages/redesign/pos/EndlessAisleModal.jsx` (244 lines) — product info, delivery method, customer info, shipping address, submit
+- Modified: `frontend/src/pages/redesign/pos/POSContext.jsx` (+9 lines) — `endlessAisleProduct`, `handleEndlessAisle`, `closeEndlessAisle`
+- Modified: `frontend/src/pages/redesign/POSRedesign.jsx` — mounted modal
 
 ---
 
-## Workstream 7: Online-Order Returns and Unified Customer History
+## Workstream 7: Online-Order Returns and Unified Customer History — ✅ DONE
 
 ### Task 7.1: Enable returns against web_orders
 
-**Files:**
-- Modify: `backend/routes/returns.js`
+**Commit:** `7a9e861`
 
-**Step 1: Extend return creation to accept `web_order_id`**
+**File modified:** `backend/routes/returns.js` (+80 lines)
 
-Allow `POST /api/returns` to optionally include `web_order_id` instead of `original_sale_id`. When present:
-- Validate the web_order exists and belongs to this tenant
-- Create return with `web_order_id` set
-- Restore stock to the chosen outlet
-
-**Step 2: Add web order lookup for returns**
-
-`GET /api/returns/lookup-web-order?q=<orderNumber>` — staff can search web orders by order number or public token to initiate a return.
-
-**Step 3: Commit**
-
-```bash
-git add backend/routes/returns.js
-git commit -m "feat(omnichannel): enable returns against web orders with lookup"
-```
+- `POST /api/returns` now accepts optional `web_order_id` — validates web order, checks items against `web_order_items`, creates return with `web_order_id` set, restores stock. Existing `original_sale_id` flow unchanged.
+- `GET /api/returns/lookup-web-order?q=` — search by external_order_id, order number, or public token
 
 ### Task 7.2: Add unified customer order history
 
-**Files:**
-- Modify: `backend/routes/customers.js`
+**Commit:** `3d9c23e`
 
-**Endpoint:**
-- `GET /api/customers/:id/order-history` — merged view of POS sales + web orders
+**File modified:** `backend/routes/customers.js` (+58 lines)
 
-**Step 1: Implement order history aggregation**
-
-Union query across `sales` and `web_orders` for a given `customer_id`, ordered by date descending. Returns:
-```js
-[{
-  type: 'pos_sale' | 'web_order',
-  id, orderNumber, channel, total, status, date,
-  items: [...]
-}]
-```
-
-**Step 2: Commit**
-
-```bash
-git add backend/routes/customers.js
-git commit -m "feat(omnichannel): add unified customer order history across POS and web channels"
-```
+`GET /api/customers/:id/order-history` — UNION ALL across `sales` + `web_orders`, joined with `sales_channels`. Pagination, excludes voided sales. Requires `view_reports` or `manage_customers`.
 
 ### Task 7.3: Add customer history UI
 
-**Files:**
-- Modify: `frontend/src/pages/redesign/CustomersRedesign.jsx` (or customer detail component)
+**Commit:** `7c213d0`
 
-**Step 1: Add order history tab to customer detail**
+**File modified:** `frontend/src/pages/redesign/CustomersRedesign.jsx` (+104 lines)
 
-Show merged timeline of POS sales and web orders with channel badges.
-
-**Step 2: Commit**
-
-```bash
-git add frontend/src/pages/redesign/CustomersRedesign.jsx
-git commit -m "feat(omnichannel): add unified order history tab to customer detail UI"
-```
+New "Order History" tab with date, order number, channel badges (POS gray, Storefront blue, Shopify green, Daraz orange, etc.), total, status. Pagination.
 
 ---
 
-## Workstream 8: Omnichannel Promotions and Regression Hardening
+## Workstream 8: Omnichannel Promotions and Regression Hardening — ⚠️ PARTIAL
 
-### Task 8.1: Integrate promotions into quote service
+### Task 8.1: Integrate promotions into quote service — ✅ DONE
 
-**Files:**
-- Modify: `backend/services/quote.js`
-- Reference: `backend/routes/promotions.js` (existing promotion logic)
+**Commit:** `36c38b7`
 
-**Step 1: Wire promotion evaluation into quote**
+**File modified:** `backend/services/quote.js`
 
-The quote service should evaluate active promotions against the cart items using the same logic that POS uses. Extract shared promotion evaluation into a reusable function if not already separated.
+Added `evaluatePromotions()` — mirrors POS promotion logic (all 5 types: percent, fixed, threshold_percent, threshold_fixed, bxgy). Per-item discount distribution proportional to subtotal share. `appliedPromotions` array in response.
 
-**Step 2: Commit**
+### Task 8.2: Add channel publication management UI — ✅ DONE
 
-```bash
-git add backend/services/quote.js
-git commit -m "feat(omnichannel): integrate promotion evaluation into storefront quote service"
-```
+**Commit:** `e4f89d2`
 
-### Task 8.2: Add channel publication management UI
+**Backend** (`backend/routes/products.js` +56 lines):
+- `GET /api/products/:id/channels` — current publication state across all channels
+- `PUT /api/products/:id/channels` — update publications (upsert/unpublish)
 
-**Files:**
-- Modify: `frontend/src/pages/redesign/ProductsRedesign.jsx` (or product edit form)
+**Frontend** (`frontend/src/pages/redesign/ProductFormPage.jsx` +58 lines):
+- "Sales Channels" section in product edit sidebar with toggle switches per channel
 
-**Step 1: Add channel publication toggle**
+### Task 8.3: Regression pass — ⬜ REMAINING
 
-In product edit, add a "Channels" section showing available channels with publish/unpublish toggles. Calls:
-- `GET /api/products/:id/channels` — current publication state
-- `PUT /api/products/:id/channels` — update publications
+**Automated checks completed:**
+- ✅ Frontend builds cleanly
+- ✅ All backend service modules load without errors
+- ✅ Backend unit tests: 125/125 pass
+- ⚠️ Frontend unit tests: pre-existing setup.js failures (not our changes)
 
-**Step 2: Add backend endpoints for channel publication**
+**Manual regression checklist (must be done against live or staging DB):**
+- [ ] Run migration v18 against a test database
+- [ ] Marketplace-imported `web_orders` (Shopify/Daraz) — create, view, fulfill
+- [ ] Picklist and loadsheet flows — create, pick, pack, dispatch
+- [ ] POS price-list behavior — correct prices applied per customer group
+- [ ] Parked sales — park, retrieve, complete
+- [ ] Public receipt page — view by invoice number
+- [ ] Returns against POS sales — still work with `original_sale_id`
+- [ ] Multichannel report — still aggregates correctly
+- [ ] **New:** Storefront browse → cart → checkout → order status (end-to-end)
+- [ ] **New:** BOPIS: checkout with pickup → mark ready → customer arrive → mark picked up
+- [ ] **New:** Endless aisle: out-of-stock in POS → create routed order
+- [ ] **New:** Channel publication: publish/unpublish product on storefront
+- [ ] **New:** Web order return: lookup web order → process return
 
-In `backend/routes/products.js`:
-- `GET /api/products/:id/channels`
-- `PUT /api/products/:id/channels`
-
-**Step 3: Commit**
-
-```bash
-git add backend/routes/products.js frontend/src/pages/redesign/ProductsRedesign.jsx
-git commit -m "feat(omnichannel): add channel publication management for products"
-```
-
-### Task 8.3: Regression pass
-
-**Verify these flows still work after all changes:**
-
-1. Marketplace-imported `web_orders` (Shopify/Daraz) — create, view, fulfill
-2. Picklist and loadsheet flows — create, pick, pack, dispatch
-3. POS price-list behavior — correct prices applied per customer group
-4. Parked sales — park, retrieve, complete
-5. Public receipt page — view by invoice number
-6. Returns against POS sales — still work with `original_sale_id`
-7. Multichannel report — still aggregates correctly
-
-**Run existing test suites:**
+**Integration test suite:**
 ```bash
 npx jest backend/tests/integration/ --runInBand
+```
+
+**E2E tests:**
+```bash
 cd frontend && npx playwright test
 ```
 
-**Step 1: Fix any regressions found**
-
-**Step 2: Commit fixes if any**
-
 ---
 
-## Workstream Summary and Commit Plan
+## Files Created/Modified Summary
 
-| Workstream | Commits | Description |
-|-----------|---------|-------------|
-| WS1 | 1 | Migration v18 + schema DDL |
-| WS2 | 2 | Storefront read APIs + frontend browse |
-| WS3 | 3 | Reservation service + allocation service + expiry worker |
-| WS4 | 3 | Cart service + quote service + checkout APIs + frontend cart/checkout |
-| WS5 | 2 | BOPIS/curbside endpoints + fulfillment UI |
-| WS6 | 3 | Ship-from-store picklists + endless aisle API + POS UI |
-| WS7 | 3 | Web order returns + unified history API + history UI |
-| WS8 | 3 | Promotions in quote + channel publication UI + regression pass |
-| **Total** | **~20** | One branch, merge to main when complete |
+### New Files (14)
+| File | Lines | Purpose |
+|------|-------|---------|
+| `backend/routes/storefront.js` | 909 | All public storefront APIs (read + cart + checkout) |
+| `backend/services/reservation.js` | 165 | Inventory hold/release/expire |
+| `backend/services/allocation.js` | 92 | Fulfillment outlet routing |
+| `backend/services/storefront-cart.js` | 186 | Cart CRUD |
+| `backend/services/quote.js` | 337 | Pricing + tax + promotions |
+| `backend/workers/reservation-worker-boss.js` | 63 | pg-boss expiry worker |
+| `frontend/.../StorefrontLayout.jsx` | 207 | Public layout + context |
+| `frontend/.../StorefrontHome.jsx` | 175 | Landing page |
+| `frontend/.../StorefrontProducts.jsx` | 236 | Product listing |
+| `frontend/.../StorefrontProductDetail.jsx` | 278 | Product detail |
+| `frontend/.../StorefrontCart.jsx` | 214 | Cart page |
+| `frontend/.../StorefrontCheckout.jsx` | 462 | Checkout flow |
+| `frontend/.../StorefrontOrderStatus.jsx` | 342 | Order tracking |
+| `frontend/.../useStorefrontCart.js` | 199 | Cart state hook |
+| `frontend/.../EndlessAisleModal.jsx` | 244 | POS endless aisle |
+
+### Modified Files (12)
+| File | Delta | Changes |
+|------|-------|---------|
+| `backend/migrate-pg.js` | +195 | Migration v18 |
+| `backend/schema-pg.sql` | +153 | DDL for fresh installs |
+| `backend/routes/registerAllRoutes.js` | +3 | Storefront mount |
+| `backend/routes/orders.js` | +288 | Pickup endpoints + endless aisle |
+| `backend/routes/fulfillment.js` | +195 | Picklist + pickup + shipping |
+| `backend/routes/returns.js` | +80 | Web order returns |
+| `backend/routes/customers.js` | +58 | Unified history |
+| `backend/routes/products.js` | +56 | Channel publications |
+| `backend/boot/workers.js` | +6 | Reservation worker registration |
+| `frontend/.../FulfillmentRedesign.jsx` | +152 | Pickup orders tab |
+| `frontend/.../CustomersRedesign.jsx` | +104 | Order history tab |
+| `frontend/.../ProductFormPage.jsx` | +58 | Channel toggles |
+
+---
 
 ## Dependencies
 

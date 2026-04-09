@@ -441,7 +441,7 @@ Shopify allows only one automatic discount per customer at a time. Vendure's mod
 
 | Source | URL | What You Learn |
 |---|---|---|
-| SmartCollection (REST) | https://shopify.dev/docs/api/admin-rest/latest/resources/smartcollection | Rule engine: column + relation + condition. Max 60 conditions, 5,000 smart collections. |
+| Collection (GraphQL) | https://shopify.dev/docs/api/admin-graphql/latest/objects/Collection | Rule engine: column + relation + condition. 5,000 smart collections per store. REST SmartCollection API deprecated Oct 2024. |
 | Collection (GraphQL) | https://shopify.dev/docs/api/admin-graphql/latest/objects/Collection | Modern collection API |
 | Category Descendants Rule | https://shopify.dev/changelog/introducing-productcategoryidwithdescendants-in-collectionrulecolumn-for-smart-collections | Hierarchical category matching (relevant to SanoPOS category tree) |
 
