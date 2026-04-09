@@ -15,6 +15,8 @@ export default function StorefrontCheckout() {
   const [deliveryMethod, setDeliveryMethod] = useState("pickup");
   const [pickupLocations, setPickupLocations] = useState([]);
   const [pickupOutletId, setPickupOutletId] = useState(null);
+  const [shippingMethods, setShippingMethods] = useState([]);
+  const [selectedCourierId, setSelectedCourierId] = useState(null);
   const [shippingAddress, setShippingAddress] = useState({
     address_line_1: "",
     address_line_2: "",
@@ -34,31 +36,43 @@ export default function StorefrontCheckout() {
     if (cartToken) fetchCart();
   }, [cartToken, fetchCart]);
 
-  // Fetch pickup locations
+  // Fetch pickup locations and shipping methods
   useEffect(() => {
     fetch(`${API_BASE}/api/storefront/pickup-locations?tenant=${tenantSlug}`)
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => {
-        const locs = Array.isArray(data) ? data : [];
+        const locs = data?.locations || (Array.isArray(data) ? data : []);
         setPickupLocations(locs);
         if (locs.length > 0 && !pickupOutletId) {
           setPickupOutletId(locs[0].id);
         }
       })
       .catch(() => {});
+
+    fetch(`${API_BASE}/api/storefront/shipping-methods?tenant=${tenantSlug}`)
+      .then((r) => (r.ok ? r.json() : { methods: [] }))
+      .then((data) => {
+        const methods = data?.methods || [];
+        setShippingMethods(methods);
+        if (methods.length > 0 && !selectedCourierId) {
+          setSelectedCourierId(methods[0].courier_id);
+        }
+      })
+      .catch(() => {});
   }, [tenantSlug]);
 
-  // Fetch quote when delivery method or pickup outlet changes
+  // Fetch quote when delivery method, pickup outlet, or shipping courier changes
   const refreshQuote = useCallback(async () => {
     if (!cartToken || items.length === 0) return;
     setQuoteLoading(true);
     const q = await getQuote(
       deliveryMethod,
-      deliveryMethod === "pickup" ? pickupOutletId : null
+      deliveryMethod === "pickup" ? pickupOutletId : null,
+      deliveryMethod === "ship_to_customer" ? selectedCourierId : null
     );
     setQuote(q);
     setQuoteLoading(false);
-  }, [cartToken, items.length, deliveryMethod, pickupOutletId, getQuote]);
+  }, [cartToken, items.length, deliveryMethod, pickupOutletId, selectedCourierId, getQuote]);
 
   useEffect(() => {
     refreshQuote();
@@ -79,7 +93,7 @@ export default function StorefrontCheckout() {
       setError("Please fill in all contact information fields.");
       return;
     }
-    if (deliveryMethod === "shipping") {
+    if (deliveryMethod === "ship_to_customer") {
       if (!shippingAddress.address_line_1.trim() || !shippingAddress.city.trim()) {
         setError("Please fill in the required shipping address fields.");
         return;
@@ -102,6 +116,7 @@ export default function StorefrontCheckout() {
       if (deliveryMethod === "pickup") {
         body.pickup_outlet_id = pickupOutletId;
       } else {
+        if (selectedCourierId) body.courier_id = selectedCourierId;
         body.shipping_address = {
           address_line_1: shippingAddress.address_line_1.trim(),
           address_line_2: shippingAddress.address_line_2.trim(),
@@ -196,14 +211,14 @@ export default function StorefrontCheckout() {
                 </div>
               </label>
               <label className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
-                deliveryMethod === "shipping" ? "border-indigo-600 bg-indigo-50" : "border-gray-200 hover:border-gray-300"
+                deliveryMethod === "ship_to_customer" ? "border-indigo-600 bg-indigo-50" : "border-gray-200 hover:border-gray-300"
               }`}>
                 <input
                   type="radio"
                   name="delivery"
-                  value="shipping"
-                  checked={deliveryMethod === "shipping"}
-                  onChange={() => setDeliveryMethod("shipping")}
+                  value="ship_to_customer"
+                  checked={deliveryMethod === "ship_to_customer"}
+                  onChange={() => setDeliveryMethod("ship_to_customer")}
                   className="text-indigo-600 focus:ring-indigo-500"
                 />
                 <div>
@@ -249,7 +264,7 @@ export default function StorefrontCheckout() {
           )}
 
           {/* 3. Shipping Address Form */}
-          {deliveryMethod === "shipping" && (
+          {deliveryMethod === "ship_to_customer" && (
             <section className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-lg font-bold text-gray-900 mb-4">Shipping Address</h2>
               <div className="space-y-4">
@@ -321,6 +336,41 @@ export default function StorefrontCheckout() {
                     </select>
                   </div>
                 </div>
+              </div>
+            </section>
+          )}
+
+          {/* 3b. Shipping Method Selector */}
+          {deliveryMethod === "ship_to_customer" && shippingMethods.length > 0 && (
+            <section className="bg-white rounded-xl border border-gray-200 p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Shipping Method</h2>
+              <div className="space-y-3">
+                {shippingMethods.map((m) => (
+                  <label
+                    key={m.courier_id}
+                    className={`flex items-center justify-between gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                      selectedCourierId === m.courier_id ? "border-indigo-600 bg-indigo-50" : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="radio"
+                        name="shipping_method"
+                        value={m.courier_id}
+                        checked={selectedCourierId === m.courier_id}
+                        onChange={() => setSelectedCourierId(m.courier_id)}
+                        className="text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{m.name}</p>
+                        <p className="text-xs text-gray-500 capitalize">{m.category} delivery</p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {m.rate > 0 ? `${currencySymbol} ${m.rate.toLocaleString()}` : "Free"}
+                    </span>
+                  </label>
+                ))}
               </div>
             </section>
           )}

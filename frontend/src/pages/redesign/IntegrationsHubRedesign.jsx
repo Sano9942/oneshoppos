@@ -15,6 +15,8 @@ import {
   ExternalLink,
   AlertCircle,
   Loader2,
+  CreditCard,
+  Smartphone,
 } from "lucide-react";
 
 const TABS = [
@@ -24,6 +26,8 @@ const TABS = [
   { key: "messaging", label: "Messaging" },
   { key: "feeds", label: "Product Feeds" },
   { key: "courier", label: "Couriers" },
+  { key: "payment", label: "Payments" },
+  { key: "sms", label: "SMS" },
 ];
 
 const PROVIDER_META = {
@@ -34,6 +38,14 @@ const PROVIDER_META = {
   instagram: { name: "Instagram Shopping", category: "social", icon: MessageCircle, color: "text-pink-500", note: "Managed via Facebook Shop connection" },
   whatsapp: { name: "WhatsApp Business", category: "messaging", icon: MessageCircle, color: "text-green-500", fields: ["api_key"], labels: { api_key: "API Token" }, configFields: ["phone_number_id", "business_account_id"], costWarning: "WhatsApp Business API charges per conversation. First 1,000 service conversations/month are free." },
   google_merchant: { name: "Google Merchant Center", category: "feeds", icon: Rss, color: "text-blue-500", fields: ["oauth_token"], labels: { oauth_token: "OAuth Token" }, configFields: ["merchant_id"], actions: ["sync-products"] },
+  // Payment providers
+  xpay: { name: "xPay", category: "payment", icon: CreditCard, color: "text-emerald-600", note: "Configured via environment variables (PAYMENT_GATEWAY=xpay)" },
+  jazzcash: { name: "JazzCash", category: "payment", icon: CreditCard, color: "text-red-500", fields: ["api_key", "api_secret"], labels: { api_key: "Merchant ID", api_secret: "Merchant Password" }, configFields: ["return_url"] },
+  easypaisa: { name: "Easypaisa", category: "payment", icon: CreditCard, color: "text-green-600", fields: ["api_key", "api_secret"], labels: { api_key: "Store ID", api_secret: "Store Password" } },
+  // SMS providers
+  zong_sms: { name: "Zong SMS", category: "sms", icon: Smartphone, color: "text-purple-600", fields: ["api_key", "api_secret"], labels: { api_key: "Username", api_secret: "Password" }, configFields: ["sender_mask"] },
+  jazz_sms: { name: "Jazz SMS", category: "sms", icon: Smartphone, color: "text-red-500", fields: ["api_key", "api_secret"], labels: { api_key: "Username", api_secret: "Password" }, configFields: ["sender_mask"] },
+  twilio: { name: "Twilio", category: "sms", icon: Smartphone, color: "text-blue-600", fields: ["api_key", "api_secret"], labels: { api_key: "Account SID", api_secret: "Auth Token" }, configFields: ["from_number"] },
 };
 
 function IntegrationCard({ provider, meta, channel, onConnect, onDisconnect, onTest, onSync, navigate }) {
@@ -308,6 +320,8 @@ export default function IntegrationsHubRedesign() {
   }
 
   const filteredProviders = Object.entries(PROVIDER_META).filter(([, meta]) => {
+    // Payment and SMS have dedicated sections
+    if (meta.category === "payment" || meta.category === "sms") return false;
     if (activeTab === "all") return true;
     return meta.category === activeTab;
   });
@@ -363,6 +377,62 @@ export default function IntegrationsHubRedesign() {
           {filteredProviders.length === 0 && (
             <p className="py-8 text-center text-sm text-slate-400">No integrations in this category</p>
           )}
+        </div>
+      )}
+
+      {/* Payment providers section */}
+      {(activeTab === "all" || activeTab === "payment") && (
+        <div className={activeTab === "all" ? "mt-8" : ""}>
+          {activeTab === "all" && (
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Payment Gateways
+            </h2>
+          )}
+          <div className="space-y-3">
+            {Object.entries(PROVIDER_META)
+              .filter(([, meta]) => meta.category === "payment")
+              .map(([key, meta]) => (
+                <IntegrationCard
+                  key={key}
+                  provider={key}
+                  meta={meta}
+                  channel={(hub?.payment_providers || []).find((p) => p.provider === key)}
+                  onConnect={setConnectProvider}
+                  onDisconnect={handleDisconnect}
+                  onTest={handleTest}
+                  onSync={handleSync}
+                  navigate={navigate}
+                />
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* SMS providers section */}
+      {(activeTab === "all" || activeTab === "sms") && (
+        <div className={activeTab === "all" ? "mt-8" : ""}>
+          {activeTab === "all" && (
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              SMS Providers
+            </h2>
+          )}
+          <div className="space-y-3">
+            {Object.entries(PROVIDER_META)
+              .filter(([, meta]) => meta.category === "sms")
+              .map(([key, meta]) => (
+                <IntegrationCard
+                  key={key}
+                  provider={key}
+                  meta={meta}
+                  channel={(hub?.sms_providers || []).find((p) => p.provider === key)}
+                  onConnect={setConnectProvider}
+                  onDisconnect={handleDisconnect}
+                  onTest={handleTest}
+                  onSync={handleSync}
+                  navigate={navigate}
+                />
+              ))}
+          </div>
         </div>
       )}
 

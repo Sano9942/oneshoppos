@@ -11,7 +11,7 @@ module.exports = function registerCredentialRoutes(router, deps) {
     validate(connectProviderSchema),
     async (req, res) => {
       try {
-        const { provider, store_url, api_key, api_secret, oauth_token, oauth_refresh_token, config_json } = req.body;
+        const { provider, category, store_url, api_key, api_secret, oauth_token, oauth_refresh_token, config_json } = req.body;
 
         const encKey = api_key ? encryptSecret(api_key) : null;
         const encSecret = api_secret ? encryptSecret(api_secret) : null;
@@ -19,9 +19,10 @@ module.exports = function registerCredentialRoutes(router, deps) {
         const encRefresh = oauth_refresh_token ? encryptSecret(oauth_refresh_token) : null;
 
         await db.query(
-          `INSERT INTO integration_settings (provider, store_url, api_key, api_secret, oauth_token, oauth_refresh_token, config_json, is_active, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, true, NOW())
+          `INSERT INTO integration_settings (provider, category, store_url, api_key, api_secret, oauth_token, oauth_refresh_token, config_json, is_active, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, NOW())
            ON CONFLICT (provider) DO UPDATE SET
+             category = COALESCE(EXCLUDED.category, integration_settings.category),
              store_url = COALESCE(EXCLUDED.store_url, integration_settings.store_url),
              api_key = COALESCE(EXCLUDED.api_key, integration_settings.api_key),
              api_secret = COALESCE(EXCLUDED.api_secret, integration_settings.api_secret),
@@ -31,7 +32,7 @@ module.exports = function registerCredentialRoutes(router, deps) {
              is_active = true,
              last_error = NULL,
              updated_at = NOW()`,
-          [provider, store_url || null, encKey, encSecret, encOauth, encRefresh, config_json || "{}"]
+          [provider, category || "marketplace", store_url || null, encKey, encSecret, encOauth, encRefresh, config_json || "{}"]
         );
 
         res.json({ connected: true, provider });
@@ -82,6 +83,30 @@ module.exports = function registerCredentialRoutes(router, deps) {
         }
 
         res.json({ success: true, provider });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    }
+  );
+
+  // POST /api/integrations/:provider/send-test-sms — test SMS delivery
+  router.post(
+    "/:provider/send-test-sms",
+    requirePerm("all_access"),
+    requireFeature("phase5_sms_providers"),
+    async (req, res) => {
+      try {
+        const { to, message } = req.body || {};
+        if (!to) return res.status(400).json({ error: "Phone number (to) required" });
+
+        const sms = require("../../services/sms");
+        const result = await sms.sendSms(db, {
+          to,
+          body: message || "Test message from SanoPOS",
+          type: "transactional",
+        });
+
+        res.json(result);
       } catch (err) {
         res.status(500).json({ error: err.message });
       }

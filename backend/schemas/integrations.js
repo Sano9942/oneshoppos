@@ -2,6 +2,7 @@ const { z } = require("zod");
 
 const connectProviderSchema = z.object({
   provider: z.string().min(1),
+  category: z.enum(["marketplace", "social", "messaging", "feeds", "payment", "sms"]).optional(),
   store_url: z.string().url().optional(),
   api_key: z.string().min(1).optional(),
   api_secret: z.string().min(1).optional(),

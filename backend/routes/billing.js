@@ -237,10 +237,10 @@ module.exports = function registerBillingRoutes(app, deps) {
 
       // Create payment intent record
       const { rows: [intent] } = await masterDb.query(
-        `INSERT INTO payment_intents (tenant_id, amount, plan, cycle, outlet_count, gateway, return_url)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO payment_intents (tenant_id, amount, plan, cycle, outlet_count, gateway, return_url, provider)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id`,
-        [tenantId, amount, plan, cycle, outletCount, gateway, `${frontendUrl}/billing`]
+        [tenantId, amount, plan, cycle, outletCount, gateway, `${frontendUrl}/billing`, gateway]
       );
 
       // Call gateway to create checkout session

@@ -30,6 +30,18 @@ module.exports = function registerWebhookRoutes(app, deps) {
 
       logger.info({ event_type, transaction_id, status }, "xPay webhook received");
 
+      // Log to payment_webhook_events for idempotency and auditability
+      try {
+        await masterDb.query(
+          `INSERT INTO payment_webhook_events (provider, event_id, event_type, raw_payload)
+           VALUES ('xpay', $1, $2, $3)
+           ON CONFLICT (provider, event_id) DO NOTHING`,
+          [transaction_id + ":" + (event_type || status), event_type, JSON.stringify(raw)]
+        );
+      } catch (logErr) {
+        logger.warn({ err: logErr }, "Failed to log webhook event (non-fatal)");
+      }
+
       // Look up payment intent by gateway reference
       const { rows: [intent] } = await masterDb.query(
         "SELECT id, tenant_id, amount, plan, cycle, outlet_count, status AS intent_status FROM payment_intents WHERE gateway_ref = $1",
@@ -45,7 +57,10 @@ module.exports = function registerWebhookRoutes(app, deps) {
         );
         if (link && (status === "completed" || event_type === "payment.completed")) {
           try {
-            await db.query("UPDATE customer_invoice_payment_links SET status = 'completed' WHERE id = $1", [link.id]);
+            await db.query(
+              "UPDATE customer_invoice_payment_links SET status = 'completed', completed_at = NOW(), raw_completion_payload = $1 WHERE id = $2",
+              [JSON.stringify(raw), link.id]
+            );
             await db.query(
               `INSERT INTO customer_invoice_payments (invoice_id, amount, payment_method, payment_type, reference)
                VALUES ($1, $2, 'online', 'payment', $3)`,
@@ -56,6 +71,33 @@ module.exports = function registerWebhookRoutes(app, deps) {
             logger.info({ invoiceId: link.invoice_id, linkId: link.id }, "Invoice payment link completed");
           } catch (linkErr) {
             logger.error({ err: linkErr }, "Invoice payment link processing failed");
+          }
+          return res.json({ ok: true });
+        }
+
+        // Check if this is a storefront payment session
+        const { rows: [session] } = await db.query(
+          "SELECT * FROM storefront_payment_sessions WHERE provider_ref = $1",
+          [transaction_id]
+        );
+        if (session && (status === "completed" || event_type === "payment.completed")) {
+          try {
+            await db.query(
+              "UPDATE storefront_payment_sessions SET status = 'completed', completed_at = NOW() WHERE id = $1",
+              [session.id]
+            );
+            await db.query(
+              `UPDATE web_orders SET payment_status = 'paid', updated_at = NOW() WHERE id = $1`,
+              [session.web_order_id]
+            );
+            await db.query(
+              `INSERT INTO web_order_transactions (web_order_id, external_txn_id, gateway, kind, status, amount, processed_at, provider_ref, payment_context)
+               VALUES ($1, $2, 'xpay', 'sale', 'completed', $3, NOW(), $4, 'storefront')`,
+              [session.web_order_id, transaction_id, session.amount, transaction_id]
+            );
+            logger.info({ orderId: session.web_order_id, sessionId: session.id }, "Storefront payment completed");
+          } catch (sfErr) {
+            logger.error({ err: sfErr }, "Storefront payment processing failed");
           }
           return res.json({ ok: true });
         }

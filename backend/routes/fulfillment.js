@@ -963,4 +963,330 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // COD Reconciliation (Phase 5B)
+  // ══════════════════════════════════════════════════════════════════════
+
+  const codPerm = [requirePerm("manage_orders"), requireFeature("phase5_cod_reconciliation")];
+
+  // ── GET /api/fulfillment/cod/settlements ────────────────────────────
+  app.get("/api/fulfillment/cod/settlements", ...codPerm, async (req, res) => {
+    try {
+      const { courier_id, status } = req.query;
+      const conds = [];
+      const params = [];
+      if (courier_id) { conds.push(`b.courier_id = $${params.length + 1}`); params.push(courier_id); }
+      if (status) { conds.push(`b.status = $${params.length + 1}`); params.push(status); }
+
+      const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+      const { rows } = await db.query(
+        `SELECT b.*, ci.name AS courier_name
+         FROM cod_settlement_batches b
+         LEFT JOIN courier_integrations ci ON b.courier_id = ci.id
+         ${where}
+         ORDER BY b.imported_at DESC`,
+        params
+      );
+      res.json({ batches: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── POST /api/fulfillment/cod/settlements/import ────────────────────
+  app.post("/api/fulfillment/cod/settlements/import", ...codPerm, async (req, res) => {
+    try {
+      const { courier_id, batch_ref, lines } = req.body || {};
+      if (!courier_id) return res.status(400).json({ error: "courier_id required" });
+      if (!lines || !Array.isArray(lines) || lines.length === 0) {
+        return res.status(400).json({ error: "lines array required (tracking_number, remitted_amount)" });
+      }
+
+      const result = await db.transaction(async (client) => {
+        const totalAmount = lines.reduce((s, l) => s + (Number(l.remitted_amount) || 0), 0);
+
+        const { rows: [batch] } = await client.query(
+          `INSERT INTO cod_settlement_batches
+            (courier_id, batch_ref, import_source, total_lines, total_amount, status, imported_by)
+           VALUES ($1, $2, $3, $4, $5, 'imported', $6)
+           RETURNING *`,
+          [courier_id, batch_ref || null, req.body.import_source || "csv", lines.length, totalAmount, req.employee?.id || null]
+        );
+
+        for (const line of lines) {
+          await client.query(
+            `INSERT INTO cod_settlement_lines
+              (batch_id, courier_tracking_number, courier_order_ref, remitted_amount, courier_fee)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [
+              batch.id,
+              line.tracking_number || line.courier_tracking_number || null,
+              line.order_ref || line.courier_order_ref || null,
+              Number(line.remitted_amount) || 0,
+              Number(line.courier_fee) || 0,
+            ]
+          );
+        }
+
+        return batch;
+      });
+
+      res.json({ batch: result, lines_imported: lines.length });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /api/fulfillment/cod/settlements/:id ────────────────────────
+  app.get("/api/fulfillment/cod/settlements/:id", ...codPerm, async (req, res) => {
+    try {
+      const { rows: [batch] } = await db.query(
+        `SELECT b.*, ci.name AS courier_name
+         FROM cod_settlement_batches b
+         LEFT JOIN courier_integrations ci ON b.courier_id = ci.id
+         WHERE b.id = $1`,
+        [req.params.id]
+      );
+      if (!batch) return res.status(404).json({ error: "Batch not found" });
+
+      const { rows: lines } = await db.query(
+        `SELECT sl.*,
+                wo.external_order_number, wo.grand_total AS order_total, wo.payment_status
+         FROM cod_settlement_lines sl
+         LEFT JOIN web_orders wo ON sl.matched_order_id = wo.id
+         WHERE sl.batch_id = $1
+         ORDER BY sl.id`,
+        [req.params.id]
+      );
+
+      res.json({ batch, lines });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── POST /api/fulfillment/cod/settlements/:id/match ─────────────────
+  app.post("/api/fulfillment/cod/settlements/:id/match", ...codPerm, async (req, res) => {
+    try {
+      const batchId = req.params.id;
+
+      const result = await db.transaction(async (client) => {
+        const { rows: [batch] } = await client.query(
+          "SELECT * FROM cod_settlement_batches WHERE id = $1 FOR UPDATE",
+          [batchId]
+        );
+        if (!batch) throw Object.assign(new Error("Batch not found"), { statusCode: 404 });
+
+        await client.query(
+          "UPDATE cod_settlement_batches SET status = 'matching' WHERE id = $1",
+          [batchId]
+        );
+
+        const { rows: lines } = await client.query(
+          "SELECT * FROM cod_settlement_lines WHERE batch_id = $1",
+          [batchId]
+        );
+
+        let matchedCount = 0;
+        let matchedAmount = 0;
+        let unmatchedCount = 0;
+        let shortAmount = 0;
+
+        for (const line of lines) {
+          // Try matching by tracking number first
+          let matchedOrder = null;
+
+          if (line.courier_tracking_number) {
+            // Match against loadsheet_orders
+            const { rows: lsMatch } = await client.query(
+              `SELECT lo.id AS lo_id, lo.web_order_id, lo.cod_amount
+               FROM loadsheet_orders lo
+               WHERE lo.tracking_number = $1 AND lo.is_cod = true
+               LIMIT 1`,
+              [line.courier_tracking_number]
+            );
+
+            if (lsMatch.length) {
+              matchedOrder = lsMatch[0];
+            } else {
+              // Try matching against web_orders.tracking_number
+              const { rows: woMatch } = await client.query(
+                `SELECT id AS web_order_id, grand_total AS cod_amount
+                 FROM web_orders
+                 WHERE tracking_number = $1 AND (payment_status = 'cod' OR payment_status = 'pending')
+                 LIMIT 1`,
+                [line.courier_tracking_number]
+              );
+              if (woMatch.length) {
+                matchedOrder = woMatch[0];
+              }
+            }
+          }
+
+          // Fallback: match by order ref
+          if (!matchedOrder && line.courier_order_ref) {
+            const { rows: refMatch } = await client.query(
+              `SELECT id AS web_order_id, grand_total AS cod_amount
+               FROM web_orders
+               WHERE external_order_number = $1 AND (payment_status = 'cod' OR payment_status = 'pending')
+               LIMIT 1`,
+              [line.courier_order_ref]
+            );
+            if (refMatch.length) matchedOrder = refMatch[0];
+          }
+
+          if (matchedOrder) {
+            const expected = Number(matchedOrder.cod_amount);
+            const remitted = Number(line.remitted_amount);
+            const diff = remitted - expected;
+            let matchStatus = "matched";
+            if (diff < -0.01) matchStatus = "short";
+            else if (diff > 0.01) matchStatus = "over";
+
+            await client.query(
+              `UPDATE cod_settlement_lines SET
+                 match_status = $1, matched_order_id = $2,
+                 matched_loadsheet_order_id = $3,
+                 expected_amount = $4, difference = $5
+               WHERE id = $6`,
+              [
+                matchStatus,
+                matchedOrder.web_order_id,
+                matchedOrder.lo_id || null,
+                expected, diff,
+                line.id,
+              ]
+            );
+
+            matchedCount++;
+            matchedAmount += remitted;
+            if (matchStatus === "short") shortAmount += Math.abs(diff);
+          } else {
+            await client.query(
+              "UPDATE cod_settlement_lines SET match_status = 'unmatched' WHERE id = $1",
+              [line.id]
+            );
+            unmatchedCount++;
+          }
+        }
+
+        // Check for duplicates (same tracking number matched to same order multiple times)
+        await client.query(
+          `UPDATE cod_settlement_lines SET match_status = 'duplicate'
+           WHERE batch_id = $1 AND id NOT IN (
+             SELECT MIN(id) FROM cod_settlement_lines
+             WHERE batch_id = $1 AND matched_order_id IS NOT NULL
+             GROUP BY matched_order_id
+           ) AND matched_order_id IS NOT NULL`,
+          [batchId]
+        );
+
+        // Update batch summary
+        await client.query(
+          `UPDATE cod_settlement_batches SET
+             status = 'review',
+             matched_count = $1, matched_amount = $2,
+             unmatched_count = $3, short_amount = $4
+           WHERE id = $5`,
+          [matchedCount, matchedAmount, unmatchedCount, shortAmount, batchId]
+        );
+
+        return { matched: matchedCount, unmatched: unmatchedCount, short_amount: shortAmount };
+      });
+
+      res.json(result);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // ── POST /api/fulfillment/cod/settlements/:id/resolve ───────────────
+  app.post("/api/fulfillment/cod/settlements/:id/resolve", ...codPerm, async (req, res) => {
+    try {
+      const { line_id, resolution_note } = req.body || {};
+      if (!line_id) return res.status(400).json({ error: "line_id required" });
+
+      await db.query(
+        `UPDATE cod_settlement_lines SET
+           resolution_note = $1, resolved_by = $2, resolved_at = NOW()
+         WHERE id = $3 AND batch_id = $4`,
+        [resolution_note || "", req.employee?.id || null, line_id, req.params.id]
+      );
+
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── POST /api/fulfillment/cod/settlements/:id/approve ───────────────
+  app.post("/api/fulfillment/cod/settlements/:id/approve", ...codPerm, async (req, res) => {
+    try {
+      const batchId = req.params.id;
+
+      const result = await db.transaction(async (client) => {
+        const { rows: [batch] } = await client.query(
+          "SELECT * FROM cod_settlement_batches WHERE id = $1 FOR UPDATE",
+          [batchId]
+        );
+        if (!batch) throw Object.assign(new Error("Batch not found"), { statusCode: 404 });
+        if (batch.status !== "review") {
+          throw Object.assign(new Error("Batch must be in review status to approve"), { statusCode: 400 });
+        }
+
+        await client.query(
+          `UPDATE cod_settlement_batches SET
+             status = 'approved', approved_by = $1, approved_at = NOW()
+           WHERE id = $2`,
+          [req.employee?.id || null, batchId]
+        );
+
+        // Update reconciliation status on associated loadsheets
+        const { rows: matchedOrders } = await client.query(
+          `SELECT DISTINCT lo.loadsheet_id
+           FROM cod_settlement_lines sl
+           JOIN loadsheet_orders lo ON sl.matched_loadsheet_order_id = lo.id
+           WHERE sl.batch_id = $1 AND sl.matched_loadsheet_order_id IS NOT NULL`,
+          [batchId]
+        );
+
+        for (const { loadsheet_id } of matchedOrders) {
+          // Check if all COD orders in this loadsheet are now reconciled
+          const { rows: [stats] } = await client.query(
+            `SELECT
+               SUM(lo.cod_amount) AS expected,
+               COALESCE(SUM(sl.remitted_amount), 0) AS received
+             FROM loadsheet_orders lo
+             LEFT JOIN cod_settlement_lines sl ON sl.matched_loadsheet_order_id = lo.id
+               AND sl.match_status IN ('matched','short','over')
+             WHERE lo.loadsheet_id = $1 AND lo.is_cod = true`,
+            [loadsheet_id]
+          );
+
+          const expected = Number(stats?.expected || 0);
+          const received = Number(stats?.received || 0);
+          const diff = received - expected;
+
+          await client.query(
+            `UPDATE loadsheets SET
+               reconciliation_status = 'reconciled',
+               reconciled_at = NOW(),
+               reconciled_by = $1,
+               expected_cod = $2,
+               received_cod = $3,
+               cod_difference = $4
+             WHERE id = $5`,
+            [req.employee?.id || null, expected, received, diff, loadsheet_id]
+          );
+        }
+
+        return { approved: true, loadsheets_reconciled: matchedOrders.length };
+      });
+
+      res.json(result);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
 };

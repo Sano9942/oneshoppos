@@ -328,6 +328,37 @@ module.exports = function mountStorefrontRoutes(app, deps) {
   });
 
   // ---------------------------------------------------------------------------
+  // GET /api/storefront/shipping-methods — available couriers with flat rates
+  // ---------------------------------------------------------------------------
+  app.get("/api/storefront/shipping-methods", async (req, res) => {
+    try {
+      const resolved = await resolvePublicTenantDb(req, deps);
+      if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+      const { db } = resolved;
+
+      const { rows } = await db.query(
+        `SELECT id, name, flat_shipping_rate, provider_category
+         FROM courier_integrations
+         WHERE enabled = true AND flat_shipping_rate IS NOT NULL
+         ORDER BY flat_shipping_rate ASC, name ASC`
+      );
+
+      res.json({
+        methods: rows.map((c) => ({
+          courier_id: c.id,
+          name: c.name,
+          rate: Number(c.flat_shipping_rate),
+          category: c.provider_category || "domestic",
+        })),
+        free_shipping_available: rows.length === 0,
+      });
+    } catch (err) {
+      console.error("Storefront shipping methods error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
   // POST /api/storefront/cart — create or retrieve a cart
   // ---------------------------------------------------------------------------
   app.post("/api/storefront/cart", async (req, res) => {
@@ -481,7 +512,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       if (!rows.length) return res.status(404).json({ error: "Cart not found" });
       const cart = rows[0];
 
-      const { deliveryMethod, pickupOutletId } = req.body || {};
+      const { deliveryMethod, pickupOutletId, courier_id } = req.body || {};
       const method = deliveryMethod || "pickup";
 
       // Load cart items for quote
@@ -497,7 +528,8 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         cartItems,
         method,
         pickupOutletId || null,
-        cart.channel_id
+        cart.channel_id,
+        courier_id || null
       );
 
       // Save quote snapshot to cart for later checkout reference
@@ -526,6 +558,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         cartToken,
         deliveryMethod,
         pickupOutletId,
+        courier_id,
         customerContact,
         shippingAddress,
       } = req.body || {};
@@ -566,7 +599,8 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         cartItems,
         deliveryMethod,
         pickupOutletId || null,
-        cart.channel_id
+        cart.channel_id,
+        courier_id || null
       );
 
       // 3. Check for availability errors
@@ -753,11 +787,13 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         await client.query("DELETE FROM storefront_carts WHERE id = $1", [cart.id]);
 
         // 13. Return result
+        const paymentGateway = require("../services/payment-gateway");
         return {
           orderId: order.id,
           orderToken: publicOrderToken,
           orderNumber: externalOrderId,
           grandTotal: Number(order.grand_total),
+          payment_enabled: paymentGateway.isEnabled(),
         };
       });
 
@@ -766,6 +802,61 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       console.error("Storefront checkout error:", err);
       const status = err.statusCode || 500;
       res.status(status).json({ error: err.message || "Checkout failed" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/storefront/orders/:orderToken/pay — initiate payment for an order
+  // ---------------------------------------------------------------------------
+  app.post("/api/storefront/orders/:orderToken/pay", async (req, res) => {
+    try {
+      const resolved = await resolvePublicTenantDb(req, deps);
+      if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+      const { db } = resolved;
+
+      const paymentGateway = require("../services/payment-gateway");
+      if (!paymentGateway.isEnabled()) {
+        return res.status(400).json({ error: "Online payments not configured", payment_enabled: false });
+      }
+
+      const { rows: [order] } = await db.query(
+        `SELECT id, grand_total, payment_status, external_order_id, public_order_token
+         FROM web_orders WHERE public_order_token = $1`,
+        [req.params.orderToken]
+      );
+      if (!order) return res.status(404).json({ error: "Order not found" });
+      if (order.payment_status === "paid") {
+        return res.status(400).json({ error: "Order is already paid" });
+      }
+
+      const amount = Number(order.grand_total);
+      const tenantSlug = req.query.tenant;
+      const frontendUrl = process.env.FRONTEND_URL || "https://sanopos.com";
+      const returnUrl = `${frontendUrl}/store/${tenantSlug}/order/${order.public_order_token}?payment=success`;
+      const cancelUrl = `${frontendUrl}/store/${tenantSlug}/order/${order.public_order_token}?payment=cancelled`;
+
+      const { checkout_url, gateway_ref } = await paymentGateway.createCheckout({
+        amount,
+        currency: "PKR",
+        reference: `storefront-${order.id}`,
+        description: `Order ${order.external_order_id}`,
+        returnUrl,
+        cancelUrl,
+      });
+
+      const providerName = process.env.PAYMENT_GATEWAY || "manual";
+
+      await db.query(
+        `INSERT INTO storefront_payment_sessions
+          (web_order_id, provider, provider_ref, amount, return_url)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [order.id, providerName, gateway_ref, amount, returnUrl]
+      );
+
+      res.json({ checkout_url, gateway_ref });
+    } catch (err) {
+      console.error("Storefront payment initiation error:", err);
+      res.status(err.statusCode || 500).json({ error: err.message || "Payment initiation failed" });
     }
   });
 

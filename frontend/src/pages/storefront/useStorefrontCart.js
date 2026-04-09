@@ -150,7 +150,7 @@ export function useStorefrontCart(tenantSlug) {
     }
   }, [tenantSlug]);
 
-  const getQuote = useCallback(async (deliveryMethod, pickupOutletId) => {
+  const getQuote = useCallback(async (deliveryMethod, pickupOutletId, courierId) => {
     const token = tokenRef.current;
     if (!token) return null;
     setError(null);
@@ -161,6 +161,7 @@ export function useStorefrontCart(tenantSlug) {
         body: JSON.stringify({
           delivery_method: deliveryMethod,
           pickup_outlet_id: pickupOutletId || null,
+          courier_id: courierId || null,
         }),
       });
       if (!res.ok) {

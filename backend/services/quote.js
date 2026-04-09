@@ -15,9 +15,10 @@
  * @param {string}  deliveryMethod   – 'pickup' | 'ship_to_customer'
  * @param {number|null} pickupOutletId – required when deliveryMethod === 'pickup'
  * @param {number}  channelId        – sales_channels.id
+ * @param {number|null} courierId    – selected courier for shipping rate lookup
  * @returns {Promise<object>} quote object (see return shape below)
  */
-async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, channelId) {
+async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, channelId, courierId) {
   if (!cartItems || cartItems.length === 0) {
     return emptyQuote(deliveryMethod, pickupOutletId);
   }
@@ -189,7 +190,18 @@ async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, cha
   // ── 8. Compute subtotals ───────────────────────────────────────────
   const subtotal = round2(items.reduce((sum, i) => sum + (i.unitPrice * i.qty), 0));
   const taxTotal = round2(items.reduce((sum, i) => sum + i.taxAmount, 0));
-  const shippingTotal = 0; // v1 free shipping placeholder
+
+  // Shipping cost: use selected courier's flat rate, or 0 for pickup / no courier
+  let shippingTotal = 0;
+  if (deliveryMethod === 'ship_to_customer' && courierId) {
+    const { rows: courierRows } = await db.query(
+      'SELECT flat_shipping_rate FROM courier_integrations WHERE id = $1 AND enabled = true',
+      [courierId]
+    );
+    if (courierRows[0]?.flat_shipping_rate != null) {
+      shippingTotal = round2(Number(courierRows[0].flat_shipping_rate));
+    }
+  }
 
   // ── 9. Evaluate promotions ────────────────────────────────────────
   const { totalDiscount, appliedPromotions } = await evaluatePromotions(db, items, subtotal);

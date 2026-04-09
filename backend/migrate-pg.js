@@ -2446,6 +2446,217 @@ const MIGRATIONS = [
       `);
     },
   },
+
+  // ── v25: Phase 5 — Pakistan Integration Depth ─────────────────────
+  {
+    version: 25,
+    description: "Phase 5 — shipping automation, COD reconciliation, payment expansion, SMS providers",
+    up: async (client) => {
+      // ── Shipping Automation ───────────────────────────────────────
+
+      // order_shipments — durable shipment record per booking attempt
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS order_shipments (
+          id SERIAL PRIMARY KEY,
+          web_order_id INTEGER REFERENCES web_orders(id),
+          courier_id INTEGER REFERENCES courier_integrations(id),
+          tracking_number TEXT,
+          label_url TEXT,
+          booking_ref TEXT,
+          booking_payload JSONB,
+          booking_response JSONB,
+          status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','booked','in_transit','delivered','cancelled','failed')),
+          shipping_cost NUMERIC(12,2),
+          booked_at TIMESTAMPTZ,
+          cancelled_at TIMESTAMPTZ,
+          delivered_at TIMESTAMPTZ,
+          last_tracking_refresh_at TIMESTAMPTZ,
+          last_tracking_payload JSONB,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_order_shipments_order ON order_shipments(web_order_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_order_shipments_tracking ON order_shipments(tracking_number)`);
+
+      // shipment_tracking_events — tracking event log
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS shipment_tracking_events (
+          id SERIAL PRIMARY KEY,
+          shipment_id INTEGER NOT NULL REFERENCES order_shipments(id) ON DELETE CASCADE,
+          event_status TEXT,
+          event_description TEXT,
+          event_location TEXT,
+          event_timestamp TIMESTAMPTZ,
+          raw_payload JSONB,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_shipment_events_shipment ON shipment_tracking_events(shipment_id)`);
+
+      // Extend courier_integrations with capability flags and config
+      await client.query(`ALTER TABLE courier_integrations ADD COLUMN IF NOT EXISTS supports_booking BOOLEAN DEFAULT false`);
+      await client.query(`ALTER TABLE courier_integrations ADD COLUMN IF NOT EXISTS supports_tracking BOOLEAN DEFAULT false`);
+      await client.query(`ALTER TABLE courier_integrations ADD COLUMN IF NOT EXISTS supports_cancellation BOOLEAN DEFAULT false`);
+      await client.query(`ALTER TABLE courier_integrations ADD COLUMN IF NOT EXISTS supports_labels BOOLEAN DEFAULT false`);
+      await client.query(`ALTER TABLE courier_integrations ADD COLUMN IF NOT EXISTS provider_category TEXT DEFAULT 'domestic'`);
+      await client.query(`ALTER TABLE courier_integrations ADD COLUMN IF NOT EXISTS flat_shipping_rate NUMERIC(10,2)`);
+      await client.query(`ALTER TABLE courier_integrations ADD COLUMN IF NOT EXISTS encrypted_config_json TEXT`);
+      await client.query(`ALTER TABLE courier_integrations ADD COLUMN IF NOT EXISTS last_healthcheck_at TIMESTAMPTZ`);
+      await client.query(`ALTER TABLE courier_integrations ADD COLUMN IF NOT EXISTS last_healthcheck_status TEXT`);
+
+      // Seed capability flags for couriers with real adapter implementations
+      await client.query(`
+        UPDATE courier_integrations SET
+          supports_booking = true,
+          supports_tracking = true
+        WHERE adapter_key IN ('leopards','tcs','blueex','trax','postex','callcourier','mnp','rider','swyft','dhl','fedex')
+      `);
+      await client.query(`
+        UPDATE courier_integrations SET provider_category = 'international'
+        WHERE adapter_key IN ('dhl','fedex')
+      `);
+
+      // Extend web_orders with shipment reference
+      await client.query(`ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS active_shipment_id INTEGER REFERENCES order_shipments(id)`);
+      await client.query(`ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS shipping_provider_status TEXT`);
+
+      // ── COD Reconciliation ────────────────────────────────────────
+
+      // cod_settlement_batches — imported courier remittance batches
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS cod_settlement_batches (
+          id SERIAL PRIMARY KEY,
+          courier_id INTEGER REFERENCES courier_integrations(id),
+          batch_ref TEXT,
+          import_source TEXT DEFAULT 'csv' CHECK (import_source IN ('csv','manual','api')),
+          total_lines INTEGER DEFAULT 0,
+          total_amount NUMERIC(12,2) DEFAULT 0,
+          matched_count INTEGER DEFAULT 0,
+          matched_amount NUMERIC(12,2) DEFAULT 0,
+          unmatched_count INTEGER DEFAULT 0,
+          short_amount NUMERIC(12,2) DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'imported' CHECK (status IN ('imported','matching','review','approved','rejected')),
+          imported_by INTEGER REFERENCES employees(id),
+          approved_by INTEGER REFERENCES employees(id),
+          imported_at TIMESTAMPTZ DEFAULT NOW(),
+          approved_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
+      // cod_settlement_lines — individual remittance lines
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS cod_settlement_lines (
+          id SERIAL PRIMARY KEY,
+          batch_id INTEGER NOT NULL REFERENCES cod_settlement_batches(id) ON DELETE CASCADE,
+          courier_tracking_number TEXT,
+          courier_order_ref TEXT,
+          remitted_amount NUMERIC(12,2),
+          courier_fee NUMERIC(12,2),
+          match_status TEXT NOT NULL DEFAULT 'unmatched' CHECK (match_status IN ('unmatched','matched','short','over','duplicate')),
+          matched_order_id INTEGER REFERENCES web_orders(id),
+          matched_loadsheet_order_id INTEGER,
+          expected_amount NUMERIC(12,2),
+          difference NUMERIC(12,2),
+          resolution_note TEXT,
+          resolved_by INTEGER REFERENCES employees(id),
+          resolved_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_cod_lines_batch ON cod_settlement_lines(batch_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_cod_lines_tracking ON cod_settlement_lines(courier_tracking_number)`);
+
+      // Extend loadsheets with reconciliation state
+      await client.query(`ALTER TABLE loadsheets ADD COLUMN IF NOT EXISTS reconciliation_status TEXT DEFAULT 'pending'`);
+      await client.query(`ALTER TABLE loadsheets ADD COLUMN IF NOT EXISTS reconciled_at TIMESTAMPTZ`);
+      await client.query(`ALTER TABLE loadsheets ADD COLUMN IF NOT EXISTS reconciled_by INTEGER REFERENCES employees(id)`);
+      await client.query(`ALTER TABLE loadsheets ADD COLUMN IF NOT EXISTS expected_cod NUMERIC(12,2)`);
+      await client.query(`ALTER TABLE loadsheets ADD COLUMN IF NOT EXISTS received_cod NUMERIC(12,2)`);
+      await client.query(`ALTER TABLE loadsheets ADD COLUMN IF NOT EXISTS cod_difference NUMERIC(12,2)`);
+
+      // ── Payment Expansion ─────────────────────────────────────────
+
+      // payment_webhook_events — idempotent webhook log
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS payment_webhook_events (
+          id SERIAL PRIMARY KEY,
+          provider TEXT NOT NULL,
+          event_id TEXT NOT NULL,
+          event_type TEXT,
+          payment_context TEXT CHECK (payment_context IN ('billing','invoice','storefront')),
+          context_ref TEXT,
+          raw_payload JSONB,
+          processed_at TIMESTAMPTZ DEFAULT NOW(),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_webhook_events_unique ON payment_webhook_events(provider, event_id)`);
+
+      // storefront_payment_sessions — storefront checkout payment tracking
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS storefront_payment_sessions (
+          id SERIAL PRIMARY KEY,
+          web_order_id INTEGER REFERENCES web_orders(id),
+          provider TEXT NOT NULL,
+          provider_ref TEXT,
+          amount NUMERIC(12,2),
+          currency_code TEXT DEFAULT 'PKR',
+          status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','completed','failed','expired')),
+          return_url TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          completed_at TIMESTAMPTZ
+        )
+      `);
+
+      // Extend payment_intents
+      await client.query(`ALTER TABLE payment_intents ADD COLUMN IF NOT EXISTS provider TEXT`);
+      await client.query(`ALTER TABLE payment_intents ADD COLUMN IF NOT EXISTS provider_status TEXT`);
+      await client.query(`ALTER TABLE payment_intents ADD COLUMN IF NOT EXISTS last_event_at TIMESTAMPTZ`);
+
+      // Extend customer_invoice_payment_links
+      await client.query(`ALTER TABLE customer_invoice_payment_links ADD COLUMN IF NOT EXISTS provider TEXT`);
+      await client.query(`ALTER TABLE customer_invoice_payment_links ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`);
+      await client.query(`ALTER TABLE customer_invoice_payment_links ADD COLUMN IF NOT EXISTS raw_completion_payload JSONB`);
+
+      // Extend web_order_transactions
+      await client.query(`ALTER TABLE web_order_transactions ADD COLUMN IF NOT EXISTS provider_ref TEXT`);
+      await client.query(`ALTER TABLE web_order_transactions ADD COLUMN IF NOT EXISTS payment_context TEXT`);
+      await client.query(`ALTER TABLE web_order_transactions ADD COLUMN IF NOT EXISTS webhook_event_id INTEGER`);
+
+      // ── SMS Provider ──────────────────────────────────────────────
+
+      // sms_provider_messages — SMS delivery log
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS sms_provider_messages (
+          id SERIAL PRIMARY KEY,
+          provider TEXT NOT NULL,
+          recipient_phone TEXT NOT NULL,
+          message_type TEXT DEFAULT 'transactional' CHECK (message_type IN ('transactional','marketing')),
+          message_body TEXT,
+          provider_ref TEXT,
+          delivery_status TEXT NOT NULL DEFAULT 'queued' CHECK (delivery_status IN ('queued','sent','delivered','failed')),
+          failure_reason TEXT,
+          cost NUMERIC(8,4),
+          sent_at TIMESTAMPTZ,
+          delivered_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_sms_messages_provider_ref ON sms_provider_messages(provider_ref)`);
+
+      // ── Feature Flags ─────────────────────────────────────────────
+
+      await client.query(`
+        INSERT INTO feature_flags (key, enabled) VALUES
+          ('phase5_shipping_automation', false),
+          ('phase5_cod_reconciliation', false),
+          ('phase5_payment_gateways', false),
+          ('phase5_sms_providers', false)
+        ON CONFLICT (key) DO NOTHING
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

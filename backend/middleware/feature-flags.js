@@ -79,6 +79,11 @@ const DEFAULT_FEATURE_FLAGS = {
   phase4_service_projects: false,
   phase4_service_contracts: false,
   phase4_contract_ai: false,
+  // Phase 5 — Pakistan Integration Depth
+  phase5_shipping_automation: false,
+  phase5_cod_reconciliation: false,
+  phase5_payment_gateways: false,
+  phase5_sms_providers: false,
 };
 
 // Per-tenant feature flag cache

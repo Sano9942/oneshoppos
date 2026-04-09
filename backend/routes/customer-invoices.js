@@ -351,10 +351,11 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
 
       const expiresAt = new Date(Date.now() + 7 * 86400000); // 7 days
 
+      const providerName = process.env.PAYMENT_GATEWAY || "manual";
       await deps.db.query(
-        `INSERT INTO customer_invoice_payment_links (invoice_id, link_token, gateway_ref, amount, status, expires_at)
-         VALUES ($1, $2, $3, $4, 'active', $5)`,
-        [id, linkToken, gateway_ref, amount, expiresAt]
+        `INSERT INTO customer_invoice_payment_links (invoice_id, link_token, gateway_ref, amount, status, expires_at, provider)
+         VALUES ($1, $2, $3, $4, 'active', $5, $6)`,
+        [id, linkToken, gateway_ref, amount, expiresAt, providerName]
       );
 
       res.json({ link_url: checkout_url, link_token: linkToken, expires_at: expiresAt });
