@@ -334,4 +334,89 @@ function emptyQuote(deliveryMethod, pickupOutletId) {
   };
 }
 
-module.exports = { calculateQuote };
+/**
+ * Resolve the effective price for a product in a given context.
+ * Cascade: outlet assignment → channel → customer → customer_group → base price.
+ *
+ * @param {object}  db
+ * @param {object}  opts - { productId, variantId, outletId, channelId, customerId }
+ * @returns {Promise<{ price: number, source: string, price_list_id: number|null }>}
+ */
+async function resolvePriceForContext(db, { productId, variantId, outletId, channelId, customerId }) {
+  const now = new Date().toISOString();
+  const scopes = [];
+  if (outletId) scopes.push({ type: "outlet", id: outletId });
+  if (channelId) scopes.push({ type: "channel", id: channelId });
+  if (customerId) {
+    scopes.push({ type: "customer", id: customerId });
+    try {
+      const { rows } = await db.query(
+        "SELECT group_id FROM customer_group_members WHERE customer_id = $1 LIMIT 1",
+        [customerId]
+      );
+      if (rows[0]) scopes.push({ type: "customer_group", id: rows[0].group_id });
+    } catch (_) {}
+  }
+
+  for (const scope of scopes) {
+    try {
+      const { rows: assignments } = await db.query(
+        `SELECT pla.price_list_id
+         FROM price_list_assignments pla
+         JOIN price_lists pl ON pl.id = pla.price_list_id AND pl.is_active = TRUE
+         WHERE pla.scope_type = $1 AND pla.scope_id = $2 AND pla.is_active = TRUE
+           AND (pla.starts_at IS NULL OR pla.starts_at <= $3)
+           AND (pla.ends_at IS NULL OR pla.ends_at >= $4)
+         ORDER BY pla.priority DESC LIMIT 1`,
+        [scope.type, scope.id, now, now]
+      );
+      if (assignments[0]) {
+        const { rows: priceRows } = await db.query(
+          `SELECT price FROM price_list_items
+           WHERE price_list_id = $1 AND product_id = $2
+             AND (variant_id = $3 OR ($3 IS NULL AND variant_id IS NULL))
+           ORDER BY min_qty ASC LIMIT 1`,
+          [assignments[0].price_list_id, productId, variantId || null]
+        );
+        if (priceRows[0]) {
+          return { price: Number(priceRows[0].price), source: `assignment:${scope.type}`, price_list_id: assignments[0].price_list_id };
+        }
+      }
+    } catch (_) {}
+  }
+
+  // Customer's direct price_list_id
+  if (customerId) {
+    try {
+      const { rows } = await db.query(
+        "SELECT price_list_id FROM customers WHERE id = $1 AND price_list_id IS NOT NULL", [customerId]
+      );
+      if (rows[0]) {
+        const { rows: priceRows } = await db.query(
+          `SELECT price FROM price_list_items
+           WHERE price_list_id = $1 AND product_id = $2
+             AND (variant_id = $3 OR ($3 IS NULL AND variant_id IS NULL))
+           ORDER BY min_qty ASC LIMIT 1`,
+          [rows[0].price_list_id, productId, variantId || null]
+        );
+        if (priceRows[0]) {
+          return { price: Number(priceRows[0].price), source: "customer_price_list", price_list_id: rows[0].price_list_id };
+        }
+      }
+    } catch (_) {}
+  }
+
+  // Base price fallback
+  const { rows } = await db.query(
+    `SELECT p.price, pv.price AS variant_price
+     FROM products p LEFT JOIN product_variants pv ON pv.id = $2 AND pv.product_id = p.id
+     WHERE p.id = $1`,
+    [productId, variantId]
+  );
+  const base = rows[0]
+    ? (rows[0].variant_price != null ? Number(rows[0].variant_price) : Number(rows[0].price))
+    : 0;
+  return { price: base, source: "base_price", price_list_id: null };
+}
+
+module.exports = { calculateQuote, resolvePriceForContext };

@@ -75,8 +75,9 @@ export const POSProvider = ({ children }) => {
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDD, setShowCustomerDD] = useState(false);
 
-  // ── Price list (customer-specific pricing) ────────────────────────────────
+  // ── Price list (customer-specific pricing + outlet assignments) ────────────
   const [priceListItems, setPriceListItems] = useState([]);
+  const [outletPriceListItems, setOutletPriceListItems] = useState([]);
 
   // ── Parked sales ──────────────────────────────────────────────────────────
   const [parkedSales, setParkedSales] = useState([]);
@@ -450,6 +451,21 @@ export const POSProvider = ({ children }) => {
       .catch(() => setPriceListItems([]));
   }, [selectedCustomerId, customers]);
 
+  // ── Outlet price list fetch (phase2_outlet_pricing) ───────────────────────
+  useEffect(() => {
+    if (!selectedOutletId) { setOutletPriceListItems([]); return; }
+    api.get(`/price-list-assignments?scope_type=outlet&scope_id=${selectedOutletId}`)
+      .then(async (d) => {
+        const assignments = d.assignments || [];
+        if (!assignments.length) { setOutletPriceListItems([]); return; }
+        // Use highest priority assignment
+        const topPl = assignments.sort((a, b) => (b.priority || 0) - (a.priority || 0))[0];
+        const items = await api.get(`/price-lists/${topPl.price_list_id}/items`);
+        setOutletPriceListItems(items.items || []);
+      })
+      .catch(() => setOutletPriceListItems([]));
+  }, [selectedOutletId]);
+
   // Re-resolve all cart prices when price list changes (customer selected/deselected)
   useEffect(() => {
     setCart((prev) => {
@@ -468,14 +484,16 @@ export const POSProvider = ({ children }) => {
   }, [priceListItems]);
 
   const resolvePriceListPrice = useCallback((productId, variantId, qty) => {
-    if (!priceListItems.length) return null;
-    const matches = priceListItems
+    // Customer price list takes priority over outlet price list
+    const sources = priceListItems.length ? priceListItems : outletPriceListItems;
+    if (!sources.length) return null;
+    const matches = sources
       .filter((i) => i.product_id === productId &&
         (String(i.variant_id || "") === String(variantId || "")) &&
         i.min_qty <= qty)
       .sort((a, b) => b.min_qty - a.min_qty);
     return matches[0] || null;
-  }, [priceListItems]);
+  }, [priceListItems, outletPriceListItems]);
 
   const updateQty = (id, delta) => {
     setCart((prev) =>

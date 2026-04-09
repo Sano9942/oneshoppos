@@ -606,10 +606,11 @@ export default function PriceListsRedesign() {
                       </div>
                     </div>
 
-                    {/* Expanded items panel */}
+                    {/* Expanded items panel + assignments */}
                     {expanded && (
                       <div className="bg-(--bg-subtle)/40 border-t border-(--border)">
                         <ItemsPanel listId={list.id} products={products} />
+                        <AssignmentsPanel listId={list.id} />
                       </div>
                     )}
                   </div>
@@ -627,5 +628,112 @@ export default function PriceListsRedesign() {
         onSaved={fetchLists}
       />
     </>
+  );
+}
+
+// ── Assignments Panel (Phase 2 — outlet pricing) ───────────────────────────
+
+const SCOPE_LABELS = { outlet: "Outlet", channel: "Channel", customer: "Customer", customer_group: "Customer Group" };
+
+function AssignmentsPanel({ listId }) {
+  const toast = useToast();
+  const [assignments, setAssignments] = useState([]);
+  const [outlets, setOutlets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ scope_type: "outlet", scope_id: "", priority: 0 });
+
+  useEffect(() => {
+    Promise.all([
+      api.get(`/api/price-list-assignments?price_list_id=${listId}`).catch(() => ({ assignments: [] })),
+      api.get("/api/outlets").catch(() => ({ outlets: [] })),
+    ]).then(([a, o]) => {
+      setAssignments(a.assignments ?? []);
+      setOutlets(o.outlets ?? o ?? []);
+      setLoading(false);
+    });
+  }, [listId]);
+
+  async function addAssignment() {
+    if (!form.scope_id) return toast.error("Select a scope entity");
+    try {
+      const res = await api.post("/api/price-list-assignments", {
+        price_list_id: listId,
+        scope_type: form.scope_type,
+        scope_id: Number(form.scope_id),
+        priority: Number(form.priority) || 0,
+      });
+      setAssignments(prev => [...prev, res.assignment]);
+      setShowAdd(false);
+      setForm({ scope_type: "outlet", scope_id: "", priority: 0 });
+      toast.success("Assignment added");
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+
+  async function removeAssignment(id) {
+    try {
+      await api.del(`/api/price-list-assignments/${id}`);
+      setAssignments(prev => prev.filter(a => a.id !== id));
+      toast.success("Assignment removed");
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+
+  if (loading) return <div className="px-6 py-3 text-xs text-(--text-muted)">Loading assignments…</div>;
+
+  return (
+    <div className="px-6 py-3 border-t border-(--border)">
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-(--text-muted)">Assignments</h4>
+        <button onClick={() => setShowAdd(!showAdd)} className="text-xs text-(--accent) hover:underline">
+          {showAdd ? "Cancel" : "+ Assign"}
+        </button>
+      </div>
+
+      {showAdd && (
+        <div className="flex items-end gap-2 mb-3">
+          <select value={form.scope_type} onChange={e => setForm(f => ({ ...f, scope_type: e.target.value, scope_id: "" }))}
+            className="rounded border border-(--border) bg-(--bg) px-2 py-1 text-xs">
+            {Object.entries(SCOPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          {form.scope_type === "outlet" ? (
+            <select value={form.scope_id} onChange={e => setForm(f => ({ ...f, scope_id: e.target.value }))}
+              className="rounded border border-(--border) bg-(--bg) px-2 py-1 text-xs grow">
+              <option value="">Select outlet…</option>
+              {outlets.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+          ) : (
+            <input type="number" placeholder="Entity ID" value={form.scope_id}
+              onChange={e => setForm(f => ({ ...f, scope_id: e.target.value }))}
+              className="rounded border border-(--border) bg-(--bg) px-2 py-1 text-xs w-24" />
+          )}
+          <input type="number" placeholder="Priority" value={form.priority}
+            onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
+            className="rounded border border-(--border) bg-(--bg) px-2 py-1 text-xs w-20" />
+          <Button size="sm" tone="primary" onClick={addAssignment}>Add</Button>
+        </div>
+      )}
+
+      {assignments.length === 0 ? (
+        <p className="text-xs text-(--text-muted)">No assignments yet. Assign this price list to outlets or customer groups.</p>
+      ) : (
+        <div className="space-y-1">
+          {assignments.map(a => (
+            <div key={a.id} className="flex items-center justify-between py-1 text-xs">
+              <span>
+                <span className="font-medium">{SCOPE_LABELS[a.scope_type] || a.scope_type}</span>
+                {" → "}
+                {a.outlet_name || `#${a.scope_id}`}
+                {a.priority > 0 && <span className="ml-1 text-(--text-muted)">(priority {a.priority})</span>}
+              </span>
+              <button onClick={() => removeAssignment(a.id)} className="text-red-500 hover:underline">Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
