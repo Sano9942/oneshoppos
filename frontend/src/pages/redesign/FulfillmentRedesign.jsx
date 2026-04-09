@@ -14,6 +14,7 @@ import {
   Search,
   ShoppingCart,
   Truck,
+  User,
   X,
   Zap,
 } from "lucide-react";
@@ -73,8 +74,23 @@ function ProgressBar({ current, total, color = "bg-blue-500" }) {
 
 // ── Tabs ────────────────────────────────────────────────────────────
 
+const PICKUP_STATUS_CONFIG = {
+  pending:   { label: "Pending",   tone: "default" },
+  ready:     { label: "Ready",     tone: "info"    },
+  arrived:   { label: "Arrived",   tone: "warning" },
+  completed: { label: "Completed", tone: "success" },
+};
+
+function pickupStatus(order) {
+  if (order.picked_up_at) return "completed";
+  if (order.curbside_arrived_at) return "arrived";
+  if (order.pickup_ready_at) return "ready";
+  return "pending";
+}
+
 const TABS = [
   { key: "queue", label: "Orders Queue", icon: ShoppingCart },
+  { key: "pickup", label: "Pickup Orders", icon: User },
   { key: "picklists", label: "Picklists", icon: ClipboardList },
   { key: "dispatch", label: "Quick Dispatch", icon: Zap },
   { key: "loadsheets", label: "Loadsheets", icon: FileSpreadsheet },
@@ -128,6 +144,7 @@ export default function FulfillmentRedesign() {
           {tab === "queue" && (
             <OrdersQueue onPicklistCreated={() => setTab("picklists")} fmt={fmt} />
           )}
+          {tab === "pickup" && <PickupOrdersTab fmt={fmt} />}
           {tab === "picklists" && (
             <PicklistsTab onOpen={setActivePicklist} fmt={fmt} />
           )}
@@ -138,6 +155,141 @@ export default function FulfillmentRedesign() {
         </>
       )}
     </PageShell>
+  );
+}
+
+// ── Pickup Orders tab ───────────────────────────────────────────────
+
+function PickupOrdersTab({ fmt }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [acting, setActing] = useState(null);
+  const { success, error } = useToast();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const qs = statusFilter ? `?status=${statusFilter}` : "";
+      const data = await api.get(`/api/fulfillment/pickup-orders${qs}`);
+      setOrders(data.orders || []);
+    } catch (err) {
+      error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, error]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const markReady = async (id) => {
+    setActing(id);
+    try {
+      await api.put(`/api/orders/${id}/pickup-ready`);
+      success("Marked as ready for pickup");
+      load();
+    } catch (err) {
+      error(err.message);
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const markPickedUp = async (id) => {
+    setActing(id);
+    try {
+      await api.put(`/api/orders/${id}/picked-up`);
+      success("Marked as picked up");
+      load();
+    } catch (err) {
+      error(err.message);
+    } finally {
+      setActing(null);
+    }
+  };
+
+  return (
+    <SectionCard>
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="font-semibold text-gray-900 dark:text-white">Pickup Orders</h3>
+        <div className="flex items-center gap-2">
+          <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="ready">Ready</option>
+            <option value="arrived">Arrived</option>
+            <option value="completed">Completed</option>
+          </Select>
+          <Button size="sm" variant="ghost" onClick={load}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="py-8 text-center text-gray-400">Loading pickup orders...</p>
+      ) : orders.length === 0 ? (
+        <EmptyState icon={User} message="No pickup orders found" />
+      ) : (
+        <div className="space-y-3">
+          {orders.map((o) => {
+            const st = pickupStatus(o);
+            const cfg = PICKUP_STATUS_CONFIG[st];
+            return (
+              <div
+                key={o.id}
+                className="flex items-start justify-between rounded-lg border border-gray-200 p-4 dark:border-gray-700"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {o.external_order_number || `#${o.id}`}
+                    </span>
+                    <Badge tone={cfg.tone}>{cfg.label}</Badge>
+                  </div>
+                  <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    {o.customer_name && <span>{o.customer_name}</span>}
+                    {o.customer_phone && <span className="ml-2">{o.customer_phone}</span>}
+                  </div>
+                  <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    {fmt(o.grand_total)}
+                    {o.outlet_name && <span className="ml-2">@ {o.outlet_name}</span>}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-3 text-xs text-gray-400">
+                    <span>Ordered: {fmtUtcDateTime(o.ordered_at)}</span>
+                    {o.pickup_ready_at && <span>Ready: {fmtUtcDateTime(o.pickup_ready_at)}</span>}
+                    {o.curbside_arrived_at && <span>Arrived: {fmtUtcDateTime(o.curbside_arrived_at)}</span>}
+                    {o.picked_up_at && <span>Picked up: {fmtUtcDateTime(o.picked_up_at)}</span>}
+                  </div>
+                </div>
+                <div className="ml-4 flex shrink-0 gap-2">
+                  {st === "pending" && (
+                    <Button
+                      size="sm"
+                      onClick={() => markReady(o.id)}
+                      disabled={acting === o.id}
+                    >
+                      <PackageCheck className="mr-1 h-4 w-4" />
+                      Mark Ready
+                    </Button>
+                  )}
+                  {(st === "ready" || st === "arrived") && (
+                    <Button
+                      size="sm"
+                      onClick={() => markPickedUp(o.id)}
+                      disabled={acting === o.id}
+                    >
+                      <CheckCircle className="mr-1 h-4 w-4" />
+                      Mark Picked Up
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </SectionCard>
   );
 }
 

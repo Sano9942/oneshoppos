@@ -779,6 +779,52 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
     }
   });
 
+  // ── GET /api/fulfillment/pickup-orders ─────────────────────────────
+  // Pickup orders with status filtering for in-store/curbside pickup workflow
+
+  app.get("/api/fulfillment/pickup-orders", perm, async (req, res) => {
+    try {
+      const { outlet_id, status } = req.query;
+      let sql = `
+        SELECT wo.id, wo.external_order_id, wo.external_order_number,
+               wo.customer_name_snapshot AS customer_name,
+               wo.customer_phone_snapshot AS customer_phone,
+               wo.fulfillment_status, wo.order_status,
+               wo.grand_total, wo.ordered_at,
+               wo.pickup_ready_at, wo.picked_up_at, wo.curbside_arrived_at,
+               wo.pickup_outlet_id,
+               o.name AS outlet_name
+        FROM web_orders wo
+        LEFT JOIN outlets o ON o.id = wo.pickup_outlet_id
+        WHERE wo.delivery_method = 'pickup'
+          AND wo.order_status != 'cancelled'
+      `;
+      const params = [];
+
+      if (outlet_id) {
+        params.push(outlet_id);
+        sql += ` AND wo.pickup_outlet_id = $${params.length}`;
+      }
+
+      if (status === "pending") {
+        sql += ` AND wo.pickup_ready_at IS NULL AND wo.picked_up_at IS NULL`;
+      } else if (status === "ready") {
+        sql += ` AND wo.pickup_ready_at IS NOT NULL AND wo.picked_up_at IS NULL AND wo.curbside_arrived_at IS NULL`;
+      } else if (status === "arrived") {
+        sql += ` AND wo.curbside_arrived_at IS NOT NULL AND wo.picked_up_at IS NULL`;
+      } else if (status === "completed") {
+        sql += ` AND wo.picked_up_at IS NOT NULL`;
+      }
+
+      sql += ` ORDER BY wo.ordered_at DESC`;
+
+      const { rows } = await db.query(sql, params);
+      res.json({ orders: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── GET /api/fulfillment/unfulfilled-orders ───────────────────────
   // Helper: list orders available for picklist creation
 
