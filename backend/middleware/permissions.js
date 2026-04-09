@@ -45,6 +45,11 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "void_sales",
     "pos_park",
     "pos_void",
+    "manage_restaurant",
+    "manage_kds",
+    "manage_bookings",
+    "manage_projects",
+    "manage_contracts",
   ],
   Cashier: ["view_reports", "pos_discount", "pos_park"],
 };
@@ -200,6 +205,37 @@ const PERMISSION_RULES = [
     methods: ["POST", "DELETE"],
     path: /^\/api\/parked-sales(\/\d+)?$/,
     anyPerms: ["pos_park"],
+  },
+  // Phase 4 — New Verticals
+  {
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    path: /^\/api\/restaurant(\/|$)/,
+    anyPerms: ["manage_restaurant"],
+  },
+  {
+    methods: ["GET", "POST", "PUT"],
+    path: /^\/api\/kds(\/|$)/,
+    anyPerms: ["manage_kds"],
+  },
+  {
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    path: /^\/api\/booking-services(\/|$)/,
+    anyPerms: ["manage_bookings"],
+  },
+  {
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    path: /^\/api\/appointments(\/|$)/,
+    anyPerms: ["manage_bookings"],
+  },
+  {
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    path: /^\/api\/projects(\/|$)/,
+    anyPerms: ["manage_projects"],
+  },
+  {
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    path: /^\/api\/contracts(\/|$)/,
+    anyPerms: ["manage_contracts"],
   },
 ];
 

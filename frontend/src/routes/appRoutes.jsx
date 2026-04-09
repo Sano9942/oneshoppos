@@ -82,6 +82,15 @@ const ReportBuilderRoute = lazy(() => import("../pages/ReportBuilderRoute"));
 const POSLayoutsRoute = lazy(() => import("../pages/POSLayoutsRoute"));
 const OutletTaxProfilesRoute = lazy(() => import("../pages/OutletTaxProfilesRoute"));
 const ScheduledChangesRoute = lazy(() => import("../pages/ScheduledChangesRoute"));
+const RestaurantFloorRoute = lazy(() => import("../pages/RestaurantFloorRoute"));
+const RestaurantChecksRoute = lazy(() => import("../pages/RestaurantChecksRoute"));
+const KDSRoute = lazy(() => import("../pages/KDSRoute"));
+const KioskOrderingRoute = lazy(() => import("../pages/KioskOrderingRoute"));
+const AppointmentServicesRoute = lazy(() => import("../pages/AppointmentServicesRoute"));
+const AppointmentsCalendarRoute = lazy(() => import("../pages/AppointmentsCalendarRoute"));
+const AppointmentsRoute = lazy(() => import("../pages/AppointmentsRoute"));
+const ProjectsRoute = lazy(() => import("../pages/ProjectsRoute"));
+const ContractsRoute = lazy(() => import("../pages/ContractsRoute"));
 
 const wrap = (Component) => <Suspense fallback={<RouteLoading />}><Component /></Suspense>;
 const perm = (p, el) => <RequirePerm perm={p}>{el}</RequirePerm>;
@@ -200,5 +209,17 @@ export const appRoutes = [
     <Route path="/messaging/inbox" element={perm("manage_orders", <MessagingInboxRoute />)} />
     <Route path="/customer-invoices" element={perm("manage_orders", <CustomerInvoicesRoute />)} />
     <Route path="/subscriptions" element={perm("all_access", <SubscriptionsRoute />)} />
+    {/* Phase 4 — Restaurant */}
+    <Route path="/restaurant/floor" element={perm("manage_restaurant", wrap(RestaurantFloorRoute))} />
+    <Route path="/restaurant/checks" element={perm("manage_restaurant", wrap(RestaurantChecksRoute))} />
+    <Route path="/kds" element={perm("manage_kds", wrap(KDSRoute))} />
+    <Route path="/kiosk" element={wrap(KioskOrderingRoute)} />
+    {/* Phase 4 — Appointments */}
+    <Route path="/appointments/services" element={perm("manage_bookings", wrap(AppointmentServicesRoute))} />
+    <Route path="/appointments/calendar" element={perm("manage_bookings", wrap(AppointmentsCalendarRoute))} />
+    <Route path="/appointments/bookings" element={perm("manage_bookings", wrap(AppointmentsRoute))} />
+    {/* Phase 4 — Service Workspace */}
+    <Route path="/projects" element={perm("manage_projects", wrap(ProjectsRoute))} />
+    <Route path="/contracts" element={perm("manage_contracts", wrap(ContractsRoute))} />
   </Route>,
 ];

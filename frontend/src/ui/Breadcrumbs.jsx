@@ -56,6 +56,17 @@ const LABELS = {
   inbox: "Inbox",
   "customer-invoices": "Customer Invoices",
   subscriptions: "Subscriptions",
+  restaurant: "Restaurant",
+  floor: "Floor Plan",
+  checks: "Checks",
+  kds: "KDS",
+  kiosk: "Kiosk",
+  appointments: "Appointments",
+  services: "Services",
+  calendar: "Calendar",
+  bookings: "Bookings",
+  projects: "Projects",
+  contracts: "Contracts",
 };
 
 const SKIP = ["/dashboard", "/pos", "/kiosk", "/customer-display"];

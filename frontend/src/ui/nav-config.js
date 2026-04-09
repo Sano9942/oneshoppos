@@ -45,6 +45,12 @@ import {
   Calendar,
   LayoutGrid,
   Mail,
+  ChefHat,
+  Scissors,
+  CalendarDays,
+  CalendarCheck,
+  FolderKanban,
+  FileSignature,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -151,6 +157,29 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Inbox", path: "/messaging/inbox", icon: MessageSquare, requiredPerm: "manage_orders", requiredFlag: "customer_messaging" },
       { name: "Customer Invoices", path: "/customer-invoices", icon: FileText, requiredPerm: "manage_orders", requiredFlag: "customer_invoicing" },
       { name: "Subscriptions", path: "/subscriptions", icon: RefreshCw, requiredPerm: "all_access", requiredFlag: "subscription_billing" },
+    ],
+  },
+  {
+    label: "Restaurant",
+    items: [
+      { name: "Floor Plan", path: "/restaurant/floor", icon: LayoutGrid, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant" },
+      { name: "Checks", path: "/restaurant/checks", icon: Receipt, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant" },
+      { name: "KDS", path: "/kds", icon: ChefHat, requiredPerm: "manage_kds", requiredFlag: "phase4_restaurant_kds" },
+    ],
+  },
+  {
+    label: "Appointments",
+    items: [
+      { name: "Services", path: "/appointments/services", icon: Scissors, requiredPerm: "manage_bookings", requiredFlag: "phase4_appointments" },
+      { name: "Calendar", path: "/appointments/calendar", icon: CalendarDays, requiredPerm: "manage_bookings", requiredFlag: "phase4_appointments" },
+      { name: "Bookings", path: "/appointments/bookings", icon: CalendarCheck, requiredPerm: "manage_bookings", requiredFlag: "phase4_appointments" },
+    ],
+  },
+  {
+    label: "Service Work",
+    items: [
+      { name: "Projects", path: "/projects", icon: FolderKanban, requiredPerm: "manage_projects", requiredFlag: "phase4_service_projects" },
+      { name: "Contracts", path: "/contracts", icon: FileSignature, requiredPerm: "manage_contracts", requiredFlag: "phase4_service_contracts" },
     ],
   },
   {

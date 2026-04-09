@@ -581,6 +581,15 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- SUBSCRIPTIONS ---
   require("./subscriptions")(app, deps);
 
+  // --- Phase 4 — New Verticals ---
+  require("./restaurant")(app, deps);
+  require("./kds")(app, deps);
+  require("./bookings")(app, deps);
+  require("./public-bookings")(app, deps);
+  require("./public-restaurant")(app, deps);
+  require("./projects")(app, deps);
+  require("./contracts")(app, deps);
+
   return {
     processPendingShopifyInventoryEvents:
       typeof processPendingShopifyInventoryEvents === "function"

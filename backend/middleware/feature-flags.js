@@ -67,6 +67,18 @@ const DEFAULT_FEATURE_FLAGS = {
   subscription_billing: false,
   sms_campaigns: false,
   subscription_autocharge: false,
+  // Phase 4 — New Verticals
+  phase4_restaurant: false,
+  phase4_restaurant_qr: false,
+  phase4_restaurant_kds: false,
+  phase4_restaurant_preauth: false,
+  phase4_appointments: false,
+  phase4_appointments_waitlists: false,
+  phase4_appointments_classes: false,
+  phase4_google_calendar_sync: false,
+  phase4_service_projects: false,
+  phase4_service_contracts: false,
+  phase4_contract_ai: false,
 };
 
 // Per-tenant feature flag cache
