@@ -161,6 +161,8 @@ module.exports = function registerSubscriptionRoutes(app, deps) {
         { startAfter: periodEnd }
       );
 
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "subscription_created", JSON.stringify({ subscription_id: sub.id, plan_id })]); } catch {}
+
       res.status(201).json(sub);
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
@@ -171,6 +173,9 @@ module.exports = function registerSubscriptionRoutes(app, deps) {
     try {
       const sub = await pauseSubscription(deps.db, Number(req.params.id));
       if (!sub) return res.status(400).json({ error: "Subscription is not active or not found" });
+
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "subscription_paused", JSON.stringify({ subscription_id: Number(req.params.id) })]); } catch {}
+
       res.json(sub);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -182,6 +187,9 @@ module.exports = function registerSubscriptionRoutes(app, deps) {
       const boss = await getBoss();
       const sub = await resumeSubscription(deps.db, boss, Number(req.params.id));
       if (!sub) return res.status(400).json({ error: "Subscription is not paused or not found" });
+
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "subscription_resumed", JSON.stringify({ subscription_id: Number(req.params.id) })]); } catch {}
+
       res.json(sub);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -192,6 +200,9 @@ module.exports = function registerSubscriptionRoutes(app, deps) {
     try {
       const sub = await cancelSubscription(deps.db, Number(req.params.id));
       if (!sub) return res.status(404).json({ error: "Subscription not found" });
+
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "subscription_cancelled", JSON.stringify({ subscription_id: Number(req.params.id) })]); } catch {}
+
       res.json(sub);
     } catch (err) {
       res.status(500).json({ error: err.message });

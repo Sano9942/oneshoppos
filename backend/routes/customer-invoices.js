@@ -119,6 +119,8 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
         await scheduleReminders(boss, deps.db, invoice.id, reminders);
       }
 
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "invoice_created", JSON.stringify({ invoice_id: invoice.id, invoice_number: invoice.invoice_number })]); } catch {}
+
       res.status(201).json(invoice);
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
@@ -228,6 +230,8 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
         },
       });
 
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "invoice_sent", JSON.stringify({ invoice_id: Number(id) })]); } catch {}
+
       res.json({ sent: true });
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
@@ -252,6 +256,9 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
       );
 
       const balanceInfo = await recomputeBalance(deps.db, Number(id));
+
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "invoice_payment_recorded", JSON.stringify({ invoice_id: Number(id), amount, payment_type })]); } catch {}
+
       res.status(201).json({ payment, ...balanceInfo });
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
@@ -365,6 +372,9 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
         [req.params.id]
       );
       if (!invoice) return res.status(404).json({ error: "Invoice not found or already voided" });
+
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "invoice_voided", JSON.stringify({ invoice_id: invoice.id })]); } catch {}
+
       res.json(invoice);
     } catch (err) {
       res.status(500).json({ error: err.message });
