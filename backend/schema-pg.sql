@@ -1756,6 +1756,158 @@ CREATE TABLE IF NOT EXISTS loadsheet_orders (
   UNIQUE(loadsheet_id, web_order_id)
 );
 
+-- ── Sales Channels ──────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS sales_channels (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  type TEXT,
+  is_active BOOLEAN DEFAULT TRUE,
+  is_public BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO sales_channels (code, name, type) VALUES
+  ('pos',         'Point of Sale',  'pos'),
+  ('storefront',  'Online Store',   'online_store'),
+  ('shopify',     'Shopify',        'online_store'),
+  ('woocommerce', 'WooCommerce',    'online_store'),
+  ('daraz',       'Daraz',          'marketplace'),
+  ('facebook',    'Facebook',       'social'),
+  ('instagram',   'Instagram',      'social'),
+  ('whatsapp',    'WhatsApp',       'messaging')
+ON CONFLICT (code) DO NOTHING;
+
+-- ── Channel Publications ────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS channel_publications (
+  id SERIAL PRIMARY KEY,
+  channel_id INT NOT NULL REFERENCES sales_channels(id),
+  product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  variant_id INT REFERENCES product_variants(id) ON DELETE CASCADE,
+  is_published BOOLEAN DEFAULT TRUE,
+  published_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_channel_publications_unique
+  ON channel_publications (channel_id, product_id, COALESCE(variant_id, 0));
+CREATE INDEX IF NOT EXISTS idx_channel_publications_product ON channel_publications(product_id);
+CREATE INDEX IF NOT EXISTS idx_channel_publications_channel ON channel_publications(channel_id);
+
+-- ── Inventory Reservations ──────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS inventory_reservations (
+  id SERIAL PRIMARY KEY,
+  reservation_key TEXT NOT NULL,
+  channel_id INT REFERENCES sales_channels(id),
+  web_order_id INT REFERENCES web_orders(id),
+  product_id INT NOT NULL REFERENCES products(id),
+  variant_id INT REFERENCES product_variants(id),
+  outlet_id INT NOT NULL REFERENCES outlets(id),
+  quantity INT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_reservations_key ON inventory_reservations(reservation_key);
+CREATE INDEX IF NOT EXISTS idx_inventory_reservations_outlet_product ON inventory_reservations(outlet_id, product_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_reservations_status ON inventory_reservations(status) WHERE status = 'active';
+
+-- ── Web Order Allocations ───────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS web_order_allocations (
+  id SERIAL PRIMARY KEY,
+  web_order_id INT NOT NULL REFERENCES web_orders(id) ON DELETE CASCADE,
+  web_order_item_id INT REFERENCES web_order_items(id) ON DELETE CASCADE,
+  fulfillment_outlet_id INT NOT NULL REFERENCES outlets(id),
+  fulfillment_method TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  allocated_qty INT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_web_order_allocations_order ON web_order_allocations(web_order_id);
+CREATE INDEX IF NOT EXISTS idx_web_order_allocations_outlet ON web_order_allocations(fulfillment_outlet_id);
+
+-- ── Customer Addresses ──────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS customer_addresses (
+  id SERIAL PRIMARY KEY,
+  customer_id INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  label TEXT,
+  recipient_name TEXT,
+  phone TEXT,
+  address_line_1 TEXT,
+  address_line_2 TEXT,
+  city TEXT,
+  province TEXT,
+  postal_code TEXT,
+  country_code TEXT DEFAULT 'PK',
+  is_default BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_addresses_customer ON customer_addresses(customer_id);
+
+-- ── Storefront Carts ────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS storefront_carts (
+  id SERIAL PRIMARY KEY,
+  cart_token TEXT NOT NULL UNIQUE,
+  customer_id INT REFERENCES customers(id),
+  channel_id INT REFERENCES sales_channels(id),
+  pickup_outlet_id INT REFERENCES outlets(id),
+  delivery_method TEXT,
+  currency TEXT DEFAULT 'PKR',
+  quote_payload JSONB,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_storefront_carts_token ON storefront_carts(cart_token);
+CREATE INDEX IF NOT EXISTS idx_storefront_carts_customer ON storefront_carts(customer_id);
+
+-- ── Storefront Cart Items ───────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS storefront_cart_items (
+  id SERIAL PRIMARY KEY,
+  cart_id INT NOT NULL REFERENCES storefront_carts(id) ON DELETE CASCADE,
+  product_id INT NOT NULL REFERENCES products(id),
+  variant_id INT REFERENCES product_variants(id),
+  quantity INT NOT NULL DEFAULT 1,
+  unit_price NUMERIC(12,2),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_storefront_cart_items_cart ON storefront_cart_items(cart_id);
+
+-- ── Omnichannel column extensions ───────────────────────────────────
+
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS channel_id INT REFERENCES sales_channels(id);
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS delivery_method TEXT;
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS pickup_outlet_id INT REFERENCES outlets(id);
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS fulfillment_outlet_id INT REFERENCES outlets(id);
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS customer_name_snapshot TEXT;
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS customer_phone_snapshot TEXT;
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS customer_email_snapshot TEXT;
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS shipping_address_json JSONB;
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS pickup_ready_at TIMESTAMPTZ;
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS picked_up_at TIMESTAMPTZ;
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS curbside_arrived_at TIMESTAMPTZ;
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS public_order_token TEXT UNIQUE;
+
+CREATE INDEX IF NOT EXISTS idx_web_orders_channel ON web_orders(channel_id);
+CREATE INDEX IF NOT EXISTS idx_web_orders_public_token ON web_orders(public_order_token);
+CREATE INDEX IF NOT EXISTS idx_web_orders_delivery_method ON web_orders(delivery_method);
+
+ALTER TABLE returns ADD COLUMN IF NOT EXISTS web_order_id INT REFERENCES web_orders(id);
+CREATE INDEX IF NOT EXISTS idx_returns_web_order ON returns(web_order_id) WHERE web_order_id IS NOT NULL;
+
 -- ── FK for customers.price_list_id (price_lists created after customers) ─
 DO $$ BEGIN
   ALTER TABLE customers ADD CONSTRAINT customers_price_list_id_fkey FOREIGN KEY (price_list_id) REFERENCES price_lists(id);
