@@ -41,14 +41,18 @@ module.exports = function createHRRouter({
           end_date,
           days = 1,
           reason,
+          partial_day,
+          start_time,
+          end_time,
         } = req.body || {};
         if (!employee_id || !start_date || !end_date) {
           return res.status(400).json({ error: "employee_id, start_date and end_date are required" });
         }
         const { rows } = await db.query(
-          `INSERT INTO leave_requests (employee_id, type, start_date, end_date, days, reason, status)
-           VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id`,
-          [employee_id, type, start_date, end_date, Number(days || 1), reason || null]
+          `INSERT INTO leave_requests (employee_id, type, start_date, end_date, days, reason, status, partial_day, start_time, end_time)
+           VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9) RETURNING id`,
+          [employee_id, type, start_date, end_date, Number(days || 1), reason || null,
+           partial_day === true, start_time || null, end_time || null]
         );
         createNotification(
           "leave_request",
@@ -75,9 +79,28 @@ module.exports = function createHRRouter({
           return res.status(400).json({ error: "Invalid status" });
         }
         const approvedBy = Number(req.headers["x-employee-id"] || 0) || null;
+
+        // Check for schedule conflicts when approving
+        let scheduleImpact = null;
+        if (status === "approved") {
+          try {
+            const { rows: lr } = await db.query("SELECT employee_id, start_date, end_date FROM leave_requests WHERE id = $1", [id]);
+            if (lr[0]) {
+              const { rows: conflicts } = await db.query(
+                `SELECT id FROM scheduled_shifts
+                 WHERE employee_id = $1 AND status = 'published'
+                   AND shift_date BETWEEN $2 AND $3`,
+                [lr[0].employee_id, lr[0].start_date, lr[0].end_date]
+              );
+              scheduleImpact = conflicts.length > 0 ? "conflicts_found" : "no_conflicts";
+            }
+          } catch (_) { /* scheduled_shifts may not exist yet */ }
+        }
+
         const { rowCount } = await db.query(
           `UPDATE leave_requests
-           SET status = $1, approved_by = $2, approved_at = $3, rejection_note = $4
+           SET status = $1, approved_by = $2, approved_at = $3, rejection_note = $4,
+               schedule_impact_status = COALESCE($6, schedule_impact_status)
            WHERE id = $5`,
           [
             status,
@@ -85,9 +108,10 @@ module.exports = function createHRRouter({
             status === "approved" || status === "rejected" ? new Date().toISOString() : null,
             status === "rejected" ? rejection_note || null : null,
             id,
+            scheduleImpact,
           ]
         );
-        res.json({ message: "Leave request updated", changed: rowCount || 0 });
+        res.json({ message: "Leave request updated", changed: rowCount || 0, schedule_impact: scheduleImpact });
       } catch (err) {
         res.status(500).json({ error: err.message });
       }
@@ -415,6 +439,96 @@ module.exports = function createHRRouter({
           [id, employee_id, baseSalary, deductAmt, netPayVal, notes || null]
         );
         res.json({ message: "Pay line saved", id: rows[0].id });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
+  // ── Schedule-Leave Conflicts ────────────────────────────────────────────
+  router.get(
+    "/api/hr/leave/schedule-conflicts",
+    requirePerm("all_access"),
+    requireFeature("advanced_hr"),
+    async (req, res) => {
+      try {
+        const { employee_id, from, to } = req.query;
+        if (!from || !to) return res.status(400).json({ error: "from and to are required" });
+        let sql = `
+          SELECT lr.id AS leave_id, lr.employee_id, e.name AS employee_name,
+                 lr.start_date, lr.end_date, lr.type AS leave_type,
+                 ss.id AS shift_id, ss.shift_date, ss.start_time, ss.end_time, ss.status AS shift_status
+          FROM leave_requests lr
+          JOIN employees e ON e.id = lr.employee_id
+          JOIN scheduled_shifts ss ON ss.employee_id = lr.employee_id
+            AND ss.shift_date BETWEEN lr.start_date AND lr.end_date
+            AND ss.status != 'cancelled'
+          WHERE lr.status IN ('pending', 'approved')
+            AND lr.start_date <= $2 AND lr.end_date >= $1
+        `;
+        const params = [from, to];
+        let idx = 3;
+        if (employee_id) { sql += ` AND lr.employee_id = $${idx++}`; params.push(employee_id); }
+        sql += " ORDER BY ss.shift_date ASC";
+        const { rows } = await db.query(sql, params);
+        res.json({ conflicts: rows });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
+  // ── Overtime Alerts ───────────────────────────────────────────────────────
+  router.get(
+    "/api/hr/overtime-alerts",
+    requirePerm("all_access"),
+    requireFeature("advanced_hr"),
+    async (req, res) => {
+      try {
+        const { outlet_id, week } = req.query;
+        // week format: YYYY-MM-DD (Monday of the week)
+        const weekStart = week || new Date().toISOString().slice(0, 10);
+        const WEEKLY_THRESHOLD_HOURS = 40;
+
+        let sql = `
+          SELECT e.id AS employee_id, e.name AS employee_name,
+                 COALESCE(SUM(
+                   EXTRACT(EPOCH FROM (
+                     COALESCE(a.session_end, NOW()) - a.session_start
+                   )) / 3600.0
+                 ), 0)::numeric(8,2) AS hours_worked
+          FROM employees e
+          LEFT JOIN attendance_sessions a ON a.employee_id = e.id
+            AND a.session_start::date >= $1::date
+            AND a.session_start::date < ($1::date + INTERVAL '7 days')
+            AND a.session_type = 'work'
+        `;
+        const params = [weekStart];
+        let idx = 2;
+        if (outlet_id) {
+          sql += ` AND a.outlet_id = $${idx++}`;
+          params.push(outlet_id);
+        }
+        sql += `
+          GROUP BY e.id, e.name
+          HAVING COALESCE(SUM(
+            EXTRACT(EPOCH FROM (COALESCE(a.session_end, NOW()) - a.session_start)) / 3600.0
+          ), 0) >= $${idx}
+          ORDER BY hours_worked DESC
+        `;
+        params.push(WEEKLY_THRESHOLD_HOURS * 0.8); // Alert at 80% of threshold
+
+        const { rows } = await db.query(sql, params);
+        res.json({
+          alerts: rows.map(r => ({
+            ...r,
+            hours_worked: Number(r.hours_worked),
+            threshold: WEEKLY_THRESHOLD_HOURS,
+            exceeded: Number(r.hours_worked) >= WEEKLY_THRESHOLD_HOURS,
+          })),
+          week_start: weekStart,
+          threshold_hours: WEEKLY_THRESHOLD_HOURS,
+        });
       } catch (err) {
         res.status(500).json({ error: err.message });
       }

@@ -42,6 +42,7 @@ import {
   Star,
   Award,
   PackageCheck,
+  Calendar,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -116,6 +117,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Quotations", path: "/quotations", icon: FileText, requiredPerm: "manage_orders", requiredFlag: "crm_quotations" },
       { name: "Attendance", path: "/attendance", icon: Clock, requiredPerm: "view_reports" },
       { name: "HR", path: "/hr", icon: User, requiredPerm: "all_access", requiredFlag: "advanced_hr" },
+      { name: "Scheduling", path: "/scheduling", icon: Calendar, requiredPerm: "all_access", requiredFlag: "phase2_scheduling" },
       { name: "Notifications", path: "/notifications", icon: Bell, requiredFlag: "notifications" },
     ],
   },

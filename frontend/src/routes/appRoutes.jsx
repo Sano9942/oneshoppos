@@ -40,6 +40,7 @@ const TransfersRoute = lazy(() => import("../pages/TransfersRoute"));
 const CRMRoute = lazy(() => import("../pages/CRMRoute"));
 const QuotationsRoute = lazy(() => import("../pages/QuotationsRoute"));
 const HRManagementRoute = lazy(() => import("../pages/HRManagementRoute"));
+const SchedulingRoute = lazy(() => import("../pages/SchedulingRoute"));
 const CompanySettingsRoute = lazy(() => import("../pages/CompanySettingsRoute"));
 const OrdersRoute = lazy(() => import("../pages/OrdersRoute"));
 const CustomersRoute = lazy(() => import("../pages/CustomersRoute"));
@@ -132,6 +133,7 @@ export const appRoutes = [
     <Route path="/notifications" element={<NotificationsRedesign />} />
     <Route path="/attendance" element={perm("view_reports", <AttendanceRedesign />)} />
     <Route path="/hr" element={perm("all_access", <HRManagementRoute />)} />
+    <Route path="/scheduling" element={perm("all_access", <SchedulingRoute />)} />
     <Route path="/company-settings" element={perm("all_access", <CompanySettingsRoute />)} />
     <Route path="/receipt-templates" element={<ReceiptTemplatesRedesign />} />
     <Route path="/printer-settings" element={perm("all_access", <PrinterSettingsRedesign />)} />

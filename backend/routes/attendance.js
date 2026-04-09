@@ -263,9 +263,20 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // POST /api/attendance/pin-checkin — kiosk: clock in or return from break
   // Intentionally unauthenticated — PIN is the authentication
   // ---------------------------------------------------------------------------
+  // Haversine distance helper (meters)
+  function haversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
   app.post("/api/attendance/pin-checkin", async (req, res) => {
     try {
-      const { pin_code, outlet_id } = req.body || {};
+      const { pin_code, outlet_id, latitude, longitude } = req.body || {};
       if (!pin_code || !outlet_id)
         return res.status(400).json({ error: "pin_code and outlet_id are required" });
 
@@ -280,6 +291,31 @@ module.exports = function registerAttendanceRoutes(app, deps) {
         return res.status(403).json({
           error: "You are not assigned to this store. Contact an administrator.",
         });
+      }
+
+      // Geofence validation (if outlet has geofence configured and coords provided)
+      if (latitude != null && longitude != null) {
+        try {
+          const { rows: [outlet] } = await db.query(
+            "SELECT latitude, longitude, geofence_radius_meters FROM outlets WHERE id = $1",
+            [outlet_id]
+          );
+          if (outlet && outlet.latitude != null && outlet.longitude != null && outlet.geofence_radius_meters != null) {
+            const dist = haversineDistance(
+              Number(latitude), Number(longitude),
+              Number(outlet.latitude), Number(outlet.longitude)
+            );
+            if (dist > outlet.geofence_radius_meters) {
+              return res.status(403).json({
+                error: "You are outside the allowed geofence radius for this outlet",
+                allowed: false,
+                geofence_error: true,
+                distance_meters: Math.round(dist),
+                radius_meters: outlet.geofence_radius_meters,
+              });
+            }
+          }
+        } catch (_) { /* geofence columns may not exist yet */ }
       }
 
       const today = new Date().toISOString().slice(0, 10);

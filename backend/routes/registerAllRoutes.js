@@ -471,6 +471,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- SUPPLIER RETURNS (RMA) ---
   require("./supplier-returns")(app, deps);
 
+  // --- ROUTES: SCHEDULES (Phase 2) ---
+  require("./schedules")(app, deps);
+
   // --- ROUTES: APPROVAL POLICIES (Phase 2) ---
   require("./approval-policies")(app, deps);
 
