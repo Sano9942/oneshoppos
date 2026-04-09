@@ -4,7 +4,7 @@ import { API_BASE as API } from "../../config";
 import { api } from "../../api";
 import { Button, PageShell, Input, SectionCard, Select } from "../../ui/primitives";
 import { sortCategories, indentLabel } from "../../utils/categoryTree";
-import { X, Package, Plus, Trash2, Search, ShieldCheck } from "lucide-react";
+import { X, Package, Plus, Trash2, Search, ShieldCheck, Globe, Store, ShoppingBag } from "lucide-react";
 import { StarDisplay, StarPicker } from "../../ui/StarRating";
 
 function cartesian(arrays) {
@@ -72,6 +72,8 @@ export default function ProductFormPage() {
   const [reviews, setReviews] = useState([]);
   const [reviewForm, setReviewForm] = useState({ rating: 0, title: "", body: "", customer_name: "" });
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [channels, setChannels] = useState([]);
+  const [channelsSaving, setChannelsSaving] = useState(false);
 
   const upd = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const updVariant = (key, field, value) =>
@@ -296,6 +298,10 @@ export default function ProductFormPage() {
           })));
         }
         setOutletStock(stockD?.stock || []);
+        // Fetch channel publication state
+        api.get(`/api/products/${id}/channels`).then((d) => {
+          setChannels(d.channels || []);
+        }).catch(() => {});
       }
     }).catch(console.error).finally(() => setLoading(false));
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -642,6 +648,56 @@ export default function ProductFormPage() {
               </Select>
             </div>
           </SectionCard>
+
+          {/* Channels — edit mode only, only if channels exist */}
+          {isEdit && channels.length > 0 && (
+            <SectionCard>
+              <div className="p-4 space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">Sales Channels</p>
+                {channels.map((ch) => {
+                  const Icon = ch.type === "online" ? Globe : ch.type === "marketplace" ? ShoppingBag : Store;
+                  return (
+                    <div key={ch.id} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Icon size={14} className="text-(--ui-text-muted)" />
+                        <span className="text-sm text-(--ui-text)">{ch.name}</span>
+                        <span className="text-[10px] uppercase tracking-wide text-(--ui-text-muted) bg-(--ui-bg-muted) px-1.5 py-0.5 rounded">{ch.type}</span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={channelsSaving}
+                        onClick={async () => {
+                          const newPublished = !ch.is_published;
+                          // Optimistic update
+                          setChannels((prev) =>
+                            prev.map((c) => c.id === ch.id ? { ...c, is_published: newPublished } : c)
+                          );
+                          setChannelsSaving(true);
+                          try {
+                            await api.put(`/api/products/${id}/channels`, {
+                              channels: [{ channelId: ch.id, isPublished: newPublished }],
+                            });
+                          } catch (e) {
+                            // Revert on failure
+                            setChannels((prev) =>
+                              prev.map((c) => c.id === ch.id ? { ...c, is_published: !newPublished } : c)
+                            );
+                            setError(e.message || "Failed to update channel");
+                          }
+                          setChannelsSaving(false);
+                        }}
+                        className="relative"
+                      >
+                        <div className={`w-9 h-5 rounded-full transition-colors flex items-center px-0.5 ${ch.is_published ? "bg-(--ui-primary)" : "bg-slate-200"}`}>
+                          <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${ch.is_published ? "translate-x-4" : ""}`} />
+                        </div>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </SectionCard>
+          )}
 
           {/* Organization */}
           <SectionCard>

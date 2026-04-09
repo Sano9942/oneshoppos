@@ -1520,4 +1520,60 @@ module.exports = function registerProductRoutes(app, deps) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // ── Channel Publications ────────────────────────────────────────────
+
+  // GET /api/products/:id/channels — list publication state per channel
+  app.get("/api/products/:id/channels", requirePerm("manage_products"), async (req, res) => {
+    try {
+      const productId = Number(req.params.id);
+      const { rows: channels } = await db.query(
+        `SELECT sc.id, sc.code, sc.name, sc.type,
+                COALESCE(cp.is_published, false) AS is_published,
+                cp.published_at
+         FROM sales_channels sc
+         LEFT JOIN channel_publications cp ON cp.channel_id = sc.id
+           AND cp.product_id = $1 AND cp.variant_id IS NULL
+         WHERE sc.is_active = true
+         ORDER BY sc.name`,
+        [productId],
+      );
+      res.json({ channels });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PUT /api/products/:id/channels — update publication toggles
+  app.put("/api/products/:id/channels", requirePerm("manage_products"), async (req, res) => {
+    try {
+      const productId = Number(req.params.id);
+      const { channels } = req.body;
+      if (!Array.isArray(channels)) {
+        return res.status(400).json({ error: "channels array required" });
+      }
+
+      for (const ch of channels) {
+        if (ch.isPublished) {
+          await db.query(
+            `INSERT INTO channel_publications (channel_id, product_id, is_published, published_at)
+             VALUES ($1, $2, true, NOW())
+             ON CONFLICT (channel_id, product_id, COALESCE(variant_id, 0))
+             DO UPDATE SET is_published = true, published_at = NOW()`,
+            [ch.channelId, productId],
+          );
+        } else {
+          await db.query(
+            `UPDATE channel_publications SET is_published = false
+             WHERE channel_id = $1 AND product_id = $2 AND variant_id IS NULL`,
+            [ch.channelId, productId],
+          );
+        }
+      }
+
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 };
