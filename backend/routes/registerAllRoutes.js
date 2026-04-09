@@ -483,6 +483,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: PRICE LIST ASSIGNMENTS (Phase 2) ---
   require("./price-list-assignments")(app, deps);
 
+  // --- ROUTES: DRAFT ORDERS (Phase 2) ---
+  require("./draft-orders")(app, deps);
+
   // --- ROUTES: PARKED SALES ---
   require("./parked-sales")(app, deps);
 

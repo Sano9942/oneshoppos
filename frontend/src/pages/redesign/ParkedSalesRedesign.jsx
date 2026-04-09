@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import { Download, PauseCircle, RefreshCw, Trash2 } from "lucide-react";
+import { Download, PauseCircle, RefreshCw, Trash2, UserCheck } from "lucide-react";
 import { api } from "../../api";
 import { fmtLocalDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { useAuth } from "../../auth/AuthProvider";
+import useFeatureFlags from "../../hooks/useFeatureFlags";
 import {
+  Badge,
   Button,
   EmptyState,
   PageShell,
@@ -14,7 +17,12 @@ import { downloadCsv } from "../../utils/csvExport";
 
 export default function ParkedSalesRedesign() {
   const { fmt } = useCurrency();
+  const { authHeaders } = useAuth();
+  const { flags } = useFeatureFlags(authHeaders);
+  const useDrafts = !!flags.phase2_draft_orders;
+
   const [rows, setRows] = useState([]);
+  const [draftRows, setDraftRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [outletFilter, setOutletFilter] = useState("");
   const [loading, setLoading] = useState(false);
@@ -28,6 +36,13 @@ export default function ParkedSalesRedesign() {
     try {
       const data = await api.get("/api/parked-sales");
       setRows(data.parkedSales || data.parked_sales || []);
+      // Also fetch draft orders if enabled
+      if (useDrafts) {
+        try {
+          const drafts = await api.get("/api/draft-orders?status=open,claimed");
+          setDraftRows(drafts.draftOrders || []);
+        } catch { setDraftRows([]); }
+      }
     } catch (e) {
       setError(e.message || "Failed to load parked sales");
     } finally {

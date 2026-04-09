@@ -29,6 +29,16 @@ export const POSProvider = ({ children }) => {
   const navigate = useNavigate();
   const { employee, authHeaders, logout, hasPerm } = useAuth();
 
+  // ── Feature flags (lightweight, one-shot fetch) ───────────────────────────
+  const [posFlags, setPosFlags] = useState({});
+  useEffect(() => {
+    api.get("/feature-flags").then(d => {
+      const map = {};
+      for (const f of (d.flags || [])) map[f.key] = f.enabled;
+      setPosFlags(map);
+    }).catch(() => {});
+  }, []);
+
   // ── Lock state ────────────────────────────────────────────────────────────
   const [isLocked, setIsLocked] = useState(
     () => sessionStorage.getItem("posLocked") === "1",
@@ -589,21 +599,31 @@ export const POSProvider = ({ children }) => {
 
   const parkSale = async () => {
     if (!cart.length || !selectedOutletId) return;
+    const itemPayload = cart.map((i) => ({
+      product_id: i.id,
+      variant_id: i.variant_id || null,
+      product_name: i.name,
+      quantity: i.quantity,
+      price: i.price,
+      effective_tax_rate: i.effectiveTaxRate || 0,
+    }));
     try {
-      await api.post("/api/parked-sales", {
+      if (posFlags.phase2_draft_orders) {
+        await api.post("/draft-orders", {
+          outlet_id: Number(selectedOutletId),
+          customer_id: selectedCustomerId ? Number(selectedCustomerId) : null,
+          notes: orderNote || null,
+          items: itemPayload,
+        });
+      } else {
+        await api.post("/api/parked-sales", {
           employee_id: employee?.id || null,
           outlet_id: Number(selectedOutletId),
           customer_id: selectedCustomerId ? Number(selectedCustomerId) : null,
           notes: orderNote || null,
-          items: cart.map((i) => ({
-            product_id: i.id,
-            variant_id: i.variant_id || null,
-            product_name: i.name,
-            quantity: i.quantity,
-            price: i.price,
-            effective_tax_rate: i.effectiveTaxRate || 0,
-          })),
+          items: itemPayload,
         });
+      }
       setCart([]);
       setDiscountInput("");
       setOrderNote("");
@@ -1182,6 +1202,7 @@ export const POSProvider = ({ children }) => {
     filteredCustomers,
     filteredCheckoutCustomers,
     parkSale,
+    posFlags,
     restoreParked,
     openCheckout,
     handleQuickCreateCustomer,
