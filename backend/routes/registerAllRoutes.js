@@ -159,6 +159,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // Public restaurant QR ordering — no auth required, manually resolves tenant DB
   require("./public-restaurant")(app, deps);
 
+  // Public booking page — no auth required, manually resolves tenant DB
+  require("./public-bookings")(app, deps);
+
   // Setup wizard — must be BEFORE auth middleware (no session exists yet)
   const createSetupRouter = require("./setup");
   const IS_MULTI_TENANT = process.env.MULTI_TENANT === "1";
@@ -588,7 +591,6 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./restaurant")(app, deps);
   require("./kds")(app, deps);
   require("./bookings")(app, deps);
-  require("./public-bookings")(app, deps);
   require("./projects")(app, deps);
   require("./contracts")(app, deps);
 
