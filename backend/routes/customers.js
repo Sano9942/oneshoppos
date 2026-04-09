@@ -312,6 +312,64 @@ module.exports = function registerCustomerRoutes(app, deps) {
    *       401:
    *         description: Unauthorized
    */
+  // GET unified order history (POS sales + web orders)
+  app.get("/api/customers/:id/order-history", requireAnyPerm(["view_reports", "manage_customers"]), async (req, res) => {
+    const { id } = req.params;
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
+    const offset = (page - 1) * limit;
+
+    try {
+      // Verify customer exists
+      const { rowCount } = await db.query("SELECT 1 FROM customers WHERE id = $1", [id]);
+      if (rowCount === 0) return res.status(404).json({ error: "Customer not found" });
+
+      const countSql = `
+        SELECT (
+          (SELECT COUNT(*) FROM sales WHERE customer_id = $1 AND voided = false)
+          +
+          (SELECT COUNT(*) FROM web_orders WHERE customer_id = $1)
+        )::int AS total
+      `;
+      const { rows: [{ total }] } = await db.query(countSql, [id]);
+
+      const sql = `
+        SELECT 'pos_sale' AS type, s.id, s.invoice_number AS order_number,
+               'pos' AS channel, s.total_amount AS total, 'completed' AS status,
+               s.timestamp AS date
+        FROM sales s WHERE s.customer_id = $1 AND s.voided = false
+
+        UNION ALL
+
+        SELECT 'web_order' AS type, wo.id, wo.external_order_id AS order_number,
+               COALESCE(sc.code, wo.source) AS channel, wo.grand_total AS total,
+               wo.order_status AS status, wo.ordered_at AS date
+        FROM web_orders wo
+        LEFT JOIN sales_channels sc ON sc.id = wo.channel_id
+        WHERE wo.customer_id = $1
+
+        ORDER BY date DESC
+        LIMIT $2 OFFSET $3
+      `;
+      const { rows } = await db.query(sql, [id, limit, offset]);
+
+      res.json({
+        orders: rows.map(r => ({
+          type: r.type,
+          id: r.id,
+          orderNumber: r.order_number,
+          channel: r.channel,
+          total: Number(r.total),
+          status: r.status,
+          date: r.date,
+        })),
+        pagination: { page, limit, total },
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // POST create customer
   app.post("/api/customers", validate(CreateCustomerSchema), async (req, res) => {
     const { name, mobile, email, address, cnic, occupation, balance, ntn_cnic,
