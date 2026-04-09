@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { API_BASE as API } from "../../config";
 import { api } from "../../api";
+import { useAuth } from "../../auth/AuthProvider";
+import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { Button, PageShell, Input, SectionCard, Select } from "../../ui/primitives";
 import { sortCategories, indentLabel } from "../../utils/categoryTree";
-import { X, Package, Plus, Trash2, Search, ShieldCheck, Globe, Store, ShoppingBag } from "lucide-react";
+import { X, Package, Plus, Trash2, Search, ShieldCheck, Globe, Store, ShoppingBag, Eye } from "lucide-react";
 import { StarDisplay, StarPicker } from "../../ui/StarRating";
 
 function cartesian(arrays) {
@@ -53,7 +55,10 @@ export default function ProductFormPage() {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
+  const { authHeaders } = useAuth();
+  const { flags } = useFeatureFlags(authHeaders);
   const [form, setForm] = useState({ ...BLANK_FORM });
+  const [outletVisibility, setOutletVisibility] = useState([]);
   const [variants, setVariants] = useState([]);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
@@ -302,6 +307,10 @@ export default function ProductFormPage() {
         api.get(`/api/products/${id}/channels`).then((d) => {
           setChannels(d.channels || []);
         }).catch(() => {});
+        // Fetch outlet visibility
+        api.get(`/api/products/${id}/outlet-visibility`).then((d) => {
+          setOutletVisibility(d.visibility || []);
+        }).catch(() => {});
       }
     }).catch(console.error).finally(() => setLoading(false));
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -527,6 +536,30 @@ export default function ProductFormPage() {
                 ) : (
                   <p className="text-sm text-(--ui-text-muted)">No stock data. Use Inventory Adjustments to set stock.</p>
                 )}
+              </div>
+            </SectionCard>
+          )}
+
+          {/* Outlet Visibility — Phase 2B */}
+          {isEdit && flags?.phase2_outlet_visibility && outletVisibility.length > 0 && (
+            <SectionCard>
+              <div className="p-4 space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted) flex items-center gap-1"><Eye size={12} /> Outlet Visibility</p>
+                <p className="text-xs text-(--ui-text-muted)">Control which outlets can see and sell this product.</p>
+                {outletVisibility.map((ov) => (
+                  <div key={ov.outlet_id} className="flex items-center justify-between text-sm py-1 border-b border-(--ui-border) last:border-0">
+                    <span className="text-(--ui-text)">{ov.outlet_name}</span>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <span className={ov.is_visible ? "text-green-600 text-xs" : "text-red-500 text-xs"}>{ov.is_visible ? "Visible" : "Hidden"}</span>
+                      <input type="checkbox" checked={ov.is_visible} onChange={async (e) => {
+                        try {
+                          const res = await api.put(`/api/products/${id}/outlet-visibility`, { outlets: [{ outlet_id: ov.outlet_id, is_visible: e.target.checked }] });
+                          setOutletVisibility(res.visibility || []);
+                        } catch (err) { console.error(err); }
+                      }} />
+                    </label>
+                  </div>
+                ))}
               </div>
             </SectionCard>
           )}

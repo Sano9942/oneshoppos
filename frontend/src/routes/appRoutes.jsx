@@ -72,6 +72,9 @@ const CustomerGroupsRedesign = lazy(() => import("../pages/redesign/CustomerGrou
 const ReviewModerationRedesign = lazy(() => import("../pages/redesign/ReviewModerationRedesign"));
 const FulfillmentRedesign = lazy(() => import("../pages/redesign/FulfillmentRedesign"));
 const LoyaltyTiersRoute = lazy(() => import("../pages/LoyaltyTiersRoute"));
+const SmartCollectionsRoute = lazy(() => import("../pages/SmartCollectionsRoute"));
+const OutletTaxProfilesRoute = lazy(() => import("../pages/OutletTaxProfilesRoute"));
+const ScheduledChangesRoute = lazy(() => import("../pages/ScheduledChangesRoute"));
 
 const wrap = (Component) => <Suspense fallback={<RouteLoading />}><Component /></Suspense>;
 const perm = (p, el) => <RequirePerm perm={p}>{el}</RequirePerm>;
@@ -176,5 +179,9 @@ export const appRoutes = [
     <Route path="/review-moderation" element={perm("manage_inventory", <ReviewModerationRedesign />)} />
     {/* Wave 5 — Fulfillment */}
     <Route path="/fulfillment" element={perm("manage_orders", <FulfillmentRedesign />)} />
+    {/* Phase 2B — Catalog Depth */}
+    <Route path="/smart-collections" element={perm("all_access", <SmartCollectionsRoute />)} />
+    <Route path="/settings/outlet-tax-profiles" element={perm("all_access", <OutletTaxProfilesRoute />)} />
+    <Route path="/scheduled-changes" element={perm("all_access", <ScheduledChangesRoute />)} />
   </Route>,
 ];

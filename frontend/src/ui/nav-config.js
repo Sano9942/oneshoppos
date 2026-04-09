@@ -77,6 +77,8 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Promotions", path: "/promotions", icon: Percent, requiredPerm: "manage_inventory" },
       { name: "Price Lists", path: "/price-lists", icon: Tag, requiredPerm: "manage_inventory" },
       { name: "Review Moderation", path: "/review-moderation", icon: Star, requiredPerm: "manage_inventory" },
+      { name: "Smart Collections", path: "/smart-collections", icon: Layers, requiredPerm: "all_access", requiredFlag: "phase2_smart_collections" },
+      { name: "Scheduled Changes", path: "/scheduled-changes", icon: Clock, requiredPerm: "all_access", requiredFlag: "phase2_scheduled_changes" },
     ],
   },
   {
@@ -134,6 +136,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Printer Settings", path: "/printer-settings", icon: Printer, requiredPerm: "all_access" },
       { name: "Import Data", path: "/import", icon: Upload, requiredPerm: "all_access" },
       { name: "Backup & Restore", path: "/backup-restore", icon: DatabaseBackup, requiredPerm: "all_access", requiredFlag: "backup_restore" },
+      { name: "Outlet Tax Profiles", path: "/settings/outlet-tax-profiles", icon: Receipt, requiredPerm: "all_access", requiredFlag: "phase2_outlet_tax" },
     ],
   },
   {

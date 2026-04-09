@@ -214,6 +214,47 @@ function startAll(deps) {
   // Report schedule worker
   startReportScheduleWorker(deps);
 
+  // Scheduled catalog changes worker
+  if (process.env.SCHEDULED_CATALOG_WORKER_ENABLED === "1") {
+    const catalogInterval = setInterval(async () => {
+      try {
+        await forEachActiveTenant("catalog-scheduler", async (tenantDb) => {
+          const { rows } = await tenantDb.query(
+            `SELECT * FROM scheduled_catalog_changes
+             WHERE status = 'pending' AND scheduled_at <= NOW()
+             ORDER BY scheduled_at ASC
+             LIMIT 50`
+          );
+          for (const change of rows) {
+            try {
+              let updateSql;
+              if (change.entity_type === "product") {
+                updateSql = `UPDATE products SET ${change.field_name} = $1 WHERE id = $2`;
+              } else if (change.entity_type === "variant") {
+                updateSql = `UPDATE product_variants SET ${change.field_name} = $1 WHERE id = $2`;
+              } else {
+                await tenantDb.query("UPDATE scheduled_catalog_changes SET status = 'failed', applied_at = NOW() WHERE id = $1", [change.id]);
+                continue;
+              }
+              await tenantDb.transaction(async (client) => {
+                await client.query(updateSql, [change.new_value, change.entity_id]);
+                await client.query(
+                  "UPDATE scheduled_catalog_changes SET status = 'applied', applied_at = NOW() WHERE id = $1",
+                  [change.id]
+                );
+              });
+            } catch (err) {
+              await tenantDb.query("UPDATE scheduled_catalog_changes SET status = 'failed', applied_at = NOW() WHERE id = $1", [change.id]);
+            }
+          }
+        }, deps);
+      } catch (err) {
+        console.error("[catalog-scheduler] poll error:", err.message);
+      }
+    }, 60_000);
+    global.__catalogSchedulerStatus = { lastPollAt: null, processedToday: 0 };
+  }
+
   // pg-boss workers — email, FBR, and cleanup (requires DATABASE_URL / Postgres)
   if (process.env.DATABASE_URL) {
     const { getBoss } = require("../services/boss");

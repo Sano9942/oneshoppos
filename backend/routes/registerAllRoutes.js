@@ -489,6 +489,18 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: DRAFT ORDERS (Phase 2) ---
   require("./draft-orders")(app, deps);
 
+  // --- ROUTES: SMART COLLECTIONS (Phase 2B) ---
+  require("./smart-collections")(app, deps);
+
+  // --- ROUTES: OUTLET VISIBILITY (Phase 2B) ---
+  require("./outlet-visibility")(app, deps);
+
+  // --- ROUTES: OUTLET TAX PROFILES (Phase 2B) ---
+  require("./outlet-tax-profiles")(app, deps);
+
+  // --- ROUTES: SCHEDULED CATALOG CHANGES (Phase 2B) ---
+  require("./scheduled-changes")(app, deps);
+
   // --- ROUTES: PARKED SALES ---
   require("./parked-sales")(app, deps);
 
