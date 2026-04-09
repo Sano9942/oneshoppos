@@ -27,6 +27,8 @@ export default function POSSidebar({ mobile }) {
     cart,
     openCheckout,
     checkoutCustomerTier,
+    appliedPromotions,
+    promoDiscount,
   } = usePOS();
 
   return (
@@ -174,6 +176,14 @@ export default function POSSidebar({ mobile }) {
               Discount {discountType === "percent" ? `(${discountInput}%)` : ""}
             </span>
             <span>- {money(discountValue)}</span>
+          </div>
+        )}
+        {promoDiscount > 0 && (
+          <div className="flex justify-between text-green-400">
+            <span className="flex items-center gap-1">
+              Promo{appliedPromotions.length > 1 ? ` (${appliedPromotions.length})` : appliedPromotions[0]?.name ? ` — ${appliedPromotions[0].name}` : ""}
+            </span>
+            <span>- {money(promoDiscount)}</span>
           </div>
         )}
         {taxInclusive && taxTotal > 0 && (

@@ -141,6 +141,10 @@ export const POSProvider = ({ children }) => {
   const [posLayout, setPosLayout] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
 
+  // ── Auto-apply promotions (Phase 2) ─────────────────────────────────
+  const [appliedPromotions, setAppliedPromotions] = useState([]);
+  const [promoDiscount, setPromoDiscount] = useState(0);
+
   // ── Return / Exchange Modal ───────────────────────────────────────────────
   const [returnModalOpen, setReturnModalOpen] = useState(false);
   // Pre-loaded sale when opened from Recent Sales panel (null = no-bill mode)
@@ -498,6 +502,27 @@ export const POSProvider = ({ children }) => {
     return () => clearTimeout(timer);
   }, [cart.map(c => c.id).join(",")]);
 
+  // ── Auto-apply promotions (debounced on cart change) ──────────────────
+  useEffect(() => {
+    if (!cart.length) { setAppliedPromotions([]); setPromoDiscount(0); return; }
+    const timer = setTimeout(() => {
+      const items = cart.map(c => ({
+        product_id: c.id,
+        category_id: c.category_id || null,
+        quantity: c.quantity,
+        price: Number(c.price || 0),
+      }));
+      const order_total = items.reduce((s, i) => s + i.price * i.quantity, 0);
+      api.post("/promotions/quote", { items, order_total })
+        .then(d => {
+          setAppliedPromotions(d.applied_promotions || []);
+          setPromoDiscount(Number(d.total_promotion_discount || 0));
+        })
+        .catch(() => { setAppliedPromotions([]); setPromoDiscount(0); });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [cart.map(c => `${c.id}:${c.quantity}:${c.price}`).join(",")]);
+
   // Re-resolve all cart prices when price list changes (customer selected/deselected)
   useEffect(() => {
     setCart((prev) => {
@@ -557,7 +582,7 @@ export const POSProvider = ({ children }) => {
 
   const taxTotal = useMemo(() => calcTaxTotal(cart, taxInclusive), [cart, taxInclusive]);
 
-  const total = calcTotal(grossTotal, discountValue, taxTotal, taxInclusive);
+  const total = calcTotal(grossTotal, discountValue + promoDiscount, taxTotal, taxInclusive);
   const totalPaid = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
 
   // ── Loyalty computations ──────────────────────────────────────────────────
@@ -817,8 +842,8 @@ export const POSProvider = ({ children }) => {
       outlet_id: Number(selectedOutletId),
       employee_id: employee?.id || null,
       customer_id: checkoutCustomerId ? Number(checkoutCustomerId) : null,
-      discount_amount: Number(discountInput || 0),
-      discount_type: discountType,
+      discount_amount: Number(discountInput || 0) + promoDiscount,
+      discount_type: promoDiscount > 0 && !Number(discountInput || 0) ? "fixed" : discountType,
       notes: orderNote || null,
       points_earned: checkoutCustomerId ? pointsEarned : 0,
       points_redeemed: checkoutCustomerId ? pointsRedeemed : 0,
@@ -1278,6 +1303,9 @@ export const POSProvider = ({ children }) => {
     // POS layout + suggestions (Phase 2B)
     posLayout,
     suggestions,
+    // Auto-apply promotions (Phase 2)
+    appliedPromotions,
+    promoDiscount,
   };
 
   return <POSContext.Provider value={value}>{children}</POSContext.Provider>;
