@@ -1204,19 +1204,61 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
   // ── POST /api/fulfillment/cod/settlements/:id/resolve ───────────────
   app.post("/api/fulfillment/cod/settlements/:id/resolve", ...codPerm, async (req, res) => {
     try {
-      const { line_id, resolution_note } = req.body || {};
+      const { line_id, resolution_note, matched_order_id } = req.body || {};
       if (!line_id) return res.status(400).json({ error: "line_id required" });
 
-      await db.query(
-        `UPDATE cod_settlement_lines SET
-           resolution_note = $1, resolved_by = $2, resolved_at = NOW()
-         WHERE id = $3 AND batch_id = $4`,
-        [resolution_note || "", req.employee?.id || null, line_id, req.params.id]
-      );
+      await db.transaction(async (client) => {
+        if (matched_order_id) {
+          // Manual match — look up the web_order, recompute fields
+          const { rows: [order] } = await client.query(
+            "SELECT grand_total FROM web_orders WHERE id = $1",
+            [matched_order_id]
+          );
+          if (!order) {
+            throw Object.assign(new Error("web_order not found"), { statusCode: 404 });
+          }
+
+          const { rows: [line] } = await client.query(
+            "SELECT remitted_amount FROM cod_settlement_lines WHERE id = $1 AND batch_id = $2",
+            [line_id, req.params.id]
+          );
+          if (!line) {
+            throw Object.assign(new Error("Line not found"), { statusCode: 404 });
+          }
+
+          const expected = Number(order.grand_total);
+          const remitted = Number(line.remitted_amount);
+          const diff = remitted - expected;
+          let status = "matched";
+          if (diff < -0.01) status = "short";
+          else if (diff > 0.01) status = "over";
+
+          await client.query(
+            `UPDATE cod_settlement_lines SET
+               matched_order_id = $1,
+               expected_amount = $2,
+               difference = $3,
+               match_status = $4,
+               resolution_note = $5,
+               resolved_by = $6,
+               resolved_at = NOW()
+             WHERE id = $7 AND batch_id = $8`,
+            [matched_order_id, expected, diff, status, resolution_note || "", req.employee?.id || null, line_id, req.params.id]
+          );
+        } else {
+          // Note-only resolution (original behavior)
+          await client.query(
+            `UPDATE cod_settlement_lines SET
+               resolution_note = $1, resolved_by = $2, resolved_at = NOW()
+             WHERE id = $3 AND batch_id = $4`,
+            [resolution_note || "", req.employee?.id || null, line_id, req.params.id]
+          );
+        }
+      });
 
       res.json({ ok: true });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
 
