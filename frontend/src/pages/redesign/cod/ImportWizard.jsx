@@ -120,7 +120,7 @@ export default function ImportWizard({ onCancel, onComplete }) {
   const amountIdx = headers.indexOf(mapping.remitted_amount);
   const hasBadAmounts =
     amountIdx >= 0 &&
-    rows.slice(0, 50).some((r) => {
+    rows.some((r) => {
       const v = r[amountIdx];
       if (v === "" || v === null || v === undefined) return false;
       return !isFinite(Number(v));
@@ -355,7 +355,7 @@ export default function ImportWizard({ onCancel, onComplete }) {
             </label>
             <input
               type="text"
-              placeholder={`e.g. ${selectedCourier?.name || "Courier"} — Week of ${new Date().toISOString().slice(0, 10)}`}
+              placeholder={`e.g. ${selectedCourier?.name || "Courier"} — Week of ${new Date().toLocaleDateString("en-CA")}`}
               value={batchRef}
               onChange={(e) => setBatchRef(e.target.value)}
               className="w-full max-w-md rounded-lg border border-(--border) bg-(--bg-input) text-(--text-primary) px-3 py-2 text-sm"
