@@ -4,6 +4,7 @@ import { api } from "../../../api";
 import { Button } from "../../../ui/primitives";
 import { useToast } from "../../../contexts/ToastContext";
 import BatchHeaderCard from "./BatchHeaderCard";
+import LineTable from "./LineTable";
 
 export default function BatchDetail({ batchId, onBack }) {
   const toast = useToast();
@@ -27,6 +28,23 @@ export default function BatchDetail({ batchId, onBack }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function handleResolveNote(lineId, note) {
+    try {
+      await api.post(`/api/fulfillment/cod/settlements/${batchId}/resolve`, {
+        line_id: lineId,
+        resolution_note: note,
+      });
+      toast.success("Note saved");
+      await load();
+    } catch (err) {
+      toast.error(err.message || "Failed to save note");
+    }
+  }
+
+  function handleManualMatch() {
+    toast.warning("Manual match modal pending (task 11)");
+  }
 
   if (loading) {
     return <div className="py-16 text-center text-(--text-muted) text-sm">Loading…</div>;
@@ -54,9 +72,12 @@ export default function BatchDetail({ batchId, onBack }) {
         {/* State-dependent action buttons — populated in task 12 */}
       </BatchHeaderCard>
 
-      <div className="p-5 text-center text-(--text-muted) text-sm">
-        Line table — {lines.length} lines (implemented in task 10)
-      </div>
+      <LineTable
+        lines={lines}
+        readOnly={batch.status === "approved" || batch.status === "rejected"}
+        onResolveNote={handleResolveNote}
+        onManualMatch={handleManualMatch}
+      />
     </div>
   );
 }
