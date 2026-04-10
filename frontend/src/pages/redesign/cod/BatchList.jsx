@@ -33,10 +33,13 @@ export default function BatchList({ onOpenImport, onOpenBatch }) {
     async function fetchBatches() {
       setLoading(true);
       try {
-        const qs = new URLSearchParams();
-        if (filter.courier_id) qs.set("courier_id", filter.courier_id);
-        if (filter.status) qs.set("status", filter.status);
-        const data = await api.get(`/api/fulfillment/cod/settlements?${qs.toString()}`);
+        const query = {};
+        if (filter.courier_id) query.courier_id = filter.courier_id;
+        if (filter.status) query.status = filter.status;
+        const data = await api.get(
+          "/api/fulfillment/cod/settlements",
+          Object.keys(query).length ? query : undefined,
+        );
         if (!cancelled) setBatches(data.batches || []);
       } catch (err) {
         if (!cancelled) toast.error(err.message || "Failed to load batches");

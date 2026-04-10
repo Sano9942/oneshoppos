@@ -2,10 +2,12 @@ import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { PageShell, SectionCard } from "../../ui/primitives";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
+import { useAuth } from "../../auth/AuthProvider";
 import BatchList from "./cod/BatchList";
 
 export default function CODSettlementsRedesign() {
-  const { flags, loading: flagsLoading } = useFeatureFlags();
+  const { authHeaders } = useAuth();
+  const { flags, loading: flagsLoading } = useFeatureFlags(authHeaders);
   const [view, setView] = useState({ name: "list" });
 
   if (flagsLoading) {
