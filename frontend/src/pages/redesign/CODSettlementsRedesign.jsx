@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Wallet } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { PageShell, SectionCard } from "../../ui/primitives";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
+import BatchList from "./cod/BatchList";
 
 export default function CODSettlementsRedesign() {
   const { flags, loading: flagsLoading } = useFeatureFlags();
@@ -28,10 +28,20 @@ export default function CODSettlementsRedesign() {
       subtitle="Reconcile cash-on-delivery remittances from couriers"
     >
       <SectionCard>
-        <div className="px-4 py-16 text-center text-(--text-muted) text-sm">
-          <Wallet size={32} className="mx-auto mb-3" />
-          Coming soon — view: {view.name}
-        </div>
+        {view.name === "list" && (
+          <BatchList
+            onOpenImport={() => setView({ name: "import" })}
+            onOpenBatch={(batchId) => setView({ name: "detail", batchId })}
+          />
+        )}
+        {view.name !== "list" && (
+          <div className="p-8 text-center text-(--text-muted) text-sm">
+            View "{view.name}" not yet implemented —
+            <button onClick={() => setView({ name: "list" })} className="ml-2 text-(--accent) underline">
+              back to list
+            </button>
+          </div>
+        )}
       </SectionCard>
     </PageShell>
   );
