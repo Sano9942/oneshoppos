@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Plus, Eye } from "lucide-react";
-import api from "../../../api";
+import { api } from "../../../api";
 import { Button } from "../../../ui/primitives";
 import { useCurrency } from "../../../contexts/CurrencyContext";
 import { useToast } from "../../../contexts/ToastContext";
