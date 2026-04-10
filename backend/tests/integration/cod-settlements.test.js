@@ -240,4 +240,96 @@ describe("COD settlements — /resolve extension", () => {
       expect(res.body.error).toMatch(/review/i);
     });
   });
+
+  describe("full flow", () => {
+    test("import → match → manual match unmatched → approve", async () => {
+      // Seed a web order that will auto-match by tracking_number.
+      // payment_status='pending' satisfies the /match handler's filter
+      // (payment_status IN ('cod','pending')).
+      await db.query(
+        `INSERT INTO web_orders (id, source, external_order_id, external_order_number, grand_total, payment_status, tracking_number)
+         VALUES (900, 'manual', 'E2E-900', 'E2E-900', 500.00, 'pending', 'TRK-AUTO')
+         ON CONFLICT (id) DO UPDATE SET tracking_number = 'TRK-AUTO', grand_total = 500.00`
+      );
+
+      // Seed another for manual match (no tracking_number so auto-match misses it).
+      await db.query(
+        `INSERT INTO web_orders (id, source, external_order_id, external_order_number, grand_total, payment_status)
+         VALUES (901, 'manual', 'E2E-901', 'E2E-901', 300.00, 'pending')
+         ON CONFLICT (id) DO UPDATE SET grand_total = 300.00`
+      );
+
+      // 1. Import — creates a new batch with two lines
+      const importRes = await request(app)
+        .post("/api/fulfillment/cod/settlements/import")
+        .set(authHeaders)
+        .send({
+          courier_id: 1,
+          batch_ref: "E2E-BATCH",
+          lines: [
+            { courier_tracking_number: "TRK-AUTO", remitted_amount: 500, courier_fee: 25 },
+            { courier_tracking_number: "TRK-UNKNOWN", remitted_amount: 300, courier_fee: 15 },
+          ],
+        });
+      expect(importRes.status).toBe(200);
+      expect(importRes.body.batch).toBeDefined();
+      const batchId = importRes.body.batch.id;
+
+      // 2. Auto-match
+      const matchRes = await request(app)
+        .post(`/api/fulfillment/cod/settlements/${batchId}/match`)
+        .set(authHeaders)
+        .send({});
+      expect(matchRes.status).toBe(200);
+
+      // Verify auto-match results directly against the DB
+      const { rows: lines1 } = await db.query(
+        "SELECT id, match_status, matched_order_id, courier_tracking_number FROM cod_settlement_lines WHERE batch_id = $1 ORDER BY id",
+        [batchId]
+      );
+      expect(lines1).toHaveLength(2);
+
+      const autoLine = lines1.find((l) => l.courier_tracking_number === "TRK-AUTO");
+      const unknownLine = lines1.find((l) => l.courier_tracking_number === "TRK-UNKNOWN");
+      expect(autoLine.match_status).toBe("matched");
+      expect(autoLine.matched_order_id).toBe(900);
+      expect(unknownLine.match_status).toBe("unmatched");
+
+      // 3. Manual match the unmatched line via /resolve with matched_order_id
+      const resolveRes = await request(app)
+        .post(`/api/fulfillment/cod/settlements/${batchId}/resolve`)
+        .set(authHeaders)
+        .send({
+          line_id: unknownLine.id,
+          matched_order_id: 901,
+          resolution_note: "e2e manual",
+        });
+      expect(resolveRes.status).toBe(200);
+
+      // Verify the manual-match classification and recomputed amounts
+      const { rows: [updatedLine] } = await db.query(
+        "SELECT match_status, matched_order_id, expected_amount, difference FROM cod_settlement_lines WHERE id = $1",
+        [unknownLine.id]
+      );
+      expect(updatedLine.match_status).toBe("matched");
+      expect(updatedLine.matched_order_id).toBe(901);
+      expect(Number(updatedLine.expected_amount)).toBe(300.00);
+      expect(Number(updatedLine.difference)).toBe(0);
+
+      // 4. Approve as admin (authHeaders = employee id 1, all_access)
+      const approveRes = await request(app)
+        .post(`/api/fulfillment/cod/settlements/${batchId}/approve`)
+        .set(authHeaders)
+        .send({});
+      expect(approveRes.status).toBe(200);
+
+      // Final state: batch flipped to 'approved' with approved_at timestamp
+      const { rows: [finalBatch] } = await db.query(
+        "SELECT status, approved_by, approved_at FROM cod_settlement_batches WHERE id = $1",
+        [batchId]
+      );
+      expect(finalBatch.status).toBe("approved");
+      expect(finalBatch.approved_at).not.toBeNull();
+    });
+  });
 });
