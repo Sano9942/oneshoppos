@@ -52,9 +52,9 @@ export default function CommissionPlansRedesign() {
 
   useEffect(() => {
     Promise.all([
-      api.get("/commission-plans").catch(() => ({ plans: [] })),
-      api.get("/commissions/earnings").catch(() => ({ earnings: [], summary: {} })),
-      api.get("/employees").catch(() => ({ employees: [] })),
+      api.get("/api/commission-plans").catch(() => ({ plans: [] })),
+      api.get("/api/commissions/earnings").catch(() => ({ earnings: [], summary: {} })),
+      api.get("/api/employees").catch(() => ({ employees: [] })),
     ]).then(([p, e, emp]) => {
       setPlans(p.plans || []);
       setEarnings(e.earnings || []);
@@ -91,7 +91,7 @@ export default function CommissionPlansRedesign() {
         setPlans(prev => prev.map(p => p.id === editingPlan.id ? { ...res.plan, rules: planForm.rules, assigned_employees: p.assigned_employees } : p));
         toast.success("Plan updated");
       } else {
-        const res = await api.post("/commission-plans", body);
+        const res = await api.post("/api/commission-plans", body);
         setPlans(prev => [...prev, { ...res.plan, rules: planForm.rules, assigned_employees: "0" }]);
         toast.success("Plan created");
       }
@@ -118,7 +118,7 @@ export default function CommissionPlansRedesign() {
       await api.post(`/commission-plans/${showAssignModal.id}/assign`, { employee_ids: selectedEmployees });
       toast.success("Employees assigned");
       setShowAssignModal(null);
-      const res = await api.get("/commission-plans");
+      const res = await api.get("/api/commission-plans");
       setPlans(res.plans || []);
     } catch (err) { toast.error(err.message); }
   };

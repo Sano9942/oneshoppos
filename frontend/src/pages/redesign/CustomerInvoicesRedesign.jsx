@@ -47,7 +47,7 @@ export default function CustomerInvoicesRedesign() {
     const params = statusFilter ? `?status=${statusFilter}` : "";
     const [inv, cust] = await Promise.all([
       api.get(`/customer-invoices${params}`).catch(() => ({ invoices: [], total: 0 })),
-      api.get("/customers?limit=500").catch(() => ({ customers: [] })),
+      api.get("/api/customers?limit=500").catch(() => ({ customers: [] })),
     ]);
     setInvoices(inv.invoices || []);
     setTotal(inv.total || 0);
@@ -79,7 +79,7 @@ export default function CustomerInvoicesRedesign() {
   const createInvoice = async () => {
     setSaving(true);
     try {
-      await api.post("/customer-invoices", {
+      await api.post("/api/customer-invoices", {
         customer_id: Number(form.customer_id),
         items: form.items.map((i) => ({ ...i, quantity: Number(i.quantity), unit_price: Number(i.unit_price), tax_rate: Number(i.tax_rate) })),
         due_date: form.due_date || undefined,
@@ -154,7 +154,7 @@ export default function CustomerInvoicesRedesign() {
 
   const createBatch = async () => {
     try {
-      const result = await api.post("/customer-invoices/batch", {
+      const result = await api.post("/api/customer-invoices/batch", {
         customer_ids: batchForm.customer_ids.map(Number),
         items: batchForm.items.map((i) => ({ ...i, quantity: Number(i.quantity), unit_price: Number(i.unit_price), tax_rate: Number(i.tax_rate) })),
         due_date: batchForm.due_date || undefined,

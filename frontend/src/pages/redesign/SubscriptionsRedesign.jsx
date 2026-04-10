@@ -40,9 +40,9 @@ export default function SubscriptionsRedesign() {
   const load = useCallback(async () => {
     setLoading(true);
     const [p, s, c] = await Promise.all([
-      api.get("/subscription-plans").catch(() => ({ plans: [] })),
-      api.get("/customer-subscriptions").catch(() => ({ subscriptions: [] })),
-      api.get("/customers?limit=500").catch(() => ({ customers: [] })),
+      api.get("/api/subscription-plans").catch(() => ({ plans: [] })),
+      api.get("/api/customer-subscriptions").catch(() => ({ subscriptions: [] })),
+      api.get("/api/customers?limit=500").catch(() => ({ customers: [] })),
     ]);
     setPlans(p.plans || []);
     setSubscriptions(s.subscriptions || []);
@@ -61,7 +61,7 @@ export default function SubscriptionsRedesign() {
         await api.put(`/subscription-plans/${editingPlan.id}`, body);
         toast.success("Plan updated");
       } else {
-        await api.post("/subscription-plans", body);
+        await api.post("/api/subscription-plans", body);
         toast.success("Plan created");
       }
       setShowPlanModal(false);
@@ -71,7 +71,7 @@ export default function SubscriptionsRedesign() {
 
   const createSubscription = async () => {
     try {
-      await api.post("/customer-subscriptions", {
+      await api.post("/api/customer-subscriptions", {
         plan_id: Number(subForm.plan_id),
         customer_id: Number(subForm.customer_id),
         auto_charge: subForm.auto_charge,

@@ -38,7 +38,7 @@ export default function KDSRedesign() {
 
   const loadStations = useCallback(async () => {
     try {
-      const data = await api.get("/restaurant/kds/stations");
+      const data = await api.get("/api/restaurant/kds/stations");
       setStations(data.stations || []);
       if (data.stations?.length && !activeStation) {
         setActiveStation(data.stations[0].id);

@@ -45,7 +45,7 @@ export default function POSLayoutsRedesign() {
   const [form, setForm] = useState({ name: "", scope_type: "global", scope_id: null, tiles: [] });
 
   useEffect(() => {
-    api.get("/pos-layouts/all").then(r => {
+    api.get("/api/pos-layouts/all").then(r => {
       setLayouts(r.layouts || []);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -71,7 +71,7 @@ export default function POSLayoutsRedesign() {
         setLayouts(prev => prev.map(l => l.id === editing.id ? res.layout : l));
         toast.success("Layout updated");
       } else {
-        const res = await api.post("/pos-layouts", { name: form.name, scope_type: form.scope_type, scope_id: form.scope_id || null, layout_json: form.tiles });
+        const res = await api.post("/api/pos-layouts", { name: form.name, scope_type: form.scope_type, scope_id: form.scope_id || null, layout_json: form.tiles });
         setLayouts(prev => [...prev, res.layout]);
         toast.success("Layout created");
       }

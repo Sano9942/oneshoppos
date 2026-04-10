@@ -42,7 +42,7 @@ export default function ScheduledChangesRedesign() {
   const handleCreate = async () => {
     if (!form.entity_id || !form.new_value || !form.scheduled_at) return toast.error("Fill all required fields");
     try {
-      const res = await api.post("/catalog/scheduled-changes", {
+      const res = await api.post("/api/catalog/scheduled-changes", {
         ...form,
         entity_id: Number(form.entity_id),
       });

@@ -33,8 +33,8 @@ export default function KioskOrderingRedesign() {
     setLoading(true);
     try {
       const [catData, prodData] = await Promise.all([
-        api.get("/restaurant/kiosk/categories").catch(() => ({ categories: [] })),
-        api.get("/restaurant/kiosk/products").catch(() => ({ products: [] })),
+        api.get("/api/restaurant/kiosk/categories").catch(() => ({ categories: [] })),
+        api.get("/api/restaurant/kiosk/products").catch(() => ({ products: [] })),
       ]);
       setCategories(catData.categories || []);
       setProducts(prodData.products || []);
@@ -75,7 +75,7 @@ export default function KioskOrderingRedesign() {
   const submitOrder = async () => {
     setSubmitting(true);
     try {
-      const result = await api.post("/restaurant/kiosk/orders", {
+      const result = await api.post("/api/restaurant/kiosk/orders", {
         table_id: tableId ? Number(tableId) : undefined,
         customer_name: orderName || undefined,
         items: cart.map(c => ({ product_id: c.id, quantity: c.quantity })),

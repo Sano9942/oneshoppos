@@ -32,7 +32,7 @@ export const POSProvider = ({ children }) => {
   // ── Feature flags (lightweight, one-shot fetch) ───────────────────────────
   const [posFlags, setPosFlags] = useState({});
   useEffect(() => {
-    api.get("/feature-flags").then(d => {
+    api.get("/api/feature-flags").then(d => {
       const map = {};
       for (const f of (d.flags || [])) map[f.key] = f.enabled;
       setPosFlags(map);
@@ -513,7 +513,7 @@ export const POSProvider = ({ children }) => {
         price: Number(c.price || 0),
       }));
       const order_total = items.reduce((s, i) => s + i.price * i.quantity, 0);
-      api.post("/promotions/quote", { items, order_total })
+      api.post("/api/promotions/quote", { items, order_total })
         .then(d => {
           setAppliedPromotions(d.applied_promotions || []);
           setPromoDiscount(Number(d.total_promotion_discount || 0));
@@ -656,7 +656,7 @@ export const POSProvider = ({ children }) => {
     }));
     try {
       if (posFlags.phase2_draft_orders) {
-        await api.post("/draft-orders", {
+        await api.post("/api/draft-orders", {
           outlet_id: Number(selectedOutletId),
           customer_id: selectedCustomerId ? Number(selectedCustomerId) : null,
           notes: orderNote || null,

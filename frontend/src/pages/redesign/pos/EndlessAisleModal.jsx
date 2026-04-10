@@ -55,7 +55,7 @@ export default function EndlessAisleModal() {
     }
     setSubmitting(true);
     try {
-      await api.post("/orders/endless-aisle", {
+      await api.post("/api/orders/endless-aisle", {
         product_id: product.id,
         variant_id: product.variant_id || null,
         source_outlet_id: Number(selectedOutletId),

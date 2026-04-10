@@ -54,8 +54,8 @@ export default function SchedulingRedesign() {
       if (selectedOutlet) params.set("outlet_id", selectedOutlet);
       const [shiftsRes, empRes, outRes] = await Promise.all([
         api.get(`/schedules?${params}`),
-        api.get("/employees"),
-        api.get("/outlets"),
+        api.get("/api/employees"),
+        api.get("/api/outlets"),
       ]);
       setShifts(shiftsRes.shifts || []);
       setEmployees(empRes.employees || []);
@@ -80,7 +80,7 @@ export default function SchedulingRedesign() {
     const draftIds = shifts.filter(s => s.status === "draft").map(s => s.id);
     if (draftIds.length === 0) return toast.warning("No draft shifts to publish");
     try {
-      const res = await api.post("/schedules/publish", { shift_ids: draftIds, notify: "affected" });
+      const res = await api.post("/api/schedules/publish", { shift_ids: draftIds, notify: "affected" });
       toast.success(`Published ${res.published} shift(s)`);
       if (res.leave_conflicts?.length) {
         toast.warning(`${res.leave_conflicts.length} shift(s) conflict with approved leave`);
@@ -97,7 +97,7 @@ export default function SchedulingRedesign() {
         await api.put(`/schedules/${editShift.id}`, data);
         toast.success("Shift updated");
       } else {
-        await api.post("/schedules", data);
+        await api.post("/api/schedules", data);
         toast.success("Shift created");
       }
       setShowModal(false);

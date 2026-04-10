@@ -26,7 +26,7 @@ export default function RestaurantFloorRedesign() {
   const loadPlans = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get("/restaurant/floor-plans?outlet_id=1");
+      const data = await api.get("/api/restaurant/floor-plans?outlet_id=1");
       setPlans(data.floor_plans || []);
       if (data.floor_plans?.length && !activePlan) {
         setActivePlan(data.floor_plans[0].id);
@@ -54,7 +54,7 @@ export default function RestaurantFloorRedesign() {
 
   const openSession = async (tableId) => {
     try {
-      await api.post("/restaurant/table-sessions", { table_id: tableId, guest_count: seatForm.guest_count, server_id: seatForm.server_id || undefined });
+      await api.post("/api/restaurant/table-sessions", { table_id: tableId, guest_count: seatForm.guest_count, server_id: seatForm.server_id || undefined });
       toast.success("Table seated");
       setShowSeatModal(null);
       loadFloorDetail();

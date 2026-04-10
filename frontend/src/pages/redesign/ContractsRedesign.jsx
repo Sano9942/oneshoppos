@@ -138,7 +138,7 @@ function CreateContractModal({ customers, templates, onClose, onCreated }) {
         if (match) return { name: match[1].trim(), email: match[2].trim() };
         return { email: s };
       });
-      await api.post("/contracts", {
+      await api.post("/api/contracts", {
         title: form.title,
         customer_id: form.customer_id ? Number(form.customer_id) : undefined,
         template_id: form.template_id ? Number(form.template_id) : undefined,
@@ -206,7 +206,7 @@ function CreateTemplateModal({ onClose, onCreated }) {
     if (!form.name.trim()) { toast.error("Template name is required"); return; }
     setSaving(true);
     try {
-      await api.post("/contract-templates", { name: form.name, body: form.body || undefined });
+      await api.post("/api/contract-templates", { name: form.name, body: form.body || undefined });
       toast.success("Template created");
       onCreated();
       onClose();
@@ -414,14 +414,14 @@ export default function ContractsRedesign() {
 
   const loadTemplates = useCallback(async () => {
     try {
-      const data = await api.get("/contract-templates");
+      const data = await api.get("/api/contract-templates");
       setTemplates(data.templates || []);
     } catch {}
   }, []);
 
   const loadCustomers = useCallback(async () => {
     try {
-      const data = await api.get("/customers");
+      const data = await api.get("/api/customers");
       setCustomers(data.customers || data || []);
     } catch {}
   }, []);

@@ -52,8 +52,8 @@ export default function MarketingCampaignsRedesign() {
   const load = useCallback(async () => {
     setLoading(true);
     const [c, t] = await Promise.all([
-      api.get("/marketing/campaigns").catch(() => ({ campaigns: [] })),
-      api.get("/marketing/templates").catch(() => ({ templates: [] })),
+      api.get("/api/marketing/campaigns").catch(() => ({ campaigns: [] })),
+      api.get("/api/marketing/templates").catch(() => ({ templates: [] })),
     ]);
     setCampaigns(c.campaigns || []);
     setTemplates(t.templates || []);
@@ -97,7 +97,7 @@ export default function MarketingCampaignsRedesign() {
         await api.put(`/marketing/campaigns/${editingCampaign.id}`, body);
         toast.success("Campaign updated");
       } else {
-        await api.post("/marketing/campaigns", body);
+        await api.post("/api/marketing/campaigns", body);
         toast.success("Campaign created");
       }
       setShowComposer(false);
@@ -139,7 +139,7 @@ export default function MarketingCampaignsRedesign() {
         await api.put(`/marketing/templates/${editingTemplate.id}`, templateForm);
         toast.success("Template updated");
       } else {
-        await api.post("/marketing/templates", templateForm);
+        await api.post("/api/marketing/templates", templateForm);
         toast.success("Template created");
       }
       setShowTemplateModal(false);

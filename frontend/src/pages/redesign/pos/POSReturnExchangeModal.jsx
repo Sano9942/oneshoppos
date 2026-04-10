@@ -35,7 +35,7 @@ export default function POSReturnExchangeModal() {
   const [approvalEventId, setApprovalEventId] = useState(null);
 
   useEffect(() => {
-    api.get("/return-reasons").then(r => setReturnReasons(r.reasons || [])).catch(() => {});
+    api.get("/api/return-reasons").then(r => setReturnReasons(r.reasons || [])).catch(() => {});
   }, []);
 
   // Separate search state for no-bill return items vs exchange replacement items

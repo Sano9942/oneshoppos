@@ -67,7 +67,7 @@ function TierModal({ open, editing, onClose, onSaved }) {
         await api.put(`/loyalty/tiers/${editing.id}`, body);
         success("Tier updated");
       } else {
-        await api.post("/loyalty/tiers", body);
+        await api.post("/api/loyalty/tiers", body);
         success("Tier created");
       }
       onSaved();
@@ -222,7 +222,7 @@ export default function LoyaltyTiersRedesign() {
 
   const load = useCallback(async () => {
     try {
-      const data = await api.get("/loyalty/tiers");
+      const data = await api.get("/api/loyalty/tiers");
       setTiers(data.tiers || []);
     } catch (err) {
       toastError(err.message || "Failed to load tiers");

@@ -183,6 +183,12 @@ export const SHOPIFY_NAV_GROUPS = [
     ],
   },
   {
+    label: "Online Store",
+    items: [
+      { name: "View Storefront", path: "__STOREFRONT__", icon: MonitorPlay, newTab: true },
+    ],
+  },
+  {
     label: "Compliance",
     items: [
       { name: "FBR Invoices", path: "/fbr", icon: Receipt, requiredPerm: "all_access", requiredFlag: "fbr_integration" },

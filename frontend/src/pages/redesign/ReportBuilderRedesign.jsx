@@ -40,8 +40,8 @@ export default function ReportBuilderRedesign() {
 
   useEffect(() => {
     Promise.all([
-      api.get("/reports/builder/datasets").catch(() => ({ datasets: [] })),
-      api.get("/reports/builder/definitions").catch(() => ({ definitions: [] })),
+      api.get("/api/reports/builder/datasets").catch(() => ({ datasets: [] })),
+      api.get("/api/reports/builder/definitions").catch(() => ({ definitions: [] })),
     ]).then(([d, defs]) => {
       setDatasets(d.datasets || []);
       setDefinitions(defs.definitions || []);
@@ -58,7 +58,7 @@ export default function ReportBuilderRedesign() {
       const filters = {};
       if (filterFrom) filters.from = filterFrom;
       if (filterTo) filters.to = filterTo;
-      const res = await api.post("/reports/builder/run", {
+      const res = await api.post("/api/reports/builder/run", {
         dataset: selectedDataset, dimensions: selectedDims, measures: selectedMeasures,
         filters, sort_by: sortBy || undefined, sort_order: sortOrder,
       });
@@ -73,7 +73,7 @@ export default function ReportBuilderRedesign() {
       const filters = {};
       if (filterFrom) filters.from = filterFrom;
       if (filterTo) filters.to = filterTo;
-      const res = await api.post("/reports/builder/definitions", {
+      const res = await api.post("/api/reports/builder/definitions", {
         name: saveName, description: saveDesc, dataset: selectedDataset,
         dimensions: selectedDims, measures: selectedMeasures,
         filters_json: filters, sort_by: sortBy || null, sort_order: sortOrder,

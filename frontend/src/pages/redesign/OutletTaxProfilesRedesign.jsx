@@ -24,11 +24,11 @@ export default function OutletTaxProfilesRedesign() {
 
   useEffect(() => {
     Promise.all([
-      api.get("/outlet-tax-profiles").catch(() => ({ profiles: [] })),
-      api.get("/taxes").catch(() => ({ taxes: [] })),
-      api.get("/categories").catch(() => ({ categories: [] })),
-      api.get("/products?limit=500").catch(() => ({ products: [] })),
-      api.get("/outlets").catch(() => ({ outlets: [] })),
+      api.get("/api/outlet-tax-profiles").catch(() => ({ profiles: [] })),
+      api.get("/api/taxes").catch(() => ({ taxes: [] })),
+      api.get("/api/categories").catch(() => ({ categories: [] })),
+      api.get("/api/products?limit=500").catch(() => ({ products: [] })),
+      api.get("/api/outlets").catch(() => ({ outlets: [] })),
     ]).then(([p, t, c, pr, o]) => {
       setProfiles(p.profiles || []);
       setTaxes(t.taxes || []);

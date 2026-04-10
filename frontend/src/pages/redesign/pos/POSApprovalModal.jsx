@@ -37,7 +37,7 @@ export default function POSApprovalModal({
     setLoading(true);
     setError("");
     try {
-      const res = await api.post("/approvals/pos-authorize", {
+      const res = await api.post("/api/approvals/pos-authorize", {
         action_type: actionType,
         reference_type: referenceType,
         reference_id: referenceId || null,

@@ -27,7 +27,7 @@ export default function RestaurantChecksRedesign() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get("/restaurant/checks?status=open");
+      const data = await api.get("/api/restaurant/checks?status=open");
       setChecks(data.checks || []);
     } catch (err) { toast.error(err.message); }
     finally { setLoading(false); }

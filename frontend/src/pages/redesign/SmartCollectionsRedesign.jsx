@@ -55,7 +55,7 @@ export default function SmartCollectionsRedesign() {
   const [form, setForm] = useState({ name: "", description: "", disjunctive: false, sort_order: "manual", rules: [emptyRule()] });
 
   useEffect(() => {
-    api.get("/smart-collections").then(r => {
+    api.get("/api/smart-collections").then(r => {
       setCollections(r.collections || []);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -82,7 +82,7 @@ export default function SmartCollectionsRedesign() {
         setCollections(prev => prev.map(c => c.id === editing.id ? { ...res.collection, rules: form.rules } : c));
         toast.success("Collection updated");
       } else {
-        const res = await api.post("/smart-collections", form);
+        const res = await api.post("/api/smart-collections", form);
         setCollections(prev => [...prev, { ...res.collection, rules: form.rules }]);
         toast.success("Collection created");
       }

@@ -49,7 +49,7 @@ function CreateProjectModal({ customers, onClose, onCreated }) {
     setSaving(true);
     try {
       const body = { ...form, budget: form.budget ? Number(form.budget) : undefined, customer_id: form.customer_id ? Number(form.customer_id) : undefined };
-      await api.post("/projects", body);
+      await api.post("/api/projects", body);
       toast.success("Project created");
       onCreated();
       onClose();
@@ -341,7 +341,7 @@ export default function ProjectsRedesign() {
 
   const loadCustomers = useCallback(async () => {
     try {
-      const data = await api.get("/customers");
+      const data = await api.get("/api/customers");
       setCustomers(data.customers || data || []);
     } catch {}
   }, []);

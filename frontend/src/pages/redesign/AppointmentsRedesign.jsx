@@ -55,7 +55,7 @@ export default function AppointmentsRedesign() {
 
   const loadEmployees = useCallback(async () => {
     try {
-      const data = await api.get("/employees");
+      const data = await api.get("/api/employees");
       setEmployees(data.employees || data || []);
     } catch {}
   }, []);

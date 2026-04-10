@@ -26,7 +26,7 @@ export default function AppointmentServicesRedesign() {
   const loadServices = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get("/booking-services");
+      const data = await api.get("/api/booking-services");
       setServices(data.services || []);
     } catch (err) { toast.error(err.message); }
     finally { setLoading(false); }
@@ -34,7 +34,7 @@ export default function AppointmentServicesRedesign() {
 
   const loadEmployees = useCallback(async () => {
     try {
-      const data = await api.get("/employees");
+      const data = await api.get("/api/employees");
       setEmployees(data.employees || data || []);
     } catch {}
   }, []);
@@ -77,7 +77,7 @@ export default function AppointmentServicesRedesign() {
         await api.put(`/booking-services/${editing.id}`, payload);
         toast.success("Service updated");
       } else {
-        await api.post("/booking-services", payload);
+        await api.post("/api/booking-services", payload);
         toast.success("Service created");
       }
       setShowModal(false);

@@ -83,8 +83,8 @@ export default function AppointmentsCalendarRedesign() {
   const loadFormData = useCallback(async () => {
     try {
       const [svcData, empData] = await Promise.all([
-        api.get("/booking-services"),
-        api.get("/employees"),
+        api.get("/api/booking-services"),
+        api.get("/api/employees"),
       ]);
       setServices(svcData.services || []);
       setEmployees(empData.employees || empData || []);
@@ -120,7 +120,7 @@ export default function AppointmentsCalendarRedesign() {
       if (!svc) { toast.error("Select a service"); return; }
       const startAt = new Date(createForm.start_at);
       const endAt = new Date(startAt.getTime() + svc.duration_minutes * 60000);
-      await api.post("/appointments", {
+      await api.post("/api/appointments", {
         service_id: Number(createForm.service_id),
         employee_id: createForm.employee_id ? Number(createForm.employee_id) : undefined,
         customer_name: createForm.customer_name || undefined,

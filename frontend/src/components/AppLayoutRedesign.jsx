@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, LogOut, Moon, Search, Sun, User, UserCircle 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { useAuth } from "../auth/AuthProvider";
+import { readTenantSlug } from "../auth/authStore";
 import { SHOPIFY_NAV_GROUPS } from "../ui/nav-config";
 import { Input } from "../ui/primitives";
 import { getTheme, toggleTheme } from "../utils/theme";
@@ -122,7 +123,11 @@ export default function AppLayoutRedesign() {
               <div className="space-y-1">
                 {group.items.map((item) => {
                   const Icon = item.icon;
-                  const active = location.pathname.startsWith(item.path);
+                  // Resolve tenant-specific storefront URL placeholder
+                  const resolvedPath = item.path === "__STOREFRONT__"
+                    ? `/store/${readTenantSlug() || ""}`
+                    : item.path;
+                  const active = location.pathname.startsWith(resolvedPath);
                   const linkClass = `flex items-center gap-2 rounded-[var(--ui-radius-sm)] px-2.5 py-2 text-sm font-medium transition ${
                     active
                       ? "bg-emerald-100 text-emerald-800"
@@ -131,7 +136,7 @@ export default function AppLayoutRedesign() {
                   return item.newTab ? (
                     <a
                       key={item.name}
-                      href={item.path}
+                      href={resolvedPath}
                       target="_blank"
                       rel="noopener noreferrer"
                       className={linkClass}
@@ -142,7 +147,7 @@ export default function AppLayoutRedesign() {
                   ) : (
                     <NavLink
                       key={item.name}
-                      to={item.path}
+                      to={resolvedPath}
                       className={linkClass}
                     >
                       <Icon size={16} />

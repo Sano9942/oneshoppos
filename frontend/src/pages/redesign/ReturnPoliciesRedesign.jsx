@@ -23,8 +23,8 @@ export default function ReturnPoliciesRedesign() {
 
   useEffect(() => {
     Promise.all([
-      api.get("/return-policies").catch(() => ({ policies: [] })),
-      api.get("/return-reasons").catch(() => ({ reasons: [] })),
+      api.get("/api/return-policies").catch(() => ({ policies: [] })),
+      api.get("/api/return-reasons").catch(() => ({ reasons: [] })),
     ]).then(([p, r]) => {
       setPolicies(p.policies || []);
       setReasons(r.reasons || []);
@@ -39,7 +39,7 @@ export default function ReturnPoliciesRedesign() {
         setPolicies(prev => prev.map(p => p.id === editPolicy.id ? res.policy : p));
         toast.success("Policy updated");
       } else {
-        const res = await api.post("/return-policies", data);
+        const res = await api.post("/api/return-policies", data);
         setPolicies(prev => [...prev, res.policy]);
         toast.success("Policy created");
       }
@@ -57,7 +57,7 @@ export default function ReturnPoliciesRedesign() {
         setReasons(prev => prev.map(r => r.id === editReason.id ? res.reason : r));
         toast.success("Reason updated");
       } else {
-        const res = await api.post("/return-reasons", data);
+        const res = await api.post("/api/return-reasons", data);
         setReasons(prev => [...prev, res.reason]);
         toast.success("Reason created");
       }
