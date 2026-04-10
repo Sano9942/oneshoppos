@@ -1219,7 +1219,7 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
           }
 
           const { rows: [line] } = await client.query(
-            "SELECT remitted_amount FROM cod_settlement_lines WHERE id = $1 AND batch_id = $2",
+            "SELECT remitted_amount FROM cod_settlement_lines WHERE id = $1 AND batch_id = $2 FOR UPDATE",
             [line_id, req.params.id]
           );
           if (!line) {
