@@ -792,10 +792,10 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         // 13. Return result
         const paymentGateway = require("../services/payment-gateway");
         return {
-          orderId: order.id,
-          orderToken: publicOrderToken,
-          orderNumber: externalOrderId,
-          grandTotal: Number(order.grand_total),
+          order_id: order.id,
+          order_token: publicOrderToken,
+          order_number: externalOrderId,
+          grand_total: Number(order.grand_total),
           payment_enabled: paymentGateway.isEnabled(),
         };
       });
@@ -873,12 +873,15 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       const { db } = resolved;
 
       const { rows: orderRows } = await db.query(
-        `SELECT id, external_order_id, order_status, payment_status, fulfillment_status,
-                delivery_method, grand_total, subtotal, tax_total, shipping_total, discount_total,
-                customer_name_snapshot, ordered_at,
-                pickup_ready_at, picked_up_at, curbside_arrived_at, currency
-         FROM web_orders
-         WHERE public_order_token = $1`,
+        `SELECT wo.id, wo.external_order_id, wo.order_status, wo.payment_status, wo.fulfillment_status,
+                wo.delivery_method, wo.grand_total, wo.subtotal, wo.tax_total, wo.shipping_total, wo.discount_total,
+                wo.customer_name_snapshot, wo.customer_phone_snapshot, wo.customer_email_snapshot,
+                wo.shipping_address_json, wo.created_at, wo.ordered_at,
+                wo.pickup_ready_at, wo.picked_up_at, wo.curbside_arrived_at, wo.currency,
+                po.name AS pickup_outlet_name, po.address AS pickup_outlet_address
+         FROM web_orders wo
+         LEFT JOIN outlets po ON po.id = wo.pickup_outlet_id
+         WHERE wo.public_order_token = $1`,
         [req.params.orderToken]
       );
 
@@ -895,32 +898,38 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       );
 
       res.json({
-        orderNumber: order.external_order_id,
+        id: order.id,
+        order_number: order.external_order_id,
         status: order.order_status,
-        paymentStatus: order.payment_status,
-        fulfillmentStatus: order.fulfillment_status,
-        deliveryMethod: order.delivery_method,
-        grandTotal: Number(order.grand_total),
+        payment_status: order.payment_status,
+        fulfillment_status: order.fulfillment_status,
+        delivery_method: order.delivery_method,
+        total: Number(order.grand_total),
         subtotal: Number(order.subtotal),
-        taxTotal: Number(order.tax_total),
-        shippingTotal: Number(order.shipping_total),
-        discountTotal: Number(order.discount_total),
+        tax: Number(order.tax_total),
+        shipping_fee: Number(order.shipping_total),
+        discount_total: Number(order.discount_total),
         currency: order.currency,
-        customerName: order.customer_name_snapshot,
-        orderedAt: order.ordered_at,
-        pickupReadyAt: order.pickup_ready_at,
-        pickedUpAt: order.picked_up_at,
-        curbsideArrivedAt: order.curbside_arrived_at,
+        customer_name: order.customer_name_snapshot,
+        customer_phone: order.customer_phone_snapshot,
+        customer_email: order.customer_email_snapshot,
+        shipping_address: order.shipping_address_json,
+        pickup_outlet_name: order.pickup_outlet_name,
+        pickup_outlet_address: order.pickup_outlet_address,
+        created_at: order.created_at || order.ordered_at,
+        pickup_ready_at: order.pickup_ready_at,
+        picked_up_at: order.picked_up_at,
+        curbside_arrived_at: order.curbside_arrived_at,
         items: items.map((i) => ({
           id: i.id,
-          title: i.title,
-          qty: i.qty,
-          unitPrice: Number(i.unit_price),
+          product_name: i.title,
+          quantity: i.qty,
+          unit_price: Number(i.unit_price),
           discount: Number(i.discount),
           tax: Number(i.tax),
-          lineTotal: Number(i.line_total),
-          productId: i.product_id,
-          variantId: i.variant_id,
+          line_total: Number(i.line_total),
+          product_id: i.product_id,
+          variant_id: i.variant_id,
           sku: i.sku,
         })),
       });
