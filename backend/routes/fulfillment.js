@@ -1263,7 +1263,12 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
   });
 
   // ── POST /api/fulfillment/cod/settlements/:id/approve ───────────────
-  app.post("/api/fulfillment/cod/settlements/:id/approve", ...codPerm, async (req, res) => {
+  // Admin-only approval (maker-checker): managers import/match/resolve, admin approves
+  app.post(
+    "/api/fulfillment/cod/settlements/:id/approve",
+    requirePerm("all_access"),
+    requireFeature("phase5_cod_reconciliation"),
+    async (req, res) => {
     try {
       const batchId = req.params.id;
 

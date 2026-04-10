@@ -174,4 +174,30 @@ describe("COD settlements — /resolve extension", () => {
       expect(res.status).toBe(400);
     });
   });
+
+  describe("approve permission (maker-checker)", () => {
+    // Employee id=1 is Administrator (all_access).
+    // Employee id=2 is Manager (has manage_orders but NOT all_access).
+    const managerHeaders = { "x-employee-id": "2" };
+
+    test("manager with manage_orders cannot approve (requires all_access)", async () => {
+      const res = await request(app)
+        .post("/api/fulfillment/cod/settlements/1/approve")
+        .set(managerHeaders)
+        .send({});
+
+      expect(res.status).toBe(403);
+    });
+
+    test("admin with all_access can approve", async () => {
+      const res = await request(app)
+        .post("/api/fulfillment/cod/settlements/1/approve")
+        .set(authHeaders)
+        .send({});
+
+      // batch id=1 was seeded in status='review', so approval should succeed
+      expect(res.status).toBe(200);
+      expect(res.body.approved).toBe(true);
+    });
+  });
 });
