@@ -71,7 +71,7 @@ export default function BatchDetail({ batchId, onBack }) {
       resolution_note: "Manually matched",
     });
     toast.success("Line matched");
-    await load();
+    load().catch(() => {}); // non-blocking — reload failure shouldn't mask match success
   }
 
   async function runMatch() {
