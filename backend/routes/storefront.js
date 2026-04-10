@@ -184,7 +184,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       // Verify product is published on storefront channel
       const { rows: productRows } = await db.query(`
         SELECT
-          p.id, p.name, p.description, p.sku, p.barcode,
+          p.id, p.name, p.description_html AS description, p.sku, p.barcode,
           p.price, p.compare_at_price, p.image_url,
           p.category_id, c.name AS category_name,
           p.brand_id, b.name AS brand_name
@@ -204,12 +204,12 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       const product = productRows[0];
 
       // Fetch variants, images, reviews, pickup availability in parallel
+      // (product_variants has no `name` or `is_active` columns; outlet_stock is product-level only)
       const [variantsRes, imagesRes, reviewsRes, stockRes] = await Promise.all([
         db.query(
-          `SELECT id, name, sku, barcode, price,
-                  COALESCE((SELECT SUM(os.quantity) FROM outlet_stock os WHERE os.product_id = $1 AND os.variant_id = pv.id), 0) AS stock
+          `SELECT id, sku, barcode, price, COALESCE(stock, 0) AS stock
            FROM product_variants pv
-           WHERE pv.product_id = $1 AND pv.is_active = true
+           WHERE pv.product_id = $1
            ORDER BY pv.id`,
           [productId]
         ),
@@ -262,7 +262,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         brandName: product.brand_name,
         variants: variantsRes.rows.map((v) => ({
           id: v.id,
-          name: v.name,
+          name: v.sku || `Variant ${v.id}`,
           sku: v.sku,
           barcode: v.barcode,
           price: parseFloat(v.price),
