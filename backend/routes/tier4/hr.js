@@ -484,10 +484,10 @@ module.exports = function createHRRouter({
           FROM leave_requests lr
           JOIN employees e ON e.id = lr.employee_id
           JOIN scheduled_shifts ss ON ss.employee_id = lr.employee_id
-            AND ss.shift_date BETWEEN lr.start_date AND lr.end_date
+            AND ss.shift_date BETWEEN lr.start_date::date AND lr.end_date::date
             AND ss.status != 'cancelled'
           WHERE lr.status IN ('pending', 'approved')
-            AND lr.start_date <= $2 AND lr.end_date >= $1
+            AND lr.start_date::date <= $2::date AND lr.end_date::date >= $1::date
         `;
         const params = [from, to];
         let idx = 3;

@@ -136,7 +136,7 @@ module.exports = function registerScheduleRoutes(app, deps) {
          JOIN employees e ON ss.employee_id = e.id
          JOIN leave_requests lr ON lr.employee_id = ss.employee_id
            AND lr.status = 'approved'
-           AND ss.shift_date BETWEEN lr.start_date AND lr.end_date
+           AND ss.shift_date BETWEEN lr.start_date::date AND lr.end_date::date
          WHERE ss.id = ANY($1) AND ss.status = 'draft'`,
         [shift_ids]
       );
