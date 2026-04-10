@@ -877,7 +877,8 @@ module.exports = function mountStorefrontRoutes(app, deps) {
                 wo.delivery_method, wo.grand_total, wo.subtotal, wo.tax_total, wo.shipping_total, wo.discount_total,
                 wo.customer_name_snapshot, wo.customer_phone_snapshot, wo.customer_email_snapshot,
                 wo.shipping_address_json, wo.created_at, wo.ordered_at,
-                wo.pickup_ready_at, wo.picked_up_at, wo.curbside_arrived_at, wo.currency,
+                wo.pickup_ready_at, wo.picked_up_at, wo.curbside_arrived_at,
+                wo.shipped_at, wo.delivered_at, wo.currency,
                 po.name AS pickup_outlet_name, po.address AS pickup_outlet_address
          FROM web_orders wo
          LEFT JOIN outlets po ON po.id = wo.pickup_outlet_id
@@ -887,6 +888,23 @@ module.exports = function mountStorefrontRoutes(app, deps) {
 
       if (!orderRows.length) return res.status(404).json({ error: "Order not found" });
       const order = orderRows[0];
+
+      // Derive timeline status from the backend's timestamp-driven state.
+      // The storefront UI expects an enum, but we track progress via columns
+      // (pickup_ready_at, picked_up_at, shipped_at, delivered_at). Map to the
+      // four-step enum the frontend timeline renders.
+      let derivedStatus;
+      if (order.order_status === "cancelled") {
+        derivedStatus = "cancelled";
+      } else if (order.delivery_method === "pickup") {
+        if (order.picked_up_at) derivedStatus = "completed";
+        else if (order.pickup_ready_at) derivedStatus = "ready_for_pickup";
+        else derivedStatus = "processing";
+      } else {
+        if (order.delivered_at || order.fulfillment_status === "delivered") derivedStatus = "completed";
+        else if (order.shipped_at || order.fulfillment_status === "shipped") derivedStatus = "shipped";
+        else derivedStatus = "processing";
+      }
 
       const { rows: items } = await db.query(
         `SELECT woi.id, woi.title, woi.qty, woi.unit_price, woi.discount, woi.tax, woi.line_total,
@@ -900,7 +918,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       res.json({
         id: order.id,
         order_number: order.external_order_id,
-        status: order.order_status,
+        status: derivedStatus,
         payment_status: order.payment_status,
         fulfillment_status: order.fulfillment_status,
         delivery_method: order.delivery_method,
