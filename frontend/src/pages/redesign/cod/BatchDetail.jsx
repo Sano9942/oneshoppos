@@ -3,16 +3,22 @@ import { ArrowLeft } from "lucide-react";
 import { api } from "../../../api";
 import { Button } from "../../../ui/primitives";
 import { useToast } from "../../../contexts/ToastContext";
+import { useAuth } from "../../../auth/AuthProvider";
 import BatchHeaderCard from "./BatchHeaderCard";
 import LineTable from "./LineTable";
 import ManualMatchModal from "./ManualMatchModal";
+import ApproveConfirmModal from "./ApproveConfirmModal";
 
 export default function BatchDetail({ batchId, onBack }) {
   const toast = useToast();
+  const { hasPerm } = useAuth();
   const [batch, setBatch] = useState(null);
   const [lines, setLines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [matchingLine, setMatchingLine] = useState(null);
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [approveBusy, setApproveBusy] = useState(false);
+  const [rematchBusy, setRematchBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,6 +64,33 @@ export default function BatchDetail({ batchId, onBack }) {
     await load();
   }
 
+  async function runMatch() {
+    setRematchBusy(true);
+    try {
+      await api.post(`/api/fulfillment/cod/settlements/${batchId}/match`, {});
+      toast.success("Match re-run");
+      await load();
+    } catch (err) {
+      toast.error(err.message || "Match failed");
+    } finally {
+      setRematchBusy(false);
+    }
+  }
+
+  async function confirmApprove() {
+    setApproveBusy(true);
+    try {
+      await api.post(`/api/fulfillment/cod/settlements/${batchId}/approve`, {});
+      toast.success("Batch approved");
+      setApproveOpen(false);
+      await load();
+    } catch (err) {
+      toast.error(err.message || "Approval failed");
+    } finally {
+      setApproveBusy(false);
+    }
+  }
+
   if (loading) {
     return <div className="py-16 text-center text-(--text-muted) text-sm">Loading…</div>;
   }
@@ -81,7 +114,28 @@ export default function BatchDetail({ batchId, onBack }) {
       </div>
 
       <BatchHeaderCard batch={batch}>
-        {/* State-dependent action buttons — populated in task 12 */}
+        {batch.status === "imported" && (
+          <Button disabled={rematchBusy} onClick={runMatch}>
+            {rematchBusy ? "Matching…" : "Run match"}
+          </Button>
+        )}
+        {batch.status === "matching" && (
+          <Button disabled>Matching in progress…</Button>
+        )}
+        {batch.status === "review" && (
+          <>
+            <Button variant="ghost" disabled={rematchBusy} onClick={runMatch}>
+              {rematchBusy ? "Matching…" : "Re-run match"}
+            </Button>
+            {hasPerm("all_access") ? (
+              <Button onClick={() => setApproveOpen(true)}>Approve batch</Button>
+            ) : (
+              <Button disabled title="Admin only">
+                Approve batch
+              </Button>
+            )}
+          </>
+        )}
       </BatchHeaderCard>
 
       <LineTable
@@ -96,6 +150,14 @@ export default function BatchDetail({ batchId, onBack }) {
         line={matchingLine}
         onClose={() => setMatchingLine(null)}
         onMatched={onMatched}
+      />
+
+      <ApproveConfirmModal
+        open={approveOpen}
+        batch={batch}
+        busy={approveBusy}
+        onCancel={() => setApproveOpen(false)}
+        onConfirm={confirmApprove}
       />
     </div>
   );
