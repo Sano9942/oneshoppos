@@ -75,6 +75,7 @@ const PriceListsRedesign = lazy(() => import("../pages/redesign/PriceListsRedesi
 const CustomerGroupsRedesign = lazy(() => import("../pages/redesign/CustomerGroupsRedesign"));
 const ReviewModerationRedesign = lazy(() => import("../pages/redesign/ReviewModerationRedesign"));
 const FulfillmentRedesign = lazy(() => import("../pages/redesign/FulfillmentRedesign"));
+const CODSettlementsRoute = lazy(() => import("../pages/CODSettlementsRoute"));
 const LoyaltyTiersRoute = lazy(() => import("../pages/LoyaltyTiersRoute"));
 const SmartCollectionsRoute = lazy(() => import("../pages/SmartCollectionsRoute"));
 const CommissionPlansRoute = lazy(() => import("../pages/CommissionPlansRoute"));
@@ -195,6 +196,7 @@ export const appRoutes = [
     <Route path="/review-moderation" element={perm("manage_inventory", <ReviewModerationRedesign />)} />
     {/* Wave 5 — Fulfillment */}
     <Route path="/fulfillment" element={perm("manage_orders", <FulfillmentRedesign />)} />
+    <Route path="/cod-settlements" element={perm("manage_orders", <CODSettlementsRoute />)} />
     {/* Phase 2B — Report Builder, POS Layouts */}
     <Route path="/report-builder" element={perm("view_reports", <ReportBuilderRoute />)} />
     <Route path="/settings/pos-layouts" element={perm("all_access", <POSLayoutsRoute />)} />

@@ -51,6 +51,7 @@ import {
   CalendarCheck,
   FolderKanban,
   FileSignature,
+  Wallet,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -64,6 +65,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "POS", path: "/pos", icon: MonitorPlay, newTab: true },
       { name: "Orders", path: "/orders", icon: ShoppingCart, requiredPerm: "manage_orders" },
       { name: "Fulfillment", path: "/fulfillment", icon: PackageCheck, requiredPerm: "manage_orders" },
+      { name: "COD Settlements", path: "/cod-settlements", icon: Wallet, requiredPerm: "manage_orders", requiredFlag: "phase5_cod_reconciliation" },
       { name: "Parked Sales", path: "/parked-sales", icon: PauseCircle, requiredPerm: "manage_orders" },
       { name: "Customers", path: "/customers", icon: Users },
       { name: "Customer Groups", path: "/customer-groups", icon: Users, requiredPerm: "manage_customers" },

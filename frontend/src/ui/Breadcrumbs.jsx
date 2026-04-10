@@ -10,6 +10,7 @@ const LABELS = {
   quotations: "Quotations",
   orders: "Orders",
   "parked-sales": "Parked Sales",
+  "cod-settlements": "COD Settlements",
   products: "Products",
   categories: "Categories",
   brands: "Brands",
