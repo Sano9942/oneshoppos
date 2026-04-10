@@ -97,8 +97,8 @@ module.exports = function mountStorefrontRoutes(app, deps) {
 
       const whereClause = conditions.join(" AND ");
 
-      // Sort
-      let orderBy = "p.created_at DESC";
+      // Sort (products table has no created_at — id DESC = newest first since SERIAL)
+      let orderBy = "p.id DESC";
       switch (req.query.sort) {
         case "price_asc":
           orderBy = "p.price ASC";
@@ -110,7 +110,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
           orderBy = "p.name ASC";
           break;
         case "newest":
-          orderBy = "p.created_at DESC";
+          orderBy = "p.id DESC";
           break;
       }
 
@@ -137,7 +137,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         LEFT JOIN categories c ON c.id = p.category_id
         WHERE ${whereClause}
         GROUP BY p.id, p.name, p.sku, p.price, p.compare_at_price,
-                 p.image_url, p.category_id, c.name, p.created_at
+                 p.image_url, p.category_id, c.name
         ORDER BY ${orderBy}
         LIMIT $${paramIdx + 1} OFFSET $${paramIdx + 2}
       `;
