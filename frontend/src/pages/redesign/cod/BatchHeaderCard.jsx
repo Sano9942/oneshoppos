@@ -54,7 +54,7 @@ export default function BatchHeaderCard({ batch, children }) {
         <div className="flex items-center gap-2 shrink-0">{children}</div>
       </div>
 
-      {Math.abs(variance) > 0.01 && (
+      {Math.abs(variance) > 0.01 && (batch.unmatched_count || 0) === 0 && (
         <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
           <AlertTriangle size={14} className="shrink-0" />
           <span>
