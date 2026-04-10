@@ -2,15 +2,22 @@ const request = require("supertest");
 const { createTestApp } = require("../helpers/createTestApp-pg");
 
 describe("COD settlements — /resolve extension", () => {
-  let app, db, cleanup;
+  let app, db, deps, cleanup;
   const authHeaders = { "x-employee-id": "1" };
 
   beforeEach(async () => {
-    ({ app, db, cleanup } = await createTestApp());
+    ({ app, db, deps, cleanup } = await createTestApp());
 
-    // Enable the feature flag
+    // Mount routes used by the COD tests
+    require("../../routes/fulfillment")(app, deps);
+    require("../../routes/couriers")(app, deps);
+
+    // Upsert the feature flag so requireFeature("phase5_cod_reconciliation") passes.
+    // schema-pg.sql does not seed this flag; migrate-pg.js adds it later.
     await db.query(
-      "UPDATE feature_flags SET enabled = true WHERE flag_key = 'phase5_cod_reconciliation'"
+      `INSERT INTO feature_flags (key, enabled)
+       VALUES ('phase5_cod_reconciliation', true)
+       ON CONFLICT (key) DO UPDATE SET enabled = true`
     );
 
     // Seed a courier, a web_order, and a cod batch+line
@@ -68,5 +75,56 @@ describe("COD settlements — /resolve extension", () => {
     );
     expect(rows[0].match_status).toBe("unmatched"); // unchanged
     expect(rows[0].resolution_note).toBe("Investigating");
+  });
+
+  describe("GET /api/web-orders/search", () => {
+    beforeEach(async () => {
+      await db.query(
+        `INSERT INTO web_orders (id, source, external_order_id, external_order_number, grand_total, payment_status, customer_name_snapshot, customer_phone_snapshot)
+         VALUES
+           (200, 'manual', 'T-200', 'ORD-200', 1500.00, 'paid', 'Ali Khan', '03001234567'),
+           (201, 'manual', 'T-201', 'ORD-201', 750.50, 'pending', 'Sara Ahmed', '03009999999')
+         ON CONFLICT DO NOTHING`
+      );
+    });
+
+    test("searches by external_order_number", async () => {
+      const res = await request(app)
+        .get("/api/web-orders/search?q=ORD-200")
+        .set(authHeaders);
+      expect(res.status).toBe(200);
+      expect(res.body.orders).toHaveLength(1);
+      expect(res.body.orders[0].id).toBe(200);
+      expect(res.body.orders[0].is_already_matched).toBe(false);
+    });
+
+    test("searches by customer name (case-insensitive)", async () => {
+      const res = await request(app)
+        .get("/api/web-orders/search?q=ali")
+        .set(authHeaders);
+      expect(res.status).toBe(200);
+      expect(res.body.orders.some((o) => o.id === 200)).toBe(true);
+    });
+
+    test("searches by phone", async () => {
+      const res = await request(app)
+        .get("/api/web-orders/search?q=03009999999")
+        .set(authHeaders);
+      expect(res.body.orders.some((o) => o.id === 201)).toBe(true);
+    });
+
+    test("searches by exact grand_total", async () => {
+      const res = await request(app)
+        .get("/api/web-orders/search?q=750.50")
+        .set(authHeaders);
+      expect(res.body.orders.some((o) => o.id === 201)).toBe(true);
+    });
+
+    test("returns empty array for no matches", async () => {
+      const res = await request(app)
+        .get("/api/web-orders/search?q=NONEXISTENT_QUERY_XYZ")
+        .set(authHeaders);
+      expect(res.body.orders).toEqual([]);
+    });
   });
 });

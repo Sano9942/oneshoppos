@@ -1331,4 +1331,50 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
+
+  // ── GET /api/web-orders/search — for manual COD match ───────────────
+  app.get(
+    "/api/web-orders/search",
+    requirePerm("manage_orders"),
+    async (req, res) => {
+      try {
+        const q = (req.query.q || "").trim();
+        if (!q) return res.json({ orders: [] });
+
+        const isNumeric = /^\d+(\.\d+)?$/.test(q);
+        const numericVal = isNumeric ? Number(q) : null;
+
+        const { rows } = await db.query(
+          `SELECT wo.id,
+                  wo.external_order_number,
+                  wo.grand_total,
+                  wo.payment_status,
+                  wo.ordered_at,
+                  wo.customer_name_snapshot,
+                  wo.customer_phone_snapshot,
+                  EXISTS (
+                    SELECT 1 FROM cod_settlement_lines sl
+                    WHERE sl.matched_order_id = wo.id
+                  ) AS is_already_matched
+           FROM web_orders wo
+           WHERE wo.external_order_number ILIKE $1
+              OR wo.customer_name_snapshot ILIKE $1
+              OR wo.customer_phone_snapshot LIKE $2
+              OR ($3::boolean AND wo.grand_total = $4)
+           ORDER BY wo.ordered_at DESC NULLS LAST
+           LIMIT 20`,
+          [`%${q}%`, `%${q}%`, isNumeric, numericVal]
+        );
+
+        res.json({
+          orders: rows.map((r) => ({
+            ...r,
+            grand_total: Number(r.grand_total),
+          })),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    }
+  );
 };
