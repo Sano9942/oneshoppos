@@ -200,4 +200,22 @@ describe("COD settlements — /resolve extension", () => {
       expect(res.body.approved).toBe(true);
     });
   });
+
+  describe("approve wrong-state", () => {
+    test("approving an already-approved batch returns 400", async () => {
+      // Flip the seeded batch straight to 'approved' so the FOR UPDATE +
+      // status guard in the handler rejects the second call.
+      await db.query(
+        "UPDATE cod_settlement_batches SET status = 'approved' WHERE id = 1"
+      );
+
+      const res = await request(app)
+        .post("/api/fulfillment/cod/settlements/1/approve")
+        .set(authHeaders)
+        .send({});
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/review/i);
+    });
+  });
 });
