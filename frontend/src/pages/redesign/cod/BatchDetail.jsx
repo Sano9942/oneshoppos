@@ -5,12 +5,14 @@ import { Button } from "../../../ui/primitives";
 import { useToast } from "../../../contexts/ToastContext";
 import BatchHeaderCard from "./BatchHeaderCard";
 import LineTable from "./LineTable";
+import ManualMatchModal from "./ManualMatchModal";
 
 export default function BatchDetail({ batchId, onBack }) {
   const toast = useToast();
   const [batch, setBatch] = useState(null);
   const [lines, setLines] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [matchingLine, setMatchingLine] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -42,8 +44,18 @@ export default function BatchDetail({ batchId, onBack }) {
     }
   }
 
-  function handleManualMatch() {
-    toast.warning("Manual match modal pending (task 11)");
+  function handleManualMatch(line) {
+    setMatchingLine(line);
+  }
+
+  async function onMatched(lineId, webOrderId) {
+    await api.post(`/api/fulfillment/cod/settlements/${batchId}/resolve`, {
+      line_id: lineId,
+      matched_order_id: webOrderId,
+      resolution_note: "Manually matched",
+    });
+    toast.success("Line matched");
+    await load();
   }
 
   if (loading) {
@@ -77,6 +89,13 @@ export default function BatchDetail({ batchId, onBack }) {
         readOnly={batch.status === "approved" || batch.status === "rejected"}
         onResolveNote={handleResolveNote}
         onManualMatch={handleManualMatch}
+      />
+
+      <ManualMatchModal
+        open={!!matchingLine}
+        line={matchingLine}
+        onClose={() => setMatchingLine(null)}
+        onMatched={onMatched}
       />
     </div>
   );
