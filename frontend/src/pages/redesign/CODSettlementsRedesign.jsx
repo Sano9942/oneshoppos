@@ -4,6 +4,7 @@ import { PageShell, SectionCard } from "../../ui/primitives";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useAuth } from "../../auth/AuthProvider";
 import BatchList from "./cod/BatchList";
+import ImportWizard from "./cod/ImportWizard";
 
 export default function CODSettlementsRedesign() {
   const { authHeaders } = useAuth();
@@ -36,9 +37,15 @@ export default function CODSettlementsRedesign() {
             onOpenBatch={(batchId) => setView({ name: "detail", batchId })}
           />
         )}
-        {view.name !== "list" && (
+        {view.name === "import" && (
+          <ImportWizard
+            onCancel={() => setView({ name: "list" })}
+            onComplete={(batchId) => setView({ name: "detail", batchId })}
+          />
+        )}
+        {view.name === "detail" && (
           <div className="p-8 text-center text-(--text-muted) text-sm">
-            View "{view.name}" not yet implemented —
+            View "detail" not yet implemented —
             <button onClick={() => setView({ name: "list" })} className="ml-2 text-(--accent) underline">
               back to list
             </button>
