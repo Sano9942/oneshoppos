@@ -8,11 +8,28 @@ export default function StorefrontProductDetail() {
   const { config } = useStorefront();
   const currencySymbol = config?.currency_symbol || "Rs";
 
+  const { cart } = useStorefront();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [selectedImage, setSelectedImage] = useState(0);
+  const [adding, setAdding] = useState(false);
+  const [addedMessage, setAddedMessage] = useState("");
+
+  const handleAddToCart = async () => {
+    if (!product || adding) return;
+    setAdding(true);
+    setAddedMessage("");
+    const ok = await cart.addItem(product.id, selectedVariant?.id || null, 1);
+    setAdding(false);
+    if (ok) {
+      setAddedMessage("Added to cart");
+      setTimeout(() => setAddedMessage(""), 2000);
+    } else {
+      setAddedMessage(cart.error || "Could not add to cart");
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -183,12 +200,19 @@ export default function StorefrontProductDetail() {
           )}
 
           {/* Add to Cart */}
-          <button
-            onClick={() => alert("Added to cart (coming soon)")}
-            className="w-full sm:w-auto px-8 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors text-base"
-          >
-            Add to Cart
-          </button>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={handleAddToCart}
+              disabled={adding}
+              className="w-full sm:w-auto px-8 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors text-base disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {adding ? "Adding..." : "Add to Cart"}
+            </button>
+            {addedMessage ? (
+              <p className="text-sm text-emerald-600 font-medium">{addedMessage}</p>
+            ) : null}
+          </div>
 
           {/* Reviews */}
           {product.reviews && product.reviews.length > 0 && (

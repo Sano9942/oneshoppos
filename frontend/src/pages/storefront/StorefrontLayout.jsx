@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { Outlet, useParams, Link, useLocation } from "react-router-dom";
 import { API_BASE } from "../../config";
+import { useStorefrontCart } from "./useStorefrontCart";
 
 const StorefrontContext = createContext(null);
 export const useStorefront = () => useContext(StorefrontContext);
@@ -14,6 +15,13 @@ export default function StorefrontLayout() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const cart = useStorefrontCart(tenantSlug);
+
+  // Keep header cart badge in sync with the actual cart
+  useEffect(() => {
+    const total = (cart.items || []).reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
+    setCartItemCount(total);
+  }, [cart.items]);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -74,7 +82,7 @@ export default function StorefrontLayout() {
 
   return (
     <StorefrontContext.Provider
-      value={{ config, categories, tenantSlug, cartItemCount, setCartItemCount, incrementCart }}
+      value={{ config, categories, tenantSlug, cartItemCount, setCartItemCount, incrementCart, cart }}
     >
       <div className="min-h-screen bg-gray-50 flex flex-col">
         {/* Header */}
