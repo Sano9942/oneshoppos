@@ -23,6 +23,8 @@ const StorefrontProductDetail = lazy(() => import("../pages/storefront/Storefron
 const StorefrontCart = lazy(() => import("../pages/storefront/StorefrontCart"));
 const StorefrontCheckout = lazy(() => import("../pages/storefront/StorefrontCheckout"));
 const StorefrontOrderStatus = lazy(() => import("../pages/storefront/StorefrontOrderStatus"));
+const PublicBookingPage = lazy(() => import("../pages/public/PublicBookingPage"));
+const PublicRestaurantMenuPage = lazy(() => import("../pages/public/PublicRestaurantMenuPage"));
 
 function HomeRedirect() {
   const { isAuthenticated, isBootstrapping } = useAuth();
@@ -93,4 +95,14 @@ export const publicRoutes = [
     <Route path="checkout" element={<StorefrontCheckout />} />
     <Route path="order/:orderToken" element={<StorefrontOrderStatus />} />
   </Route>,
+  <Route
+    key="public-book"
+    path="/book/:tenantSlug"
+    element={<Suspense fallback={<RouteLoading />}><PublicBookingPage /></Suspense>}
+  />,
+  <Route
+    key="public-menu"
+    path="/menu/:token"
+    element={<Suspense fallback={<RouteLoading />}><PublicRestaurantMenuPage /></Suspense>}
+  />,
 ];

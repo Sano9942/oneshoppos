@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckSquare, Download, Eye, Package, RefreshCw, Save, Search, Truck } from "lucide-react";
+import { CheckSquare, Download, Eye, Package, RefreshCw, Save, Search, Send, Truck } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
@@ -119,11 +119,22 @@ export default function OrdersRedesign() {
   const [page, setPage] = useState(1);
   const [agingSummary, setAgingSummary] = useState({ fresh: 0, aging: 0, stale: 0, critical: 0 });
   const [agingFilter, setAgingFilter] = useState(null);
+  const [couriers, setCouriers] = useState([]);
+  const [shipModalOrder, setShipModalOrder] = useState(null);
 
   const loadAgingSummary = async () => {
     try {
       const data = await api.get("/api/orders/aging-summary");
       setAgingSummary(data.buckets || { fresh: 0, aging: 0, stale: 0, critical: 0 });
+    } catch {
+      // non-critical, silently ignore
+    }
+  };
+
+  const loadCouriers = async () => {
+    try {
+      const data = await api.get("/api/couriers");
+      setCouriers((data.couriers || data || []).filter((c) => c.enabled));
     } catch {
       // non-critical, silently ignore
     }
@@ -165,6 +176,7 @@ export default function OrdersRedesign() {
   useEffect(() => {
     loadOrders();
     loadAgingSummary();
+    loadCouriers();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -256,6 +268,27 @@ export default function OrdersRedesign() {
       }
     } catch (e) {
       toast.error(e.message || "Failed to mark complete");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const bookShipment = async ({ courier_id, weight }) => {
+    if (!shipModalOrder) return;
+    setBusy(true);
+    try {
+      await api.post(`/api/orders/${shipModalOrder.id}/shipments/book`, {
+        courier_id: Number(courier_id),
+        weight: weight ? Number(weight) : undefined,
+      });
+      toast.success("Shipment booked");
+      setShipModalOrder(null);
+      await loadOrders();
+      if (selectedOrder?.id === shipModalOrder.id) {
+        await loadDetail(shipModalOrder.id);
+      }
+    } catch (e) {
+      toast.error(e.message || "Failed to book shipment");
     } finally {
       setBusy(false);
     }
@@ -607,7 +640,36 @@ export default function OrdersRedesign() {
                   <Save size={14} className="mr-1 inline" />
                   Save Statuses
                 </Button>
+                <Button
+                  disabled={busy || couriers.length === 0}
+                  onClick={() => setShipModalOrder(selectedOrder)}
+                  title={couriers.length === 0 ? "No couriers enabled. Configure in Courier Settings." : "Book shipment with a courier"}
+                >
+                  <Send size={14} className="mr-1 inline" />
+                  Book Shipment
+                </Button>
               </div>
+
+              {/* Active tracking banner */}
+              {selectedOrder.tracking_number && (
+                <div className="rounded-lg border border-(--ui-border) bg-(--ui-surface-subtle) p-2.5 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-(--ui-text-muted)">
+                      <Truck size={12} />
+                      <span>Tracking</span>
+                    </div>
+                    <Badge tone={pillTone(selectedOrder.shipping_provider_status)}>
+                      {selectedOrder.shipping_provider_status || "shipped"}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 font-mono text-(--ui-text)">{selectedOrder.tracking_number}</p>
+                  {selectedOrder.shipped_at && (
+                    <p className="mt-0.5 text-(--ui-text-muted)">
+                      Shipped {fmtUtcDateTime(selectedOrder.shipped_at)}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Detail tabs */}
               <div>
@@ -705,6 +767,90 @@ export default function OrdersRedesign() {
           )}
         </SectionCard>
       </div>
+
+      {shipModalOrder && (
+        <BookShipmentModal
+          order={shipModalOrder}
+          couriers={couriers}
+          busy={busy}
+          onClose={() => setShipModalOrder(null)}
+          onSubmit={bookShipment}
+          fmt={fmt}
+        />
+      )}
     </PageShell>
+  );
+}
+
+function BookShipmentModal({ order, couriers, busy, onClose, onSubmit, fmt }) {
+  const [courierId, setCourierId] = useState(couriers[0]?.id ? String(couriers[0].id) : "");
+  const [weight, setWeight] = useState("0.5");
+  const [error, setError] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!courierId) {
+      setError("Select a courier");
+      return;
+    }
+    onSubmit({ courier_id: courierId, weight });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div
+        className="mx-4 w-full max-w-md rounded-xl bg-(--ui-surface) p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="mb-3 text-base font-semibold text-(--ui-text)">
+          Book Shipment — Order #{order.external_order_number || order.id}
+        </h3>
+        <p className="mb-4 text-xs text-(--ui-text-muted)">
+          Customer: {order.customer_name || "Walk-in"} · Total: {fmt(order.grand_total)}
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-(--ui-text)">Courier</label>
+            <Select value={courierId} onChange={(e) => setCourierId(e.target.value)}>
+              <option value="">Select a courier</option>
+              {couriers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.supports_booking ? "" : " (manual)"}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-(--ui-text)">Weight (kg)</label>
+            <Input
+              type="number"
+              step="0.1"
+              min="0"
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+              placeholder="0.5"
+            />
+            <p className="mt-1 text-xs text-(--ui-text-muted)">
+              Used by the courier API to calculate shipping fees. Defaults to 0.5kg.
+            </p>
+          </div>
+
+          {error && (
+            <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+              {error}
+            </p>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" tone="plain" onClick={onClose}>Cancel</Button>
+            <Button type="submit" tone="primary" disabled={busy}>
+              {busy ? "Booking..." : "Book Shipment"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }

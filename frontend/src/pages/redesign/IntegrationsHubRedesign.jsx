@@ -263,7 +263,8 @@ export default function IntegrationsHubRedesign() {
   useEffect(() => { loadHub(); }, [loadHub]);
 
   const handleConnect = async (payload) => {
-    await api.post("/api/integrations/connect", payload);
+    const category = PROVIDER_META[payload.provider].category;
+    await api.post("/api/integrations/connect", { ...payload, category });
     toast.success(`${payload.provider} connected`);
     loadHub();
   };
