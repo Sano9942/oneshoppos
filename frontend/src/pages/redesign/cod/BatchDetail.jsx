@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { ArrowLeft } from "lucide-react";
 import { api } from "../../../api";
 import { Button } from "../../../ui/primitives";
@@ -19,17 +19,27 @@ export default function BatchDetail({ batchId, onBack }) {
   const [approveOpen, setApproveOpen] = useState(false);
   const [approveBusy, setApproveBusy] = useState(false);
   const [rematchBusy, setRematchBusy] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await api.get(`/api/fulfillment/cod/settlements/${batchId}`);
+      if (!mountedRef.current) return;
       setBatch(data.batch);
       setLines(data.lines || []);
     } catch (err) {
+      if (!mountedRef.current) return;
       toast.error(err.message || "Failed to load batch");
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, [batchId]);
 

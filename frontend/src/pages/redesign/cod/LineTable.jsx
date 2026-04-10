@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useCurrency } from "../../../contexts/CurrencyContext";
 
 const TAB_KEYS = ["all", "matched", "short", "over", "unmatched", "duplicate"];
@@ -25,6 +25,7 @@ export default function LineTable({ lines, readOnly, onResolveNote, onManualMatc
   const [tab, setTab] = useState("all");
   const [editingNoteFor, setEditingNoteFor] = useState(null);
   const [noteDraft, setNoteDraft] = useState("");
+  const cancelledRef = useRef(false);
 
   const counts = {
     all: lines.length,
@@ -142,13 +143,20 @@ export default function LineTable({ lines, readOnly, onResolveNote, onManualMatc
                         value={noteDraft}
                         onChange={(e) => setNoteDraft(e.target.value)}
                         autoFocus
-                        onBlur={() => commitNote(line)}
+                        onBlur={() => {
+                          if (cancelledRef.current) {
+                            cancelledRef.current = false;
+                            return;
+                          }
+                          commitNote(line);
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             e.preventDefault();
                             commitNote(line);
                           } else if (e.key === "Escape") {
                             e.preventDefault();
+                            cancelledRef.current = true;
                             cancelNote();
                           }
                         }}

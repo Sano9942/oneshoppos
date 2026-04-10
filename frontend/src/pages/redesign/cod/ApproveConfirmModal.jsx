@@ -14,7 +14,7 @@ export default function ApproveConfirmModal({ open, batch, busy, onCancel, onCon
   if (!open || !batch) return null;
 
   const expected = batch.batch_ref || `#${batch.id}`;
-  const enabled = typed === expected && !busy;
+  const enabled = typed.trim() === expected.trim() && !busy;
   const shortCount = batch.unmatched_count || 0;
   const shortAmount = Number(batch.short_amount || 0);
   const showWarning = shortAmount > 0 || shortCount > 0;

@@ -48,7 +48,18 @@ export default function ManualMatchModal({ open, line, onClose, onMatched }) {
       }
     }, 250);
     return () => clearTimeout(t);
-  }, [query, open, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, open]);
+
+  // Escape closes the modal
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
 
   async function pick(order) {
     setBusy(true);
