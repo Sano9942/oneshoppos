@@ -630,7 +630,7 @@ module.exports = function registerCustomerRoutes(app, deps) {
       // Top 5 purchased products
       const { rows: topProducts } = await db.query(
         `SELECT p.name, p.sku, SUM(si.quantity)::int AS total_qty,
-                SUM(si.subtotal) AS total_value
+                SUM(si.quantity * si.price_at_sale) AS total_value
          FROM sale_items si
          JOIN sales s ON si.sale_id = s.id
          JOIN products p ON si.product_id = p.id

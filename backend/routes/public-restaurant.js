@@ -28,11 +28,11 @@ module.exports = function registerPublicRestaurantRoutes(app, deps) {
 
       // Fetch published menu items for outlet
       const { rows: items } = await db.query(
-        `SELECT p.id, p.name, p.description, p.price, p.image_url,
+        `SELECT p.id, p.name, p.description_html AS description, p.price, p.image_url,
                 c.name AS category_name, c.id AS category_id
          FROM products p
          LEFT JOIN categories c ON c.id = p.category_id
-         WHERE p.is_active = true
+         WHERE p.status = 'active' AND p.deleted_at IS NULL
          ORDER BY c.sort_order, c.name, p.name`
       );
 
@@ -74,7 +74,7 @@ module.exports = function registerPublicRestaurantRoutes(app, deps) {
 
       // Get product
       const { rows: [product] } = await db.query(
-        "SELECT id, name, price FROM products WHERE id = $1 AND is_active = true",
+        "SELECT id, name, price FROM products WHERE id = $1 AND status = 'active' AND deleted_at IS NULL",
         [product_id]
       );
       if (!product) return res.status(404).json({ error: "Product not found" });

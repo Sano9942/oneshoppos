@@ -11,14 +11,14 @@ module.exports = function (app, deps) {
 
       const { rows } = await db.query(
         `SELECT s.invoice_number, s.timestamp, s.total_amount, s.discount_amount,
-                c.name as buyer_name, c.phone as buyer_phone,
+                c.name as buyer_name, c.mobile as buyer_phone,
                 si.quantity, si.price_at_sale, p.name as item_description,
-                tg.name as tax_group_name, tg.rate as tax_rate
+                t.name as tax_group_name, t.rate as tax_rate
          FROM sales s
          JOIN sale_items si ON si.sale_id = s.id
          LEFT JOIN products p ON si.product_id = p.id
          LEFT JOIN customers c ON s.customer_id = c.id
-         LEFT JOIN tax_groups tg ON p.tax_group_id = tg.id
+         LEFT JOIN taxes t ON p.tax_id = t.id
          WHERE s.timestamp >= $1 AND s.timestamp < ($2::date + 1)
          AND s.voided = false
          ORDER BY s.timestamp`,

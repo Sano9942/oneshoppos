@@ -45,7 +45,8 @@ async function calculateQuote(db, cartItems, deliveryMethod, pickupOutletId, cha
 
   // ── 3. Batch-fetch product + category + tax data ───────────────────
   const { rows: productRows } = await db.query(
-    `SELECT p.id, p.name, p.price, p.compare_at_price, p.category_id, p.is_active,
+    `SELECT p.id, p.name, p.price, p.compare_at_price, p.category_id,
+            (p.status = 'active' AND p.deleted_at IS NULL) AS is_active,
             COALESCE(t2.rate, t.rate) AS tax_rate
        FROM products p
        LEFT JOIN categories c ON p.category_id = c.id

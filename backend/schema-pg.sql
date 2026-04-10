@@ -508,7 +508,9 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
   reference TEXT,
   paid_by TEXT,
   paid_at TIMESTAMPTZ DEFAULT NOW(),
-  notes TEXT
+  notes TEXT,
+  voided BOOLEAN DEFAULT false,
+  void_reason TEXT
 );
 
 -- ── Supplier Returns ──────────────────────────────────────────────────

@@ -2692,6 +2692,20 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 27,
+    description: "Add voided + void_reason columns to supplier_payments (void-payment endpoint)",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE supplier_payments
+          ADD COLUMN IF NOT EXISTS voided BOOLEAN DEFAULT false
+      `);
+      await client.query(`
+        ALTER TABLE supplier_payments
+          ADD COLUMN IF NOT EXISTS void_reason TEXT
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {
