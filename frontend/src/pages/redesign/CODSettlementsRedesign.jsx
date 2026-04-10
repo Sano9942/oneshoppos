@@ -5,6 +5,7 @@ import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useAuth } from "../../auth/AuthProvider";
 import BatchList from "./cod/BatchList";
 import ImportWizard from "./cod/ImportWizard";
+import BatchDetail from "./cod/BatchDetail";
 
 export default function CODSettlementsRedesign() {
   const { authHeaders } = useAuth();
@@ -44,12 +45,10 @@ export default function CODSettlementsRedesign() {
           />
         )}
         {view.name === "detail" && (
-          <div className="p-8 text-center text-(--text-muted) text-sm">
-            View "detail" not yet implemented —
-            <button onClick={() => setView({ name: "list" })} className="ml-2 text-(--accent) underline">
-              back to list
-            </button>
-          </div>
+          <BatchDetail
+            batchId={view.batchId}
+            onBack={() => setView({ name: "list" })}
+          />
         )}
       </SectionCard>
     </PageShell>
