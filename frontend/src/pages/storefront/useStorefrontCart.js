@@ -2,9 +2,11 @@ import { useState, useCallback, useRef } from "react";
 import { API_BASE } from "../../config";
 
 export function useStorefrontCart(tenantSlug) {
-  const [cartToken, setCartToken] = useState(
-    () => localStorage.getItem(`sf_cart_${tenantSlug}`) || null
-  );
+  const [cartToken, setCartToken] = useState(() => {
+    const stored = localStorage.getItem(`sf_cart_${tenantSlug}`);
+    if (!stored || stored === "undefined" || stored === "null") return null;
+    return stored;
+  });
   const [cart, setCart] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);

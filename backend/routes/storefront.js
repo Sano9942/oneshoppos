@@ -367,15 +367,16 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const { db } = resolved;
 
-      let { cartToken } = req.body || {};
+      let { cart_token } = req.body || {};
 
       // If no token provided, generate one
-      if (!cartToken) {
-        cartToken = crypto.randomUUID();
+      if (!cart_token) {
+        cart_token = crypto.randomUUID();
       }
 
-      const cart = await getOrCreateCart(db, cartToken);
-      res.json({ cartToken: cart.cart_token, cart });
+      const cart = await getOrCreateCart(db, cart_token);
+      const cartData = await getCartWithItems(db, cart.id);
+      res.json({ token: cart.cart_token, ...cartData });
     } catch (err) {
       console.error("Storefront create cart error:", err);
       res.status(500).json({ error: "Internal server error" });
@@ -421,11 +422,11 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       if (!rows.length) return res.status(404).json({ error: "Cart not found" });
       const cart = rows[0];
 
-      const { productId, variantId, qty } = req.body || {};
-      if (!productId) return res.status(400).json({ error: "productId is required" });
-      if (!qty || qty < 1) return res.status(400).json({ error: "qty must be >= 1" });
+      const { product_id, variant_id, quantity } = req.body || {};
+      if (!product_id) return res.status(400).json({ error: "product_id is required" });
+      if (!quantity || quantity < 1) return res.status(400).json({ error: "quantity must be >= 1" });
 
-      await addItem(db, cart.id, productId, variantId || null, qty);
+      await addItem(db, cart.id, product_id, variant_id || null, quantity);
       const result = await getCartWithItems(db, cart.id);
       res.json(result);
     } catch (err) {
@@ -453,10 +454,10 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       if (!rows.length) return res.status(404).json({ error: "Cart not found" });
       const cart = rows[0];
 
-      const { qty } = req.body || {};
-      if (qty == null) return res.status(400).json({ error: "qty is required" });
+      const { quantity } = req.body || {};
+      if (quantity == null) return res.status(400).json({ error: "quantity is required" });
 
-      await updateItem(db, cart.id, parseInt(req.params.itemId, 10), qty);
+      await updateItem(db, cart.id, parseInt(req.params.itemId, 10), quantity);
       const result = await getCartWithItems(db, cart.id);
       res.json(result);
     } catch (err) {
@@ -512,8 +513,8 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       if (!rows.length) return res.status(404).json({ error: "Cart not found" });
       const cart = rows[0];
 
-      const { deliveryMethod, pickupOutletId, courier_id } = req.body || {};
-      const method = deliveryMethod || "pickup";
+      const { delivery_method, pickup_outlet_id, courier_id } = req.body || {};
+      const method = delivery_method || "pickup";
 
       // Load cart items for quote
       const cartData = await getCartWithItems(db, cart.id);
@@ -527,7 +528,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         db,
         cartItems,
         method,
-        pickupOutletId || null,
+        pickup_outlet_id || null,
         cart.channel_id,
         courier_id || null
       );
@@ -555,30 +556,32 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       const { db } = resolved;
 
       const {
-        cartToken,
-        deliveryMethod,
-        pickupOutletId,
+        cart_token,
+        delivery_method,
+        pickup_outlet_id,
         courier_id,
-        customerContact,
-        shippingAddress,
+        customer_name,
+        customer_phone,
+        customer_email,
+        shipping_address,
       } = req.body || {};
 
-      if (!cartToken) return res.status(400).json({ error: "cartToken is required" });
-      if (!deliveryMethod) return res.status(400).json({ error: "deliveryMethod is required" });
-      if (!customerContact || !customerContact.name || !customerContact.phone) {
-        return res.status(400).json({ error: "customerContact with name and phone is required" });
+      if (!cart_token) return res.status(400).json({ error: "cart_token is required" });
+      if (!delivery_method) return res.status(400).json({ error: "delivery_method is required" });
+      if (!customer_name || !customer_phone) {
+        return res.status(400).json({ error: "customer_name and customer_phone are required" });
       }
-      if (deliveryMethod === "pickup" && !pickupOutletId) {
-        return res.status(400).json({ error: "pickupOutletId is required for pickup orders" });
+      if (delivery_method === "pickup" && !pickup_outlet_id) {
+        return res.status(400).json({ error: "pickup_outlet_id is required for pickup orders" });
       }
-      if (deliveryMethod === "ship_to_customer" && (!shippingAddress || !shippingAddress.addressLine1 || !shippingAddress.city)) {
-        return res.status(400).json({ error: "shippingAddress with addressLine1 and city is required for shipping" });
+      if (delivery_method === "ship_to_customer" && (!shipping_address || !shipping_address.address_line_1 || !shipping_address.city)) {
+        return res.status(400).json({ error: "shipping_address with address_line_1 and city is required for shipping" });
       }
 
       // 1. Validate cart exists and has items
       const { rows: cartRows } = await db.query(
         "SELECT * FROM storefront_carts WHERE cart_token = $1",
-        [cartToken]
+        [cart_token]
       );
       if (!cartRows.length) return res.status(404).json({ error: "Cart not found" });
       const cart = cartRows[0];
@@ -597,8 +600,8 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       const quote = await calculateQuote(
         db,
         cartItems,
-        deliveryMethod,
-        pickupOutletId || null,
+        delivery_method,
+        pickup_outlet_id || null,
         cart.channel_id,
         courier_id || null
       );
@@ -625,8 +628,8 @@ module.exports = function mountStorefrontRoutes(app, deps) {
 
         // Determine fulfillment outlet
         let fulfillmentOutletId = null;
-        if (deliveryMethod === "pickup") {
-          fulfillmentOutletId = pickupOutletId;
+        if (delivery_method === "pickup") {
+          fulfillmentOutletId = pickup_outlet_id;
         }
 
         // 8. Insert web_orders
@@ -650,9 +653,9 @@ module.exports = function mountStorefrontRoutes(app, deps) {
           ) RETURNING *`,
           [
             externalOrderId, channelId,
-            deliveryMethod, pickupOutletId || null, fulfillmentOutletId,
-            customerContact.name, customerContact.phone, customerContact.email || null,
-            shippingAddress ? JSON.stringify(shippingAddress) : null,
+            delivery_method, pickup_outlet_id || null, fulfillmentOutletId,
+            customer_name, customer_phone, customer_email || null,
+            shipping_address ? JSON.stringify(shipping_address) : null,
             quote.subtotal, quote.discountTotal, quote.taxTotal, quote.shippingTotal, quote.grandTotal,
             publicOrderToken,
           ]
@@ -683,8 +686,8 @@ module.exports = function mountStorefrontRoutes(app, deps) {
 
           // Determine which outlet to decrement stock from
           let stockOutletId;
-          if (deliveryMethod === "pickup") {
-            stockOutletId = pickupOutletId;
+          if (delivery_method === "pickup") {
+            stockOutletId = pickup_outlet_id;
           } else {
             // Ship-to-customer: pick outlet with most stock
             const { rows: stockRows } = await client.query(
@@ -741,7 +744,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
           );
 
           // Update fulfillment_outlet_id on order if ship_to_customer and not yet set
-          if (deliveryMethod === "ship_to_customer" && !fulfillmentOutletId) {
+          if (delivery_method === "ship_to_customer" && !fulfillmentOutletId) {
             fulfillmentOutletId = stockOutletId;
             await client.query(
               "UPDATE web_orders SET fulfillment_outlet_id = $1 WHERE id = $2",
@@ -761,8 +764,8 @@ module.exports = function mountStorefrontRoutes(app, deps) {
         // the same client. Insert allocations directly here instead.
         for (const ai of allocItems) {
           let outletId;
-          if (deliveryMethod === "pickup") {
-            outletId = pickupOutletId;
+          if (delivery_method === "pickup") {
+            outletId = pickup_outlet_id;
           } else {
             // Use the outlet we already determined during stock decrement
             const { rows } = await client.query(
@@ -779,7 +782,7 @@ module.exports = function mountStorefrontRoutes(app, deps) {
               web_order_id, web_order_item_id, fulfillment_outlet_id,
               fulfillment_method, status, allocated_qty
             ) VALUES ($1, $2, $3, $4, 'pending', $5)`,
-            [order.id, ai.webOrderItemId, outletId, deliveryMethod, ai.qty]
+            [order.id, ai.webOrderItemId, outletId, delivery_method, ai.qty]
           );
         }
 
