@@ -39,7 +39,7 @@ module.exports = function mountCourierRoutes(app, deps) {
       const { rows } = await db.query(
         `SELECT id, name, adapter_key, tracking_url_template, enabled, api_base_url,
                 supports_booking, supports_tracking, supports_cancellation, supports_labels,
-                provider_category, flat_shipping_rate,
+                provider_category, flat_shipping_rate, config_json,
                 last_healthcheck_at, last_healthcheck_status
          FROM courier_integrations ORDER BY name`
       );
@@ -53,6 +53,42 @@ module.exports = function mountCourierRoutes(app, deps) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // PATCH /api/couriers/:id/csv-mapping — save COD CSV column mapping
+  app.patch(
+    "/api/couriers/:id/csv-mapping",
+    requirePerm("manage_orders"),
+    async (req, res) => {
+      try {
+        const { mapping } = req.body || {};
+        if (!mapping || typeof mapping !== "object") {
+          return res.status(400).json({ error: "mapping object required" });
+        }
+        if (!mapping.courier_tracking_number || !mapping.remitted_amount) {
+          return res.status(400).json({
+            error: "courier_tracking_number and remitted_amount are required in mapping",
+          });
+        }
+
+        // courier_integrations.config_json is TEXT (JSON string). Cast to jsonb
+        // to merge, then cast the merged object back to text for storage so we
+        // preserve any existing keys the courier adapters rely on.
+        await db.query(
+          `UPDATE courier_integrations SET
+             config_json = (
+               COALESCE(NULLIF(config_json, '')::jsonb, '{}'::jsonb)
+               || jsonb_build_object('cod_csv_mapping', $1::jsonb)
+             )::text
+           WHERE id = $2`,
+          [JSON.stringify(mapping), req.params.id]
+        );
+
+        res.json({ ok: true });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    }
+  );
 
   // PUT /api/couriers/:id — admin configures courier
   app.put("/api/couriers/:id", requirePerm("all_access"), async (req, res) => {

@@ -127,4 +127,51 @@ describe("COD settlements — /resolve extension", () => {
       expect(res.body.orders).toEqual([]);
     });
   });
+
+  describe("PATCH /api/couriers/:id/csv-mapping", () => {
+    test("saves mapping to config_json", async () => {
+      const res = await request(app)
+        .patch("/api/couriers/1/csv-mapping")
+        .set(authHeaders)
+        .send({
+          mapping: {
+            courier_tracking_number: "Tracking No",
+            remitted_amount: "COD Amount",
+            courier_order_ref: "CN#",
+            courier_fee: "Delivery Fee",
+          },
+        });
+
+      expect(res.status).toBe(200);
+
+      // config_json is stored as TEXT (JSON string) — cast to jsonb in the
+      // query so the pg driver returns a parsed object for assertion.
+      const { rows } = await db.query(
+        "SELECT config_json::jsonb AS config_json FROM courier_integrations WHERE id = 1"
+      );
+      const cfg = rows[0].config_json || {};
+      expect(cfg.cod_csv_mapping).toEqual({
+        courier_tracking_number: "Tracking No",
+        remitted_amount: "COD Amount",
+        courier_order_ref: "CN#",
+        courier_fee: "Delivery Fee",
+      });
+    });
+
+    test("GET /api/couriers returns config_json", async () => {
+      const res = await request(app).get("/api/couriers").set(authHeaders);
+      const courier = res.body.couriers.find((c) => c.id === 1);
+      expect(courier).toBeDefined();
+      expect(courier.config_json).toBeDefined();
+    });
+
+    test("rejects missing required fields", async () => {
+      const res = await request(app)
+        .patch("/api/couriers/1/csv-mapping")
+        .set(authHeaders)
+        .send({ mapping: { courier_order_ref: "CN#" } }); // missing required fields
+
+      expect(res.status).toBe(400);
+    });
+  });
 });
