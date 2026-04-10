@@ -704,6 +704,11 @@ export const POSProvider = ({ children }) => {
       setShowParked(false);
       showNotice("Parked sale restored.");
     } catch (e) {
+      if (e.message?.includes("Parked sale not found")) {
+        await loadParked(selectedOutletId);
+        showNotice("That parked sale was already restored on another terminal.");
+        return;
+      }
       setError(e.message || "Failed to restore parked sale");
     }
   };
