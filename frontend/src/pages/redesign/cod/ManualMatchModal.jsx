@@ -4,7 +4,7 @@ import { api } from "../../../api";
 import { Button } from "../../../ui/primitives";
 import { useCurrency } from "../../../contexts/CurrencyContext";
 import { useToast } from "../../../contexts/ToastContext";
-import { fmtLocalDate } from "../../../utils/dates";
+import { fmtUtcDate } from "../../../utils/dates";
 
 export default function ManualMatchModal({ open, line, onClose, onMatched }) {
   const { fmt } = useCurrency();
@@ -149,7 +149,7 @@ export default function ManualMatchModal({ open, line, onClose, onMatched }) {
                       {fmt(Number(o.grand_total || 0))}
                     </td>
                     <td className="px-4 py-2 text-(--text-muted)">
-                      {o.ordered_at ? fmtLocalDate(o.ordered_at) : "—"}
+                      {o.ordered_at ? fmtUtcDate(o.ordered_at) : "—"}
                     </td>
                     <td className="px-4 py-2 text-(--text-muted)">{o.payment_status || "—"}</td>
                     <td className="px-4 py-2 text-right">
