@@ -76,10 +76,12 @@ railway logs 2>&1 | grep -iE "error|fatal|crash|SIGTERM|OOM|killed" | head -10
 
 Interpretation:
 - `railway whoami` confirms auth. Any `Unauthorized` or `not logged in` message means stale auth — flag as "Railway: auth required, run `railway login`" and skip the rest.
-- `railway status` should show `Project: zealous-friendship` and `Environment: production`. `Service: None` is OK for the status check itself but means no service is linked for log tailing.
-- `railway logs` without `--service` will return `No service linked` if no service is set. If that happens, note "Railway log check skipped — no service linked in this workspace. Run `railway service <name>` once to enable log tailing." Continue the health check — this is a warning, not a failure.
+- `railway status` should show `Project: zealous-friendship`, `Environment: production`, `Service: oneshoppos`. If `Service: None`, the workspace is missing its service link — see gotcha below.
+- `railway logs` without `--service` will return `No service linked` if no service is set. If that happens, note "Railway log check skipped — no service linked in this workspace. Run `railway link` once to enable log tailing." Continue the health check — this is a warning, not a failure.
 - If logs DO come back, flag any lines containing error/fatal/crash/OOM keywords. Zero matches = green.
-- **Do NOT** auto-run `railway service <name>` to fix the linking — that modifies the user's local state without consent.
+- **Do NOT** auto-run `railway link` or `railway service <name>` to fix the linking — that modifies the user's local state without consent.
+
+**Windows case-sensitivity gotcha** (resolved 2026-04-11): Railway CLI stores project links in `~/.railway/config.json` keyed by the *exact cwd string*. On Windows, Node-based tools (including Claude Code's Bash tool) can report the same directory with different drive-letter casing (`D:\...` vs `d:\...`), creating duplicate entries — one linked, one not. If `railway status` shows `Service: None` in this skill but the user insists they ran `railway link` successfully, read `~/.railway/config.json`, find both capital-D and lowercase-d entries for the repo path, and copy the `service` UUID from the linked one to the unlinked one. Both entries point to the same project; deduping them is safe.
 
 **5. Supabase — Database health**
 Use `mcp__claude_ai_Supabase__get_project` with `id: "tpjewvfoqtskscmwjtjj"`.
