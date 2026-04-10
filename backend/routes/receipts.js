@@ -29,7 +29,7 @@ module.exports = function mountReceiptRoutes(app, deps) {
 
       // Fetch sale with store info
       const { rows: [sale] } = await db.query(
-        `SELECT s.id, s.invoice_number, s.created_at, s.total_amount, s.discount_amount,
+        `SELECT s.id, s.invoice_number, s.timestamp, s.total_amount, s.discount_amount,
                 s.customer_id, s.employee_id, s.outlet_id,
                 e.name AS employee_name,
                 c.name AS customer_name,
@@ -51,8 +51,9 @@ module.exports = function mountReceiptRoutes(app, deps) {
 
       // Fetch sale items with product info
       const { rows: items } = await db.query(
-        `SELECT si.quantity, si.price_at_sale, si.total,
-                p.title AS name, p.sku
+        `SELECT si.quantity, si.price_at_sale,
+                (si.quantity * si.price_at_sale) AS total,
+                p.name, p.sku
          FROM sale_items si
          LEFT JOIN products p ON si.product_id = p.id
          WHERE si.sale_id = $1
@@ -78,7 +79,7 @@ module.exports = function mountReceiptRoutes(app, deps) {
         },
         sale: {
           invoice_number: sale.invoice_number,
-          timestamp: sale.created_at,
+          timestamp: sale.timestamp,
           total_amount: sale.total_amount,
           discount_amount: sale.discount_amount,
           employee_name: sale.employee_name,

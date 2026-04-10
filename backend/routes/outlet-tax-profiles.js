@@ -30,6 +30,47 @@ module.exports = function registerOutletTaxProfileRoutes(app, deps) {
     }
   });
 
+  // GET /api/outlet-tax-profiles/resolve?outlet_id=X&product_id=Y&category_id=Z
+  // NOTE: Must be registered BEFORE /:id so Express doesn't match "resolve" as an id.
+  app.get("/api/outlet-tax-profiles/resolve", feat, async (req, res) => {
+    const { outlet_id, product_id, category_id } = req.query;
+    if (!outlet_id) return res.status(400).json({ error: "outlet_id required" });
+    try {
+      const { rows: profileLines } = await db.query(
+        `SELECT otpl.*, t.name AS tax_name, t.rate AS tax_rate
+         FROM outlet_tax_profiles otp
+         JOIN outlet_tax_profile_lines otpl ON otpl.profile_id = otp.id
+         LEFT JOIN taxes t ON t.id = otpl.tax_id
+         WHERE otp.outlet_id = $1 AND otp.is_active = TRUE
+           AND (otpl.product_id = $2 OR otpl.category_id = $3 OR (otpl.product_id IS NULL AND otpl.category_id IS NULL))
+         ORDER BY otpl.priority DESC
+         LIMIT 1`,
+        [outlet_id, product_id || null, category_id || null]
+      );
+
+      if (profileLines.length) {
+        return res.json({ tax: profileLines[0], source: "outlet_profile" });
+      }
+
+      if (product_id) {
+        const { rows } = await db.query(
+          `SELECT t.id AS tax_id, t.name AS tax_name, t.rate AS tax_rate
+           FROM products p
+           LEFT JOIN taxes t ON t.id = p.tax_id
+           WHERE p.id = $1`,
+          [product_id]
+        );
+        if (rows.length && rows[0].tax_id) {
+          return res.json({ tax: rows[0], source: "product_default" });
+        }
+      }
+
+      res.json({ tax: null, source: "none" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // GET /api/outlet-tax-profiles/:id
   app.get("/api/outlet-tax-profiles/:id", feat, async (req, res) => {
     try {
@@ -100,43 +141,4 @@ module.exports = function registerOutletTaxProfileRoutes(app, deps) {
     }
   });
 
-  // GET /api/outlet-tax-profiles/resolve?outlet_id=X&product_id=Y&category_id=Z
-  app.get("/api/outlet-tax-profiles/resolve", feat, async (req, res) => {
-    const { outlet_id, product_id, category_id } = req.query;
-    if (!outlet_id) return res.status(400).json({ error: "outlet_id required" });
-    try {
-      const { rows: profileLines } = await db.query(
-        `SELECT otpl.*, t.name AS tax_name, t.rate AS tax_rate
-         FROM outlet_tax_profiles otp
-         JOIN outlet_tax_profile_lines otpl ON otpl.profile_id = otp.id
-         LEFT JOIN taxes t ON t.id = otpl.tax_id
-         WHERE otp.outlet_id = $1 AND otp.is_active = TRUE
-           AND (otpl.product_id = $2 OR otpl.category_id = $3 OR (otpl.product_id IS NULL AND otpl.category_id IS NULL))
-         ORDER BY otpl.priority DESC
-         LIMIT 1`,
-        [outlet_id, product_id || null, category_id || null]
-      );
-
-      if (profileLines.length) {
-        return res.json({ tax: profileLines[0], source: "outlet_profile" });
-      }
-
-      if (product_id) {
-        const { rows } = await db.query(
-          `SELECT t.id AS tax_id, t.name AS tax_name, t.rate AS tax_rate
-           FROM products p
-           LEFT JOIN taxes t ON t.id = p.tax_id
-           WHERE p.id = $1`,
-          [product_id]
-        );
-        if (rows.length && rows[0].tax_id) {
-          return res.json({ tax: rows[0], source: "product_default" });
-        }
-      }
-
-      res.json({ tax: null, source: "none" });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
 };

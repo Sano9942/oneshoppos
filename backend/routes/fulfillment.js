@@ -192,7 +192,7 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
 
       const { rows: items } = await db.query(
         `SELECT pi.*, p.name AS product_name, p.barcode AS product_barcode,
-                pv.name AS variant_name, pv.barcode AS variant_barcode,
+                pv.sku AS variant_name, pv.barcode AS variant_barcode,
                 wo.external_order_number,
                 woa.fulfillment_method AS allocation_method, woa.status AS allocation_status
          FROM picklist_items pi
@@ -917,7 +917,7 @@ module.exports = function registerFulfillmentRoutes(app, deps) {
                 wo.customer_name_snapshot AS customer_name,
                 wo.ordered_at, wo.grand_total,
                 p.name AS product_name, p.barcode AS product_barcode,
-                pv.name AS variant_name
+                pv.sku AS variant_name
          FROM web_order_allocations woa
          JOIN web_order_items woi ON woi.id = woa.web_order_item_id
          JOIN web_orders wo ON wo.id = woa.web_order_id

@@ -1,6 +1,8 @@
 /**
  * Stock aging report — shows how long inventory has been sitting,
- * based on most recent GRN received date (fallback: product.created_at).
+ * based on most recent GRN received date. Products with no GRN history
+ * fall back to NOW() (treated as just-received, age_days = 0) since the
+ * products table has no created_at column.
  * Feature #14, Wave 3.
  */
 module.exports = function registerStockAgingReport(app, deps, helpers) {
@@ -69,8 +71,8 @@ module.exports = function registerStockAgingReport(app, deps, helpers) {
             COALESCE(b.name, '') AS brand,
             COALESCE(s.name, '') AS supplier,
             grn_date.last_received,
-            COALESCE(grn_date.last_received, p.created_at) AS age_reference_date,
-            EXTRACT(DAY FROM NOW() - COALESCE(grn_date.last_received, p.created_at))::int AS age_days
+            COALESCE(grn_date.last_received, NOW()) AS age_reference_date,
+            EXTRACT(DAY FROM NOW() - COALESCE(grn_date.last_received, NOW()))::int AS age_days
           FROM outlet_stock os
           JOIN products p ON p.id = os.product_id
           JOIN outlets o ON o.id = os.outlet_id

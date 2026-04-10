@@ -147,7 +147,7 @@ async function getCartWithItems(db, cartId) {
   const itemsRes = await db.query(
     `SELECT sci.id, sci.product_id, sci.variant_id, sci.quantity, sci.unit_price,
             p.name AS product_name, p.image_url, p.sku,
-            pv.name AS variant_name, pv.sku AS variant_sku
+            pv.sku AS variant_name, pv.sku AS variant_sku
      FROM storefront_cart_items sci
      JOIN products p ON p.id = sci.product_id
      LEFT JOIN product_variants pv ON pv.id = sci.variant_id

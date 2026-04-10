@@ -417,6 +417,35 @@ module.exports = function registerReturnsRoutes(app, deps) {
     }
   });
 
+  // Lookup web orders for return initiation
+  // NOTE: Must be registered BEFORE /:id so Express doesn't match "lookup-web-order" as an id.
+  app.get("/api/returns/lookup-web-order", requireAnyPerm(["manage_returns", "view_reports"]), async (req, res) => {
+    const { q } = req.query;
+    if (!q || !q.trim()) {
+      return res.status(400).json({ error: "Search query is required" });
+    }
+    const search = q.trim();
+    const likeTerm = `%${search}%`;
+
+    try {
+      const { rows } = await db.query(
+        `SELECT wo.id, wo.external_order_id, wo.external_order_number,
+                wo.customer_name_snapshot AS customer_name,
+                wo.grand_total, wo.ordered_at, wo.source, wo.order_status,
+                wo.delivery_method, wo.fulfillment_status
+         FROM web_orders wo
+         WHERE wo.external_order_id ILIKE $1
+            OR wo.external_order_number ILIKE $1
+            OR wo.public_order_token = $2
+         LIMIT 10`,
+        [likeTerm, search],
+      );
+      res.json({ orders: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Get a single return with items
   app.get("/api/returns/:id", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
     const { id } = req.params;
@@ -447,31 +476,4 @@ module.exports = function registerReturnsRoutes(app, deps) {
     }
   });
 
-  // Lookup web orders for return initiation
-  app.get("/api/returns/lookup-web-order", requireAnyPerm(["manage_returns", "view_reports"]), async (req, res) => {
-    const { q } = req.query;
-    if (!q || !q.trim()) {
-      return res.status(400).json({ error: "Search query is required" });
-    }
-    const search = q.trim();
-    const likeTerm = `%${search}%`;
-
-    try {
-      const { rows } = await db.query(
-        `SELECT wo.id, wo.external_order_id, wo.external_order_number,
-                wo.customer_name_snapshot AS customer_name,
-                wo.grand_total, wo.ordered_at, wo.source, wo.order_status,
-                wo.delivery_method, wo.fulfillment_status
-         FROM web_orders wo
-         WHERE wo.external_order_id ILIKE $1
-            OR wo.external_order_number ILIKE $1
-            OR wo.public_order_token = $2
-         LIMIT 10`,
-        [likeTerm, search],
-      );
-      res.json({ orders: rows });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
 };

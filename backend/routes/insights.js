@@ -47,7 +47,7 @@ module.exports = function mountInsightRoutes(app, deps) {
       const { rows: [lowStock] } = await db.query(
         `SELECT COUNT(*) as count FROM products p
          JOIN outlet_stock os ON p.id = os.product_id
-         WHERE os.quantity <= p.reorder_level AND p.reorder_level > 0 AND p.deleted_at IS NULL`
+         WHERE os.quantity <= p.min_qty AND p.min_qty > 0 AND p.deleted_at IS NULL`
       );
       cards.push({
         type: "low_stock",

@@ -1241,14 +1241,14 @@ module.exports = function registerProductRoutes(app, deps) {
                   p.name AS product_name,
                   p.sku,
                   p.price AS default_price,
-                  pv.name AS variant_name,
+                  pv.sku AS variant_name,
                   pv.sku AS variant_sku,
                   pv.price AS variant_price
            FROM price_list_items pli
            JOIN products p ON p.id = pli.product_id
            LEFT JOIN product_variants pv ON pv.id = pli.variant_id
            WHERE pli.price_list_id = $1
-           ORDER BY p.name ASC, pv.name ASC`,
+           ORDER BY p.name ASC, pv.sku ASC`,
           [req.params.id],
         );
         res.json({ items: rows });
