@@ -158,11 +158,33 @@ describe("COD settlements — /resolve extension", () => {
       });
     });
 
-    test("GET /api/couriers returns config_json", async () => {
+    test("GET /api/couriers returns config_json after save", async () => {
+      // Save a mapping first
+      await request(app)
+        .patch("/api/couriers/1/csv-mapping")
+        .set(authHeaders)
+        .send({
+          mapping: {
+            courier_tracking_number: "TrackNo",
+            remitted_amount: "CODAmt",
+          },
+        });
+
+      // Then GET and verify the mapping round-trips
       const res = await request(app).get("/api/couriers").set(authHeaders);
       const courier = res.body.couriers.find((c) => c.id === 1);
       expect(courier).toBeDefined();
-      expect(courier.config_json).toBeDefined();
+      expect(courier).toHaveProperty("config_json");
+
+      // config_json is stored as TEXT and returned as a TEXT string; parse it
+      const parsed =
+        typeof courier.config_json === "string"
+          ? JSON.parse(courier.config_json)
+          : courier.config_json;
+      expect(parsed.cod_csv_mapping).toEqual({
+        courier_tracking_number: "TrackNo",
+        remitted_amount: "CODAmt",
+      });
     });
 
     test("rejects missing required fields", async () => {
