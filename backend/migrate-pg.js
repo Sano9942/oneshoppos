@@ -2751,6 +2751,28 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 30,
+    description: "Add products.created_at TIMESTAMPTZ for smart-collections sort hygiene",
+    up: async (client) => {
+      // Backs the smart-collections `created_at_desc` sort alias with a
+      // real column. Before v30, routes/smart-collections.js aliased the
+      // alias to `p.id DESC` as a workaround because the column didn't
+      // exist. Per drive-by decision D2: backfill all existing rows with
+      // NOW() rather than interpolating from id order. Existing rows tie
+      // on timestamp and fall back to `p.id DESC` for deterministic
+      // ordering; new rows after v30 get proper chronological sort.
+      // ALTER TABLE ADD COLUMN DEFAULT NOW() is O(1) metadata-only on
+      // Postgres 11+ (Supabase runs 15+) — no table rewrite.
+      await client.query(`
+        ALTER TABLE products
+          ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()
+      `);
+      await client.query(`
+        UPDATE products SET created_at = NOW() WHERE created_at IS NULL
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

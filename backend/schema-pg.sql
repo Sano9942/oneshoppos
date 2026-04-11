@@ -143,6 +143,7 @@ CREATE TABLE IF NOT EXISTS products (
   sku TEXT,
   image_url TEXT,
   deleted_at TIMESTAMPTZ DEFAULT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
   is_bundle BOOLEAN DEFAULT false,
   avg_rating NUMERIC(3,2) DEFAULT 0,
   review_count INTEGER DEFAULT 0
