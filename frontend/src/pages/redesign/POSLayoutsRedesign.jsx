@@ -67,7 +67,7 @@ export default function POSLayoutsRedesign() {
     if (!form.name.trim()) return toast.error("Name is required");
     try {
       if (editing) {
-        const res = await api.put(`/pos-layouts/${editing.id}`, { name: form.name, layout_json: form.tiles });
+        const res = await api.put(`/api/pos-layouts/${editing.id}`, { name: form.name, layout_json: form.tiles });
         setLayouts(prev => prev.map(l => l.id === editing.id ? res.layout : l));
         toast.success("Layout updated");
       } else {
@@ -82,7 +82,7 @@ export default function POSLayoutsRedesign() {
   const handleDelete = async (id) => {
     if (!confirm("Delete this layout?")) return;
     try {
-      await api.del(`/pos-layouts/${id}`);
+      await api.del(`/api/pos-layouts/${id}`);
       setLayouts(prev => prev.filter(l => l.id !== id));
       toast.success("Layout deleted");
     } catch (err) { toast.error(err.message); }

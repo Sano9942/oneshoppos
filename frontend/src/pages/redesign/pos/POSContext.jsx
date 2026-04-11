@@ -472,13 +472,13 @@ export const POSProvider = ({ children }) => {
   // ── Outlet price list fetch (phase2_outlet_pricing) ───────────────────────
   useEffect(() => {
     if (!selectedOutletId) { setOutletPriceListItems([]); return; }
-    api.get(`/price-list-assignments?scope_type=outlet&scope_id=${selectedOutletId}`)
+    api.get(`/api/price-list-assignments?scope_type=outlet&scope_id=${selectedOutletId}`)
       .then(async (d) => {
         const assignments = d.assignments || [];
         if (!assignments.length) { setOutletPriceListItems([]); return; }
         // Use highest priority assignment
         const topPl = assignments.sort((a, b) => (b.priority || 0) - (a.priority || 0))[0];
-        const items = await api.get(`/price-lists/${topPl.price_list_id}/items`);
+        const items = await api.get(`/api/price-lists/${topPl.price_list_id}/items`);
         setOutletPriceListItems(items.items || []);
       })
       .catch(() => setOutletPriceListItems([]));
@@ -488,7 +488,7 @@ export const POSProvider = ({ children }) => {
   useEffect(() => {
     const params = new URLSearchParams();
     if (selectedOutletId) params.set("outlet_id", selectedOutletId);
-    api.get(`/pos-layouts?${params}`).then(d => setPosLayout(d.layout)).catch(() => {});
+    api.get(`/api/pos-layouts?${params}`).then(d => setPosLayout(d.layout)).catch(() => {});
   }, [selectedOutletId]);
 
   // ── Item suggestions fetch (phase2_item_suggestions, debounced) ───────
@@ -497,7 +497,7 @@ export const POSProvider = ({ children }) => {
     const timer = setTimeout(() => {
       const ids = cart.map(c => c.id).filter(Boolean).join(",");
       if (!ids) return;
-      api.get(`/pos/suggestions?product_ids=${ids}`).then(d => setSuggestions(d.suggestions || [])).catch(() => {});
+      api.get(`/api/pos/suggestions?product_ids=${ids}`).then(d => setSuggestions(d.suggestions || [])).catch(() => {});
     }, 500);
     return () => clearTimeout(timer);
   }, [cart.map(c => c.id).join(",")]);
