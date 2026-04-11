@@ -105,10 +105,20 @@ async function processRenewal(db, boss, tenantSlug, subscriptionId) {
   // Schedule next renewal — tenantSlug is threaded through so the worker
   // can set search_path when it fires. Runs AFTER tx commit — see comment
   // above for why this must not move inside the transaction.
+  //
+  // singletonKey is a deterministic dedupe token per (subscription, period).
+  // If the worker crashes between db.transaction commit and this boss.send,
+  // the next scheduled tick will enqueue with the same key — pg-boss then
+  // rejects the duplicate at the queue layer. Closes the H1 deferred race
+  // (fix-plan.md:866) with zero schema change. House pattern: email-worker-boss.js:66
+  // already uses singletonKey for lifecycle emails. Per drive-by decision D3.
   await boss.send(
     "subscription-renewal",
     { tenantSlug, subscriptionId },
-    { startAfter: nextEnd }
+    {
+      startAfter: nextEnd,
+      singletonKey: `${subscriptionId}:${nextEnd.toISOString().slice(0, 10)}`,
+    }
   );
 
   logger.info({ subscriptionId, invoiceId: invoice.id, nextEnd }, "Subscription renewed — invoice created");

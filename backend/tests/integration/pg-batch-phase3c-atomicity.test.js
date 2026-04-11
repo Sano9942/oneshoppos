@@ -126,6 +126,14 @@ describe("Wave 3 Batch 3C — Cross-domain atomicity + gating", () => {
       });
       expect(bossCalls[0].options.startAfter).toBeDefined();
 
+      // DB-5 item 11: deterministic singletonKey closes the worker-
+      // crash-between-tx-and-boss.send race. Per drive-by decision D3,
+      // format is `${subscriptionId}:${nextEnd.toISOString().slice(0,10)}`.
+      // pg-boss rejects duplicate jobs with the same key at the queue layer.
+      const expectedKey = `${subscriptionId}:${new Date(bossCalls[0].subNow.current_period_end).toISOString().slice(0, 10)}`;
+      expect(bossCalls[0].options.singletonKey).toBe(expectedKey);
+      expect(bossCalls[0].options.singletonKey).toMatch(/^\d+:\d{4}-\d{2}-\d{2}$/);
+
       // The snapshot taken INSIDE boss.send proves the tx had committed:
       //   - invoice row exists with the expected amount
       //   - subscription_runs row exists with status='invoiced'
