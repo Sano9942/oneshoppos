@@ -294,6 +294,85 @@ the finding moves to `notabug` with the evidence recorded here.
 
 ---
 
+# Wave 2 — Independent critical findings
+
+With M1 unblocking the integration test suite, Wave 2 tackles the remaining
+review criticals one by one with real Postgres verification. Each Pattern
+below was scoped via the 3-question approval discipline before any code.
+
+---
+
+## Pattern Phase 2 C3 — SQL injection in scheduled_catalog_changes worker
+
+**Status:** `done`
+**Branch:** `review-fixes`
+**Closed:** 2026-04-11 (3 commits: fix + test + docs)
+
+### Decision log
+
+- **2026-04-11 — Decision I: refactor scope (Option B over Option A)**
+  - **Q:** Inline the allowlist check in `boot/workers.js` (Option A, minimal scope) or extract a service (Option B, same shape as Pattern A Decision E)?
+  - **Chose: Option B.** Extract `applyScheduledChange(db, change)` into `backend/services/catalog-scheduler.js`. Three reasons: (1) testability — the worker is currently wrapped in a 60s `setInterval`, unit-testable only if the body becomes a pure function; (2) convention — Pattern A Decision E already established "worker loop = thin caller, logic = testable service" and doing it again here makes the pattern stick; (3) `boot/workers.js` is already 250+ lines of loop+logic soup, any bug added inline is pure cost.
+  - **Impact:** ~35 new lines (service file) traded for 23 fewer lines in `boot/workers.js`. Net +1 small file, +7 unit tests that directly exercise the exact line where the injection lived.
+
+- **2026-04-11 — Decision J: use Zod + `validate()` middleware, not a hand-rolled allowlist**
+  - **Q:** Create `backend/shared/catalog-scheduler-fields.js` (initial plan, influenced by stale CLAUDE.md claiming `shared/` was reserved) or follow the codebase convention?
+  - **User correction:** "The claude md files are old and stale please do research on code first instead of assumptions."
+  - **Verified via live codebase grep:** `schemas/smart-collections.js:4` is the exact template — `field: z.enum([...])` for user-picks-a-column allowlists. `middleware/validate.js` already turns Zod errors into 400 `{error, details}`. 23 existing schema files use `validate(Schema)` via `bookings.js` / `auth.js` / etc. There is no parallel allowlist pattern in the codebase.
+  - **Chose:** create `backend/schemas/scheduled-changes.js` as a normal Zod schema file, export `PRODUCT_FIELDS` and `VARIANT_FIELDS` arrays so the service can reuse them. Deleted the stray `backend/shared/` directory. This matches the "grep the codebase, not the docs" rule.
+
+- **2026-04-11 — Decision K: allowlist membership — numbers + status + tags only**
+  - **Chose the set:** `products`: price, cost_price, compare_at_price, stock, status, min_qty, max_qty, tags, vendor, product_type. `product_variants`: price, cost_price, compare_at_price, stock, barcode, weight.
+  - **Deliberately excluded:** `name`, `sku` (scheduled renames break reporting joins and barcode lookups — should be interactive edits, not timers). `description_html` (stored XSS vector — renders on public product pages). FKs (`category_id`, `brand_id`, etc.) — require coordinated table edits. Timestamps and computed columns (`avg_rating`, `review_count`) — machine-managed.
+  - **Rationale:** the feature the June 9 packagesmall rows actually use is "seasonal pricing / stock adjustments on a timer," not "generic field editor on a timer." The allowlist matches the narrow feature intent.
+
+- **2026-04-11 — Decision L: defense in depth at both route and worker**
+  - **Chose:** validate the allowlist once at the route (Zod `.superRefine()` cross-field check) AND re-validate inside the service (`applyScheduledChange` re-checks before building the SQL). Reason: the worker reads rows that may have been inserted days/weeks ago by code that has since been reverted, or via a non-route path (manual DB edit, future migration, direct INSERT). Service-layer check closes the window.
+
+### Findings
+
+- **Phase 2 C3** — `boot/workers.js:232` and `:234` interpolate `change.field_name` directly into `UPDATE` SQL → `fix`, 3-commit plan
+  [verified 2026-04-11:
+  • Bug exists in production code at the flagged lines.
+  • Route `routes/scheduled-changes.js:33-54` performs zero validation on `field_name` — raw `req.body.field_name` flows directly to `INSERT`.
+  • Production state: packagesmall has `phase2_scheduled_changes` feature flag **enabled** and **3 pending rows** (all benign — `field_name='price'`, `new_value='799'`, scheduled for June 9). Handicraft and khantoys have the flag disabled with zero rows.
+  • Worker env: `SCHEDULED_CATALOG_WORKER_ENABLED` is **not set** in Railway production (verified via `railway variables`) — worker is currently off.
+  • **Exposure shape: dormant.** Rows queue up indefinitely. Activation-day incident risk: the moment someone turns on the worker env (likely when packagesmall notices the June 9 prices haven't fired), every pending row runs its `field_name` as SQL. Pattern A Decision D "activation-day-incident" argument applies.]
+
+- **DB CHECK constraint mismatch on `change_type` enum** → `fix`, drive-by (bundled into test commit)
+  [verified 2026-04-11: `schema-pg.sql:2124` has CHECK `change_type IN ('price','visibility','status','tax')`. The initial Zod schema in fix commit used `['field_update','price','status','stock']` — copied from the review's repro example without verifying against the DB contract. Mismatch would have allowed valid Zod POSTs that 500'd at INSERT. No production rows affected (only `price` used by any tenant) but the contract was wrong. Fixed in the test commit where the integration test exposed it.]
+
+- **Zod 4 API compat — `.refine()` dynamic message function form dropped** → `fix`, drive-by (bundled into test commit)
+  [verified 2026-04-11: Zod 4 silently ignores the `(val) => ({message, path})` function form of `.refine()`'s second argument. Parses fine, emits generic "Invalid input" instead of the custom dynamic message. Discovered when the integration test expected `body.error` to match `/field_name/i` and got "Invalid input". Fixed by switching to `.superRefine((val, ctx) => ctx.addIssue({...}))` which is the Zod 4 pattern for dynamic cross-field messages. The `validate()` middleware already surfaces `issues[0].message` as `body.error`, so UX side is unchanged once the schema emits a meaningful message.]
+
+### Commit plan
+
+1. `fix(catalog-scheduler): allowlist field_name to prevent SQL injection` — [landed `ef1dc76`]
+   - New: `backend/schemas/scheduled-changes.js` (Zod schema + exported allowlist arrays)
+   - New: `backend/services/catalog-scheduler.js` (`applyScheduledChange(db, change)`)
+   - Modified: `backend/routes/scheduled-changes.js` (uses `validate()` middleware)
+   - Modified: `backend/boot/workers.js` (worker body replaced with service call)
+   - Modified: `backend/schemas/CLAUDE.md`, `backend/services/CLAUDE.md` (sub-guide entries; services guide count corrected 9→31 and flagged for `/update-docs` refresh)
+2. `test(catalog-scheduler): unit + integration tests for allowlist enforcement` — [landed `76045cb`]
+   - New: `backend/tests/unit/services-catalog-scheduler.test.js` (7 Vitest tests, ~650ms)
+   - New: `backend/tests/integration/pg-batch13-catalog-scheduler.test.js` (11 Jest + Postgres tests, ~9s)
+   - Bundled drive-by fixes: schema `change_type` enum (DB CHECK match) and `.refine()` → `.superRefine()` (Zod 4 API)
+3. `docs(review): close Phase 2 C3 with final disposition` — this update
+
+### Test strategy
+
+- **Vitest unit** (`tests/unit/services-catalog-scheduler.test.js`): injects fake db with recording `query()` + a `transaction()` that routes through a fake client. Tests exercise `applyScheduledChange(db, change)` directly with 7 scenarios — valid product/variant, non-allowlisted field, injection-shaped field, cross-field (status on variant), unknown entity_type, simulated UPDATE failure. Critical assertion: for the injection-shaped input, scan **every** recorded query and prove none contain `"UPDATE products"` or the malicious metacharacters.
+- **Jest integration** (`tests/integration/pg-batch13-catalog-scheduler.test.js`): creates isolated Postgres schema with the real `scheduled_catalog_changes` DDL + CHECK constraints, mounts `routes/scheduled-changes.js` via supertest. 11 tests cover happy paths, allowlist rejects (id, deleted_at, description_html), cross-field, entity_type='bogus', change_type='field_update' (not in DB CHECK), scheduled_at in past, and injection-shaped field_name with row-count verification (confirms zero rows inserted on reject).
+- **Both test suites passing**: 7/7 + 11/11 = 18/18. Combined runtime under 10s. Real Postgres verification is possible *because* M1 (Pattern M1) unblocked the pg-batch suite the same day.
+
+### Deferred / documented-only
+
+- **Worker does not exist in Railway env**: `SCHEDULED_CATALOG_WORKER_ENABLED=1` is a flip away from making this feature live. When that happens, the scheduled-changes feature should be re-tested end-to-end (not just the guard tests) against the 3 packagesmall pending rows.
+- **`collection` and `price_list` entity_types are allowed by the DB CHECK but blocked by Zod**: the DB allows `entity_type IN ('product','variant','collection','price_list')` but my schema only accepts `product` and `variant`. The worker never handled the other two anyway (original inline if/else marked them failed). Narrowing is deliberate and safe — doesn't break existing rows — but if someone wants to extend the feature to collections or price lists, they'll need to extend both the Zod schema and the service resolver.
+- **Feature flag `phase2_scheduled_changes` enabled on packagesmall only**: no action needed; just a reference for future debugging.
+
+---
+
 ## Deviations from synthesis
 
 Running log of where we've diverged from the reviewer findings, with dates and reasons:
@@ -310,3 +389,7 @@ Running log of where we've diverged from the reviewer findings, with dates and r
 - **2026-04-11 — Pattern M1 scope expanded from 1 bug to 3**: the Phase 1 review flagged M1 as a single FK-ordering issue (`picklist_items` → `web_order_allocations`). Full-file verification surfaced two more bugs that broke the same code path: a duplicate `courier_integrations` block (silent no-op, not a production bug but drift risk) and a stray `ALTER TABLE payment_intents` that leaked from `migrate-pg.js` v11 into `schema-pg.sql` (real bug — `payment_intents` is master-schema-only, so the ALTER fails inside any tenant schema context). All three landed in one bundled commit. The review underestimated the scope by 2×.
 - **2026-04-11 — Pattern M1: Explore scan missed the third bug**: the pre-fix Explore agent search specifically looked for `REFERENCES <later_table>` patterns. The third bug was a *cross-schema table leak* from an `ALTER TABLE` — a different pattern the scan wasn't designed to catch. Lesson for future scans: don't trust a grep-shaped scan to find the last bug of a given class; always finish with a scratch apply against real Postgres. `verify-schema-apply.js` was written to make this cheap for next time.
 - **2026-04-11 — Pattern M1: integration test unblock quantified**: pg-batch3-complex went from 0 tests runnable (seed crash) → 55/55 passing. pg-batch12-billing went from 29 tests attempted → 64 attempted (35 newly-reachable). The 4 pre-existing pg-batch12 failures are billing-code issues unrelated to M1 and verified to exist on `main` via `git stash` + re-run. M1 is the single biggest integration-test unlock on this branch so far.
+- **2026-04-11 — Phase 2 C3: initial plan to use `backend/shared/`  discarded after user flagged stale CLAUDE.md**: my first scope proposal put a hand-rolled allowlist module at `backend/shared/catalog-scheduler-fields.js` because the root CLAUDE.md said `shared/` was "reserved — constants currently inline in middleware/…". Live codebase check showed (a) `shared/` was actually empty, not "reserved" — Write auto-created the directory; (b) the codebase already has a strong convention for this shape: Zod schemas in `backend/schemas/` + `validate()` middleware, and `schemas/smart-collections.js` uses `field: z.enum([...])` for exactly this kind of column-name allowlist. User correction: "the claude md files are old and stale please do research on code first instead of assumptions." Deleted the shared/ file, created `schemas/scheduled-changes.js` following the smart-collections template. Lesson: the docs are a starting hint, not a contract; verify against live grep before inventing a pattern.
+- **2026-04-11 — Phase 2 C3: services/CLAUDE.md badly stale (9→31 files)**: the `backend/services/CLAUDE.md` claimed 9 files. Actual count is 31. This was a ~3x drift. Corrected the count in the fix commit and flagged for `/update-docs` refresh. Not updating the narrative for every file because that's out of scope for a security fix commit — the discipline is "don't turn bugfixes into documentation rewrites."
+- **2026-04-11 — Phase 2 C3: tests caught two drive-by schema bugs**: the initial Zod schema had (a) `change_type` enum copied from the review repro example (`['field_update',...]`) instead of matching the DB CHECK (`['price','visibility','status','tax']`) and (b) used Zod 3 `.refine()` function-form dynamic messages which Zod 4 silently drops. Integration tests exposed both: (a) via reading the real DDL during test fixture setup, (b) via `expect(body.error).toMatch(/field_name/i)` asserting the 400 response was meaningful. Both fixed in the test commit as drive-bys. This is the third time in this session that "tests caught a bug the code review didn't" — Pattern A Commit 4's lastPollAt, M1's payment_intents ALTER, and now these two. Tests earn their keep.
+- **2026-04-11 — Phase 2 C3: worker body refactor preserved atomicity**: the original inline worker wrapped the target UPDATE and the status='applied' update inside `tenantDb.transaction()` so they land atomically. My first draft of `applyScheduledChange` naively took a `db` argument and ran both queries sequentially on it — losing atomicity if the caller passed a pool. Corrected before commit: the service opens its own `db.transaction()` internally. Caught by re-reading the original worker flow carefully, not by tests (unit tests don't exercise real transaction semantics). Lesson: when extracting a function out of a worker loop, preserve the transaction boundary *as-is* or explicitly think about moving it.
