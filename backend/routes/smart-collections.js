@@ -23,7 +23,6 @@ module.exports = function registerSmartCollectionRoutes(app, deps) {
         case "price": col = "p.price"; break;
         case "stock": col = "p.stock"; break;
         case "status": col = "p.status"; break;
-        case "created_at": col = "p.created_at"; break;
         default: continue;
       }
 
