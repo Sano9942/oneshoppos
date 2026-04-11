@@ -895,17 +895,18 @@ Items discovered during Wave 3 scope/execution that are **not** in the 24 review
 | 3 | `schemas/smart-collections.js` sort_order enum still includes `created_at_desc` | Line 763 (Batch 3A Deferred) | Schema hygiene | pending — DB-1 (verification only; already correct) |
 | 4 | `employees.js:451` `SELECT name FROM company_profile` — column is `company_name` | Line 613 (Phase 5 H1 Deferred), Line 765 (Batch 3A Deferred — unchanged) | Pre-existing bug | closed — DB-2 `ce360a9` |
 | 5 | Zod schema for `POST /api/orders/endless-aisle` (whole `routes/orders.js` has no Zod) | Line 805 (Batch 3B Deferred) | Validation hygiene | **deferred — DB-3** (per D5) |
-| 6 | `db-pg.js:6` `require("dotenv").config(...)` at module load breaks test isolation | Line 806 (Batch 3B Deferred), Line 931 (Deviation log) | Test-infra refactor | pending — DB-4 |
-| 7 | `createTestApp-pg.js:307` inserts `enabled ? 1 : 0` into BOOLEAN column | Line 868 (Batch 3C Deferred) | Test-infra style | pending — DB-4 |
-| 8 | `cod-settlements.test.js` pre-existing 5s `beforeEach` timeout cascade (14/14 fails on main too) | Line 611 (Phase 5 H1 Deferred), Line 923 (Deviation log) | Test-infra repair | pending — DB-4 |
+| 6 | `db-pg.js:6` `require("dotenv").config(...)` at module load breaks test isolation | Line 806 (Batch 3B Deferred), Line 931 (Deviation log) | Test-infra refactor | closed — DB-4 `40fcd67` |
+| 7 | `createTestApp-pg.js:307` inserts `enabled ? 1 : 0` into BOOLEAN column | Line 868 (Batch 3C Deferred) | Test-infra style | closed — DB-4 `38e549a` |
+| 8 | `cod-settlements.test.js` pre-existing 5s `beforeEach` timeout cascade (14/14 fails on main too) | Line 611 (Phase 5 H1 Deferred), Line 923 (Deviation log) | Test-infra repair | closed — DB-4 `c7d4331` (13/14 passing; remainder is drive-by 15) |
 | 9 | Dead `processRenewal` import in `routes/subscriptions.js:22` (never invoked) | Line 867 (Batch 3C Deferred) | Import hygiene | pending — DB-5 |
 | 10 | `bumpTicket` expo-routing sequence at `restaurant-kds.js:217-243` not atomic | Line 870 (Batch 3C Deferred) + Line 527 (Phase 4 C3 noted earlier) | Atomicity follow-up | pending — DB-5 |
 | 11 | Idempotency token on `subscription-renewal` job payloads (prevents double-processing on worker crash between tx commit and boss.send) | Line 866 (Batch 3C Deferred) | Reliability follow-up | pending — DB-5 (shape: pg-boss `singletonKey`, per D3) |
 | 12 | Middleware-level `requireFeature("phase5_sms_providers")` on SMS-triggering routes (beyond the inline helper check) | Line 869 (Batch 3C Deferred) | Defense in depth | **dropped — DB-5** (per D4; bug already closed by inline helper check) |
 | 13 | `bumpTicket` expo-station `LIMIT 1` without `ORDER BY` (non-deterministic in tests) | Line 527 (Phase 4 C3 Deferred) | Pre-existing hygiene | closed — DB-2 `9caeb0d` |
 | 14 | `jest.setTimeout()` / `jest.fn()` / `jest.mock()` in 6 pg-batch files — runner is Vitest, not Jest | Discovered during DB-2 regression verification (2026-04-11) | Test-infra repair | partial — DB-2 `0e103bc` closes 5/6 files (timeout API); DB-5 must finish the 6th (mock API on `pg-batch-phase3c-atomicity.test.js`) before regression-extending that file |
+| 15 | `cod-settlements.test.js` "full flow" test at line 284 — POST `/api/fulfillment/cod/settlements/import` returns 500 instead of 200 | Discovered during DB-4 item 8 verification (2026-04-11) | Pre-existing bug (content, not test infra) | pending — route-level bug; needs fulfillment.js investigation and is NOT a test-infra fix. The surrounding 4 tests in the same describe block (incl. simpler /resolve and /approve paths) all pass, so the bug is localized to the `/import` auto-match flow. Out of DB-4 scope (test infra only) |
 
-**14 drive-by items total** (13 + item 14 discovered during DB-2 execution).
+**15 drive-by items total** (13 + items 14, 15 discovered during execution).
 
 **Category breakdown**:
 - **Schema/code hygiene**: items 1, 2, 3 (smart-collections leftovers)
@@ -916,8 +917,8 @@ Items discovered during Wave 3 scope/execution that are **not** in the 24 review
 - **Atomicity / reliability follow-ups**: items 10, 11, 12
 
 **Drive-by pass progress** (Wave 3 drive-by hygiene closure session, 2026-04-11):
-- **closed**: 3 items (4, 13, partial 14)
-- **pending**: 10 items (1, 2, 3, 6, 7, 8, 9, 10, 11, remainder of 14)
+- **closed**: 6 items (4, 6, 7, 8, 13, partial 14)
+- **pending**: 8 items (1, 2, 3, 9, 10, 11, remainder of 14, new item 15)
 - **deferred**: 1 item (5 — per D5)
 - **dropped**: 1 item (12 — per D4)
 
@@ -982,6 +983,36 @@ since DB-5 needs to extend `pg-batch-phase3c-atomicity.test.js` for
 items 10 and 11. **Lesson**: the CLAUDE.md calling the runner "Jest"
 is stale — the real runner has been Vitest since commit `0286bf0`
 (2026-04-03). Always verify the runner via `package.json` + `node_modules/.bin`.
+
+**D-VITEST-ENV — Vitest doesn't auto-load `.env`; needed a setup file (DB-4
+item 6 mid-execution correction).** The Phase 1 Explore agent said "Tests
+get env from the Vitest runner's own environment" but that's wrong on a
+local dev machine — Vitest respects `process.env` at spawn time, and on
+dev the only source is `backend/.env`. Before DB-4 item 6, db-pg.js's
+dotenv call was doing useful work for the test harness even though it was
+also breaking test isolation. After removing the call in item 6, the
+canary tests failed with `SASL: SCRAM-SERVER-FIRST-MESSAGE: client
+password must be a string` — pg got `DATABASE_URL=undefined`.
+
+**Fix**: created `backend/tests/helpers/vitest-setup.js` that loads
+backend/.env once per worker fork, and registered it via `setupFiles` in
+`vitest.config.js`. Setup files run **before** any test imports, so any
+test that deletes `process.env.MULTI_TENANT` inside `beforeAll` still
+works correctly (the delete happens after the setup-file populates, and
+no later require re-injects the var). This is cleaner than the original
+Decision II ordering dance — the MULTI_TENANT trap is now architecturally
+prevented at the runner level, not via test-code discipline.
+
+**D-COD-BAND-AID — cod-settlements.test.js item 8 fix: hookTimeout bump,
+not beforeAll refactor.** Three tests in the file mutate the seeded
+`cod_settlement_batches` row (two approve tests flip status='approved',
+one wrong-state test pre-mutates it). Moving `createTestApp()` from
+`beforeEach` to `beforeAll` would need TRUNCATE-per-test orchestration to
+avoid state leakage, which is a deeper refactor than DB-4 budgeted. The
+band-aid (`vi.setConfig({ hookTimeout: 60000 })`) unblocks 13/14 tests
+at minimal risk. Runtime cost is ~11min for the file, which is acceptable
+since it was 0min runnable before. The remaining 1/14 failure is
+drive-by 15 (a route-level 500 on `/import`, not a test-infra problem).
 
 ---
 
