@@ -440,4 +440,45 @@ describe("Batch 9 — Architecture audit fixes (Postgres)", () => {
       expect(res.status).not.toBe(400);
     });
   });
+
+  // ─── DB-2 item 4: employees.js:451 company_profile.company_name ───
+
+  describe("Admin-initiated password reset reads company_name column (DB-2 item 4)", () => {
+    it("send-reset email uses company_profile.company_name as storeName", async () => {
+      // Set a distinctive company name so a correct SELECT returns a value
+      // different from the "SanoPOS" fallback that the try/catch would use
+      // if the column lookup threw.
+      await db.query(
+        "UPDATE company_profile SET company_name = $1 WHERE id = 1",
+        ["DB-2 Test Company"]
+      );
+      // Admin employee (ID 1) needs an email address to reach the branch
+      await db.query(
+        "UPDATE employees SET email = $1 WHERE id = 1",
+        ["admin-reset@example.com"]
+      );
+
+      const resendModule = require("../../utils/resendEmail");
+      const originalSend = resendModule.sendPasswordResetEmail;
+      let captured = null;
+      resendModule.sendPasswordResetEmail = async (opts) => {
+        captured = opts;
+      };
+
+      try {
+        const res = await request(app)
+          .post("/api/employees/1/send-reset")
+          .set("x-employee-id", "1");
+
+        expect(res.status).toBe(200);
+        expect(captured).toBeTruthy();
+        // Pre-DB-2 the SELECT named "name" would throw, the catch would
+        // swallow, and storeName would fall back to "SanoPOS". Post-DB-2
+        // the query succeeds and storeName reflects the configured value.
+        expect(captured.storeName).toBe("DB-2 Test Company");
+      } finally {
+        resendModule.sendPasswordResetEmail = originalSend;
+      }
+    });
+  });
 });

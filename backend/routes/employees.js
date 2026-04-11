@@ -448,8 +448,8 @@ module.exports = function registerEmployeeRoutes(app, deps) {
 
       let storeName = "SanoPOS";
       try {
-        const { rows: [co] } = await db.query("SELECT name FROM company_profile WHERE id = 1");
-        if (co?.name) storeName = co.name;
+        const { rows: [co] } = await db.query("SELECT company_name FROM company_profile WHERE id = 1");
+        if (co?.company_name) storeName = co.company_name;
       } catch { /* best-effort */ }
 
       if (process.env.MULTI_TENANT === "1" && req.tenantSlug) {
