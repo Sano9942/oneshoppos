@@ -41,6 +41,30 @@ the finding moves to `notabug` with the evidence recorded here.
 
 ### Decision log
 
+- **2026-04-11 — Decision B: test strategy after hitting Phase 1 M1 block**
+  - **Q:** Can Commit 2 be verified via the integration test suite (pg-batch3)?
+  - **Finding:** `npx jest pg-batch3-complex.test.js` fails at seed time with
+    `relation "web_order_allocations" does not exist` at
+    `tests/helpers/seedSchema-pg.js:10`. This is Phase 1 finding M1
+    (schema-pg.sql static snapshot FK ordering) — already flagged by the
+    review as blocking every fresh-install integration test. The block is
+    pre-existing on `main`, not introduced by our edits.
+  - **Options considered:**
+    - (1) Fix M1 first, then resume Commit 2 — pulls unplanned scope into
+      Pattern D.
+    - (2) Write a Vitest unit test that mounts the route on a mini-express
+      with a mocked `db.query`, asserts SQL + param shape. No real DB.
+    - (3) Commit untested — violates verification rule.
+  - **Chose (2).** New test at
+    `backend/tests/unit/routes-orders-transactions.test.js`. Mocks
+    `db.query`, captures SQL and params, asserts (a) column list includes
+    the three v25 columns, (b) payment_context defaults to 'billing',
+    (c) param array length equals $1..$N placeholder count. 3 tests,
+    1.18s runtime, 100% offline.
+  - **Impact:** Phase 1 M1 lands in the backlog as a hard blocker for any
+    future integration-test-backed fix. Worth lifting into its own fix
+    (pg-batch suite has 22 test files blocked by it).
+
 - **2026-04-11 — Decision A: v25 deployment state**
   - **Q:** Are live tenants at schema v25 or earlier? The review claimed
     Phase 1 storefront checkout would 500 on any schema `<v25`.
@@ -93,14 +117,16 @@ the finding moves to `notabug` with the evidence recorded here.
 
 ### Commit plan
 
-1. `docs(review): add fix-plan.md as living source of truth` — this file + link from FINAL-REPORT
-2. `fix(orders): populate v25 columns in transaction INSERT` — `routes/orders.js:575-589` + targeted test
-3. `fix(couriers): read encrypted_config_json with plaintext fallback` — `routes/couriers.js:270-275` + targeted test
+1. `docs(review): add fix-plan.md as living source of truth` — this file + link from FINAL-REPORT [landed `51fbfca`]
+2. `fix(orders): populate v25 columns in transaction INSERT` — `routes/orders.js:575-593` + unit test at `tests/unit/routes-orders-transactions.test.js` (Vitest, mocked db, 3 tests)
+3. `fix(couriers): read encrypted_config_json with plaintext fallback` — `routes/couriers.js:270-275` + unit test (same pattern as Commit 2)
 
 ### Test strategy
 
-- **2 new targeted integration tests**, one per fix commit.
-- **Existing integration suite** (56 files, ~850 tests) must still pass on v25 — no edits to shared helpers or schemas.
+- **Vitest unit tests**, one file per fix commit, using the
+  mini-express-with-mocked-db pattern. No real Postgres, sub-second runtime.
+- **Integration test suite is blocked** by Phase 1 M1 (schema seed failure).
+  Cannot verify via jest/pg-batch until M1 is fixed.
 - **No manual scratch-DB testing** — guards dropped per Decision A.
 
 ### Deferred / documented-only
@@ -110,6 +136,14 @@ the finding moves to `notabug` with the evidence recorded here.
   if `schema_version < 25` — but there's no way to reach the failure mode
   in current production. If the legacy provisioner ever produces a fresh
   pre-v25 install, revisit.
+
+- **Phase 1 M1 — schema-pg.sql FK ordering** is a hard blocker for the
+  entire pg-batch integration test suite. Discovered 2026-04-11 when
+  attempting to verify Commit 2 via `npx jest pg-batch3-complex.test.js`.
+  Every test fails at seed time with `relation "web_order_allocations"
+  does not exist`. Needs to be fixed as its own item before any
+  future Pattern fix can use real integration tests. Tracked here
+  until lifted into its own Pattern/Wave.
 
 ---
 
@@ -128,3 +162,4 @@ Running log of where we've diverged from the reviewer findings, with dates and r
 
 - **2026-04-11 — Phase 5 C2 → `notabug`**: synthesis claimed COD auto-match joined on `web_orders.active_shipment_id`. Actual code in `routes/fulfillment.js:1114-1120` joins on `tracking_number`. Reviewer misdiagnosed the mechanism.
 - **2026-04-11 — Pattern D scope 5→2 commits**: after verifying all live tenants at v27, Phase 1 C3 + `/pay` + courier-list guards dropped to `notabug`. Only Phase 5 H2 and C1 remain as actionable fixes.
+- **2026-04-11 — Test format switched from integration (Jest) to unit (Vitest)**: pg-batch suite is currently broken at the seed-schema step due to Phase 1 M1. Rather than fix M1 as an unplanned prerequisite, we switched to Vitest unit tests for Commits 2 and 3. Trade-off: doesn't exercise real Postgres; mitigated by verifying column existence live via Supabase before each commit.
