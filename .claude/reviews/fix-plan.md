@@ -898,12 +898,12 @@ Items discovered during Wave 3 scope/execution that are **not** in the 24 review
 | 6 | `db-pg.js:6` `require("dotenv").config(...)` at module load breaks test isolation | Line 806 (Batch 3B Deferred), Line 931 (Deviation log) | Test-infra refactor | closed — DB-4 `40fcd67` |
 | 7 | `createTestApp-pg.js:307` inserts `enabled ? 1 : 0` into BOOLEAN column | Line 868 (Batch 3C Deferred) | Test-infra style | closed — DB-4 `38e549a` |
 | 8 | `cod-settlements.test.js` pre-existing 5s `beforeEach` timeout cascade (14/14 fails on main too) | Line 611 (Phase 5 H1 Deferred), Line 923 (Deviation log) | Test-infra repair | closed — DB-4 `c7d4331` (13/14 passing; remainder is drive-by 15) |
-| 9 | Dead `processRenewal` import in `routes/subscriptions.js:22` (never invoked) | Line 867 (Batch 3C Deferred) | Import hygiene | pending — DB-5 |
-| 10 | `bumpTicket` expo-routing sequence at `restaurant-kds.js:217-243` not atomic | Line 870 (Batch 3C Deferred) + Line 527 (Phase 4 C3 noted earlier) | Atomicity follow-up | pending — DB-5 |
-| 11 | Idempotency token on `subscription-renewal` job payloads (prevents double-processing on worker crash between tx commit and boss.send) | Line 866 (Batch 3C Deferred) | Reliability follow-up | pending — DB-5 (shape: pg-boss `singletonKey`, per D3) |
+| 9 | Dead `processRenewal` import in `routes/subscriptions.js:22` (never invoked) | Line 867 (Batch 3C Deferred) | Import hygiene | closed — DB-5 `01f8a76` |
+| 10 | `bumpTicket` expo-routing sequence at `restaurant-kds.js:217-243` not atomic | Line 870 (Batch 3C Deferred) + Line 527 (Phase 4 C3 noted earlier) | Atomicity follow-up | closed — DB-5 `33cc7f0` |
+| 11 | Idempotency token on `subscription-renewal` job payloads (prevents double-processing on worker crash between tx commit and boss.send) | Line 866 (Batch 3C Deferred) | Reliability follow-up | closed — DB-5 `a53c60f` (pg-boss `singletonKey` per D3) |
 | 12 | Middleware-level `requireFeature("phase5_sms_providers")` on SMS-triggering routes (beyond the inline helper check) | Line 869 (Batch 3C Deferred) | Defense in depth | **dropped — DB-5** (per D4; bug already closed by inline helper check) |
 | 13 | `bumpTicket` expo-station `LIMIT 1` without `ORDER BY` (non-deterministic in tests) | Line 527 (Phase 4 C3 Deferred) | Pre-existing hygiene | closed — DB-2 `9caeb0d` |
-| 14 | `jest.setTimeout()` / `jest.fn()` / `jest.mock()` in 6 pg-batch files — runner is Vitest, not Jest | Discovered during DB-2 regression verification (2026-04-11) | Test-infra repair | partial — DB-2 `0e103bc` closes 5/6 files (timeout API); DB-5 must finish the 6th (mock API on `pg-batch-phase3c-atomicity.test.js`) before regression-extending that file |
+| 14 | `jest.setTimeout()` / `jest.fn()` / `jest.mock()` in 6 pg-batch files — runner is Vitest, not Jest | Discovered during DB-2 regression verification (2026-04-11) | Test-infra repair | closed — DB-2 `0e103bc` (timeout API, 5/6 files) + DB-5 `fb0f526` (mock API on pg-batch-phase3c-atomicity via vi.spyOn, closing the 6th file). Two other files (pg-batch12-billing, pg-batch13-catalog-scheduler) still use jest.mock but are out of Wave 3 regression scope; logged for future hygiene pass |
 | 15 | `cod-settlements.test.js` "full flow" test at line 284 — POST `/api/fulfillment/cod/settlements/import` returns 500 instead of 200 | Discovered during DB-4 item 8 verification (2026-04-11) | Pre-existing bug (content, not test infra) | pending — route-level bug; needs fulfillment.js investigation and is NOT a test-infra fix. The surrounding 4 tests in the same describe block (incl. simpler /resolve and /approve paths) all pass, so the bug is localized to the `/import` auto-match flow. Out of DB-4 scope (test infra only) |
 
 **15 drive-by items total** (13 + items 14, 15 discovered during execution).
@@ -917,10 +917,17 @@ Items discovered during Wave 3 scope/execution that are **not** in the 24 review
 - **Atomicity / reliability follow-ups**: items 10, 11, 12
 
 **Drive-by pass progress** (Wave 3 drive-by hygiene closure session, 2026-04-11):
-- **closed**: 9 items (1, 2, 3, 4, 6, 7, 8, 13, partial 14)
-- **pending**: 5 items (9, 10, 11, remainder of 14, new item 15)
+- **closed**: 13 items (1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 13, 14)
+- **pending**: 1 item (new drive-by 15 — cod-settlements full-flow /import route bug)
 - **deferred**: 1 item (5 — per D5)
 - **dropped**: 1 item (12 — per D4)
+
+**Wave 3 drive-by hygiene pass closure**: all 11 items that were in active
+scope are now closed, plus drive-by 14 (Jest→Vitest runner API migration)
+discovered mid-session is also closed. The one remaining pending item is
+drive-by 15 (a route-level 500 in fulfillment.js `/import` that the DB-4
+item 8 regression run surfaced) — it's a content bug, not a hygiene fix,
+and stays logged for a future session in its own domain.
 
 None of the drive-bys block merge. They're flagged for future work whenever a session is in the same area or a "hygiene pass" becomes warranted.
 
@@ -1046,6 +1053,37 @@ sequence.
 in a maintenance window. The script runs per-tenant automatically via
 `migrateAllTenants`. Expected runtime: sub-second per schema. Post-run
 verification: `SELECT schema_name, MAX(version) FROM information_schema.schemata s JOIN (schema-per-schema schema_version lookups) ORDER BY schema_name` — should show 30 on all four schemas.
+
+**D-DB5-SPYON — DB-5 prereq 0 mock migration: vi.spyOn, not vi.mock.**
+The initial mechanical rename (jest.fn/jest.mock → vi.fn/vi.mock) landed
+5/6 tests green but the H3 flag-ON test failed with "expected 1 calls, got
+0." Root cause: Vitest's `vi.mock()` works via ESM hooks, and inline
+`require("../services/sms")` at function call time under CommonJS bypasses
+the mock module cache that vi.mock populates. Jest's `jest.mock()` rewrote
+`require.cache` entries directly, which caught inline requires — Vitest
+doesn't. This is exactly the "CJS caveat" pattern from the user's
+`reference_vitest_cjs_mock_caveat` memory.
+
+**Fix**: remove the top-of-file `vi.hoisted` + `vi.mock` pair entirely, and
+use `vi.spyOn(smsService, "sendSms")` inside H3's `beforeAll` where
+`smsService = require("../../services/sms")`. vi.spyOn monkey-patches the
+real exports object after the module has been required, so every subsequent
+call — inline or top-level — hits the spied method. `mockRestore()` in
+`afterAll` undoes the patch. H1 and H2 tests are unaffected because they
+don't reach the SMS code path. Closed drive-by 14 fully.
+
+**D-DB5-ROLLBACK-PROXY — item 10 rollback test pattern.** The bumpTicket
+rollback test needed to force an error inside the transaction to prove
+the rollback unwinds the event INSERT and expo-ticket INSERT together.
+Considered: BEFORE INSERT trigger that fails on a sentinel course_name
+value; proxy-wrap db.query to throw; mock db.transaction. Picked the
+**proxy pattern** because it's already the house pattern for H2's
+rollback test at line 295 — same file, same style, same mental model.
+Test wraps `db.transaction` so its internal client Proxy throws on the
+expo-ticket INSERT (identifiable by the full column list which is unique
+to that INSERT in bumpTicket). Both tests land in a sibling describe
+under H2/H3 — new block is "DB-5 item 10 — bumpTicket expo-routing
+atomicity" with 2 tests (happy + rollback), 8/8 total in the file.
 
 ---
 
