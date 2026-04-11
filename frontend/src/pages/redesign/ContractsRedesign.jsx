@@ -252,7 +252,7 @@ function ContractDetail({ contractId, onBack }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get(`/contracts/${contractId}`);
+      const data = await api.get(`/api/contracts/${contractId}`);
       setContract(data.contract || data);
     } catch (err) { toast.error(err.message); }
     finally { setLoading(false); }
@@ -262,7 +262,7 @@ function ContractDetail({ contractId, onBack }) {
 
   const sendContract = async () => {
     try {
-      await api.post(`/contracts/${contractId}/send`);
+      await api.post(`/api/contracts/${contractId}/send`);
       toast.success("Contract sent");
       load();
     } catch (err) { toast.error(err.message); }
@@ -270,7 +270,7 @@ function ContractDetail({ contractId, onBack }) {
 
   const signContract = async (signatureDataUrl) => {
     try {
-      await api.post(`/contracts/${contractId}/sign`, {
+      await api.post(`/api/contracts/${contractId}/sign`, {
         signature: signatureDataUrl,
         signer_name: signerName || undefined,
         signer_email: signerEmail || undefined,

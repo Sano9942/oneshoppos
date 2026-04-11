@@ -115,7 +115,7 @@ function AddMilestoneRow({ projectId, onAdded }) {
     if (!form.name.trim()) { toast.error("Milestone name is required"); return; }
     setSaving(true);
     try {
-      await api.post(`/projects/${projectId}/milestones`, {
+      await api.post(`/api/projects/${projectId}/milestones`, {
         name: form.name,
         due_date: form.due_date || undefined,
         amount: form.amount ? Number(form.amount) : undefined,
@@ -162,7 +162,7 @@ function ProjectDetail({ projectId, onBack }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get(`/projects/${projectId}`);
+      const data = await api.get(`/api/projects/${projectId}`);
       setProject(data.project || data);
     } catch (err) { toast.error(err.message); }
     finally { setLoading(false); }
@@ -170,7 +170,7 @@ function ProjectDetail({ projectId, onBack }) {
 
   const loadBilling = useCallback(async () => {
     try {
-      const data = await api.get(`/projects/${projectId}/billing`);
+      const data = await api.get(`/api/projects/${projectId}/billing`);
       setBilling(data);
     } catch {}
   }, [projectId]);
@@ -179,7 +179,7 @@ function ProjectDetail({ projectId, onBack }) {
 
   const updateStatus = async (status) => {
     try {
-      await api.put(`/projects/${projectId}`, { status });
+      await api.put(`/api/projects/${projectId}`, { status });
       toast.success(`Project marked ${status}`);
       setStatusDropdown(false);
       load();
@@ -189,7 +189,7 @@ function ProjectDetail({ projectId, onBack }) {
   const toggleMilestone = async (mid, currentStatus) => {
     const newStatus = currentStatus === "completed" ? "pending" : "completed";
     try {
-      await api.put(`/projects/${projectId}/milestones/${mid}`, { status: newStatus });
+      await api.put(`/api/projects/${projectId}/milestones/${mid}`, { status: newStatus });
       load();
     } catch (err) { toast.error(err.message); }
   };

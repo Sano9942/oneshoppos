@@ -74,7 +74,7 @@ export default function AppointmentServicesRedesign() {
         max_advance_days: Number(form.max_advance_days), staff_ids: form.staff_ids,
       };
       if (editing) {
-        await api.put(`/booking-services/${editing.id}`, payload);
+        await api.put(`/api/booking-services/${editing.id}`, payload);
         toast.success("Service updated");
       } else {
         await api.post("/api/booking-services", payload);
@@ -87,7 +87,7 @@ export default function AppointmentServicesRedesign() {
 
   const toggleActive = async (svc) => {
     try {
-      await api.put(`/booking-services/${svc.id}`, { is_active: !svc.is_active });
+      await api.put(`/api/booking-services/${svc.id}`, { is_active: !svc.is_active });
       toast.success(svc.is_active ? "Service deactivated" : "Service activated");
       loadServices();
     } catch (err) { toast.error(err.message); }
