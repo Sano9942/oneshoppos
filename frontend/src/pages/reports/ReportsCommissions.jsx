@@ -24,7 +24,7 @@ export default function CommissionSummaryTab({ filters }) {
     if (statusFilter) params.set("status", statusFilter);
     const qs = params.toString() ? `?${params}` : "";
 
-    api.get(`/commissions/earnings${qs}`).then(r => {
+    api.get(`/api/commissions/earnings${qs}`).then(r => {
       setEarnings(r.earnings || []);
       setSummary(r.summary || {});
       setLoading(false);

@@ -87,7 +87,7 @@ export default function CommissionPlansRedesign() {
     try {
       const body = { ...planForm, starts_at: planForm.starts_at || undefined, ends_at: planForm.ends_at || undefined };
       if (editingPlan) {
-        const res = await api.put(`/commission-plans/${editingPlan.id}`, body);
+        const res = await api.put(`/api/commission-plans/${editingPlan.id}`, body);
         setPlans(prev => prev.map(p => p.id === editingPlan.id ? { ...res.plan, rules: planForm.rules, assigned_employees: p.assigned_employees } : p));
         toast.success("Plan updated");
       } else {
@@ -102,7 +102,7 @@ export default function CommissionPlansRedesign() {
   const handleDelete = async (id) => {
     if (!confirm("Delete this commission plan? Employees will be unassigned.")) return;
     try {
-      await api.del(`/commission-plans/${id}`);
+      await api.del(`/api/commission-plans/${id}`);
       setPlans(prev => prev.filter(p => p.id !== id));
       toast.success("Plan deleted");
     } catch (err) { toast.error(err.message); }
@@ -115,7 +115,7 @@ export default function CommissionPlansRedesign() {
 
   const handleAssign = async () => {
     try {
-      await api.post(`/commission-plans/${showAssignModal.id}/assign`, { employee_ids: selectedEmployees });
+      await api.post(`/api/commission-plans/${showAssignModal.id}/assign`, { employee_ids: selectedEmployees });
       toast.success("Employees assigned");
       setShowAssignModal(null);
       const res = await api.get("/api/commission-plans");
@@ -125,7 +125,7 @@ export default function CommissionPlansRedesign() {
 
   const handleEarningStatus = async (earningId, status) => {
     try {
-      const res = await api.put(`/commissions/earnings/${earningId}/status`, { status });
+      const res = await api.put(`/api/commissions/earnings/${earningId}/status`, { status });
       setEarnings(prev => prev.map(e => e.id === earningId ? res.earning : e));
       toast.success(`Earning ${status}`);
     } catch (err) { toast.error(err.message); }

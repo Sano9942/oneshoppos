@@ -78,7 +78,7 @@ export default function SmartCollectionsRedesign() {
     if (!form.rules.every(r => r.value.trim())) return toast.error("All rules must have a value");
     try {
       if (editing) {
-        const res = await api.put(`/smart-collections/${editing.id}`, form);
+        const res = await api.put(`/api/smart-collections/${editing.id}`, form);
         setCollections(prev => prev.map(c => c.id === editing.id ? { ...res.collection, rules: form.rules } : c));
         toast.success("Collection updated");
       } else {
@@ -93,7 +93,7 @@ export default function SmartCollectionsRedesign() {
   const handleDelete = async (id) => {
     if (!confirm("Delete this collection?")) return;
     try {
-      await api.del(`/smart-collections/${id}`);
+      await api.del(`/api/smart-collections/${id}`);
       setCollections(prev => prev.filter(c => c.id !== id));
       toast.success("Collection deleted");
     } catch (err) { toast.error(err.message); }
@@ -101,7 +101,7 @@ export default function SmartCollectionsRedesign() {
 
   const handleView = async (id) => {
     try {
-      const res = await api.get(`/smart-collections/${id}`);
+      const res = await api.get(`/api/smart-collections/${id}`);
       setViewCollection(res.collection);
     } catch (err) { toast.error(err.message); }
   };

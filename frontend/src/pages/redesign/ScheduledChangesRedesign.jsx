@@ -31,7 +31,7 @@ export default function ScheduledChangesRedesign() {
 
   const fetchChanges = () => {
     const params = filter ? `?status=${filter}` : "";
-    api.get(`/catalog/scheduled-changes${params}`).then(r => {
+    api.get(`/api/catalog/scheduled-changes${params}`).then(r => {
       setChanges(r.changes || []);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -54,7 +54,7 @@ export default function ScheduledChangesRedesign() {
 
   const handleCancel = async (id) => {
     try {
-      const res = await api.put(`/catalog/scheduled-changes/${id}`, { status: "cancelled" });
+      const res = await api.put(`/api/catalog/scheduled-changes/${id}`, { status: "cancelled" });
       setChanges(prev => prev.map(c => c.id === id ? res.change : c));
       toast.success("Change cancelled");
     } catch (err) { toast.error(err.message); }

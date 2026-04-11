@@ -100,7 +100,7 @@ export default function ReportBuilderRedesign() {
 
   const handleDeleteDef = async (id) => {
     try {
-      await api.del(`/reports/builder/definitions/${id}`);
+      await api.del(`/api/reports/builder/definitions/${id}`);
       setDefinitions(prev => prev.filter(d => d.id !== id));
       toast.success("Definition deleted");
     } catch (err) { toast.error(err.message); }

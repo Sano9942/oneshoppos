@@ -57,7 +57,7 @@ export default function OutletTaxProfilesRedesign() {
 
   const handleSave = async (outletId) => {
     try {
-      const res = await api.put(`/outlet-tax-profiles/${outletId}`, {
+      const res = await api.put(`/api/outlet-tax-profiles/${outletId}`, {
         name: editName,
         is_active: true,
         lines: editLines.map(l => ({ category_id: l.category_id || null, product_id: l.product_id || null, tax_id: l.tax_id, priority: l.priority || 0 })),
@@ -75,7 +75,7 @@ export default function OutletTaxProfilesRedesign() {
   const handleDelete = async (outletId) => {
     if (!confirm("Remove tax profile for this outlet?")) return;
     try {
-      await api.del(`/outlet-tax-profiles/${outletId}`);
+      await api.del(`/api/outlet-tax-profiles/${outletId}`);
       setProfiles(prev => prev.filter(p => p.outlet_id !== outletId));
       toast.success("Tax profile removed");
     } catch (err) { toast.error(err.message); }

@@ -35,7 +35,7 @@ export default function ReturnPoliciesRedesign() {
   const handleSavePolicy = async (data) => {
     try {
       if (editPolicy) {
-        const res = await api.put(`/return-policies/${editPolicy.id}`, data);
+        const res = await api.put(`/api/return-policies/${editPolicy.id}`, data);
         setPolicies(prev => prev.map(p => p.id === editPolicy.id ? res.policy : p));
         toast.success("Policy updated");
       } else {
@@ -53,7 +53,7 @@ export default function ReturnPoliciesRedesign() {
   const handleSaveReason = async (data) => {
     try {
       if (editReason) {
-        const res = await api.put(`/return-reasons/${editReason.id}`, data);
+        const res = await api.put(`/api/return-reasons/${editReason.id}`, data);
         setReasons(prev => prev.map(r => r.id === editReason.id ? res.reason : r));
         toast.success("Reason updated");
       } else {

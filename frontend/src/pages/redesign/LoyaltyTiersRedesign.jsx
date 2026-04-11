@@ -64,7 +64,7 @@ function TierModal({ open, editing, onClose, onSaved }) {
         sort_order: parseInt(form.sort_order) || 0,
       };
       if (editing) {
-        await api.put(`/loyalty/tiers/${editing.id}`, body);
+        await api.put(`/api/loyalty/tiers/${editing.id}`, body);
         success("Tier updated");
       } else {
         await api.post("/api/loyalty/tiers", body);
@@ -245,7 +245,7 @@ export default function LoyaltyTiersRedesign() {
   async function deleteTier(tier) {
     if (!confirm(`Delete "${tier.name}" tier?`)) return;
     try {
-      await api.del(`/loyalty/tiers/${tier.id}`);
+      await api.del(`/api/loyalty/tiers/${tier.id}`);
       success("Tier deleted");
       load();
     } catch (err) {
