@@ -5,6 +5,8 @@
 **Commit range:** `b1b2763^..35f9874` (~68 phase commits, ~30 bug-fix commits after merge)
 **Methodology:** 4-step cross-batch review — (1) interconnection map, (2) targeted reviewer prompts, (3) 5 parallel phase reviewers, (4) cross-phase synthesis pass
 
+> **Active fix plan:** [fix-plan.md](fix-plan.md) — read this for current decisions, live production verifications, and commit progress. This report is a frozen snapshot of the review; `fix-plan.md` is the living document.
+
 ---
 
 ## TL;DR
