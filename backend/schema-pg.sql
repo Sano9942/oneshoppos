@@ -1165,37 +1165,6 @@ CREATE TABLE IF NOT EXISTS web_order_fulfillments (
   raw_payload TEXT
 );
 
--- ── Courier Integrations ─────────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS courier_integrations (
-  id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL,
-  adapter_key TEXT NOT NULL DEFAULT 'generic',
-  api_base_url TEXT,
-  api_key TEXT,
-  api_secret TEXT,
-  tracking_url_template TEXT,
-  enabled BOOLEAN DEFAULT false,
-  config_json TEXT DEFAULT '{}',
-  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-
-INSERT INTO courier_integrations (name, adapter_key, tracking_url_template) VALUES
-  ('Leopards Courier', 'leopards', 'https://leopardscourier.com/tracking/track-your-order?id={tracking}'),
-  ('TCS', 'tcs', 'https://www.tcsexpress.com/tracking?code={tracking}'),
-  ('BlueEx', 'blueex', 'https://blue-ex.com/tracking/{tracking}'),
-  ('Trax', 'trax', 'https://trax.pk/tracking/{tracking}'),
-  ('PostEx', 'postex', 'https://postex.pk/tracking/{tracking}'),
-  ('Rider', 'rider', 'https://rider.pk/tracking/{tracking}'),
-  ('Call Courier', 'callcourier', 'https://callcourier.com.pk/tracking/{tracking}'),
-  ('M&P', 'mnp', 'https://www.mulphico.com/tracking/{tracking}'),
-  ('Bykea', 'bykea', ''),
-  ('Swyft', 'swyft', 'https://swyft.pk/tracking/{tracking}'),
-  ('Pakistan Post', 'pakpost', 'https://ep.gov.pk/track/{tracking}'),
-  ('DHL Express', 'dhl', 'https://www.dhl.com/pk-en/home/tracking.html?tracking-id={tracking}'),
-  ('FedEx', 'fedex', 'https://www.fedex.com/fedextrack/?trknbr={tracking}')
-ON CONFLICT DO NOTHING;
-
 -- ── Shopify tables ────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS shopify_connections (
@@ -1708,6 +1677,26 @@ CREATE TABLE IF NOT EXISTS stock_count_items (
   UNIQUE(stock_count_id, product_id, variant_id)
 );
 
+-- ── Web Order Allocations ───────────────────────────────────────────
+-- Defined here (not later in the file) because picklist_items.allocation_id
+-- references it. schema-pg.sql is executed top-to-bottom as one batch by
+-- tenant-provisioner-pg.js, so forward-reference FKs fail fresh installs.
+
+CREATE TABLE IF NOT EXISTS web_order_allocations (
+  id SERIAL PRIMARY KEY,
+  web_order_id INT NOT NULL REFERENCES web_orders(id) ON DELETE CASCADE,
+  web_order_item_id INT REFERENCES web_order_items(id) ON DELETE CASCADE,
+  fulfillment_outlet_id INT NOT NULL REFERENCES outlets(id),
+  fulfillment_method TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  allocated_qty INT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_web_order_allocations_order ON web_order_allocations(web_order_id);
+CREATE INDEX IF NOT EXISTS idx_web_order_allocations_outlet ON web_order_allocations(fulfillment_outlet_id);
+
 -- ── Fulfillment (Pick/Pack/Dispatch) ─────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS picklists (
@@ -1822,23 +1811,6 @@ CREATE TABLE IF NOT EXISTS inventory_reservations (
 CREATE INDEX IF NOT EXISTS idx_inventory_reservations_key ON inventory_reservations(reservation_key);
 CREATE INDEX IF NOT EXISTS idx_inventory_reservations_outlet_product ON inventory_reservations(outlet_id, product_id);
 CREATE INDEX IF NOT EXISTS idx_inventory_reservations_status ON inventory_reservations(status) WHERE status = 'active';
-
--- ── Web Order Allocations ───────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS web_order_allocations (
-  id SERIAL PRIMARY KEY,
-  web_order_id INT NOT NULL REFERENCES web_orders(id) ON DELETE CASCADE,
-  web_order_item_id INT REFERENCES web_order_items(id) ON DELETE CASCADE,
-  fulfillment_outlet_id INT NOT NULL REFERENCES outlets(id),
-  fulfillment_method TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
-  allocated_qty INT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_web_order_allocations_order ON web_order_allocations(web_order_id);
-CREATE INDEX IF NOT EXISTS idx_web_order_allocations_outlet ON web_order_allocations(fulfillment_outlet_id);
 
 -- ── Customer Addresses ──────────────────────────────────────────────
 
@@ -3098,12 +3070,6 @@ CREATE TABLE IF NOT EXISTS storefront_payment_sessions (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   completed_at TIMESTAMPTZ
 );
-
--- Extend payment_intents
-ALTER TABLE payment_intents
-  ADD COLUMN IF NOT EXISTS provider TEXT,
-  ADD COLUMN IF NOT EXISTS provider_status TEXT,
-  ADD COLUMN IF NOT EXISTS last_event_at TIMESTAMPTZ;
 
 -- Extend customer_invoice_payment_links
 ALTER TABLE customer_invoice_payment_links
