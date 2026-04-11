@@ -355,6 +355,153 @@ describe("Wave 3 Batch 3C — Cross-domain atomicity + gating", () => {
   });
 
   // ───────────────────────────────────────────────────────────────
+  // DB-5 item 10 — bumpTicket expo-routing atomicity
+  // ───────────────────────────────────────────────────────────────
+  describe("DB-5 item 10 — bumpTicket expo-routing atomicity", () => {
+    const kds = require("../../services/restaurant-kds");
+    let prepStationId;
+    let expoStationId;
+
+    beforeAll(async () => {
+      // Seed a prep station and an expo station on outlet 1. The
+      // factory doesn't pre-seed kds_stations; Batch 3C's H2 creates
+      // its own, and we create ours here so the two sections don't
+      // share state.
+      const { rows: [prep] } = await db.query(
+        `INSERT INTO kds_stations (outlet_id, name, station_role, is_active)
+         VALUES (1, 'DB5 Prep', 'prep', true) RETURNING id`
+      );
+      prepStationId = prep.id;
+
+      const { rows: [expo] } = await db.query(
+        `INSERT INTO kds_stations (outlet_id, name, station_role, is_active)
+         VALUES (1, 'DB5 Expo', 'expo', true) RETURNING id`
+      );
+      expoStationId = expo.id;
+    });
+
+    async function seedPrepTicket(tableLabel) {
+      // Create a draft_order and a prep ticket for it. Separate helper
+      // so happy-path and rollback-path tests can each get a fresh
+      // draft without stepping on each other's state.
+      const { rows: [draft] } = await db.query(
+        `INSERT INTO draft_orders (outlet_id, created_by, status)
+         VALUES (1, 1, 'open') RETURNING id`
+      );
+      const { rows: [ticket] } = await db.query(
+        `INSERT INTO kds_tickets (station_id, draft_order_id, table_label, course_name, status)
+         VALUES ($1, $2, $3, 'main', 'new') RETURNING *`,
+        [prepStationId, draft.id, tableLabel]
+      );
+      return { draftId: draft.id, ticketId: ticket.id };
+    }
+
+    it("happy path: bumps last prep ticket → creates expo ticket + both events (atomic commit)", async () => {
+      const { draftId, ticketId } = await seedPrepTicket("T-HAPPY");
+
+      const result = await kds.bumpTicket(db, ticketId, /* actorId */ 1);
+
+      // Returned ticket is the bumped prep ticket.
+      expect(result.id).toBe(ticketId);
+      expect(result.status).toBe("bumped");
+
+      // Original prep ticket row has status='bumped' in the DB.
+      const { rows: [prepAfter] } = await db.query(
+        `SELECT status FROM kds_tickets WHERE id = $1`,
+        [ticketId]
+      );
+      expect(prepAfter.status).toBe("bumped");
+
+      // 'bumped' event row committed.
+      const { rows: bumpedEvents } = await db.query(
+        `SELECT event_type, actor_id FROM kds_ticket_events WHERE ticket_id = $1`,
+        [ticketId]
+      );
+      expect(bumpedEvents).toHaveLength(1);
+      expect(bumpedEvents[0].event_type).toBe("bumped");
+      expect(bumpedEvents[0].actor_id).toBe(1);
+
+      // Expo ticket created for the same draft_order on the expo station.
+      const { rows: expoTickets } = await db.query(
+        `SELECT id, station_id, course_name, status FROM kds_tickets
+         WHERE draft_order_id = $1 AND station_id = $2`,
+        [draftId, expoStationId]
+      );
+      expect(expoTickets).toHaveLength(1);
+      expect(expoTickets[0].course_name).toBe("main");
+      expect(expoTickets[0].status).toBe("new");
+
+      // 'created' event row for the expo ticket committed.
+      const { rows: expoEvents } = await db.query(
+        `SELECT event_type FROM kds_ticket_events WHERE ticket_id = $1`,
+        [expoTickets[0].id]
+      );
+      expect(expoEvents).toHaveLength(1);
+      expect(expoEvents[0].event_type).toBe("created");
+    });
+
+    it("rollback path: expo INSERT failure leaves prep bumped but wipes transactional writes", async () => {
+      const { draftId, ticketId } = await seedPrepTicket("T-ROLLBACK");
+
+      // Proxy-wrap db.transaction so the client inside throws on the
+      // expo-ticket INSERT (the only VALUES-with-station_id INSERT that
+      // runs inside the tx — the bump UPDATE is outside the tx). Same
+      // pattern as H2's rollback test at line 295+.
+      const wrappedDb = {
+        query: (...args) => db.query(...args),
+        transaction: (fn) => db.transaction(async (client) => {
+          const wrappedClient = new Proxy(client, {
+            get(target, prop) {
+              if (prop === "query") {
+                return (sql, params) => {
+                  if (
+                    typeof sql === "string" &&
+                    sql.includes("INSERT INTO kds_tickets") &&
+                    sql.includes("station_id, draft_order_id, table_label, course_name, status")
+                  ) {
+                    // This is the expo-ticket INSERT inside the tx.
+                    // Throw — db.transaction's catch block will ROLLBACK.
+                    throw new Error("Simulated expo INSERT failure for DB-5 item 10 rollback test");
+                  }
+                  return target.query(sql, params);
+                };
+              }
+              return target[prop];
+            },
+          });
+          return fn(wrappedClient);
+        }),
+      };
+
+      await expect(kds.bumpTicket(wrappedDb, ticketId, 1)).rejects.toThrow(
+        /Simulated expo INSERT failure/
+      );
+
+      // Idempotency anchor: the prep ticket UPDATE ran OUTSIDE the tx,
+      // so status='bumped' stays committed even though the tx rolled back.
+      const { rows: [prepAfter] } = await db.query(
+        `SELECT status FROM kds_tickets WHERE id = $1`,
+        [ticketId]
+      );
+      expect(prepAfter.status).toBe("bumped");
+
+      // Inside the tx: 'bumped' event row does NOT exist (rolled back).
+      const { rows: bumpedEvents } = await db.query(
+        `SELECT event_type FROM kds_ticket_events WHERE ticket_id = $1`,
+        [ticketId]
+      );
+      expect(bumpedEvents).toHaveLength(0);
+
+      // Inside the tx: no expo ticket row (rolled back before or during INSERT).
+      const { rows: expoTickets } = await db.query(
+        `SELECT id FROM kds_tickets WHERE draft_order_id = $1 AND station_id = $2`,
+        [draftId, expoStationId]
+      );
+      expect(expoTickets).toHaveLength(0);
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────
   // H3 — notifyCustomerSms feature flag gate
   // ───────────────────────────────────────────────────────────────
   describe("H3 — notifyCustomerSms gated on phase5_sms_providers", () => {

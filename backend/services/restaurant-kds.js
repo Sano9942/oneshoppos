@@ -197,51 +197,63 @@ async function getTickets(db, stationId, statusFilter) {
 }
 
 async function bumpTicket(db, ticketId, actorId) {
+  // Idempotency anchor: the first UPDATE runs outside the transaction.
+  // If the expo-routing writes below roll back, the ticket's status='bumped'
+  // stays committed (same semantic as Phase 4 H2 Decision LL). Retries can
+  // safely re-enter without double-bumping.
   const { rows: [ticket] } = await db.query(
     "UPDATE kds_tickets SET status = 'bumped', updated_at = NOW() WHERE id = $1 RETURNING *",
     [ticketId]
   );
   if (!ticket) throw Object.assign(new Error("Ticket not found"), { statusCode: 404 });
 
-  await db.query(
-    "INSERT INTO kds_ticket_events (ticket_id, event_type, actor_id) VALUES ($1, 'bumped', $2)",
-    [ticketId, actorId]
-  );
+  // All subsequent reads + writes (bump event, remaining-check, expo lookup,
+  // expo INSERT, expo event) run inside a single transaction so a failure
+  // in the expo-routing branch rolls back all of them together. Without
+  // this wrapper, a partial failure could leave an event row for an expo
+  // ticket that was never created, or a created expo ticket without its
+  // "created" event (DB-5 item 10).
+  await db.transaction(async (client) => {
+    await client.query(
+      "INSERT INTO kds_ticket_events (ticket_id, event_type, actor_id) VALUES ($1, 'bumped', $2)",
+      [ticketId, actorId]
+    );
 
-  // Check if all tickets for this order are bumped → mark expo
-  const { rows: remaining } = await db.query(
-    "SELECT id FROM kds_tickets WHERE draft_order_id = $1 AND status IN ('new','in_progress')",
-    [ticket.draft_order_id]
-  );
-
-  // Route to expo station if all prep done
-  if (!remaining.length) {
-    const { rows: expoStations } = await db.query(
-      `SELECT ks.id FROM kds_stations ks
-       JOIN kds_tickets kt ON kt.station_id = ks.id
-       WHERE kt.draft_order_id = $1 AND ks.station_role = 'expo'
-       LIMIT 1`,
+    // Check if all tickets for this order are bumped → mark expo
+    const { rows: remaining } = await client.query(
+      "SELECT id FROM kds_tickets WHERE draft_order_id = $1 AND status IN ('new','in_progress')",
       [ticket.draft_order_id]
     );
-    // If no expo ticket exists, create one
-    if (!expoStations.length) {
-      const { rows: [expo] } = await db.query(
-        `SELECT id FROM kds_stations WHERE outlet_id = (SELECT outlet_id FROM draft_orders WHERE id = $1) AND station_role = 'expo' AND is_active = true ORDER BY id LIMIT 1`,
+
+    // Route to expo station if all prep done
+    if (!remaining.length) {
+      const { rows: expoStations } = await client.query(
+        `SELECT ks.id FROM kds_stations ks
+         JOIN kds_tickets kt ON kt.station_id = ks.id
+         WHERE kt.draft_order_id = $1 AND ks.station_role = 'expo'
+         LIMIT 1`,
         [ticket.draft_order_id]
       );
-      if (expo) {
-        const { rows: [expoTicket] } = await db.query(
-          `INSERT INTO kds_tickets (station_id, draft_order_id, table_label, course_name, status)
-           VALUES ($1, $2, $3, $4, 'new') RETURNING *`,
-          [expo.id, ticket.draft_order_id, ticket.table_label, ticket.course_name]
+      // If no expo ticket exists, create one
+      if (!expoStations.length) {
+        const { rows: [expo] } = await client.query(
+          `SELECT id FROM kds_stations WHERE outlet_id = (SELECT outlet_id FROM draft_orders WHERE id = $1) AND station_role = 'expo' AND is_active = true ORDER BY id LIMIT 1`,
+          [ticket.draft_order_id]
         );
-        await db.query(
-          "INSERT INTO kds_ticket_events (ticket_id, event_type) VALUES ($1, 'created')",
-          [expoTicket.id]
-        );
+        if (expo) {
+          const { rows: [expoTicket] } = await client.query(
+            `INSERT INTO kds_tickets (station_id, draft_order_id, table_label, course_name, status)
+             VALUES ($1, $2, $3, $4, 'new') RETURNING *`,
+            [expo.id, ticket.draft_order_id, ticket.table_label, ticket.course_name]
+          );
+          await client.query(
+            "INSERT INTO kds_ticket_events (ticket_id, event_type) VALUES ($1, 'created')",
+            [expoTicket.id]
+          );
+        }
       }
     }
-  }
+  });
 
   return ticket;
 }
