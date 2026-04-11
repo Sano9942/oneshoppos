@@ -7,6 +7,14 @@ const logger = require("../services/logger").child({ component: "couriers" });
  */
 async function notifyCustomerSms(db, orderId, messageTemplate) {
   try {
+    // Billing gate: tenants without the phase5_sms_providers add-on must
+    // not trigger outbound SMS even when sms_consent is true on the
+    // customer, because the carrier charge happens regardless of consent.
+    const { rows: [flag] } = await db.query(
+      "SELECT enabled FROM feature_flags WHERE key = 'phase5_sms_providers'"
+    );
+    if (!flag || flag.enabled !== true) return;
+
     const { rows: [order] } = await db.query(
       `SELECT wo.id, wo.tracking_number, wo.external_order_number,
               c.mobile, c.sms_consent, c.name AS customer_name
@@ -29,7 +37,7 @@ async function notifyCustomerSms(db, orderId, messageTemplate) {
   }
 }
 
-module.exports = function mountCourierRoutes(app, deps) {
+function mountCourierRoutes(app, deps) {
   const db = deps.db;
   const { requirePerm, requireFeature } = deps;
 
@@ -551,4 +559,6 @@ module.exports = function mountCourierRoutes(app, deps) {
       res.status(500).json({ error: err.message });
     }
   });
-};
+}
+
+module.exports = Object.assign(mountCourierRoutes, { notifyCustomerSms });
