@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 
 import { api } from "../api";
+import { useToast } from "../contexts/ToastContext";
 import {
   fmtDate,
   ExportButton,
@@ -763,6 +764,7 @@ const TAB_ALIASES = {
 };
 
 export default function Reports() {
+  const toast = useToast();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => {
     const tab = searchParams.get("tab");
@@ -821,10 +823,11 @@ export default function Reports() {
         });
       } catch (err) {
         console.error("Failed to load metadata", err);
+        toast.error(`Failed to load reports metadata — ${err.message || "Unknown error"}`);
       }
     };
     loadMeta();
-  }, [filters.outletIds, filters.dateFrom, filters.dateTo]);
+  }, [filters.outletIds, filters.dateFrom, filters.dateTo, toast]);
 
   // Apply URL params once after meta loads (need outlet list to validate outlet_id)
   useEffect(() => {

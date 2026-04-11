@@ -16,6 +16,7 @@ import { api } from "../../api";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { downloadCsv } from "../../utils/csvExport";
 import { useAuth } from "../../auth/AuthProvider";
+import { useToast } from "../../contexts/ToastContext";
 import {
   Badge,
   Button,
@@ -177,6 +178,7 @@ function NewCountDialog({ outlets, onConfirm, onCancel, saving }) {
 // ── Counting View ─────────────────────────────────────────────────────────
 
 function CountingView({ countId, onBack }) {
+  const toast = useToast();
   const [count, setCount] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -200,10 +202,11 @@ function CountingView({ countId, onBack }) {
       setItems(data.items);
     } catch (err) {
       console.error("Failed to load count:", err);
+      toast.error(err.message || "Failed to load stock count");
     } finally {
       setLoading(false);
     }
-  }, [countId]);
+  }, [countId, toast]);
 
   useEffect(() => {
     loadCount();
@@ -621,6 +624,7 @@ function CountingView({ countId, onBack }) {
 
 export default function StockCountRedesign() {
   const { hasPerm } = useAuth();
+  const toast = useToast();
   const [view, setView] = useState("list"); // list | new | counting
   const [counts, setCounts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -635,6 +639,7 @@ export default function StockCountRedesign() {
       setCounts(data.stockCounts || []);
     } catch (err) {
       console.error("Failed to load stock counts:", err);
+      toast.error(err.message || "Failed to load stock counts");
     } finally {
       setLoading(false);
     }
