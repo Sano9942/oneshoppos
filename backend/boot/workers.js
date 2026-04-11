@@ -286,6 +286,48 @@ function startAll(deps) {
           const { registerReservationWorker } = require("../workers/reservation-worker-boss");
           await registerReservationWorker(boss, pool);
         }
+
+        // Booking reminders — tenant-aware setInterval poll. Uses
+        // forEachActiveTenant to iterate active tenants (since it's a
+        // scheduled poll, not a per-event job — there's no tenantSlug
+        // to pull from a payload). Each iteration calls
+        // processPendingReminders(tenantDb, boss), which SELECTs
+        // pending appointment_reminders rows and enqueues them via the
+        // shared "email" job. The email worker is tenant-agnostic —
+        // it just calls Resend — so no further routing is needed.
+        if (String(process.env.BOOKING_REMINDER_WORKER_ENABLED || "0") === "1") {
+          const { processPendingReminders } = require("../services/booking-reminders");
+          global.__bookingReminderWorkerStatus = {
+            lastPollAt: null,
+            processedToday: 0,
+            queueDepth: 0,
+          };
+          const pollIntervalMs = 5 * 60 * 1000; // 5 minutes
+          const pollBookingReminders = async () => {
+            global.__bookingReminderWorkerStatus.lastPollAt = Date.now();
+            let processedThisPoll = 0;
+            await forEachActiveTenant("BookingReminders", async (tenantDb) => {
+              const count = await processPendingReminders(tenantDb, boss);
+              processedThisPoll += count || 0;
+            }, deps);
+            if (processedThisPoll > 0) {
+              global.__bookingReminderWorkerStatus.processedToday += processedThisPoll;
+              console.log(`[BookingReminders] Processed ${processedThisPoll} reminders across tenants`);
+            }
+          };
+          // Run once on boot so any reminders due at startup get processed
+          // without waiting a full 5 minutes. Fire-and-forget — startup errors
+          // are logged by forEachActiveTenant's inner try/catch.
+          pollBookingReminders().catch((err) =>
+            console.error("[BookingReminders] boot poll error:", err.message)
+          );
+          setInterval(() => {
+            pollBookingReminders().catch((err) =>
+              console.error("[BookingReminders] poll error:", err.message)
+            );
+          }, pollIntervalMs);
+          console.log("[BookingReminders] Worker enabled (5-minute poll)");
+        }
       })
       .catch((err) => console.error("[boss] Failed to start pg-boss:", err.message));
   }
