@@ -8,6 +8,7 @@ module.exports = defineConfig({
     pool: "forks",
     isolate: true,
     globals: true,
+    setupFiles: ["./tests/helpers/vitest-setup.js"],
     coverage: {
       provider: "v8",
       include: [

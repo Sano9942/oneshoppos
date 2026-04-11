@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
 /**
  * migrate-pg.js — Postgres schema migration runner.
  *
