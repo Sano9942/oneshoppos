@@ -443,6 +443,93 @@ below was scoped via the 3-question approval discipline before any code.
 
 ---
 
+## Pattern Phase 4 C3 — KDS JOIN fan-out
+
+**Status:** `done`
+**Branch:** `review-fixes`
+**Closed:** 2026-04-11 (3 commits: partial fix + revised junction fix + docs — scope corrected mid-implementation)
+
+### Decision log
+
+- **2026-04-11 — Decision Q: Option 1 (per-course ticket) over Option 2 (junction table) — LATER REVERSED**
+  - **Initial Q:** "Which review direction to take — one-ticket-per-(draft_order, station, course) or add a `kds_ticket_items` junction table?"
+  - **Initial chose: Option 1.** Reasoning at the time: the frontend UI (`KDSRedesign.jsx:134`) already renders one bump button per ticket with an items array underneath — per-item state from a junction table would be wasted. No schema change, no migration. `bumpTicket` already assumes "one ticket = one kitchen unit of work" so the grouping would clean up a pre-existing inconsistency.
+  - **Committed as `3155263`** — `sendToKitchen` rewritten to group items by `(station_id, course_name)` and INSERT one ticket per group.
+  - **Reversed by test 2**: the test asserted that station A's ticket contains only its own 2 items (Widget A+B, category 1) and station B's ticket contains only its 1 item (Snack D, category 2). Actual result: both tickets contained all 3 items. **The fix was incomplete.** `getTickets`'s read-side JOIN at `restaurant-kds.js:133-134` joins `draft_order_items di ON di.draft_order_id = kt.draft_order_id AND di.course_name = kt.course_name` — no station filter. So even with one ticket per station, the JOIN pulled every item in that course onto every station's ticket. The review's Option 1 direction only fixed the write side; the read side still fanned out.
+  - **Key insight**: the reviewer implicitly assumed the JOIN would know about station routing, but neither the JOIN nor the underlying data model supports that without either (a) denormalizing `station_id` onto `draft_order_items` or (b) adding a junction table. The review omitted this.
+  - **Pivoted to Option 2** (see Decision R below) after stopping the implementation and checking in with the user.
+
+- **2026-04-11 — Decision R: revised scope after test 2 exposed the read-side gap**
+  - **Q:** Revert `3155263` and ship a clean single commit, or leave it and add the junction-table fix on top?
+  - **User chose:** leave `3155263`, add the junction fix on top.
+  - **Rationale:** the user's blanket rule is "never amend, always new commit." Reverting would require a revert commit anyway. Adding on top preserves the reasoning trail — future readers see "the write-side grouping was intentional but insufficient; the junction was added as a follow-up" rather than a single mysterious commit that does both. It also matches how Pattern D and Pattern A handled scope expansion: add commits, don't retroactively edit.
+  - **Cost paid:** one extra commit in history. Benefit: intellectual honesty + easier bisection if someone later wants to understand why the grouping exists.
+
+- **2026-04-11 — Decision S: junction table shape — composite PK + second index**
+  - **Q:** `SERIAL id + UNIQUE(ticket_id, draft_order_item_id)` or composite PK?
+  - **Chose: composite PK** `PRIMARY KEY (ticket_id, draft_order_item_id)`.
+  - **Rationale:** grep of the codebase showed `role_permissions`, `employee_outlets`, `channel_publications` all use composite keys or functional unique constraints for tight junction tables. Matches convention. Saves one column per row for a table that will never be referenced *from* anywhere else.
+  - **Second index on `draft_order_item_id`**: PK covers "given a ticket, find its items" (left-anchored on ticket_id). The reverse lookup ("given this item, which tickets reference it") needs its own index. Currently unused in the codebase but costs ~1 row per item and enables reconciliation queries during future bump/recall edge cases.
+  - **`ON DELETE CASCADE` on both FKs**: if either side is deleted, junction rows go with it. No dangling junction rows that would cause null-joins.
+
+- **2026-04-11 — Decision T: JOIN defensive `FILTER ... COALESCE '[]'::json`**
+  - **Q:** Can `getTickets` safely assume every ticket has junction entries?
+  - **Chose: defend against empty junction.** Wrap `json_agg(...)` in `FILTER (WHERE kti.ticket_id IS NOT NULL)` and `COALESCE(..., '[]'::json)`.
+  - **Reason:** without `FILTER`, a LEFT JOIN with no matching junction rows produces one output row with all NULL columns. `json_agg(json_build_object('id', NULL, ...))` then emits `[{"id":null,...}]` — a single-element array of a useless null-object that the frontend (`KDSRedesign.jsx:134`: `(ticket.items || []).map(...)`) would render as a ghost item row with empty fields. Defending now is cheap insurance against the sendToKitchen partial-failure case (Phase 4 H2 territory — outside this fix's scope) and future edge cases where a ticket might be inserted without its junction rows.
+  - **Observation worth recording**: the pre-fix JOIN couldn't produce this case because `(draft_order_id, course_name)` always matched at least the items in that course. The new junction JOIN legitimately can produce an empty match. Every read-side refactor inherits new failure modes.
+
+- **2026-04-11 — Decision U: fix test 6's fixture isolation inline instead of deferring**
+  - **Q:** Test 6 fails (`expo.station_id 7 vs 2`) because `bumpTicket`'s expo-station lookup at `restaurant-kds.js:228` uses `LIMIT 1` with no `ORDER BY` and happens to pick the pre-existing "Expo Window" station (created by an earlier describe) instead of our dedicated `bumpExpoStation`. Fix it now or defer?
+  - **Chose: fix now.** User explicitly approved "fix test 6" as part of the revised scope. Fix is one line in the test: `UPDATE kds_stations SET is_active = false WHERE name = 'Expo Window'` at test start. No production code change — the underlying `LIMIT 1 without ORDER BY` non-determinism is a separate issue (Phase 4 review would have flagged it as H-level at most) and out of scope for C3.
+
+### Findings
+
+- **Phase 4 C3 — KDS ticket-to-item JOIN fans out across stations** → `fix`, 3-commit plan
+  [verified 2026-04-11:
+  • `sendToKitchen` at `services/restaurant-kds.js:43-115` created one `kds_tickets` row per item (loop at line 77 with in-loop INSERT at 93-97).
+  • `getTickets` at `services/restaurant-kds.js:127-140` joined `draft_order_items di ON di.draft_order_id = kt.draft_order_id AND di.course_name = kt.course_name` — no station filter.
+  • Consequence: 3 items in 'main' course → 3 tickets, each ticket's aggregation includes ALL 3 items. Kitchen screen shows 3×3=9 item renderings. Bumping one ticket advances 1/3 of the state while the UI shows all 3 items gone.
+  • Production state: packagesmall has `phase4_restaurant_kds` flag enabled but 0 kds_tickets and 0 kds_stations. handicraft and khantoys have flag disabled. Dormant bug — Pattern A Decision D activation-day shape.
+  • Frontend consumer: `KDSRedesign.jsx:134` renders `ticket.items.map(...)` with a single bump button per ticket. This matches the ticket-per-course-per-station model Option 1 produces but doesn't match the read-side fan-out the JOIN was producing.]
+
+- **Scope expansion discovered mid-implementation**: the initial write-side-only fix (`3155263`) left the read-side fan-out intact. Tests 2/5 expected the JOIN to respect station routing; the review direction didn't require a JOIN change. See Decision Q.
+
+- **Test 6 fixture isolation bug** (not in the review) → `fix`, drive-by
+  [verified 2026-04-11: `bumpTicket` at `services/restaurant-kds.js:218-230` picks an active expo station in the outlet via `LIMIT 1` with no `ORDER BY`. The earlier "KDS stations" describe at `pg-batch13-restaurant.test.js:301` creates an "Expo Window" station with `is_active=true` and a lower id than my dedicated `bumpExpoStation`. Postgres's `LIMIT 1` without ORDER BY is non-deterministic but in practice returns lower-id rows first, so the test routed to the wrong expo. Fixed test-side by deactivating "Expo Window" at test start. The underlying non-determinism in `bumpTicket` is a pre-existing issue outside Phase 4 C3 scope.]
+
+### Commit plan
+
+1. `fix(kds): collapse ticket-per-item into ticket-per-course (Phase 4 C3)` — [landed `3155263`, **incomplete fix**]
+   - Modified: `services/restaurant-kds.js` (`sendToKitchen` grouping only)
+   - Claimed to fix Phase 4 C3; actually fixed the write side only. Tests would have caught this if I'd run them before committing the code, but I wrote tests after. **Lesson: write at least one skeleton test for the critical assertion before committing the fix, or verify the fix runs against an existing test that would catch it.**
+2. `fix(kds): add kds_ticket_items junction to complete Phase 4 C3 fix` — [landed `03b36f5`]
+   - New: migration v29, schema-pg.sql mirror
+   - Modified: `services/restaurant-kds.js` (sendToKitchen writes junction rows, getTickets joins via junction with FILTER/COALESCE guards)
+   - Modified: `tests/integration/pg-batch13-restaurant.test.js` (new KDS ticket fan-out describe block with 6 tests, test 6 fixture isolation fix)
+3. `docs(review): close Phase 4 C3 with final disposition` — this update.
+
+### Test strategy
+
+- **Integration only**, appended to `pg-batch13-restaurant.test.js` as a `KDS ticket fan-out — Phase 4 C3` describe block. No unit tests — the grouping is a `Map` build + loop and the JOIN rewrite is SQL, neither interesting in unit isolation.
+- **6 tests:**
+  1. 3 items / 1 station / main course → exactly 1 ticket with 3 items
+  2. 3 items / 2 category-routed stations → 2 tickets, each with its own subset (2 items on station A, 1 on station B). **This is the test that exposed the incomplete fix.**
+  3. 4 items / 1 station / 2 courses (main+dessert) → 2 tickets, each with 2 items, course-scoped
+  4. Empty item list → `[]` return, 0 tickets created
+  5. Two concurrent checks on same station+course → each ticket's items scoped to its own check (no cross-check fan-out)
+  6. Bump→expo auto-routing with dedicated bumpPrep/bumpExpo stations
+- **Runtime**: ~103s for the full 41-test file (was 61s before Phase 4 C2 tests, ~40s added for the 14 Phase 4 C2 + C3 tests combined).
+- **Required env bump**: file-level `jest.setTimeout(20000)` added because KDS fan-out tests do 7+ supertest round-trips each and the default 5s ceiling is tight against remote Supabase.
+- **Regression check**: all 27 pre-existing restaurant tests + all 8 Phase 4 C2 QR tests still passing after the junction changes.
+
+### Deferred / documented-only
+
+- **`bumpTicket` expo-station lookup non-determinism**: `SELECT ... FROM kds_stations WHERE ... LIMIT 1` without `ORDER BY` at `services/restaurant-kds.js:228`. In production with one expo station per outlet, this is harmless. In tests with multiple expo stations, it picks arbitrarily. A proper fix would `ORDER BY id LIMIT 1` or pick via explicit routing. Out of scope for Phase 4 C3 — flagged for a future KDS hygiene pass.
+- **No per-item ticket state**: the junction table has only `(ticket_id, draft_order_item_id)`. If someone later wants per-item bump/ready state (kitchen marks one item ready before the others), the column can be added to `kds_ticket_items`. Not shipped today to avoid scope bloat the UI doesn't need. Pattern D Decision C lesson: don't ship unexercised code paths.
+- **Phase 4 H2** (`sendToKitchen` not atomic): related but separate — the loop of INSERTs still runs outside a transaction, so a partial failure leaves orphaned tickets + junction rows. Junction changes didn't touch this; still Phase 4 H2 territory. The new FILTER/COALESCE defends the read path against the "ticket exists, no junction rows" state that partial failures could produce, which is a small incidental improvement.
+
+---
+
 ## Deviations from synthesis
 
 Running log of where we've diverged from the reviewer findings, with dates and reasons:
@@ -468,3 +555,9 @@ Running log of where we've diverged from the reviewer findings, with dates and r
 - **2026-04-11 — Phase 4 C2: test 7 hit a pre-existing `createCheckSchema` quirk**: `createCheckSchema` at `schemas/restaurant.js:41` accepts `table_session_id` but not `table_id`. The POST route inserts `draft_orders` with `table_id = NULL`. The public menu query at `routes/public-restaurant.js:17` JOINs on `table_id = restaurant_tables.id` — so the lookup never resolves even with a valid token. Worked around in test 7 with a direct `UPDATE draft_orders SET table_id` after the POST. The underlying bug (route should derive `table_id` from `table_session_id`, or the schema should accept `table_id` with an FK existence check) is **out of scope for Phase 4 C2** but documented as deferred. Worth noting: this bug would have 404'd every real QR scan in production the moment packagesmall tried to use the feature, *even after* the Phase 4 C2 fix. So the "fix completes the feature" claim has a caveat — it fixes the service/migration side, but the route/schema side still has a gap.
 - **2026-04-11 — Phase 4 C2: pg-batch filename numbering is already cluttered**: both `pg-batch13-restaurant.test.js` and `pg-batch14-bookings.test.js` pre-exist on main. Phase 2 C3 added `pg-batch13-catalog-scheduler.test.js` (a 13- collision I introduced without noticing). Rather than compound the confusion with a new `pg-batch1x-restaurant-qr.test.js`, appended tests to the existing `pg-batch13-restaurant.test.js`. The 13- filename collision is documented as a deferred cleanup — low-priority hygiene, not blocking anything.
 - **2026-04-11 — Phase 4 C2: iterated 3 times to get tests green**: first run 33/35 (tests 7-8 both 400 from `MULTI_TENANT` env issue), second run 34/35 (test 7 still 404 because of `table_id` JOIN), third run 35/35. Each iteration taught something the review didn't flag — the env-reads-at-load-time gotcha and the `createCheckSchema.table_id` quirk. Both recorded above. "Tests catch what reviews miss" pattern holds for the fourth time in this session: lastPollAt (Pattern A), payment_intents ALTER (M1), Zod 4 message API (Phase 2 C3), and these two quirks (Phase 4 C2).
+- **2026-04-11 — Phase 4 C3: the review's Option 1 direction was insufficient**: the review said "one ticket per draft_order+station+course" would fix the fan-out. I took that direction and committed `3155263` implementing exactly that on the write side. Then I wrote tests and test 2 (the category-routing split test) failed: 1 ticket on station A, 1 ticket on station B, but **both** showed all 3 items. Root cause: the read-side JOIN in `getTickets` joins `draft_order_items` by `(draft_order_id, course_name)` with no station filter. Grouping the INSERT side doesn't help — the SELECT still fans out. **The review implicitly assumed the JOIN would respect routing, but neither the JOIN nor the data model supports that.** Pivoted to Option 2 (junction table) mid-implementation after stopping to re-verify with the user. Fifth time in this session tests caught what reviews missed: lastPollAt, payment_intents ALTER, Zod 4 message API, Phase 4 C2 env/table_id quirks, and now Phase 4 C3's read-side gap. **The broader pattern**: reviewer instructions describing "do X" are often describing the symptom fix, not the data-model fix. Always trace the full lifecycle (write AND read) before committing.
+- **2026-04-11 — Phase 4 C3: "leave the incomplete commit alone, add the fix on top"**: the user's consistent rule "never amend, always new commit" applied here. `3155263` was a partial fix; reverting would require a revert commit anyway. Adding the junction-table fix on top in `03b36f5` preserves the reasoning trail — a future reader bisecting sees "write-side grouping was intentional but required a follow-up" rather than a single opaque commit. This is not a sunk-cost decision (the grouping code in `3155263` is still necessary and correct, just not sufficient). Worth contrasting with Phase 2 C3 where I bundled refactor + fix into one commit because they had the same motivation; here the two commits have genuinely different rationale (grouping fixes the write side, junction fixes the read side), so splitting is honest.
+- **2026-04-11 — Phase 4 C3: file-level `jest.setTimeout(20000)` was required**: tests 2/3/5/6 initially failed with 5s timeouts because they do 7+ supertest round-trips each (seed check + insert items + POST send-to-kitchen + 2× GET kds/tickets). Against remote Supabase the default 5s ceiling is tight. Bumped to 20s at file level. Runtime for the full pg-batch13-restaurant file went from ~61s to ~103s. Not a regression — the tests are just doing more real work.
+- **2026-04-11 — Phase 4 C3: orphaned test schemas caused a "41 all failed" cascade**: during iteration, failed test runs left `test_XXXXXX` schemas behind in Supabase. Three accumulated across runs, consuming connection/lock budget. A subsequent run of `pg-batch13-restaurant.test.js` had the top-level `beforeAll` time out because `createTestApp()` couldn't acquire resources, which cascaded into 41/41 failed tests with misleading "db is undefined" errors. Resolved by dropping the orphaned schemas via Supabase MCP. Lesson: the test factory's `afterAll` → `cleanup()` → `DROP SCHEMA ... CASCADE` isn't resilient to Jest crashes; an exit before `afterAll` leaves state on the server. Worth either (a) using a shared cleanup daemon or (b) adding a pre-test "DROP orphaned test_* schemas" step to the factory. Flagged for a future test-infra pass.
+- **2026-04-11 — Phase 4 C3: composite PK over surrogate id on junction**: verified codebase convention by grepping for existing junction tables — `role_permissions`, `employee_outlets`, `channel_publications` all use composite keys. Followed the precedent. Wouldn't have occurred to me to check without the stale-CLAUDE.md lesson from Phase 2 C3. "Grep the codebase before inventing" is now a reflexive habit this session.
+- **2026-04-11 — Phase 4 C3: JOIN `FILTER ... COALESCE` defensive guard**: the new junction JOIN can legitimately produce an empty match if a ticket has no junction rows (e.g., during a partial sendToKitchen failure — Phase 4 H2 territory). Without `FILTER (WHERE kti.ticket_id IS NOT NULL)` + `COALESCE(..., '[]'::json)`, `json_agg` emits `[{id:null,...}]` — a single null-object that the frontend would render as a ghost item row. The pre-fix JOIN couldn't produce this case because `(draft_order_id, course_name)` always matched at least one row. Every read-side refactor inherits new failure modes — defend against them inline. This is the subtle kind of bug that only shows up in production under unusual state, so it's worth writing the defense even without a specific test for it.
