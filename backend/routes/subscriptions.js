@@ -19,7 +19,6 @@ module.exports = function registerSubscriptionRoutes(app, deps) {
   const { createPlanSchema, updatePlanSchema, createSubscriptionSchema } = require("../schemas/subscriptions");
   const {
     computeNextPeriod,
-    processRenewal,
     cancelSubscription,
     pauseSubscription,
     resumeSubscription,
