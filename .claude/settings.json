@@ -154,13 +154,15 @@
       "WebFetch(domain:apidocs.getsafepay.com)",
       "WebFetch(domain:getsafepay.pk)",
       "mcp__claude_ai_Supabase__list_tables",
-      "Read(//c/Users/HP/.railway/**)"
+      "Read(//c/Users/HP/.railway/**)",
+      "WebFetch(domain:medium.com)"
     ],
     "additionalDirectories": [
       "\\tmp",
       "d:\\newprojects\\oneshoppos\\.claude",
       "C:\\Users\\HP\\.claude",
-      "C:\\Users\\HP\\.railway"
+      "C:\\Users\\HP\\.railway",
+      "d:\\newprojects\\oneshoppos\\.claude\\reviews"
     ]
   },
   "hooks": {
