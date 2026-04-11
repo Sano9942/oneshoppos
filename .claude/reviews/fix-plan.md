@@ -888,33 +888,100 @@ Wave 3 closed. All 24 review findings have a final disposition. The branch is re
 
 Items discovered during Wave 3 scope/execution that are **not** in the 24 reviewer findings. Each is documented in its originating batch's "Deferred / out-of-scope" section (and sometimes in the deviation log). This list exists so future sessions can see the full set of deferred hygiene work in one place without grepping.
 
-| # | Item | Canonical location | Category |
-|---|---|---|---|
-| 1 | `products.created_at` as a real column (migration v18) | Line 761 (Batch 3A Deferred) | Schema hygiene |
-| 2 | `sortMap.created_at_desc → p.id DESC` cosmetic mismatch | Line 762 (Batch 3A Deferred) | Code hygiene |
-| 3 | `schemas/smart-collections.js` sort_order enum still includes `created_at_desc` | Line 763 (Batch 3A Deferred) | Schema hygiene |
-| 4 | `employees.js:451` `SELECT name FROM company_profile` — column is `company_name` | Line 613 (Phase 5 H1 Deferred), Line 765 (Batch 3A Deferred — unchanged) | Pre-existing bug |
-| 5 | Zod schema for `POST /api/orders/endless-aisle` (whole `routes/orders.js` has no Zod) | Line 805 (Batch 3B Deferred) | Validation hygiene |
-| 6 | `db-pg.js:6` `require("dotenv").config(...)` at module load breaks test isolation | Line 806 (Batch 3B Deferred), Line 931 (Deviation log) | Test-infra refactor |
-| 7 | `createTestApp-pg.js:307` inserts `enabled ? 1 : 0` into BOOLEAN column | Line 868 (Batch 3C Deferred) | Test-infra style |
-| 8 | `cod-settlements.test.js` pre-existing 5s `beforeEach` timeout cascade (14/14 fails on main too) | Line 611 (Phase 5 H1 Deferred), Line 923 (Deviation log) | Test-infra repair |
-| 9 | Dead `processRenewal` import in `routes/subscriptions.js:22` (never invoked) | Line 867 (Batch 3C Deferred) | Import hygiene |
-| 10 | `bumpTicket` expo-routing sequence at `restaurant-kds.js:217-243` not atomic | Line 870 (Batch 3C Deferred) + Line 527 (Phase 4 C3 noted earlier) | Atomicity follow-up |
-| 11 | Idempotency token on `subscription-renewal` job payloads (prevents double-processing on worker crash between tx commit and boss.send) | Line 866 (Batch 3C Deferred) | Reliability follow-up |
-| 12 | Middleware-level `requireFeature("phase5_sms_providers")` on SMS-triggering routes (beyond the inline helper check) | Line 869 (Batch 3C Deferred) | Defense in depth |
-| 13 | `bumpTicket` expo-station `LIMIT 1` without `ORDER BY` (non-deterministic in tests) | Line 527 (Phase 4 C3 Deferred) | Pre-existing hygiene |
+| # | Item | Canonical location | Category | Status |
+|---|---|---|---|---|
+| 1 | `products.created_at` as a real column (migration v30 — not v18; CLAUDE.md was stale) | Line 761 (Batch 3A Deferred) | Schema hygiene | pending — DB-1 |
+| 2 | `sortMap.created_at_desc → p.id DESC` cosmetic mismatch | Line 762 (Batch 3A Deferred) | Code hygiene | pending — DB-1 |
+| 3 | `schemas/smart-collections.js` sort_order enum still includes `created_at_desc` | Line 763 (Batch 3A Deferred) | Schema hygiene | pending — DB-1 (verification only; already correct) |
+| 4 | `employees.js:451` `SELECT name FROM company_profile` — column is `company_name` | Line 613 (Phase 5 H1 Deferred), Line 765 (Batch 3A Deferred — unchanged) | Pre-existing bug | closed — DB-2 `ce360a9` |
+| 5 | Zod schema for `POST /api/orders/endless-aisle` (whole `routes/orders.js` has no Zod) | Line 805 (Batch 3B Deferred) | Validation hygiene | **deferred — DB-3** (per D5) |
+| 6 | `db-pg.js:6` `require("dotenv").config(...)` at module load breaks test isolation | Line 806 (Batch 3B Deferred), Line 931 (Deviation log) | Test-infra refactor | pending — DB-4 |
+| 7 | `createTestApp-pg.js:307` inserts `enabled ? 1 : 0` into BOOLEAN column | Line 868 (Batch 3C Deferred) | Test-infra style | pending — DB-4 |
+| 8 | `cod-settlements.test.js` pre-existing 5s `beforeEach` timeout cascade (14/14 fails on main too) | Line 611 (Phase 5 H1 Deferred), Line 923 (Deviation log) | Test-infra repair | pending — DB-4 |
+| 9 | Dead `processRenewal` import in `routes/subscriptions.js:22` (never invoked) | Line 867 (Batch 3C Deferred) | Import hygiene | pending — DB-5 |
+| 10 | `bumpTicket` expo-routing sequence at `restaurant-kds.js:217-243` not atomic | Line 870 (Batch 3C Deferred) + Line 527 (Phase 4 C3 noted earlier) | Atomicity follow-up | pending — DB-5 |
+| 11 | Idempotency token on `subscription-renewal` job payloads (prevents double-processing on worker crash between tx commit and boss.send) | Line 866 (Batch 3C Deferred) | Reliability follow-up | pending — DB-5 (shape: pg-boss `singletonKey`, per D3) |
+| 12 | Middleware-level `requireFeature("phase5_sms_providers")` on SMS-triggering routes (beyond the inline helper check) | Line 869 (Batch 3C Deferred) | Defense in depth | **dropped — DB-5** (per D4; bug already closed by inline helper check) |
+| 13 | `bumpTicket` expo-station `LIMIT 1` without `ORDER BY` (non-deterministic in tests) | Line 527 (Phase 4 C3 Deferred) | Pre-existing hygiene | closed — DB-2 `9caeb0d` |
+| 14 | `jest.setTimeout()` / `jest.fn()` / `jest.mock()` in 6 pg-batch files — runner is Vitest, not Jest | Discovered during DB-2 regression verification (2026-04-11) | Test-infra repair | partial — DB-2 `0e103bc` closes 5/6 files (timeout API); DB-5 must finish the 6th (mock API on `pg-batch-phase3c-atomicity.test.js`) before regression-extending that file |
 
-**13 drive-by items total** (the earlier summary said "~10" — the actual count is 13 once you include three items I didn't initially list: `schemas/smart-collections.js` sort_order enum, middleware-level SMS gating, and the `bumpTicket` `LIMIT 1` non-determinism from Phase 4 C3).
+**14 drive-by items total** (13 + item 14 discovered during DB-2 execution).
 
 **Category breakdown**:
 - **Schema/code hygiene**: items 1, 2, 3 (smart-collections leftovers)
 - **Pre-existing bugs not in reviewer scope**: items 4, 13
 - **Validation hygiene**: item 5 (Zod schemas for routes/orders.js)
-- **Test-infra**: items 6, 7, 8 (dotenv re-inject, boolean-as-int seed, cod-settlements timeout)
+- **Test-infra**: items 6, 7, 8, 14 (dotenv re-inject, boolean-as-int seed, cod-settlements timeout, Jest→Vitest runner API)
 - **Import hygiene**: item 9
 - **Atomicity / reliability follow-ups**: items 10, 11, 12
 
-None of the 13 drive-bys block merge. They're flagged for future work whenever a session is in the same area or a "hygiene pass" becomes warranted.
+**Drive-by pass progress** (Wave 3 drive-by hygiene closure session, 2026-04-11):
+- **closed**: 3 items (4, 13, partial 14)
+- **pending**: 10 items (1, 2, 3, 6, 7, 8, 9, 10, 11, remainder of 14)
+- **deferred**: 1 item (5 — per D5)
+- **dropped**: 1 item (12 — per D4)
+
+None of the drive-bys block merge. They're flagged for future work whenever a session is in the same area or a "hygiene pass" becomes warranted.
+
+## Wave 3 drive-by decisions (D1–D6 + in-execution)
+
+Decisions made during the drive-by closure pass. D1-D6 were made during plan
+design (see C:\Users\HP\.claude\plans\inherited-sniffing-newell.md); later
+decisions are logged as they land.
+
+**D1 — Batch order: DB-2 → DB-4 → DB-1 → DB-5 → DB-3 (no-op).** DB-4 must
+run before DB-1 because the v30 migration block lands in `migrate-pg.js`,
+and item 6 adds a dotenv line to the same file. One touch, not two.
+
+**D2 — Backfill for item 1: `NOW()` for existing rows.** The column's only
+consumer is a sort-order tie-break. Interpolating from id order is a lie
+in the data we'd own forever. Join through `sale_items` is expensive and
+still can't reconstruct creation time for never-sold products.
+
+**D3 — Item 11 idempotency: pg-boss `singletonKey`.** House pattern
+already used in `email-worker-boss.js:66` for lifecycle emails. Zero schema
+change, zero worker-side code. Payload-key-only has a race window; schema-
+level unique needs a dedupe-pass migration that's separate scope.
+
+**D4 — Item 12 DROPPED.** The bug is already closed by the inline helper
+check at `routes/couriers.js:13–16`, and Batch 3C H3 has a regression test
+at `pg-batch-phase3c-atomicity.test.js:345–409` proving flag-off behavior.
+Middleware would be belt-and-suspenders buying nothing the H3 tests don't
+already prove.
+
+**D5 — Item 5 (Zod for endless-aisle) DEFERRED.** Asymmetric validation
+in a 20-route file reads worse than no validation. Belongs in a dedicated
+validation hygiene pass covering `routes/orders.js` and `routes/couriers.js`
+together.
+
+**D6 — DB-4 item 6 blast radius confirmed: 2 files.** `backend/migrate-pg.js`
+and `backend/jobs/cleanup-dead-tenants.js` each need a one-line dotenv add.
+Everything else either already loads dotenv or doesn't import `db-pg.js` at
+module top-level.
+
+**D-SWEEP — Jest→Vitest runner API incompatibility (14th drive-by,
+discovered during DB-2 regression).** 6 pg-batch files called
+`jest.setTimeout(N)` at file top which throws `ReferenceError: jest is not
+defined` under Vitest. Fixed in DB-2 commit 2.5 (`0e103bc`) by replacing
+with `vi.setConfig({ testTimeout: N, hookTimeout: 60000 })`. **Vitest
+separates test and hook timeouts** — Jest had one knob for both, so the
+first pass only setting `testTimeout` still failed because
+`createTestApp`'s `beforeAll` exceeded the default 10s `hookTimeout` from
+`vitest.config.js`. Both fields are required.
+
+**5 of 6 swept files now run green**: pg-batch13-restaurant (41/41),
+pg-batch-phase2-pos-hardening (5/5), pg-batch-phase1-storefront-contracts
+(3/3), pg-batch15-couriers (5/5), pg-batch7-order-service (25/25).
+
+**pg-batch-phase3c-atomicity.test.js remains broken** because it also uses
+`jest.fn()` and `jest.mock()` at lines 29, 30, 85, 165 — a separate
+mock-API migration. Two other files (`pg-batch12-billing.test.js`,
+`pg-batch13-catalog-scheduler.test.js`) have the same problem but are
+out of Wave 3 regression scope. The mock-API fix will land as DB-5 prep
+since DB-5 needs to extend `pg-batch-phase3c-atomicity.test.js` for
+items 10 and 11. **Lesson**: the CLAUDE.md calling the runner "Jest"
+is stale — the real runner has been Vitest since commit `0286bf0`
+(2026-04-03). Always verify the runner via `package.json` + `node_modules/.bin`.
 
 ---
 
