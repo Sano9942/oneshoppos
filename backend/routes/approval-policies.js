@@ -90,7 +90,7 @@ module.exports = function registerApprovalPolicyRoutes(app, deps) {
   });
 
   // POS authorize — manager PIN validation + approval event recording
-  app.post("/api/approvals/pos-authorize", async (req, res) => {
+  app.post("/api/approvals/pos-authorize", requireFeature("phase2_pos_approvals"), async (req, res) => {
     const { action_type, reference_type, reference_id, manager_pin, outlet_id, metadata } = req.body;
     if (!action_type || !manager_pin) {
       return res.status(400).json({ error: "action_type and manager_pin are required" });
@@ -104,7 +104,8 @@ module.exports = function registerApprovalPolicyRoutes(app, deps) {
       const { rows: employees } = await db.query(
         `SELECT e.id, e.name, e.role_id, e.pin_hash, e.pin_code, r.name as role
          FROM employees e
-         LEFT JOIN roles r ON e.role_id = r.id`
+         LEFT JOIN roles r ON e.role_id = r.id
+         WHERE e.deleted_at IS NULL`
       );
 
       let manager = null;
