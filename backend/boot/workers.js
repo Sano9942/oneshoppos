@@ -216,6 +216,7 @@ function startAll(deps) {
 
   // Scheduled catalog changes worker
   if (process.env.SCHEDULED_CATALOG_WORKER_ENABLED === "1") {
+    const { applyScheduledChange } = require("../services/catalog-scheduler");
     const catalogInterval = setInterval(async () => {
       try {
         await forEachActiveTenant("catalog-scheduler", async (tenantDb) => {
@@ -226,26 +227,7 @@ function startAll(deps) {
              LIMIT 50`
           );
           for (const change of rows) {
-            try {
-              let updateSql;
-              if (change.entity_type === "product") {
-                updateSql = `UPDATE products SET ${change.field_name} = $1 WHERE id = $2`;
-              } else if (change.entity_type === "variant") {
-                updateSql = `UPDATE product_variants SET ${change.field_name} = $1 WHERE id = $2`;
-              } else {
-                await tenantDb.query("UPDATE scheduled_catalog_changes SET status = 'failed', applied_at = NOW() WHERE id = $1", [change.id]);
-                continue;
-              }
-              await tenantDb.transaction(async (client) => {
-                await client.query(updateSql, [change.new_value, change.entity_id]);
-                await client.query(
-                  "UPDATE scheduled_catalog_changes SET status = 'applied', applied_at = NOW() WHERE id = $1",
-                  [change.id]
-                );
-              });
-            } catch (err) {
-              await tenantDb.query("UPDATE scheduled_catalog_changes SET status = 'failed', applied_at = NOW() WHERE id = $1", [change.id]);
-            }
+            await applyScheduledChange(tenantDb, change);
           }
         }, deps);
       } catch (err) {
