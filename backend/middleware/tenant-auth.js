@@ -130,26 +130,56 @@ async function loadTenantAndPerms(req, res, next) {
       // table/column may not exist yet — skip revocation checks
     }
 
-    // Load permissions
-    try {
+    // Load permissions — retry once on transient DB errors. The pre-retry
+    // version silently fell through with req.employeePerms = [] on any
+    // exception, which masked real backend issues as "403 insufficient
+    // permissions" for Admin users whose role_permissions query transiently
+    // failed under pool pressure.
+    const loadPerms = async () => {
       const { rows: [emp] } = await permDb.query(
         "SELECT role_id, name FROM employees WHERE id = $1", [decoded.eid]
       );
-      if (!emp) {
-        req.employeePerms = [];
-        return next();
-      }
-      req.employee.name = emp.name;
-      if (req.isImpersonating) {
-        req.employee.name = (emp.name || "Admin") + " (impersonated by Super-Admin)";
-      }
+      if (!emp) return { empty: true };
       const { rows } = await permDb.query(
         "SELECT permission FROM role_permissions WHERE role_id = $1", [emp.role_id]
       );
-      req.employeePerms = rows.map(r => r.permission);
-    } catch {
-      req.employeePerms = [];
+      return { emp, perms: rows.map(r => r.permission) };
+    };
+
+    let result;
+    try {
+      result = await loadPerms();
+    } catch (err1) {
+      // One retry with a small delay — covers transient pool exhaustion,
+      // connection resets, and query timeouts under concurrent load.
+      try {
+        await new Promise((r) => setTimeout(r, 100));
+        result = await loadPerms();
+      } catch (err2) {
+        // Both attempts failed — log loudly so this surfaces in monitoring
+        // instead of silently 403-ing the user. Still fall through with
+        // empty perms so the backend doesn't cascade-503 on a DB blip.
+        const log = req.log || console;
+        log.error && log.error({
+          err: err2.message,
+          employeeId: decoded.eid,
+          tenantId: decoded.tid,
+          path: req.path,
+        }, "loadTenantAndPerms: both permission load attempts failed");
+        req.employeePerms = [];
+        return next();
+      }
     }
+
+    if (result.empty) {
+      req.employeePerms = [];
+      return next();
+    }
+    req.employee.name = result.emp.name;
+    if (req.isImpersonating) {
+      req.employee.name = (result.emp.name || "Admin") + " (impersonated by Super-Admin)";
+    }
+    req.employeePerms = result.perms;
     next();
   } catch (err) {
     if (err.name === "TokenExpiredError") {
