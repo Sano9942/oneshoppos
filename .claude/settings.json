@@ -155,7 +155,8 @@
       "WebFetch(domain:getsafepay.pk)",
       "mcp__claude_ai_Supabase__list_tables",
       "Read(//c/Users/HP/.railway/**)",
-      "WebFetch(domain:medium.com)"
+      "WebFetch(domain:medium.com)",
+      "mcp__claude_ai_Supabase__list_projects"
     ],
     "additionalDirectories": [
       "\\tmp",
