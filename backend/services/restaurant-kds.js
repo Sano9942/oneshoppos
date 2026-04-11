@@ -41,7 +41,13 @@ async function updateStation(db, id, data) {
 }
 
 async function sendToKitchen(db, draftOrderId) {
-  // Get items and route to stations
+  // Reads stay outside the transaction — they don't mutate state and
+  // holding tx locks on them wastes DB resources. The writes (ticket
+  // insert, junction rows, events, kitchen_status update) all run
+  // inside one transaction so a partial failure rolls back cleanly.
+  // Without this wrapper, a mid-loop failure would leave some items
+  // ticketed and others still 'pending'. Phase 4 C3's junction-table
+  // fix added more writes to this already non-atomic flow.
   const { rows: items } = await db.query(
     `SELECT di.*, p.category_id, d.table_id
      FROM draft_order_items di
@@ -52,7 +58,6 @@ async function sendToKitchen(db, draftOrderId) {
   );
   if (!items.length) return [];
 
-  // Get order context for table label
   const { rows: [order] } = await db.query(
     `SELECT d.*, rt.label AS table_label
      FROM draft_orders d
@@ -61,7 +66,6 @@ async function sendToKitchen(db, draftOrderId) {
     [draftOrderId]
   );
 
-  // Get outlet's stations and routing rules
   const { rows: stations } = await db.query(
     "SELECT * FROM kds_stations WHERE outlet_id = $1 AND is_active = true",
     [order.outlet_id]
@@ -106,52 +110,49 @@ async function sendToKitchen(db, draftOrderId) {
     groups.get(key).items.push(item);
   }
 
-  const tickets = [];
-  for (const { station, course, items: grpItems } of groups.values()) {
-    // Seat label: comma-concatenate distinct seats in the group so a ticket
-    // spanning seats 1 and 3 shows "S1, S3". Preserves information without
-    // a schema change. NULL if no items in the group have a seat_number.
-    const seatNums = [...new Set(grpItems.map(i => i.seat_number).filter(Boolean))];
-    const seatLabel = seatNums.length ? seatNums.map(n => `S${n}`).join(", ") : null;
+  return await db.transaction(async (client) => {
+    const tickets = [];
+    for (const { station, course, items: grpItems } of groups.values()) {
+      // Seat label: comma-concatenate distinct seats in the group so a ticket
+      // spanning seats 1 and 3 shows "S1, S3". NULL if none have seat_number.
+      const seatNums = [...new Set(grpItems.map(i => i.seat_number).filter(Boolean))];
+      const seatLabel = seatNums.length ? seatNums.map(n => `S${n}`).join(", ") : null;
 
-    const { rows: [ticket] } = await db.query(
-      `INSERT INTO kds_tickets (station_id, draft_order_id, table_label, seat_label, course_name)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [station.id, draftOrderId, order.table_label || null, seatLabel, course]
-    );
+      const { rows: [ticket] } = await client.query(
+        `INSERT INTO kds_tickets (station_id, draft_order_id, table_label, seat_label, course_name)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [station.id, draftOrderId, order.table_label || null, seatLabel, course]
+      );
 
-    // Link this ticket to the exact items that routed to its station via
-    // the kds_ticket_items junction (migration v29). Multi-row VALUES insert
-    // is one round-trip regardless of group size. Required for getTickets'
-    // JOIN to scope items per-station — see "JOIN kds_ticket_items" below.
-    const values = [];
-    const params = [];
-    let paramIdx = 1;
-    for (const it of grpItems) {
-      values.push(`($${paramIdx++}, $${paramIdx++})`);
-      params.push(ticket.id, it.id);
+      // Junction INSERT: multi-row VALUES is one round-trip regardless of
+      // group size. Required for getTickets' JOIN to scope items per-station.
+      const values = [];
+      const params = [];
+      let paramIdx = 1;
+      for (const it of grpItems) {
+        values.push(`($${paramIdx++}, $${paramIdx++})`);
+        params.push(ticket.id, it.id);
+      }
+      await client.query(
+        `INSERT INTO kds_ticket_items (ticket_id, draft_order_item_id) VALUES ${values.join(", ")}`,
+        params
+      );
+
+      await client.query(
+        "INSERT INTO kds_ticket_events (ticket_id, event_type) VALUES ($1, 'created')",
+        [ticket.id]
+      );
+
+      tickets.push(ticket);
     }
-    await db.query(
-      `INSERT INTO kds_ticket_items (ticket_id, draft_order_item_id) VALUES ${values.join(", ")}`,
-      params
+
+    await client.query(
+      "UPDATE draft_order_items SET kitchen_status = 'sent' WHERE draft_order_id = $1 AND kitchen_status = 'pending'",
+      [draftOrderId]
     );
 
-    // Log event
-    await db.query(
-      "INSERT INTO kds_ticket_events (ticket_id, event_type) VALUES ($1, 'created')",
-      [ticket.id]
-    );
-
-    tickets.push(ticket);
-  }
-
-  // Mark items as sent
-  await db.query(
-    "UPDATE draft_order_items SET kitchen_status = 'sent' WHERE draft_order_id = $1 AND kitchen_status = 'pending'",
-    [draftOrderId]
-  );
-
-  return tickets;
+    return tickets;
+  });
 }
 
 async function getTickets(db, stationId, statusFilter) {
