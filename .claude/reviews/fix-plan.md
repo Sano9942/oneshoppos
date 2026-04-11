@@ -166,10 +166,79 @@ the finding moves to `notabug` with the evidence recorded here.
 
 ## Pattern A — Background workers bypass multi-tenant DB routing
 
-**Status:** `deferred`
-**Blocker:** Sequencing rule from [findings/cross-phase-synthesis.md:130](findings/cross-phase-synthesis.md) — Pattern D must land first. Otherwise, new tenant-routed workers will hit `column does not exist` errors on any tenant whose migration lag we haven't verified. (Per Decision A we now know all live tenants are at v27, so the sequencing rule's original motivation is weaker than it was — but we're honoring the order anyway because Pattern A's own verification work hasn't started yet.)
+**Status:** `done`
+**Branch:** `review-fixes`
+**Closed:** 2026-04-11 (4 code commits + 1 docs commit; all findings `fix` or `notabug`)
 
-**Next step when picked up:** re-read [findings/cross-phase-synthesis.md](findings/cross-phase-synthesis.md) Pattern A section and the Phase 3/4 worker findings, verify the affected workers' current state in production, then draft a plan following the same process (gather → verify → plan → approve → execute).
+### Decision log
+
+- **2026-04-11 — Decision D: scope of the full fix (Option 1)**
+  - **Q:** Fix all Pattern A findings preventively even though production has zero data at risk, or `wontfix` like we did for C1?
+  - **Context:** Unlike C1 (no UI, no data, pre-feature), Pattern A workers are *already registered and firing on schedule*. The bug is silent today but would become "subscription never renewed, customer not billed" the moment someone creates a subscription. Activation-day incident risk is real.
+  - **Chose: full fix (Option 1).** 5-commit plan. Fix now while the code is fresh and the cost is limited; avoid activation-day incident pressure later.
+  - **Impact:** Pattern A closes with 4 of 5 review findings fixed + 1 drive-by bug found during code reading.
+
+- **2026-04-11 — Decision E: helper pattern for pg-boss workers**
+  - **Q:** How should tenant-scoped pg-boss workers receive their scoped db? Three existing options in the codebase:
+    - FBR worker: interpolate `tenant_${slug}.` into every SQL string (works but doesn't compose with service functions)
+    - `forEachActiveTenant`: iterate all active tenants per poll (right for polls, wrong for per-event jobs)
+    - `tenant-db-proxy-pg.js` AsyncLocalStorage: empty outside HTTP requests, throws inside workers
+  - **Chose: new `workers/tenant-job-context.js` with `withTenantContext(pool, slug, fn)`.** Acquires a dedicated pool client, sets search_path, runs the callback with a scoped `db` proxy, resets search_path + releases client even on error. Service functions like `processRenewal(db, ...)` work unchanged.
+  - **Rationale:** A per-event helper lets the service layer stay clean (no table-name prefixing, no per-query client churn). Security: `tenantSlug` is validated against `[a-z0-9_]` before interpolation into `SET search_path` (which can't be parameterized).
+
+- **2026-04-11 — Decision F: job-shape split — per-event vs. poll**
+  - **Q:** Do all Pattern A workers use the same helper?
+  - **Answer: no.** Two job shapes:
+    - **Per-event** (subscription-renewal, campaign-scheduled-send, invoice-reminder, campaign-email): workers that receive a specific `tenantSlug` in their pg-boss payload and process one unit of work. Use `withTenantContext(pool, tenantSlug, fn)`.
+    - **Poll** (booking-reminders): workers that run on a fixed schedule and must iterate *all* active tenants. Use the existing `forEachActiveTenant` helper in `boot/workers.js` with a `setInterval` cadence, matching the `scheduled_catalog_changes` pattern.
+  - **Impact:** Commit 3 (booking-reminders) follows a visibly different pattern than Commits 1-2. Documented in the commit message so a future reader doesn't try to unify them.
+
+### Findings
+
+- **Phase 3 C1 subscription-renewal** (`workers/email-worker-boss.js:358-369` — shim queries public, not tenant) → `fix`, Commit 2
+  [verified 2026-04-11: `customer_subscriptions` table exists in both public and all 3 tenant schemas; `pool.query` shim at line 362 silently returned zero rows from empty public table on every job fire. Zero active subscriptions across all live tenants, so the bug was unreachable today but would fire on first real subscription creation.]
+
+- **Phase 3 C1 campaign-scheduled-send** (`workers/email-worker-boss.js:343-355` — shim queries public) → `fix`, Commit 2
+  [verified 2026-04-11: `marketing_campaigns` exists in both public and tenant schemas; same shim pattern at line 348. Would throw `Campaign not found` on first scheduled campaign fire.]
+
+- **Phase 3 C1 invoice-reminder** (`workers/email-worker-boss.js:292-340` — direct pool.query against tenant tables) → `fix`, Commit 2
+  [verified 2026-04-11: `customer_invoices` + `customer_invoice_reminders` exist in tenant schemas; worker ran `pool.query` directly with no schema prefix, so SELECT returned zero rows from empty public table. 0 pending reminders across all live tenants.]
+
+- **campaign-email** (`workers/email-worker-boss.js:249-289`) → `fix`, Commit 2
+  [**Found during code reading — not in the synthesis.** The synthesis said "three Phase 3 worker handlers" but there are four. `campaign-email` uses `pool.query` directly for both the delivery-row UPDATE and the campaign-status rollup. Same bug, same fix. Flagged as a deviation from synthesis below.]
+
+- **Phase 4 C1 appointment reminders** (`services/booking-reminders.js:5` — dead code, unregistered) → `fix`, Commit 3
+  [verified 2026-04-11: `processPendingReminders` is exported but never called; `boot/workers.js` has no reference to booking-reminders; appointments at `services/booking-services.js:39-43` insert rows into `appointment_reminders` that sit forever in `status='pending'`. Registered as a setInterval poll using forEachActiveTenant. 0 rows across all live tenants, so no user impact today.]
+
+- **Phase 1 H2 worker-status visibility** (`routes/admin/system.js:8-35` — reads only 3 heartbeats) → `fix`, Commit 4
+  [verified 2026-04-11 by reading the endpoint: response included `email`, `fbr`, `cleanup` only. The reservation, marketplace-sync workers already set their own global.__xxxWorkerStatus globals but were invisible to super-admin. Added three new reads (reservation, marketplace_sync, booking_reminder) to match.]
+
+- **marketplace-sync-worker-boss.js lastPollAt format** (not in the review) → `fix`, Commit 4 (drive-by)
+  [Found during Commit 4 verification: `marketplace-sync-worker-boss.js:77` stored `lastPollAt` as an ISO string (via `toISOString()`), but every other worker stored it as a millisecond number (`Date.now()`). The `workerInfo()` helper in `admin/system.js` computes `Date.now() - status.lastPollAt`, which with a string produces `NaN`. Exposed by Commit 4 adding marketplace_sync to the response — it would always have reported as "not running" even when healthy. Changed to `Date.now()` to match the convention.]
+
+### Commit plan
+
+1. `feat(workers): add withTenantContext helper for pg-boss jobs` — [landed `b9f81c6`]
+2. `fix(workers): route email-worker-boss jobs through tenant context` — bundled refactor of 4 worker bodies + service signature changes + call-site updates + unit tests [landed `38b6d73`]
+3. `feat(workers): register booking-reminders as tenant-aware poll job` — [landed `63e5273`]
+4. `fix(admin): worker-status reads reservation/marketplace/booking-reminder heartbeats` — [landed `5414add`]
+5. `docs(review): close Pattern A with final dispositions` — this update
+
+### Test strategy
+
+- **Vitest unit tests** for every code commit, following the patterns established in Pattern D Commit 2:
+  - Commit 1: 12 tests (`workers-tenant-job-context.test.js`) — helper happy path, error release, transaction rollback, slug validation
+  - Commit 2: 9 tests (`workers-email-worker-boss.test.js`) — defensive throws + end-to-end worker→helper→fake-pool chain
+  - Commit 3: 5 tests (`services-booking-reminders.test.js`) — direct test of `processPendingReminders(db, boss)`
+  - Commit 4: 5 tests (`routes-admin-worker-status.test.js`) — mini-express + heartbeat globals + response shape
+- **Real Postgres integration tests still blocked** by Phase 1 M1 (schema seed failure) — same as Pattern D.
+- **Vitest `vi.mock()` interop with CommonJS `require()` is unreliable in this repo** — I learned this the hard way in Commit 2's test after spending time debugging a mock that never intercepted. Works for built-in modules and simple factories; fails silently for user-code service mocks. The workaround is to let real modules run against fake injected dependencies (pool, boss) — which turns out to be a better test anyway because it exercises the whole chain end-to-end.
+
+### Deferred / documented-only
+
+- **processRenewal transaction wrapping** — `processRenewal` does 5 sequential INSERTs + 1 UPDATE without a transaction. A crash mid-renewal could produce an invoice row with no subscription_runs, or a subscription with an advanced period but no invoice. This is Pattern E territory (multi-step business flows lacking transactions), not Pattern A. Leave for Pattern E work.
+- **Resend send + DB update atomicity** — the refactored `campaign-email` worker sends the email *outside* `withTenantContext` (to hold the pool client for a shorter window), then updates the delivery row inside. If the DB update fails after a successful send, pg-boss retries, which sends the email again. This was true before Pattern A and is still true after — not changed to avoid behavior drift. Revisit when someone reports duplicate emails.
+- **SMS channel in booking-reminders** — `processPendingReminders` marks SMS-channel rows as `sent` without actually delivering them (no SMS send code exists). Pre-existing quirk, out of Pattern A scope. Will need attention when the SMS feature is actually wired up.
 
 ---
 
@@ -182,3 +251,7 @@ Running log of where we've diverged from the reviewer findings, with dates and r
 - **2026-04-11 — Test format switched from integration (Jest) to unit (Vitest)**: pg-batch suite is currently broken at the seed-schema step due to Phase 1 M1. Rather than fix M1 as an unplanned prerequisite, we switched to Vitest unit tests for Commits 2 and 3. Trade-off: doesn't exercise real Postgres; mitigated by verifying column existence live via Supabase before each commit.
 - **2026-04-11 — Phase 5 C1 dropped to `wontfix`**: production verification showed zero credential data on any tenant (`encrypted_config_json`, `api_key`, `api_secret` all empty). The silent-ignore bug is architecturally real but unreachable. Fixing it now would ship unexercised code protecting an unused feature. Documented the required fix for the future UI author. See Decision C.
 - **2026-04-11 — Pattern D final tally**: 1 commit landed (Phase 5 H2), 1 `wontfix` (Phase 5 C1), 3 `notabug` (Phase 1 C3, Phase 1 /pay, Phase 5 C2). The review's original framing was "Pattern D unlocks half the criticals" — actual: 1 real critical in production out of 5 claimed. Verification-before-completion saved ~4 commits of unnecessary work.
+- **2026-04-11 — Pattern A: fourth broken worker discovered**: the synthesis listed three broken workers in `email-worker-boss.js` (subscription-renewal, campaign-scheduled-send, invoice-reminder). Reading the actual code for Commit 2 revealed a fourth — `campaign-email` at lines 249-289 — with the exact same `pool.query` direct-to-public bug. Fixed as part of Commit 2. Good reason for the rule "always verify against actual code, not the review summary."
+- **2026-04-11 — Pattern A: per-event vs. poll job shape split**: the synthesis said "Single helper `withTenantContext(slug, fn)`" for all Pattern A workers. Reality is two shapes — per-event (withTenantContext) and poll (forEachActiveTenant). The two helpers exist for different reasons and can't unify without a third helper that handles both. Documented as Decision F.
+- **2026-04-11 — Pattern A: drive-by fix to marketplace-sync-worker-boss.js**: found while verifying Commit 4 that `lastPollAt` was stored as an ISO string instead of milliseconds. Breaks `Date.now() - status.lastPollAt` with NaN. Exposed by Commit 4 but pre-existing; fixed in the same commit since Commit 4 was the first time anyone would see the broken state.
+- **2026-04-11 — Pattern A final tally**: 4 code commits landed (Commits 1-4) + 1 docs commit (Commit 5). All 5 review findings fixed plus 1 drive-by bug found during code reading. Zero `wontfix`, zero `notabug` — unlike Pattern D, Pattern A's bugs were all genuinely broken code paths that just didn't have users yet. The activation-day-incident argument for Option 1 (full fix) held up: fixing now while the code is fresh was cheaper than fixing later under pressure.
