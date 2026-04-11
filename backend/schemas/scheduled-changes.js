@@ -22,7 +22,10 @@ const VARIANT_FIELDS = [
   "weight",
 ];
 
-const CHANGE_TYPES = ["field_update", "price", "status", "stock"];
+// Must match the DB CHECK constraint on scheduled_catalog_changes.change_type.
+// See schema-pg.sql:2124. Adding a new value here without updating the CHECK
+// (and migrating existing tenants) will cause 500 on INSERT.
+const CHANGE_TYPES = ["price", "visibility", "status", "tax"];
 
 const createScheduledChangeSchema = z.object({
   change_type: z.enum(CHANGE_TYPES),
@@ -35,15 +38,23 @@ const createScheduledChangeSchema = z.object({
     { message: "scheduled_at must be in the future" }
   ),
   notes: z.string().max(2000).optional().nullable(),
-}).passthrough().refine(
-  (d) => d.entity_type === "product"
-    ? PRODUCT_FIELDS.includes(d.field_name)
-    : VARIANT_FIELDS.includes(d.field_name),
-  (d) => ({
-    message: `field_name "${d.field_name}" is not allowed for entity_type "${d.entity_type}"`,
-    path: ["field_name"],
-  })
-);
+}).passthrough().superRefine((d, ctx) => {
+  // Cross-field allowlist: field_name must be valid for the given entity_type.
+  // Uses superRefine (not refine) because Zod 4 dropped the function-form second
+  // argument to refine(), so we need ctx.addIssue to emit a dynamic message
+  // that includes the rejected field_name in the error response body.
+  const allowed =
+    d.entity_type === "product" ? PRODUCT_FIELDS :
+    d.entity_type === "variant" ? VARIANT_FIELDS :
+    null;
+  if (!allowed || !allowed.includes(d.field_name)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `field_name "${d.field_name}" is not allowed for entity_type "${d.entity_type}"`,
+      path: ["field_name"],
+    });
+  }
+});
 
 const updateScheduledChangeSchema = z.object({
   new_value: z.union([z.string(), z.number(), z.boolean()]).transform((v) => String(v)).optional(),
