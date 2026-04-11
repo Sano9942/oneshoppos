@@ -3,6 +3,7 @@
  */
 const { validate } = require("../../middleware/validate");
 const { CreateTenantSchema } = require("../../schemas/admin");
+const { DEFAULT_FEATURE_FLAGS } = require("../../middleware/feature-flags");
 
 module.exports = function registerTenantRoutes(app, deps) {
   const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager, PLAN_DEFAULTS, provision, bcrypt, BCRYPT_ROUNDS, auditLog, logAdminAction } = deps;
@@ -409,7 +410,14 @@ module.exports = function registerTenantRoutes(app, deps) {
 
       const tenantDb = await tenantDbManager.getDb(tenant.id);
       const { rows } = await tenantDb.query("SELECT key, enabled, description FROM feature_flags ORDER BY key");
-      return res.json(rows);
+      const rowMap = new Map(rows.map((r) => [r.key, r]));
+      const mergedDefaults = Object.keys(DEFAULT_FEATURE_FLAGS).map((key) => {
+        const existing = rowMap.get(key);
+        if (existing) return existing;
+        return { key, enabled: !!DEFAULT_FEATURE_FLAGS[key], description: null };
+      });
+      const extras = rows.filter((r) => !Object.prototype.hasOwnProperty.call(DEFAULT_FEATURE_FLAGS, r.key));
+      return res.json([...mergedDefaults, ...extras].sort((a, b) => a.key.localeCompare(b.key)));
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -425,8 +433,13 @@ module.exports = function registerTenantRoutes(app, deps) {
 
       const tenantDb = await tenantDbManager.getDb(tenant.id);
       await tenantDb.query(
-        "UPDATE feature_flags SET enabled = $1, updated_by = $2, updated_at = NOW() WHERE key = $3",
-        [!!enabled, `admin:${req.admin.email}`, key]
+        `INSERT INTO feature_flags (key, enabled, updated_by, updated_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (key) DO UPDATE SET
+           enabled = EXCLUDED.enabled,
+           updated_by = EXCLUDED.updated_by,
+           updated_at = NOW()`,
+        [key, !!enabled, `admin:${req.admin.email}`]
       );
 
       logAdminAction(req.admin.email, "feature_flag_toggled", "tenant", req.params.id, { key, enabled: !!enabled }, req.ip);
