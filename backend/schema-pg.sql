@@ -2609,6 +2609,13 @@ ALTER TABLE draft_orders
   ADD COLUMN IF NOT EXISTS dining_option TEXT CHECK (dining_option IN ('dine_in','takeout','delivery')),
   ADD COLUMN IF NOT EXISTS source_token_id TEXT;
 
+-- Partial UNIQUE index for QR public menu lookup (routes/public-restaurant.js).
+-- Enforces one-token-to-one-check and speeds up the WHERE source_token_id = $1 query.
+-- Partial (WHERE source_token_id IS NOT NULL) so non-restaurant draft orders don't trip it.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_draft_orders_source_token
+  ON draft_orders(source_token_id)
+  WHERE source_token_id IS NOT NULL;
+
 -- Extend draft_order_items for seat/course tracking
 ALTER TABLE draft_order_items
   ADD COLUMN IF NOT EXISTS seat_number INTEGER,

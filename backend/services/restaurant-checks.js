@@ -3,14 +3,28 @@
  * Checks are draft_orders with order_context != 'retail'.
  */
 
+const crypto = require("crypto");
+
+// Contexts that need a QR public token. Retail/takeout/delivery don't need
+// a public menu URL because the customer isn't sitting at a table scanning
+// a code. See also routes/public-restaurant.js which looks up
+// draft_orders by source_token_id.
+const TOKEN_CONTEXTS = new Set(["dine_in", "bar"]);
+
+function makeSourceToken(orderContext) {
+  return TOKEN_CONTEXTS.has(orderContext) ? crypto.randomUUID() : null;
+}
+
 async function createRestaurantCheck(db, data, employeeId) {
+  const orderContext = data.order_context || "dine_in";
+  const sourceToken = makeSourceToken(orderContext);
   const { rows: [order] } = await db.query(
-    `INSERT INTO draft_orders (outlet_id, created_by, order_context, table_id, table_session_id, tab_id, seat_count, dining_option, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open') RETURNING *`,
-    [data.outlet_id, employeeId, data.order_context || "dine_in",
+    `INSERT INTO draft_orders (outlet_id, created_by, order_context, table_id, table_session_id, tab_id, seat_count, dining_option, source_token_id, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open') RETURNING *`,
+    [data.outlet_id, employeeId, orderContext,
      data.table_id || null, data.table_session_id || null,
      data.tab_id || null, data.seat_count || 0,
-     data.dining_option || null]
+     data.dining_option || null, sourceToken]
   );
   return order;
 }
@@ -71,11 +85,16 @@ async function splitCheckByItem(db, sourceDraftOrderId, itemAssignments, employe
 
     const newChecks = [];
     for (const [, itemIds] of Object.entries(groups)) {
-      // Create new draft order for split
+      // Create new draft order for split. Each split child gets its own
+      // fresh source_token_id — never inherit from the source, because
+      // that would make one QR URL resolve to multiple checks after a
+      // split (violates the partial UNIQUE index and confuses the
+      // public menu lookup). Non-restaurant contexts still get NULL.
+      const newSourceToken = makeSourceToken(source.order_context);
       const { rows: [newOrder] } = await client.query(
-        `INSERT INTO draft_orders (outlet_id, created_by, order_context, table_id, table_session_id, tab_id, status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'open') RETURNING *`,
-        [source.outlet_id, employeeId, source.order_context, source.table_id, source.table_session_id, source.tab_id]
+        `INSERT INTO draft_orders (outlet_id, created_by, order_context, table_id, table_session_id, tab_id, source_token_id, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'open') RETURNING *`,
+        [source.outlet_id, employeeId, source.order_context, source.table_id, source.table_session_id, source.tab_id, newSourceToken]
       );
 
       // Move items

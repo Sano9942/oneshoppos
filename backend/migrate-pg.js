@@ -2706,6 +2706,23 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 28,
+    description: "Partial UNIQUE index on draft_orders.source_token_id for QR lookup",
+    up: async (client) => {
+      // Enforces one-token-to-one-check and speeds up the public menu
+      // lookup at routes/public-restaurant.js. Partial index skips NULLs
+      // so non-restaurant draft orders (retail/takeout/delivery) don't
+      // trigger the constraint. Safe on live tenants because no existing
+      // row has a non-NULL source_token_id (the column was added in v22
+      // but never populated until this fix).
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_draft_orders_source_token
+          ON draft_orders(source_token_id)
+          WHERE source_token_id IS NOT NULL
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {
