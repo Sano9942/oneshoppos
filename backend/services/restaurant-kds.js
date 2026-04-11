@@ -73,9 +73,17 @@ async function sendToKitchen(db, draftOrderId) {
     [order.outlet_id]
   );
 
-  const tickets = [];
+  // Group items by (station_id, course_name). Each group becomes one ticket.
+  // Fixes Phase 4 C3: the pre-fix code inserted one kds_tickets row per item,
+  // but getTickets joins draft_order_items on (draft_order_id, course_name)
+  // — so each item-ticket's items aggregation included EVERY item in that
+  // course, producing N² fan-out on the kitchen screen (3 items → 3 tickets
+  // each showing all 3). The grouping here collapses to one ticket per
+  // (station, course), which is how the UI already treats them — one bump
+  // button per ticket, one row per item under the ticket.
+  const groups = new Map();
   for (const item of items) {
-    // Find matching station by category routing, fallback to match_all
+    // Routing: category-matched station → match_all fallback → first station.
     let targetStation = null;
     for (const route of routes) {
       if (route.category_id === item.category_id) {
@@ -90,10 +98,26 @@ async function sendToKitchen(db, draftOrderId) {
     if (!targetStation && stations.length) targetStation = stations[0];
     if (!targetStation) continue;
 
+    const course = item.course_name || "main";
+    const key = `${targetStation.id}|${course}`;
+    if (!groups.has(key)) {
+      groups.set(key, { station: targetStation, course, items: [] });
+    }
+    groups.get(key).items.push(item);
+  }
+
+  const tickets = [];
+  for (const { station, course, items: grpItems } of groups.values()) {
+    // Seat label: comma-concatenate distinct seats in the group so a ticket
+    // spanning seats 1 and 3 shows "S1, S3". Preserves information without
+    // a schema change. NULL if no items in the group have a seat_number.
+    const seatNums = [...new Set(grpItems.map(i => i.seat_number).filter(Boolean))];
+    const seatLabel = seatNums.length ? seatNums.map(n => `S${n}`).join(", ") : null;
+
     const { rows: [ticket] } = await db.query(
       `INSERT INTO kds_tickets (station_id, draft_order_id, table_label, seat_label, course_name)
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [targetStation.id, draftOrderId, order.table_label || null, item.seat_number ? `S${item.seat_number}` : null, item.course_name || "main"]
+      [station.id, draftOrderId, order.table_label || null, seatLabel, course]
     );
 
     // Log event
