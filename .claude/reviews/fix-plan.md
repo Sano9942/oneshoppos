@@ -154,13 +154,8 @@ the finding moves to `notabug` with the evidence recorded here.
   in current production. If the legacy provisioner ever produces a fresh
   pre-v25 install, revisit.
 
-- **Phase 1 M1 — schema-pg.sql FK ordering** is a hard blocker for the
-  entire pg-batch integration test suite. Discovered 2026-04-11 when
-  attempting to verify Commit 2 via `npx jest pg-batch3-complex.test.js`.
-  Every test fails at seed time with `relation "web_order_allocations"
-  does not exist`. Needs to be fixed as its own item before any
-  future Pattern fix can use real integration tests. Tracked here
-  until lifted into its own Pattern/Wave.
+- ~~**Phase 1 M1 — schema-pg.sql FK ordering**~~ **lifted into its own
+  Pattern M1 below (closed 2026-04-11).**
 
 ---
 
@@ -242,6 +237,63 @@ the finding moves to `notabug` with the evidence recorded here.
 
 ---
 
+## Pattern M1 — schema-pg.sql cannot be applied end-to-end
+
+**Status:** `done`
+**Branch:** `review-fixes`
+**Closed:** 2026-04-11 (1 bundled fix + docs commit; full-audit scope — 3 bugs in one file)
+
+### Decision log
+
+- **2026-04-11 — Decision G: scope expansion from 1 bug to 3 after live verification**
+  - **Q:** Does "M1 schema-pg.sql FK ordering" stop at the one known symptom (`web_order_allocations`), or do we sweep the whole file for the same class of bug?
+  - **Context:** Before starting the fix I delegated an Explore scan across the 3142-line file for all forward-reference FKs. It reported two candidates: picklist_items → web_order_allocations (the known one) and web_orders → courier_integrations. Reading the second in context revealed courier_integrations is actually defined *twice* (lines 1068 and 1170) — the scan hit the second copy, but the first already satisfies the FK. Not a forward reference; a duplicate table. Cleanup opportunity, not a bug.
+  - **Then live verification surfaced a third bug the scan missed**: `ALTER TABLE payment_intents` at schema-pg.sql:3075 targets a *master-schema* table from within a *tenant-schema* context. `payment_intents` is only defined in `master-db-pg.js` and `migrate-pg.js` — schema-pg.sql has no `CREATE TABLE payment_intents`. The ALTER tries to resolve the unqualified name in `tenant_<slug>` and fails with `relation "payment_intents" does not exist`. This only became visible after fixing the first two bugs (the scratch apply got far enough to hit it).
+  - **Chose: bundle all three into one commit** per the "bundled" answer to the pre-fix 3-question discipline. All three are in the same file, all are schema-pg.sql hygiene, all are proved safe by the same verification (fresh apply + unchanged test outcomes on main). Splitting into three commits would add ceremony without adding reviewability.
+  - **Impact:** Pattern M1 grew from 1 bug to 3. This is exactly why the "full verification before commit" rule exists — if I had fixed only the allocation_id FK and committed, the next person to touch schema-pg.sql would have hit the payment_intents bug in isolation and wondered why.
+
+- **2026-04-11 — Decision H: commit the verification script as a drive-by utility**
+  - **Q:** Do we commit the `verify-schema-apply.js` script I wrote to reproduce the failures?
+  - **Context:** The script is 35 lines, does a throwaway schema apply that mirrors what `tenant-provisioner-pg.js` does, and is the only automated way to catch this class of bug before the integration test suite catches fire. No existing script does end-to-end apply.
+  - **Chose: commit it** alongside the fix. Added a CLAUDE.md entry under `backend/scripts/` describing when to run it ("after any edit to schema-pg.sql"). Leaving it uncommitted means the next person rediscovers this work.
+  - **Followup not taken:** adding this to CI as a pre-merge check would prevent regression permanently, but that's Wave 2+ territory. Flagged here for future consideration.
+
+### Findings
+
+- **Phase 1 M1a** — `picklist_items.allocation_id REFERENCES web_order_allocations(id)` at `schema-pg.sql:1736` (old line) with target defined 92 lines later at `:1828` (old line) → `fix`, bundled commit
+  [verified 2026-04-11: `DROP SCHEMA IF EXISTS tenant_m1_test CASCADE; CREATE SCHEMA tenant_m1_test; SET search_path = tenant_m1_test; <apply file>` fails with `relation "web_order_allocations" does not exist`. Introduced by commit `c91406b` (Apr 9, "feat(omnichannel): connect storefront shipping orders to picklist flow") which added the column without reordering. Fixed by moving the `CREATE TABLE web_order_allocations` + its two indexes from after `inventory_reservations` to immediately before the `-- Fulfillment (Pick/Pack/Dispatch)` section. Preserved the semantic grouping of `picklists` + `picklist_items` + `loadsheets` + `loadsheet_orders` by moving the lighter block (allocations) rather than the heavier group.]
+
+- **Phase 1 M1b** — duplicate `courier_integrations` block at `schema-pg.sql:1168-1197` (old lines) → `fix`, bundled commit (cleanup)
+  [verified 2026-04-11: `CREATE TABLE IF NOT EXISTS courier_integrations` and its seed `INSERT ... ON CONFLICT DO NOTHING` appear twice in the file, at lines 1068-1095 and 1170-1197. The second is a silent no-op today, but the two blocks will drift if someone edits only one copy. Deleted the second block (32 lines removed). Not strictly an M1 bug since the table is always defined by the first occurrence, but it's in-scope file hygiene with the same verification.]
+
+- **Phase 1 M1c** — stray `ALTER TABLE payment_intents` at `schema-pg.sql:3075` (old lines) → `fix`, bundled commit
+  [verified 2026-04-11 after M1a+M1b were fixed: scratch apply still failed with `relation "payment_intents" does not exist`. `payment_intents` is a **master-schema** table defined only in `master-db-pg.js:104` and `migrate-pg.js:390`. schema-pg.sql has no `CREATE TABLE payment_intents` — the provider/provider_status/last_event_at extension at line 3075 was copy-pasted from the v11 migration into the wrong file. Deleted the ALTER (5 lines removed). Live tenants are unaffected because `migrate-pg.js` applied this ALTER to the public schema directly when v11 ran. Not in the original Explore scan because the scan was looking for `REFERENCES <later_table>` patterns, not `ALTER TABLE <master_table>` leaks.]
+
+- **Drive-by** — added `backend/scripts/verify-schema-apply.js` + CLAUDE.md entry
+  [end-to-end smoke test for schema-pg.sql. Drops+creates throwaway schema `tenant_m1_test`, sets search_path, runs `client.query(SCHEMA_SQL)`, counts created tables, drops the schema. Same code path as `tenant-provisioner-pg.js:58`, so this catches exactly the class of bug that breaks fresh tenant provisioning. Run: `node backend/scripts/verify-schema-apply.js`. Documented in `backend/scripts/CLAUDE.md`.]
+
+### Commit plan
+
+1. `fix(schema): apply schema-pg.sql end-to-end — 3 bugs + verification script` — bundled single commit covering M1a/M1b/M1c + `verify-schema-apply.js` + CLAUDE.md entry.
+2. `docs(review): close Pattern M1 with final dispositions` — this file only.
+
+### Test strategy
+
+- **Live scratch-apply via `verify-schema-apply.js`**: the authoritative test, because it's a byte-for-byte match of what `tenant-provisioner-pg.js` does in production for new tenant signup. After fix: `[OK] schema applied cleanly. 213 tables created.`
+- **Previously-blocked integration tests**:
+  - `pg-batch3-complex.test.js`: **55/55 passing** (was blocked at seed time on main — 0 tests could run).
+  - `pg-batch1-crud.test.js`: **passing** (was blocked at seed time on main).
+  - `pg-batch12-billing.test.js`: **60/64 passing** — the 4 failures are pre-existing on main (`git stash` + re-run on main gave the same 4/29 pattern), not regressions. Our fix reached **35 more tests than main could reach** (64 attempted vs 29 attempted before seed failure blocked the rest).
+- **No production state to verify**: M1 only affects fresh tenant provisioning. Live tenants (packagesmall, handicraft, khantoys) are at v27, built incrementally via `migrate-pg.js`, and were never apply-tested against `schema-pg.sql`. Their schemas are correct regardless.
+
+### Deferred / documented-only
+
+- **CI pre-merge check** that runs `verify-schema-apply.js` — would prevent future recurrences of this exact class of bug permanently. Left for a later Wave because (a) adding CI scope here drifts from the "fix bugs, don't redesign pipelines" rule, (b) GitHub Actions DATABASE_URL provisioning is non-trivial and would need a separate Supabase branch. The script is committed and documented, so a future CI task has everything it needs.
+
+- **Fresh-tenant regression test**: the real end-to-end check would be `tenant-provisioner-pg.js --slug m1_smoke_test --name test --pin 9999` against production Supabase, then immediately delete the tenant. Not done in this session because provisioning a real tenant touches `public.tenants` and `admin_activity_log`, creating cleanup work. `verify-schema-apply.js` covers the schema-apply portion without touching public tables, which is the only part of provisioning M1 affects.
+
+---
+
 ## Deviations from synthesis
 
 Running log of where we've diverged from the reviewer findings, with dates and reasons:
@@ -255,3 +307,6 @@ Running log of where we've diverged from the reviewer findings, with dates and r
 - **2026-04-11 — Pattern A: per-event vs. poll job shape split**: the synthesis said "Single helper `withTenantContext(slug, fn)`" for all Pattern A workers. Reality is two shapes — per-event (withTenantContext) and poll (forEachActiveTenant). The two helpers exist for different reasons and can't unify without a third helper that handles both. Documented as Decision F.
 - **2026-04-11 — Pattern A: drive-by fix to marketplace-sync-worker-boss.js**: found while verifying Commit 4 that `lastPollAt` was stored as an ISO string instead of milliseconds. Breaks `Date.now() - status.lastPollAt` with NaN. Exposed by Commit 4 but pre-existing; fixed in the same commit since Commit 4 was the first time anyone would see the broken state.
 - **2026-04-11 — Pattern A final tally**: 4 code commits landed (Commits 1-4) + 1 docs commit (Commit 5). All 5 review findings fixed plus 1 drive-by bug found during code reading. Zero `wontfix`, zero `notabug` — unlike Pattern D, Pattern A's bugs were all genuinely broken code paths that just didn't have users yet. The activation-day-incident argument for Option 1 (full fix) held up: fixing now while the code is fresh was cheaper than fixing later under pressure.
+- **2026-04-11 — Pattern M1 scope expanded from 1 bug to 3**: the Phase 1 review flagged M1 as a single FK-ordering issue (`picklist_items` → `web_order_allocations`). Full-file verification surfaced two more bugs that broke the same code path: a duplicate `courier_integrations` block (silent no-op, not a production bug but drift risk) and a stray `ALTER TABLE payment_intents` that leaked from `migrate-pg.js` v11 into `schema-pg.sql` (real bug — `payment_intents` is master-schema-only, so the ALTER fails inside any tenant schema context). All three landed in one bundled commit. The review underestimated the scope by 2×.
+- **2026-04-11 — Pattern M1: Explore scan missed the third bug**: the pre-fix Explore agent search specifically looked for `REFERENCES <later_table>` patterns. The third bug was a *cross-schema table leak* from an `ALTER TABLE` — a different pattern the scan wasn't designed to catch. Lesson for future scans: don't trust a grep-shaped scan to find the last bug of a given class; always finish with a scratch apply against real Postgres. `verify-schema-apply.js` was written to make this cheap for next time.
+- **2026-04-11 — Pattern M1: integration test unblock quantified**: pg-batch3-complex went from 0 tests runnable (seed crash) → 55/55 passing. pg-batch12-billing went from 29 tests attempted → 64 attempted (35 newly-reachable). The 4 pre-existing pg-batch12 failures are billing-code issues unrelated to M1 and verified to exist on `main` via `git stash` + re-run. M1 is the single biggest integration-test unlock on this branch so far.
