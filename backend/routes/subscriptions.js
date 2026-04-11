@@ -153,11 +153,12 @@ module.exports = function registerSubscriptionRoutes(app, deps) {
         [plan_id, customer_id, now, periodEnd, trialEnd, auto_charge || false]
       );
 
-      // Schedule first renewal at period end
+      // Schedule first renewal at period end. tenantSlug is required so
+      // the worker can set search_path when the job fires.
       const boss = await getBoss();
       await boss.send(
         "subscription-renewal",
-        { subscriptionId: sub.id },
+        { tenantSlug: req.tenantSlug, subscriptionId: sub.id },
         { startAfter: periodEnd }
       );
 
@@ -185,7 +186,7 @@ module.exports = function registerSubscriptionRoutes(app, deps) {
   app.post("/api/customer-subscriptions/:id/resume", ...gate, async (req, res) => {
     try {
       const boss = await getBoss();
-      const sub = await resumeSubscription(deps.db, boss, Number(req.params.id));
+      const sub = await resumeSubscription(deps.db, boss, req.tenantSlug, Number(req.params.id));
       if (!sub) return res.status(400).json({ error: "Subscription is not paused or not found" });
 
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "subscription_resumed", JSON.stringify({ subscription_id: Number(req.params.id) })]); } catch {}

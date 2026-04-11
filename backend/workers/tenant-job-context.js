@@ -17,7 +17,7 @@
  *
  * Usage:
  *   await withTenantContext(pool, tenantSlug, async (db) => {
- *     await processRenewal(db, boss, subscriptionId);
+ *     await processRenewal(db, boss, tenantSlug, subscriptionId);
  *   });
  *
  * The `db` parameter passed to the callback is a tenant-scoped proxy

@@ -113,10 +113,11 @@ module.exports = function registerCustomerInvoiceRoutes(app, deps) {
         );
       }
 
-      // Schedule reminders if provided and due_date set
+      // Schedule reminders if provided and due_date set. tenantSlug is
+      // required so each invoice-reminder job carries tenant routing.
       if (reminders && reminders.length > 0 && due_date) {
         const boss = await getBoss();
-        await scheduleReminders(boss, deps.db, invoice.id, reminders);
+        await scheduleReminders(boss, deps.db, invoice.id, reminders, req.tenantSlug);
       }
 
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "invoice_created", JSON.stringify({ invoice_id: invoice.id, invoice_number: invoice.invoice_number })]); } catch {}

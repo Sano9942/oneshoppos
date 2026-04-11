@@ -5,11 +5,20 @@
  *
  * Jobs:
  *   "email"                    — send a single email via Resend
- *   "billing-lifecycle-check"  — hourly cron: trial/grace/expiry transitions + email triggers
+ *   "billing-lifecycle-check"  — hourly cron: trial/grace/expiry transitions + email triggers (uses public.tenants)
+ *   "campaign-email"           — tenant-scoped: send one marketing delivery
+ *   "campaign-scheduled-send"  — tenant-scoped: fan-out for a scheduled campaign
+ *   "invoice-reminder"         — tenant-scoped: send one reminder for a customer invoice
+ *   "subscription-renewal"     — tenant-scoped: generate invoice + schedule next renewal
+ *
+ * Tenant-scoped jobs MUST include `tenantSlug` in the payload. The worker
+ * uses `withTenantContext` to acquire a pool client with search_path set
+ * to `tenant_<slug>` before running the handler body.
  */
 
 const { Resend } = require("resend");
 const { TEMPLATES } = require("../services/email-templates");
+const { withTenantContext } = require("./tenant-job-context");
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -247,123 +256,154 @@ async function registerEmailWorker(boss, pool) {
 
   // ── Campaign email delivery worker ──────────────────────────────────────
   await boss.work("campaign-email", { teamSize: 5, teamConcurrency: 5 }, async (job) => {
-    const { deliveryId, to, subject, html } = job.data;
+    const { tenantSlug, deliveryId, to, subject, html, campaignId } = job.data;
+    if (!tenantSlug) {
+      throw new Error("Missing tenantSlug in campaign-email job payload");
+    }
+
+    // Send the email first (this is a pure Resend call — no DB context needed).
+    // Only after a successful send do we touch tenant-scoped delivery rows.
+    let sendError = null;
     try {
       const fromAddr = process.env.RESEND_FROM_EMAIL || "SanoPOS <noreply@sanopos.com>";
       await resend.emails.send({ from: fromAddr, to, subject, html });
-      await pool.query(
-        "UPDATE marketing_campaign_deliveries SET status = 'sent', sent_at = NOW() WHERE id = $1",
-        [deliveryId]
-      );
-      logger.info({ deliveryId, to }, "Campaign email sent");
+      logger.info({ tenantSlug, deliveryId, to }, "Campaign email sent");
     } catch (err) {
-      await pool.query(
-        "UPDATE marketing_campaign_deliveries SET status = 'failed', error = $1 WHERE id = $2",
-        [err.message, deliveryId]
-      );
-      logger.error({ err, deliveryId }, "Campaign email failed");
-      throw err;
+      sendError = err;
+      logger.error({ err, tenantSlug, deliveryId }, "Campaign email failed");
     }
 
-    // Check if all deliveries for campaign are complete — update campaign status
-    if (job.data.campaignId) {
-      try {
-        const { rows: [stats] } = await pool.query(
-          `SELECT
-             COUNT(*)::int AS total,
-             COUNT(*) FILTER (WHERE status = 'sent')::int AS sent,
-             COUNT(*) FILTER (WHERE status = 'failed')::int AS failed,
-             COUNT(*) FILTER (WHERE status = 'pending')::int AS pending
-           FROM marketing_campaign_deliveries WHERE campaign_id = $1`,
-          [job.data.campaignId]
+    // Update delivery row + optionally roll up campaign status — all in one
+    // tenant-scoped context so the pool client is only acquired once.
+    await withTenantContext(pool, tenantSlug, async (db) => {
+      if (sendError) {
+        await db.query(
+          "UPDATE marketing_campaign_deliveries SET status = 'failed', error = $1 WHERE id = $2",
+          [sendError.message, deliveryId]
         );
-        if (stats.pending === 0) {
-          const newStatus = stats.failed === 0 ? "sent" : stats.sent === 0 ? "failed" : "partial";
-          await pool.query(
-            "UPDATE marketing_campaigns SET status = $1, sent_at = NOW(), updated_at = NOW() WHERE id = $2",
-            [newStatus, job.data.campaignId]
+      } else {
+        await db.query(
+          "UPDATE marketing_campaign_deliveries SET status = 'sent', sent_at = NOW() WHERE id = $1",
+          [deliveryId]
+        );
+      }
+
+      // Roll up campaign status if all deliveries are complete.
+      if (campaignId) {
+        try {
+          const { rows: [stats] } = await db.query(
+            `SELECT
+               COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE status = 'sent')::int AS sent,
+               COUNT(*) FILTER (WHERE status = 'failed')::int AS failed,
+               COUNT(*) FILTER (WHERE status = 'pending')::int AS pending
+             FROM marketing_campaign_deliveries WHERE campaign_id = $1`,
+            [campaignId]
           );
-        }
-      } catch { /* non-critical */ }
-    }
+          if (stats.pending === 0) {
+            const newStatus = stats.failed === 0 ? "sent" : stats.sent === 0 ? "failed" : "partial";
+            await db.query(
+              "UPDATE marketing_campaigns SET status = $1, sent_at = NOW(), updated_at = NOW() WHERE id = $2",
+              [newStatus, campaignId]
+            );
+          }
+        } catch { /* non-critical rollup */ }
+      }
+    });
+
+    // Re-throw after DB update so pg-boss retries the email send.
+    if (sendError) throw sendError;
   });
 
   // ── Invoice reminder worker ────────────────────────────────────────────
   await boss.work("invoice-reminder", async (job) => {
-    const { reminderId, invoiceId } = job.data;
+    const { tenantSlug, reminderId, invoiceId } = job.data;
+    if (!tenantSlug) {
+      throw new Error("Missing tenantSlug in invoice-reminder job payload");
+    }
     try {
-      // Load invoice + customer
-      const { rows: [invoice] } = await pool.query(
-        `SELECT ci.*, c.email AS customer_email, c.name AS customer_name
-         FROM customer_invoices ci
-         LEFT JOIN customers c ON c.id = ci.customer_id
-         WHERE ci.id = $1`,
-        [invoiceId]
-      );
-      if (!invoice || invoice.status === "paid" || invoice.status === "void") {
-        logger.info({ invoiceId, reminderId }, "Invoice reminder skipped — invoice paid or void");
-        await pool.query(
-          "UPDATE customer_invoice_reminders SET status = 'skipped' WHERE id = $1",
+      await withTenantContext(pool, tenantSlug, async (db) => {
+        // Load invoice + customer
+        const { rows: [invoice] } = await db.query(
+          `SELECT ci.*, c.email AS customer_email, c.name AS customer_name
+           FROM customer_invoices ci
+           LEFT JOIN customers c ON c.id = ci.customer_id
+           WHERE ci.id = $1`,
+          [invoiceId]
+        );
+        if (!invoice || invoice.status === "paid" || invoice.status === "void") {
+          logger.info({ tenantSlug, invoiceId, reminderId }, "Invoice reminder skipped — invoice paid or void");
+          await db.query(
+            "UPDATE customer_invoice_reminders SET status = 'skipped' WHERE id = $1",
+            [reminderId]
+          );
+          return;
+        }
+        if (!invoice.customer_email) {
+          logger.warn({ tenantSlug, invoiceId, reminderId }, "Invoice reminder skipped — no customer email");
+          return;
+        }
+
+        // Enqueue reminder email (the "email" worker is tenant-agnostic — it
+        // just calls Resend — so this enqueue doesn't need tenantSlug).
+        await boss.send("email", {
+          to: invoice.customer_email,
+          from: process.env.RESEND_FROM_EMAIL || "SanoPOS <noreply@sanopos.com>",
+          subject: `Reminder: Invoice ${invoice.invoice_number} — ${Number(invoice.balance_due).toLocaleString()} due`,
+          html: require("../services/email-templates").TEMPLATES.invoice_reminder({
+            invoice_number: invoice.invoice_number,
+            customer_name: invoice.customer_name,
+            balance_due: invoice.balance_due,
+            due_date: invoice.due_date,
+            company_name: "Our Store",
+          }).html,
+          type: "invoice_reminder",
+        });
+
+        await db.query(
+          "UPDATE customer_invoice_reminders SET status = 'sent', sent_at = NOW() WHERE id = $1",
           [reminderId]
         );
-        return;
-      }
-      if (!invoice.customer_email) {
-        logger.warn({ invoiceId, reminderId }, "Invoice reminder skipped — no customer email");
-        return;
-      }
-
-      // Enqueue reminder email
-      await boss.send("email", {
-        to: invoice.customer_email,
-        from: process.env.RESEND_FROM_EMAIL || "SanoPOS <noreply@sanopos.com>",
-        subject: `Reminder: Invoice ${invoice.invoice_number} — ${Number(invoice.balance_due).toLocaleString()} due`,
-        html: require("../services/email-templates").TEMPLATES.invoice_reminder({
-          invoice_number: invoice.invoice_number,
-          customer_name: invoice.customer_name,
-          balance_due: invoice.balance_due,
-          due_date: invoice.due_date,
-          company_name: "Our Store",
-        }).html,
-        type: "invoice_reminder",
+        logger.info({ tenantSlug, invoiceId, reminderId }, "Invoice reminder sent");
       });
-
-      await pool.query(
-        "UPDATE customer_invoice_reminders SET status = 'sent', sent_at = NOW() WHERE id = $1",
-        [reminderId]
-      );
-      logger.info({ invoiceId, reminderId }, "Invoice reminder sent");
     } catch (err) {
-      logger.error({ err, invoiceId, reminderId }, "Invoice reminder failed");
+      logger.error({ err, tenantSlug, invoiceId, reminderId }, "Invoice reminder failed");
       throw err;
     }
   });
 
   // ── Scheduled campaign send (delayed job) ─────────────────────────────
   await boss.work("campaign-scheduled-send", async (job) => {
-    const { campaignId } = job.data;
+    const { tenantSlug, campaignId } = job.data;
+    if (!tenantSlug) {
+      throw new Error("Missing tenantSlug in campaign-scheduled-send job payload");
+    }
     try {
       const { enqueueCampaignSend } = require("../services/marketing");
-      // Use pool directly since scheduled jobs run without tenant context
-      const db = { query: (sql, params) => pool.query(sql, params) };
-      await enqueueCampaignSend(boss, campaignId, db);
-      logger.info({ campaignId }, "Scheduled campaign send triggered");
+      await withTenantContext(pool, tenantSlug, async (db) => {
+        await enqueueCampaignSend(boss, campaignId, db, tenantSlug);
+      });
+      logger.info({ tenantSlug, campaignId }, "Scheduled campaign send triggered");
     } catch (err) {
-      logger.error({ err, campaignId }, "Scheduled campaign send failed");
+      logger.error({ err, tenantSlug, campaignId }, "Scheduled campaign send failed");
       throw err;
     }
   });
 
   // ── Subscription renewal worker ─────────────────────────────────────────
   await boss.work("subscription-renewal", async (job) => {
-    const { subscriptionId } = job.data;
+    const { tenantSlug, subscriptionId } = job.data;
+    if (!tenantSlug) {
+      throw new Error("Missing tenantSlug in subscription-renewal job payload");
+    }
     try {
       const { processRenewal } = require("../services/subscriptions");
-      const db = { query: (sql, params) => pool.query(sql, params) };
-      await processRenewal(db, boss, subscriptionId);
-      logger.info({ subscriptionId }, "Subscription renewal processed");
+      await withTenantContext(pool, tenantSlug, async (db) => {
+        await processRenewal(db, boss, tenantSlug, subscriptionId);
+      });
+      logger.info({ tenantSlug, subscriptionId }, "Subscription renewal processed");
     } catch (err) {
-      logger.error({ err, subscriptionId }, "Subscription renewal failed");
+      logger.error({ err, tenantSlug, subscriptionId }, "Subscription renewal failed");
       throw err;
     }
   });

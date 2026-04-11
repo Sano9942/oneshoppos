@@ -181,8 +181,19 @@ async function createBatchInvoices(db, { customerIds, items, dueDate, discountAm
 
 /**
  * Schedule reminder jobs via pg-boss.
+ *
+ * @param {object} boss - pg-boss instance
+ * @param {object} db - tenant-scoped db proxy
+ * @param {number} invoiceId
+ * @param {Array} rules - reminder rule rows
+ * @param {string} tenantSlug - required: each invoice-reminder job needs
+ *   the slug so the worker can set search_path before reading invoice +
+ *   customer rows.
  */
-async function scheduleReminders(boss, db, invoiceId, rules) {
+async function scheduleReminders(boss, db, invoiceId, rules, tenantSlug) {
+  if (!tenantSlug) {
+    throw new Error("scheduleReminders requires tenantSlug for pg-boss payloads");
+  }
   const { rows: [invoice] } = await db.query(
     "SELECT due_date FROM customer_invoices WHERE id = $1",
     [invoiceId]
@@ -213,7 +224,7 @@ async function scheduleReminders(boss, db, invoiceId, rules) {
 
     await boss.send(
       "invoice-reminder",
-      { reminderId: reminder.id, invoiceId },
+      { tenantSlug, reminderId: reminder.id, invoiceId },
       { startAfter: fireAt }
     );
 

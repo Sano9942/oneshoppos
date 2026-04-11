@@ -23,8 +23,18 @@ function computeNextPeriod(currentPeriodEnd, interval, intervalCount = 1) {
 /**
  * Process a subscription renewal.
  * If auto_charge disabled or not available, creates an invoice instead.
+ *
+ * @param {object} db - tenant-scoped db proxy (query, transaction)
+ * @param {object} boss - pg-boss instance
+ * @param {string} tenantSlug - needed so the next scheduled renewal job
+ *   carries the correct tenant context in its payload. Without this, the
+ *   re-enqueue below would silently drop tenant routing.
+ * @param {number} subscriptionId
  */
-async function processRenewal(db, boss, subscriptionId) {
+async function processRenewal(db, boss, tenantSlug, subscriptionId) {
+  if (!tenantSlug) {
+    throw new Error("processRenewal requires tenantSlug for pg-boss re-enqueue");
+  }
   const { rows: [sub] } = await db.query(
     `SELECT cs.*, sp.name AS plan_name, sp.price, sp.billing_interval, sp.billing_interval_count
      FROM customer_subscriptions cs
@@ -80,10 +90,11 @@ async function processRenewal(db, boss, subscriptionId) {
     [nextStart, nextEnd, subscriptionId]
   );
 
-  // Schedule next renewal
+  // Schedule next renewal — tenantSlug is threaded through so the worker
+  // can set search_path when it fires.
   await boss.send(
     "subscription-renewal",
-    { subscriptionId },
+    { tenantSlug, subscriptionId },
     { startAfter: nextEnd }
   );
 
@@ -115,8 +126,18 @@ async function pauseSubscription(db, subscriptionId) {
 
 /**
  * Resume a paused subscription. Reschedules next renewal.
+ *
+ * @param {object} db - tenant-scoped db proxy
+ * @param {object} boss - pg-boss instance
+ * @param {string} tenantSlug - required so the rescheduled renewal job
+ *   is dispatched with tenant routing.
+ * @param {number} subscriptionId
  */
-async function resumeSubscription(db, boss, subscriptionId) {
+async function resumeSubscription(db, boss, tenantSlug, subscriptionId) {
+  if (!tenantSlug) {
+    throw new Error("resumeSubscription requires tenantSlug for pg-boss re-enqueue");
+  }
+
   const { rows: [sub] } = await db.query(
     "UPDATE customer_subscriptions SET status = 'active', paused_at = NULL, updated_at = NOW() WHERE id = $1 AND status = 'paused' RETURNING *",
     [subscriptionId]
@@ -127,7 +148,7 @@ async function resumeSubscription(db, boss, subscriptionId) {
   if (sub.current_period_end) {
     await boss.send(
       "subscription-renewal",
-      { subscriptionId },
+      { tenantSlug, subscriptionId },
       { startAfter: new Date(sub.current_period_end) }
     );
   }

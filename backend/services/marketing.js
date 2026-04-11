@@ -89,8 +89,18 @@ async function resolveAudience(db, filters, opts = {}) {
 
 /**
  * Enqueue campaign delivery: creates delivery rows + pg-boss jobs.
+ *
+ * @param {object} boss - pg-boss instance
+ * @param {number} campaignId
+ * @param {object} db - tenant-scoped db proxy
+ * @param {string} tenantSlug - required: each campaign-email job must carry
+ *   the slug so the consumer worker can set search_path when updating
+ *   marketing_campaign_deliveries rows.
  */
-async function enqueueCampaignSend(boss, campaignId, db) {
+async function enqueueCampaignSend(boss, campaignId, db, tenantSlug) {
+  if (!tenantSlug) {
+    throw new Error("enqueueCampaignSend requires tenantSlug for per-delivery pg-boss payloads");
+  }
   const { rows: [campaign] } = await db.query(
     `SELECT mc.*, mt.body_html AS tmpl_html, mt.subject AS tmpl_subject
      FROM marketing_campaigns mc
@@ -139,9 +149,11 @@ async function enqueueCampaignSend(boss, campaignId, db) {
     deliveryIds.push({ deliveryId: row.id, to: cust.email, name: cust.name });
   }
 
-  // Enqueue pg-boss jobs
+  // Enqueue pg-boss jobs — each delivery carries tenantSlug so the
+  // consumer worker can route its status-update queries to the right schema.
   for (const d of deliveryIds) {
     await boss.send("campaign-email", {
+      tenantSlug,
       deliveryId: d.deliveryId,
       campaignId,
       to: d.to,
