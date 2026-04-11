@@ -61,6 +61,23 @@ const DEFAULT_FEATURE_FLAGS = {
   context_selection_required: false,
   context_header_enforced: false,
   kiosk_context_locked: false,
+  // Wave 16 features — enabled by default to match production
+  phase2_scheduling: true,
+  phase2_returns_policy: true,
+  phase2_smart_collections: true,
+  phase2_outlet_tax: true,
+  phase2_scheduled_changes: true,
+  phase2_report_builder: true,
+  phase2_pos_layouts: true,
+  marketing_campaigns: true,
+  customer_messaging: true,
+  customer_invoicing: true,
+  subscription_billing: true,
+  phase4_restaurant: true,
+  phase4_restaurant_kds: true,
+  phase4_appointments: true,
+  phase4_service_projects: true,
+  phase4_service_contracts: true,
 };
 
 const PERMISSION_RULES = [
