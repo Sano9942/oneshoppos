@@ -304,7 +304,7 @@ async function seedData(db) {
   for (const [key, enabled] of Object.entries(DEFAULT_FEATURE_FLAGS)) {
     await db.query(
       `INSERT INTO feature_flags (key, enabled) VALUES ($1, $2)`,
-      [key, enabled ? 1 : 0]
+      [key, enabled]
     );
   }
 
