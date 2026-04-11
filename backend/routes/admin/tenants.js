@@ -3,7 +3,7 @@
  */
 const { validate } = require("../../middleware/validate");
 const { CreateTenantSchema } = require("../../schemas/admin");
-const { DEFAULT_FEATURE_FLAGS } = require("../../middleware/feature-flags");
+const { DEFAULT_FEATURE_FLAGS, invalidateFeatureFlagCache } = require("../../middleware/feature-flags");
 
 module.exports = function registerTenantRoutes(app, deps) {
   const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager, PLAN_DEFAULTS, provision, bcrypt, BCRYPT_ROUNDS, auditLog, logAdminAction } = deps;
@@ -441,6 +441,10 @@ module.exports = function registerTenantRoutes(app, deps) {
            updated_at = NOW()`,
         [key, !!enabled, `admin:${req.admin.email}`]
       );
+
+      if (typeof invalidateFeatureFlagCache === "function") {
+        invalidateFeatureFlagCache(tenant.id);
+      }
 
       logAdminAction(req.admin.email, "feature_flag_toggled", "tenant", req.params.id, { key, enabled: !!enabled }, req.ip);
       return res.json({ message: "Feature flag updated" });
