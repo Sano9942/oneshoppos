@@ -410,6 +410,207 @@ describe("Batch 13 — Phase 4A Restaurant (Postgres)", () => {
     });
   });
 
+  // ─── QR ORDERING (Phase 4 C2) ────────────────────────────────
+
+  describe("QR ordering — source_token_id lifecycle", () => {
+    const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-9a-f][0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let qrSessionId;
+    let qrTableId;
+    let origMultiTenant;
+
+    beforeAll(async () => {
+      // Fresh table session for QR tests (isolated from the ones above).
+      // Capture both session id and table id — the table id is needed for
+      // test 7 which exercises the public menu endpoint's JOIN on
+      // draft_orders.table_id = restaurant_tables.id.
+      const { rows: tables } = await db.query("SELECT id FROM restaurant_tables LIMIT 1");
+      qrTableId = tables[0].id;
+      const { rows: [session] } = await db.query(
+        `INSERT INTO restaurant_table_sessions (table_id, outlet_id, server_id, guest_count)
+         VALUES ($1, 1, 1, 2) RETURNING *`,
+        [qrTableId]
+      );
+      qrSessionId = session.id;
+
+      // services/public-tenant-context.js reads MULTI_TENANT at require time
+      // and short-circuits to deps.db when it's unset. The dev .env sets
+      // MULTI_TENANT=1, which would make resolvePublicTenantDb require a
+      // tenant slug query param we can't satisfy from a test schema.
+      // Unset it before first require so the module loads in single-tenant
+      // mode. Restore in afterAll.
+      origMultiTenant = process.env.MULTI_TENANT;
+      delete process.env.MULTI_TENANT;
+
+      // Mount the public-restaurant route for tests 7-8. Lazy-require here
+      // so the MULTI_TENANT env override takes effect on its first load.
+      require("../../routes/public-restaurant")(app, deps);
+    });
+
+    afterAll(() => {
+      if (origMultiTenant !== undefined) process.env.MULTI_TENANT = origMultiTenant;
+    });
+
+    it("1. POST /api/restaurant/checks with dine_in → source_token_id matches UUID v4 regex", async () => {
+      const res = await request(app)
+        .post("/api/restaurant/checks")
+        .set("x-employee-id", "1")
+        .send({
+          outlet_id: 1,
+          order_context: "dine_in",
+          table_session_id: qrSessionId,
+          seat_count: 2,
+        });
+      expect(res.status).toBe(201);
+      expect(res.body.source_token_id).toMatch(UUID_V4_REGEX);
+    });
+
+    it("2. POST /api/restaurant/checks with bar → source_token_id present", async () => {
+      const res = await request(app)
+        .post("/api/restaurant/checks")
+        .set("x-employee-id", "1")
+        .send({
+          outlet_id: 1,
+          order_context: "bar",
+          seat_count: 1,
+        });
+      expect(res.status).toBe(201);
+      expect(res.body.source_token_id).toMatch(UUID_V4_REGEX);
+    });
+
+    it("3. POST /api/restaurant/checks with takeout → source_token_id is NULL", async () => {
+      const res = await request(app)
+        .post("/api/restaurant/checks")
+        .set("x-employee-id", "1")
+        .send({
+          outlet_id: 1,
+          order_context: "takeout",
+          dining_option: "takeout",
+          seat_count: 0,
+        });
+      expect(res.status).toBe(201);
+      expect(res.body.source_token_id).toBeNull();
+    });
+
+    it("4. POST /api/restaurant/checks with delivery → source_token_id is NULL", async () => {
+      const res = await request(app)
+        .post("/api/restaurant/checks")
+        .set("x-employee-id", "1")
+        .send({
+          outlet_id: 1,
+          order_context: "delivery",
+          dining_option: "delivery",
+          seat_count: 0,
+        });
+      expect(res.status).toBe(201);
+      expect(res.body.source_token_id).toBeNull();
+    });
+
+    it("5. two consecutive dine_in checks get different tokens (uniqueness)", async () => {
+      const [a, b] = await Promise.all([
+        request(app).post("/api/restaurant/checks").set("x-employee-id", "1").send({
+          outlet_id: 1, order_context: "dine_in", table_session_id: qrSessionId, seat_count: 1,
+        }),
+        request(app).post("/api/restaurant/checks").set("x-employee-id", "1").send({
+          outlet_id: 1, order_context: "dine_in", table_session_id: qrSessionId, seat_count: 1,
+        }),
+      ]);
+      expect(a.status).toBe(201);
+      expect(b.status).toBe(201);
+      expect(a.body.source_token_id).toBeTruthy();
+      expect(b.body.source_token_id).toBeTruthy();
+      expect(a.body.source_token_id).not.toBe(b.body.source_token_id);
+    });
+
+    it("6. splitCheckByItem: each split child gets its own fresh token, not a copy of source", async () => {
+      // Create a source dine_in check
+      const sourceRes = await request(app)
+        .post("/api/restaurant/checks")
+        .set("x-employee-id", "1")
+        .send({
+          outlet_id: 1,
+          order_context: "dine_in",
+          table_session_id: qrSessionId,
+          seat_count: 2,
+        });
+      expect(sourceRes.status).toBe(201);
+      const sourceId = sourceRes.body.id;
+      const sourceToken = sourceRes.body.source_token_id;
+      expect(sourceToken).toMatch(UUID_V4_REGEX);
+
+      // Insert 2 items directly into draft_order_items so splitCheckByItem has something to split
+      const { rows: [item1] } = await db.query(
+        `INSERT INTO draft_order_items (draft_order_id, product_id, product_name, quantity, price)
+         VALUES ($1, 1, 'Widget A', 1, 100) RETURNING id`,
+        [sourceId]
+      );
+      const { rows: [item2] } = await db.query(
+        `INSERT INTO draft_order_items (draft_order_id, product_id, product_name, quantity, price)
+         VALUES ($1, 2, 'Widget B', 1, 200) RETURNING id`,
+        [sourceId]
+      );
+
+      // Split: item1 to target 0, item2 to target 1 — produces 2 child checks
+      const splitRes = await request(app)
+        .post(`/api/restaurant/checks/${sourceId}/split`)
+        .set("x-employee-id", "1")
+        .send({
+          split_type: "by_item",
+          item_assignments: [
+            { item_id: item1.id, target_check_index: 0 },
+            { item_id: item2.id, target_check_index: 1 },
+          ],
+        });
+      expect(splitRes.status).toBe(200);
+      expect(splitRes.body.new_checks).toHaveLength(2);
+
+      const [child1, child2] = splitRes.body.new_checks;
+      // Each child has its own token...
+      expect(child1.source_token_id).toMatch(UUID_V4_REGEX);
+      expect(child2.source_token_id).toMatch(UUID_V4_REGEX);
+      // ...that is not the source's token...
+      expect(child1.source_token_id).not.toBe(sourceToken);
+      expect(child2.source_token_id).not.toBe(sourceToken);
+      // ...and not equal to each other.
+      expect(child1.source_token_id).not.toBe(child2.source_token_id);
+    });
+
+    it("7. GET /api/public/restaurant/menu/:token with a valid token returns 200 + menu items", async () => {
+      // Create a fresh dine_in check and use its token
+      const checkRes = await request(app)
+        .post("/api/restaurant/checks")
+        .set("x-employee-id", "1")
+        .send({
+          outlet_id: 1,
+          order_context: "dine_in",
+          table_session_id: qrSessionId,
+          seat_count: 1,
+        });
+      const token = checkRes.body.source_token_id;
+      expect(token).toBeTruthy();
+
+      // The public-restaurant menu query JOINs draft_orders → restaurant_tables
+      // on table_id. createCheckSchema doesn't accept table_id (only
+      // table_session_id), so the POST route inserts with table_id = NULL
+      // and the JOIN would fail. Set it directly so the menu lookup works —
+      // this is test scaffolding, not a claim about route behavior.
+      await db.query("UPDATE draft_orders SET table_id = $1 WHERE id = $2", [qrTableId, checkRes.body.id]);
+
+      const menuRes = await request(app).get(`/api/public/restaurant/menu/${token}`);
+      expect(menuRes.status).toBe(200);
+      expect(menuRes.body).toHaveProperty("table_label");
+      expect(menuRes.body).toHaveProperty("items");
+      expect(Array.isArray(menuRes.body.items)).toBe(true);
+      // Seeded fixture has 5 products, all active with deleted_at = NULL
+      expect(menuRes.body.items.length).toBeGreaterThanOrEqual(5);
+    });
+
+    it("8. GET /api/public/restaurant/menu/:token with a bogus token returns 404", async () => {
+      const menuRes = await request(app).get("/api/public/restaurant/menu/nonexistent-token-xyz");
+      expect(menuRes.status).toBe(404);
+      expect(menuRes.body.error).toMatch(/no active session/i);
+    });
+  });
+
   // ─── FEATURE FLAG GATING ─────────────────────────────────────
 
   describe("feature flag gating", () => {
