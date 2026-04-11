@@ -890,9 +890,9 @@ Items discovered during Wave 3 scope/execution that are **not** in the 24 review
 
 | # | Item | Canonical location | Category | Status |
 |---|---|---|---|---|
-| 1 | `products.created_at` as a real column (migration v30 — not v18; CLAUDE.md was stale) | Line 761 (Batch 3A Deferred) | Schema hygiene | pending — DB-1 |
-| 2 | `sortMap.created_at_desc → p.id DESC` cosmetic mismatch | Line 762 (Batch 3A Deferred) | Code hygiene | pending — DB-1 |
-| 3 | `schemas/smart-collections.js` sort_order enum still includes `created_at_desc` | Line 763 (Batch 3A Deferred) | Schema hygiene | pending — DB-1 (verification only; already correct) |
+| 1 | `products.created_at` as a real column (migration v30 — not v18; CLAUDE.md was stale) | Line 761 (Batch 3A Deferred) | Schema hygiene | closed — DB-1 `c97cb44` (code only; prod rollout deferred to operator) |
+| 2 | `sortMap.created_at_desc → p.id DESC` cosmetic mismatch | Line 762 (Batch 3A Deferred) | Code hygiene | closed — DB-1 `5c7ab37` |
+| 3 | `schemas/smart-collections.js` sort_order enum still includes `created_at_desc` | Line 763 (Batch 3A Deferred) | Schema hygiene | closed — DB-1 verification only (already correct; no code change) |
 | 4 | `employees.js:451` `SELECT name FROM company_profile` — column is `company_name` | Line 613 (Phase 5 H1 Deferred), Line 765 (Batch 3A Deferred — unchanged) | Pre-existing bug | closed — DB-2 `ce360a9` |
 | 5 | Zod schema for `POST /api/orders/endless-aisle` (whole `routes/orders.js` has no Zod) | Line 805 (Batch 3B Deferred) | Validation hygiene | **deferred — DB-3** (per D5) |
 | 6 | `db-pg.js:6` `require("dotenv").config(...)` at module load breaks test isolation | Line 806 (Batch 3B Deferred), Line 931 (Deviation log) | Test-infra refactor | closed — DB-4 `40fcd67` |
@@ -917,8 +917,8 @@ Items discovered during Wave 3 scope/execution that are **not** in the 24 review
 - **Atomicity / reliability follow-ups**: items 10, 11, 12
 
 **Drive-by pass progress** (Wave 3 drive-by hygiene closure session, 2026-04-11):
-- **closed**: 6 items (4, 6, 7, 8, 13, partial 14)
-- **pending**: 8 items (1, 2, 3, 9, 10, 11, remainder of 14, new item 15)
+- **closed**: 9 items (1, 2, 3, 4, 6, 7, 8, 13, partial 14)
+- **pending**: 5 items (9, 10, 11, remainder of 14, new item 15)
 - **deferred**: 1 item (5 — per D5)
 - **dropped**: 1 item (12 — per D4)
 
@@ -1013,6 +1013,39 @@ band-aid (`vi.setConfig({ hookTimeout: 60000 })`) unblocks 13/14 tests
 at minimal risk. Runtime cost is ~11min for the file, which is acceptable
 since it was 0min runnable before. The remaining 1/14 failure is
 drive-by 15 (a route-level 500 on `/import`, not a test-infra problem).
+
+**D-DB-1-PROD-DEFER — v30 production rollout deferred to operator.** The
+Batch DB-1 commit plan originally called for MCP-driven production
+rollout of v30 (and, incidentally, v28 and v29 which were also unapplied
+on all 3 live tenants + public at the time). Mid-batch discovery: the
+`migrate-pg.js:2793` filter `m.version > currentVersion` means that if
+MCP inserts `schema_version = 30` without applying v28 and v29 first,
+those two migrations become permanently unreachable — next operator run
+would see `currentVersion = 30` and skip v28/v29 as already-applied.
+This forced an "all three or none" decision.
+
+Applying all three via MCP was feasible (all three have safe operational
+profiles — v28 on empty source_token_id, v29 on empty kds_tickets, v30
+on 47 products total across all tenants) but constituted a shared-state
+production action beyond DB-1's bug-fix scope. The decision: skip the
+production migration entirely this session. DB-1's code changes
+(commits c97cb44, 5c7ab37, 15a8d2e) stay on the `review-fixes` branch
+and are forward-compatible with unmigrated production because
+`ADD COLUMN IF NOT EXISTS` is idempotent. The next operator to run
+`node backend/migrate-pg.js` in a maintenance window will apply v28, v29,
+and v30 together, catching production up to the branch state in one
+sequence.
+
+**Production state as of DB-1 closure (2026-04-11)**:
+- `public.schema_version` MAX: 27 (v28, v29, v30 unapplied)
+- `tenant_packagesmall.schema_version` MAX: 27 (v28, v29, v30 unapplied; 47 products will receive backfill)
+- `tenant_handicraft.schema_version` MAX: 27 (v28, v29, v30 unapplied; 0 products)
+- `tenant_khantoys.schema_version` MAX: 27 (v28, v29, v30 unapplied; 0 products)
+
+**Operator instructions for catch-up**: `railway run node backend/migrate-pg.js`
+in a maintenance window. The script runs per-tenant automatically via
+`migrateAllTenants`. Expected runtime: sub-second per schema. Post-run
+verification: `SELECT schema_name, MAX(version) FROM information_schema.schemata s JOIN (schema-per-schema schema_version lookups) ORDER BY schema_name` — should show 30 on all four schemas.
 
 ---
 
