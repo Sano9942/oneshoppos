@@ -373,6 +373,76 @@ below was scoped via the 3-question approval discipline before any code.
 
 ---
 
+## Pattern Phase 4 C2 — QR source_token_id never populated
+
+**Status:** `done`
+**Branch:** `review-fixes`
+**Closed:** 2026-04-11 (3 commits: fix + test + docs)
+
+### Decision log
+
+- **2026-04-11 — Decision M: Option B scope (service + split + migration, no route gate)**
+  - **Q:** Minimal fix (Option A), tight fix with defense-in-depth (Option B), or wide fix with new `/qr` endpoint (Option C)?
+  - **Chose: Option B.** `createRestaurantCheck` + `splitCheckByItem` + migration v28 + schema-pg.sql mirror. Rationale: split path has the same bug class and is cheaper to fix bundled; partial UNIQUE index is safe-additive (column is empty on all live tenants) and prevents future token collisions for near-zero cost; new `/qr` route in Option C would preempt a frontend design question I shouldn't answer unilaterally.
+
+- **2026-04-11 — Decision N: drop public-route feature flag gate after codebase research (mid-implementation scope correction)**
+  - **Q:** Should the public-restaurant route include `requireFeature('phase4_restaurant_qr')`?
+  - **Initial plan:** yes, as a defense-in-depth gate.
+  - **Codebase research:** grepped `routes/public-bookings.js` and `routes/storefront.js` (the only other public-before-auth routes). Neither gates by feature flag. Zero precedent for public-route feature gating in the codebase. Adding it only here would create a one-off asymmetric pattern — either we gate all public routes (scope creep, touches 2 unrelated files) or we gate none.
+  - **User correction earlier in the session:** "the claude md files are old and stale please do research on code first instead of assumptions." Applied here: don't invent security patterns not present in the codebase.
+  - **Chose: drop the gate.** Natural gate: "no token was written if the flag-writer didn't populate one." The token generation is unconditional on the write side (always populated for `dine_in`/`bar`) but the public URL only exists if a specific tenant workflow produces it. A tenant with the flag off won't have a front-end path that calls the QR URL, and a lookup with no token simply returns 404 (which it already did). Documented as a deviation.
+  - **Alternative considered:** also querying `feature_flags` inside `createRestaurantCheck` to gate token generation at write time. Rejected: adds a DB round-trip to a hot path; the column is harmless when unused; future-proofs retroactive flag flips.
+
+- **2026-04-11 — Decision O: include migration v28 partial UNIQUE index in the fix commit**
+  - **Q:** Does the migration belong in the same commit as the service/schema fix, or separate?
+  - **Chose: same commit.** Migration is strictly motivated by the fix (prevents collisions on the column we just started populating). Safe-additive: zero rows on any tenant have `source_token_id IS NOT NULL`, so `CREATE UNIQUE INDEX` runs against an empty column — no lock contention, no downtime, no data migration. A separate migration commit would have no visible "why" in its diff. Same reasoning as Phase 2 C3 Decision I (bundle motivation-linked changes).
+
+- **2026-04-11 — Decision P: append tests to existing `pg-batch13-restaurant.test.js` instead of creating a new `pg-batch14-restaurant-qr.test.js`**
+  - **Q:** New test file or extend the existing one?
+  - **Verified via live `ls`:** `pg-batch13-restaurant.test.js` and `pg-batch14-bookings.test.js` already exist from main. Phase 2 C3 added `pg-batch13-catalog-scheduler.test.js` (naming collision on `13-` I didn't catch at the time). Creating yet another `pg-batch1x-restaurant-qr.test.js` would multiply the confusion.
+  - **Chose: append to `pg-batch13-restaurant.test.js`.** Reuses the existing fixture scaffolding (feature flags seeded, routes mounted, table/floor-plan/session created), co-locates related tests, avoids a third filename cluster. The `describe("QR ordering — source_token_id lifecycle", ...)` block is clearly attributable to Phase 4 C2 via its name.
+  - **Flagged for future cleanup:** the two `pg-batch13-*` filename collision (restaurant + catalog-scheduler) is a minor hygiene problem I introduced in Phase 2 C3. Not urgent but worth revisiting when the next wave renames test files or when someone runs `jest pg-batch13` and gets two unrelated suites.
+
+### Findings
+
+- **Phase 4 C2** — `routes/public-restaurant.js:17` and `:70` query `WHERE d.source_token_id = $1`, but no code writes the column → `fix`, 3-commit plan
+  [verified 2026-04-11:
+  • `grep -rn source_token_id backend/` shows 2 reads and 0 writes in live code (outside the migration/schema column definition).
+  • `createRestaurantCheck` at `services/restaurant-checks.js:6-16` inserts into `draft_orders` without the column. `splitCheckByItem` at `:75-79` has the same omission.
+  • Frontend grep for `source_token_id|qr_url|qr_token` returns zero hits — no UI surfaces the token today.
+  • Production state: packagesmall has `phase4_restaurant=true` AND `phase4_restaurant_qr=true` (both enabled), but `tenant_packagesmall.draft_orders` has 0 rows in `order_context IN ('dine_in','bar')` and 0 rows with a non-NULL token. handicraft and khantoys have both flags disabled.
+  • Worker env: `SCHEDULED_CATALOG_WORKER_ENABLED` not set — unrelated; no env var gates this feature. The only runtime gate is the two feature flags.
+  • **Exposure shape**: feature is flag-live on packagesmall but code is dead. The first real dine-in check + QR scan would 404. Pattern A Decision D activation-day-incident shape.]
+
+### Commit plan
+
+1. `fix(restaurant): populate source_token_id on checks + splits (Phase 4 C2)` — [landed `9dc9846`]
+   - Modified: `backend/services/restaurant-checks.js` (new `TOKEN_CONTEXTS` set, `makeSourceToken` helper, applied to both `createRestaurantCheck` and `splitCheckByItem`)
+   - Modified: `backend/migrate-pg.js` (new migration v28 with partial UNIQUE index)
+   - Modified: `backend/schema-pg.sql` (mirrors the new index after the existing `ALTER TABLE draft_orders` block)
+   - Scope correction from Decision N documented in the commit trailer.
+2. `test(restaurant): QR source_token_id lifecycle (Phase 4 C2)` — [landed `e2a1641`]
+   - 8 new tests appended to `pg-batch13-restaurant.test.js` as a new `QR ordering — source_token_id lifecycle` describe block.
+   - Two documented scaffolding subtleties: `MULTI_TENANT` env override (so `resolvePublicTenantDb` short-circuits to `deps.db`), and direct `UPDATE draft_orders SET table_id` (because `createCheckSchema` doesn't accept `table_id`, but the public menu JOIN requires it).
+3. `docs(review): close Phase 4 C2 with final disposition` — this update.
+
+### Test strategy
+
+- **Integration only, real Postgres** via `pg-batch13-restaurant.test.js` + `createTestApp()` factory. No unit tests — the logic is "branch on order_context, generate UUID, pass through INSERT," which isn't interesting in isolation. The partial UNIQUE index is enforcement-infrastructure — unit-testing Postgres's UNIQUE constraint behavior is pointless.
+- **Coverage shape** (8 tests): 5 write-path tests (dine_in / bar / takeout / delivery / uniqueness), 1 split-path test, 2 public-route tests (valid-token 200, bogus-token 404).
+- **Scope-correction impact on test count**: started at 9 tests, dropped to 8 after removing the `phase4_restaurant_qr=off → 403` test (per Decision N, no gate was added).
+- **Regression check**: Phase 2 C3's `pg-batch13-catalog-scheduler.test.js` — 11/11 still passing after the `restaurant-checks.js` edit. The `_catalog_scheduler_` file is completely unrelated to `_restaurant_` work, but both mount routes against a shared-pool test factory and I wanted to be sure.
+- **Results**: 35/35 (27 pre-existing restaurant tests + 8 new QR tests) in 61s. All 8 new tests passed on the third iteration — first iteration (pre-env-fix) was 33/35, second (post-env-fix) was 34/35, third (after fixing the JOIN-on-table_id scaffolding) was 35/35.
+
+### Deferred / documented-only
+
+- **Frontend QR rendering**: no frontend component references `source_token_id` today. The fix produces the token server-side; whoever builds the "print QR code from tablet" UI needs to: (a) read `source_token_id` from the `createRestaurantCheck` response body, (b) construct `${PUBLIC_URL}/menu/${source_token_id}?tenant=${slug}` client-side, (c) render as QR via any library. No new backend route needed.
+- **`createCheckSchema` doesn't accept `table_id`**: separate pre-existing quirk. The route takes `table_session_id` and leaves `draft_orders.table_id` NULL. The public menu query JOINs on `table_id`, so in practice the JOIN will fail for any check created through the POST route unless something *else* populates `table_id` later. Test 7 works around this via `UPDATE draft_orders SET table_id` as test scaffolding. A real fix would either derive `table_id` from `table_session_id` inside `createRestaurantCheck`, or add `table_id` to `createCheckSchema` with a foreign-key-existence check. Out of scope for Phase 4 C2 — this is a separate bug in the restaurant write path that the reviewer didn't flag.
+- **pg-batch13 filename collision**: Phase 2 C3 created `pg-batch13-catalog-scheduler.test.js` while `pg-batch13-restaurant.test.js` already existed. Minor hygiene problem. Not fixed here because renaming a committed test file would create git history noise. Revisit during the next test-file reshuffle.
+- **Feature flag `phase4_restaurant_qr` gate on the write side**: could be added inside `createRestaurantCheck` to suppress token generation when the flag is off. Skipped because querying the flag adds a DB round-trip to a hot path and the column is harmless when unused. See Decision N.
+
+---
+
 ## Deviations from synthesis
 
 Running log of where we've diverged from the reviewer findings, with dates and reasons:
@@ -393,3 +463,8 @@ Running log of where we've diverged from the reviewer findings, with dates and r
 - **2026-04-11 — Phase 2 C3: services/CLAUDE.md badly stale (9→31 files)**: the `backend/services/CLAUDE.md` claimed 9 files. Actual count is 31. This was a ~3x drift. Corrected the count in the fix commit and flagged for `/update-docs` refresh. Not updating the narrative for every file because that's out of scope for a security fix commit — the discipline is "don't turn bugfixes into documentation rewrites."
 - **2026-04-11 — Phase 2 C3: tests caught two drive-by schema bugs**: the initial Zod schema had (a) `change_type` enum copied from the review repro example (`['field_update',...]`) instead of matching the DB CHECK (`['price','visibility','status','tax']`) and (b) used Zod 3 `.refine()` function-form dynamic messages which Zod 4 silently drops. Integration tests exposed both: (a) via reading the real DDL during test fixture setup, (b) via `expect(body.error).toMatch(/field_name/i)` asserting the 400 response was meaningful. Both fixed in the test commit as drive-bys. This is the third time in this session that "tests caught a bug the code review didn't" — Pattern A Commit 4's lastPollAt, M1's payment_intents ALTER, and now these two. Tests earn their keep.
 - **2026-04-11 — Phase 2 C3: worker body refactor preserved atomicity**: the original inline worker wrapped the target UPDATE and the status='applied' update inside `tenantDb.transaction()` so they land atomically. My first draft of `applyScheduledChange` naively took a `db` argument and ran both queries sequentially on it — losing atomicity if the caller passed a pool. Corrected before commit: the service opens its own `db.transaction()` internally. Caught by re-reading the original worker flow carefully, not by tests (unit tests don't exercise real transaction semantics). Lesson: when extracting a function out of a worker loop, preserve the transaction boundary *as-is* or explicitly think about moving it.
+- **2026-04-11 — Phase 4 C2: mid-implementation scope correction dropped the public-route feature flag gate**: original Option B approval included `requireFeature('phase4_restaurant_qr')` on the public-restaurant route as defense-in-depth. Before writing code I grepped `routes/public-bookings.js` and `routes/storefront.js` for similar gates and found **none** — the codebase has no precedent for public-route feature-flag gating. Adding it only on restaurant would create a one-off asymmetric pattern. Stopped, flagged the scope deviation to the user, got revised approval (drop the gate), documented as Decision N. This is the same lesson as Phase 2 C3's `backend/shared/` episode: don't invent patterns not present in the codebase, even when they sound "correct in isolation." User's earlier correction — "the claude md files are old and stale please do research on code first instead of assumptions" — applied here a second time.
+- **2026-04-11 — Phase 4 C2: `public-tenant-context.js` reads `MULTI_TENANT` at module load**: test 7 and test 8 initially failed with 400 instead of their expected 200/404. Root cause: `backend/.env` sets `MULTI_TENANT=1`, dotenv injects it before Jest loads any test file, and `public-tenant-context.js:6` captures `IS_MULTI_TENANT = process.env.MULTI_TENANT === "1"` at require time. Delete/re-set inside `beforeAll` has no effect once the module is cached. Fix: delete `process.env.MULTI_TENANT` **before** the first `require("../../routes/public-restaurant")` call (which is the only path that transitively loads `public-tenant-context`). Lazy-require inside the describe's `beforeAll` so the env override takes effect. Restore in `afterAll`. This is a general gotcha for any module that reads env at top level — worth flagging in backend/tests CLAUDE.md eventually.
+- **2026-04-11 — Phase 4 C2: test 7 hit a pre-existing `createCheckSchema` quirk**: `createCheckSchema` at `schemas/restaurant.js:41` accepts `table_session_id` but not `table_id`. The POST route inserts `draft_orders` with `table_id = NULL`. The public menu query at `routes/public-restaurant.js:17` JOINs on `table_id = restaurant_tables.id` — so the lookup never resolves even with a valid token. Worked around in test 7 with a direct `UPDATE draft_orders SET table_id` after the POST. The underlying bug (route should derive `table_id` from `table_session_id`, or the schema should accept `table_id` with an FK existence check) is **out of scope for Phase 4 C2** but documented as deferred. Worth noting: this bug would have 404'd every real QR scan in production the moment packagesmall tried to use the feature, *even after* the Phase 4 C2 fix. So the "fix completes the feature" claim has a caveat — it fixes the service/migration side, but the route/schema side still has a gap.
+- **2026-04-11 — Phase 4 C2: pg-batch filename numbering is already cluttered**: both `pg-batch13-restaurant.test.js` and `pg-batch14-bookings.test.js` pre-exist on main. Phase 2 C3 added `pg-batch13-catalog-scheduler.test.js` (a 13- collision I introduced without noticing). Rather than compound the confusion with a new `pg-batch1x-restaurant-qr.test.js`, appended tests to the existing `pg-batch13-restaurant.test.js`. The 13- filename collision is documented as a deferred cleanup — low-priority hygiene, not blocking anything.
+- **2026-04-11 — Phase 4 C2: iterated 3 times to get tests green**: first run 33/35 (tests 7-8 both 400 from `MULTI_TENANT` env issue), second run 34/35 (test 7 still 404 because of `table_id` JOIN), third run 35/35. Each iteration taught something the review didn't flag — the env-reads-at-load-time gotcha and the `createCheckSchema.table_id` quirk. Both recorded above. "Tests catch what reviews miss" pattern holds for the fourth time in this session: lastPollAt (Pattern A), payment_intents ALTER (M1), Zod 4 message API (Phase 2 C3), and these two quirks (Phase 4 C2).
