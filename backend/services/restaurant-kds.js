@@ -226,7 +226,7 @@ async function bumpTicket(db, ticketId, actorId) {
     // If no expo ticket exists, create one
     if (!expoStations.length) {
       const { rows: [expo] } = await db.query(
-        `SELECT id FROM kds_stations WHERE outlet_id = (SELECT outlet_id FROM draft_orders WHERE id = $1) AND station_role = 'expo' AND is_active = true LIMIT 1`,
+        `SELECT id FROM kds_stations WHERE outlet_id = (SELECT outlet_id FROM draft_orders WHERE id = $1) AND station_role = 'expo' AND is_active = true ORDER BY id LIMIT 1`,
         [ticket.draft_order_id]
       );
       if (expo) {
