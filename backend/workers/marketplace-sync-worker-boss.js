@@ -74,7 +74,10 @@ async function registerMarketplaceSyncWorker(boss, pool) {
         }
       }
 
-      global.__marketplaceSyncWorkerStatus.lastPollAt = now.toISOString();
+      // Store as millisecond timestamp to match the format the other workers
+      // use and the format /api/admin/worker-status expects. Previously this
+      // was an ISO string, which produced NaN when subtracted from Date.now().
+      global.__marketplaceSyncWorkerStatus.lastPollAt = Date.now();
       global.__marketplaceSyncWorkerStatus.processedToday += totalImported;
       logger.info({ totalImported }, "Marketplace order poll complete");
     } catch (err) {

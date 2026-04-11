@@ -10,6 +10,13 @@ module.exports = function registerSystemRoutes(app, deps) {
       const emailStatus = global.__emailWorkerStatus || null;
       const fbrStatus = global.__fbrWorkerStatus || null;
       const cleanupStatus = global.__cleanupWorkerStatus || null;
+      // Pattern A Commit 4 — Phase 1 H2 visibility gap. The reservation,
+      // marketplace-sync, and booking-reminder workers were invisible to
+      // super-admin monitoring. Each worker already sets its own heartbeat
+      // global; this endpoint just had to read them.
+      const reservationStatus = global.__reservationWorkerStatus || null;
+      const marketplaceSyncStatus = global.__marketplaceSyncWorkerStatus || null;
+      const bookingReminderStatus = global.__bookingReminderWorkerStatus || null;
 
       function workerInfo(status, pollIntervalMs) {
         if (!status) return { enabled: false, running: false };
@@ -28,6 +35,9 @@ module.exports = function registerSystemRoutes(app, deps) {
         email: workerInfo(emailStatus, 60_000),
         fbr: workerInfo(fbrStatus, 30_000),
         cleanup: workerInfo(cleanupStatus, 24 * 60 * 60 * 1000),
+        reservation: workerInfo(reservationStatus, 60_000),
+        marketplace_sync: workerInfo(marketplaceSyncStatus, 5 * 60_000),
+        booking_reminder: workerInfo(bookingReminderStatus, 5 * 60_000),
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });
