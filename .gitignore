@@ -22,6 +22,10 @@ Thumbs.db
 # Claude Code IDE settings (local only)
 .claude/settings.local.json
 
+# Review scaffolding (one-shot reviewer prompts + file lists — findings are committed)
+.claude/reviews/_reviewer-prompt-*.md
+.claude/reviews/phase*-files.txt
+
 # Database files (all SQLite artifacts)
 backend/*.db
 backend/*.db-shm
