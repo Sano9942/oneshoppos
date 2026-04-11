@@ -27,7 +27,7 @@ export default function MessagingInboxRedesign() {
   const loadThreads = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await api.get(`/messaging/threads?status=${statusFilter}`);
+      const result = await api.get(`/api/messaging/threads?status=${statusFilter}`);
       setThreads(result.threads || []);
     } catch { setThreads([]); }
     setLoading(false);
@@ -37,7 +37,7 @@ export default function MessagingInboxRedesign() {
 
   const loadMessages = async (threadId) => {
     try {
-      const result = await api.get(`/messaging/threads/${threadId}/messages?limit=100`);
+      const result = await api.get(`/api/messaging/threads/${threadId}/messages?limit=100`);
       setMessages(result.messages || []);
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch { setMessages([]); }
@@ -52,7 +52,7 @@ export default function MessagingInboxRedesign() {
     if (!replyText.trim() || !selectedThread) return;
     setSending(true);
     try {
-      await api.post(`/messaging/threads/${selectedThread.id}/send`, { content: replyText.trim() });
+      await api.post(`/api/messaging/threads/${selectedThread.id}/send`, { content: replyText.trim() });
       setReplyText("");
       loadMessages(selectedThread.id);
       loadThreads();
@@ -62,7 +62,7 @@ export default function MessagingInboxRedesign() {
 
   const toggleThreadStatus = async (threadId, newStatus) => {
     try {
-      await api.put(`/messaging/threads/${threadId}`, { status: newStatus });
+      await api.put(`/api/messaging/threads/${threadId}`, { status: newStatus });
       loadThreads();
       if (selectedThread?.id === threadId) setSelectedThread({ ...selectedThread, status: newStatus });
     } catch (err) { toast.error(err.message); }

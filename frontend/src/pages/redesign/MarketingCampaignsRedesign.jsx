@@ -66,7 +66,7 @@ export default function MarketingCampaignsRedesign() {
 
   const previewAudience = async (filters) => {
     try {
-      const result = await api.get(`/marketing/audiences/preview?filters=${encodeURIComponent(JSON.stringify(filters))}`);
+      const result = await api.get(`/api/marketing/audiences/preview?filters=${encodeURIComponent(JSON.stringify(filters))}`);
       setAudiencePreview(result);
     } catch { setAudiencePreview(null); }
   };
@@ -94,7 +94,7 @@ export default function MarketingCampaignsRedesign() {
     try {
       const body = { ...form, template_id: form.template_id ? Number(form.template_id) : undefined };
       if (editingCampaign) {
-        await api.put(`/marketing/campaigns/${editingCampaign.id}`, body);
+        await api.put(`/api/marketing/campaigns/${editingCampaign.id}`, body);
         toast.success("Campaign updated");
       } else {
         await api.post("/api/marketing/campaigns", body);
@@ -110,7 +110,7 @@ export default function MarketingCampaignsRedesign() {
 
   const sendCampaign = async (id) => {
     try {
-      const result = await api.post(`/marketing/campaigns/${id}/send`);
+      const result = await api.post(`/api/marketing/campaigns/${id}/send`);
       toast.success(`Campaign sending to ${result.recipientCount} recipients`);
       load();
     } catch (err) { toast.error(err.message); }
@@ -118,7 +118,7 @@ export default function MarketingCampaignsRedesign() {
 
   const sendTestEmail = async (id) => {
     try {
-      const result = await api.post(`/marketing/campaigns/${id}/send-test`);
+      const result = await api.post(`/api/marketing/campaigns/${id}/send-test`);
       toast.success(`Test email sent to ${result.sent_to}`);
     } catch (err) { toast.error(err.message); }
   };
@@ -126,7 +126,7 @@ export default function MarketingCampaignsRedesign() {
   const scheduleCampaign = async () => {
     if (!scheduleDate) return;
     try {
-      await api.post(`/marketing/campaigns/${scheduleCampaignId}/schedule`, { scheduled_at: new Date(scheduleDate).toISOString() });
+      await api.post(`/api/marketing/campaigns/${scheduleCampaignId}/schedule`, { scheduled_at: new Date(scheduleDate).toISOString() });
       toast.success("Campaign scheduled");
       setShowScheduleModal(false);
       load();
@@ -136,7 +136,7 @@ export default function MarketingCampaignsRedesign() {
   const saveTemplate = async () => {
     try {
       if (editingTemplate) {
-        await api.put(`/marketing/templates/${editingTemplate.id}`, templateForm);
+        await api.put(`/api/marketing/templates/${editingTemplate.id}`, templateForm);
         toast.success("Template updated");
       } else {
         await api.post("/api/marketing/templates", templateForm);
@@ -149,7 +149,7 @@ export default function MarketingCampaignsRedesign() {
 
   const deleteTemplate = async (id) => {
     try {
-      await api.del(`/marketing/templates/${id}`);
+      await api.del(`/api/marketing/templates/${id}`);
       toast.success("Template deleted");
       load();
     } catch (err) { toast.error(err.message); }
