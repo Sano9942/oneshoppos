@@ -6,4 +6,4 @@
 - **`RequireContext.jsx`** — blocks render until feature flags load. If `context_selection_required` off, passes through. Checks `readContext()` for valid scope. Redirects to `/context-select` if missing
 - **`RequirePerm.jsx`** — props: `{ perm, children, redirectTo }`. Renders children if `hasPerm(perm)`, otherwise redirects to `/access-denied`
 - **`ContextSwitcher.jsx`** — dropdown for switching active outlet/branch. Reads/writes context via `authStore`. Fetches `/api/context/bootstrap` for outlet list
-- **`NotificationBell.jsx`** — bell icon with unread badge. Notification types: `low_stock`, `po_received`, `shift_open`, `approval_required`, `schedule_event`. Click navigates to relevant page
+- **`NotificationBell.jsx`** — bell icon with unread badge. Notification types: `low_stock`, `po_received`, `shift_open`, `shift_close`, `leave_request`, `quotation_accepted`. Click navigates to `row.link` if set

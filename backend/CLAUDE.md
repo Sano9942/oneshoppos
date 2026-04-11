@@ -19,6 +19,7 @@
 | Tenant provisioning | `tenant-provisioner-pg.js` |
 | Super-admin seeding | `seed-admin-pg.js` |
 | JWT auth utilities | `jwt-auth.js` |
+| OpenAPI/Swagger spec | `swagger.js` — `swagger-jsdoc` config; served at `/api-docs` via `swagger-ui-express` |
 | Plan limit enforcement | `middleware/plan-limits.js` |
 | Server entry + middleware | `index.js` |
 | Route registration | `routes/registerAllRoutes.js` (orchestrator only — no route logic here) |
@@ -84,9 +85,9 @@
 
 ## Test Suites
 
-### Postgres Integration Tests (56 files — primary) + unit tests
-- Location: `tests/integration/` (56 files): 12 pg-batch files, 36 full-audit domain tests, 7 pg-standalone, 1 legacy smoke-gate
-- Unit tests: `tests/unit/` (4 files — utils.test.js, services.test.js, middleware.test.js, tz.test.js)
+### Postgres Integration Tests (64 files — primary) + unit tests
+- Location: `tests/integration/` (64 files): 19 pg-batch files (16 numbered + 3 phase batches), 37 full-audit domain tests, 7 pg-standalone, 1 legacy smoke-gate
+- Unit tests: `tests/unit/` (10 files — middleware, services, tz, utils + routes-admin-worker-status, routes-orders-transactions, services-booking-reminders, services-catalog-scheduler, workers-email-worker-boss, workers-tenant-job-context)
 - Unit test runner: `vitest` with `@vitest/coverage-v8` (see `vitest.config.js`)
 - Factory: `tests/helpers/createTestApp-pg.js` (isolated schema per test)
 - Schema: `tests/helpers/seedSchema-pg.js`
@@ -232,8 +233,43 @@
 | `reports_inventory_health_plus` | `routes/reports/inventory.js` | ReportsInventoryHealth |
 | `reports_exceptions` | `routes/reports/analytics.js` | ReportsAnalytics |
 | `reports_scheduled_exports` | `routes/reports/governance.js` | ReportsGovernance |
-| `shopify_integration` | `routes/shopify/*` | ShopifyIntegrationRedesign |
 | `marketplace_integrations` | `routes/integrations/*` | IntegrationsHubRedesign |
+| `phase2_draft_orders` | `routes/draft-orders.js` | (feature-gated in POS) |
+| `phase2_pos_approvals` | `routes/approval-policies.js` | POSApprovalModal |
+| `phase2_smart_collections` | `routes/smart-collections.js` | SmartCollectionsRedesign |
+| `phase2_commissions` | `routes/commissions.js` | CommissionPlansRedesign, ReportsCommissions |
+| `phase2_item_suggestions` | `routes/item-suggestions.js` | (POS affinity suggestions) |
+| `phase2_outlet_pricing` | `routes/price-list-assignments.js` | PriceListsRedesign |
+| `phase2_outlet_tax` | `routes/outlet-tax-profiles.js` | OutletTaxProfilesRedesign |
+| `phase2_outlet_visibility` | `routes/outlet-visibility.js` | (per-product visibility) |
+| `phase2_pos_layouts` | `routes/pos-layouts.js` | POSLayoutsRedesign |
+| `phase2_report_builder` | `routes/report-builder.js` | ReportBuilderRedesign |
+| `phase2_returns_policy` | `routes/return-policies.js` | ReturnPoliciesRedesign |
+| `phase2_scheduled_changes` | `routes/scheduled-changes.js` | ScheduledChangesRedesign |
+| `phase2_scheduling` | `routes/schedules.js` | SchedulingRedesign |
+| `phase3_subscription_billing` | `routes/subscriptions.js` | SubscriptionsRedesign |
+| `phase4_restaurant` | `routes/restaurant.js` | RestaurantFloorRedesign, RestaurantChecksRedesign |
+| `phase4_restaurant_kds` | `routes/kds.js` | KDSRedesign |
+| `phase4_restaurant_qr` | `routes/public-restaurant.js` | (QR menu) |
+| `phase4_restaurant_preauth` | `routes/restaurant.js` | (card preauth tabs) |
+| `phase4_appointments` | `routes/bookings.js` | AppointmentsRedesign, AppointmentsCalendarRedesign, AppointmentServicesRedesign |
+| `phase4_appointments_waitlists` | `routes/bookings.js` | (waitlists) |
+| `phase4_appointments_classes` | `routes/bookings.js` | (class sessions) |
+| `phase4_google_calendar_sync` | `routes/bookings.js` | (Google Calendar sync) |
+| `phase4_service_projects` | `routes/projects.js` | ProjectsRedesign |
+| `phase4_service_contracts` | `routes/contracts.js` | ContractsRedesign |
+| `phase4_contract_ai` | `routes/contracts.js` | (AI contract analysis) |
+| `phase5_shipping_automation` | `routes/fulfillment.js` | FulfillmentRedesign |
+| `phase5_cod_reconciliation` | `routes/fulfillment.js` | CODSettlementsRedesign |
+| `phase5_payment_gateways` | `routes/webhooks.js` | (multi-gateway) |
+| `phase5_sms_providers` | `services/sms.js` | (SMS adapters) |
+| `customer_invoicing` | `routes/customer-invoices.js` | CustomerInvoicesRedesign |
+| `customer_messaging` | `routes/messaging.js` | MessagingInboxRedesign |
+| `marketing_campaigns` | `routes/marketing.js` | MarketingCampaignsRedesign |
+| `payment_links` | `routes/customer-invoices.js` | (payment link on invoices) |
+| `subscription_billing` | `routes/subscriptions.js` | SubscriptionsRedesign |
+| `subscription_autocharge` | `routes/subscriptions.js` | (auto-charge renewals) |
+| `sms_campaigns` | `routes/marketing.js` | (SMS campaign sends) |
 | `context_selection_required` | context middleware | ContextSelect page |
 | `context_header_enforced` | context middleware | — |
 | `kiosk_context_locked` | kiosk context | KioskRedesign |
@@ -260,6 +296,8 @@
 | `ui_redesign_promotions` | — | Promotions page redesign |
 | `ui_redesign_expenses` | — | Expenses page redesign |
 | `reports_enhanced_filters` | `routes/reports/*` | Enhanced report filter UI |
+
+> **Notes**: `fbr_integration` is DB-seeded in `migrate-pg.js` v9 + `schema-pg.sql`, not in `DEFAULT_FEATURE_FLAGS`. `ai_insights` is a soft DB check in `routes/insights-ai.js`, not enforced via `requireFeature()`. The `shopify_integration` flag was removed — Shopify routes are gated by the connection check in `routes/shopify/*`, not a feature flag.
 
 ### Plan Limits
 
@@ -310,6 +348,9 @@
 - `REPORT_DELIVERY_RETENTION_DAYS` — Days to keep deliveries (default: 60)
 - `REPORT_EXPORT_FILES_RETENTION_DAYS` — Days to keep export files (default: 30)
 - `MARKETPLACE_SYNC_WORKER_ENABLED` — "1" enables marketplace sync worker
+- `RESERVATION_WORKER_ENABLED` — "1" enables inventory reservation expiry worker (5-min cron)
+- `BOOKING_REMINDER_WORKER_ENABLED` — "1" enables appointment reminder worker (Phase 4)
+- `SCHEDULED_CATALOG_WORKER_ENABLED` — "1" enables scheduled catalog changes worker (Phase 2)
 
 ### Payments
 - `PAYMENT_GATEWAY` — Active processor: "manual" (default), "xpay", "stripe"

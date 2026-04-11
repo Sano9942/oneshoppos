@@ -11,6 +11,18 @@
 - **`ModuleRedesignShell.jsx`** — thin wrapper around `PageShell`+`SectionCard` with a feature-flag note banner
 - **`ReportsPowerUpPanel.jsx`** — analytics power-up overlay used by reports (CSV export, filters, category tree)
 - **`ProductFormPage.jsx`** — standalone product create/edit form (not a `*Redesign.jsx` but lives here)
+- **Wave 16 feature pages** (86 total files; all follow standard PageShell + SectionCard + feature-flag pattern):
+  - `AppointmentsRedesign`, `AppointmentsCalendarRedesign`, `AppointmentServicesRedesign` — bookings/scheduling (flag: `phase4_appointments`)
+  - `RestaurantChecksRedesign`, `RestaurantFloorRedesign`, `KDSRedesign`, `KioskOrderingRedesign` — restaurant vertical (flags: `phase4_restaurant`, `phase4_restaurant_kds`)
+  - `ContractsRedesign`, `ProjectsRedesign` — service vertical (flags: `phase4_service_contracts`, `phase4_service_projects`)
+  - `CustomerInvoicesRedesign`, `SubscriptionsRedesign` — B2B billing (flags: `customer_invoicing`, `subscription_billing`)
+  - `MarketingCampaignsRedesign`, `MessagingInboxRedesign` — marketing/CRM (flags: `marketing_campaigns`, `customer_messaging`)
+  - `CommissionPlansRedesign`, `LoyaltyTiersRedesign`, `ReviewModerationRedesign` — staff + loyalty
+  - `POSLayoutsRedesign`, `ReturnPoliciesRedesign`, `ScheduledChangesRedesign`, `SchedulingRedesign`, `SmartCollectionsRedesign`, `OutletTaxProfilesRedesign` — Phase 2 competitive features
+  - `ReportBuilderRedesign` — custom report designer (flag: `phase2_report_builder`)
+  - `CODSettlementsRedesign`, `FulfillmentRedesign` — Phase 5 shipping/COD
+  - `ChartOfAccountsRedesign`, `JournalEntriesRedesign`, `CreditDebitNotesRedesign`, `PostdatedChequesRedesign` — accounting extensions
+  - `CustomerGroupsRedesign`, `PriceListsRedesign`, `ReorderAlertsRedesign`, `StockCountRedesign`, `ParkedSalesRedesign`, `NotificationsRedesign` — catalog + inventory + UX
 - **CSV export**: Use `downloadCsv(headers, rows, filename)` from `utils/csvExport.js`
 - **Currency**: Always `const { fmt } = useCurrency()` — never hardcode symbols
 - **Timestamps**: Use `fmtUtcDateTime`/`fmtLocalDateTime` from `utils/dates.js` — never raw `new Date()`

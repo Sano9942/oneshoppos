@@ -2,6 +2,8 @@
 
 > When working on a feature, find the domain below to see every file involved — backend route, schema, permissions, feature flags, frontend page, DB tables, workers, and related files.
 
+> **Coverage note**: Wave-16 competitive features (restaurant/KDS, appointments, projects, contracts, customer invoices, subscriptions, marketing campaigns, messaging, commissions, COD settlements, smart collections, scheduled changes, report builder, POS layouts, outlet tax profiles, return policies, price lists, loyalty tiers, stock counts, and more) may not yet have dedicated entries below. For a new Wave-16 feature, find the matching `routes/<domain>.js`, `schemas/<domain>.js`, and `pages/redesign/<X>Redesign.jsx`, then add the entry here. See `backend/CLAUDE.md` Feature Flags Registry for the full list of `phase2_*`, `phase4_*`, `phase5_*`, and Wave-16 flags.
+
 ---
 
 ## Sales / POS

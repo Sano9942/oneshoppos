@@ -12,7 +12,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 
 ## Sub-Guides (loaded automatically when working in those directories)
 
-- **`backend/CLAUDE.md`** — Postgres query patterns, backend gotchas, test suites (56 integration files ~850 tests + 4 unit files ~134 tests), production env
+- **`backend/CLAUDE.md`** — Postgres query patterns, backend gotchas, test suites (64 integration files + 10 unit files), production env
 - **`frontend/CLAUDE.md`** — route wrapper skip list, conventions (Tailwind v4, timestamps, currency, API calls), POS architecture, test suites
 
 ## Efficiency Rules (Read First)
@@ -232,10 +232,10 @@ oneshoppos/
 
 ## Running Tests
 
-### Postgres Integration Tests (primary — 56 files, ~850 tests) + Unit Tests (~134 backend + ~37 frontend)
+### Postgres Integration Tests (primary — 64 files) + Unit Tests (10 backend + 4 frontend)
 - `npx jest backend/tests/integration/pg-batch1-crud.test.js` (requires `DATABASE_URL`)
-- 56 integration files: 12 pg-batch, 36 full-audit domain tests, 7 pg-standalone, 1 legacy smoke-gate
-- Unit tests: `backend/tests/unit/` (4 files, ~134 tests) + `frontend/tests/unit/` (37 tests)
+- 64 integration files: 19 pg-batch files (16 numbered + 3 phase batches), 37 full-audit domain tests, 7 pg-standalone, 1 legacy smoke-gate
+- Unit tests: `backend/tests/unit/` (10 files — Vitest) + `frontend/tests/unit/` (4 files — Vitest)
 
 ### Production E2E Tests (24 specs, ~290 tests — full system audit against production)
 - `cd frontend && npx playwright test tests/auth.spec.js`
@@ -261,11 +261,11 @@ oneshoppos/
 
 ## Permission System
 
-- **Roles**: Administrator (`all_access`), Manager (8 permissions), Cashier (3 permissions)
+- **Roles**: Administrator (`all_access`), Manager (13 permissions), Cashier (3 permissions)
 - **Middleware**: `requirePerm("perm")` and `requireAnyPerm(["perm1", "perm2"])` in route handlers
 - **Frontend**: `hasPerm("perm")` from `useAuth()` — returns true if `all_access` or specific permission
 - **Admin-only routes**: employees CRUD, outlets, email config, printer config, roles, action-history logging
-- **Manager+Admin routes**: products (write), orders, purchase orders, inventory, attribute sets, barcode print jobs
+- **Manager+Admin routes**: products (write), orders, purchase orders, inventory, attribute sets, barcode print jobs, restaurant ops (`manage_restaurant`), KDS (`manage_kds`), bookings (`manage_bookings`), projects (`manage_projects`), contracts (`manage_contracts`)
 - **All authenticated**: view reports, read-only data, send receipts, POS operations
 
 ## Migrations

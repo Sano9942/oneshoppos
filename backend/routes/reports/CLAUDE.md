@@ -10,4 +10,4 @@
   - `e_invoicing_export` → FBR export
 - **Date params**: Use `from`/`to` (not `start`/`end`)
 - **Governance tables**: `report_schedules`, `report_schedule_runs`, `report_delivery_log`, `saved_report_views`, `report_definition_versions`
-- **Frontend**: `pages/reports/*.jsx` (23 module files) orchestrated by `pages/Reports.jsx`
+- **Frontend**: `pages/reports/*.jsx` (24 module files) orchestrated by `pages/Reports.jsx`

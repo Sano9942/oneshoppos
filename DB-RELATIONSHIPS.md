@@ -190,6 +190,134 @@ broadcast_log — standalone
 email_queue — standalone (tenant_id informational)
 ```
 
+## Restaurant / KDS (Phase 4)
+
+```
+restaurant_floor_plans → outlets (outlet_id)
+restaurant_floor_sections → restaurant_floor_plans (floor_plan_id)
+restaurant_tables → restaurant_floor_sections (section_id), restaurant_floor_plans (floor_plan_id)
+restaurant_table_sessions → restaurant_tables (table_id), employees (opened_by, closed_by), draft_orders (check_id)
+restaurant_check_seats → draft_orders (check_id)
+restaurant_check_adjustments → draft_orders (check_id), employees (applied_by)
+restaurant_course_fires → draft_orders (check_id)
+restaurant_tabs → draft_orders (check_id), customers (customer_id)
+restaurant_preauth_holds → draft_orders (check_id), sales (sale_id)
+kds_stations → outlets (outlet_id)
+kds_station_routes → kds_stations (station_id), categories (category_id)
+kds_tickets → kds_stations (station_id), draft_orders (check_id)
+kds_ticket_items → kds_tickets (ticket_id), sale_items (sale_item_id)
+kds_ticket_events → kds_tickets (ticket_id), employees (employee_id)
+```
+
+## Bookings / Appointments (Phase 4)
+
+```
+booking_services → categories (category_id), taxes (tax_id)
+booking_service_variants → booking_services (service_id)
+booking_staff_assignments → booking_services (service_id), employees (employee_id)
+booking_resources → outlets (outlet_id)
+booking_resource_assignments → booking_services (service_id), booking_resources (resource_id)
+booking_availability_rules → booking_services (service_id), employees (employee_id)
+appointments → booking_services (service_id), customers (customer_id), employees (staff_id), outlets (outlet_id)
+appointment_segments → appointments (appointment_id)
+appointment_reminders → appointments (appointment_id)
+appointment_waitlist_entries → booking_services (service_id), customers (customer_id), outlets (outlet_id)
+appointment_blocks → employees (employee_id), outlets (outlet_id)
+class_sessions → booking_services (service_id), employees (staff_id), outlets (outlet_id)
+class_session_bookings → class_sessions (session_id), customers (customer_id)
+calendar_sync_accounts → employees (employee_id)
+```
+
+## Service Projects & Contracts (Phase 4)
+
+```
+service_projects → customers (customer_id), employees (assigned_to, created_by), outlets (outlet_id)
+project_contacts → service_projects (project_id), customers (customer_id)
+project_milestones → service_projects (project_id)
+project_activities → service_projects (project_id), employees (employee_id)
+project_files → service_projects (project_id), employees (uploaded_by)
+contract_templates → employees (created_by)
+contracts → contract_templates (template_id), customers (customer_id), service_projects (project_id), employees (created_by, signed_by)
+contract_signers → contracts (contract_id), customers (customer_id), employees (employee_id)
+contract_events → contracts (contract_id), employees (actor_employee_id)
+```
+
+## Customer Invoicing & Subscriptions
+
+```
+customer_invoices → customers (customer_id), outlets (outlet_id), service_projects (project_id), employees (created_by)
+customer_invoice_items → customer_invoices (invoice_id), products (product_id), product_variants (variant_id)
+customer_invoice_payments → customer_invoices (invoice_id)
+customer_invoice_payment_links → customer_invoices (invoice_id)
+customer_invoice_reminders → customer_invoices (invoice_id)
+subscription_plans → products (product_id), taxes (tax_id)
+customer_subscriptions → subscription_plans (plan_id), customers (customer_id), outlets (outlet_id)
+subscription_runs → customer_subscriptions (subscription_id), customer_invoices (invoice_id)
+```
+
+## Marketing / CRM / Messaging
+
+```
+marketing_campaigns → employees (created_by)
+marketing_campaign_audiences → marketing_campaigns (campaign_id), customer_groups (customer_group_id)
+marketing_campaign_deliveries → marketing_campaigns (campaign_id), customers (customer_id)
+marketing_templates → employees (created_by)
+message_threads → customers (customer_id)
+message_entries → message_threads (thread_id), employees (employee_id)
+sms_provider_messages → employees (sent_by)
+```
+
+## Commissions
+
+```
+commission_plans → employees (created_by)
+commission_plan_rules → commission_plans (plan_id), products (product_id), categories (category_id)
+commission_earnings → commission_plans (plan_id), employees (employee_id), sales (sale_id)
+```
+
+## Shipping & COD (Phase 5)
+
+```
+order_shipments → web_orders (web_order_id), courier_integrations (courier_id), outlets (outlet_id)
+shipment_tracking_events → order_shipments (shipment_id)
+cod_settlement_batches → courier_integrations (courier_id), employees (created_by)
+cod_settlement_lines → cod_settlement_batches (batch_id), web_orders (web_order_id)
+```
+
+## Storefront / Public Orders
+
+```
+storefront_carts → customers (customer_id)
+storefront_cart_items → storefront_carts (cart_id), products (product_id), product_variants (variant_id)
+storefront_payment_sessions → storefront_carts (cart_id), web_orders (web_order_id)
+payment_webhook_events — standalone (public schema, idempotency key)
+draft_orders → customers (customer_id), outlets (outlet_id), employees (created_by)
+draft_order_items → draft_orders (draft_id), products (product_id), product_variants (variant_id)
+web_order_allocations → web_orders (web_order_id), outlets (outlet_id), product_variants (variant_id)
+inventory_reservations → outlets (outlet_id), products (product_id), product_variants (variant_id), web_orders (web_order_id)
+```
+
+## Phase 2 Competitive Features
+
+```
+smart_collections → employees (created_by)
+smart_collection_rules → smart_collections (collection_id)
+return_policies → employees (created_by)
+return_reasons → return_policies (policy_id)
+pos_layouts → outlets (outlet_id), employees (created_by)
+price_list_assignments → price_lists (price_list_id), outlets (outlet_id), customer_groups (customer_group_id)
+outlet_product_visibility → outlets (outlet_id), products (product_id)
+outlet_tax_profiles → outlets (outlet_id)
+outlet_tax_profile_lines → outlet_tax_profiles (profile_id), taxes (tax_id), categories (category_id)
+scheduled_catalog_changes → employees (created_by)
+scheduled_shifts → employees (employee_id), outlets (outlet_id)
+product_affinities → products (product_a, product_b)
+approval_events → approval_requests (request_id), employees (employee_id)
+approval_policies → employees (created_by)
+custom_report_definitions → employees (created_by)
+custom_report_widgets → custom_report_definitions (report_id)
+```
+
 ## Config (standalone tables)
 
 ```
@@ -201,4 +329,11 @@ courier_integrations
 gift_cards
 notifications, action_history, backup_log
 approval_requests, approval_actions
+customer_addresses → customers (customer_id)
+customer_groups — standalone
+loyalty_tiers — standalone
+channel_publications → products (product_id), sales_channels (channel_id)
+sales_channels — standalone
 ```
+
+> **Coverage note**: This file documents the most-used domain clusters. The full schema (`backend/schema-pg.sql`) has ~214 tables total — for any FK not listed here, grep `schema-pg.sql` for `CREATE TABLE <name>` and check the inline `REFERENCES` clauses.

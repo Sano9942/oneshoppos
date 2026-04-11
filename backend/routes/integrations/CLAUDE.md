@@ -5,7 +5,7 @@
 ## Files
 | File | Endpoints | Purpose |
 |------|-----------|---------|
-| `index.js` | — | Router mount point, applies `requireFeature('marketplace_integrations')` |
+| `index.js` | — | Router mount point; injects `encryptSecret`/`decryptSecret`/`maskSecret` from `services/crypto.js` into deps — each sub-module applies `requireFeature('marketplace_integrations')` per-route |
 | `hub.js` | `GET /hub` | Central dashboard — all providers + courier + Shopify/Woo status |
 | `credentials.js` | `POST /connect`, `POST /disconnect`, `POST /test`, `GET /:provider/status` | Generic BYOK credential management (AES-256-GCM encrypted) |
 | `daraz.js` | `POST /daraz/test`, `POST /daraz/sync-products`, `POST /daraz/pull-orders`, `POST /daraz/push-inventory` | Daraz Seller API integration |

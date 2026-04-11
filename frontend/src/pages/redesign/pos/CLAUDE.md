@@ -1,6 +1,6 @@
 # POS Module — Claude Guide
 
-- **20 files** — entire POS terminal, driven by single React Context (`POSContext`)
+- **22 files** — entire POS terminal, driven by single React Context (`POSContext`)
 - **`POSContext.jsx`** — central state machine. `POSProvider` wraps the page, `usePOS()` hook for all children. 130+ exports. Lock state in `sessionStorage` (clears on tab close). Offline queue uses `localStorage` keyed per employee ID
 - **`cartMath.js`** — pure utility, zero React. `calcGrossTotal`, `calcDiscountValue` (percent/flat), `calcTaxTotal` (inclusive only — exclusive adds tax in calling code), `calcTotal` (always ≥ 0)
 - **Modal components** (all read from `usePOS()` context, null-guard at top):
@@ -15,6 +15,8 @@
   - `POSSessionExpiredModal` — PIN re-auth (always PIN, even if employee has password)
   - `POSLockScreen` — PIN unlock
   - `POSShortcutsOverlay` — F-key reference (F1-F10 + Esc)
+  - `POSApprovalModal` — manager PIN authorization for approval-policy gated actions (discount, return, void). Uses **props** (`actionType`, `referenceType`, `referenceId`, `outletId`, `metadata`, `onApproved`, `onDenied`, `onClose`) — NOT context
+  - `EndlessAisleModal` — special-order placement for out-of-stock items; reads from `usePOS()` context (`endlessAisleProduct`, `closeEndlessAisle`)
 - **Layout**: `POSHeader` (top nav), `POSSubHeader` (tax toggle, park controls), `POSSearchArea` (barcode/SKU/price/general search), `POSCartTable`, `POSSidebar` (customer, totals), `POSRecentSalesPanel` (slide-in)
 - **`POSEmailReceiptModal`** — the only modal that uses **props** instead of context: `{ saleId, customerEmail, onClose }`
 - **POS does NOT use design system tokens** — uses hardcoded `#8066FF` and `slate-*` Tailwind classes

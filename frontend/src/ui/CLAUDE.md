@@ -7,8 +7,8 @@
 - **`ErrorBoundary.jsx`** — class component, integrates with Sentry. Props: `onReset`
 - **`AnnouncementBanner.jsx`** — fetches `/api/announcements/active`. Types: info/warning/maintenance. Dismissal in `sessionStorage`
 - **`ImpersonationBanner.jsx`** — amber banner during admin impersonation. Exit calls `POST /api/admin/impersonate/:sessionId/end`
-- **`SubscriptionBanner.jsx`** — trial/grace/expired warnings. Links to `/billing`. Hidden when `status === "active"`
-- **`StarRating.jsx`** — `StarDisplay` (read-only) + `StarPicker` (interactive with hover)
+- **`SubscriptionBanner.jsx`** — trial/grace/expired warnings. Links to `/billing`. Hidden when `status === "active"` or null. Trial banner only shows when `subscriptionDaysLeft <= 7` (approaching expiry), not for the full trial period
+- **`StarRating.jsx`** — `StarDisplay({ rating, size=16 })` (read-only, rounds rating) + `StarPicker({ value, onChange, size=24 })` (interactive with hover)
 - **`SupportWidget.jsx`** — floating support form with file upload (max 3 files, 5MB each). Types: bug/feature/question
 - **`tokens.css`** — CSS custom property definitions for the design system (colors, spacing, typography tokens used across light/dark themes)
 - **All components use CSS custom property classes** (`text-(--ui-text)`) for dark mode theming. POS is the exception — uses hardcoded colors

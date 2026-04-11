@@ -11,10 +11,11 @@
 
 ## DO NOT READ These Files (token waste)
 
-### Route Wrappers (38 files — skip all, they are 5-line pass-throughs)
-`AccountingRoute.jsx`, `ActionHistoryRoute.jsx`, `AdministratorRoute.jsx`, `AttributeSetsRoute.jsx`, `BackupRestoreRoute.jsx`, `BillingRoute.jsx`, `BrandsRoute.jsx`, `CRMRoute.jsx`, `CashManagementRoute.jsx`, `CategoriesRoute.jsx`, `CompanySettingsRoute.jsx`, `CustomersRoute.jsx`, `DashboardRoute.jsx`, `EmployeesRoute.jsx`, `ExpensesRoute.jsx`, `FBRDashboardRoute.jsx`, `FBRSettingsRoute.jsx`, `HRManagementRoute.jsx`, `InventoryRoute.jsx`, `LoyaltyTiersRoute.jsx`, `MyTicketsRoute.jsx`, `OrdersRoute.jsx`, `OutletsRoute.jsx`, `POSRoute.jsx`, `PromotionsRoute.jsx`, `PurchaseOrdersRoute.jsx`, `QuotationsRoute.jsx`, `ReportsRoute.jsx`, `ReturnedStockRoute.jsx`, `ReturnsRoute.jsx`, `SalesHistoryRoute.jsx`, `ShopifyIntegrationRoute.jsx`, `StockAdjustmentsRoute.jsx`, `SupplierPayablesRoute.jsx`, `SuppliersRoute.jsx`, `TaxesRoute.jsx`, `TaxLookupRoute.jsx`, `TransfersRoute.jsx`
+### Route Wrappers (60 files — skip all, they are 5-line pass-throughs)
+Any `pages/*Route.jsx` file. Each one just does:
+`import XRedesign from './redesign/XRedesign'; export default function XRoute() { return <XRedesign />; }`
 
-Each one just does: `import XRedesign from './redesign/XRedesign'; export default function XRoute() { return <XRedesign />; }`
+Examples: `POSRoute.jsx`, `DashboardRoute.jsx`, `CustomersRoute.jsx`, `OrdersRoute.jsx`, `InventoryRoute.jsx`, `ReportsRoute.jsx`, and all Wave-16 additions (`AppointmentsRoute`, `CommissionPlansRoute`, `ContractsRoute`, `CustomerInvoicesRoute`, `KDSRoute`, `LoyaltyTiersRoute`, `MarketingCampaignsRoute`, `MessagingInboxRoute`, `OutletTaxProfilesRoute`, `POSLayoutsRoute`, `ProjectsRoute`, `ReportBuilderRoute`, `RestaurantChecksRoute`, `RestaurantFloorRoute`, `ReturnPoliciesRoute`, `ScheduledChangesRoute`, `SchedulingRoute`, `SmartCollectionsRoute`, `SubscriptionsRoute`, `CODSettlementsRoute`, `KioskOrderingRoute`, …). If it matches `*Route.jsx` in `pages/`, do not read it.
 
 ### Legacy Original Pages (8 files — only read if editing their redesign wrapper)
 `Accounting.jsx`, `Approvals.jsx`, `Attendance.jsx`, `BarcodeTemplates.jsx`, `ReceiptTemplates.jsx`, `ShopifyIntegration.jsx`, `InvoiceView.jsx` — these are imported by their Redesign counterparts. Do NOT delete them, but don't read them unless you need to understand the wrapped component.
