@@ -21,12 +21,12 @@ module.exports = function mountStorefrontRoutes(app, deps) {
       const profile = rows[0] || {};
 
       res.json({
-        companyName: profile.company_name || "",
-        logoUrl: profile.logo_url || null,
+        company_name: profile.company_name || "",
+        logo_url: profile.logo_url || null,
         currency: "PKR",
-        currencySymbol: profile.currency_symbol || "Rs",
-        deliveryMethods: ["pickup", "ship_to_customer"],
-        pickupEnabled: true,
+        currency_symbol: profile.currency_symbol || "Rs",
+        delivery_methods: ["pickup", "ship_to_customer"],
+        pickup_enabled: true,
       });
     } catch (err) {
       console.error("Storefront config error:", err);
