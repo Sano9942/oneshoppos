@@ -33,7 +33,7 @@ const origMultiTenant = process.env.MULTI_TENANT;
 const { createTestApp } = require("../helpers/createTestApp-pg");
 const { makeRequest, ADMIN_ID } = require("../helpers/request");
 
-jest.setTimeout(60000);
+vi.setConfig({ testTimeout: 60000, hookTimeout: 60000 });
 
 describe("Wave 3 Batch 3B — Phase 1 storefront contracts", () => {
   let app;

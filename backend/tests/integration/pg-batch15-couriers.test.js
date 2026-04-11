@@ -32,7 +32,7 @@ const { makeRequest, ADMIN_ID } = require("../helpers/request");
 
 // beforeAll runs full schema-pg.sql against remote Supabase which is slow
 // on a cold connection. Per-test budget stays tight.
-jest.setTimeout(60000);
+vi.setConfig({ testTimeout: 60000, hookTimeout: 60000 });
 
 describe("Phase 5 H1 — pakpost/bykea stub adapters throw 501", () => {
   let app;

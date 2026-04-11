@@ -6,7 +6,7 @@ const { createTestApp } = require("../helpers/createTestApp-pg");
 // send-to-kitchen + 2× GET kds/tickets). Against remote Supabase the
 // default 5s ceiling is tight; 20s gives comfortable headroom without
 // letting a real stall go unnoticed.
-jest.setTimeout(20000);
+vi.setConfig({ testTimeout: 20000, hookTimeout: 60000 });
 
 /**
  * pg-batch13-restaurant.test.js — Phase 4A Restaurant integration tests (Postgres).

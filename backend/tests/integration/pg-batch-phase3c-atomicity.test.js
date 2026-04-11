@@ -21,7 +21,7 @@
 
 const { createTestApp } = require("../helpers/createTestApp-pg");
 
-jest.setTimeout(60000);
+vi.setConfig({ testTimeout: 60000, hookTimeout: 60000 });
 
 // Mock the sms service BEFORE any require that transitively loads
 // routes/couriers. jest.mock is hoisted so this applies even though the
