@@ -23,13 +23,20 @@ const { createTestApp } = require("../helpers/createTestApp-pg");
 
 vi.setConfig({ testTimeout: 60000, hookTimeout: 60000 });
 
-// Mock the sms service BEFORE any require that transitively loads
-// routes/couriers. jest.mock is hoisted so this applies even though the
-// require in notifyCustomerSms is inline at call time.
-const mockSmsSendSpy = jest.fn().mockResolvedValue({ success: true, provider_ref: "test-1" });
-jest.mock("../../services/sms", () => ({
-  sendSms: (...args) => mockSmsSendSpy(...args),
-}));
+// H3 mocks sms.sendSms via vi.spyOn on the real module (not vi.mock).
+// Jest's jest.mock() intercepted CJS require() calls via require.cache
+// manipulation — Vitest's vi.mock() works via ESM hooks and CJS
+// require() interop is unreliable (per reference_vitest_cjs_mock_caveat
+// memory). notifyCustomerSms calls `const sms = require("../services/sms")`
+// inline inside the function body, which under vi.mock() was not being
+// intercepted (flag-ON test asserted 1 call, observed 0).
+//
+// vi.spyOn against the real module works because it mutates the real
+// exports object AFTER the module has been required. Every subsequent
+// call — including inline requires that hit the cached module — sees
+// the spied method. The spy is installed in H3's beforeAll and restored
+// in afterAll; H1 and H2 tests are unaffected because they never reach
+// the sms code path.
 
 describe("Wave 3 Batch 3C — Cross-domain atomicity + gating", () => {
   let app;
@@ -82,7 +89,7 @@ describe("Wave 3 Batch 3C — Cross-domain atomicity + gating", () => {
     it("happy path: creates invoice + item + run + advances period, then calls boss.send", async () => {
       const bossCalls = [];
       const boss = {
-        send: jest.fn(async (queue, payload, options) => {
+        send: vi.fn(async (queue, payload, options) => {
           // Capture the point-in-time DB state at which boss.send was called.
           // This is the key assertion for the post-commit ordering: by the time
           // boss.send fires, all 4 writes must already be visible.
@@ -162,7 +169,7 @@ describe("Wave 3 Batch 3C — Cross-domain atomicity + gating", () => {
         [subscriptionId]
       );
 
-      const boss = { send: jest.fn() };
+      const boss = { send: vi.fn() };
       const result = await processRenewal(db, boss, "packagesmall", subscriptionId);
 
       expect(result).toBeUndefined();
@@ -344,8 +351,16 @@ describe("Wave 3 Batch 3C — Cross-domain atomicity + gating", () => {
   // ───────────────────────────────────────────────────────────────
   describe("H3 — notifyCustomerSms gated on phase5_sms_providers", () => {
     let orderId;
+    let sendSmsSpy;
 
     beforeAll(async () => {
+      // Install the sms.sendSms spy against the real module. See the
+      // file-top comment for why this uses vi.spyOn instead of vi.mock.
+      const smsService = require("../../services/sms");
+      sendSmsSpy = vi
+        .spyOn(smsService, "sendSms")
+        .mockResolvedValue({ success: true, provider_ref: "test-1" });
+
       // Enable sms_consent on customer 1 (factory seeds it at id=1).
       // sms_consent column was added in v21 per fix-plan.md Phase 3 M2.
       // Defensive: add it if missing, then set it.
@@ -370,8 +385,12 @@ describe("Wave 3 Batch 3C — Cross-domain atomicity + gating", () => {
       orderId = order.id;
     });
 
+    afterAll(() => {
+      sendSmsSpy?.mockRestore();
+    });
+
     beforeEach(() => {
-      mockSmsSendSpy.mockClear();
+      sendSmsSpy.mockClear();
     });
 
     it("flag OFF: sms.sendSms is NOT called", async () => {
@@ -387,7 +406,7 @@ describe("Wave 3 Batch 3C — Cross-domain atomicity + gating", () => {
         "Hi {name}, your order {order} has tracking {tracking}"
       );
 
-      expect(mockSmsSendSpy).not.toHaveBeenCalled();
+      expect(sendSmsSpy).not.toHaveBeenCalled();
     });
 
     it("flag ON: sms.sendSms IS called with the expected body", async () => {
@@ -402,8 +421,8 @@ describe("Wave 3 Batch 3C — Cross-domain atomicity + gating", () => {
         "Hi {name}, your order {order} has tracking {tracking}"
       );
 
-      expect(mockSmsSendSpy).toHaveBeenCalledTimes(1);
-      const [, args] = mockSmsSendSpy.mock.calls[0];
+      expect(sendSmsSpy).toHaveBeenCalledTimes(1);
+      const [, args] = sendSmsSpy.mock.calls[0];
       expect(args.to).toBe("0300-1234567");
       expect(args.body).toContain("H3-ORDER-001");
       expect(args.body).toContain("TRK12345");
