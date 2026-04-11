@@ -884,6 +884,38 @@ With Batch 3C complete:
 
 Wave 3 closed. All 24 review findings have a final disposition. The branch is ready for a final merge decision whenever the user chooses.
 
+### Wave 3 drive-by hygiene items — consolidated index
+
+Items discovered during Wave 3 scope/execution that are **not** in the 24 reviewer findings. Each is documented in its originating batch's "Deferred / out-of-scope" section (and sometimes in the deviation log). This list exists so future sessions can see the full set of deferred hygiene work in one place without grepping.
+
+| # | Item | Canonical location | Category |
+|---|---|---|---|
+| 1 | `products.created_at` as a real column (migration v18) | Line 761 (Batch 3A Deferred) | Schema hygiene |
+| 2 | `sortMap.created_at_desc → p.id DESC` cosmetic mismatch | Line 762 (Batch 3A Deferred) | Code hygiene |
+| 3 | `schemas/smart-collections.js` sort_order enum still includes `created_at_desc` | Line 763 (Batch 3A Deferred) | Schema hygiene |
+| 4 | `employees.js:451` `SELECT name FROM company_profile` — column is `company_name` | Line 613 (Phase 5 H1 Deferred), Line 765 (Batch 3A Deferred — unchanged) | Pre-existing bug |
+| 5 | Zod schema for `POST /api/orders/endless-aisle` (whole `routes/orders.js` has no Zod) | Line 805 (Batch 3B Deferred) | Validation hygiene |
+| 6 | `db-pg.js:6` `require("dotenv").config(...)` at module load breaks test isolation | Line 806 (Batch 3B Deferred), Line 931 (Deviation log) | Test-infra refactor |
+| 7 | `createTestApp-pg.js:307` inserts `enabled ? 1 : 0` into BOOLEAN column | Line 868 (Batch 3C Deferred) | Test-infra style |
+| 8 | `cod-settlements.test.js` pre-existing 5s `beforeEach` timeout cascade (14/14 fails on main too) | Line 611 (Phase 5 H1 Deferred), Line 923 (Deviation log) | Test-infra repair |
+| 9 | Dead `processRenewal` import in `routes/subscriptions.js:22` (never invoked) | Line 867 (Batch 3C Deferred) | Import hygiene |
+| 10 | `bumpTicket` expo-routing sequence at `restaurant-kds.js:217-243` not atomic | Line 870 (Batch 3C Deferred) + Line 527 (Phase 4 C3 noted earlier) | Atomicity follow-up |
+| 11 | Idempotency token on `subscription-renewal` job payloads (prevents double-processing on worker crash between tx commit and boss.send) | Line 866 (Batch 3C Deferred) | Reliability follow-up |
+| 12 | Middleware-level `requireFeature("phase5_sms_providers")` on SMS-triggering routes (beyond the inline helper check) | Line 869 (Batch 3C Deferred) | Defense in depth |
+| 13 | `bumpTicket` expo-station `LIMIT 1` without `ORDER BY` (non-deterministic in tests) | Line 527 (Phase 4 C3 Deferred) | Pre-existing hygiene |
+
+**13 drive-by items total** (the earlier summary said "~10" — the actual count is 13 once you include three items I didn't initially list: `schemas/smart-collections.js` sort_order enum, middleware-level SMS gating, and the `bumpTicket` `LIMIT 1` non-determinism from Phase 4 C3).
+
+**Category breakdown**:
+- **Schema/code hygiene**: items 1, 2, 3 (smart-collections leftovers)
+- **Pre-existing bugs not in reviewer scope**: items 4, 13
+- **Validation hygiene**: item 5 (Zod schemas for routes/orders.js)
+- **Test-infra**: items 6, 7, 8 (dotenv re-inject, boolean-as-int seed, cod-settlements timeout)
+- **Import hygiene**: item 9
+- **Atomicity / reliability follow-ups**: items 10, 11, 12
+
+None of the 13 drive-bys block merge. They're flagged for future work whenever a session is in the same area or a "hygiene pass" becomes warranted.
+
 ---
 
 ## Deviations from synthesis
