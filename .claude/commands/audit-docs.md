@@ -18,7 +18,8 @@ Run these shell commands FIRST. These numbers are the **only source of truth** f
 
 ```bash
 # Backend counts
-echo "routes:" $(ls backend/routes/*.js 2>/dev/null | wc -l)
+echo "backend (top-level loose files):" $(ls backend/*.js 2>/dev/null | grep -v "\.test\.js" | wc -l)
+echo "routes (top-level):" $(ls backend/routes/*.js 2>/dev/null | wc -l)
 echo "routes/admin:" $(ls backend/routes/admin/*.js 2>/dev/null | wc -l)
 echo "routes/reports:" $(ls backend/routes/reports/*.js 2>/dev/null | wc -l)
 echo "routes/shopify:" $(ls backend/routes/shopify/*.js 2>/dev/null | wc -l)
@@ -43,6 +44,7 @@ echo "tests/helpers:" $(ls backend/tests/helpers/*.js 2>/dev/null | wc -l)
 
 ```bash
 # Frontend counts
+echo "pages (top-level wrappers + special pages):" $(ls frontend/src/pages/*.jsx 2>/dev/null | wc -l)
 echo "redesign:" $(ls frontend/src/pages/redesign/*.jsx 2>/dev/null | wc -l)
 echo "pos:" $(ls frontend/src/pages/redesign/pos/*.jsx frontend/src/pages/redesign/pos/*.js 2>/dev/null | wc -l)
 echo "admin:" $(ls frontend/src/pages/admin/*.jsx 2>/dev/null | wc -l)
@@ -65,25 +67,32 @@ Also list all filenames in key directories (`ls backend/routes/*.js | sort`, etc
 
 Save these results — you will use them when editing docs in later steps.
 
-## Step 2 — Deep Scan (6 Combined Agents, 2 Waves)
+## Step 2 — Deep Scan (7 Combined Agents, 2 Waves)
 
-Launch **6 combined agents** in **2 waves of 3**. Use `model: "sonnet"` for all agents.
+Launch **7 combined agents** in **2 waves** (4 in Wave 1, 3 in Wave 2). Use `model: "sonnet"` for all agents. At most 4 agents run concurrently, matching the original API-overload safety budget.
 
 **Resilience rule**: If **2+ agents fail** (529, timeout, etc.) in Wave 1, **abandon the agent strategy entirely** and switch to manual scanning in the main thread (read each CLAUDE.md, compare against Step 1 file lists, apply changes directly). Manual scanning is fast enough and avoids wasted retries.
 
-### Wave 1 — Backend (launch 3 agents in parallel):
+### Wave 1 — Backend (launch 4 agents in parallel):
 
-**Agent 1: Backend Routes (all subdirs)**
+**Agent 1a: Backend Route Subdirectories (admin/reports/shopify/tier4/integrations)**
 > Read every .js file in these directories: `backend/routes/admin/`, `backend/routes/reports/`, `backend/routes/shopify/`, `backend/routes/tier4/`, `backend/routes/integrations/`.
 > For each file, note exports, key routes, permissions (requirePerm/requireAnyPerm/requireFeature), tables touched.
 > Then read the CLAUDE.md in each directory and compare.
-> VERIFIED file counts: admin=10, reports=14, shopify=9, tier4=7, integrations=7.
+> VERIFIED file counts: admin=10, reports=14, shopify=9, tier4=7, integrations=7 (~47 files total; update from Step 1 output).
 > Report ONLY what needs to change per CLAUDE.md. Do NOT edit files.
 
+**Agent 1b: Backend Top-Level Routes**
+> Read every .js file in `backend/routes/*.js` (TOP-LEVEL ONLY, ~68 files — NOT the subdirectories, which Agent 1a owns). Examples: `sales.js`, `products.js`, `customers.js`, `employees.js`, `draft-orders.js`, `smart-collections.js`, `subscriptions.js`, `couriers.js`, `fulfillment.js`, `auth.js`, `orders.js`, `returns.js`, `inventory.js`, `purchase-orders.js`, `grn.js`, etc.
+> For each file, note exports, key routes (method + path), permissions (requirePerm/requireAnyPerm/requireFeature), tables touched, and any Zod schema references.
+> Read `backend/routes/CLAUDE.md` and compare — this doc covers the top-level routes as a navigation index, NOT line-by-line exports.
+> Report ONLY what needs to change in `backend/routes/CLAUDE.md`. Do NOT edit files.
+> **Note**: if changed exports or new feature flags are discovered, also flag them for Tier 2 update of `backend/CLAUDE.md` (feature flag registry + "Where to Look Instead" table).
+
 **Agent 2: Backend Services + Middleware + Workers**
-> Read every .js file in: `backend/services/` (top-level 9 files), `backend/services/couriers/` (16 files), `backend/services/marketplace/` (5 files), `backend/middleware/` (8 files), `backend/workers/` (6 files).
+> Read every .js file in: `backend/services/` (top-level ~31 files; update from Step 1), `backend/services/couriers/` (16 files), `backend/services/marketplace/` (5 files), `backend/middleware/` (8 files), `backend/workers/` (~7 files).
 > Note exports, key functions, env vars, external services used.
-> Read the CLAUDE.md in each directory and compare.
+> Read the CLAUDE.md in each directory and compare. **Marketplace note**: `backend/services/marketplace/CLAUDE.md` exists as its own file (not just a section inside `services/CLAUDE.md`).
 > Report ONLY what needs to change per CLAUDE.md. Do NOT edit files.
 
 **Agent 3: Backend Tests + Utils + Misc**
@@ -97,7 +106,7 @@ Launch **6 combined agents** in **2 waves of 3**. Use `model: "sonnet"` for all 
 
 **Agent 4: Frontend Pages (all subdirs)**
 > Read all .jsx files in: `frontend/src/pages/redesign/` (VERIFIED: [N] files), `frontend/src/pages/redesign/pos/` ([N] files), `frontend/src/pages/admin/` ([N] files), `frontend/src/pages/reports/` ([N] files), `frontend/src/pages/dashboard/` ([N] files), `frontend/src/pages/shopify/` ([N] files).
-> Also list top-level `frontend/src/pages/*.jsx` files (wrappers + special pages).
+> Also list top-level `frontend/src/pages/*.jsx` files (wrappers + special pages — VERIFIED from Step 1 count).
 > Note component names, API endpoints called, feature flags checked, permissions checked.
 > Read the CLAUDE.md in each directory and compare.
 > Report ONLY what needs to change per CLAUDE.md. Do NOT edit files.
@@ -108,12 +117,13 @@ Launch **6 combined agents** in **2 waves of 3**. Use `model: "sonnet"` for all 
 > Read the CLAUDE.md in each directory and compare.
 > Report ONLY what needs to change per CLAUDE.md. Do NOT edit files.
 
-**Agent 6: Schema + Config**
+**Agent 6: Schema + Config + Backend Top-Level Loose Files**
 > Read `backend/schema-pg.sql` — extract all CREATE TABLE + REFERENCES. Compare with `DB-RELATIONSHIPS.md`.
 > Grep `process.env` across backend (exclude node_modules/tests). List every unique env var.
 > Read `backend/middleware/feature-flags.js` — list all flag names + defaults.
 > Read `backend/middleware/permissions.js` — list all permission names + role defaults.
 > Read `backend/middleware/plan-limits.js` — list all plan limits.
+> **Top-level loose files**: read every `backend/*.js` at the backend root (~13-14 files: `index.js`, `db-pg.js`, `master-db-pg.js`, `tenant-db-manager-pg.js`, `tenant-db-proxy-pg.js`, `tenant-db-pg.js`, `tenant-multer.js`, `tenant-provisioner-pg.js`, `jwt-auth.js`, `category-tree.js`, `migrate-pg.js`, `seed-admin-pg.js`, `swagger.js`). Note each file's exports, purpose, and key env vars. Compare against `backend/CLAUDE.md`'s "Where to Look Instead" table and project structure tree — report any file that's missing, misdocumented, or whose purpose has drifted.
 > Compare with `backend/CLAUDE.md` env vars / flags / permissions sections.
 > Report ONLY what needs to change. Do NOT edit files.
 
@@ -177,7 +187,7 @@ Read the freshly-updated Tier 3 docs and check:
 
 - **Shell counts from Step 1 are the ONLY truth for file counts** — never use agent counts
 - **Use `model: "sonnet"` for all subagents** — Opus is unnecessary for this work
-- **Max 6 agents total** — 3 per wave, to avoid API overload bursts
+- **Max 7 agents total** — Wave 1 has 4 (backend route subdirs, backend top-level routes, services+middleware+workers, tests+utils+misc); Wave 2 has 3 (frontend pages, frontend UI/auth/utils, schema+config+top-level loose files). At most 4 agents run concurrently to match the original API-overload safety budget
 - **Fail fast**: If 2+ agents fail in Wave 1, skip Wave 2 and switch to manual scanning
 - **Do NOT modify source code** — documentation only
 - **Do NOT rewrite docs from scratch** — use Edit to change specific lines
