@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
 /**
  * migrate-pg.js — Postgres schema migration runner.
  *
@@ -2703,6 +2704,72 @@ const MIGRATIONS = [
       await client.query(`
         ALTER TABLE supplier_payments
           ADD COLUMN IF NOT EXISTS void_reason TEXT
+      `);
+    },
+  },
+  {
+    version: 28,
+    description: "Partial UNIQUE index on draft_orders.source_token_id for QR lookup",
+    up: async (client) => {
+      // Enforces one-token-to-one-check and speeds up the public menu
+      // lookup at routes/public-restaurant.js. Partial index skips NULLs
+      // so non-restaurant draft orders (retail/takeout/delivery) don't
+      // trigger the constraint. Safe on live tenants because no existing
+      // row has a non-NULL source_token_id (the column was added in v22
+      // but never populated until this fix).
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_draft_orders_source_token
+          ON draft_orders(source_token_id)
+          WHERE source_token_id IS NOT NULL
+      `);
+    },
+  },
+  {
+    version: 29,
+    description: "Add kds_ticket_items junction — fixes Phase 4 C3 read-side fan-out",
+    up: async (client) => {
+      // Phase 4 C3 revised fix. Commit 3155263 collapsed sendToKitchen's
+      // per-item INSERT loop into per-(station, course) groups — write side
+      // correct — but getTickets still joins draft_order_items by
+      // (draft_order_id, course_name) with no station filter, so each
+      // station's ticket still shows every item in that course. Adding a
+      // junction table lets getTickets join ticket → item via explicit
+      // routing, restoring one-ticket = one-station's-portion semantics.
+      //
+      // Safe on live tenants: kds_tickets is empty on all 3 live tenants
+      // (verified 2026-04-11) so the FK add has nothing to conflict with.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS kds_ticket_items (
+          ticket_id INTEGER NOT NULL REFERENCES kds_tickets(id) ON DELETE CASCADE,
+          draft_order_item_id INTEGER NOT NULL REFERENCES draft_order_items(id) ON DELETE CASCADE,
+          PRIMARY KEY (ticket_id, draft_order_item_id)
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_kds_ticket_items_item
+          ON kds_ticket_items(draft_order_item_id)
+      `);
+    },
+  },
+  {
+    version: 30,
+    description: "Add products.created_at TIMESTAMPTZ for smart-collections sort hygiene",
+    up: async (client) => {
+      // Backs the smart-collections `created_at_desc` sort alias with a
+      // real column. Before v30, routes/smart-collections.js aliased the
+      // alias to `p.id DESC` as a workaround because the column didn't
+      // exist. Per drive-by decision D2: backfill all existing rows with
+      // NOW() rather than interpolating from id order. Existing rows tie
+      // on timestamp and fall back to `p.id DESC` for deterministic
+      // ordering; new rows after v30 get proper chronological sort.
+      // ALTER TABLE ADD COLUMN DEFAULT NOW() is O(1) metadata-only on
+      // Postgres 11+ (Supabase runs 15+) — no table rewrite.
+      await client.query(`
+        ALTER TABLE products
+          ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()
+      `);
+      await client.query(`
+        UPDATE products SET created_at = NOW() WHERE created_at IS NULL
       `);
     },
   },

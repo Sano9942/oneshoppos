@@ -23,7 +23,6 @@ module.exports = function registerSmartCollectionRoutes(app, deps) {
         case "price": col = "p.price"; break;
         case "stock": col = "p.stock"; break;
         case "status": col = "p.status"; break;
-        case "created_at": col = "p.created_at"; break;
         default: continue;
       }
 
@@ -114,7 +113,7 @@ module.exports = function registerSmartCollectionRoutes(app, deps) {
           name_desc: "p.name DESC",
           price_asc: "p.price ASC",
           price_desc: "p.price DESC",
-          created_at_desc: "p.id DESC",
+          created_at_desc: "p.created_at DESC, p.id DESC",
         };
         const orderClause = sortMap[collection.sort_order] || "p.name ASC";
         const { rows: products } = await db.query(

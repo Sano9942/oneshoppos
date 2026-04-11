@@ -205,8 +205,8 @@ module.exports = function registerDraftOrderRoutes(app, deps) {
         return res.status(400).json({ error: "Only the claiming employee can complete this draft" });
       }
 
-      await db.query(
-        "UPDATE draft_orders SET status = 'completed', updated_at = NOW() WHERE id = $1",
+      const { rows: [updated] } = await db.query(
+        "UPDATE draft_orders SET status = 'completed', updated_at = NOW() WHERE id = $1 RETURNING *",
         [id]
       );
 
@@ -214,7 +214,7 @@ module.exports = function registerDraftOrderRoutes(app, deps) {
       const { rows: items } = await db.query(
         "SELECT * FROM draft_order_items WHERE draft_order_id = $1", [id]
       );
-      res.json({ completed: true, draftOrder: draft, items });
+      res.json({ completed: true, draftOrder: updated, items });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

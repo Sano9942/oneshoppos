@@ -3,6 +3,7 @@
  * Safety: skips tenants that have any sales data.
  * Usage: node backend/jobs/cleanup-dead-tenants.js [--dry-run]
  */
+require("dotenv").config({ path: require("path").resolve(__dirname, "..", ".env") });
 const dbPg = require("../db-pg");
 const masterDb = require("../master-db-pg");
 const tenantDbManager = require("../tenant-db-manager-pg");

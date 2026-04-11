@@ -56,17 +56,30 @@ export default function EndlessAisleModal() {
     setSubmitting(true);
     try {
       await api.post("/api/orders/endless-aisle", {
-        product_id: product.id,
-        variant_id: product.variant_id || null,
-        source_outlet_id: Number(selectedOutletId),
-        delivery_method: deliveryMethod,
-        customer_id: selectedCustomer?.id || null,
-        customer_name: name.trim(),
-        customer_phone: phone.trim(),
-        customer_email: email.trim() || null,
-        shipping_address: deliveryMethod === "ship_to_customer" ? address.trim() : null,
-        shipping_city: deliveryMethod === "ship_to_customer" ? city.trim() : null,
-        note: note.trim() || null,
+        items: [
+          {
+            productId: product.id,
+            variantId: product.variant_id || null,
+            qty: 1,
+          },
+        ],
+        customerId: selectedCustomer?.id || null,
+        deliveryMethod,
+        pickupOutletId:
+          deliveryMethod === "pickup" ? Number(selectedOutletId) : null,
+        shippingAddress:
+          deliveryMethod === "ship_to_customer"
+            ? {
+                line1: address.trim(),
+                city: city.trim() || null,
+                note: note.trim() || null,
+              }
+            : null,
+        customerContact: {
+          name: name.trim(),
+          phone: phone.trim(),
+          email: email.trim() || null,
+        },
       });
       success("Endless aisle order created successfully");
       closeEndlessAisle();
@@ -146,9 +159,9 @@ export default function EndlessAisleModal() {
                 <input
                   type="radio"
                   name="delivery"
-                  value="pickup_at_store"
-                  checked={deliveryMethod === "pickup_at_store"}
-                  onChange={() => setDeliveryMethod("pickup_at_store")}
+                  value="pickup"
+                  checked={deliveryMethod === "pickup"}
+                  onChange={() => setDeliveryMethod("pickup")}
                   className="text-blue-600"
                 />
                 <span className="text-sm text-gray-700 dark:text-gray-300">Pick Up at Store</span>

@@ -143,6 +143,7 @@ CREATE TABLE IF NOT EXISTS products (
   sku TEXT,
   image_url TEXT,
   deleted_at TIMESTAMPTZ DEFAULT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
   is_bundle BOOLEAN DEFAULT false,
   avg_rating NUMERIC(3,2) DEFAULT 0,
   review_count INTEGER DEFAULT 0
@@ -1165,37 +1166,6 @@ CREATE TABLE IF NOT EXISTS web_order_fulfillments (
   raw_payload TEXT
 );
 
--- ── Courier Integrations ─────────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS courier_integrations (
-  id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL,
-  adapter_key TEXT NOT NULL DEFAULT 'generic',
-  api_base_url TEXT,
-  api_key TEXT,
-  api_secret TEXT,
-  tracking_url_template TEXT,
-  enabled BOOLEAN DEFAULT false,
-  config_json TEXT DEFAULT '{}',
-  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-
-INSERT INTO courier_integrations (name, adapter_key, tracking_url_template) VALUES
-  ('Leopards Courier', 'leopards', 'https://leopardscourier.com/tracking/track-your-order?id={tracking}'),
-  ('TCS', 'tcs', 'https://www.tcsexpress.com/tracking?code={tracking}'),
-  ('BlueEx', 'blueex', 'https://blue-ex.com/tracking/{tracking}'),
-  ('Trax', 'trax', 'https://trax.pk/tracking/{tracking}'),
-  ('PostEx', 'postex', 'https://postex.pk/tracking/{tracking}'),
-  ('Rider', 'rider', 'https://rider.pk/tracking/{tracking}'),
-  ('Call Courier', 'callcourier', 'https://callcourier.com.pk/tracking/{tracking}'),
-  ('M&P', 'mnp', 'https://www.mulphico.com/tracking/{tracking}'),
-  ('Bykea', 'bykea', ''),
-  ('Swyft', 'swyft', 'https://swyft.pk/tracking/{tracking}'),
-  ('Pakistan Post', 'pakpost', 'https://ep.gov.pk/track/{tracking}'),
-  ('DHL Express', 'dhl', 'https://www.dhl.com/pk-en/home/tracking.html?tracking-id={tracking}'),
-  ('FedEx', 'fedex', 'https://www.fedex.com/fedextrack/?trknbr={tracking}')
-ON CONFLICT DO NOTHING;
-
 -- ── Shopify tables ────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS shopify_connections (
@@ -1708,6 +1678,26 @@ CREATE TABLE IF NOT EXISTS stock_count_items (
   UNIQUE(stock_count_id, product_id, variant_id)
 );
 
+-- ── Web Order Allocations ───────────────────────────────────────────
+-- Defined here (not later in the file) because picklist_items.allocation_id
+-- references it. schema-pg.sql is executed top-to-bottom as one batch by
+-- tenant-provisioner-pg.js, so forward-reference FKs fail fresh installs.
+
+CREATE TABLE IF NOT EXISTS web_order_allocations (
+  id SERIAL PRIMARY KEY,
+  web_order_id INT NOT NULL REFERENCES web_orders(id) ON DELETE CASCADE,
+  web_order_item_id INT REFERENCES web_order_items(id) ON DELETE CASCADE,
+  fulfillment_outlet_id INT NOT NULL REFERENCES outlets(id),
+  fulfillment_method TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  allocated_qty INT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_web_order_allocations_order ON web_order_allocations(web_order_id);
+CREATE INDEX IF NOT EXISTS idx_web_order_allocations_outlet ON web_order_allocations(fulfillment_outlet_id);
+
 -- ── Fulfillment (Pick/Pack/Dispatch) ─────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS picklists (
@@ -1822,23 +1812,6 @@ CREATE TABLE IF NOT EXISTS inventory_reservations (
 CREATE INDEX IF NOT EXISTS idx_inventory_reservations_key ON inventory_reservations(reservation_key);
 CREATE INDEX IF NOT EXISTS idx_inventory_reservations_outlet_product ON inventory_reservations(outlet_id, product_id);
 CREATE INDEX IF NOT EXISTS idx_inventory_reservations_status ON inventory_reservations(status) WHERE status = 'active';
-
--- ── Web Order Allocations ───────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS web_order_allocations (
-  id SERIAL PRIMARY KEY,
-  web_order_id INT NOT NULL REFERENCES web_orders(id) ON DELETE CASCADE,
-  web_order_item_id INT REFERENCES web_order_items(id) ON DELETE CASCADE,
-  fulfillment_outlet_id INT NOT NULL REFERENCES outlets(id),
-  fulfillment_method TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
-  allocated_qty INT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_web_order_allocations_order ON web_order_allocations(web_order_id);
-CREATE INDEX IF NOT EXISTS idx_web_order_allocations_outlet ON web_order_allocations(fulfillment_outlet_id);
 
 -- ── Customer Addresses ──────────────────────────────────────────────
 
@@ -2627,6 +2600,18 @@ CREATE TABLE IF NOT EXISTS kds_ticket_events (
 );
 CREATE INDEX IF NOT EXISTS idx_kds_ticket_events_ticket ON kds_ticket_events(ticket_id);
 
+-- Junction: links each ticket to the specific draft_order_items that routed
+-- to its station. Phase 4 C3 revised fix — the pre-v29 getTickets JOIN on
+-- (draft_order_id, course_name) with no station filter pulled every item in
+-- that course onto every station's ticket. Joining through this junction
+-- restores one-ticket = one-station's-portion semantics.
+CREATE TABLE IF NOT EXISTS kds_ticket_items (
+  ticket_id INTEGER NOT NULL REFERENCES kds_tickets(id) ON DELETE CASCADE,
+  draft_order_item_id INTEGER NOT NULL REFERENCES draft_order_items(id) ON DELETE CASCADE,
+  PRIMARY KEY (ticket_id, draft_order_item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_kds_ticket_items_item ON kds_ticket_items(draft_order_item_id);
+
 -- Extend draft_orders for restaurant context
 ALTER TABLE draft_orders
   ADD COLUMN IF NOT EXISTS order_context TEXT DEFAULT 'retail' CHECK (order_context IN ('retail','dine_in','takeout','delivery','bar')),
@@ -2636,6 +2621,13 @@ ALTER TABLE draft_orders
   ADD COLUMN IF NOT EXISTS seat_count INTEGER DEFAULT 0,
   ADD COLUMN IF NOT EXISTS dining_option TEXT CHECK (dining_option IN ('dine_in','takeout','delivery')),
   ADD COLUMN IF NOT EXISTS source_token_id TEXT;
+
+-- Partial UNIQUE index for QR public menu lookup (routes/public-restaurant.js).
+-- Enforces one-token-to-one-check and speeds up the WHERE source_token_id = $1 query.
+-- Partial (WHERE source_token_id IS NOT NULL) so non-restaurant draft orders don't trip it.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_draft_orders_source_token
+  ON draft_orders(source_token_id)
+  WHERE source_token_id IS NOT NULL;
 
 -- Extend draft_order_items for seat/course tracking
 ALTER TABLE draft_order_items
@@ -3098,12 +3090,6 @@ CREATE TABLE IF NOT EXISTS storefront_payment_sessions (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   completed_at TIMESTAMPTZ
 );
-
--- Extend payment_intents
-ALTER TABLE payment_intents
-  ADD COLUMN IF NOT EXISTS provider TEXT,
-  ADD COLUMN IF NOT EXISTS provider_status TEXT,
-  ADD COLUMN IF NOT EXISTS last_event_at TIMESTAMPTZ;
 
 -- Extend customer_invoice_payment_links
 ALTER TABLE customer_invoice_payment_links

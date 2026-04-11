@@ -1,7 +1,7 @@
 const { z } = require("zod");
 
 const ruleSchema = z.object({
-  field: z.enum(["category_id", "brand_id", "product_type", "vendor", "tags", "price", "stock", "status", "created_at"]),
+  field: z.enum(["category_id", "brand_id", "product_type", "vendor", "tags", "price", "stock", "status"]),
   operator: z.enum(["equals", "not_equals", "greater_than", "less_than", "contains", "starts_with", "in"]),
   value: z.string().min(1),
 });

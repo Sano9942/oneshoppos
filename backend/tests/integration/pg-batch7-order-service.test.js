@@ -5,7 +5,7 @@
  * resolveWebOrderItemMapping, resolveWebOrderOutletId,
  * shouldApplyWebOrderStock, shouldReverseWebOrderStock
  */
-jest.setTimeout(30000);
+vi.setConfig({ testTimeout: 30000, hookTimeout: 60000 });
 
 const { createTestApp } = require("../helpers/createTestApp-pg");
 const createOrderService = require("../../shopify/order-service");

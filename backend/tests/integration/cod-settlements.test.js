@@ -1,6 +1,16 @@
 const request = require("supertest");
 const { createTestApp } = require("../helpers/createTestApp-pg");
 
+// Each test in this file creates a fresh schema via createTestApp() in
+// beforeEach. Against remote Supabase that runs ~20-30s per test; with
+// the default 10s Vitest hookTimeout every test died in beforeEach. The
+// test bodies themselves are fast — they just need room for the schema
+// seed. Bumping hookTimeout to 60s is the narrow fix. A full
+// beforeAll refactor would also need TRUNCATE-per-test orchestration
+// because three tests mutate the seeded cod_settlement_batches row; the
+// band-aid approach keeps the existing isolation pattern intact.
+vi.setConfig({ testTimeout: 60000, hookTimeout: 60000 });
+
 describe("COD settlements — /resolve extension", () => {
   let app, db, deps, cleanup;
   const authHeaders = { "x-employee-id": "1" };

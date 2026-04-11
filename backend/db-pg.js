@@ -1,9 +1,16 @@
 // backend/db-pg.js
 // PostgreSQL connection pool + query/transaction helpers.
 // Connects via DATABASE_URL env var.
+//
+// Dotenv is NOT loaded here — callers must ensure .env is loaded before
+// requiring this module. backend/index.js handles the main server path;
+// standalone scripts (migrate-pg.js, jobs/cleanup-dead-tenants.js,
+// seed-admin-pg.js, scripts/*) load dotenv themselves at line 1.
+// Tests get env from the Vitest runner's own environment. This avoids
+// re-injecting MULTI_TENANT after tests intentionally delete it for
+// single-tenant-mode scenarios (Decision II from Batch 3B).
 
 const { Pool } = require("pg");
-require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,

@@ -7,11 +7,19 @@ const GenericAdapter = require("./generic-adapter");
  */
 class PakPostAdapter extends GenericAdapter {
   async bookShipment(order, sender, receiver, options = {}) {
-    return {
-      tracking_number: null,
-      label_url: null,
-      message: "Book at Pakistan Post counter. Enter tracking number manually after booking.",
-    };
+    // Pakistan Post has no booking API. Throw so the booking route does not
+    // persist a null-tracking order_shipments row with status='booked'
+    // (which would falsely mark the order as shipped and fire a
+    // "Tracking: N/A" SMS to the customer). Operators should book at the
+    // counter and then use the manual tracking entry flow — either by
+    // setting supports_booking=false on this courier row or by pasting
+    // the tracking number into the order's manual-ship action.
+    const err = new Error(
+      "Pakistan Post has no booking API. Book at a PakPost counter and enter the tracking number manually (disable 'supports_booking' on this courier row or use the manual ship action)."
+    );
+    err.statusCode = 501;
+    err.code = "COURIER_NO_BOOKING_API";
+    throw err;
   }
 
   async getTracking(trackingNumber) {

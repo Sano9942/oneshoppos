@@ -141,7 +141,7 @@ module.exports = function registerMarketingRoutes(app, deps) {
   app.post("/api/marketing/campaigns/:id/send", ...gate, async (req, res) => {
     try {
       const boss = await getBoss();
-      const result = await enqueueCampaignSend(boss, Number(req.params.id), deps.db);
+      const result = await enqueueCampaignSend(boss, Number(req.params.id), deps.db, req.tenantSlug);
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "campaign_sent", JSON.stringify({ campaign_id: Number(req.params.id) })]); } catch {}
 
       res.json(result);
@@ -163,9 +163,14 @@ module.exports = function registerMarketingRoutes(app, deps) {
         [scheduled_at, id]
       );
 
-      // Enqueue delayed pg-boss job
+      // Enqueue delayed pg-boss job. tenantSlug is required so the worker
+      // can set search_path when it fires at scheduled_at.
       const boss = await getBoss();
-      await boss.send("campaign-scheduled-send", { campaignId: Number(id) }, { startAfter: new Date(scheduled_at) });
+      await boss.send(
+        "campaign-scheduled-send",
+        { tenantSlug: req.tenantSlug, campaignId: Number(id) },
+        { startAfter: new Date(scheduled_at) }
+      );
 
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "campaign_scheduled", JSON.stringify({ campaign_id: Number(id), scheduled_at })]); } catch {}
 

@@ -570,12 +570,16 @@ module.exports = function registerOrderRoutes(app, deps) {
         amount = 0,
         processed_at,
         raw_payload,
+        provider_ref,
+        payment_context,
+        webhook_event_id,
       } = req.body || {};
       try {
         const { rows } = await db.query(
           `INSERT INTO web_order_transactions (
-        web_order_id, external_txn_id, gateway, kind, status, amount, processed_at, raw_payload
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+        web_order_id, external_txn_id, gateway, kind, status, amount, processed_at, raw_payload,
+        provider_ref, payment_context, webhook_event_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
           [
             id,
             external_txn_id || null,
@@ -585,6 +589,9 @@ module.exports = function registerOrderRoutes(app, deps) {
             parseFloat(amount || 0),
             processed_at || new Date().toISOString(),
             raw_payload ? JSON.stringify(raw_payload) : null,
+            provider_ref || null,
+            payment_context || "billing",
+            webhook_event_id || null,
           ],
         );
         res.json({ id: rows[0].id, message: "Transaction recorded" });
