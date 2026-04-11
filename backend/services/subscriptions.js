@@ -59,39 +59,52 @@ async function processRenewal(db, boss, tenantSlug, subscriptionId) {
     sub.billing_interval_count
   );
 
-  // Create invoice for this renewal
   const { generateInvoiceNumber } = require("./customer-invoicing");
   const invoiceNumber = await generateInvoiceNumber(db);
 
-  const { rows: [invoice] } = await db.query(
-    `INSERT INTO customer_invoices
-       (invoice_number, customer_id, status, subtotal, tax_total, total_amount, balance_due, due_date, notes)
-     VALUES ($1, $2, 'sent', $3, 0, $3, $3, $4, $5) RETURNING *`,
-    [invoiceNumber, sub.customer_id, Number(sub.price), nextStart.toISOString().slice(0, 10), `Subscription renewal: ${sub.plan_name}`]
-  );
+  // All 4 writes run in one transaction so a crash or error between any
+  // two of them rolls back everything. Without this wrapper, a failure
+  // between the invoice insert and the subscription period update would
+  // leave a hanging invoice with no corresponding run, and the next
+  // renewal tick would create a duplicate invoice.
+  //
+  // boss.send is deliberately OUTSIDE the transaction: pg-boss writes
+  // to public.pgboss_* tables, which are not affected by the tenant tx
+  // rollback. If we enqueued inside the tx and the tx then rolled back,
+  // an orphan renewal job would sit in the queue. Running boss.send
+  // AFTER the commit means a queue enqueue only happens when the
+  // period has actually advanced.
+  const invoice = await db.transaction(async (client) => {
+    const { rows: [inv] } = await client.query(
+      `INSERT INTO customer_invoices
+         (invoice_number, customer_id, status, subtotal, tax_total, total_amount, balance_due, due_date, notes)
+       VALUES ($1, $2, 'sent', $3, 0, $3, $3, $4, $5) RETURNING *`,
+      [invoiceNumber, sub.customer_id, Number(sub.price), nextStart.toISOString().slice(0, 10), `Subscription renewal: ${sub.plan_name}`]
+    );
 
-  // Insert invoice item
-  await db.query(
-    `INSERT INTO customer_invoice_items (invoice_id, description, quantity, unit_price, line_total)
-     VALUES ($1, $2, 1, $3, $3)`,
-    [invoice.id, `${sub.plan_name} subscription — ${sub.billing_interval}`, Number(sub.price)]
-  );
+    await client.query(
+      `INSERT INTO customer_invoice_items (invoice_id, description, quantity, unit_price, line_total)
+       VALUES ($1, $2, 1, $3, $3)`,
+      [inv.id, `${sub.plan_name} subscription — ${sub.billing_interval}`, Number(sub.price)]
+    );
 
-  // Create subscription run
-  await db.query(
-    `INSERT INTO subscription_runs (subscription_id, period_start, period_end, status, invoice_id, charge_amount)
-     VALUES ($1, $2, $3, 'invoiced', $4, $5)`,
-    [subscriptionId, nextStart, nextEnd, invoice.id, Number(sub.price)]
-  );
+    await client.query(
+      `INSERT INTO subscription_runs (subscription_id, period_start, period_end, status, invoice_id, charge_amount)
+       VALUES ($1, $2, $3, 'invoiced', $4, $5)`,
+      [subscriptionId, nextStart, nextEnd, inv.id, Number(sub.price)]
+    );
 
-  // Advance the subscription period
-  await db.query(
-    `UPDATE customer_subscriptions SET current_period_start = $1, current_period_end = $2, updated_at = NOW() WHERE id = $3`,
-    [nextStart, nextEnd, subscriptionId]
-  );
+    await client.query(
+      `UPDATE customer_subscriptions SET current_period_start = $1, current_period_end = $2, updated_at = NOW() WHERE id = $3`,
+      [nextStart, nextEnd, subscriptionId]
+    );
+
+    return inv;
+  });
 
   // Schedule next renewal — tenantSlug is threaded through so the worker
-  // can set search_path when it fires.
+  // can set search_path when it fires. Runs AFTER tx commit — see comment
+  // above for why this must not move inside the transaction.
   await boss.send(
     "subscription-renewal",
     { tenantSlug, subscriptionId },
