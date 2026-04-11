@@ -38,7 +38,7 @@ export default function RestaurantFloorRedesign() {
   const loadFloorDetail = useCallback(async () => {
     if (!activePlan) return;
     try {
-      const data = await api.get(`/restaurant/floor-plans/${activePlan}`);
+      const data = await api.get(`/api/restaurant/floor-plans/${activePlan}`);
       setTables(data.tables || []);
     } catch (err) { toast.error(err.message); }
   }, [activePlan]);
@@ -63,7 +63,7 @@ export default function RestaurantFloorRedesign() {
 
   const closeSession = async (sessionId) => {
     try {
-      await api.put(`/restaurant/table-sessions/${sessionId}`, { status: "closed" });
+      await api.put(`/api/restaurant/table-sessions/${sessionId}`, { status: "closed" });
       toast.success("Session closed");
       loadFloorDetail();
     } catch (err) { toast.error(err.message); }

@@ -57,4 +57,14 @@ module.exports = function registerKdsRoutes(app, deps) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
+
+  app.post("/api/kds/tickets/:id/recall", ...gate, async (req, res) => {
+    try {
+      const ticket = await kds.recallTicket(deps.db, Number(req.params.id), req.employee.id);
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "kds_ticket_recalled", JSON.stringify({ ticket_id: Number(req.params.id) })]); } catch {}
+      res.json(ticket);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
 };

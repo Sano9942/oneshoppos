@@ -38,7 +38,7 @@ export default function KDSRedesign() {
 
   const loadStations = useCallback(async () => {
     try {
-      const data = await api.get("/api/restaurant/kds/stations");
+      const data = await api.get("/api/kds/stations?outlet_id=1");
       setStations(data.stations || []);
       if (data.stations?.length && !activeStation) {
         setActiveStation(data.stations[0].id);
@@ -50,7 +50,7 @@ export default function KDSRedesign() {
     if (!activeStation) return;
     setLoading(true);
     try {
-      const data = await api.get(`/restaurant/kds/stations/${activeStation}/tickets`);
+      const data = await api.get(`/api/kds/tickets?station_id=${activeStation}`);
       setTickets(data.tickets || []);
     } catch (err) { toast.error(err.message); }
     finally { setLoading(false); }
@@ -75,7 +75,7 @@ export default function KDSRedesign() {
 
   const bumpTicket = async (ticketId) => {
     try {
-      await api.post(`/restaurant/kds/tickets/${ticketId}/bump`);
+      await api.post(`/api/kds/tickets/${ticketId}/bump`);
       toast.success("Ticket bumped");
       loadTickets();
     } catch (err) { toast.error(err.message); }
@@ -83,7 +83,7 @@ export default function KDSRedesign() {
 
   const recallTicket = async (ticketId) => {
     try {
-      await api.post(`/restaurant/kds/tickets/${ticketId}/recall`);
+      await api.post(`/api/kds/tickets/${ticketId}/recall`);
       toast.success("Ticket recalled");
       loadTickets();
     } catch (err) { toast.error(err.message); }

@@ -27,7 +27,7 @@ export default function RestaurantChecksRedesign() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get("/api/restaurant/checks?status=open");
+      const data = await api.get("/api/restaurant/checks?outlet_id=1");
       setChecks(data.checks || []);
     } catch (err) { toast.error(err.message); }
     finally { setLoading(false); }
@@ -37,7 +37,7 @@ export default function RestaurantChecksRedesign() {
 
   const fireCourse = async (checkId, course) => {
     try {
-      await api.post(`/restaurant/checks/${checkId}/fire-course`, { course_number: course });
+      await api.post(`/api/restaurant/checks/${checkId}/fire-course`, { course_number: course });
       toast.success(`Course ${course} fired`);
       load();
     } catch (err) { toast.error(err.message); }
@@ -45,7 +45,7 @@ export default function RestaurantChecksRedesign() {
 
   const splitCheck = async (checkId) => {
     try {
-      await api.post(`/restaurant/checks/${checkId}/split`, { mode: splitMode, split_count: splitCount });
+      await api.post(`/api/restaurant/checks/${checkId}/split`, { mode: splitMode, split_count: splitCount });
       toast.success("Check split");
       setShowSplit(null);
       load();
@@ -54,7 +54,7 @@ export default function RestaurantChecksRedesign() {
 
   const closeCheck = async (checkId) => {
     try {
-      await api.put(`/restaurant/checks/${checkId}`, { status: "closed" });
+      await api.put(`/api/restaurant/checks/${checkId}`, { status: "closed" });
       toast.success("Check closed");
       load();
     } catch (err) { toast.error(err.message); }

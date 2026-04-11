@@ -258,4 +258,19 @@ async function bumpTicket(db, ticketId, actorId) {
   return ticket;
 }
 
-module.exports = { getStations, createStation, updateStation, sendToKitchen, getTickets, bumpTicket };
+async function recallTicket(db, ticketId, actorId) {
+  const { rows: [ticket] } = await db.query(
+    "UPDATE kds_tickets SET status = 'new', updated_at = NOW() WHERE id = $1 AND status = 'bumped' RETURNING *",
+    [ticketId]
+  );
+  if (!ticket) throw Object.assign(new Error("Ticket not found or not bumped"), { statusCode: 404 });
+
+  await db.query(
+    "INSERT INTO kds_ticket_events (ticket_id, event_type, actor_id) VALUES ($1, 'recalled', $2)",
+    [ticketId, actorId]
+  );
+
+  return ticket;
+}
+
+module.exports = { getStations, createStation, updateStation, sendToKitchen, getTickets, bumpTicket, recallTicket };
