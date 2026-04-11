@@ -113,7 +113,7 @@ module.exports = function registerSmartCollectionRoutes(app, deps) {
           name_desc: "p.name DESC",
           price_asc: "p.price ASC",
           price_desc: "p.price DESC",
-          created_at_desc: "p.id DESC",
+          created_at_desc: "p.created_at DESC, p.id DESC",
         };
         const orderClause = sortMap[collection.sort_order] || "p.name ASC";
         const { rows: products } = await db.query(
