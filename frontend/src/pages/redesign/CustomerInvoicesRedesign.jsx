@@ -46,7 +46,7 @@ export default function CustomerInvoicesRedesign() {
     setLoading(true);
     const params = statusFilter ? `?status=${statusFilter}` : "";
     const [inv, cust] = await Promise.all([
-      api.get(`/customer-invoices${params}`).catch(() => ({ invoices: [], total: 0 })),
+      api.get(`/api/customer-invoices${params}`).catch(() => ({ invoices: [], total: 0 })),
       api.get("/api/customers?limit=500").catch(() => ({ customers: [] })),
     ]);
     setInvoices(inv.invoices || []);
@@ -97,9 +97,9 @@ export default function CustomerInvoicesRedesign() {
     setSelectedInvoice(inv);
     try {
       const [items, pmts] = await Promise.all([
-        api.get(`/customer-invoices?customer_id=${inv.customer_id}&limit=1`).then(() =>
+        api.get(`/api/customer-invoices?customer_id=${inv.customer_id}&limit=1`).then(() =>
           // Fetch items by getting the invoice detail (items embedded in list response isn't available, so we handle separately)
-          api.get(`/customer-invoices?status=&limit=1`).catch(() => ({ invoices: [] }))
+          api.get(`/api/customer-invoices?status=&limit=1`).catch(() => ({ invoices: [] }))
         ).catch(() => []),
         Promise.resolve([]), // payments are loaded separately
       ]);
@@ -108,7 +108,7 @@ export default function CustomerInvoicesRedesign() {
 
   const sendInvoice = async (id) => {
     try {
-      await api.post(`/customer-invoices/${id}/send`);
+      await api.post(`/api/customer-invoices/${id}/send`);
       toast.success("Invoice sent");
       load();
     } catch (err) { toast.error(err.message); }
@@ -116,7 +116,7 @@ export default function CustomerInvoicesRedesign() {
 
   const voidInvoice = async (id) => {
     try {
-      await api.put(`/customer-invoices/${id}/void`);
+      await api.put(`/api/customer-invoices/${id}/void`);
       toast.success("Invoice voided");
       load();
     } catch (err) { toast.error(err.message); }
@@ -124,7 +124,7 @@ export default function CustomerInvoicesRedesign() {
 
   const recordPayment = async (invoiceId) => {
     try {
-      await api.post(`/customer-invoices/${invoiceId}/payments`, {
+      await api.post(`/api/customer-invoices/${invoiceId}/payments`, {
         amount: Number(paymentForm.amount),
         payment_method: paymentForm.payment_method,
         payment_type: paymentForm.payment_type,
@@ -139,7 +139,7 @@ export default function CustomerInvoicesRedesign() {
 
   const generatePaymentLink = async (id) => {
     try {
-      const result = await api.post(`/customer-invoices/${id}/payment-link`);
+      const result = await api.post(`/api/customer-invoices/${id}/payment-link`);
       toast.success("Payment link generated");
       navigator.clipboard?.writeText(result.link_url);
     } catch (err) { toast.error(err.message); }
@@ -147,7 +147,7 @@ export default function CustomerInvoicesRedesign() {
 
   const sendReminder = async (id) => {
     try {
-      await api.post(`/customer-invoices/${id}/reminders/run`);
+      await api.post(`/api/customer-invoices/${id}/reminders/run`);
       toast.success("Reminder sent");
     } catch (err) { toast.error(err.message); }
   };

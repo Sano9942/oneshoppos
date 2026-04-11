@@ -58,7 +58,7 @@ export default function SubscriptionsRedesign() {
     try {
       const body = { ...planForm, price: Number(planForm.price), billing_interval_count: Number(planForm.billing_interval_count), trial_days: Number(planForm.trial_days) };
       if (editingPlan) {
-        await api.put(`/subscription-plans/${editingPlan.id}`, body);
+        await api.put(`/api/subscription-plans/${editingPlan.id}`, body);
         toast.success("Plan updated");
       } else {
         await api.post("/api/subscription-plans", body);
@@ -83,15 +83,15 @@ export default function SubscriptionsRedesign() {
   };
 
   const pauseSub = async (id) => {
-    try { await api.post(`/customer-subscriptions/${id}/pause`); toast.success("Paused"); load(); }
+    try { await api.post(`/api/customer-subscriptions/${id}/pause`); toast.success("Paused"); load(); }
     catch (err) { toast.error(err.message); }
   };
   const resumeSub = async (id) => {
-    try { await api.post(`/customer-subscriptions/${id}/resume`); toast.success("Resumed"); load(); }
+    try { await api.post(`/api/customer-subscriptions/${id}/resume`); toast.success("Resumed"); load(); }
     catch (err) { toast.error(err.message); }
   };
   const cancelSub = async (id) => {
-    try { await api.post(`/customer-subscriptions/${id}/cancel`); toast.success("Cancelled"); load(); }
+    try { await api.post(`/api/customer-subscriptions/${id}/cancel`); toast.success("Cancelled"); load(); }
     catch (err) { toast.error(err.message); }
   };
 
