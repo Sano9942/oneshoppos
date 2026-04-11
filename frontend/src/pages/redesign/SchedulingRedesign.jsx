@@ -53,7 +53,7 @@ export default function SchedulingRedesign() {
       const params = new URLSearchParams({ from: weekFrom, to: weekTo });
       if (selectedOutlet) params.set("outlet_id", selectedOutlet);
       const [shiftsRes, empRes, outRes] = await Promise.all([
-        api.get(`/schedules?${params}`),
+        api.get(`/api/schedules?${params}`),
         api.get("/api/employees"),
         api.get("/api/outlets"),
       ]);
@@ -71,7 +71,7 @@ export default function SchedulingRedesign() {
 
   // Fetch overtime alerts
   useEffect(() => {
-    api.get(`/hr/overtime-alerts?week=${weekFrom}${selectedOutlet ? `&outlet_id=${selectedOutlet}` : ""}`)
+    api.get(`/api/hr/overtime-alerts?week=${weekFrom}${selectedOutlet ? `&outlet_id=${selectedOutlet}` : ""}`)
       .then(r => setOvertimeAlerts(r.alerts || []))
       .catch(() => {});
   }, [weekFrom, selectedOutlet]);
@@ -94,7 +94,7 @@ export default function SchedulingRedesign() {
   const handleSave = async (data) => {
     try {
       if (editShift) {
-        await api.put(`/schedules/${editShift.id}`, data);
+        await api.put(`/api/schedules/${editShift.id}`, data);
         toast.success("Shift updated");
       } else {
         await api.post("/api/schedules", data);
@@ -110,7 +110,7 @@ export default function SchedulingRedesign() {
 
   const handleCancel = async (id) => {
     try {
-      await api.del(`/schedules/${id}`);
+      await api.del(`/api/schedules/${id}`);
       toast.success("Shift cancelled");
       fetchData();
     } catch (err) {
