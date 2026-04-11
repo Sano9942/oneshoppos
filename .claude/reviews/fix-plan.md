@@ -530,6 +530,94 @@ below was scoped via the 3-question approval discipline before any code.
 
 ---
 
+## Pattern Phase 5 H1 — pakpost/bykea stub adapters return apparent success
+
+**Status:** `done`
+**Branch:** `review-fixes`
+**Closed:** 2026-04-11 (3 commits: fix+drive-bys + test + docs)
+
+### Decision log
+
+- **2026-04-11 — Decision V: scope = Option B (adapter throws only, no route-level fall-through)**
+  - **Q:** Option A (2-adapter throw, minimal), Option B (throw + make 501 actionable via `statusCode/code`), or Option C (sweep all 13 adapters for the same anti-pattern)?
+  - **Verified via live code (all 13 adapter files):** 11 of 13 adapters (leopards, tcs, blueex, trax, callcourier, mnp, postex, rider, swyft, dhl, fedex) make real HTTP calls and throw with `if (!res.ok) throw ...` style. Only `pakpost` and `bykea` use the defensive-null-success shape. Option C is unnecessary — no other bugs to fix in that class.
+  - **Verified via Supabase MCP** on all 3 live tenants: pakpost and bykea rows have `supports_booking=false` and `enabled=false`. Dormant bug, activation-day-incident shape (same as Pattern A Decision D).
+  - **Chose: Option B.** Throw with `statusCode: 501` + `code: 'COURIER_NO_BOOKING_API'` + actionable error message pointing the operator at manual entry. Do NOT add a route-level fall-through to the manual branch — that would mean the route inconsistently honors/ignores `supports_booking` depending on which error shape the adapter threw, creating asymmetric behavior. Operators should use the existing mechanism (flip `supports_booking=false` on the integrations hub row). Leave `getTracking`/`cancelShipment` alone — they return advisory shapes that the frontend renders as tracking URLs, which is correct behavior for couriers without APIs.
+  - **Deferred explicitly:** P1/P2 low-pattern findings (P1: plaintext credentials in 3 route locations; P2: interface naming drift). Out of scope for H1 — separate hygiene passes.
+
+- **2026-04-11 — Decision W: Zod validation of request bodies (user-raised question mid-approval)**
+  - **Q (user):** "did you know about zod schema and did you consider this while fixing bugs?"
+  - **Codebase research:** `routes/couriers.js` imports zero Zod schemas and uses zero `validate()` middleware. Every endpoint reads `req.body` directly with manual null checks. The book route at `:218` reads `{courier_id, weight}` without schema validation.
+  - **Impact on H1:** none. H1 is an adapter-layer bug (adapter returns a defensive-null shape; route trusts the shape). No amount of Zod on `req.body` would catch a stub returning `{tracking_number: null}` — Zod validates inputs, not adapter outputs.
+  - **Chose:** keep H1 scope at 2 adapter files + deferred note. Do NOT create `schemas/couriers.js` as part of H1. The missing-Zod-validation gap is pre-existing hygiene across ~8 courier endpoints and belongs in its own wave, not rolled into a narrow adapter fix. Same lesson as Phase 2 C3 user correction: don't invent patterns or rollouts beyond what the finding requires.
+  - **Documented in the "Deferred / documented-only" section below.**
+
+- **2026-04-11 — Decision X: bundle two drive-by route fixes discovered during testing into Commit 1**
+  - **Q:** After pg-batch15 tests went red with two new errors (`FOR UPDATE cannot be applied to nullable side`, `column "name" does not exist`), fix-and-bundle or defer both?
+  - **Context:** Both are pre-existing bugs in `routes/couriers.js` (lines 227 and 261) that were never caught because the book route had zero integration test coverage before pg-batch15. Both are in the exact code path H1 tests exercise. Both unreachable in production today: the FOR UPDATE bug requires a walk-in order (customer_id IS NULL) which no tenant has, and the company_name bug requires the book route to actually run (which is dormant because supports_booking=false everywhere).
+  - **Chose: bundle both into Commit 1.** Same precedent as Pattern M1 Decision G (3 schema bugs bundled into one commit after full verification) and Pattern A Decision D (drive-by lastPollAt fix in Commit 4). Splitting them would create 3 commits with 1-line fixes each and fracture the "discovered while writing tests" narrative. The test file (Commit 2) would then depend on two unrelated fix commits, which complicates bisection more than bundling.
+  - **Impact:** Commit 1 touches 3 files (2 adapters + `routes/couriers.js`) instead of 2. Commit message names both drive-bys explicitly so a future reader understands why the fix commit touched a third file.
+
+- **2026-04-11 — Decision Y: file-level `jest.setTimeout(60000)` for slow beforeAll**
+  - **Q:** The first real run (all schema + column bugs patched) hit a 30s beforeAll timeout because `createTestApp()` runs the full `schema-pg.sql` against remote Supabase on a cold connection (~35s).
+  - **Chose:** bump to 60s at file level. Per-test budget stays tight since tests themselves are 1-2s each. Same precedent as Phase 4 C3 which bumped to 20s for 7-roundtrip tests; H1's driver is a single slow setup rather than many per-test roundtrips.
+
+### Findings
+
+- **Phase 5 H1** — `services/couriers/pakpost-adapter.js:9-14` and `services/couriers/bykea-adapter.js:9-16` return `{tracking_number: null, label_url: null, message: '...'}` instead of throwing → `fix`, 3-commit plan
+  [verified 2026-04-11:
+  • Both files confirmed to return the defensive-null shape.
+  • GenericAdapter at `generic-adapter.js:4-10` returns the same shape — but pakpost/bykea are the only two adapters that inherit and don't override with a real API call. The other 11 adapters make real HTTP calls and throw on failure.
+  • `routes/couriers.js:268-311` enters the `if (courier.supports_booking)` branch and blindly persists a row with `status='booked'` and null tracking.
+  • `routes/couriers.js:354` fires SMS on `status==='booked' || tracking_number` — the null-tracking shipment triggers "Tracking: N/A" SMS.
+  • Route outer catch at `:370` uses `err.statusCode || 500`, so throwing with `statusCode: 501` cleanly reaches the client.
+  • Production state via Supabase MCP: all 3 tenants have pakpost/bykea with `supports_booking=false` and `enabled=false`. **Activation-day shape.** Bug is dormant; first tenant to flip `supports_booking=true` fires the bug.
+  • Also observed: migration v25 at `migrate-pg.js:2524` explicitly excludes pakpost and bykea from the `supports_booking=true` UPDATE. Deliberate — the seed knows these are manual-entry couriers.]
+
+- **Drive-by 1** (`routes/couriers.js:227` — `SELECT ... FROM web_orders wo LEFT JOIN customers c ON ... FOR UPDATE`) → `fix`, bundled into Commit 1
+  [verified 2026-04-11: first pg-batch15 test run failed with `FOR UPDATE cannot be applied to the nullable side of an outer join`. Postgres disallows locking rows on the nullable side of a LEFT JOIN. Fixed by scoping the lock: `FOR UPDATE OF wo`. Pre-existing unreachable bug — live tenants never book orders with `customer_id IS NULL`, so the LEFT JOIN's nullable side is always empty in practice. Would fire on the first walk-in / guest checkout shipment booking. Not the H1 bug but in the same file and route path.]
+
+- **Drive-by 2** (`routes/couriers.js:261` — `SELECT name, phone, address FROM company_profile LIMIT 1`) → `fix`, bundled into Commit 1
+  [verified 2026-04-11: second pg-batch15 test run failed with `column "name" does not exist`. The canonical column is `company_name`, which is what every other route uses (grepped: `storefront.js`, `public-restaurant.js`, `public-bookings.js`, `fbr-export.js`, `admin/operations.js` all use `company_name`). Only `couriers.js:261` and `employees.js:451` use the wrong `name`. The book route's sender-info query has literally never executed successfully in production — would have 500'd on every real booking. Another pre-existing dead code path, uncovered by the same testing pass. Fixed both the SQL and the JS property name (`company.name` → `company.company_name`).]
+
+### Commit plan
+
+1. `fix(couriers): throw 501 from pakpost/bykea bookShipment stubs (Phase 5 H1)` — [landed `7b1c342`]
+   - Modified: `services/couriers/pakpost-adapter.js` (throw with `statusCode: 501`, `code: 'COURIER_NO_BOOKING_API'`, actionable message)
+   - Modified: `services/couriers/bykea-adapter.js` (same shape, different message)
+   - Modified: `routes/couriers.js` (drive-by 1: `FOR UPDATE OF wo`; drive-by 2: `company_name` column + JS property rename)
+2. `test(couriers): pg-batch15 integration tests for Phase 5 H1 regression coverage` — [landed `0139456`]
+   - New: `backend/tests/integration/pg-batch15-couriers.test.js` (5 tests, ~41s runtime)
+3. `docs(review): close Phase 5 H1 with final disposition` — this update
+
+### Test strategy
+
+- **Integration only, real Postgres** via `pg-batch15-couriers.test.js` + `createTestApp-pg.js` factory. This is the first integration test coverage for `routes/couriers.js` — previously zero coverage, which is why the two drive-by bugs survived undetected. No unit tests for the adapters because the logic is "throw with a specific statusCode" and unit-testing a one-line throw is pointless; the real failure mode the user cares about is "does the book route return a clean 501 with no DB side effects," which only an integration test can verify.
+- **5 tests:**
+  1. PakPost with `supports_booking=true` → 501 + actionable error message (matches `/Pakistan Post/i`, `/no booking API/i`, `/manual/i`).
+  2. Bykea with `supports_booking=true` → 501 + actionable error message (matches `/Bykea/i`, same shape).
+  3. Transaction rollback — the highest-value test. After 501: `order_shipments` empty, `web_orders.shipping_provider_status` NULL, `fulfillment_status='unfulfilled'`, `shipped_at` NULL, `active_shipment_id` NULL, `courier_id` NULL, `tracking_number` NULL. Proves the pre-fix failure mode (orphan row + tainted web_orders) cannot recur.
+  4. Control — Leopards with bogus credentials → 500 (NOT 501), transaction rolled back. Proves the fix is scoped strictly to the two stubs.
+  5. Control — PakPost with `supports_booking=false` → 200, manual fallback branch at `:314` still works. This is the production shape today — proves the fix doesn't disturb the currently-working path.
+- **Result:** 5/5 passing in 40.9s against remote Supabase. Runtime verified reproducibly after a stash-pop clean re-run.
+- **Regression check:** `cod-settlements.test.js` is the only other file that mounts `routes/couriers`. It fails 14/14 on **both** `main` and this branch with a pre-existing 5s `beforeEach` timeout. Verified via `git stash` + re-run on main. Not a regression from H1 — flagged in the deferred section below.
+
+### Deferred / documented-only
+
+- **`routes/couriers.js` has no Zod validation on any endpoint** — user-raised question during scope approval (Decision W). The route reads `req.body` directly with manual null checks across all 8-ish endpoints (book, test-booking, cancel, tracking refresh, webhook handlers, etc.). Should have a full `schemas/couriers.js` pass following the `smart-collections.js` / `scheduled-changes.js` convention established in Phase 2 C3. **Not H1 scope.** Pre-existing hygiene drift across 8 endpoints; H1 is a narrow 2-file fix. Revisit as a standalone pattern when the next wave of routes hygiene work lands.
+
+- **bykea duplicate seed rows** — observed during Supabase verification (5 duplicates on handicraft and khantoys, 1 on packagesmall; pakpost has only 1 row per tenant). The `INSERT ... ON CONFLICT DO NOTHING` on `courier_integrations` at `schema-pg.sql:1081` seems to have a unique-constraint mismatch — bykea has no `tracking_url_template` (empty string) which may be evading the constraint. Not investigated further; pre-existing seed idempotency quirk unrelated to H1. Belongs in a seed-hygiene sweep when someone tackles courier integrations end-to-end.
+
+- **`cod-settlements.test.js` pre-existing 5s timeout cascade** — 14/14 tests fail on both main and this branch because the file's `beforeEach` creates a fresh `createTestApp()` per test (not `beforeAll`) without adjusting `jest.setTimeout`. Against remote Supabase, 5s is far too tight for a full schema-pg.sql run. Not a regression from H1 (verified via `git stash`). The file is the only other integration coverage for `routes/couriers`; fixing it would expand H1's regression surface, but doing so would turn an adapter fix into a test-infra cleanup task. Out of scope; noting so the next courier-domain work knows the file needs a timeout bump before it can meaningfully run.
+
+- **`employees.js:451` — same `company_profile.name` bug as drive-by 2** — during the drive-by 2 investigation I found `employees.js:451: SELECT name FROM company_profile WHERE id = 1`. Same class of bug as drive-by 2, different file. Not touched because employees.js is outside Phase 5 and the Phase 1 review didn't flag it. Pre-existing bug unrelated to H1; fixing it would widen scope beyond the file H1 was approved against.
+
+- **Route-level fall-through to manual branch for adapters that throw `COURIER_NO_BOOKING_API`** — considered and rejected in Decision V. Would mean the route inconsistently honors/ignores `supports_booking` depending on which error the adapter threw. Cleaner to have operators flip `supports_booking=false` on the integrations hub row when a courier lacks an API. Worth revisiting only if UX feedback shows operators repeatedly hitting the 501 without understanding the fix.
+
+- **`getTracking` / `cancelShipment` stubs on pakpost/bykea** — intentionally left alone. They return non-throwing advisory shapes (`"Track via Bykea app"`, `"Cancel via Bykea app"`) which are the *correct* behavior for couriers without APIs — the frontend can render them as tracking URLs. The review flagged only `bookShipment`, and widening to `getTracking`/`cancelShipment` would turn advisory responses into 501s for no user benefit.
+
+---
+
 ## Deviations from synthesis
 
 Running log of where we've diverged from the reviewer findings, with dates and reasons:
@@ -561,3 +649,8 @@ Running log of where we've diverged from the reviewer findings, with dates and r
 - **2026-04-11 — Phase 4 C3: orphaned test schemas caused a "41 all failed" cascade**: during iteration, failed test runs left `test_XXXXXX` schemas behind in Supabase. Three accumulated across runs, consuming connection/lock budget. A subsequent run of `pg-batch13-restaurant.test.js` had the top-level `beforeAll` time out because `createTestApp()` couldn't acquire resources, which cascaded into 41/41 failed tests with misleading "db is undefined" errors. Resolved by dropping the orphaned schemas via Supabase MCP. Lesson: the test factory's `afterAll` → `cleanup()` → `DROP SCHEMA ... CASCADE` isn't resilient to Jest crashes; an exit before `afterAll` leaves state on the server. Worth either (a) using a shared cleanup daemon or (b) adding a pre-test "DROP orphaned test_* schemas" step to the factory. Flagged for a future test-infra pass.
 - **2026-04-11 — Phase 4 C3: composite PK over surrogate id on junction**: verified codebase convention by grepping for existing junction tables — `role_permissions`, `employee_outlets`, `channel_publications` all use composite keys. Followed the precedent. Wouldn't have occurred to me to check without the stale-CLAUDE.md lesson from Phase 2 C3. "Grep the codebase before inventing" is now a reflexive habit this session.
 - **2026-04-11 — Phase 4 C3: JOIN `FILTER ... COALESCE` defensive guard**: the new junction JOIN can legitimately produce an empty match if a ticket has no junction rows (e.g., during a partial sendToKitchen failure — Phase 4 H2 territory). Without `FILTER (WHERE kti.ticket_id IS NOT NULL)` + `COALESCE(..., '[]'::json)`, `json_agg` emits `[{id:null,...}]` — a single null-object that the frontend would render as a ghost item row. The pre-fix JOIN couldn't produce this case because `(draft_order_id, course_name)` always matched at least one row. Every read-side refactor inherits new failure modes — defend against them inline. This is the subtle kind of bug that only shows up in production under unusual state, so it's worth writing the defense even without a specific test for it.
+- **2026-04-11 — Phase 5 H1 scope narrowed to 2 adapter files after live research**: initial reading of the review finding suggested a possible 13-file sweep (one per adapter). After spot-checking all 13 adapter files I confirmed 11 of them (leopards, tcs, blueex, trax, callcourier, mnp, postex, rider, swyft, dhl, fedex) make real HTTP calls and throw with `if (!res.ok) throw ...` style — only pakpost and bykea use the defensive-null-success shape. The review's "single out these two" framing was correct. Option C (13-file sweep) dropped to `not needed`. Scope confirmed as 2 files + deferred notes.
+- **2026-04-11 — Phase 5 H1: 3 bugs in one route-code commit (1 H1 + 2 drive-bys)**: tests went red three times before turning green. First failure: `feature_flags.enabled` BOOLEAN column rejected integer literals in unbound SQL (fixed in test). Second failure: `routes/couriers.js:227` used `FOR UPDATE` on the nullable side of a LEFT JOIN, which Postgres rejects (fixed in production code as drive-by 1). Third failure: `routes/couriers.js:261` queried `company_profile.name` which doesn't exist — the column is `company_name` (fixed in production code as drive-by 2). Both drive-bys are pre-existing, both in the same file H1 was approved to touch, both in the same code path H1 tests exercise, and both unreachable in production today (walk-in orders with `customer_id IS NULL` don't exist; and `supports_booking=false` everywhere means the book route's sender-info query never runs). Bundled into Commit 1 per precedent from Pattern M1 Decision G and Pattern A Decision D drive-bys. **Seventh time in this review session that tests caught a bug the review didn't flag**: lastPollAt (Pattern A), payment_intents ALTER (M1), Zod 4 message API (Phase 2 C3), MULTI_TENANT env-read + table_id JOIN (Phase 4 C2), KDS read-side fan-out (Phase 4 C3), and now these two. "Tests earn their keep" remains the motto.
+- **2026-04-11 — Phase 5 H1: Zod validation gap deferred explicitly after user-raised question**: user asked mid-approval "did you know about zod schema and did you consider this while fixing bugs?" Correct answer: H1 is an adapter-layer bug, not a request-validation bug — no Zod on `req.body` would catch a stub returning `{tracking_number: null}`. But the question surfaced a separate hygiene gap: `routes/couriers.js` has zero Zod schemas and zero `validate()` middleware across all 8-ish endpoints. That's pre-existing drift from the codebase convention (`schemas/<domain>.js` + `validate(Schema)` middleware) established in Phase 2 C3 and followed by 23 other schema files. Deferred to a standalone pattern rather than rolled into H1. Same discipline as Phase 4 C2 Decision N — don't invent scope that isn't in the finding.
+- **2026-04-11 — Phase 5 H1: cod-settlements.test.js is broken on both main and this branch (pre-existing)**: `cod-settlements.test.js` is the only other integration test that mounts `routes/couriers`, and it fails 14/14 with a pre-existing 5s `beforeEach` timeout. Verified via `git stash` + re-run on main. Not a regression from H1 — the file creates a fresh `createTestApp()` per test without adjusting `jest.setTimeout`, and against remote Supabase 5s is too tight for a full schema-pg.sql run. Flagged in H1 deferred section so the next courier-domain work knows the file needs a timeout bump before it can meaningfully run.
+- **2026-04-11 — Phase 5 H1: orphan test schemas left by the broken cod-settlements run**: running cod-settlements as a regression check left 12 orphan `test_*` schemas (14 tests × `beforeEach`, minus 2 successful cleanups before the cascade set in). Dropped one at a time via Supabase MCP per the Phase 4 C3 lesson — multi-drop in one transaction still hits "out of shared memory." Same test-factory resilience gap as Phase 4 C3 Decision. The test-infra cleanup discipline ("drop orphans before and after every iteration") is now a reflexive habit — I ran the sweep three times during this pattern (initial check, mid-iteration after the fix-test loop, final check before committing).
