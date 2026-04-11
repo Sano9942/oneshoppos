@@ -17,14 +17,7 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === "production"
     ? { rejectUnauthorized: false }
     : false,
-  // max: 10 (was 20) — reduced to leave room for pg-boss's default max:10
-  // pool + the brief connection overlap during Railway container handoff.
-  // Supabase Free tier caps at 60 connections; previous 20+10+overlap could
-  // exceed it and cause pg-boss to fail startup with
-  // "Max client connections reached - in Session mode max clients are
-  // limited to pool_size". Observed steady-state usage is ~26/60, so halving
-  // the app pool is non-impacting. See 2026-04-11 session notes.
-  max: 10,
+  max: 20,
 });
 
 pool.on("error", (err) => {
