@@ -2599,6 +2599,18 @@ CREATE TABLE IF NOT EXISTS kds_ticket_events (
 );
 CREATE INDEX IF NOT EXISTS idx_kds_ticket_events_ticket ON kds_ticket_events(ticket_id);
 
+-- Junction: links each ticket to the specific draft_order_items that routed
+-- to its station. Phase 4 C3 revised fix — the pre-v29 getTickets JOIN on
+-- (draft_order_id, course_name) with no station filter pulled every item in
+-- that course onto every station's ticket. Joining through this junction
+-- restores one-ticket = one-station's-portion semantics.
+CREATE TABLE IF NOT EXISTS kds_ticket_items (
+  ticket_id INTEGER NOT NULL REFERENCES kds_tickets(id) ON DELETE CASCADE,
+  draft_order_item_id INTEGER NOT NULL REFERENCES draft_order_items(id) ON DELETE CASCADE,
+  PRIMARY KEY (ticket_id, draft_order_item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_kds_ticket_items_item ON kds_ticket_items(draft_order_item_id);
+
 -- Extend draft_orders for restaurant context
 ALTER TABLE draft_orders
   ADD COLUMN IF NOT EXISTS order_context TEXT DEFAULT 'retail' CHECK (order_context IN ('retail','dine_in','takeout','delivery','bar')),

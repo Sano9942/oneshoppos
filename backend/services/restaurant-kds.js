@@ -120,6 +120,22 @@ async function sendToKitchen(db, draftOrderId) {
       [station.id, draftOrderId, order.table_label || null, seatLabel, course]
     );
 
+    // Link this ticket to the exact items that routed to its station via
+    // the kds_ticket_items junction (migration v29). Multi-row VALUES insert
+    // is one round-trip regardless of group size. Required for getTickets'
+    // JOIN to scope items per-station — see "JOIN kds_ticket_items" below.
+    const values = [];
+    const params = [];
+    let paramIdx = 1;
+    for (const it of grpItems) {
+      values.push(`($${paramIdx++}, $${paramIdx++})`);
+      params.push(ticket.id, it.id);
+    }
+    await db.query(
+      `INSERT INTO kds_ticket_items (ticket_id, draft_order_item_id) VALUES ${values.join(", ")}`,
+      params
+    );
+
     // Log event
     await db.query(
       "INSERT INTO kds_ticket_events (ticket_id, event_type) VALUES ($1, 'created')",
@@ -148,14 +164,29 @@ async function getTickets(db, stationId, statusFilter) {
     where += " AND kt.status IN ('new','in_progress','ready')";
   }
 
+  // JOIN through the kds_ticket_items junction (v29) so each ticket aggregates
+  // only the items that routed to its station, not every item in that course.
+  // Phase 4 C3 revised fix — the pre-v29 JOIN on (draft_order_id, course_name)
+  // fanned out every course item onto every station's ticket.
+  //
+  // json_agg with an empty-child ticket (no junction rows) would produce
+  // [{id: null, ...}] one-element array instead of []. FILTER on kti.ticket_id
+  // NOT NULL collapses that edge case, and COALESCE falls back to '[]'::json
+  // so the route always returns items as an array.
   const { rows } = await db.query(
     `SELECT kt.*,
-       json_agg(json_build_object(
-         'id', di.id, 'product_name', di.product_name, 'quantity', di.quantity,
-         'notes', di.notes, 'seat_number', di.seat_number, 'course_name', di.course_name
-       )) AS items
+       COALESCE(
+         json_agg(
+           json_build_object(
+             'id', di.id, 'product_name', di.product_name, 'quantity', di.quantity,
+             'notes', di.notes, 'seat_number', di.seat_number, 'course_name', di.course_name
+           )
+         ) FILTER (WHERE kti.ticket_id IS NOT NULL),
+         '[]'::json
+       ) AS items
      FROM kds_tickets kt
-     LEFT JOIN draft_order_items di ON di.draft_order_id = kt.draft_order_id AND di.course_name = kt.course_name
+     LEFT JOIN kds_ticket_items kti ON kti.ticket_id = kt.id
+     LEFT JOIN draft_order_items di ON di.id = kti.draft_order_item_id
      WHERE ${where}
      GROUP BY kt.id
      ORDER BY kt.priority DESC, kt.created_at ASC`,

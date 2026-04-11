@@ -2723,6 +2723,33 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 29,
+    description: "Add kds_ticket_items junction — fixes Phase 4 C3 read-side fan-out",
+    up: async (client) => {
+      // Phase 4 C3 revised fix. Commit 3155263 collapsed sendToKitchen's
+      // per-item INSERT loop into per-(station, course) groups — write side
+      // correct — but getTickets still joins draft_order_items by
+      // (draft_order_id, course_name) with no station filter, so each
+      // station's ticket still shows every item in that course. Adding a
+      // junction table lets getTickets join ticket → item via explicit
+      // routing, restoring one-ticket = one-station's-portion semantics.
+      //
+      // Safe on live tenants: kds_tickets is empty on all 3 live tenants
+      // (verified 2026-04-11) so the FK add has nothing to conflict with.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS kds_ticket_items (
+          ticket_id INTEGER NOT NULL REFERENCES kds_tickets(id) ON DELETE CASCADE,
+          draft_order_item_id INTEGER NOT NULL REFERENCES draft_order_items(id) ON DELETE CASCADE,
+          PRIMARY KEY (ticket_id, draft_order_item_id)
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_kds_ticket_items_item
+          ON kds_ticket_items(draft_order_item_id)
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {
