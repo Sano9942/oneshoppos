@@ -618,6 +618,107 @@ below was scoped via the 3-question approval discipline before any code.
 
 ---
 
+# Wave 3 — Remaining review findings (self-verified triage)
+
+With all 4 Wave 2 criticals closed, Wave 3 addresses the remaining 24 review
+findings. Before any fix work, I verified every finding against current
+`review-fixes` branch state to catch anything already fixed by intervening
+commits, misdiagnosed by the reviewer, or made unreachable by later changes.
+
+## Wave 3 triage discipline
+
+The first attempt at Wave 3 triage dispatched a research agent to sweep all 24
+findings. The agent returned a structured report but it contained hallucinated
+commit SHAs (`bc4ee08`, `f313daf`, `ee7c4d5`, `280c981` — none exist in the
+branch history) and internal contradictions (Phase 4 C2 listed as both "fixed"
+and "still present, column always NULL" in the same report). After two
+verified contradictions with fix-plan.md's known-accurate dispositions
+(Phase 4 C2 "fixed" confirmed via `services/restaurant-checks.js:22,95`;
+Phase 5 C2 `notabug` confirmed via `routes/fulfillment.js:1100-1124` which
+joins on `tracking_number`, not `active_shipment_id`), I discarded the entire
+agent report and re-verified all 24 findings myself via direct Read/Grep/
+Supabase calls.
+
+**Lesson for future sessions**: research agents dispatched for triage work
+will sometimes invent commit SHAs and fabricate dispositions. Two
+sanity-check signals that expose this: (1) cross-reference claimed "fixed"
+SHAs against `git log --oneline`, and (2) verify at least two "still broken"
+claims against fix-plan.md's own verified-closed dispositions. If either
+check fails, discard the whole report — the agent cannot be trusted on any
+row. Prefer self-verification in the main context for triage work; parallel
+agents are still useful for narrow well-specified checks (e.g. "grep for X
+across the codebase") where the disposition decision isn't delegated.
+
+## Wave 3 open-finding triage table
+
+Every disposition below was verified by direct Read/Grep/Supabase in this
+session against the `review-fixes` branch at commit `7e7ef3f`. File:line
+references are verified present unless marked `NOTABUG`.
+
+| # | Finding | Sev | Verified state | Reach | Complexity | Recommendation |
+|---|---|---|---|---|---|---|
+| 1 | **Phase 1 C1** EndlessAisleModal body mismatch | C | still broken — every field name mismatches between [EndlessAisleModal.jsx:58-70](frontend/src/pages/redesign/pos/EndlessAisleModal.jsx#L58) and [orders.js:1072-1075](backend/routes/orders.js#L1072); first check `if (!items || !items.length)` returns 400 immediately | hot path (POS out-of-stock flow) | small (rewrite one file's body) | **fix-now** |
+| 2 | **Phase 1 C2** storefront/config camelCase vs snake_case | C | still broken — [storefront.js:23-30](backend/routes/storefront.js#L23) returns `{companyName, logoUrl, currencySymbol}`; 7 files under [frontend/src/pages/storefront/](frontend/src/pages/storefront/) read `config?.company_name`, `config?.logo_url`, `config?.currency_symbol` | hot path (every storefront page) | trivial (1 backend file) | **fix-now** |
+| 3 | **Phase 1 H1** createReservation dead code | H | still dead — [reservation.js:14](backend/services/reservation.js#L14) exported, zero callers across `backend/` grep | dormant (never executed) | medium (feature wiring decision, not a bug fix) | **defer** — not a bug, a feature decision |
+| 4 | **Phase 1 M2** convertReservations TOCTOU | M | dead code, prerequisite of H1 — [reservation.js:45](backend/services/reservation.js#L45) is plain UPDATE with no transaction, zero callers | dormant | small (transaction wrapper) | **defer** (bundle with H1 if ever activated) |
+| 5 | **Phase 2 C1** draft_orders complete returns stale state | C | still broken — [draft-orders.js:200-217](backend/routes/draft-orders.js#L200) reads `draft` pre-UPDATE, runs UPDATE, returns the stale `draft` object; response `draftOrder.status` is `"claimed"` instead of `"completed"` | hot path (every POS draft completion) | trivial (1-3 lines) | **fix-now** |
+| 6 | **Phase 2 C2** pos-authorize no feature flag + no deleted_at filter | C | still broken — [approval-policies.js:93](backend/routes/approval-policies.js#L93) has no `requireFeature`; [approval-policies.js:104-107](backend/routes/approval-policies.js#L104) SELECTs employees with no `WHERE e.deleted_at IS NULL`; every other endpoint in the same file uses `requireFeature("phase2_pos_approvals")` | hot path on approvals-enabled tenants; security gap (deleted manager PINs still work) | trivial (2 lines) | **fix-now** |
+| 7 | **Phase 2 H1** smart-collections `p.created_at` | H | still broken — [smart-collections.js:26](backend/routes/smart-collections.js#L26) has `case "created_at": col = "p.created_at"`; verified via Supabase that `tenant_packagesmall.products` has neither `created_at` nor `updated_at` column | medium (only on rules using the `created_at` field) | small (remove the case, or add column + backfill) | **fix-now** (simple path: remove the case) |
+| 8 | **Phase 2 H2** buildQuery ORDER BY on aggregate alias | H | **NOTABUG** — reviewer claimed Postgres rejects `ORDER BY <aggregate alias>`. Verified via live Supabase query: `SELECT SUM(1) AS points_balance FROM (VALUES (1),(2),(3)) AS t(x) GROUP BY x ORDER BY points_balance DESC LIMIT 5` — works. Reviewer misdiagnosed. | — | — | **notabug** |
+| 9 | **Phase 2 M1** approval_events atomicity gap | M | confirmed as design gap — [approval-policies.js:93](backend/routes/approval-policies.js#L93) records the approval synchronously, returns 200, then the frontend submits the sale as a separate request. Two-phase commit problem that can't be fixed with a single transaction inside this endpoint. | edge case (server crash between `recordApprovalEvent` and sale POST) | medium (idempotency tokens, or inline authorize inside sale POST transaction) | **defer** — needs design discussion |
+| 10 | **Phase 2 M2** leave_requests date | M | already `notabug` per reviewer — [phase2.md:91](.claude/reviews/findings/phase2.md#L91) says "The fix from commit 73b1d0a is in place and the pattern is safe. No bug here" | — | — | **notabug** (no action) |
+| 11 | **Phase 3 C2** cancel subscription leaves orphan pg-boss job | C | still broken — [subscriptions.js:108-114](backend/services/subscriptions.js#L108) is one UPDATE, no `boss.cancel()`. Defensive `status !== 'active'` check at [subscriptions.js:51](backend/services/subscriptions.js#L51) preserves data integrity; just wastes queue space. | low (zero active subs on live tenants; defensive skip holds) | trivial (1 line: `boss.cancel(jobId)` in `cancelSubscription`) | **fix-later** — low value |
+| 12 | **Phase 3 H1** processRenewal no transaction (double-billing) | H | still broken — [subscriptions.js:34-103](backend/services/subscriptions.js#L34) does 5 sequential writes + `boss.send` with no `db.transaction()`. Crash between invoice insert (line 66) and subscription period update (line 88) produces duplicate invoice on next run. | edge case (crash mid-renewal) × high impact (double billing) | small (wrap in `db.transaction()`) | **fix-now** — billing integrity |
+| 13 | **Phase 3 H2** campaign ignores SMS/WhatsApp consent | H | still broken but latent — [marketing.js:133](backend/services/marketing.js#L133) queries `WHERE email IS NOT NULL AND email_consent = true` regardless of campaign channel; [marketing.js:145-146](backend/services/marketing.js#L145) hardcodes `channel = 'email'` in delivery insert. SMS/WhatsApp campaigns route to email-consented audience only. | pre-feature (SMS delivery not wired; compliance risk is latent) | small | **defer** — activate-day shape; fix before SMS delivery lands |
+| 14 | **Phase 3 M1** Phase 3 queues piggyback on EMAIL_WORKER_ENABLED | M | still present — [email-worker-boss.js:224-229](backend/workers/email-worker-boss.js#L224) registers all 4 Phase 3 queues inside `registerEmailWorker`. No independent env var. Post-Pattern A fix, the workers work correctly when `EMAIL_WORKER_ENABLED=1`. | low (config-shape issue, not a runtime bug) | small (extract into own function with own env var) | **defer** — next worker-startup refactor |
+| 15 | **Phase 3 M2** consent defaults to false (silent unsub) | M | confirmed — live Supabase: packagesmall has 36 customers, `email_consented=0`, `sms_consented=0`. v21 added the columns with `DEFAULT false`; pre-existing customers are now unsubscribed. | high (data quality on upgraded tenants) but compliance-safe | ambiguous | **wontfix** — backfilling `true` violates opt-in compliance; reconsider only if a tenant escalates |
+| 16 | **Phase 3 M3** subscription_autocharge flag never enforced | M | still broken — [migrate-pg.js:1847](backend/migrate-pg.js#L1847) seeds the flag, [feature-flags.js:69](backend/middleware/feature-flags.js#L69) registers it, [subscriptions.js:137,151](backend/routes/subscriptions.js#L137) accepts `auto_charge` on POST. Zero `requireFeature("subscription_autocharge")` calls anywhere. `processRenewal` always creates an invoice regardless. | none today (no subs exist); dead semantic | small (add check in `processRenewal`) | **defer** — no impact today |
+| 17 | **Phase 4 H1** 4 dead feature flags + dead schema | H | confirmed — [migrate-pg.js:2276-2278,2456](backend/migrate-pg.js#L2276) seeds `phase4_appointments_waitlists`, `phase4_appointments_classes`, `phase4_google_calendar_sync`, `phase4_contract_ai`. Zero `requireFeature()` calls for any of them. Tables `appointment_waitlist_entries`, `class_sessions`, `calendar_sync_accounts` are never queried. | none (abandoned features) | wontfix or small (remove flags + drop tables, or leave as-is) | **wontfix** — dead schema from cancelled features; clean up in a future schema hygiene pass |
+| 18 | **Phase 4 H2** sendToKitchen not atomic | H | still broken — [restaurant-kds.js:43](backend/services/restaurant-kds.js#L43) runs many sequential INSERTs on whatever `db` proxy is passed; no `db.transaction()` wrapper. **Phase 4 C3 junction fix added more INSERTs to the same non-atomic flow without wrapping it.** Partial failure leaves some items ticketed, others `pending`. | hot path (every restaurant send-to-kitchen) | small (wrap body in `db.transaction()`) | **fix-now** |
+| 19 | **Phase 4 H3** splitCheckBySeat stale-read race | H | still broken — [restaurant-checks.js:127-138](backend/services/restaurant-checks.js#L127) reads `draft_order_items` outside any transaction, then delegates to `splitCheckByItem` which opens its own transaction. Concurrent item insert between the two opens a stale-read window. | edge case (concurrent split + item add) | small (wrap read + delegate in single `db.transaction()`) | **defer** — low frequency |
+| 20 | **Phase 4 M1** Phase 3 invoices UI won't label Phase 4 project invoices | M | confirmed — grep of [CustomerInvoicesRedesign.jsx](frontend/src/pages/redesign/CustomerInvoicesRedesign.jsx) returns zero references to `invoice_kind`, `project_id`, or `milestone_id`. v24 columns are populated on the backend but invisible to the UI. | low (no project invoices in live tenants) | small (UI change) | **defer** |
+| 21 | **Phase 4 M2** signature_data no size limit | M | confirmed — [contracts.js:64-70](backend/services/contracts.js#L64) passes `signatureData` directly into UPDATE with no length validation; schema column is unbounded TEXT. | low (requires malicious client) | trivial (add MAX_LENGTH constant) | **defer** |
+| 22 | **Phase 5 H3** SMS flag not checked in notifyCustomerSms | H | still broken — [couriers.js:8-30](backend/routes/couriers.js#L8) checks `sms_consent` but not `phase5_sms_providers`. Route calling it ([couriers.js:354-358](backend/routes/couriers.js#L354)) gates on `phase5_shipping_automation`, not the SMS flag. | medium (billing/plan enforcement: lower-tier tenants get free SMS on shipment events) | trivial (1 flag check) | **fix-now** |
+| 23 | **Phase 5 M1** phase5_payment_gateways flag never enforced | M | confirmed — [migrate-pg.js:2666](backend/migrate-pg.js#L2666) seeds the flag, [feature-flags.js:85](backend/middleware/feature-flags.js#L85) registers it, zero `requireFeature("phase5_payment_gateways")` calls. | none today | small or wontfix | **defer** |
+| 24 | **Phase 5 M2** getLabel missing from adapter interface | M | confirmed — grep for `getLabel` in [backend/services/couriers/](backend/services/couriers/) returns zero hits. `supports_labels` column exists on `courier_integrations` but no adapter implements it, no route calls it. | pre-feature (label UI not built) | small | **defer** — activate when label UI lands |
+
+## Wave 3 disposition summary
+
+- **fix-now (8)**: Phase 1 C1, Phase 1 C2, Phase 2 C1, Phase 2 C2, Phase 2 H1, Phase 3 H1, Phase 4 H2, Phase 5 H3
+- **fix-later (1)**: Phase 3 C2 (low-value queue hygiene)
+- **notabug (2)**: Phase 2 H2 (ORDER BY alias works in Postgres — reviewer misdiagnosed), Phase 2 M2 (reviewer pre-flagged as clean)
+- **wontfix (2)**: Phase 3 M2 (compliance — backfilling consent=true violates opt-in), Phase 4 H1 (dead schema from cancelled features)
+- **defer (11)**: Phase 1 H1, Phase 1 M2, Phase 2 M1, Phase 3 H2, Phase 3 M1, Phase 3 M3, Phase 4 H3, Phase 4 M1, Phase 4 M2, Phase 5 M1, Phase 5 M2
+
+**Ratio check vs. Wave 2**: Wave 2 closed 4 findings from the synthesis. Wave 3 has 8 fix-now recommendations — roughly 2× the scope. Expect 2-3 batches rather than 1.
+
+## Wave 3 batch shape (proposed, not yet approved)
+
+The 8 fix-now findings cluster into 3 natural batches that are independently
+scopeable via the 3-question discipline:
+
+1. **Batch 3A — Phase 2 POS hardening (C1 + C2 + H1)** — three fixes in three
+   adjacent POS-domain files (draft-orders, approval-policies,
+   smart-collections). All trivial-to-small. C2 is a security issue
+   (deleted employee PINs still grant approvals) so this batch has the
+   highest priority-on-urgency.
+
+2. **Batch 3B — Phase 1 storefront contracts (C1 + C2)** — two hot-path
+   frontend/backend contract mismatches. One is the endless-aisle POST body
+   format; the other is the storefront/config response key casing. Both
+   small and independently verifiable.
+
+3. **Batch 3C — Cross-domain atomicity + gating (Phase 3 H1 + Phase 4 H2 +
+   Phase 5 H3)** — three independent fixes. Phase 3 H1 wraps `processRenewal`
+   in a transaction (billing integrity). Phase 4 H2 wraps `sendToKitchen` in
+   a transaction (KDS consistency). Phase 5 H3 adds a `requireFeature` check
+   to `notifyCustomerSms` (billing enforcement). No shared scope; could be
+   split further if desired.
+
+**Recommended start: Batch 3A.** Security > hot-path > atomicity.
+
+---
+
 ## Deviations from synthesis
 
 Running log of where we've diverged from the reviewer findings, with dates and reasons:
@@ -654,3 +755,5 @@ Running log of where we've diverged from the reviewer findings, with dates and r
 - **2026-04-11 — Phase 5 H1: Zod validation gap deferred explicitly after user-raised question**: user asked mid-approval "did you know about zod schema and did you consider this while fixing bugs?" Correct answer: H1 is an adapter-layer bug, not a request-validation bug — no Zod on `req.body` would catch a stub returning `{tracking_number: null}`. But the question surfaced a separate hygiene gap: `routes/couriers.js` has zero Zod schemas and zero `validate()` middleware across all 8-ish endpoints. That's pre-existing drift from the codebase convention (`schemas/<domain>.js` + `validate(Schema)` middleware) established in Phase 2 C3 and followed by 23 other schema files. Deferred to a standalone pattern rather than rolled into H1. Same discipline as Phase 4 C2 Decision N — don't invent scope that isn't in the finding.
 - **2026-04-11 — Phase 5 H1: cod-settlements.test.js is broken on both main and this branch (pre-existing)**: `cod-settlements.test.js` is the only other integration test that mounts `routes/couriers`, and it fails 14/14 with a pre-existing 5s `beforeEach` timeout. Verified via `git stash` + re-run on main. Not a regression from H1 — the file creates a fresh `createTestApp()` per test without adjusting `jest.setTimeout`, and against remote Supabase 5s is too tight for a full schema-pg.sql run. Flagged in H1 deferred section so the next courier-domain work knows the file needs a timeout bump before it can meaningfully run.
 - **2026-04-11 — Phase 5 H1: orphan test schemas left by the broken cod-settlements run**: running cod-settlements as a regression check left 12 orphan `test_*` schemas (14 tests × `beforeEach`, minus 2 successful cleanups before the cascade set in). Dropped one at a time via Supabase MCP per the Phase 4 C3 lesson — multi-drop in one transaction still hits "out of shared memory." Same test-factory resilience gap as Phase 4 C3 Decision. The test-infra cleanup discipline ("drop orphans before and after every iteration") is now a reflexive habit — I ran the sweep three times during this pattern (initial check, mid-iteration after the fix-test loop, final check before committing).
+- **2026-04-11 — Wave 3 triage: research agent hallucinated SHAs and dispositions, report discarded**: first attempt at Wave 3 triage dispatched an Explore agent to verify all 24 open findings against live code. The agent returned a structured 3000-word report with per-finding dispositions, then flagged 7 findings as "already fixed" with commit SHAs (`bc4ee08`, `f313daf`, `ee7c4d5`, `280c981`). **None of those SHAs exist on `review-fixes`** (the real Wave 1/2 commits are `38b6d73`, `63e5273`, `9dc9846`, `03b36f5`, `7b1c342`, `36bc3b0`). Internal contradictions too: Phase 4 C2 listed as both "fixed" and "still present, column always NULL" in the same report. Two sanity checks against fix-plan.md's verified-closed dispositions exposed the pattern: Phase 4 C2 verified fixed via direct read of `restaurant-checks.js:22,95` (matches fix-plan.md `9dc9846` closure), Phase 5 C2 verified `notabug` via direct read of `fulfillment.js:1100-1124` (joins on `tracking_number`, not `active_shipment_id`, matching fix-plan.md `notabug` disposition). After two independent contradictions in the same direction ("agent says still broken" on things already closed), I discarded the entire agent report and re-verified all 24 findings myself via direct Read/Grep/Supabase in the main context. **Lesson**: research agents are unreliable for triage work where the disposition decision is delegated. They're still fine for narrow mechanical checks (grep, file counts) but anything shaped like "read X, decide state, report" should stay in the main context with direct tool calls. Two cheap cross-checks on any future agent triage: (1) cross-reference claimed "fixed" SHAs against `git log --oneline`, and (2) spot-check at least two "still broken" claims against fix-plan.md's known-closed dispositions.
+- **2026-04-11 — Wave 3 triage: Phase 2 H2 reclassified to `notabug` after live Postgres test**: reviewer claimed "Report builder `buildQuery` ORDER BY on aggregate alias fails silently for customer_analysis dataset." Verified directly via Supabase MCP with `SELECT SUM(1) AS points_balance FROM (VALUES (1),(2),(3)) AS t(x) GROUP BY x ORDER BY points_balance DESC LIMIT 5` — query returns 3 rows cleanly, no error. Postgres allows ORDER BY on top-level SELECT aliases including aggregate aliases. The reviewer may have been thinking of the SQL standard rule that aliases can't be used in WHERE, but ORDER BY is processed after SELECT list and aliases work fine. **Disposition**: `notabug`, reviewer misdiagnosed the Postgres behavior. If the `customer_analysis` dataset ever actually fails in production, the root cause is something else (likely the dataset config or a column that doesn't exist in `customers`), not the ORDER BY clause.
