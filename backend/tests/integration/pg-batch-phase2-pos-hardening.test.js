@@ -166,9 +166,28 @@ describe("Wave 3 Batch 3A — Phase 2 POS hardening", () => {
   });
 
   // ───────────────────────────────────────────────────────────────
-  // H1 — smart-collections created_at removed
+  // H1 — smart-collections created_at rule field rejected; sort alias real
   // ───────────────────────────────────────────────────────────────
-  describe("H1 — smart-collections rule field='created_at' removed", () => {
+  //
+  // Batch 3A's original H1 fix stripped `created_at` from both the Zod
+  // rule enum and the buildRuleQuery switch, because the products table
+  // didn't have a created_at column at all — the rule couldn't produce
+  // valid SQL. The sort alias `created_at_desc` survived as a workaround
+  // pointing at `p.id DESC`.
+  //
+  // DB-1 (migration v30) adds the real products.created_at column, so
+  // the sort alias now references a real column. The rule *field* stays
+  // rejected — filtering smart collections by creation date isn't a
+  // product requirement, and ruleSchema.field purposefully excludes it
+  // to avoid reopening the original SQL surface.
+  //
+  // Post-DB-1 semantics:
+  //   (a) POST with rules[].field='created_at' → 400 (Zod enum)
+  //   (b) Legacy DB row with field='created_at' → silently dropped by
+  //       buildRuleQuery's `default: continue` (no SQL error)
+  //   (c) POST with sort_order='created_at_desc' → ORDER BY the real
+  //       column, with p.id DESC as tie-break for determinism
+  describe("H1 — smart-collections rule field='created_at' rejected; sort alias backed by real column", () => {
     it("rejects POST with rule field='created_at' at Zod layer (400)", async () => {
       const res = await makeRequest(app, ADMIN_ID)
         .post("/api/smart-collections")
@@ -179,7 +198,8 @@ describe("Wave 3 Batch 3A — Phase 2 POS hardening", () => {
           rules: [{ field: "created_at", operator: "greater_than", value: "2025-01-01" }],
         });
 
-      // validate() middleware returns 400 for enum mismatch.
+      // validate() middleware returns 400 for enum mismatch. The rule
+      // field stays excluded even after v30 — see header comment.
       expect(res.status).toBe(400);
     });
 
@@ -215,6 +235,52 @@ describe("Wave 3 Batch 3A — Phase 2 POS hardening", () => {
       expect(res.body.collection.rules).toHaveLength(2); // both rules still readable
       expect(Array.isArray(res.body.collection.products)).toBe(true);
       // The key assertion: products query did not throw.
+    });
+
+    it("sort_order='created_at_desc' orders products by products.created_at DESC (DB-1 item 2)", async () => {
+      // Post-v30 assertion: the sortMap alias in smart-collections.js:116
+      // now references the real products.created_at column. Set two
+      // seeded products to distinctive timestamps so the DESC ordering
+      // is observable. The explicit tie-break on p.id DESC (also in the
+      // sortMap) means ties fall back to id order — but here the
+      // timestamps differ, so id tie-break isn't exercised.
+      await db.query(
+        "UPDATE products SET created_at = NOW() - INTERVAL '10 minutes' WHERE id = 1"
+      );
+      await db.query(
+        "UPDATE products SET created_at = NOW() WHERE id = 2"
+      );
+
+      // Rule matches both products (all seeded rows have status='active').
+      const createRes = await makeRequest(app, ADMIN_ID)
+        .post("/api/smart-collections")
+        .send({
+          name: "created_at sort regression",
+          disjunctive: false,
+          sort_order: "created_at_desc",
+          rules: [{ field: "status", operator: "equals", value: "active" }],
+        });
+      expect(createRes.status).toBe(201);
+      const collectionId = createRes.body.collection.id;
+
+      // GET the hydrated collection — the products array is sorted
+      // server-side via the sortMap ORDER BY clause.
+      const getRes = await makeRequest(app, ADMIN_ID).get(
+        `/api/smart-collections/${collectionId}`
+      );
+      expect(getRes.status).toBe(200);
+      const productIds = getRes.body.collection.products.map((p) => p.id);
+
+      // Product 2 (NOW()) must appear before product 1 (NOW() - 10min).
+      // Other seeded products (3, 4, 5) all tied on NOW() from seed time
+      // and fall back to p.id DESC, so they sit between 2 and 1 in an
+      // unspecified-but-deterministic order. The key assertion is that
+      // 2 is strictly earlier in the list than 1.
+      const idxTwo = productIds.indexOf(2);
+      const idxOne = productIds.indexOf(1);
+      expect(idxTwo).toBeGreaterThanOrEqual(0);
+      expect(idxOne).toBeGreaterThanOrEqual(0);
+      expect(idxTwo).toBeLessThan(idxOne);
     });
   });
 });
