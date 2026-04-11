@@ -220,11 +220,18 @@ module.exports = function mountCourierRoutes(app, deps) {
 
         const result = await db.transaction(async (client) => {
           // Load order
+          // FOR UPDATE OF wo — scope the row lock to web_orders only.
+          // Unqualified FOR UPDATE on a LEFT JOIN raises
+          // "FOR UPDATE cannot be applied to the nullable side of an outer join"
+          // the moment someone books a shipment for a walk-in order
+          // (customer_id IS NULL). Pre-existing bug unrelated to Phase 5 H1
+          // but discovered while writing H1 regression tests — fixed as a
+          // drive-by, same pattern as Pattern A lastPollAt / M1 payment_intents.
           const { rows: [order] } = await client.query(
             `SELECT wo.*, c.name AS customer_name, c.mobile AS customer_phone, c.email AS customer_email
              FROM web_orders wo
              LEFT JOIN customers c ON wo.customer_id = c.id
-             WHERE wo.id = $1 FOR UPDATE`,
+             WHERE wo.id = $1 FOR UPDATE OF wo`,
             [orderId]
           );
           if (!order) throw Object.assign(new Error("Order not found"), { statusCode: 404 });
@@ -249,13 +256,17 @@ module.exports = function mountCourierRoutes(app, deps) {
             city: addr.city || "",
           };
 
-          // Load company for sender info
+          // Load company for sender info.
+          // `company_profile.name` doesn't exist — the canonical column is
+          // `company_name`. Pre-existing dead code path discovered via
+          // Phase 5 H1 regression tests. Drive-by fix alongside the
+          // FOR UPDATE scoping above.
           const { rows: companyRows } = await client.query(
-            "SELECT name, phone, address FROM company_profile LIMIT 1"
+            "SELECT company_name, phone, address FROM company_profile LIMIT 1"
           );
           const company = companyRows[0] || {};
           const sender = {
-            name: company.name || "Store",
+            name: company.company_name || "Store",
             phone: company.phone || "",
             address: company.address || "",
             city: "",

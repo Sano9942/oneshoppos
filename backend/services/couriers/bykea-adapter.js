@@ -7,13 +7,19 @@ const GenericAdapter = require("./generic-adapter");
  */
 class BykeaAdapter extends GenericAdapter {
   async bookShipment(order, sender, receiver, options = {}) {
-    // Bykea bookings are made via their app/dashboard
-    // Return placeholder for manual entry
-    return {
-      tracking_number: null,
-      label_url: null,
-      message: "Book via Bykea app/dashboard. Enter tracking number manually after booking.",
-    };
+    // Bykea has no public booking API. Throw so the booking route does not
+    // persist a null-tracking order_shipments row with status='booked'
+    // (which would falsely mark the order as shipped and fire a
+    // "Tracking: N/A" SMS to the customer). Operators should book via the
+    // Bykea app/dashboard and then use the manual tracking entry flow —
+    // either by setting supports_booking=false on this courier row or by
+    // pasting the tracking number into the order's manual-ship action.
+    const err = new Error(
+      "Bykea has no booking API. Book via the Bykea app/dashboard and enter the tracking number manually (disable 'supports_booking' on this courier row or use the manual ship action)."
+    );
+    err.statusCode = 501;
+    err.code = "COURIER_NO_BOOKING_API";
+    throw err;
   }
 
   async getTracking(trackingNumber) {
