@@ -21,8 +21,6 @@ export default function AppointmentServicesRedesign() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: "", description: "", duration_minutes: 30, padding_minutes: 0, price: 0, requires_confirmation: false, max_advance_days: 30, staff_ids: [] });
 
-  if (!flagsLoading && !flags.phase4_appointments) return <Navigate to="/dashboard" replace />;
-
   const loadServices = useCallback(async () => {
     setLoading(true);
     try {
@@ -40,6 +38,9 @@ export default function AppointmentServicesRedesign() {
   }, []);
 
   useEffect(() => { loadServices(); loadEmployees(); }, [loadServices, loadEmployees]);
+
+  if (flagsLoading) return null;
+  if (!flags.phase4_appointments) return <Navigate to="/dashboard" replace />;
 
   const openCreate = () => {
     setEditing(null);

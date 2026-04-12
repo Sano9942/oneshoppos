@@ -323,8 +323,6 @@ export default function ProjectsRedesign() {
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
 
-  if (!flagsLoading && !flags.phase4_service_projects) return <Navigate to="/dashboard" replace />;
-
   const loadProjects = useCallback(async () => {
     setLoading(true);
     try {
@@ -348,6 +346,9 @@ export default function ProjectsRedesign() {
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
   useEffect(() => { loadCustomers(); }, [loadCustomers]);
+
+  if (flagsLoading) return null;
+  if (!flags.phase4_service_projects) return <Navigate to="/dashboard" replace />;
 
   if (selectedId) {
     return (

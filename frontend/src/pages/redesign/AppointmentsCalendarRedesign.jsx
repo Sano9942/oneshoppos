@@ -47,8 +47,6 @@ export default function AppointmentsCalendarRedesign() {
   const [employees, setEmployees] = useState([]);
   const [createForm, setCreateForm] = useState({ service_id: "", employee_id: "", customer_name: "", start_at: "", notes: "" });
 
-  if (!flagsLoading && !flags.phase4_appointments) return <Navigate to="/dashboard" replace />;
-
   const dateRange = useMemo(() => {
     if (view === "day") {
       return { from: fmtDate(currentDate), to: fmtDate(addDays(currentDate, 1)) };
@@ -98,6 +96,9 @@ export default function AppointmentsCalendarRedesign() {
     uniqueEmpIds.forEach((id, i) => { map[id] = EMPLOYEE_COLORS[i % EMPLOYEE_COLORS.length]; });
     return map;
   }, [events]);
+
+  if (flagsLoading) return null;
+  if (!flags.phase4_appointments) return <Navigate to="/dashboard" replace />;
 
   const navigate = (dir) => {
     const n = view === "day" ? 1 : 7;

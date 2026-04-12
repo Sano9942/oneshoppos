@@ -39,8 +39,6 @@ export default function AppointmentsRedesign() {
   const [cancelReason, setCancelReason] = useState("");
   const [rescheduleDate, setRescheduleDate] = useState("");
 
-  if (!flagsLoading && !flags.phase4_appointments) return <Navigate to="/dashboard" replace />;
-
   const loadAppointments = useCallback(async () => {
     setLoading(true);
     try {
@@ -62,6 +60,9 @@ export default function AppointmentsRedesign() {
 
   useEffect(() => { loadAppointments(); }, [loadAppointments]);
   useEffect(() => { loadEmployees(); }, [loadEmployees]);
+
+  if (flagsLoading) return null;
+  if (!flags.phase4_appointments) return <Navigate to="/dashboard" replace />;
 
   const updateStatus = async (id, status) => {
     try {

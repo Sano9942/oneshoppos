@@ -399,8 +399,6 @@ export default function ContractsRedesign() {
   // Filters
   const [statusFilter, setStatusFilter] = useState("");
 
-  if (!flagsLoading && !flags.phase4_service_contracts) return <Navigate to="/dashboard" replace />;
-
   const loadContracts = useCallback(async () => {
     setLoading(true);
     try {
@@ -428,6 +426,9 @@ export default function ContractsRedesign() {
 
   useEffect(() => { loadContracts(); }, [loadContracts]);
   useEffect(() => { loadTemplates(); loadCustomers(); }, [loadTemplates, loadCustomers]);
+
+  if (flagsLoading) return null;
+  if (!flags.phase4_service_contracts) return <Navigate to="/dashboard" replace />;
 
   if (selectedId) {
     return (
