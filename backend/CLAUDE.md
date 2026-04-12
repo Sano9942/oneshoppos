@@ -302,28 +302,6 @@
 | `context_selection_required` | context middleware | ContextSelect page |
 | `context_header_enforced` | context middleware | — |
 | `kiosk_context_locked` | kiosk context | KioskRedesign |
-| `ui_redesign_enabled` | — | Global redesign toggle |
-| `ui_redesign_inventory` | — | Inventory page redesign |
-| `ui_redesign_orders` | — | Orders page redesign |
-| `ui_redesign_pos` | — | POS page redesign |
-| `ui_redesign_reports` | — | Reports page redesign |
-| `ui_redesign_admin` | — | Admin page redesign |
-| `ui_redesign_customers` | — | Customers page redesign |
-| `ui_redesign_sales_history` | — | Sales History page redesign |
-| `ui_redesign_cash_management` | — | Cash Management page redesign |
-| `ui_redesign_returns` | — | Returns page redesign |
-| `ui_redesign_categories` | — | Categories page redesign |
-| `ui_redesign_brands` | — | Brands page redesign |
-| `ui_redesign_taxes` | — | Taxes page redesign |
-| `ui_redesign_attribute_sets` | — | Attribute Sets page redesign |
-| `ui_redesign_stock_adjustments` | — | Stock Adjustments page redesign |
-| `ui_redesign_transfers` | — | Transfers page redesign |
-| `ui_redesign_returned_stock` | — | Returned Stock page redesign |
-| `ui_redesign_suppliers` | — | Suppliers page redesign |
-| `ui_redesign_purchase_orders` | — | Purchase Orders page redesign |
-| `ui_redesign_supplier_payables` | — | Supplier Payables page redesign |
-| `ui_redesign_promotions` | — | Promotions page redesign |
-| `ui_redesign_expenses` | — | Expenses page redesign |
 | `reports_enhanced_filters` | `routes/reports/*` | Enhanced report filter UI |
 
 > **Notes**: `fbr_integration` is DB-seeded in `migrate-pg.js` v9 + `schema-pg.sql`, not in `DEFAULT_FEATURE_FLAGS`. `ai_insights` is a soft DB check in `routes/insights-ai.js`, not enforced via `requireFeature()`. The `shopify_integration` flag was removed — Shopify routes are gated by the connection check in `routes/shopify/*`, not a feature flag.

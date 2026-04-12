@@ -371,14 +371,14 @@ describe("requireFeature", () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
-  it("returns 503 when flag is disabled by default (ui_redesign_pos = false)", async () => {
+  it("returns 503 when flag is disabled by default (phase2_outlet_pricing = false)", async () => {
     const req = { tenantId: null };
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
     const next = vi.fn();
-    await requireFeature("ui_redesign_pos")(req, res, next);
+    await requireFeature("phase2_outlet_pricing")(req, res, next);
     expect(res.status).toHaveBeenCalledWith(503);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ flag: "ui_redesign_pos" })
+      expect.objectContaining({ flag: "phase2_outlet_pricing" })
     );
     expect(next).not.toHaveBeenCalled();
   });
@@ -393,16 +393,16 @@ describe("requireFeature", () => {
   });
 
   it("calls next() when DB row overrides a default-false flag to true", async () => {
-    // Simulate DB returning ui_redesign_pos = true
+    // Simulate DB returning phase2_outlet_pricing = true
     mockDbQuery.mockResolvedValue({
-      rows: [{ key: "ui_redesign_pos", enabled: true }],
+      rows: [{ key: "phase2_outlet_pricing", enabled: true }],
     });
     invalidateFeatureFlagCache(); // ensure fresh DB fetch
 
     const req = { tenantId: null };
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
     const next = vi.fn();
-    await requireFeature("ui_redesign_pos")(req, res, next);
+    await requireFeature("phase2_outlet_pricing")(req, res, next);
     expect(next).toHaveBeenCalled();
     expect(res.status).not.toHaveBeenCalled();
   });

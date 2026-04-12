@@ -13,7 +13,6 @@ const DEFAULT_FLAGS = {
   crm_quotations: false,
   advanced_hr: false,
   multi_company: false,
-  ui_redesign_pos: false,
   reports_enhanced_filters: false,
   reports_profit_layer: false,
   reports_inventory_health_plus: false,

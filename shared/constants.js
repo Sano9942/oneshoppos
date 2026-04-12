@@ -46,7 +46,7 @@ const BILLING_STATUS = Object.freeze({
 
 /**
  * Cross-cutting feature flag keys (used on both backend and frontend).
- * The full flag set (including ui_redesign_* flags) lives in
+ * The full flag set lives in
  * backend/middleware/feature-flags.js — do not duplicate them here.
  * @type {Readonly<{
  *   FBR_INTEGRATION: 'fbr_integration',

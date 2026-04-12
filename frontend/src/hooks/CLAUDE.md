@@ -15,7 +15,7 @@
 
 **Fail-closed:** all flags default to `false` — privileged features are hidden if the backend is unreachable or returns an error. On error, state resets to `DEFAULT_FLAGS` (not left as partial).
 
-**Known flags (18 total):**
+**Known flags (17 total):**
 
 | Flag key | Notes |
 |----------|-------|
@@ -28,7 +28,6 @@
 | `crm_quotations` | |
 | `advanced_hr` | |
 | `multi_company` | |
-| `ui_redesign_pos` | |
 | `reports_enhanced_filters` | |
 | `reports_profit_layer` | |
 | `reports_inventory_health_plus` | |

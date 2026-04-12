@@ -77,9 +77,6 @@ Paper sizes hardcoded: 80mm/48, 76mm/42, 58mm/32, 57mm/30 chars, Custom. Default
 ### `MyTicketsRedesign.jsx`
 Fetches `GET /api/support/tickets`. Shows status badges (open, acknowledged, resolved, closed) + admin reply column. No permission gate — available to all authenticated employees.
 
-### `ModuleRedesignShell.jsx`
-Props: `{ title, subtitle, children, note }`. Default note: "Redesigned shell enabled via feature flag. Business logic remains unchanged." Wraps children in `PageShell` + `SectionCard` with a small gray note banner.
-
 ### `ReportsPowerUpPanel.jsx`
 Accepts `{ flags }` prop. Returns `null` if none of `reports_profit_layer`, `reports_inventory_health_plus`, `reports_exceptions` are enabled. Collapsible panel with:
 - Profit Layer (flag: `reports_profit_layer`) — summary + by-product + by-outlet + discount leakage

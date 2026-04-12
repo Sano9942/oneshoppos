@@ -52,8 +52,6 @@ const DEFAULT_FEATURE_FLAGS = {
   crm_quotations: true,
   advanced_hr: true,
   multi_company: true,
-  ui_redesign_enabled: true,
-  ui_redesign_inventory: true,
   reports_profit_layer: false,
   reports_inventory_health_plus: false,
   reports_exceptions: false,
