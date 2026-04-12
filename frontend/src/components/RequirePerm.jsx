@@ -2,8 +2,12 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 
 export default function RequirePerm({ perm, children, redirectTo = "/dashboard" }) {
-  const { hasPerm } = useAuth();
+  const { hasPerm, isBootstrapping } = useAuth();
   const location = useLocation();
+
+  if (isBootstrapping) {
+    return null;
+  }
 
   if (!perm || hasPerm(perm)) {
     return children;
