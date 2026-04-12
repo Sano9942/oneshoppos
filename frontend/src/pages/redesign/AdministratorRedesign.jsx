@@ -17,11 +17,18 @@ const AVAILABLE_PERMISSIONS = [
   { id: "manage_inventory", label: "Manage Inventory", category: "Inventory" },
   { id: "manage_orders", label: "Manage Orders", category: "Orders" },
   { id: "manage_customers", label: "Manage Customers", category: "Customers" },
+  { id: "manage_products", label: "Manage Products", category: "Products" },
+  { id: "manage_returns", label: "Manage Returns", category: "Products" },
   { id: "view_reports", label: "View Reports", category: "Reporting" },
   { id: "pos_discount", label: "Apply Custom Discounts", category: "POS" },
   { id: "void_sales", label: "Void Sales", category: "POS" },
   { id: "pos_void", label: "Manager Override Void", category: "POS" },
   { id: "pos_park", label: "Park & Restore Sales", category: "POS" },
+  { id: "manage_restaurant", label: "Manage Restaurant", category: "Restaurant" },
+  { id: "manage_kds", label: "Manage KDS", category: "Restaurant" },
+  { id: "manage_bookings", label: "Manage Bookings", category: "Services" },
+  { id: "manage_projects", label: "Manage Projects", category: "Services" },
+  { id: "manage_contracts", label: "Manage Contracts", category: "Services" },
 ];
 
 const PERM_GROUPS = [...new Set(AVAILABLE_PERMISSIONS.map((p) => p.category))];

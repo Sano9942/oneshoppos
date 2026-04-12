@@ -220,7 +220,7 @@ module.exports = function registerReportBuilderRoutes(app, deps) {
     try {
       const { rows: existing } = await db.query("SELECT * FROM custom_report_definitions WHERE id = $1", [req.params.id]);
       if (!existing.length) return res.status(404).json({ error: "Definition not found" });
-      if (existing[0].created_by !== req.employee?.id && !req.permissions?.includes("all_access")) {
+      if (existing[0].created_by !== req.employee?.id && !req.employeePerms?.includes("all_access")) {
         return res.status(403).json({ error: "Not authorized to edit this definition" });
       }
 
@@ -252,7 +252,7 @@ module.exports = function registerReportBuilderRoutes(app, deps) {
     try {
       const { rows } = await db.query("SELECT * FROM custom_report_definitions WHERE id = $1", [req.params.id]);
       if (!rows.length) return res.status(404).json({ error: "Definition not found" });
-      if (rows[0].created_by !== req.employee?.id && !req.permissions?.includes("all_access")) {
+      if (rows[0].created_by !== req.employee?.id && !req.employeePerms?.includes("all_access")) {
         return res.status(403).json({ error: "Not authorized to delete this definition" });
       }
       await db.query("DELETE FROM custom_report_definitions WHERE id = $1", [req.params.id]);

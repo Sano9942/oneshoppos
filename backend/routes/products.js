@@ -1367,7 +1367,7 @@ module.exports = function registerProductRoutes(app, deps) {
   app.get("/api/products/:id/reviews", async (req, res) => {
     try {
       const productId = Number(req.params.id);
-      const isAdmin = req.employee && (req.employee.role === "admin" || req.employee.role === "Administrator");
+      const isAdmin = req.employeePerms?.includes("all_access");
       const statusFilter = isAdmin ? "" : "AND pr.status = 'approved'";
       const { rows } = await db.query(
         `SELECT pr.*, c.name AS customer_name_resolved
