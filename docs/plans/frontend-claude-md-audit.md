@@ -47,11 +47,11 @@ These did not exist before — created from scratch after reading all files:
 
 | # | Folder | Approx Files | Status |
 |---|--------|-------------|--------|
-| 1 | `frontend/src/contexts/` | 2 files (CurrencyContext, ToastContext) | [ ] |
-| 2 | `frontend/src/hooks/` | 2 files (useFeatureFlags, useReportFilters) | [ ] |
-| 3 | `frontend/src/types/` | 2 TS files (auth.ts, api.ts) | [ ] |
-| 4 | `frontend/src/routes/` | 4 files (publicRoutes, appRoutes, adminRoutes, RouteLoading) | [ ] |
-| 5 | `frontend/src/pages/public/` | 2 files (PublicBookingPage, PublicRestaurantMenuPage) | [ ] |
+| 1 | `frontend/src/contexts/` | 2 files (CurrencyContext, ToastContext) | [x] |
+| 2 | `frontend/src/hooks/` | 2 files (useFeatureFlags, useReportFilters) | [x] |
+| 3 | `frontend/src/types/` | 2 TS files (auth.ts, api.ts) | [x] |
+| 4 | `frontend/src/routes/` | 4 files (publicRoutes, appRoutes, adminRoutes, RouteLoading) | [x] |
+| 5 | `frontend/src/pages/public/` | 2 files (PublicBookingPage, PublicRestaurantMenuPage) | [x] |
 
 ---
 
@@ -59,12 +59,12 @@ These did not exist before — created from scratch after reading all files:
 
 | # | Folder | Approx Files | Status |
 |---|--------|-------------|--------|
-| 6 | `frontend/src/auth/` | 3 files (AuthProvider, authStore, adminAuthStore) | [ ] |
-| 7 | `frontend/src/components/` | 6 files (AppLayout, ContextSwitcher, NotificationBell, RequireAuth, RequireContext, RequirePerm) | [ ] |
-| 8 | `frontend/src/ui/` | 9 files (primitives, nav-config, ErrorBoundary, Breadcrumbs, banners ×3, SupportWidget, StarRating, tokens.css) | [ ] |
-| 9 | `frontend/src/utils/` | 6 files (dates, receipt, categoryTree, offlineQueue, csvExport, theme) | [ ] |
-| 10 | `frontend/src/pages/storefront/` | 8 files (Home, Products, ProductDetail, Cart, Checkout, OrderStatus, Layout, useStorefrontCart) | [ ] |
-| 11 | `frontend/src/pages/shopify/` | 7 files (Context, Events, Import, Mappings, Overview, Reconciliation, Settings) | [ ] |
+| 6 | `frontend/src/auth/` | 3 files (AuthProvider, authStore, adminAuthStore) | [x] |
+| 7 | `frontend/src/components/` | 6 files (AppLayout, ContextSwitcher, NotificationBell, RequireAuth, RequireContext, RequirePerm) | [x] |
+| 8 | `frontend/src/ui/` | 9 files (primitives, nav-config, ErrorBoundary, Breadcrumbs, banners ×3, SupportWidget, StarRating, tokens.css) | [x] |
+| 9 | `frontend/src/utils/` | 6 files (dates, receipt, categoryTree, offlineQueue, csvExport, theme) | [x] |
+| 10 | `frontend/src/pages/storefront/` | 8 files (Home, Products, ProductDetail, Cart, Checkout, OrderStatus, Layout, useStorefrontCart) | [x] |
+| 11 | `frontend/src/pages/shopify/` | 7 files (Context, Events, Import, Mappings, Overview, Reconciliation, Settings) | [x] |
 
 ---
 
@@ -72,11 +72,11 @@ These did not exist before — created from scratch after reading all files:
 
 | # | Folder | Approx Files | Notes | Status |
 |---|--------|-------------|-------|--------|
-| 12 | `frontend/src/pages/admin/` | 10 files | Separate auth system, adminFetch, InfraPanel | [ ] |
-| 13 | `frontend/src/pages/dashboard/` | 18 files | 17 widget components + shared — many undocumented | [ ] |
-| 14 | `frontend/src/pages/reports/` | 25 files | 24 report modules + shared — largest sub-folder | [ ] |
-| 15 | `frontend/src/pages/redesign/pos/` | 22 files | POSContext 130+ exports, cartMath, 11 modals | [ ] |
-| 16 | `frontend/src/pages/redesign/` | 89 files | Read key non-Wave-16 pages + spot-check Wave-16 pages | [ ] |
+| 12 | `frontend/src/pages/admin/` | 10 files | Separate auth system, adminFetch, InfraPanel | [x] |
+| 13 | `frontend/src/pages/dashboard/` | 18 files | 17 widget components + shared — many undocumented | [x] |
+| 14 | `frontend/src/pages/reports/` | 25 files | 24 report modules + shared — largest sub-folder | [x] |
+| 15 | `frontend/src/pages/redesign/pos/` | 22 files | POSContext ~145 exports, cartMath, 13 modals | [x] |
+| 16 | `frontend/src/pages/redesign/` | 89 files | Read key non-Wave-16 pages + spot-check Wave-16 pages | [x] |
 
 ---
 
@@ -88,7 +88,7 @@ After all sub-folders done, re-read `frontend/CLAUDE.md` and verify every claim 
 
 | # | File | Current doc coverage | Status |
 |---|------|---------------------|--------|
-| 17 | `frontend/CLAUDE.md` | Full pass — verify "Where to Look Instead" table, all hook signatures, all API patterns, provider hierarchy, test suite counts | [ ] |
+| 17 | `frontend/CLAUDE.md` | Full pass — verify "Where to Look Instead" table, all hook signatures, all API patterns, provider hierarchy, test suite counts | [x] |
 
 ---
 
@@ -98,9 +98,9 @@ The test suite has its own CLAUDE.md (`frontend/tests/CLAUDE.md`) already thorou
 
 | # | Folder | Files | Notes | Status |
 |---|--------|-------|-------|--------|
-| 18 | `frontend/tests/helpers/` | 3 files (auth.js, api.js, nav.js) | Verify helper exports vs what tests actually call | [ ] |
-| 19 | `frontend/tests/smoke/helpers/` | 4 files | cleanup, featureFlags, mockPaymentGateway, smokeRunId | [ ] |
-| 20 | `frontend/tests/unit/` | 4 files | auth_guards, contexts, layout, primitives — verify what each actually tests | [ ] |
+| 18 | `frontend/tests/helpers/` | 3 files (auth.js, api.js, nav.js) | Verify helper exports vs what tests actually call | [x] |
+| 19 | `frontend/tests/smoke/helpers/` | 4 files | cleanup, featureFlags, mockPaymentGateway, smokeRunId | [x] |
+| 20 | `frontend/tests/unit/` | 4 files | auth_guards, contexts, layout, primitives — verify what each actually tests | [x] |
 
 ---
 
@@ -113,3 +113,7 @@ Update this section as each folder is completed.
 | 2026-04-13 | `frontend/src/` root | Created from scratch: api.js 6-export table, config.js env map, main.jsx provider hierarchy, AUTH_LOGOUT hook, step-skip wizard gotcha |
 | 2026-04-13 | `frontend/public/` | Created from scratch: sw.js cache strategy, AUTH_LOGOUT integration point, cache versioning gotcha |
 | 2026-04-13 | `frontend/src/pages/redesign/cod/` | Created from scratch: batch lifecycle states, 4-step wizard with step-skip logic, config_json TEXT-not-JSONB gotcha, full API endpoint table |
+| 2026-04-13 | `frontend/CLAUDE.md` master pass | Fixed: useAuth missing fields (isAuthenticated, isBootstrapping, authHeaders); unit test count 37→35; contexts.test.jsx is cartMath-heavy, no POSContext hooks exist |
+| 2026-04-13 | `frontend/tests/helpers/` | Added full export tables: auth.js (6 exports), api.js (6 exports + ensurePOSReady gotcha), nav.js (3 exports) |
+| 2026-04-13 | `frontend/tests/smoke/helpers/` | Added full export tables: smokeRunId (2), featureFlags (4), cleanup (3 + 33 DELETERS resource types), mockPaymentGateway (5 stubs) |
+| 2026-04-13 | `frontend/tests/unit/` | Added per-file test counts (35 total), named what contexts.test.jsx actually tests (cartMath not POSContext) |
