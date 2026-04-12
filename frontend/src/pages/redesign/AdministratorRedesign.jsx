@@ -219,7 +219,7 @@ export default function AdministratorRedesign() {
 
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-lg p-5">
+          <SectionCard className="w-full max-w-lg max-h-[90vh] overflow-y-auto p-5">
             <h3 className="mb-3 text-lg font-semibold text-(--ui-text)">
               {editing ? "Edit Role" : "Create Role"}
             </h3>
@@ -241,7 +241,7 @@ export default function AdministratorRedesign() {
                 {PERM_GROUPS.map((cat) => (
                   <div key={cat} className="mb-2">
                     <p className="mb-1 text-xs text-(--ui-text-muted)">{cat}</p>
-                    <div className="grid grid-cols-2 gap-1">
+                    <div className="grid grid-cols-3 gap-1">
                       {AVAILABLE_PERMISSIONS.filter((p) => p.category === cat).map((perm) => {
                         const checked = rolePerms.includes(perm.id);
                         return (
