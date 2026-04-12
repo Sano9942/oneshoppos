@@ -45,11 +45,15 @@ Examples: `POSRoute.jsx`, `DashboardRoute.jsx`, `CustomersRoute.jsx`, `OrdersRou
 | POS cart math | `pages/redesign/pos/cartMath.js` — pure cart calculation functions (extracted from POSContext for testability) |
 | POS state & logic | `pages/redesign/pos/POSContext.jsx` |
 | Dashboard modules | `pages/dashboard/*.jsx` |
-| Report modules | `pages/reports/*.jsx` |
+| Report modules | `pages/reports/*.jsx` — also exports `ReportsTabStandaloneRedesign` from `redesign/ReportsRedesign.jsx` for deep-linked tabs |
+| Report filter state | `hooks/useReportFilters.js` — shared filter state hook used by report tab components |
 | Shopify modules | `pages/shopify/*.jsx` |
 | Admin panel | `pages/admin/*.jsx` (10 files — login, layout, dashboard, tenant-list, tenant-detail, activity, emails, support-tickets, dead-letters, tax-rates) |
-| Error boundary | `ui/ErrorBoundary.jsx` — global + page-level |
+| Error boundary | `ui/ErrorBoundary.jsx` — **named export** `{ ErrorBoundary }`, not default — global + page-level |
 | Support widget | `ui/SupportWidget.jsx` — floating ticket form |
+| Star rating | `ui/StarRating.jsx` — two named exports: `StarDisplay` (read-only) + `StarPicker` (interactive) |
+| API error type guard | `types/api.ts` — `isApiError(res)` runtime guard, narrows `ApiResponse` to error case |
+| Standalone report deep-link | `routes/appRoutes.jsx` — 16 `/reports/:tabId` deep-link routes (e.g. `/reports/sales-summary`) |
 | Impersonation banner | `ui/ImpersonationBanner.jsx` — amber bar during impersonation |
 | Announcement banner | `ui/AnnouncementBanner.jsx` — platform announcements, dismissible per session |
 | Subscription banner | `ui/SubscriptionBanner.jsx` — global trial countdown / grace warning / expired state banner |
@@ -89,8 +93,10 @@ Examples: `POSRoute.jsx`, `DashboardRoute.jsx`, `CustomersRoute.jsx`, `OrdersRou
 
 ### API Calls
 - **Use `api.js` for all API calls** — `import api from '../api'` then `api.get('/products')`, `api.post('/sales', body)`, etc. Do NOT use raw `fetch()` in non-admin pages.
+- **Exceptions — these intentionally use raw `fetch()`**: `storefront/` pages (self-contained, no auth), `pages/public/` pages (unauthenticated), `hooks/useFeatureFlags.js` (called before interceptor may be wired)
 - Admin pages use `adminFetch` from `AdminLogin.jsx` — separate auth system, do NOT replace with `api.js`
 - All fetch calls to URLs containing `/api/` get auth headers injected automatically by `AuthProvider.jsx`
+- **Interceptor skips**: non-`/api/` URLs, no authenticated employee, and public auth endpoints (`/api/auth/signup`, `/api/auth/forgot-password`, `/api/auth/reset-password`)
 - Do NOT manually set `x-employee-id` or `Authorization` headers — the interceptor does it
 - **`config.js` exports**: `API_BASE` (no `/api` suffix), `IS_MULTI_TENANT`, `SENTRY_DSN`, `ENV_MODE`, `IS_PROD`, `IS_DEV`. There is no `API` export — `AuthProvider.jsx` aliases `API_BASE as API` internally. `api.js` paths must include `/api/` prefix (e.g. `api.get("/api/products")`) for the auth interceptor to inject headers.
 - `API_BASE` is imported from `../config` (or `../../config` depending on depth)
@@ -111,6 +117,12 @@ Examples: `POSRoute.jsx`, `DashboardRoute.jsx`, `CustomersRoute.jsx`, `OrdersRou
 - Receipt rendering: **all logic in `utils/receipt.js`** — `buildReceiptSections`, `buildReceiptHtml`, `printToHardware`; `POSContext.printSlip` tries hardware first, falls back to browser popup
 - POS Recent Sales + Return/Exchange: `POSRecentSalesPanel.jsx` + `POSReturnExchangeModal.jsx`
 - POS Session Expired: `POSSessionExpiredModal.jsx` — shown on 401 during checkout; PIN re-login auto-retries pending sale
+- **`completeSale` uses `api.raw`** (not `api.post`) — must stay this way to detect 401 mid-checkout. Do NOT refactor to `api.post`.
+- **Park sale is feature-flagged**: when `posFlags.phase2_draft_orders` is on, parks to `/api/draft-orders` instead of `/api/parked-sales`
+- **Barcode scanner**: global keydown listener buffers rapid keystrokes with 100ms inter-key timeout; fires `handleBarcodeScanned` on `Enter` with buffer ≥ 3 chars
+- **Customer price list takes priority** over outlet price list during price resolution
+- **`POSApprovalModal` and `POSEmailReceiptModal`** receive all data via props — NOT from context. All other POS modals use context.
+- **POS uses hardcoded colors** (`#8066FF`, `slate-*`, `#0A0A0A` sidebar) — NOT design system CSS variables. Exception: `POSShortcutsOverlay`, `EndlessAisleModal`, `POSApprovalModal` use CSS variables.
 
 ### CSV Export
 - Shared utility: `utils/csvExport.js` — `downloadCsv(headers, rows, filename)`
@@ -120,10 +132,28 @@ Examples: `POSRoute.jsx`, `DashboardRoute.jsx`, `CustomersRoute.jsx`, `OrdersRou
 
 ### Feature Flag Gating (Apr 1 2026)
 - `useFeatureFlags(authHeaders)` hook from `hooks/useFeatureFlags.js` — returns `{ flags, loading }`
+- Uses raw `fetch()` directly (NOT `api.js`) — intentional, some callers run before interceptor is wired
+- **Do NOT pass an inline `{}` object as `authHeaders` each render** — it creates a new reference every render and causes an infinite loop. Hoist or memoize the value first.
 - **Approvals page** (`ApprovalsRedesign.jsx`) checks `flags.approvals` and redirects to `/` if off
 - **Kiosk page** (`KioskRedesign.jsx`) gracefully handles 401 on feature-flags fetch (`if (!r.ok) return { flags: [] }`)
 - No `RequireFeature` wrapper component exists — feature-flag checks are done inside individual page components
 - When adding feature-flagged pages, check the flag inside the component and redirect if off
+
+### Timestamps — additional gotcha
+- `pg` driver returns UTC columns as native JS `Date` objects (not strings). Both `fmtUtcDateTime` and `fmtLocalDateTime` handle this. Legacy SQLite strings also handled.
+- `receipt.js` slip builder expects `slip.timestamp` as a **pre-formatted display string** — call `fmtDateTime()` before passing, do NOT pass a raw DB value.
+
+### Polling rates (do not guess these)
+| Component | Rate | Notes |
+|-----------|------|-------|
+| `DashboardRedesign` | 60s | Full data refresh via `refreshKey` |
+| `NotificationBell` | 60s | Count only; full rows fetched on open |
+| Admin pages | 30s | All admin pages except `AdminTaxRates` (no polling) |
+| `AdminLayout` support badge | 60s | Separate from admin page refresh |
+| `InfrastructurePanel` | 30s | Inside `AdminDashboard` |
+
+### MT mode setup wizard skip
+- `HomeRedirect` (in `appRoutes`) skips the setup wizard check when `IS_MULTI_TENANT = true` — tenants go straight to dashboard
 
 ### Admin Panel (separate auth system)
 - Uses `adminFetch` from `AdminLogin.jsx` — NOT the global fetch interceptor
@@ -157,6 +187,8 @@ Examples: `POSRoute.jsx`, `DashboardRoute.jsx`, `CustomersRoute.jsx`, `OrdersRou
 1. Create `pages/reports/Reports<Name>.jsx`
 2. Register in `pages/Reports.jsx` tab config
 3. Backend: add to `routes/reports/<name>.js`, guard with `view_reports`
+- **Date param naming is inconsistent** — most report tabs use `date_from`/`date_to`; `ReportsMultichannel` and `FBRExportTab` use `from`/`to`. Match whichever convention the backend route expects.
+- **Shift-locked tabs** skip date params entirely and use `session_id` instead.
 
 ### Adding a new Shopify tab
 1. Create `pages/shopify/Shopify<Name>.jsx`
@@ -177,7 +209,7 @@ ToastProvider          → useToast()     — available everywhere
 |------|--------|---------|
 | `useToast()` | `contexts/ToastContext.jsx` | `{ toast, success, error, warning }` — max 3 visible, 4s auto-dismiss |
 | `useCurrency()` | `contexts/CurrencyContext.jsx` | `{ symbol, code, fmt, refresh, denominations }` |
-| `useAuth()` | `auth/AuthProvider.jsx` | `{ user, hasPerm, logout, token, employee }` |
+| `useAuth()` | `auth/AuthProvider.jsx` | `{ user, hasPerm, logout, token, employee, isAuthenticated, isBootstrapping, authHeaders, subscriptionStatus, subscriptionDaysLeft, impersonationTenantName, impersonationSessionId }` |
 | `useFeatureFlags()` | `hooks/useFeatureFlags.js` | `{ flags, loading }` |
 
 ### API patterns
@@ -218,6 +250,7 @@ ToastProvider          → useToast()     — available everywhere
 - Location: `tests/smoke/` — bookings, catalog-advanced, commissions-reports, draft-orders-returns, insights-dashboard, invoicing-subscriptions, marketing-messaging, omnichannel-admin, phase5-pakistan, pricing-promotions, restaurant, service-workspace, storefront-public, workforce
 - Smoke helpers: `tests/smoke/helpers/` — cleanup, featureFlags, mockPaymentGateway, smokeRunId
 
-### Unit Tests (37 tests)
-- Location: `tests/unit/` — auth guards, layout, primitives, CurrencyContext, cartMath, POSContext hooks
+### Unit Tests (35 tests)
+- Location: `tests/unit/` — `auth_guards` (5), `contexts` (19 — cartMath × 17 + CurrencyContext × 2), `layout` (4 — PageShell + NotificationBell), `primitives` (7 — Button + Input + Badge + EmptyState)
 - Run: `npx vitest run tests/unit/` (vitest with @vitest/coverage-v8)
+- Note: `contexts.test.jsx` tests `cartMath.js` functions (calcGrossTotal, calcDiscountValue, calcTaxTotal, calcTotal) + `CurrencyContext` — no POSContext hook unit tests exist

@@ -5,21 +5,29 @@
 ### Stale Directories (skip)
 - `backups/`, `archive/legacy/`, `tenants/`, `exports/`, `uploads_test/`, `uploads_tmp/`
 
+### Stale Root Files (skip — do not read)
+- `schema.sql` — SQLite legacy DDL (858 lines, `AUTOINCREMENT` syntax). Superseded by `schema-pg.sql`
+- `schema_dump.txt` — corrupted UTF-16 SQLite dump artifact. No value
+- `_endpoint_list.txt` — generated flat endpoint list, likely stale. Use `registerAllRoutes.js` or grep instead
+- `BACKEND-AUDIT.md` — March 15 2026 audit doc written before Phase 5 cleanup. Historical only, may contradict current state
+
 > **Note:** All SQLite infrastructure files (db.js, master-db.js, tenant-db-manager.js, etc.), 74 SQLite migration files (migrate1.js–migrate74.js), and one-off scripts (cleanup-public-schema.js, reset-production.js) were deleted in the Phase 5 audit cleanup (commit `3227600`). The codebase is Postgres-only. Schema source of truth: `schema-pg.sql`.
 
 ## Where to Look Instead
 
 | Need | Read This |
 |------|-----------|
-| Database connection / queries | `db-pg.js` |
+| Database connection / queries | `db-pg.js` — exports `query`, `transaction`, `getClient`, `end`, `pool`. Pool size: 20. SSL disabled in non-prod. Dotenv NOT loaded here. |
 | Full table schema (DDL) | `schema-pg.sql` |
-| Postgres migrations | `migrate-pg.js` |
-| Multi-tenant DB routing | `tenant-db-proxy-pg.js` + `tenant-db-manager-pg.js` (primary) or `tenant-db-pg.js` (older ALS-based proxy, checks out pool client per request) |
-| Master tenant registry | `master-db-pg.js` |
-| Tenant provisioning | `tenant-provisioner-pg.js` |
-| Super-admin seeding | `seed-admin-pg.js` |
-| JWT auth utilities | `jwt-auth.js` |
-| OpenAPI/Swagger spec | `swagger.js` — `swagger-jsdoc` config; served at `/api-docs` via `swagger-ui-express` |
+| Postgres migrations | `migrate-pg.js` — exports `{ migrate, MIGRATIONS }`. CLI: `node backend/migrate-pg.js` (no flags). Migrates public schema first, then all `status='active'` tenants sequentially. Each tenant has its own `schema_version` table. Tenant failures are caught per-tenant and logged (don't abort the run). |
+| Multi-tenant DB routing | `tenant-db-proxy-pg.js` (primary Proxy — exports `asyncStore`, `createDbProxy`, `getCurrentDb`; proxies `query`/`transaction`/`getClient`) + `tenant-db-manager-pg.js` (60s tenant cache, per-query search_path reset — exports `init`, `getDb`, `healthCheck`, `clearCache`, `closeDb`, `closeAll`) or `tenant-db-pg.js` (older — checks out ONE pool client per request via `runWithTenant`; exports `asyncStore`, `getProxy`, `getStore`, `runWithTenant`; `getProxy()` has `query`+`transaction` only, no `getClient`) |
+| Master tenant registry | `master-db-pg.js` — exports `init`, `createTenant`, `getTenantBySlug`, `getTenantById`, `query`. Manages 10 public tables: `tenants`, `super_admins`, `tenant_audit_log`, `schema_migrations`, `tenant_refresh_tokens`, `plan_pricing` (seeded: pro/monthly 8000 PKR, pro/annual 80000 PKR), `payment_records`, `upgrade_requests`, `payment_intents`, `impersonation_sessions`. `query()` always sets search_path to public. `init()` is idempotent (CREATE TABLE IF NOT EXISTS). |
+| Tenant provisioning | `tenant-provisioner-pg.js` — exports `provision(db, opts)` and `validateSlug(slug)`. 6-step sequence: CREATE SCHEMA → run DDL → seed (outlet, admin role + 10 perms, admin employee, employee-outlet link, company_profile with 48h setupToken, default 0% tax) → register in public.tenants + audit log. On failure: DROP SCHEMA CASCADE. Slug regex: `^[a-z0-9_]{3,40}$` (no hyphens). Returns `{ tenantId, employeeId, outletId, setupToken }`. |
+| Super-admin seeding | `seed-admin-pg.js` — CLI flags: `--email`, `--password` (min 8 chars), `--name` (default: "Super Admin"). Idempotent — prints existing ID and exits cleanly if email already exists. Email stored lowercased+trimmed. |
+| JWT auth utilities | `jwt-auth.js` — 6 exports: `signAccessToken`, `signRefreshToken`, `verifyAccessToken`, `verifyRefreshToken`, `hashToken`, `defaults`. Access token payload: `{ tid, eid, rid, oid, scope, jti }` (jti=random UUID per token). Refresh token: SHA-256 hashed before DB storage; raw token → httpOnly cookie. Default TTLs: 24h access, 7d refresh (overridable via env). |
+| OpenAPI/Swagger spec | `swagger.js` — `swagger-jsdoc` config; scans `./routes/*.js` + `./routes/**/*.js` for `@openapi` JSDoc. 4 inline schemas: Product, Sale, Customer, Order, Error. 8 tags. Bearer auth scheme. Served at `/api-docs?key=API_DOCS_KEY` — returns 404 if `API_DOCS_KEY` unset, 401 if wrong key. |
+| Production startup script | `start.sh` — Railway entrypoint: sets `TZ`, runs `migrate-pg.js`, then `exec node index.js`. SQLite branch is dead code |
+| Railway deployment config | `railway.toml` — Dockerfile builder, healthcheck `/api/health` (120s timeout), restart on failure (max 3), `/data` volume mount |
 | Plan limit enforcement | `middleware/plan-limits.js` |
 | Server entry + middleware | `index.js` |
 | Route registration | `routes/registerAllRoutes.js` (orchestrator only — no route logic here) |
@@ -35,7 +43,7 @@
 | Timezone utilities | `utils/tz.js` |
 | Receipt email builder | `utils/receiptEmail.js` |
 | Postgres backup/restore | `utils/backup-pg.js` |
-| Category tree logic | `category-tree.js` — includes `resolveInheritedField()` for tax/HS inheritance |
+| Category tree logic | `category-tree.js` — 17 exports: `resolveInheritedField` (walks parent chain for tax_id/hs_code), `enrichCategories` (adds depth/path_ids/path_names/path_label/child_count/product_count_direct/product_count_rollup/is_leaf), `fetchEnrichedCategories`, `fetchCategoryIndexes`, `buildCategoryIndexes`, `getCategoryById`, `getAncestorIds`, `getDescendantIds`, `getDescendantLeafIds`, `getDescendantLeafIdsFromIndexes`, `isLeafCategory`, `isLeafCategoryFromIndexes`, `wouldCreateCycle`, `fetchCategoryRows`, `fetchDirectProductCounts`, `dbAllAsync`, `dbGetAsync` |
 | Printer service | `services/printer.js` |
 | Structured logging | `services/logger.js` (Pino) |
 | Alert system | `services/alerting.js` (error spikes, DB pressure) |
@@ -51,7 +59,7 @@
 | FBR background worker | `workers/fbr-worker.js` (legacy inline), `workers/fbr-worker-boss.js` (pg-boss backed) |
 | pg-boss job queue | `services/boss.js` — shared pg-boss instance factory |
 | Upload validation | `middleware/upload-validation.js` — centralized MIME + extension whitelist |
-| Tenant-aware file uploads | `tenant-multer.js` — multer storage factories: `createProductImageStorage`, `createCompanyLogoStorage`, `createRestoreStorage` |
+| Tenant-aware file uploads | `tenant-multer.js` — 3 factories: `createProductImageStorage` (→ `uploads/products/`, safe-ext whitelist), `createCompanyLogoStorage` (→ `uploads/company/`), `createRestoreStorage` (→ `uploads/restore_{ts}.db`). No size limits enforced here — set limit in the `multer()` call that uses the storage. Requires `req.tenantDir` set by tenant middleware. |
 | Rate limiting | `middleware/rate-limit.js` — global, auth endpoint, webhook limiters |
 | JWT auth + tenant resolution | `middleware/tenant-auth.js` — loadTenantAndPerms, resolveTenant, loadCompanyProfile, resolveContext |
 | Permissions | `middleware/permissions.js` — requirePerm, requireAnyPerm, PERMISSION_RULES |
@@ -150,8 +158,17 @@
 - Optional: `pg_stat_statements` (historical slow queries) — try/catch, skipped if extension unavailable
 
 ### Boot Guard (index.js)
-- `index.js` is now Postgres-only (~230-line orchestrator). SQLite fallback removed.
+- `index.js` is now Postgres-only (~293-line orchestrator). SQLite fallback removed.
 - `require("dotenv").config(...)` must remain line 1 so `DATABASE_URL` is set before any require
+
+### migrate-pg.js tenant migration gotcha
+- Existing tenants need a `schema_version` table with prior versions already inserted before first run — otherwise migrate sees version 0 and tries to re-apply v1 (full DDL), which is idempotent but slow
+- Migration order: public schema → all `status='active'` tenants sequentially (not parallel)
+- Per-tenant failures are caught and logged — one failed tenant doesn't block others
+- `module.exports = { migrate, MIGRATIONS }` — `migrate(scopedDb)` can be called standalone for a single schema
+
+### db-pg.js dotenv isolation
+- `db-pg.js` does NOT load dotenv — callers are responsible. This is intentional: tests use `process.env` set by the Vitest runner, avoiding re-injection of `MULTI_TENANT` after tests deliberately delete it (Decision II, Batch 3B)
 
 ### Worker Heartbeat Pattern
 - Email, FBR, cleanup, and marketplace sync workers expose `global.__emailWorkerStatus`, `__fbrWorkerStatus`, `__cleanupWorkerStatus`, `__marketplaceSyncWorkerStatus`
@@ -193,27 +210,39 @@
 ## Middleware Chain (request lifecycle order)
 
 ```
-1. requestId            — UUID per request (X-Request-Id header)
-2. rateLimiter          — global rate limit (600/min default)
-3. Sentry requestHandler — error tracking context
+1. helmet               — security headers (CSP + COEP disabled)
+2. cors                 — CORS_ORIGIN (CSV) or localhost:5173
+3. express.json(10mb)   — rawBody captured for /api/webhooks/* and /api/integrations/shopify/webhooks/*
+4. malformed JSON handler — 400 instead of Sentry bubble for entity.parse.failed
+5. /uploads static      — single-tenant static file serving
+6. /r2/*key proxy       — streams R2 object (only when R2_PUBLIC_URL not set)
+7. compression
+8. cookieParser
+9. globalLimiter        — global rate limit (600/min default)
+10. requestId           — UUID per request (X-Request-Id header)
 
 --- admin routes (routes/admin/) mount here — NO tenant context ---
 --- webhook routes (routes/webhooks.js) mount here — NO auth, signature-verified ---
 
-4. loadTenantAndPerms   — decode JWT, look up tenant, attach req.employee + req.permissions
-5. resolveTenant        — SET search_path to tenant schema, attach deps.db proxy
-6. tenant /uploads      — serve tenant-specific uploaded files
-7. loadCompanyProfile   — cache company_profile row → req.company (currency, timezone, FBR config)
-8. resolveContext       — attach req.context (outlet, employee context from headers)
+11. loadTenantAndPerms  — decode JWT, look up tenant, attach req.employee + req.permissions
+12. resolveTenant       — SET search_path to tenant schema, attach deps.db proxy
+13. tenant /uploads     — serve tenant-specific uploaded files
+14. loadCompanyProfile  — cache company_profile row → req.company (currency, timezone, FBR config)
+15. resolveContext      — attach req.context (outlet, employee context from headers)
 
 --- all tenant routes mount here ---
 
-9. requirePerm / requireAnyPerm  — per-route permission check
-10. requireFeature               — per-route feature flag check
-11. validate(schema)             — per-route Zod request body validation
-12. requirePlanLimit(resource)    — per-route plan cap check (POST only)
-13. requireActiveSubscription    — blocks all writes if payment_status = 'expired'
+16. requirePerm / requireAnyPerm  — per-route permission check
+17. requireFeature                — per-route feature flag check
+18. validate(schema)              — per-route Zod request body validation
+19. requirePlanLimit(resource)    — per-route plan cap check (POST only)
+20. requireActiveSubscription     — blocks all writes if payment_status = 'expired'
 ```
+
+### Boot-time assertions (index.js)
+
+- `ensureCriticalRoutesRegistered()` — verifies 4 routes exist on the Express router at startup; throws (crashes boot) if any missing: `POST /api/products/bulk-import`, `POST /api/products/bulk-delete`, `POST /api/products/bulk-status`, `DELETE /api/integrations/shopify/import/products`
+- `ADMIN_ALLOWED_IPS` warning — logs `[SECURITY]` error (prod) or warn (dev) if unset at startup
 
 ## Feature Flags Registry
 
@@ -336,7 +365,7 @@
 ### Monitoring
 - `SENTRY_DSN` — Sentry error tracking
 - `ALERT_EMAIL` — Receives error spike / DB pressure alerts
-- `API_DOCS_KEY` — Auth key for /api-docs endpoint
+- `API_DOCS_KEY` — Auth key for /api-docs endpoint (returns 404 if unset; pass as `?key=` query param)
 
 ### Workers
 - `FBR_WORKER_ENABLED` — "1" enables FBR invoice worker
