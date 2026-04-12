@@ -798,20 +798,27 @@ export default function Reports() {
 
   useEffect(() => {
     if (isBootstrapping) return;
-    // Basic meta loader for dropdowns
+    // Basic meta loader for dropdowns — use allSettled so one 403 doesn't kill all filters
     const loadMeta = async () => {
       try {
-        const [outlets, categories, brands, suppliers, employees, cashFlow] = await Promise.all([
+        const results = await Promise.allSettled([
           api.get("/api/outlets"),
           api.get("/api/categories"),
           api.get("/api/brands"),
           api.get("/api/suppliers"),
-          api.get("/api/employees"),
+          api.get("/api/employees").catch(() => ({ employees: [] })),
           api.get("/api/reports/cash-flow", {
             date_from: filters.dateFrom,
             date_to: filters.dateTo,
           }),
         ]);
+        const val = (i, fallback = []) => results[i].status === "fulfilled" ? results[i].value : fallback;
+        const outlets = val(0, { outlets: [] });
+        const categories = val(1, { categories: [] });
+        const brands = val(2, { brands: [] });
+        const suppliers = val(3, { suppliers: [] });
+        const employees = val(4, { employees: [] });
+        const cashFlow = val(5, { sessions: [] });
         setMeta({
           outlets: outlets.outlets || outlets || [],
           categories: categories.categories || categories || [],
