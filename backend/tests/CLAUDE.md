@@ -7,6 +7,7 @@
   - **pg-standalone** (7 files): `pg-brands`, `pg-connection`, `pg-master-db`, `pg-schema`, `pg-tenant-db`, `pg-test-app`, `pg-tenant-isolation`
   - **Legacy**: `smoke-gate.test.js` — 22/25 pre-existing failures, **do not run** unless explicitly asked
 - **Unit tests** (`unit/`): 10 files, Vitest with ESM imports, pure functions, no DB/network
-- **Helpers** (`helpers/`): `createTestApp-pg.js` (isolated Postgres schema per test suite), `request.js` (supertest wrapper), `seedSchema-pg.js` (runs full DDL), `globalTeardown.js` (orphaned schema cleanup on crash), `vitest-setup.js` (loads .env for Vitest worker forks)
-- **Running**: `npx jest backend/tests/integration/pg-batch*.test.js` (integration), `npx vitest run tests/unit/` (unit)
+- **Helpers** (`helpers/`): 5 files — `createTestApp-pg.js` (isolated Postgres schema per test suite), `request.js` (supertest wrapper), `seedSchema-pg.js` (runs full DDL), `globalTeardown.js` (orphaned `test_%` schema cleanup on crash — per-schema failures don't abort the rest), `vitest-setup.js` (loads `backend/.env` for Vitest worker forks so `DATABASE_URL` is available)
+- **Running**: `npx jest backend/tests/integration/pg-batch*.test.js` (integration), `npx vitest run backend/tests/unit/` (unit — run from repo root)
 - **Isolation**: Each pg-batch test gets its own schema, `cleanup()` drops it. No shared state between files
+- **"Decision II trap"**: env vars deleted inside a test's `beforeAll` are safe only *after* `createTestApp()` has run. Deleting an env var *before* `createTestApp()` or at module scope breaks module-level env reads
