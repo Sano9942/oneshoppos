@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 
 import { api } from "../api";
+import { useAuth } from "../auth/AuthProvider";
 import { useToast } from "../contexts/ToastContext";
 import {
   fmtDate,
@@ -764,6 +765,7 @@ const TAB_ALIASES = {
 };
 
 export default function Reports() {
+  const { isBootstrapping } = useAuth();
   const toast = useToast();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => {
@@ -795,6 +797,7 @@ export default function Reports() {
   });
 
   useEffect(() => {
+    if (isBootstrapping) return;
     // Basic meta loader for dropdowns
     const loadMeta = async () => {
       try {
@@ -827,7 +830,7 @@ export default function Reports() {
       }
     };
     loadMeta();
-  }, [filters.outletIds, filters.dateFrom, filters.dateTo, toast]);
+  }, [isBootstrapping, filters.outletIds, filters.dateFrom, filters.dateTo, toast]);
 
   // Apply URL params once after meta loads (need outlet list to validate outlet_id)
   useEffect(() => {
