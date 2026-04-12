@@ -416,8 +416,7 @@ module.exports = function registerTenantRoutes(app, deps) {
         if (existing) return existing;
         return { key, enabled: !!DEFAULT_FEATURE_FLAGS[key], description: null };
       });
-      const extras = rows.filter((r) => !Object.prototype.hasOwnProperty.call(DEFAULT_FEATURE_FLAGS, r.key));
-      return res.json([...mergedDefaults, ...extras].sort((a, b) => a.key.localeCompare(b.key)));
+      return res.json(mergedDefaults.sort((a, b) => a.key.localeCompare(b.key)));
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }

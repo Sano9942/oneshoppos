@@ -338,11 +338,7 @@ module.exports = function registerAllRoutes(app, deps) {
           updated_at: null,
         };
       });
-      const extras = rows.filter(
-        (r) =>
-          !Object.prototype.hasOwnProperty.call(DEFAULT_FEATURE_FLAGS, r.key),
-      );
-      return res.json({ flags: [...mergedDefaults, ...extras] });
+      return res.json({ flags: mergedDefaults });
     } catch (err) {
       if (String(err.message || "").includes("does not exist")) {
         const fallback = Object.keys(DEFAULT_FEATURE_FLAGS).map((k) => ({
