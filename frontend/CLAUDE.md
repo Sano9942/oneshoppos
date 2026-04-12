@@ -38,7 +38,7 @@ Examples: `POSRoute.jsx`, `DashboardRoute.jsx`, `CustomersRoute.jsx`, `OrdersRou
 | Category tree UI | `utils/categoryTree.js` |
 | Offline queue | `utils/offlineQueue.js` |
 | CSV export | `utils/csvExport.js` — `downloadCsv(headers, rows, filename)` |
-| API base URL | `config.js` |
+| API base URL + env flags | `config.js` — `API_BASE`, `IS_MULTI_TENANT`, `SENTRY_DSN`, `ENV_MODE`, `IS_PROD`, `IS_DEV` |
 | Centralized API calls | `api.js` — `api.get/post/put/del/upload/raw`; handles URL construction, auth headers, JSON parsing, error normalization |
 | Admin session storage | `auth/adminAuthStore.js` — admin session helpers (extracted from AdminLogin.jsx) |
 | TypeScript types | `types/auth.ts`, `types/api.ts` — shared shape declarations (tsconfig: allowJs + noEmit) |
@@ -92,7 +92,7 @@ Examples: `POSRoute.jsx`, `DashboardRoute.jsx`, `CustomersRoute.jsx`, `OrdersRou
 - Admin pages use `adminFetch` from `AdminLogin.jsx` — separate auth system, do NOT replace with `api.js`
 - All fetch calls to URLs containing `/api/` get auth headers injected automatically by `AuthProvider.jsx`
 - Do NOT manually set `x-employee-id` or `Authorization` headers — the interceptor does it
-- **`config.js` gotcha**: `API` export = `${API_BASE}/api` (already includes `/api`). Never do `${API}/api/...` — produces double prefix → 404. Use `api.js` or import `API_BASE` and append `/api/...` yourself.
+- **`config.js` exports**: `API_BASE` (no `/api` suffix), `IS_MULTI_TENANT`, `SENTRY_DSN`, `ENV_MODE`, `IS_PROD`, `IS_DEV`. There is no `API` export — `AuthProvider.jsx` aliases `API_BASE as API` internally. `api.js` paths must include `/api/` prefix (e.g. `api.get("/api/products")`) for the auth interceptor to inject headers.
 - `API_BASE` is imported from `../config` (or `../../config` depending on depth)
 - **Silent refresh**: On 401 with `TOKEN_EXPIRED`, interceptor calls `POST /api/auth/refresh` via `window._nativeFetch`, stores new token, retries original request. Uses `_refreshPromise` lock to prevent concurrent refreshes.
 - **Do NOT add `token` to `useEffect` deps** — interceptor reads it live via `readToken()`. Adding it causes re-wrapping on every refresh.
@@ -176,7 +176,7 @@ ToastProvider          → useToast()     — available everywhere
 | Hook | Source | Returns |
 |------|--------|---------|
 | `useToast()` | `contexts/ToastContext.jsx` | `{ toast, success, error, warning }` — max 3 visible, 4s auto-dismiss |
-| `useCurrency()` | `contexts/CurrencyContext.jsx` | `{ symbol, code, fmt, refresh }` |
+| `useCurrency()` | `contexts/CurrencyContext.jsx` | `{ symbol, code, fmt, refresh, denominations }` |
 | `useAuth()` | `auth/AuthProvider.jsx` | `{ user, hasPerm, logout, token, employee }` |
 | `useFeatureFlags()` | `hooks/useFeatureFlags.js` | `{ flags, loading }` |
 
@@ -213,6 +213,10 @@ ToastProvider          → useToast()     — available everywhere
   - Login form is `LandingPage.jsx` — placeholders are `"e.g. aceshardware"` / `"Enter your password"` / button `"Sign In"`
   - Clock-in: use `/api/attendance/pin-checkin?tenant=${slug}` with `{ pin_code, outlet_id }` — NOT `/clock-in`
   - Health check: use simple `/api/health` (no `?deep=true` — no tenant context available)
+
+### Smoke Tests (14 specs — competitive feature coverage)
+- Location: `tests/smoke/` — bookings, catalog-advanced, commissions-reports, draft-orders-returns, insights-dashboard, invoicing-subscriptions, marketing-messaging, omnichannel-admin, phase5-pakistan, pricing-promotions, restaurant, service-workspace, storefront-public, workforce
+- Smoke helpers: `tests/smoke/helpers/` — cleanup, featureFlags, mockPaymentGateway, smokeRunId
 
 ### Unit Tests (37 tests)
 - Location: `tests/unit/` — auth guards, layout, primitives, CurrencyContext, cartMath, POSContext hooks

@@ -172,6 +172,7 @@ tax_rate_suggestions — standalone (reference_id informational)
 ## Reporting
 
 ```
+report_schedules → employees (created_by)
 report_schedule_runs → report_schedules (schedule_id)
 report_delivery_log → report_schedule_runs (schedule_run_id), report_schedules (schedule_id)
 saved_report_views — standalone (employee_id/role_id informational)
@@ -322,13 +323,15 @@ custom_report_widgets → custom_report_definitions (report_id)
 
 ```
 company_profile, companies, feature_flags, schema_version
+roles, outlets, brands, taxes, suppliers, attribute_sets, price_lists — standalone parent tables (referenced as FKs from many domains)
 printer_config, email_config
 barcode_templates, receipt_templates
 barcode_print_jobs → barcode_templates (template_id), products (product_id)
 courier_integrations
 gift_cards
 notifications, action_history, backup_log
-approval_requests, approval_actions
+approval_requests, approval_actions → approval_requests (request_id)
+expense_categories — standalone (parent of expenses.category_id)
 customer_addresses → customers (customer_id)
 customer_groups — standalone
 loyalty_tiers — standalone

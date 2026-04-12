@@ -23,6 +23,7 @@
   - `CODSettlementsRedesign`, `FulfillmentRedesign` — Phase 5 shipping/COD
   - `ChartOfAccountsRedesign`, `JournalEntriesRedesign`, `CreditDebitNotesRedesign`, `PostdatedChequesRedesign` — accounting extensions
   - `CustomerGroupsRedesign`, `PriceListsRedesign`, `ReorderAlertsRedesign`, `StockCountRedesign`, `ParkedSalesRedesign`, `NotificationsRedesign` — catalog + inventory + UX
+- **Standard pages** (not Wave 16, but live here): `KioskRedesign` (attendance kiosk — PIN clock-in/clock-out, break tracking; routed via publicRoutes), `PrinterSettingsRedesign` (printer config, `/printer-settings`, `all_access` perm gate)
 - **CSV export**: Use `downloadCsv(headers, rows, filename)` from `utils/csvExport.js`
 - **Currency**: Always `const { fmt } = useCurrency()` — never hardcode symbols
 - **Timestamps**: Use `fmtUtcDateTime`/`fmtLocalDateTime` from `utils/dates.js` — never raw `new Date()`

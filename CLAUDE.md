@@ -50,7 +50,7 @@ oneshoppos/
 │   ├── jwt-auth.js               # JWT sign/verify utilities
 │   ├── category-tree.js          # Category tree enrichment + resolveInheritedField (FBR)
 │   ├── routes/
-│   │   ├── registerAllRoutes.js  # Orchestrator only (~324 lines)
+│   │   ├── registerAllRoutes.js  # Orchestrator only (~607 lines)
 │   │   ├── admin/                # /api/admin/* — 10 files (auth, tenants, monitoring, billing, operations, compliance, messaging, system, helpers, index) — mounted BEFORE tenant middleware
 │   │   ├── auth.js               # /api/auth/*
 │   │   ├── sales.js              # /api/sales
@@ -90,7 +90,7 @@ oneshoppos/
 │   ├── middleware/feature-flags.js # Feature flag cache, requireFeature, notification helpers
 │   ├── middleware/validate.js     # Zod validation helper — validate(schema) middleware factory
 │   ├── middleware/upload-validation.js # Centralized MIME + extension whitelist for file uploads
-│   ├── schemas/                   # Zod schemas: auth, billing, employees, products, sales, returns, customers, purchase-orders, inventory, orders, admin, integrations
+│   ├── schemas/                   # Zod schemas (23 files): auth, billing, employees, products, sales, returns, customers, purchase-orders, inventory, orders, admin, integrations, bookings, commissions, contracts, customer-invoices, marketing, messaging, projects, restaurant, scheduled-changes, smart-collections, subscriptions
 │   ├── boot/workers.js            # All worker startup (email, FBR, cleanup, Shopify, scheduled tasks)
 │   ├── shopify/crypto.js          # Shopify secret encryption/decryption + event logging
 │   ├── services/crypto.js          # Generalized AES-256-GCM encryption (all integrations)
@@ -99,6 +99,8 @@ oneshoppos/
 │   ├── middleware/request-id.js   # Request ID + Pino logging middleware
 │   ├── tenant-db-proxy-pg.js     # AsyncLocalStorage + Proxy for MT DB routing
 │   ├── tenant-db-manager-pg.js   # Shared pg.Pool + per-request search_path
+│   ├── tenant-db-pg.js           # Older ALS-based tenant proxy (pool client per request)
+│   ├── tenant-multer.js          # Multer storage factories for MT file uploads
 │   ├── master-db-pg.js           # Master tenant registry
 │   ├── tenant-provisioner-pg.js  # Schema-based provisioning
 │   ├── services/printer.js       # ESC/POS thermal + network TCP/IP printer
@@ -117,17 +119,17 @@ oneshoppos/
 │   ├── workers/marketplace-sync-worker-boss.js # Marketplace order poll + feed check (pg-boss)
 │   ├── scripts/seed-tax-rates.js # One-time seed for tax_rate_reference (~96 HS codes)
 │   ├── shared/                   # (reserved — constants currently inline in middleware/permissions.js + middleware/feature-flags.js)
-│   └── utils/                    # tz.js, receiptEmail.js, digestEmail.js, backup-pg.js, resendEmail.js, alertEmail.js
+│   └── utils/                    # tz.js, r2.js, receiptEmail.js, digestEmail.js, backup-pg.js, resendEmail.js, alertEmail.js
 └── frontend/src/
     ├── App.jsx                   # Route orchestrator (composition only — route defs in routes/*.jsx)
     ├── api.js                    # Centralized API service layer — api.get/post/put/del/upload/raw (replaces raw fetch, handles URL/auth/JSON/errors)
     ├── auth/AuthProvider.jsx     # Global fetch interceptor + JWT auth
     ├── auth/authStore.js         # Token storage helpers
-    ├── config.js                 # API base URL, IS_MULTI_TENANT — sole import.meta.env reader in the frontend
+    ├── config.js                 # API_BASE, IS_MULTI_TENANT, SENTRY_DSN, ENV_MODE, IS_PROD, IS_DEV — sole import.meta.env reader
     ├── types/                    # TypeScript declarations: auth.ts, api.ts (tsconfig: allowJs + noEmit)
     ├── auth/adminAuthStore.js    # Admin session storage helpers (extracted from AdminLogin.jsx)
     ├── routes/                   # Route config split: publicRoutes.jsx, appRoutes.jsx, adminRoutes.jsx, RouteLoading.jsx
-    ├── contexts/CurrencyContext.jsx  # useCurrency() → { symbol, code, fmt, refresh }
+    ├── contexts/CurrencyContext.jsx  # useCurrency() → { symbol, code, fmt, refresh, denominations }
     ├── contexts/ToastContext.jsx    # useToast() → { toast, success, error, warning }
     ├── ui/primitives.jsx         # Design system (PageShell, Button, Input, etc.)
     ├── ui/Breadcrumbs.jsx        # Route-based breadcrumb nav (auto-derived from pathname)
@@ -167,7 +169,7 @@ oneshoppos/
         ├── ReceiptPublicPage.jsx # Public shareable receipt (/receipt/:invoiceNumber)
         ├── SignupPage.jsx        # Public self-service signup (/signup)
         ├── Reports.jsx           # Reports orchestrator (NOT legacy)
-        └── [*Route.jsx]          # 38 thin wrappers — never edit (includes MyTicketsRoute.jsx)
+        └── [*Route.jsx]          # ~60 thin wrappers — never edit (includes MyTicketsRoute.jsx)
 ```
 
 ## Key Architecture Facts
@@ -204,7 +206,7 @@ oneshoppos/
 - **FBR export**: `GET /api/reports/fbr-export?from=X&to=Y` — generates FBR-compliant CSV data.
 - **FBR Digital Invoicing**: Real-time invoice posting to FBR DI API. Feature-flagged per tenant (`fbr_integration`). Sales/returns/voids enqueue payloads to `fbr_invoices` table. Background worker (`workers/fbr-worker.js`, inline or standalone) polls queue with exponential backoff retry (5 attempts). Routes: `routes/fbr.js` (config, dashboard, retry), `routes/tax-lookup.js` (HS code search, suggest corrections). Admin: `routes/admin/compliance.js` has tax rate CRUD + FBR health endpoint. Category-level HS code + tax inheritance via `category-tree.js:resolveInheritedField()`. Tax rate reference table (`tax_rate_reference`) in public schema with ~100 seeded HS codes. Migration v9. Frontend: `/settings/fbr` (config), `/fbr` (invoice queue dashboard), `/tax-lookup` (rate search), `/admin/tax-rates` (super-admin CRUD).
 - **AI insights**: `GET /api/insights/auto` (5 pre-built analytics cards). `POST /api/insights/ask` (Claude AI chat, feature-flagged `ai_insights`, requires `ANTHROPIC_API_KEY`).
-- **Self-service signup**: `POST /api/auth/signup` — creates tenant + admin employee + welcome email. Gated by `SELF_SERVICE_SIGNUP=1` env var. Rate-limited. 2-tier plans: Free (1 outlet, 3 employees, 100 products) or Pro (unlimited, 45-day trial). Dead tenant cleanup job (`backend/jobs/cleanup-dead-tenants.js`) removes tenants that never complete setup after 7 days.
+- **Self-service signup**: `POST /api/auth/signup` — creates tenant + admin employee + welcome email. Gated by `SELF_SERVICE_SIGNUP=1` env var. Rate-limited. 2-tier plans: Free (1 outlet, 3 employees, 100 products) or Pro (1 outlet default, unlimited employees/products, 45-day trial). Dead tenant cleanup job (`backend/jobs/cleanup-dead-tenants.js`) removes tenants that never complete setup after 7 days.
 - **Subscription lifecycle**: `requireActiveSubscription` middleware gates all business routes. Trial (45 days) → grace (7 days) → expired (read-only). Email worker sends `trial_warning`, `trial_ended`, `account_locked` automatically. Renewal emails (`renewal_due`, `renewal_overdue`) for paid tenants. `ui/SubscriptionBanner.jsx` shows trial countdown / grace warning / expired state globally.
 - **Subscription billing**: `routes/billing.js` — `GET /api/billing/status` (includes `payment_enabled`, trial/grace status), `GET /api/billing/pricing`, `GET /api/billing/payment-history`, `POST /api/billing/request-upgrade` (manual path), `POST /api/billing/create-checkout` (gateway path). Admin billing UI in `AdminTenantDetail.jsx`. Tables: `plan_pricing`, `payment_records`, `upgrade_requests` (migration v7), `payment_intents` (migration v11).
 - **Payment integration**: `services/payment-gateway.js` — gateway adapter (xPay implementation, extensible). `routes/webhooks.js` — `POST /api/webhooks/xpay` (HMAC-verified, mounted before tenant middleware). Feature-gated by `PAYMENT_GATEWAY` env var — when unset, system uses manual admin payments. Checkout flow: create intent → gateway redirect → webhook confirms → tenant auto-activated + payment record + confirmation email.
@@ -223,7 +225,7 @@ oneshoppos/
 - **Dead letter queue**: `/admin/dead-letters` — failed webhook events with retry/dismiss actions.
 - **Tenant impersonation**: `POST /api/admin/impersonate/:tenantId` — 1-hour JWT, amber banner, audit trail in `impersonation_sessions` table. Actions tagged "(impersonated by Super-Admin)". Impersonation JWT is verified server-side (not decoded via atob() client-side).
 - **Admin activity logging**: All admin mutations logged to `admin_activity_log` table. Security events (login success/failure) logged to `admin_security_log`. Cross-tenant activity via `GET /api/admin/tenant-activity`.
-- **Worker monitoring**: `GET /api/admin/worker-status` reads heartbeat globals (`__emailWorkerStatus`, `__fbrWorkerStatus`, `__cleanupWorkerStatus`, `__marketplaceSyncWorkerStatus`). `queueDepth` is a real `SELECT COUNT(*)` from the queue table (not always-0). Dashboard shows running/stopped status, real queue depth, processed today.
+- **Worker monitoring**: `GET /api/admin/worker-status` reads heartbeat globals (`__emailWorkerStatus`, `__fbrWorkerStatus`, `__cleanupWorkerStatus`, `__marketplaceSyncWorkerStatus`, `__reservationWorkerStatus`, `__bookingReminderWorkerStatus`). `queueDepth` is a real `SELECT COUNT(*)` from the queue table (not always-0). Dashboard shows running/stopped status, real queue depth, processed today.
 - **Cleanup worker**: `CLEANUP_WORKER_ENABLED=1` env var. Runs `jobs/cleanup-dead-tenants.js` every 24h inline.
 - **Orphaned schema detection**: `GET /api/admin/orphaned-schemas` + `POST /api/admin/orphaned-schemas/cleanup`.
 - **Announcements**: `GET/POST/PUT/DELETE /api/admin/announcements` (admin), `GET /api/announcements/active` (public, no auth). Tenant-side banner via `ui/AnnouncementBanner.jsx` in AppLayout.
@@ -270,7 +272,7 @@ oneshoppos/
 
 ## Migrations
 
-- **Current version**: 17 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns, v6: setup_token_expires_at, v7: billing tables, v8: support_tickets/impersonation_sessions, v9: FBR digital invoicing — fbr_invoices queue, category tax/HS inheritance, tax_rate_reference, tax_rate_suggestions, v10: email_queue for unified email service, v11: payment_intents for gateway checkout tracking, v12: super admin enhancements — admin_activity_log, admin_security_log, tenant_notes, announcements, broadcast_log, support_tickets reply columns, v13: performance indexes — sales, sale_items, products, customers, cash_shifts, returns; return_items variant_id column, v14: pin_code column nullable — plaintext PIN storage removed, v15: pg-boss pgboss_job_id column on fbr_invoices, v16: competitive features — 13 new tables, customer/product enhancements, stock counts, fulfillment, reporting, loyalty, v17: integrations hub — extend integration_settings, marketplace mapping tables, new courier seeds)
+- **Current version**: 30 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns, v6: setup_token_expires_at, v7: billing tables, v8: support_tickets/impersonation_sessions, v9: FBR digital invoicing — fbr_invoices queue, category tax/HS inheritance, tax_rate_reference, tax_rate_suggestions, v10: email_queue for unified email service, v11: payment_intents for gateway checkout tracking, v12: super admin enhancements — admin_activity_log, admin_security_log, tenant_notes, announcements, broadcast_log, support_tickets reply columns, v13: performance indexes — sales, sale_items, products, customers, cash_shifts, returns; return_items variant_id column, v14: pin_code column nullable — plaintext PIN storage removed, v15: pg-boss pgboss_job_id column on fbr_invoices, v16: competitive features — 13 new tables, customer/product enhancements, stock counts, fulfillment, reporting, loyalty, v17: integrations hub — extend integration_settings, marketplace mapping tables, new courier seeds, v18: omnichannel — sales_channels, inventory_reservations, storefront_carts, customer_addresses, v19: Phase 2 — scheduled_shifts, price_list_assignments, draft_orders, approval_policies, return_policies, smart_collections, outlet_product_visibility, outlet_tax_profiles, scheduled_catalog_changes, commission_plans, custom_report_definitions, pos_layouts, product_affinities, v20: marketing & messaging — marketing_campaigns, message_threads, customer_invoices family (5 tables), subscription_plans, customer_subscriptions, v21: Phase 4 restaurant — floor plans, tables, sessions, checks, coursing, tabs, preauth, KDS stations/tickets, v22: Phase 4 appointments/projects/contracts — booking_services, appointments, calendar_sync, service_projects, contracts, v23: Phase 4 feature flags seeded, v24: Phase 5 feature flags + payment_webhook_events + sms_provider_messages, v25: Phase 5 shipping — order_shipments, shipment_tracking_events, cod_settlement_batches, v26: backfill Phase 2 feature flags, v27: supplier_payments voided columns, v28: draft_orders partial UNIQUE index, v29: kds_ticket_items junction, v30: products.created_at column)
 - **migrate-pg.js CLI**: `node backend/migrate-pg.js` — migrates public schema AND all active tenant schemas
 - **Tenant migration gotcha**: existing tenants need `schema_version` table seeded with previous versions before first run
 

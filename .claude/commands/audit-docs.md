@@ -6,7 +6,7 @@ user_invocable: true
 
 # Audit Documentation (Full Deep Scan)
 
-Comprehensive documentation audit. Reads every source file to rebuild all 40 CLAUDE.md files. Use this monthly or when you suspect docs have drifted significantly.
+Comprehensive documentation audit. Reads every source file to rebuild all 43 CLAUDE.md files. Use this monthly or when you suspect docs have drifted significantly.
 
 **Cost warning**: This reads ~115K lines of code (~1.4M tokens). ~$5 on Sonnet, ~$25 on Opus.
 
@@ -51,6 +51,8 @@ echo "admin:" $(ls frontend/src/pages/admin/*.jsx 2>/dev/null | wc -l)
 echo "reports:" $(ls frontend/src/pages/reports/*.jsx 2>/dev/null | wc -l)
 echo "shopify:" $(ls frontend/src/pages/shopify/*.jsx 2>/dev/null | wc -l)
 echo "dashboard:" $(ls frontend/src/pages/dashboard/*.jsx 2>/dev/null | wc -l)
+echo "storefront:" $(ls frontend/src/pages/storefront/*.jsx frontend/src/pages/storefront/*.js 2>/dev/null | wc -l)
+echo "public:" $(ls frontend/src/pages/public/*.jsx 2>/dev/null | wc -l)
 echo "ui:" $(ls frontend/src/ui/*.jsx frontend/src/ui/*.js frontend/src/ui/*.css 2>/dev/null | wc -l)
 echo "components:" $(ls frontend/src/components/*.jsx 2>/dev/null | wc -l)
 echo "auth:" $(ls frontend/src/auth/*.jsx frontend/src/auth/*.js 2>/dev/null | wc -l)
@@ -90,7 +92,7 @@ Launch **7 combined agents** in **2 waves** (4 in Wave 1, 3 in Wave 2). Use `mod
 > **Note**: if changed exports or new feature flags are discovered, also flag them for Tier 2 update of `backend/CLAUDE.md` (feature flag registry + "Where to Look Instead" table).
 
 **Agent 2: Backend Services + Middleware + Workers**
-> Read every .js file in: `backend/services/` (top-level ~31 files; update from Step 1), `backend/services/couriers/` (16 files), `backend/services/marketplace/` (5 files), `backend/middleware/` (8 files), `backend/workers/` (~7 files).
+> Read every .js file in: `backend/services/` (top-level ~31 files; update from Step 1), `backend/services/couriers/` (16 files), `backend/services/marketplace/` (5 files), `backend/middleware/` (8 files), `backend/workers/` (8 files).
 > Note exports, key functions, env vars, external services used.
 > Read the CLAUDE.md in each directory and compare. **Marketplace note**: `backend/services/marketplace/CLAUDE.md` exists as its own file (not just a section inside `services/CLAUDE.md`).
 > Report ONLY what needs to change per CLAUDE.md. Do NOT edit files.
@@ -105,7 +107,7 @@ Launch **7 combined agents** in **2 waves** (4 in Wave 1, 3 in Wave 2). Use `mod
 ### Wave 2 — Frontend + Config (launch 3 agents after Wave 1 succeeds):
 
 **Agent 4: Frontend Pages (all subdirs)**
-> Read all .jsx files in: `frontend/src/pages/redesign/` (VERIFIED: [N] files), `frontend/src/pages/redesign/pos/` ([N] files), `frontend/src/pages/admin/` ([N] files), `frontend/src/pages/reports/` ([N] files), `frontend/src/pages/dashboard/` ([N] files), `frontend/src/pages/shopify/` ([N] files).
+> Read all .jsx files in: `frontend/src/pages/redesign/` (VERIFIED: [N] files), `frontend/src/pages/redesign/pos/` ([N] files), `frontend/src/pages/admin/` ([N] files), `frontend/src/pages/reports/` ([N] files), `frontend/src/pages/dashboard/` ([N] files), `frontend/src/pages/shopify/` ([N] files), `frontend/src/pages/storefront/` ([N] files + 1 .js hook), `frontend/src/pages/public/` ([N] files).
 > Also list top-level `frontend/src/pages/*.jsx` files (wrappers + special pages — VERIFIED from Step 1 count).
 > Note component names, API endpoints called, feature flags checked, permissions checked.
 > Read the CLAUDE.md in each directory and compare.
@@ -123,7 +125,7 @@ Launch **7 combined agents** in **2 waves** (4 in Wave 1, 3 in Wave 2). Use `mod
 > Read `backend/middleware/feature-flags.js` — list all flag names + defaults.
 > Read `backend/middleware/permissions.js` — list all permission names + role defaults.
 > Read `backend/middleware/plan-limits.js` — list all plan limits.
-> **Top-level loose files**: read every `backend/*.js` at the backend root (~13-14 files: `index.js`, `db-pg.js`, `master-db-pg.js`, `tenant-db-manager-pg.js`, `tenant-db-proxy-pg.js`, `tenant-db-pg.js`, `tenant-multer.js`, `tenant-provisioner-pg.js`, `jwt-auth.js`, `category-tree.js`, `migrate-pg.js`, `seed-admin-pg.js`, `swagger.js`). Note each file's exports, purpose, and key env vars. Compare against `backend/CLAUDE.md`'s "Where to Look Instead" table and project structure tree — report any file that's missing, misdocumented, or whose purpose has drifted.
+> **Top-level loose files**: read every `backend/*.js` at the backend root (~15 files: `index.js`, `db-pg.js`, `master-db-pg.js`, `tenant-db-manager-pg.js`, `tenant-db-proxy-pg.js`, `tenant-db-pg.js`, `tenant-multer.js`, `tenant-provisioner-pg.js`, `jwt-auth.js`, `category-tree.js`, `migrate-pg.js`, `seed-admin-pg.js`, `swagger.js`, `jest.config.js`, `vitest.config.js`). Note each file's exports, purpose, and key env vars. Compare against `backend/CLAUDE.md`'s "Where to Look Instead" table and project structure tree — report any file that's missing, misdocumented, or whose purpose has drifted.
 > Compare with `backend/CLAUDE.md` env vars / flags / permissions sections.
 > Report ONLY what needs to change. Do NOT edit files.
 
@@ -178,7 +180,7 @@ Read the freshly-updated Tier 3 docs and check:
   Verified correct (no changes needed):
     [list of unchanged files]
 
-  Total: X/40 docs updated
+  Total: X/43 docs updated
   Review: git diff -- "*.md"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```

@@ -459,7 +459,7 @@
 
 - **Backend routes**: `routes/reports/` (14 files: dashboard, sales, inventory, analytics, purchasing, finance, staff, shifts, governance, fbr-export, stock-aging, multichannel, helpers, index)
 - **Permissions**: `view_reports` (all), some feature-gated (see below)
-- **Feature flags**: `reports_profit_layer` (sales profit), `reports_inventory_health_plus` (inventory advanced), `reports_exceptions` (analytics exceptions), `reports_scheduled_exports` (governance schedules), `e_invoicing_export` (FBR export)
+- **Feature flags**: `reports_profit_layer` (sales profit), `reports_inventory_health_plus` (inventory advanced), `reports_exceptions` (analytics exceptions), `reports_scheduled_exports` (governance schedules). Note: FBR export uses `requirePerm('all_access')`, not a feature flag
 - **Frontend orchestrator**: `pages/Reports.jsx` (delegates to `pages/reports/*.jsx` — 23 module files)
 - **Route path**: `/reports`, `/reports/:tabId`
 - **Nav entry**: "Reports"
@@ -482,7 +482,7 @@
 
 ## Shopify Integration
 
-- **Backend routes**: `routes/shopify/` (8 files: config, health, sync, orders, import, mappings, webhooks, reconciliation)
+- **Backend routes**: `routes/shopify/` (9 files: config, health, sync, orders, import, mappings, webhooks, reconciliation, index)
 - **Permissions**: `manage_orders`
 - **Feature flags**: `shopify_integration` (implicitly, via connection check)
 - **Frontend page**: `pages/redesign/ShopifyIntegrationRedesign.jsx`

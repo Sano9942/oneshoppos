@@ -14,7 +14,7 @@
 | Database connection / queries | `db-pg.js` |
 | Full table schema (DDL) | `schema-pg.sql` |
 | Postgres migrations | `migrate-pg.js` |
-| Multi-tenant DB routing | `tenant-db-proxy-pg.js` + `tenant-db-manager-pg.js` |
+| Multi-tenant DB routing | `tenant-db-proxy-pg.js` + `tenant-db-manager-pg.js` (primary) or `tenant-db-pg.js` (older ALS-based proxy, checks out pool client per request) |
 | Master tenant registry | `master-db-pg.js` |
 | Tenant provisioning | `tenant-provisioner-pg.js` |
 | Super-admin seeding | `seed-admin-pg.js` |
@@ -51,6 +51,7 @@
 | FBR background worker | `workers/fbr-worker.js` (legacy inline), `workers/fbr-worker-boss.js` (pg-boss backed) |
 | pg-boss job queue | `services/boss.js` — shared pg-boss instance factory |
 | Upload validation | `middleware/upload-validation.js` — centralized MIME + extension whitelist |
+| Tenant-aware file uploads | `tenant-multer.js` — multer storage factories: `createProductImageStorage`, `createCompanyLogoStorage`, `createRestoreStorage` |
 | Rate limiting | `middleware/rate-limit.js` — global, auth endpoint, webhook limiters |
 | JWT auth + tenant resolution | `middleware/tenant-auth.js` — loadTenantAndPerms, resolveTenant, loadCompanyProfile, resolveContext |
 | Permissions | `middleware/permissions.js` — requirePerm, requireAnyPerm, PERMISSION_RULES |
@@ -63,7 +64,7 @@
 ## Efficiency Rules
 
 - **Read only the specific route file needed** — never read the whole `routes/` directory. If adding a sales feature, read `routes/sales.js` only
-- **Grep schema-pg.sql** — it's ~600 lines. Grep for the specific table name (`CREATE TABLE orders`) instead of reading the whole file
+- **Grep schema-pg.sql** — it's ~3,100 lines (214 tables). Grep for the specific table name (`CREATE TABLE orders`) instead of reading the whole file
 - **Don't read registerAllRoutes.js** — route mounting is documented in the root CLAUDE.md. Skip it for all domain-level tasks
 - **Don't read index.js** — middleware order is documented in root CLAUDE.md. Only read it if the task is explicitly about server boot or middleware config
 - **One reference route** — when adding a new route file, read ONE similar existing route as a pattern reference, not multiple
@@ -247,7 +248,6 @@
 | `phase2_returns_policy` | `routes/return-policies.js` | ReturnPoliciesRedesign |
 | `phase2_scheduled_changes` | `routes/scheduled-changes.js` | ScheduledChangesRedesign |
 | `phase2_scheduling` | `routes/schedules.js` | SchedulingRedesign |
-| `phase3_subscription_billing` | `routes/subscriptions.js` | SubscriptionsRedesign |
 | `phase4_restaurant` | `routes/restaurant.js` | RestaurantFloorRedesign, RestaurantChecksRedesign |
 | `phase4_restaurant_kds` | `routes/kds.js` | KDSRedesign |
 | `phase4_restaurant_qr` | `routes/public-restaurant.js` | (QR menu) |
@@ -304,7 +304,7 @@
 | Plan | Outlets | Employees | Products |
 |------|---------|-----------|----------|
 | Free | 1 | 3 | 100 |
-| Pro | unlimited | unlimited | unlimited |
+| Pro | 1 (code default) | unlimited | unlimited |
 
 - Enforced by `requirePlanLimit(resource)` on POST routes
 - `requireActiveSubscription()` blocks all writes when `payment_status = 'expired'`

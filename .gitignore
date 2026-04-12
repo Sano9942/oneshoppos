@@ -21,6 +21,7 @@ Thumbs.db
 
 # Claude Code IDE settings (local only)
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # Review scaffolding (one-shot reviewer prompts + file lists — findings are committed)
 .claude/reviews/_reviewer-prompt-*.md

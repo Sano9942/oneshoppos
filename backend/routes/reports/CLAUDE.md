@@ -7,7 +7,7 @@
   - `reports_inventory_health_plus` → advanced inventory health
   - `reports_exceptions` → analytics exception detection
   - `reports_scheduled_exports` → governance scheduled report generation
-  - `e_invoicing_export` → FBR export
+  - FBR export (`GET /api/reports/fbr-export`) uses `requirePerm('all_access')` — no feature flag, perm-gated only
 - **Date params**: Use `from`/`to` (not `start`/`end`)
 - **Governance tables**: `report_schedules`, `report_schedule_runs`, `report_delivery_log`, `saved_report_views`, `report_definition_versions`
 - **Frontend**: `pages/reports/*.jsx` (24 module files) orchestrated by `pages/Reports.jsx`

@@ -1,6 +1,7 @@
 # Report Pages — Claude Guide
 
 - **24 files** — all report tab components, orchestrated by `pages/Reports.jsx`
+- **`FBRExportTab.jsx`** — FBR compliance export tab. Date-range picker, calls `GET /api/reports/fbr-export`, CSV download via `downloadCsv`
 - **`ReportShared.jsx`** — shared utilities: `fmtDate`, `fmtDateTime`, `exportCSV(filename, cols, rows)` (forces text for barcode/sku via `="value"` Excel trick), `ExportButton`, `TableShell`, `CardShell`
 - **Barrel re-exports**: `ReportsSales.jsx` re-exports from SalesOverview/Core/Detail/Operations. `ReportsInventory.jsx` re-exports from InventoryCore/Analytics/Health/Replenishment
 - **Wave 16 report modules**: `ReportsMultichannel.jsx` (POS vs Shopify vs WooCommerce channel breakdown with PieChart), `ReportsCommissions.jsx` (`CommissionSummaryTab` — fetches `/commissions/earnings`, status filter, CSV export), `ReportsInventoryHealth.jsx`, `ReportsInventoryReplenishment.jsx` (reorder suggestions, inventory health stats)
