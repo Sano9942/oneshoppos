@@ -156,9 +156,9 @@ async function loadTenantAndPerms(req, res, next) {
         await new Promise((r) => setTimeout(r, 100));
         result = await loadPerms();
       } catch (err2) {
-        // Both attempts failed — log loudly so this surfaces in monitoring
-        // instead of silently 403-ing the user. Still fall through with
-        // empty perms so the backend doesn't cascade-503 on a DB blip.
+        // Both attempts failed — return 503 so the frontend can retry
+        // instead of falling through with empty perms (which causes
+        // misleading "403 insufficient permissions" for admin users).
         const log = req.log || console;
         log.error && log.error({
           err: err2.message,
@@ -166,8 +166,7 @@ async function loadTenantAndPerms(req, res, next) {
           tenantId: decoded.tid,
           path: req.path,
         }, "loadTenantAndPerms: both permission load attempts failed");
-        req.employeePerms = [];
-        return next();
+        return res.status(503).json({ error: "Service temporarily unavailable — please retry", code: "PERM_LOAD_FAILED" });
       }
     }
 
