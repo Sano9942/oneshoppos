@@ -1,7 +1,7 @@
 # Tenant Preset Engine v1 — Strategy & Implementation Specification
 
 **Date:** 2026-04-13
-**Status:** Agreed — ready for design doc and implementation plan
+**Status:** COMPLETE — all 4 milestones delivered (M1-M4), 2026-04-14
 **Author:** Hassan + Claude (session 2026-04-13)
 
 ---
@@ -312,6 +312,53 @@ Before building the preset engine, this is what exists:
 | **Wholesale** | (none — base retail) | Product/Buyer/Invoice | grid |
 | **Photography Studio** | `service_projects`, `appointments` | Package/Client/Session | list |
 
+### Milestone 4: Deepen Preset Adaptation Surfaces — COMPLETE
+
+> **Status:** Done — all 6 features delivered 2026-04-14, 25/25 unit tests passing, frontend builds clean.
+>
+> **Commits:** `f591f8c` (M4-C), `db3a2a8` (M4-A), `493d5d6` (M4-D+E), `2563b4b` (M4-B), `ba843b5` (M4-F), `dbcb99d` (supporting changes)
+>
+> **Migration:** v33 (clinic patient extension columns) — needs deployment to production.
+
+**Feature C — Country Pack System:**
+
+1. **New file** `backend/config/country-packs.js` — 23 country configs (currency, timezone, default tax, cash denominations, compliance features, available couriers, regions)
+2. **New file** `backend/routes/country-packs.js` — public API: `GET /api/country-packs` (summary list), `GET /api/country-packs/:code` (full details)
+3. **Setup wizard refactor** — Frontend fetches from API instead of hardcoded `COUNTRY_DATA`/`COUNTRY_DENOMS`. Auto-fills currency, timezone, denominations, and default tax on country selection.
+4. **Setup backend** — Accepts `country_code`, resolves via `getCountryCodeFromName()` for backward compat. Auto-seeds compliance features (e.g. `fbr_integration` for PK) and default tax from country pack.
+
+**Feature A — Receipt Wording Adaptation:**
+
+1. Labels flow from `PresetContext` → `POSContext` → `receipt.js` (browser popup), `POSReceiptModal` (screen), and `printer.js` (thermal ESC/POS)
+2. Clinic receipts say "Patient:", salon says "Client:", wholesale says "Buyer:" — all driven from `industry-config.js` labels
+3. Backend `POST /api/print/receipt` accepts `labels` in body, falls back to `getPresetLabels(industry_type)` from company profile
+
+**Feature D — Per-Preset Report Defaults:**
+
+1. Added `visible_report_groups` to each preset — `null` = show all, array = show only listed groups
+2. Service presets (salon, clinic, gym, photography) hide Procurement, Inventory, Operations, Multi-Channel
+3. Restaurant/cafe hide Procurement and Multi-Channel; retail/grocery/wholesale show all
+4. Reports sidebar filters by `sidebarGroups`; direct URL access to hidden tabs still works (no data gating)
+
+**Feature E — Preset-Aware POS Search Defaults:**
+
+1. Added `pos_search_config` to each preset — `{ show_barcode, show_sku, show_price }`
+2. Service presets hide barcode + SKU (keep price); restaurant/cafe hide all three; retail/grocery/wholesale show all
+3. `POSSearchArea.jsx` conditionally renders search fields based on config; adapts grid columns to visible field count
+
+**Feature B — Sample Data Seeding Per Preset:**
+
+1. **New file** `backend/seeds/preset-seed-data.js` — 10 seed configs with 2-4 categories + 3-5 sample products each
+2. Called during setup transaction after outlet creation. All samples labeled "(Sample)" with 100 initial stock
+3. Guard: skips if products already exist. Non-fatal: seeding failure logs but doesn't abort setup
+
+**Feature F — Clinic Patient Extension:**
+
+1. **Migration v33** — 6 nullable columns on `customers`: `blood_group`, `allergies`, `medical_notes`, `emergency_contact_name`, `emergency_contact_phone`, `insurance_id`
+2. Backend `POST/PUT /api/customers` accepts and returns medical fields
+3. Frontend shows "Medical Information" section (blood group dropdown, allergies, emergency contacts, insurance ID, medical notes) only when `industry_type === "clinic"`
+4. Detail view shows medical info card with red-highlighted allergies
+
 ---
 
 ## 7. Database Changes
@@ -386,13 +433,14 @@ CREATE TABLE IF NOT EXISTS tenant_modes (
 4. POS layout mode (retail vs restaurant vs service)
 5. Onboarding checklist (what steps to show)
 
-### Later Adaptation Surfaces (not in v1)
+### Later Adaptation Surfaces (all delivered in M4)
 
-- Receipt wording adaptation
-- Sample data seeding per preset
-- Country pack integration
-- Per-preset report defaults
-- Preset-aware search/filter defaults
+- ~~Receipt wording adaptation~~ — M4-A
+- ~~Sample data seeding per preset~~ — M4-B
+- ~~Country pack integration~~ — M4-C
+- ~~Per-preset report defaults~~ — M4-D
+- ~~Preset-aware search/filter defaults~~ — M4-E
+- Clinic patient extension (bonus) — M4-F
 
 ---
 
@@ -415,6 +463,9 @@ CREATE TABLE IF NOT EXISTS tenant_modes (
 4. ~~**Review and ship** — Acceptance test all 3 preset paths end-to-end~~ Done (production E2E verified)
 5. ~~**Execute Milestone 2** — Workflow/ticket engine + recurring billing polish~~ Done (deployed 2026-04-14, 6/6 smoke tests passing)
 6. ~~**Execute Milestone 3** — Additional presets (grocery, cafe, clinic, repair shop, gym, wholesale, photography studio)~~ Done (21/21 unit tests passing, frontend builds clean)
+7. ~~**Execute Milestone 4** — Deepen preset adaptation surfaces (country packs, receipt labels, report defaults, POS search, sample data, clinic extension)~~ Done (25/25 unit tests passing, 6 features delivered 2026-04-14)
+
+**Preset Engine v1 is COMPLETE.** All 4 milestones delivered. 10 industry presets, 10 adaptation surfaces, 6 business modes, 23 country packs. Remaining work is operational: deploy migration v33 to production, run E2E acceptance tests on new tenant onboarding flows.
 
 ---
 
