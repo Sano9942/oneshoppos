@@ -21,11 +21,13 @@ module.exports = function printerRoutes(app, deps) {
     const employeeId = Number(req.headers["x-employee-id"] || 0);
     if (!employeeId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { slip, template } = req.body || {};
+    const { slip, template, labels: bodyLabels } = req.body || {};
     if (!slip) return res.status(400).json({ error: "slip is required" });
 
     const currencySymbol = req.company?.currency_symbol || "$";
-    const result = await printReceipt(slip, template || null, currencySymbol);
+    // Use labels from request body, fall back to preset labels based on tenant's industry_type
+    const labels = bodyLabels || (req.company?.industry_type ? require("../config/industry-config").getPresetLabels(req.company.industry_type) : {});
+    const result = await printReceipt(slip, template || null, currencySymbol, labels);
     // Always return 200 — frontend checks result.fallback, not HTTP status
     return res.json(result);
   });

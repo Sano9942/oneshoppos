@@ -13,6 +13,7 @@ import { useAuth } from "../../../auth/AuthProvider";
 import { readContext } from "../../../auth/authStore";
 import { buildReceiptHtml, buildReceiptSections, printToHardware } from "../../../utils/receipt";
 import { useCurrency } from "../../../contexts/CurrencyContext";
+import { usePreset } from "../../../contexts/PresetContext";
 import { getQueue, enqueue, dequeue, WARN_THRESHOLD } from "../../../utils/offlineQueue";
 import { calcGrossTotal, calcDiscountValue, calcTaxTotal, calcTotal } from "./cartMath.js";
 
@@ -174,6 +175,7 @@ export const POSProvider = ({ children }) => {
   };
 
   const { fmt: money, denominations: currencyDenominations, symbol: currencySymbol } = useCurrency();
+  const { labels: presetLabels } = usePreset();
 
   const openingFloat = useMemo(
     () =>
@@ -817,10 +819,10 @@ export const POSProvider = ({ children }) => {
   };
 
   const printSlip = async (s) => {
-    const result = await printToHardware(s, receiptTemplate);
+    const result = await printToHardware(s, receiptTemplate, presetLabels);
     if (result.fallback) {
       // Printer offline or not configured — fall back to browser popup
-      buildReceiptHtml(s, receiptTemplate, currencySymbol);
+      buildReceiptHtml(s, receiptTemplate, currencySymbol, presetLabels);
     }
     // If result.ok: silent hardware print succeeded, no browser popup needed
   };
@@ -1236,6 +1238,7 @@ export const POSProvider = ({ children }) => {
     money,
     currencyDenominations,
     currencySymbol,
+    presetLabels,
     showNotice,
     loadParked,
     triggerSearch,

@@ -5,7 +5,7 @@ import { buildReceiptSections } from "../../../utils/receipt";
 import POSEmailReceiptModal from "./POSEmailReceiptModal";
 
 export default function POSReceiptModal() {
-  const { slipOpen, setSlipOpen, slip, money, printSlip, receiptTemplate, currencySymbol } = usePOS();
+  const { slipOpen, setSlipOpen, slip, money, printSlip, receiptTemplate, currencySymbol, presetLabels } = usePOS();
 
   const [showEmailModal, setShowEmailModal] = useState(false);
 
@@ -68,7 +68,7 @@ export default function POSReceiptModal() {
             )}
             {slip.customer && (
               <p className="text-xs text-emerald-700 font-semibold">
-                Customer: {slip.customer.name}
+                {presetLabels?.customer || "Customer"}: {slip.customer.name}
                 {slip.customer.mobile ? ` · ${slip.customer.mobile}` : ""}
               </p>
             )}

@@ -66,7 +66,7 @@ module.exports = function makePrinterService(db) {
    * Build the full receipt as ESC/POS printer commands.
    * All widths are derived from cfg.paper_width.
    */
-  async function formatReceipt(printer, slip, template, cfg, currencySymbol = "$") {
+  async function formatReceipt(printer, slip, template, cfg, currencySymbol = "$", labels = {}) {
     const W = cfg.paper_width || 48;
     const fmt = (n) => fmtCurrency(n, currencySymbol);
 
@@ -85,7 +85,7 @@ module.exports = function makePrinterService(db) {
     printer.println(`Date: ${slip.timestamp || new Date().toLocaleString()}`);
     printer.println(`Invoice: ${slip.invoiceNumber || "-"}`);
     if (slip.employee?.name)  printer.println(`Cashier: ${slip.employee.name}`);
-    if (slip.customer?.name)  printer.println(`Customer: ${slip.customer.name}`);
+    if (slip.customer?.name)  printer.println(`${labels.customer || "Customer"}: ${slip.customer.name}`);
     if (slip.returnedFrom)    printer.println(`Exchange for: ${slip.returnedFrom}`);
     printer.println(divider(W));
 
@@ -181,7 +181,7 @@ module.exports = function makePrinterService(db) {
    * Print a receipt slip to the configured thermal printer.
    * Returns { ok: true } on success, { error: string, fallback: true } on failure.
    */
-  async function printReceipt(slip, template, currencySymbol = "$") {
+  async function printReceipt(slip, template, currencySymbol = "$", labels = {}) {
     let cfg;
     try {
       cfg = await loadConfig();
@@ -201,7 +201,7 @@ module.exports = function makePrinterService(db) {
     }
 
     try {
-      await formatReceipt(printer, slip, template, cfg, currencySymbol);
+      await formatReceipt(printer, slip, template, cfg, currencySymbol, labels);
 
       // Kick cash drawer (ESC/POS pulse on pin 2)
       if (cfg.cash_drawer) {

@@ -73,7 +73,7 @@ function makeFmt(symbol = "$") {
  * @param {object} slip     - The sale slip object
  * @param {object|null} template - Active receipt template (null = use defaults)
  */
-export function buildReceiptHtml(slip, template, currencySymbol = "$") {
+export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = {}) {
   const fmt = makeFmt(currencySymbol);
   const s = buildReceiptSections(slip, template, currencySymbol);
 
@@ -122,7 +122,7 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$") {
   if (s.employee)
     b.appendChild(txt("div", `Staff: ${s.employee.name}`, "c"));
   if (s.customer)
-    b.appendChild(txt("div", `Customer: ${s.customer.name}${s.customer.mobile ? " · " + s.customer.mobile : ""}`, "c"));
+    b.appendChild(txt("div", `${labels.customer || "Customer"}: ${s.customer.name}${s.customer.mobile ? " · " + s.customer.mobile : ""}`, "c"));
   b.appendChild(hr());
 
   // Returned items (exchange receipts only)
@@ -218,12 +218,12 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$") {
  * @param {object|null} template - Active receipt template
  * @returns {Promise<{ok?: boolean, error?: string, fallback?: boolean}>}
  */
-export async function printToHardware(slip, template) {
+export async function printToHardware(slip, template, labels = {}) {
   try {
     const res = await fetch("/api/print/receipt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slip, template: template || null }),
+      body: JSON.stringify({ slip, template: template || null, labels }),
     });
     if (!res.ok) return { error: `HTTP ${res.status}`, fallback: true };
     return await res.json();
