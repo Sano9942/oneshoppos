@@ -19,6 +19,8 @@ const DEFAULT_PRESET = {
   },
   onboarding_steps: ["store", "product", "employees", "shift", "sale"],
   pos_layout_mode: "grid",
+  visible_report_groups: null,
+  pos_search_config: { show_barcode: true, show_sku: true, show_price: true },
   enabled_modes: [],
 };
 

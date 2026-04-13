@@ -4,7 +4,7 @@ import { usePOS } from "./POSContext";
 import { usePreset } from "../../../contexts/PresetContext";
 
 export default function POSSearchArea() {
-  const { pos_layout_mode } = usePreset();
+  const { pos_layout_mode, pos_search_config } = usePreset();
   const [viewMode, setViewMode] = useState(
     () => localStorage.getItem("pos_view_mode") || pos_layout_mode || "grid"
   );
@@ -29,17 +29,17 @@ export default function POSSearchArea() {
 
   return (
     <div className="mb-3 space-y-2">
-      {/* Specific field search row */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-        {[
-          {
-            field: "barcode",
-            val: barcodeSearch,
-            placeholder: "Search by Barcode",
-          },
-          { field: "sku", val: skuSearch, placeholder: "Search by SKU" },
-          { field: "price", val: priceSearch, placeholder: "Search by Price" },
-        ].map(({ field, val, placeholder }) => (
+      {/* Specific field search row — conditionally shown per preset */}
+      {(() => {
+        const fields = [
+          pos_search_config?.show_barcode !== false && { field: "barcode", val: barcodeSearch, placeholder: "Search by Barcode" },
+          pos_search_config?.show_sku !== false && { field: "sku", val: skuSearch, placeholder: "Search by SKU" },
+          pos_search_config?.show_price !== false && { field: "price", val: priceSearch, placeholder: "Search by Price" },
+        ].filter(Boolean);
+        if (fields.length === 0) return null;
+        return (
+      <div className={`grid gap-2 ${fields.length === 1 ? "grid-cols-1" : fields.length === 2 ? "grid-cols-2" : "grid-cols-2 md:grid-cols-3"}`}>
+        {fields.map(({ field, val, placeholder }) => (
           <input
             key={field}
             type="text"
@@ -50,6 +50,8 @@ export default function POSSearchArea() {
           />
         ))}
       </div>
+        );
+      })()}
 
       {/* Unified search */}
       <div className="relative">

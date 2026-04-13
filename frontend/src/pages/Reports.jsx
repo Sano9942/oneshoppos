@@ -45,6 +45,7 @@ import {
 import { api } from "../api";
 import { useAuth } from "../auth/AuthProvider";
 import { useToast } from "../contexts/ToastContext";
+import { usePreset } from "../contexts/PresetContext";
 import {
   fmtDate,
   ExportButton,
@@ -767,6 +768,11 @@ const TAB_ALIASES = {
 export default function Reports() {
   const { isBootstrapping } = useAuth();
   const toast = useToast();
+  const { visible_report_groups } = usePreset();
+  // Filter groups for sidebar — null = show all, array = show only listed groups
+  const sidebarGroups = visible_report_groups
+    ? GROUPS.filter((g) => visible_report_groups.includes(g.label))
+    : GROUPS;
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => {
     const tab = searchParams.get("tab");
@@ -867,8 +873,8 @@ export default function Reports() {
             Reports
           </h1>
           <p className="text-slate-500">
-            {GROUPS.reduce((n, g) => n + g.tabs.length, 0)} reports across
-            sales, inventory, operations, and procurement.
+            {sidebarGroups.reduce((n, g) => n + g.tabs.length, 0)} reports across
+            {sidebarGroups.map((g) => g.label.toLowerCase()).join(", ")}.
           </p>
         </div>
       </div>
@@ -880,7 +886,7 @@ export default function Reports() {
       <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-0">
         {/* Left: group icon sidebar */}
         <div className="flex shrink-0 gap-1 overflow-x-auto py-1 lg:w-18 lg:flex-col lg:overflow-visible lg:border-r lg:border-slate-200 lg:pr-2">
-          {GROUPS.map((group) => {
+          {sidebarGroups.map((group) => {
             const isActive = group === activeGroup;
             const GroupIcon = group.tabs[0].icon;
             return (
