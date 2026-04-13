@@ -33,6 +33,12 @@ const MODE_REGISTRY = Object.freeze({
       "subscription_billing",
     ],
   },
+  workflow_tickets: {
+    description: "Service tickets, repair/alteration tracking, deposits, final invoicing",
+    feature_flags_to_enable: [
+      "phase4_workflow_tickets",
+    ],
+  },
 });
 
 const VALID_MODES = Object.keys(MODE_REGISTRY);

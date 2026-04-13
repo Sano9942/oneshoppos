@@ -57,6 +57,7 @@ const DEFAULT_FEATURE_FLAGS = {
   phase4_service_projects: true,
   phase4_service_contracts: true,
   phase4_contract_ai: false,
+  phase4_workflow_tickets: true,
   // Phase 5 — Pakistan Integration Depth
   phase5_shipping_automation: false,
   phase5_cod_reconciliation: false,

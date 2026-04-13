@@ -339,6 +339,39 @@ function invoiceReminder(data) {
   };
 }
 
+// -- Subscription renewal notifications -----------------------------------
+
+function subscriptionRenewalAdmin(data) {
+  return {
+    subject: `Subscription renewal: ${data.customer_name} — ${data.plan_name}`,
+    html: wrapEmailHtml(
+      "Subscription Renewal Generated",
+      `<p>A renewal invoice has been generated:</p>
+       <p><strong>Customer:</strong> ${data.customer_name || "N/A"}</p>
+       <p><strong>Plan:</strong> ${data.plan_name}</p>
+       <p><strong>Amount:</strong> ${Number(data.amount).toLocaleString()}</p>
+       <p><strong>Invoice #:</strong> ${data.invoice_number}</p>
+       <p>The customer should be contacted for payment.</p>
+       ${footer("This is an automated admin notification.")}`
+    ),
+  };
+}
+
+function subscriptionRenewalDue(data) {
+  return {
+    subject: `Your subscription renewal is due — ${data.plan_name}`,
+    html: wrapEmailHtml(
+      "Subscription Renewal Due",
+      `<p>Hi ${data.customer_name || "Customer"},</p>
+       <p>Your <strong>${data.plan_name}</strong> subscription has been renewed.</p>
+       <p><strong>Amount:</strong> ${Number(data.amount).toLocaleString()}</p>
+       <p><strong>Period:</strong> ${data.period_start || ""} to ${data.period_end || ""}</p>
+       <p>Please arrange payment to keep your subscription active.</p>
+       ${footer("This notification was sent by " + (data.company_name || "Our Store") + ".")}`
+    ),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
   campaign_test: campaignTest,
@@ -359,6 +392,8 @@ const TEMPLATES = {
   renewal_overdue: renewalOverdue,
   downtime,
   announcement,
+  subscription_renewal_admin: subscriptionRenewalAdmin,
+  subscription_renewal_due: subscriptionRenewalDue,
 };
 
 module.exports = { TEMPLATES, wrapEmailHtml };

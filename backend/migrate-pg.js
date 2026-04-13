@@ -2793,6 +2793,66 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 32,
+    description: "M2 — service_tickets + ticket_activities tables, subscription cancel_reason + grace_period_end",
+    up: async (client) => {
+      // ── Workflow Tickets ──────────────────────────────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS service_tickets (
+          id SERIAL PRIMARY KEY,
+          ticket_number TEXT NOT NULL UNIQUE,
+          customer_id INTEGER REFERENCES customers(id),
+          outlet_id INTEGER REFERENCES outlets(id),
+          created_by INTEGER NOT NULL REFERENCES employees(id),
+          assigned_to INTEGER REFERENCES employees(id),
+          status TEXT NOT NULL DEFAULT 'intake'
+            CHECK (status IN ('intake','approved','in_progress','on_hold','completed','invoiced','cancelled')),
+          title TEXT NOT NULL,
+          description TEXT,
+          notes TEXT,
+          deposit_amount NUMERIC(12,2) DEFAULT 0,
+          deposit_paid_at TIMESTAMPTZ,
+          deposit_method TEXT,
+          final_invoice_id INTEGER REFERENCES customer_invoices(id),
+          expected_completion DATE,
+          actual_completion TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_service_tickets_customer ON service_tickets(customer_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_service_tickets_status ON service_tickets(status)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_service_tickets_assigned ON service_tickets(assigned_to)`);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS service_ticket_activities (
+          id SERIAL PRIMARY KEY,
+          ticket_id INTEGER NOT NULL REFERENCES service_tickets(id) ON DELETE CASCADE,
+          actor_id INTEGER REFERENCES employees(id),
+          activity_type TEXT NOT NULL
+            CHECK (activity_type IN ('note','status_change','assignment','deposit_recorded','invoice_generated')),
+          description TEXT,
+          metadata JSONB DEFAULT '{}',
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_ticket_activities_ticket ON service_ticket_activities(ticket_id)`);
+
+      // ── Subscription Billing Polish ───────────────────────────────
+      await client.query(`
+        ALTER TABLE customer_subscriptions
+          ADD COLUMN IF NOT EXISTS cancel_reason TEXT,
+          ADD COLUMN IF NOT EXISTS grace_period_end TIMESTAMPTZ
+      `);
+
+      // ── Feature flag ──────────────────────────────────────────────
+      await client.query(`
+        INSERT INTO feature_flags (key, enabled) VALUES ('phase4_workflow_tickets', true)
+        ON CONFLICT (key) DO NOTHING
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

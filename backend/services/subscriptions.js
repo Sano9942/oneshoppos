@@ -102,6 +102,15 @@ async function processRenewal(db, boss, tenantSlug, subscriptionId) {
     return inv;
   });
 
+  // Set grace period: 7 days after the new period end — gives the customer
+  // time to pay the renewal invoice before the subscription degrades to past_due.
+  const graceDays = 7;
+  const graceEnd = new Date(nextEnd.getTime() + graceDays * 86400000);
+  await db.query(
+    "UPDATE customer_subscriptions SET grace_period_end = $1 WHERE id = $2",
+    [graceEnd, subscriptionId]
+  );
+
   // Schedule next renewal — tenantSlug is threaded through so the worker
   // can set search_path when it fires. Runs AFTER tx commit — see comment
   // above for why this must not move inside the transaction.
@@ -128,10 +137,10 @@ async function processRenewal(db, boss, tenantSlug, subscriptionId) {
 /**
  * Cancel a subscription.
  */
-async function cancelSubscription(db, subscriptionId) {
+async function cancelSubscription(db, subscriptionId, cancelReason) {
   const { rows: [sub] } = await db.query(
-    "UPDATE customer_subscriptions SET status = 'cancelled', cancelled_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING *",
-    [subscriptionId]
+    "UPDATE customer_subscriptions SET status = 'cancelled', cancelled_at = NOW(), cancel_reason = $2, updated_at = NOW() WHERE id = $1 RETURNING *",
+    [subscriptionId, cancelReason || null]
   );
   return sub;
 }

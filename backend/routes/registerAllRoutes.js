@@ -589,6 +589,7 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./bookings")(app, deps);
   require("./projects")(app, deps);
   require("./contracts")(app, deps);
+  require("./service-tickets")(app, deps);
 
   return {
     processPendingShopifyInventoryEvents:

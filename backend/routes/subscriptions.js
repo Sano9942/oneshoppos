@@ -198,7 +198,7 @@ module.exports = function registerSubscriptionRoutes(app, deps) {
 
   app.post("/api/customer-subscriptions/:id/cancel", ...gate, async (req, res) => {
     try {
-      const sub = await cancelSubscription(deps.db, Number(req.params.id));
+      const sub = await cancelSubscription(deps.db, Number(req.params.id), req.body?.cancel_reason);
       if (!sub) return res.status(404).json({ error: "Subscription not found" });
 
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "subscription_cancelled", JSON.stringify({ subscription_id: Number(req.params.id) })]); } catch {}
@@ -207,5 +207,72 @@ module.exports = function registerSubscriptionRoutes(app, deps) {
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  // ── Detail + Renewal History + Stats ──────────────────────────────────
+
+  // Single subscription detail
+  app.get("/api/customer-subscriptions/:id", ...gate, async (req, res) => {
+    try {
+      const { rows: [sub] } = await deps.db.query(
+        `SELECT cs.*, sp.name AS plan_name, sp.price AS plan_price, sp.billing_interval,
+           sp.billing_interval_count, sp.trial_days,
+           c.name AS customer_name, c.email AS customer_email
+         FROM customer_subscriptions cs
+         JOIN subscription_plans sp ON sp.id = cs.plan_id
+         LEFT JOIN customers c ON c.id = cs.customer_id
+         WHERE cs.id = $1`,
+        [Number(req.params.id)]
+      );
+      if (!sub) return res.status(404).json({ error: "Subscription not found" });
+      res.json(sub);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Renewal history for a subscription
+  app.get("/api/customer-subscriptions/:id/renewals", ...gate, async (req, res) => {
+    try {
+      const { rows } = await deps.db.query(
+        `SELECT sr.*, ci.invoice_number, ci.status AS invoice_status, ci.balance_due
+         FROM subscription_runs sr
+         LEFT JOIN customer_invoices ci ON ci.id = sr.invoice_id
+         WHERE sr.subscription_id = $1
+         ORDER BY sr.period_start DESC`,
+        [Number(req.params.id)]
+      );
+      res.json({ renewals: rows });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Customer's subscriptions (for customer detail page)
+  app.get("/api/customer-subscriptions/by-customer/:customerId", ...gate, async (req, res) => {
+    try {
+      const { rows } = await deps.db.query(
+        `SELECT cs.*, sp.name AS plan_name, sp.price AS plan_price, sp.billing_interval
+         FROM customer_subscriptions cs
+         JOIN subscription_plans sp ON sp.id = cs.plan_id
+         WHERE cs.customer_id = $1
+         ORDER BY cs.created_at DESC`,
+        [Number(req.params.customerId)]
+      );
+      res.json({ subscriptions: rows });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Churn stats
+  app.get("/api/subscriptions/stats", ...gate, async (req, res) => {
+    try {
+      const { rows: [{ active_count }] } = await deps.db.query(
+        "SELECT COUNT(*)::int AS active_count FROM customer_subscriptions WHERE status = 'active'"
+      );
+      const { rows: [{ churned_this_month }] } = await deps.db.query(
+        `SELECT COUNT(*)::int AS churned_this_month FROM customer_subscriptions
+         WHERE status = 'cancelled' AND cancelled_at >= date_trunc('month', NOW())`
+      );
+      const denominator = active_count + churned_this_month;
+      const churn_rate = denominator > 0 ? Math.round((churned_this_month / denominator) * 10000) / 100 : 0;
+
+      res.json({ active_count, churned_this_month, churn_rate });
+    } catch (err) { res.status(500).json({ error: err.message }); }
   });
 };

@@ -269,6 +269,11 @@ function startAll(deps) {
           await registerReservationWorker(boss, pool);
         }
 
+        if (String(process.env.SUBSCRIPTION_GRACE_WORKER_ENABLED || "0") === "1") {
+          const { registerSubscriptionGraceWorker } = require("../workers/subscription-grace-worker-boss");
+          await registerSubscriptionGraceWorker(boss, pool);
+        }
+
         // Booking reminders — tenant-aware setInterval poll. Uses
         // forEachActiveTenant to iterate active tenants (since it's a
         // scheduled poll, not a per-event job — there's no tenantSlug

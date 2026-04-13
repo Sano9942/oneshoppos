@@ -50,6 +50,7 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "manage_bookings",
     "manage_projects",
     "manage_contracts",
+    "manage_tickets",
   ],
   Cashier: ["view_reports", "pos_discount", "pos_park"],
 };
@@ -236,6 +237,11 @@ const PERMISSION_RULES = [
     methods: ["GET", "POST", "PUT", "DELETE"],
     path: /^\/api\/contracts(\/|$)/,
     anyPerms: ["manage_contracts"],
+  },
+  {
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    path: /^\/api\/service-tickets(\/|$)/,
+    anyPerms: ["manage_tickets"],
   },
 ];
 

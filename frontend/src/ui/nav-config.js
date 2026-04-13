@@ -183,6 +183,7 @@ export const SHOPIFY_NAV_GROUPS = [
     items: [
       { name: "Projects", path: "/projects", icon: FolderKanban, requiredPerm: "manage_projects", requiredFlag: "phase4_service_projects", requiredMode: "service_projects" },
       { name: "Contracts", path: "/contracts", icon: FileSignature, requiredPerm: "manage_contracts", requiredFlag: "phase4_service_contracts", requiredMode: "service_projects" },
+      { name: "Tickets", path: "/service-tickets", icon: ClipboardList, requiredPerm: "manage_tickets", requiredFlag: "phase4_workflow_tickets", requiredMode: "workflow_tickets" },
     ],
   },
   {

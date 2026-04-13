@@ -22,4 +22,8 @@ const createSubscriptionSchema = z.object({
   auto_charge: z.boolean().default(false),
 });
 
-module.exports = { createPlanSchema, updatePlanSchema, createSubscriptionSchema };
+const cancelSubscriptionSchema = z.object({
+  cancel_reason: z.string().max(500).optional(),
+}).passthrough();
+
+module.exports = { createPlanSchema, updatePlanSchema, createSubscriptionSchema, cancelSubscriptionSchema };
