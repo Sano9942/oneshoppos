@@ -171,6 +171,9 @@ module.exports = function registerAllRoutes(app, deps) {
   }
   app.use("/api/setup", createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManager: setupTenantDbManager }));
 
+  // Country packs — public (no auth), used by setup wizard
+  app.use("/api/country-packs", require("./country-packs")());
+
   // Toggle auth middleware: JWT-based (MULTI_TENANT=1) vs header-based (default)
   app.use(process.env.MULTI_TENANT === "1" ? loadTenantAndPerms : loadEmployeePerms);
   // In multi-tenant mode, resolve the tenant DB via AsyncLocalStorage after JWT auth

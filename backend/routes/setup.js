@@ -14,6 +14,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { getPreset, VALID_INDUSTRY_TYPES } = require("../config/industry-config");
 const { getFeatureFlagsForModes } = require("../config/mode-registry");
+const { getCountryPack, getCountryCodeFromName } = require("../config/country-packs");
 
 const ROLE_PERMISSIONS = {
   Administrator: ['all_access'],
@@ -79,9 +80,13 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
       admin_pin,
       cash_denominations,
       industry_type: rawIndustryType,
+      country_code: rawCountryCode,
     } = req.body || {};
 
     const industry_type = rawIndustryType || "general_retail";
+    // Resolve country code: accept explicit code or derive from country name
+    const country_code = rawCountryCode || getCountryCodeFromName(country);
+    const countryPack = getCountryPack(country_code);
 
     // Basic validation
     if (!token) return res.status(400).json({ error: 'token is required' });
@@ -152,7 +157,7 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
              country_code = $3,
              industry_preset_version = 1
            WHERE id = 1`,
-          [preset.industry_type, preset.business_model, country === "Pakistan" ? "PK" : (country === "United States" ? "US" : (country === "United Arab Emirates" ? "AE" : "PK"))]
+          [preset.industry_type, preset.business_model, country_code]
         );
 
         // 1c. Seed tenant_modes for this preset
@@ -173,6 +178,16 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
              VALUES ($1, true)
              ON CONFLICT (key) DO UPDATE SET enabled = true`,
             [flagKey]
+          );
+        }
+
+        // 1e. Auto-enable compliance features from country pack
+        for (const flag of countryPack.compliance_features) {
+          await client.query(
+            `INSERT INTO feature_flags (key, enabled)
+             VALUES ($1, true)
+             ON CONFLICT (key) DO UPDATE SET enabled = true`,
+            [flag]
           );
         }
 
@@ -266,15 +281,14 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
           );
         }
 
-        // 7. Optional tax
-        if (tax_name && tax_rate !== undefined && tax_rate !== '') {
-          const rate = parseFloat(tax_rate);
-          if (!isNaN(rate)) {
-            await client.query(
-              'INSERT INTO taxes (name, rate, is_default) VALUES ($1, $2, false)',
-              [tax_name, rate]
-            );
-          }
+        // 7. Tax — user-specified or auto-seed from country pack
+        const finalTaxName = tax_name || (countryPack.default_tax && countryPack.default_tax.name);
+        const finalTaxRate = (tax_rate !== undefined && tax_rate !== '') ? parseFloat(tax_rate) : (countryPack.default_tax ? countryPack.default_tax.rate : NaN);
+        if (finalTaxName && !isNaN(finalTaxRate)) {
+          await client.query(
+            'INSERT INTO taxes (name, rate, is_default) VALUES ($1, $2, false)',
+            [finalTaxName, finalTaxRate]
+          );
         }
 
         // 8. Mark setup complete, clear token

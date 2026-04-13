@@ -1,57 +1,47 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Package, ChefHat, Scissors } from "lucide-react";
+import { Package, ChefHat, Scissors, ShoppingCart, Coffee, Stethoscope, Wrench, Dumbbell, Warehouse, Camera } from "lucide-react";
 import { api } from "../api";
 
-const BUSINESS_TYPES = [
-  { value: "general_retail", label: "Retail Store", description: "Sell physical products, manage inventory & stock", icon: Package, iconBg: "bg-blue-100", iconColor: "text-blue-600" },
-  { value: "restaurant", label: "Restaurant / Cafe", description: "Manage tables, kitchen orders, and menu items", icon: ChefHat, iconBg: "bg-amber-100", iconColor: "text-amber-600" },
-  { value: "salon", label: "Salon / Services", description: "Book appointments, manage client services", icon: Scissors, iconBg: "bg-purple-100", iconColor: "text-purple-600" },
+const BUSINESS_TYPE_CATEGORIES = [
+  {
+    label: "Retail",
+    types: [
+      { value: "general_retail", label: "Retail Store", description: "Sell products, manage inventory & stock", icon: Package, iconBg: "bg-blue-100", iconColor: "text-blue-600" },
+      { value: "grocery", label: "Grocery / Supermarket", description: "Barcode scanning, perishables, stock alerts", icon: ShoppingCart, iconBg: "bg-green-100", iconColor: "text-green-600" },
+      { value: "wholesale", label: "Wholesale / Distribution", description: "B2B bulk sales, price lists, buyer accounts", icon: Warehouse, iconBg: "bg-slate-100", iconColor: "text-slate-600" },
+    ],
+  },
+  {
+    label: "Food & Beverage",
+    types: [
+      { value: "restaurant", label: "Restaurant / Cafe", description: "Tables, floor plan, kitchen orders, KDS", icon: ChefHat, iconBg: "bg-amber-100", iconColor: "text-amber-600" },
+      { value: "cafe", label: "Cafe / Quick Service", description: "Counter orders, menu items, kitchen display", icon: Coffee, iconBg: "bg-orange-100", iconColor: "text-orange-600" },
+    ],
+  },
+  {
+    label: "Services",
+    types: [
+      { value: "salon", label: "Salon / Services", description: "Appointments, commissions, client bookings", icon: Scissors, iconBg: "bg-purple-100", iconColor: "text-purple-600" },
+      { value: "clinic", label: "Clinic / Practice", description: "Patient appointments, services, calendar", icon: Stethoscope, iconBg: "bg-rose-100", iconColor: "text-rose-600" },
+      { value: "repair_shop", label: "Repair / Service Shop", description: "Job tickets, deposits, repair tracking", icon: Wrench, iconBg: "bg-zinc-100", iconColor: "text-zinc-600" },
+      { value: "gym", label: "Gym / Fitness Studio", description: "Memberships, class bookings, member tracking", icon: Dumbbell, iconBg: "bg-indigo-100", iconColor: "text-indigo-600" },
+      { value: "photography_studio", label: "Photography / Creative Studio", description: "Projects, session bookings, packages", icon: Camera, iconBg: "bg-teal-100", iconColor: "text-teal-600" },
+    ],
+  },
 ];
 
 const ALL_TIMEZONES = Intl.supportedValuesOf("timeZone");
 
-const COUNTRY_DENOMS = {
-  Pakistan: [5000, 1000, 500, 100, 50, 20, 10],
-  "United States": [100, 50, 20, 10, 5, 1],
-  "United Kingdom": [50, 20, 10, 5, 2, 1],
-  "United Arab Emirates": [1000, 500, 200, 100, 50, 20, 10, 5],
-  India: [2000, 500, 200, 100, 50, 20, 10],
-  "Saudi Arabia": [500, 200, 100, 50, 10, 5, 1],
-  Canada: [100, 50, 20, 10, 5],
-  Australia: [100, 50, 20, 10, 5],
-};
-
-// Country → { currency_symbol, currency_code, timezones[] }
-const COUNTRY_DATA = {
-  Pakistan: { currency_symbol: "Rs", currency_code: "PKR", timezones: ["Asia/Karachi"] },
-  "United States": { currency_symbol: "$", currency_code: "USD", timezones: ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Phoenix", "Pacific/Honolulu"] },
-  "United Kingdom": { currency_symbol: "£", currency_code: "GBP", timezones: ["Europe/London"] },
-  Canada: { currency_symbol: "CA$", currency_code: "CAD", timezones: ["America/Toronto", "America/Vancouver", "America/Winnipeg", "America/Halifax"] },
-  Australia: { currency_symbol: "A$", currency_code: "AUD", timezones: ["Australia/Sydney", "Australia/Melbourne", "Australia/Brisbane", "Australia/Perth", "Australia/Adelaide"] },
-  India: { currency_symbol: "₹", currency_code: "INR", timezones: ["Asia/Kolkata"] },
-  "United Arab Emirates": { currency_symbol: "AED", currency_code: "AED", timezones: ["Asia/Dubai"] },
-  "Saudi Arabia": { currency_symbol: "SAR", currency_code: "SAR", timezones: ["Asia/Riyadh"] },
-  Bangladesh: { currency_symbol: "৳", currency_code: "BDT", timezones: ["Asia/Dhaka"] },
-  Nigeria: { currency_symbol: "₦", currency_code: "NGN", timezones: ["Africa/Lagos"] },
-  Kenya: { currency_symbol: "KSh", currency_code: "KES", timezones: ["Africa/Nairobi"] },
-  Ghana: { currency_symbol: "₵", currency_code: "GHS", timezones: ["Africa/Accra"] },
-  "South Africa": { currency_symbol: "R", currency_code: "ZAR", timezones: ["Africa/Johannesburg"] },
-  Egypt: { currency_symbol: "E£", currency_code: "EGP", timezones: ["Africa/Cairo"] },
-  Germany: { currency_symbol: "€", currency_code: "EUR", timezones: ["Europe/Berlin"] },
-  France: { currency_symbol: "€", currency_code: "EUR", timezones: ["Europe/Paris"] },
-  Netherlands: { currency_symbol: "€", currency_code: "EUR", timezones: ["Europe/Amsterdam"] },
-  Singapore: { currency_symbol: "S$", currency_code: "SGD", timezones: ["Asia/Singapore"] },
-  Malaysia: { currency_symbol: "RM", currency_code: "MYR", timezones: ["Asia/Kuala_Lumpur"] },
-  Indonesia: { currency_symbol: "Rp", currency_code: "IDR", timezones: ["Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura"] },
-  Philippines: { currency_symbol: "₱", currency_code: "PHP", timezones: ["Asia/Manila"] },
-  "New Zealand": { currency_symbol: "NZ$", currency_code: "NZD", timezones: ["Pacific/Auckland", "Pacific/Chatham"] },
-  Other: { currency_symbol: "$", currency_code: "USD", timezones: ["UTC"] },
-};
-
-const COUNTRIES = Object.keys(COUNTRY_DATA).sort((a, b) =>
-  a === "Other" ? 1 : b === "Other" ? -1 : a.localeCompare(b)
-);
+// Minimal fallback data if country-packs API fails
+const FALLBACK_COUNTRIES = [
+  { code: "PK", name: "Pakistan", currency_symbol: "Rs", currency_code: "PKR", timezone_default: "Asia/Karachi" },
+  { code: "US", name: "United States", currency_symbol: "$", currency_code: "USD", timezone_default: "America/New_York" },
+  { code: "GB", name: "United Kingdom", currency_symbol: "£", currency_code: "GBP", timezone_default: "Europe/London" },
+  { code: "AE", name: "United Arab Emirates", currency_symbol: "AED", currency_code: "AED", timezone_default: "Asia/Dubai" },
+  { code: "IN", name: "India", currency_symbol: "₹", currency_code: "INR", timezone_default: "Asia/Kolkata" },
+  { code: "OTHER", name: "Other", currency_symbol: "$", currency_code: "USD", timezone_default: "UTC" },
+];
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -115,6 +105,10 @@ export default function SetupWizard() {
   const [tzSearch, setTzSearch] = useState("");
   const [denomInput, setDenomInput] = useState("");
 
+  // Country packs from API
+  const [countries, setCountries] = useState(FALLBACK_COUNTRIES);
+  const [selectedPack, setSelectedPack] = useState(null);
+
   // Read token and tenant slug from URL
   const searchParams = new URLSearchParams(window.location.search);
   const token = searchParams.get("token") || "";
@@ -123,6 +117,7 @@ export default function SetupWizard() {
   const [form, setForm] = useState({
     industry_type: "general_retail",
     company_name: "",
+    country_code: "PK",
     country: "Pakistan",
     city: "",
     phone: "",
@@ -149,12 +144,18 @@ export default function SetupWizard() {
     setDenomInput("");
   };
 
-  // On mount: check setup status
+  // On mount: check setup status + fetch country packs
   useEffect(() => {
     api.raw(`/api/setup/status${tenantSlug ? `?tenant=${tenantSlug}` : ""}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.setup_complete) navigate("/login", { replace: true });
+      })
+      .catch(() => {});
+    api.raw("/api/country-packs")
+      .then((r) => r.json())
+      .then((list) => {
+        if (Array.isArray(list) && list.length > 0) setCountries(list);
       })
       .catch(() => {});
   }, [navigate]);
@@ -163,12 +164,27 @@ export default function SetupWizard() {
     setForm((prev) => {
       const next = { ...prev, [field]: value };
       // Auto-fill currency + first timezone + denominations when country changes
-      if (field === "country") {
-        const d = COUNTRY_DATA[value] || COUNTRY_DATA.Other;
-        next.currency_symbol = d.currency_symbol;
-        next.currency_code = d.currency_code;
-        next.timezone = d.timezones[0];
-        next.denominations = COUNTRY_DENOMS[value] || [100, 50, 20, 10, 5, 1];
+      if (field === "country_code") {
+        const summary = countries.find((c) => c.code === value);
+        if (summary) {
+          next.country = summary.name;
+          next.currency_symbol = summary.currency_symbol;
+          next.currency_code = summary.currency_code;
+          next.timezone = summary.timezone_default;
+        }
+        // Fetch full pack for denominations, tax, etc.
+        api.raw(`/api/country-packs/${value}`)
+          .then((r) => r.json())
+          .then((pack) => {
+            setSelectedPack(pack);
+            setForm((f) => ({
+              ...f,
+              denominations: pack.cash_denominations || [100, 50, 20, 10, 5, 1],
+              tax_name: pack.default_tax ? pack.default_tax.name : "",
+              tax_rate: pack.default_tax ? String(pack.default_tax.rate) : "",
+            }));
+          })
+          .catch(() => {});
       }
       return next;
     });
@@ -213,6 +229,7 @@ export default function SetupWizard() {
           industry_type: form.industry_type,
           company_name: form.company_name,
           country: form.country,
+          country_code: form.country_code,
           city: form.city,
           phone: form.phone,
           email: form.email,
@@ -296,26 +313,33 @@ export default function SetupWizard() {
                 <div className="space-y-4">
                   <h2 className="text-base font-semibold text-slate-800">What kind of business do you run?</h2>
                   <p className="text-sm text-slate-500">This customizes your experience. You can change it later in settings.</p>
-                  <div className="grid gap-3">
-                    {BUSINESS_TYPES.map((bt) => (
-                      <button
-                        key={bt.value}
-                        type="button"
-                        onClick={() => set("industry_type", bt.value)}
-                        className={`flex items-center gap-4 rounded-xl border-2 p-4 text-left transition cursor-pointer ${
-                          form.industry_type === bt.value
-                            ? "border-indigo-500 bg-indigo-50"
-                            : "border-slate-200 hover:border-slate-300"
-                        }`}
-                      >
-                        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${bt.iconBg}`}>
-                          <bt.icon size={20} className={bt.iconColor} />
+                  <div className="space-y-4">
+                    {BUSINESS_TYPE_CATEGORIES.map((cat) => (
+                      <div key={cat.label}>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">{cat.label}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {cat.types.map((bt) => (
+                            <button
+                              key={bt.value}
+                              type="button"
+                              onClick={() => set("industry_type", bt.value)}
+                              className={`flex flex-col items-start gap-2 rounded-xl border-2 p-3 text-left transition cursor-pointer ${
+                                form.industry_type === bt.value
+                                  ? "border-indigo-500 bg-indigo-50"
+                                  : "border-slate-200 hover:border-slate-300"
+                              }`}
+                            >
+                              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${bt.iconBg}`}>
+                                <bt.icon size={16} className={bt.iconColor} />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-slate-800">{bt.label}</p>
+                                <p className="text-xs leading-tight text-slate-500">{bt.description}</p>
+                              </div>
+                            </button>
+                          ))}
                         </div>
-                        <div>
-                          <p className="font-medium text-slate-800">{bt.label}</p>
-                          <p className="text-xs text-slate-500">{bt.description}</p>
-                        </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -329,8 +353,11 @@ export default function SetupWizard() {
                     <input className={inputCls} value={form.company_name} onChange={(e) => set("company_name", e.target.value)} placeholder="e.g. Sunrise Mart" />
                   </Field>
                   <Field label="Country">
-                    <select className={selectCls} value={form.country} onChange={(e) => set("country", e.target.value)}>
-                      {COUNTRIES.map((c) => <option key={c}>{c}</option>)}
+                    <select className={selectCls} value={form.country_code} onChange={(e) => set("country_code", e.target.value)}>
+                      {countries
+                        .slice()
+                        .sort((a, b) => a.code === "OTHER" ? 1 : b.code === "OTHER" ? -1 : a.name.localeCompare(b.name))
+                        .map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
                     </select>
                   </Field>
                   <Field label="City">
@@ -419,7 +446,9 @@ export default function SetupWizard() {
                     </select>
                   </Field>
                   <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">Optional: Add a Default Tax</p>
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                      {selectedPack?.default_tax ? "Default Tax (auto-detected for your country)" : "Optional: Add a Default Tax"}
+                    </p>
                     <div className="grid grid-cols-2 gap-3">
                       <Field label="Tax Name">
                         <input className={inputCls} value={form.tax_name} onChange={(e) => set("tax_name", e.target.value)} placeholder="e.g. GST" />
