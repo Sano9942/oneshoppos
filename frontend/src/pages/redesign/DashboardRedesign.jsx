@@ -23,6 +23,7 @@ import { InsightCards } from "../dashboard/InsightCards";
 import { AIChatPanel } from "../dashboard/AIChatPanel";
 import { BackupStatusCard } from "../dashboard/BackupStatusCard";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
+import { usePreset } from "../../contexts/PresetContext";
 
 export default function DashboardRedesign() {
   const navigate = useNavigate();
@@ -49,6 +50,7 @@ export default function DashboardRedesign() {
 
   // Feature flags (for AI chat panel)
   const { flags } = useFeatureFlags(authHeaders);
+  const { dashboard_widgets, presetLoaded } = usePreset();
 
   const fetchDashboard = useCallback((silent = false) => {
     let mounted = true;
@@ -191,8 +193,8 @@ export default function DashboardRedesign() {
         </div>
       )}
 
-      {/* Inventory alerts — hidden for cashier */}
-      {!isCashier && (
+      {/* Inventory alerts — hidden for cashier + hidden if preset disables it */}
+      {!isCashier && (!presetLoaded || dashboard_widgets.inventory_alerts) && (
         <div className="mb-4">
           <DashboardInventoryAlerts data={data} />
         </div>

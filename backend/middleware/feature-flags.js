@@ -120,6 +120,67 @@ function requireFeature(flagKey) {
   };
 }
 
+// --- Mode cache (same pattern as feature flags) ---
+const _modeCache = new Map();
+const MODE_CACHE_MS = 60_000;
+
+async function getModesMap(tenantId) {
+  const cacheKey = tenantId || "_default";
+  const cached = _modeCache.get(cacheKey);
+  const now = Date.now();
+  if (cached && now - cached.timestamp < MODE_CACHE_MS) {
+    return { ...cached.modes };
+  }
+
+  let modeDb = db;
+  if (IS_MULTI_TENANT && tenantId && tenantDbManager) {
+    try { modeDb = await tenantDbManager.getDb(tenantId); } catch { /* fall back */ }
+  }
+
+  try {
+    const { rows } = await modeDb.query(
+      "SELECT mode, enabled FROM tenant_modes"
+    );
+    const map = {};
+    for (const row of rows) map[row.mode] = row.enabled === true;
+    _modeCache.set(cacheKey, { modes: map, timestamp: now });
+    return map;
+  } catch (err) {
+    if (String(err.message || "").includes("does not exist")) {
+      return {};
+    }
+    throw err;
+  }
+}
+
+function invalidateModeCache(tenantId) {
+  if (tenantId) _modeCache.delete(tenantId);
+  else _modeCache.clear();
+}
+
+function requireMode(modeName) {
+  return async (req, res, next) => {
+    try {
+      const modes = await getModesMap(req.tenantId);
+      // If modes map is empty (pre-migration or no modes set), fall through
+      // to let feature flags be the sole gate (backward compat)
+      if (Object.keys(modes).length === 0) return next();
+      if (!modes[modeName]) {
+        return res.status(503).json({
+          error: `Mode not enabled: ${modeName}`,
+          mode: modeName,
+        });
+      }
+      next();
+    } catch (err) {
+      if (String(err.message || "").includes("does not exist")) {
+        return next();
+      }
+      return res.status(500).json({ error: err.message });
+    }
+  };
+}
+
 // --- Notification helpers ---
 
 let _notifDb;
@@ -172,8 +233,11 @@ module.exports = {
   init,
   DEFAULT_FEATURE_FLAGS,
   getFeatureFlagsMap,
+  getModesMap,
   invalidateFeatureFlagCache,
+  invalidateModeCache,
   requireFeature,
+  requireMode,
   createNotification,
   notifyLowStockForSale,
 };

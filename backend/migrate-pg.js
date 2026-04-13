@@ -2773,6 +2773,26 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 31,
+    description: "Tenant preset engine — industry columns on company_profile + tenant_modes table",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE company_profile
+          ADD COLUMN IF NOT EXISTS industry_type TEXT DEFAULT 'general_retail',
+          ADD COLUMN IF NOT EXISTS business_model TEXT DEFAULT 'buy_sell',
+          ADD COLUMN IF NOT EXISTS country_code TEXT DEFAULT 'PK',
+          ADD COLUMN IF NOT EXISTS industry_preset_version INTEGER DEFAULT 1
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tenant_modes (
+          mode TEXT NOT NULL PRIMARY KEY,
+          enabled BOOLEAN DEFAULT true,
+          enabled_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

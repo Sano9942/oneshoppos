@@ -1,6 +1,7 @@
 module.exports = function registerAuthRoutes(app, deps) {
   const { db, authLimiter } = deps;
   const bcrypt = require("bcryptjs");
+  const { getPreset } = require("../config/industry-config");
   const { validate } = require("../middleware/validate");
   const { LoginSchema, MtLoginSchema, KioskLoginSchema, ForgotPasswordSchema, ResetPasswordSchema, SignupSchema } = require("../schemas/auth");
 
@@ -194,6 +195,38 @@ module.exports = function registerAuthRoutes(app, deps) {
         [employeeId]
       );
 
+      // Fetch preset data (safe fallback for pre-migration tenants)
+      let presetData = null;
+      try {
+        const { rows: [cpProfile] } = await db.query(
+          "SELECT industry_type, business_model, country_code FROM company_profile WHERE id = 1"
+        );
+        const industryType = cpProfile?.industry_type || "general_retail";
+        const presetConfig = getPreset(industryType);
+
+        let enabledModes = [];
+        try {
+          const { rows: modeRows } = await db.query(
+            "SELECT mode FROM tenant_modes WHERE enabled = true"
+          );
+          enabledModes = modeRows.map(r => r.mode);
+        } catch {
+          // tenant_modes table may not exist yet
+        }
+
+        presetData = {
+          industry_type: industryType,
+          business_model: presetConfig.business_model,
+          labels: presetConfig.labels,
+          dashboard_widgets: presetConfig.dashboard_widgets,
+          onboarding_steps: presetConfig.onboarding_steps,
+          pos_layout_mode: presetConfig.pos_layout_mode,
+          enabled_modes: enabledModes,
+        };
+      } catch {
+        // Pre-migration tenants — no preset columns exist yet
+      }
+
       res.json({
         employee: {
           id: emp.id,
@@ -206,6 +239,7 @@ module.exports = function registerAuthRoutes(app, deps) {
         allowed_outlet_ids: (outlets || []).map((o) => o.id),
         scope_mode_default: isAdmin ? "all_branches" : "single_branch",
         primary_outlet_id: primary?.outlet_id || (outlets?.[0]?.id ?? null),
+        preset: presetData,
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });

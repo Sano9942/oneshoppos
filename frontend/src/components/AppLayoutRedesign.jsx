@@ -13,6 +13,8 @@ import SupportWidget from "../ui/SupportWidget";
 import ContextSwitcher from "./ContextSwitcher";
 import NotificationBell from "./NotificationBell";
 import AnnouncementBanner from "../ui/AnnouncementBanner";
+import { usePreset } from "../contexts/PresetContext";
+import { api } from "../api";
 
 function ProfileDropdown({ employee, logout, navigate }) {
   const [open, setOpen] = useState(false);
@@ -76,7 +78,16 @@ export default function AppLayoutRedesign() {
   const navigate = useNavigate();
   const { employee, hasPerm, logout, authHeaders } = useAuth();
   const { flags } = useFeatureFlags(authHeaders);
+  const { updatePreset, hasMode } = usePreset();
   const [collapsed, setCollapsed] = useState(false);
+
+  // Load preset data from bootstrap once on mount
+  useEffect(() => {
+    if (!employee?.id) return;
+    api.get("/api/context/bootstrap")
+      .then(data => { if (data?.preset) updatePreset(data.preset); })
+      .catch(() => {});
+  }, [employee?.id, updatePreset]);
 
   const nav = useMemo(
     () =>
@@ -85,10 +96,11 @@ export default function AppLayoutRedesign() {
         items: group.items.filter(
           (it) =>
             (!it.requiredPerm || hasPerm(it.requiredPerm)) &&
-            (!it.requiredFlag || Boolean(flags[it.requiredFlag])),
+            (!it.requiredFlag || Boolean(flags[it.requiredFlag])) &&
+            (!it.requiredMode || hasMode(it.requiredMode)),
         ),
       })).filter((g) => g.items.length),
-    [flags, hasPerm],
+    [flags, hasPerm, hasMode],
   );
 
   return (

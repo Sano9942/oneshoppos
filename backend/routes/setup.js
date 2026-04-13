@@ -12,6 +12,8 @@
 
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const { getPreset, VALID_INDUSTRY_TYPES } = require("../config/industry-config");
+const { getFeatureFlagsForModes } = require("../config/mode-registry");
 
 const ROLE_PERMISSIONS = {
   Administrator: ['all_access'],
@@ -76,10 +78,16 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
       admin_name,
       admin_pin,
       cash_denominations,
+      industry_type: rawIndustryType,
     } = req.body || {};
+
+    const industry_type = rawIndustryType || "general_retail";
 
     // Basic validation
     if (!token) return res.status(400).json({ error: 'token is required' });
+    if (!VALID_INDUSTRY_TYPES.includes(industry_type)) {
+      return res.status(400).json({ error: `Invalid industry_type: ${industry_type}. Valid: ${VALID_INDUSTRY_TYPES.join(", ")}` });
+    }
     if (!company_name) return res.status(400).json({ error: 'company_name is required' });
     if (!admin_name) return res.status(400).json({ error: 'admin_name is required' });
     if (!admin_pin) return res.status(400).json({ error: 'admin_pin is required' });
@@ -134,6 +142,39 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
             cash_denominations || null,
           ]
         );
+
+        // 1b. Set industry preset fields
+        const preset = getPreset(industry_type);
+        await client.query(
+          `UPDATE company_profile SET
+             industry_type = $1,
+             business_model = $2,
+             country_code = $3,
+             industry_preset_version = 1
+           WHERE id = 1`,
+          [preset.industry_type, preset.business_model, country === "Pakistan" ? "PK" : (country === "United States" ? "US" : (country === "United Arab Emirates" ? "AE" : "PK"))]
+        );
+
+        // 1c. Seed tenant_modes for this preset
+        for (const mode of preset.modes) {
+          await client.query(
+            `INSERT INTO tenant_modes (mode, enabled, enabled_at)
+             VALUES ($1, true, NOW())
+             ON CONFLICT (mode) DO NOTHING`,
+            [mode]
+          );
+        }
+
+        // 1d. Enable feature flags corresponding to the preset's modes
+        const flagsToEnable = getFeatureFlagsForModes(preset.modes);
+        for (const flagKey of flagsToEnable) {
+          await client.query(
+            `INSERT INTO feature_flags (key, enabled)
+             VALUES ($1, true)
+             ON CONFLICT (key) DO UPDATE SET enabled = true`,
+            [flagKey]
+          );
+        }
 
         // 2. Create/update outlet
         const { rows: [existingOutlet] } = await client.query(

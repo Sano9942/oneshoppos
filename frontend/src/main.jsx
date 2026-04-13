@@ -7,6 +7,7 @@ import { AuthProvider } from './auth/AuthProvider.jsx'
 import { CurrencyProvider } from './contexts/CurrencyContext.jsx'
 import { ToastProvider } from './contexts/ToastContext.jsx'
 import { ErrorBoundary } from './ui/ErrorBoundary.jsx'
+import { PresetProvider } from './contexts/PresetContext.jsx'
 import { SENTRY_DSN, ENV_MODE, IS_PROD } from './config.js'
 
 if (SENTRY_DSN) {
@@ -24,7 +25,9 @@ createRoot(document.getElementById('root')).render(
       <CurrencyProvider>
         <ToastProvider>
           <AuthProvider>
-            <App />
+            <PresetProvider>
+              <App />
+            </PresetProvider>
           </AuthProvider>
         </ToastProvider>
       </CurrencyProvider>

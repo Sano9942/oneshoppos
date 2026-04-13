@@ -767,7 +767,17 @@ CREATE TABLE IF NOT EXISTS company_profile (
   fbr_api_token TEXT,
   fbr_environment TEXT DEFAULT 'sandbox',
   fbr_default_hs_code TEXT,
-  fbr_province TEXT
+  fbr_province TEXT,
+  industry_type TEXT DEFAULT 'general_retail',
+  business_model TEXT DEFAULT 'buy_sell',
+  country_code TEXT DEFAULT 'PK',
+  industry_preset_version INTEGER DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS tenant_modes (
+  mode TEXT NOT NULL PRIMARY KEY,
+  enabled BOOLEAN DEFAULT true,
+  enabled_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ── Companies (Context Unification) ───────────────────────────────────

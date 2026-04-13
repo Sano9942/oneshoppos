@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Package, ChefHat, Scissors } from "lucide-react";
 import { api } from "../api";
+
+const BUSINESS_TYPES = [
+  { value: "general_retail", label: "Retail Store", description: "Sell physical products, manage inventory & stock", icon: Package, iconBg: "bg-blue-100", iconColor: "text-blue-600" },
+  { value: "restaurant", label: "Restaurant / Cafe", description: "Manage tables, kitchen orders, and menu items", icon: ChefHat, iconBg: "bg-amber-100", iconColor: "text-amber-600" },
+  { value: "salon", label: "Salon / Services", description: "Book appointments, manage client services", icon: Scissors, iconBg: "bg-purple-100", iconColor: "text-purple-600" },
+];
 
 const ALL_TIMEZONES = Intl.supportedValuesOf("timeZone");
 
@@ -114,6 +121,7 @@ export default function SetupWizard() {
   const tenantSlug = searchParams.get("tenant") || "";
 
   const [form, setForm] = useState({
+    industry_type: "general_retail",
     company_name: "",
     country: "Pakistan",
     city: "",
@@ -167,10 +175,10 @@ export default function SetupWizard() {
   }
 
   function validateStep() {
-    if (step === 1) {
+    if (step === 2) {
       if (!form.company_name.trim()) return "Store name is required.";
     }
-    if (step === 4) {
+    if (step === 5) {
       if (!form.admin_name.trim()) return "Admin name is required.";
       if (!form.admin_pin) return "PIN is required.";
       if (!/^\d{4,6}$/.test(form.admin_pin)) return "PIN must be 4–6 digits.";
@@ -202,6 +210,7 @@ export default function SetupWizard() {
         body: JSON.stringify({
           token,
           tenant: tenantSlug || undefined,
+          industry_type: form.industry_type,
           company_name: form.company_name,
           country: form.country,
           city: form.city,
@@ -257,13 +266,13 @@ export default function SetupWizard() {
         {/* Progress bar */}
         <div className="mb-6">
           <div className="mb-1 flex items-center justify-between text-xs font-medium text-slate-500">
-            <span>Step {step} of 4</span>
-            <span>{["Store Identity", "Time & Currency", "First Outlet", "Admin Account"][step - 1]}</span>
+            <span>Step {step} of 5</span>
+            <span>{["Business Type", "Store Identity", "Time & Currency", "First Outlet", "Admin Account"][step - 1]}</span>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
             <div
               className="h-full rounded-full bg-indigo-500 transition-all duration-300"
-              style={{ width: `${(step / 4) * 100}%` }}
+              style={{ width: `${(step / 5) * 100}%` }}
             />
           </div>
         </div>
@@ -282,8 +291,38 @@ export default function SetupWizard() {
             </div>
           ) : (
             <>
-              {/* Step 1 — Store Identity */}
+              {/* Step 1 — Business Type */}
               {step === 1 && (
+                <div className="space-y-4">
+                  <h2 className="text-base font-semibold text-slate-800">What kind of business do you run?</h2>
+                  <p className="text-sm text-slate-500">This customizes your experience. You can change it later in settings.</p>
+                  <div className="grid gap-3">
+                    {BUSINESS_TYPES.map((bt) => (
+                      <button
+                        key={bt.value}
+                        type="button"
+                        onClick={() => set("industry_type", bt.value)}
+                        className={`flex items-center gap-4 rounded-xl border-2 p-4 text-left transition cursor-pointer ${
+                          form.industry_type === bt.value
+                            ? "border-indigo-500 bg-indigo-50"
+                            : "border-slate-200 hover:border-slate-300"
+                        }`}
+                      >
+                        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${bt.iconBg}`}>
+                          <bt.icon size={20} className={bt.iconColor} />
+                        </div>
+                        <div>
+                          <p className="font-medium text-slate-800">{bt.label}</p>
+                          <p className="text-xs text-slate-500">{bt.description}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2 — Store Identity */}
+              {step === 2 && (
                 <div className="space-y-4">
                   <h2 className="text-base font-semibold text-slate-800">Store Identity</h2>
                   <Field label="Store Name" required>
@@ -308,8 +347,8 @@ export default function SetupWizard() {
                 </div>
               )}
 
-              {/* Step 2 — Time & Currency */}
-              {step === 2 && (
+              {/* Step 3 — Time & Currency */}
+              {step === 3 && (
                 <div className="space-y-4">
                   <h2 className="text-base font-semibold text-slate-800">Time & Currency</h2>
                   <div className="space-y-1">
@@ -393,8 +432,8 @@ export default function SetupWizard() {
                 </div>
               )}
 
-              {/* Step 3 — First Outlet */}
-              {step === 3 && (
+              {/* Step 4 — First Outlet */}
+              {step === 4 && (
                 <div className="space-y-4">
                   <h2 className="text-base font-semibold text-slate-800">First Outlet</h2>
                   <p className="text-sm text-slate-500">This will be your main store location. You can add more outlets later.</p>
@@ -413,8 +452,8 @@ export default function SetupWizard() {
                 </div>
               )}
 
-              {/* Step 4 — Admin Account */}
-              {step === 4 && (
+              {/* Step 5 — Admin Account */}
+              {step === 5 && (
                 <div className="space-y-4">
                   <h2 className="text-base font-semibold text-slate-800">Admin Account</h2>
                   <p className="text-sm text-slate-500">This account will have full Administrator access.</p>
@@ -466,7 +505,7 @@ export default function SetupWizard() {
                 >
                   Back
                 </button>
-                {step < 4 ? (
+                {step < 5 ? (
                   <button
                     onClick={next}
                     className="rounded-lg bg-indigo-600 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 active:bg-indigo-800"
