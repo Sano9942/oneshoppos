@@ -208,7 +208,7 @@ async function generateInvoiceFromTicket(db, ticketId, employeeId) {
 
     // Create line item
     await client.query(
-      `INSERT INTO customer_invoice_items (invoice_id, description, quantity, unit_price, total)
+      `INSERT INTO customer_invoice_items (invoice_id, description, quantity, unit_price, line_total)
        VALUES ($1, $2, 1, $3, $3)`,
       [invoice.id, ticket.title, totalAmount]
     );
