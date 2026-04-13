@@ -245,24 +245,72 @@ Before building the preset engine, this is what exists:
 | Migration v31 idempotent on re-run | Confirmed — "up to date" on second run |
 | Unit tests (19 tests across 3 new files + 49 existing middleware tests) | All 68 passing |
 
-### Milestone 2: Deepen Partial Core Modules
+### Milestone 2: Deepen Partial Core Modules — COMPLETE
 
-After the preset engine works with 3 presets, build the two missing reusable primitives:
+> **Status:** Done — deployed to production 2026-04-14, all 6 smoke tests passing.
+>
+> **Commits:** `15a4f82` (M2 implementation), `ddc0178` (column fix + smoke tests)
+>
+> **Migration:** v32 applied to public schema + all 3 active tenant schemas (packagesmall, khantoys, handicraft)
+>
+> **Railway:** `SUBSCRIPTION_GRACE_WORKER_ENABLED=1` set, worker registered and running hourly.
 
-1. **Workflow/ticket engine** — Intake form, job/ticket number, status board, assigned staff, deposits, final invoice. Unlocks: repair shop, laundry, tailor presets.
-2. **Recurring billing polish** — Subscription UX, renewal flows, failed payment handling, churn tracking. Unlocks: gym, tuition center, coworking presets.
+**Deliverable A — Workflow/Ticket Engine (built from scratch):**
 
-### Milestone 3: More Presets
+1. **Migration v32** — `service_tickets` table (ticket_number, customer, outlet, assigned_to, status machine, deposit tracking, invoice link) + `service_ticket_activities` table (activity log with 5 types). Feature flag `phase4_workflow_tickets` seeded.
+2. **Backend** — `schemas/service-tickets.js` (3 Zod schemas), `services/service-tickets.js` (7 functions: create, update, get, list, generateInvoiceFromTicket, logActivity, generateTicketNumber), `routes/service-tickets.js` (6 endpoints).
+3. **Status machine** — `intake → approved → in_progress → on_hold → completed → invoiced → cancelled`. Invoice generation gated on `completed` status. Deposit tracked on ticket, deducted on final invoice.
+4. **Invoice generation** — `POST /api/service-tickets/:id/generate-invoice` creates `customer_invoices` + `customer_invoice_items` row inside a transaction, links back via `final_invoice_id`, transitions to `invoiced`.
+5. **Mode + permissions** — `workflow_tickets` mode in `mode-registry.js`, `manage_tickets` permission added to Manager role + PERMISSION_RULES, nav item in "Service Work" group.
+6. **Frontend** — `ServiceTicketsRedesign.jsx` with list view (filterable by status/search), detail view (description, deposit card, activity timeline, action buttons), and create modal (title, description, customer, assigned_to, expected date, deposit amount/method, notes).
 
-Each new industry preset is mostly config + maybe one vertical extension table:
+**Deliverable B — Subscription Billing Polish (enhanced existing):**
 
-- grocery → `retail` mode
-- cafe → `restaurant` mode
-- clinic → `appointments` mode + patient profile extension
-- repair shop → `workflow_tickets` mode
-- gym → `subscriptions` + `appointments` modes
-- wholesale → `retail` mode + price list emphasis
-- photography studio → `service_projects` + `appointments` modes
+1. **Cancel reason** — `cancel_reason TEXT` column on `customer_subscriptions`. Cancel endpoint accepts `{ cancel_reason }`. Frontend shows cancel reason modal before cancelling.
+2. **Detail view** — `GET /api/customer-subscriptions/:id` returns plan + customer + period info. Frontend inline detail view with plan info, period dates, days remaining, cancel reason.
+3. **Renewal history** — `GET /api/customer-subscriptions/:id/renewals` returns `subscription_runs` JOIN `customer_invoices`. Frontend table shows period, amount, invoice number, status.
+4. **By-customer endpoint** — `GET /api/customer-subscriptions/by-customer/:customerId` for customer detail page integration.
+5. **Churn stats** — `GET /api/subscriptions/stats` returns active_count, churned_this_month, churn_rate %. Frontend widget at top of subscriptions list.
+6. **Grace period** — `grace_period_end TIMESTAMPTZ` column set 7 days after renewal. `subscription-grace-worker-boss.js` hourly cron transitions `active → past_due` (unpaid past grace) and `past_due → expired` (7 more days). `past_due` and `expired` status badges added to frontend.
+7. **Email templates** — `subscription_renewal_admin` (admin notification) and `subscription_renewal_due` (customer reminder) added to email-templates.js + TEMPLATES registry.
+
+**M2 acceptance test — PASSED (production, 2026-04-14):**
+
+| Test | Result |
+|------|--------|
+| Ticket lifecycle: create with deposit → approve → in_progress → complete → generate invoice | PASS |
+| Ticket: add note, verify in activity timeline | PASS |
+| Ticket: cannot generate invoice from non-completed status (400) | PASS |
+| Subscription: cancel with reason → verify reason persisted via detail endpoint | PASS |
+| Subscription: detail + renewals + by-customer endpoints return correct data | PASS |
+| Subscription: churn stats endpoint returns valid counts + rate | PASS |
+
+### Milestone 3: More Presets — COMPLETE
+
+> **Status:** Done — all 7 presets added, unit tests passing (21/21), frontend builds clean.
+>
+> **Migration:** None needed — pure config changes, no DB schema changes.
+
+**Scope (all delivered):**
+
+1. **7 new presets** added to `backend/config/industry-config.js` — grocery, cafe, clinic, repair_shop, gym, wholesale, photography_studio
+2. **Bug fix** — Added `phase4_workflow_tickets` to `ALL_MODE_FLAGS` in `company-profile.js` (was missing, caused stale flag when switching away from repair_shop)
+3. **Setup wizard redesign** — Step 1 changed from 3 flat cards to categorized grid (Retail / Food & Bev / Services) with 10 options
+4. **Company Settings** — `INDUSTRY_OPTIONS` dropdown updated with all 10 presets
+5. **Onboarding steps** — Added `ticket` ("Create your first job ticket" → `/service-tickets`) and `membership` ("Set up your first membership plan" → `/subscriptions`)
+6. **Unit tests** — 7 new preset-specific test cases validating modes, labels, widgets, and onboarding steps
+
+**What each new preset enables:**
+
+| Preset | Modes | Key Labels | POS |
+|--------|-------|------------|-----|
+| **Grocery** | (none — base retail) | Product/Customer/Sale | grid |
+| **Cafe** | `restaurant` | Menu Item/Customer/Order | list |
+| **Clinic** | `appointments` | Service/Patient/Visit | list |
+| **Repair Shop** | `workflow_tickets` | Service/Customer/Repair | list |
+| **Gym** | `subscriptions`, `appointments` | Plan/Member/Enrollment | list |
+| **Wholesale** | (none — base retail) | Product/Buyer/Invoice | grid |
+| **Photography Studio** | `service_projects`, `appointments` | Package/Client/Session | list |
 
 ---
 
@@ -365,8 +413,8 @@ CREATE TABLE IF NOT EXISTS tenant_modes (
 2. ~~**Create implementation plan** — File-by-file changes, migration script, test plan~~ Done (`docs/plans/2026-04-13-preset-engine-m1-completion.md`)
 3. ~~**Execute Milestone 1** — Tenant Preset Engine v1 with retail, restaurant, salon presets~~ Done (deployed 2026-04-14)
 4. ~~**Review and ship** — Acceptance test all 3 preset paths end-to-end~~ Done (production E2E verified)
-5. **Execute Milestone 2** — Workflow/ticket engine + recurring billing polish
-6. **Execute Milestone 3** — Additional presets (grocery, cafe, clinic, repair shop, gym, wholesale)
+5. ~~**Execute Milestone 2** — Workflow/ticket engine + recurring billing polish~~ Done (deployed 2026-04-14, 6/6 smoke tests passing)
+6. ~~**Execute Milestone 3** — Additional presets (grocery, cafe, clinic, repair shop, gym, wholesale, photography studio)~~ Done (21/21 unit tests passing, frontend builds clean)
 
 ---
 

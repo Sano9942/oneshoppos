@@ -15,8 +15,15 @@ const ALL_TIMEZONES = Intl.supportedValuesOf("timeZone");
 
 const INDUSTRY_OPTIONS = [
   { value: "general_retail", label: "Retail Store" },
+  { value: "grocery", label: "Grocery / Supermarket" },
+  { value: "wholesale", label: "Wholesale / Distribution" },
   { value: "restaurant", label: "Restaurant / Cafe" },
+  { value: "cafe", label: "Cafe / Quick Service" },
   { value: "salon", label: "Salon / Services" },
+  { value: "clinic", label: "Clinic / Practice" },
+  { value: "repair_shop", label: "Repair / Service Shop" },
+  { value: "gym", label: "Gym / Fitness Studio" },
+  { value: "photography_studio", label: "Photography / Creative Studio" },
 ];
 
 const DEFAULT_FORM = {

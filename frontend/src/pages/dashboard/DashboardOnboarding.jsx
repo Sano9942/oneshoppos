@@ -79,6 +79,18 @@ function buildSteps(data, onNavigate, presetSteps, labelFn) {
       done: false,
       navigate: () => onNavigate("/appointments/bookings"),
     },
+    ticket: {
+      id: "ticket",
+      label: "Create your first job ticket",
+      done: false,
+      navigate: () => onNavigate("/service-tickets"),
+    },
+    membership: {
+      id: "membership",
+      label: "Set up your first membership plan",
+      done: false,
+      navigate: () => onNavigate("/subscriptions"),
+    },
   };
 
   return presetSteps.map((key) => ALL_STEPS[key]).filter(Boolean);

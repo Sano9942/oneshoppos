@@ -54,4 +54,56 @@ describe("industry-config", () => {
     expect(labels.product).toBe("Service");
     expect(labels).not.toHaveProperty("modes");
   });
+
+  it("has 10 industry presets", () => {
+    expect(VALID_INDUSTRY_TYPES).toHaveLength(10);
+  });
+
+  it("grocery preset has no extra modes (base retail)", () => {
+    const p = getPreset("grocery");
+    expect(p.modes).toEqual([]);
+    expect(p.pos_layout_mode).toBe("grid");
+  });
+
+  it("cafe preset has restaurant mode but no floor_plan widget", () => {
+    const p = getPreset("cafe");
+    expect(p.modes).toEqual(["restaurant"]);
+    expect(p.dashboard_widgets.floor_plan).toBe(false);
+    expect(p.labels.customer).toBe("Customer");
+  });
+
+  it("clinic preset has appointments but not commissions", () => {
+    const p = getPreset("clinic");
+    expect(p.modes).toEqual(["appointments"]);
+    expect(p.modes).not.toContain("commissions");
+    expect(p.labels.customer).toBe("Patient");
+  });
+
+  it("repair_shop preset has workflow_tickets mode", () => {
+    const p = getPreset("repair_shop");
+    expect(p.modes).toEqual(["workflow_tickets"]);
+    expect(p.onboarding_steps).toContain("ticket");
+  });
+
+  it("gym preset has dual modes (subscriptions + appointments)", () => {
+    const p = getPreset("gym");
+    expect(p.modes).toContain("subscriptions");
+    expect(p.modes).toContain("appointments");
+    expect(p.labels.customer).toBe("Member");
+    expect(p.onboarding_steps).toContain("membership");
+  });
+
+  it("wholesale preset has no extra modes and grid POS", () => {
+    const p = getPreset("wholesale");
+    expect(p.modes).toEqual([]);
+    expect(p.pos_layout_mode).toBe("grid");
+    expect(p.labels.customer).toBe("Buyer");
+  });
+
+  it("photography_studio preset has service_projects + appointments", () => {
+    const p = getPreset("photography_studio");
+    expect(p.modes).toContain("service_projects");
+    expect(p.modes).toContain("appointments");
+    expect(p.labels.product).toBe("Package");
+  });
 });

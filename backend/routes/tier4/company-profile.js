@@ -155,7 +155,7 @@ module.exports = function createCompanyProfileRouter({
             "phase4_restaurant", "phase4_restaurant_kds",
             "phase4_appointments", "phase2_commissions",
             "phase4_service_projects", "phase4_service_contracts",
-            "subscription_billing",
+            "subscription_billing", "phase4_workflow_tickets",
           ];
           for (const flagKey of ALL_MODE_FLAGS) {
             await db.query(
