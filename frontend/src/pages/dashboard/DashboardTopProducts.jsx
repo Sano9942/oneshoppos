@@ -1,8 +1,10 @@
 import { SectionCard } from "../../ui/primitives";
 import { useCurrency } from "./DashboardShared";
+import { usePreset } from "../../contexts/PresetContext";
 
 export function DashboardTopProducts({ data }) {
   const { fmt } = useCurrency();
+  const { label } = usePreset();
   // topProducts = today/7-day window [{name, units_sold}]
   const products = (data?.topProducts || []).slice(0, 5);
 
@@ -12,7 +14,7 @@ export function DashboardTopProducts({ data }) {
 
   return (
     <SectionCard className="p-4">
-      <h3 className="mb-3 text-sm font-semibold text-(--ui-text)">Top Products Today</h3>
+      <h3 className="mb-3 text-sm font-semibold text-(--ui-text)">Top {label("products")} Today</h3>
       <div className="flex flex-col gap-2">
         {products.map((p, i) => {
           const qty = Number(p.units_sold || 0);

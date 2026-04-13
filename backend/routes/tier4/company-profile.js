@@ -1,5 +1,8 @@
 const express = require("express");
 const multer = require("multer");
+const { getPreset, VALID_INDUSTRY_TYPES } = require("../../config/industry-config");
+const { getFeatureFlagsForModes } = require("../../config/mode-registry");
+const { invalidateModeCache, invalidateFeatureFlagCache } = require("../../middleware/feature-flags");
 
 module.exports = function createCompanyProfileRouter({
   db,
@@ -77,6 +80,7 @@ module.exports = function createCompanyProfileRouter({
           refund_threshold_pct,
           void_threshold_pct,
           cash_denominations,
+          industry_type,
         } = req.body || {};
 
         await db.query(
@@ -124,6 +128,54 @@ module.exports = function createCompanyProfileRouter({
             cash_denominations || null,
           ]
         );
+        // If industry_type changed, re-derive modes and flags
+        if (industry_type && VALID_INDUSTRY_TYPES.includes(industry_type)) {
+          const preset = getPreset(industry_type);
+
+          await db.query(
+            `UPDATE company_profile SET
+               industry_type = $1,
+               business_model = $2,
+               industry_preset_version = 1
+             WHERE id = 1`,
+            [preset.industry_type, preset.business_model]
+          );
+
+          // Clear old modes and seed new ones
+          await db.query("DELETE FROM tenant_modes");
+          for (const mode of preset.modes) {
+            await db.query(
+              `INSERT INTO tenant_modes (mode, enabled, enabled_at) VALUES ($1, true, NOW()) ON CONFLICT (mode) DO NOTHING`,
+              [mode]
+            );
+          }
+
+          // Disable all mode-related flags first, then enable the new preset's
+          const ALL_MODE_FLAGS = [
+            "phase4_restaurant", "phase4_restaurant_kds",
+            "phase4_appointments", "phase2_commissions",
+            "phase4_service_projects", "phase4_service_contracts",
+            "subscription_billing",
+          ];
+          for (const flagKey of ALL_MODE_FLAGS) {
+            await db.query(
+              `INSERT INTO feature_flags (key, enabled) VALUES ($1, false) ON CONFLICT (key) DO UPDATE SET enabled = false`,
+              [flagKey]
+            );
+          }
+          const flagsToEnable = getFeatureFlagsForModes(preset.modes);
+          for (const flagKey of flagsToEnable) {
+            await db.query(
+              `UPDATE feature_flags SET enabled = true WHERE key = $1`,
+              [flagKey]
+            );
+          }
+
+          // Bust caches so next request picks up changes
+          invalidateModeCache();
+          invalidateFeatureFlagCache();
+        }
+
         res.json({ message: "Company profile updated" });
       } catch (err) {
         res.status(500).json({ error: err.message });

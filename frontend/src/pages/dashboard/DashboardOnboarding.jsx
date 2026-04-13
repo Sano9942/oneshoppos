@@ -2,48 +2,90 @@ import { useState, useEffect } from "react";
 import { CheckCircle2, Circle, X, PartyPopper } from "lucide-react";
 import { SectionCard } from "../../ui/primitives";
 import { api } from "../../api";
+import { usePreset } from "../../contexts/PresetContext";
 
 const STORAGE_KEY = "onboarding_dismissed";
 
-function buildSteps(data, onNavigate) {
+function buildSteps(data, onNavigate, presetSteps, labelFn) {
   const hasShiftOpen = Array.isArray(data?.operationalReadiness)
     && data.operationalReadiness.some((o) => o.shift_open);
+  const hasSales = (data?.saleCount ?? 0) > 0 || (data?.totalRevenueToday ?? 0) > 0;
+  const hasProducts = (data?.inventory?.total_products ?? 0) > 0;
 
-  return [
-    {
+  const ALL_STEPS = {
+    store: {
       id: "store",
       label: "Set up your store",
       done: !!data,
       navigate: () => onNavigate("/company-settings"),
     },
-    {
+    product: {
       id: "product",
-      label: "Add your first product",
-      done: (data?.inventory?.total_products ?? 0) > 0,
+      label: `Add your first ${labelFn("product").toLowerCase()}`,
+      done: hasProducts,
       navigate: () => onNavigate("/products/new"),
     },
-    {
+    menu_item: {
+      id: "menu_item",
+      label: `Add your first ${labelFn("product").toLowerCase()}`,
+      done: hasProducts,
+      navigate: () => onNavigate("/products/new"),
+    },
+    service: {
+      id: "service",
+      label: `Add your first ${labelFn("product").toLowerCase()}`,
+      done: hasProducts,
+      navigate: () => onNavigate("/products/new"),
+    },
+    employees: {
       id: "employees",
       label: "Add employees",
       done: (data?.attendanceSummary?.total_employees ?? 0) > 1,
       navigate: () => onNavigate("/employees"),
     },
-    {
+    shift: {
       id: "shift",
       label: "Open a shift",
       done: hasShiftOpen,
       navigate: () => window.open("/pos", "_blank"),
     },
-    {
+    sale: {
       id: "sale",
-      label: "Make your first sale",
-      done: (data?.saleCount ?? 0) > 0 || (data?.totalRevenueToday ?? 0) > 0,
+      label: `Make your first ${labelFn("sale").toLowerCase()}`,
+      done: hasSales,
       navigate: () => window.open("/pos", "_blank"),
     },
-  ];
+    order: {
+      id: "order",
+      label: `Make your first ${labelFn("order").toLowerCase()}`,
+      done: hasSales,
+      navigate: () => window.open("/pos", "_blank"),
+    },
+    floor_plan: {
+      id: "floor_plan",
+      label: "Set up your floor plan",
+      done: false,
+      navigate: () => onNavigate("/restaurant/floor"),
+    },
+    calendar: {
+      id: "calendar",
+      label: "Set up your calendar",
+      done: false,
+      navigate: () => onNavigate("/appointments/calendar"),
+    },
+    booking: {
+      id: "booking",
+      label: "Create your first booking",
+      done: false,
+      navigate: () => onNavigate("/appointments/bookings"),
+    },
+  };
+
+  return presetSteps.map((key) => ALL_STEPS[key]).filter(Boolean);
 }
 
 export function DashboardOnboarding({ data, onNavigate }) {
+  const { onboarding_steps, label: labelFn } = usePreset();
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem(STORAGE_KEY) === "1"
   );
@@ -64,7 +106,7 @@ export function DashboardOnboarding({ data, onNavigate }) {
       .catch(() => setServerChecked(true));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const steps = buildSteps(data, onNavigate);
+  const steps = buildSteps(data, onNavigate, onboarding_steps, labelFn);
   const doneCount = steps.filter((s) => s.done).length;
   const allDone = doneCount === steps.length;
 

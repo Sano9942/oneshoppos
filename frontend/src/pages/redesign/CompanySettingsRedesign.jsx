@@ -3,6 +3,7 @@ import { Building2, CheckCircle, Globe, Target, Upload, X } from "lucide-react";
 import { API_BASE as API } from "../../config";
 import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { usePreset } from "../../contexts/PresetContext";
 import {
   Button,
   Input,
@@ -12,7 +13,14 @@ import {
 
 const ALL_TIMEZONES = Intl.supportedValuesOf("timeZone");
 
+const INDUSTRY_OPTIONS = [
+  { value: "general_retail", label: "Retail Store" },
+  { value: "restaurant", label: "Restaurant / Cafe" },
+  { value: "salon", label: "Salon / Services" },
+];
+
 const DEFAULT_FORM = {
+  industry_type: "general_retail",
   company_name: "", trading_name: "", ntn: "", strn: "", address: "",
   city: "", country: "Pakistan", phone: "", email: "", website: "",
   currency_symbol: "$", currency_code: "USD",
@@ -32,6 +40,7 @@ function FormField({ label, children }) {
 
 export default function CompanySettingsRedesign() {
   const { refresh } = useCurrency();
+  const { updatePreset } = usePreset();
   const [form, setForm] = useState(DEFAULT_FORM);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null); // { type: 'success'|'error', text }
@@ -79,6 +88,10 @@ export default function CompanySettingsRedesign() {
       showMsg("success", "Company profile saved.");
       load();
       refresh();
+      // Re-fetch bootstrap to update preset context with new industry labels/modes
+      api.get("/api/context/bootstrap")
+        .then(data => { if (data?.preset) updatePreset(data.preset); })
+        .catch(() => {});
     } catch (err) {
       showMsg("error", err.body?.error || err.message || "Save failed");
     } finally {
@@ -135,6 +148,17 @@ export default function CompanySettingsRedesign() {
             <h2 className="font-semibold text-(--ui-text)">Business Identity</h2>
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <FormField label="Business Type">
+              <select
+                className="w-full rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-sm text-(--ui-text)"
+                value={form.industry_type || "general_retail"}
+                onChange={(e) => upd("industry_type", e.target.value)}
+              >
+                {INDUSTRY_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </FormField>
             <FormField label="Company Name">
               <Input
                 placeholder="Acme Corp"

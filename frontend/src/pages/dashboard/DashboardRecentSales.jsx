@@ -2,10 +2,12 @@ import { useNavigate } from "react-router-dom";
 import { SectionCard } from "../../ui/primitives";
 import { fmtDateTime } from "../../utils/dates";
 import { useCurrency } from "./DashboardShared";
+import { usePreset } from "../../contexts/PresetContext";
 
 export function DashboardRecentSales({ recentSales, data, isSingleBranch, onNavigate }) {
   const navigate = useNavigate();
   const { fmt } = useCurrency();
+  const { label } = usePreset();
 
   if (!recentSales?.length) {
     return (
@@ -20,7 +22,7 @@ export function DashboardRecentSales({ recentSales, data, isSingleBranch, onNavi
   return (
     <SectionCard className="p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-(--ui-text)">Recent Sales</h3>
+        <h3 className="text-sm font-semibold text-(--ui-text)">Recent {label("sale")}s</h3>
         <button
           onClick={() => navigate("/sales-history")}
           className="text-xs font-medium text-(--ui-primary) hover:underline"

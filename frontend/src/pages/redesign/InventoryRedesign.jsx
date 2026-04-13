@@ -4,6 +4,7 @@ import { BarChart2, CreditCard, Download, Hash, Plus, Search, Trash2, Upload, X 
 import { api } from "../../api";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { usePreset } from "../../contexts/PresetContext";
 import {
   Badge,
   BulkActionBar,
@@ -154,6 +155,7 @@ function parseCSV(text) {
 
 export default function InventoryRedesign() {
   const { fmt } = useCurrency();
+  const { label } = usePreset();
   const { authHeaders, hasPerm } = useAuth();
   const navigate = useNavigate();
   const canViewAllLocations = hasPerm("all_access");
@@ -417,8 +419,8 @@ export default function InventoryRedesign() {
   return (
     <>
     <PageShell
-      title="Products"
-      subtitle="Manage products, pricing, stock levels, and variants."
+      title={label("products")}
+      subtitle={`Manage ${label("products").toLowerCase()}, pricing, stock levels, and variants.`}
       right={
         <div className="flex items-center gap-2">
           <button

@@ -3,6 +3,7 @@ import { ArrowRightLeft, Award, Ban, BookOpen, Calendar, ChevronLeft, ChevronRig
 import { api } from "../../api";
 import { fmtDate, fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { usePreset } from "../../contexts/PresetContext";
 import { useToast } from "../../contexts/ToastContext";
 import {
   Badge,
@@ -79,6 +80,7 @@ function exportCsv(rows) {
 
 export default function CustomersRedesign() {
   const { fmt: money } = useCurrency();
+  const { label } = usePreset();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -486,8 +488,8 @@ export default function CustomersRedesign() {
 
   return (
     <PageShell
-      title="Customers"
-      subtitle="Manage customers, loyalty points, and wallet balances."
+      title={label("customers")}
+      subtitle={`Manage ${label("customers").toLowerCase()}, loyalty points, and wallet balances.`}
       right={
         <div className="flex gap-2">
           <Button onClick={() => exportCsv(rows)}>
