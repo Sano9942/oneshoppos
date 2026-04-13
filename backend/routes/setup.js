@@ -15,6 +15,7 @@ const bcrypt = require('bcryptjs');
 const { getPreset, VALID_INDUSTRY_TYPES } = require("../config/industry-config");
 const { getFeatureFlagsForModes } = require("../config/mode-registry");
 const { getCountryPack, getCountryCodeFromName } = require("../config/country-packs");
+const { seedPresetData } = require("../seeds/preset-seed-data");
 
 const ROLE_PERMISSIONS = {
   Administrator: ['all_access'],
@@ -207,6 +208,13 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
             'INSERT INTO outlets (id, name, address, company_id, is_active) VALUES (1, $1, $2, 1, true)',
             [finalOutletName, outlet_address || '']
           );
+        }
+
+        // 2b. Seed sample data (categories + products) — failure is non-fatal
+        try {
+          await seedPresetData(client, industry_type, 1);
+        } catch (seedErr) {
+          console.error("[setup] Sample data seeding failed (non-fatal):", seedErr.message);
         }
 
         // 3. Ensure default roles (id=1 Administrator, id=2 Manager, id=3 Cashier)
