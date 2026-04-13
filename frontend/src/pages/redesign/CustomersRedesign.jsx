@@ -36,8 +36,15 @@ const EMPTY = {
   email_consent: false,
   sms_consent: false,
   whatsapp_consent: false,
+  blood_group: "",
+  allergies: "",
+  medical_notes: "",
+  emergency_contact_name: "",
+  emergency_contact_phone: "",
+  insurance_id: "",
 };
 
+const BLOOD_GROUPS = ["", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDER_OPTIONS = ["", "Male", "Female", "Other"];
 const PAYMENT_OPTIONS = ["", "Cash", "Card", "Bank Transfer", "Mobile Wallet", "Credit"];
 const CONTACT_OPTIONS = ["", "Phone", "Email", "WhatsApp", "SMS"];
@@ -80,7 +87,7 @@ function exportCsv(rows) {
 
 export default function CustomersRedesign() {
   const { fmt: money } = useCurrency();
-  const { label } = usePreset();
+  const { label, industry_type } = usePreset();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -230,6 +237,12 @@ export default function CustomersRedesign() {
       email_consent: !!row.email_consent,
       sms_consent: !!row.sms_consent,
       whatsapp_consent: !!row.whatsapp_consent,
+      blood_group: row.blood_group || "",
+      allergies: row.allergies || "",
+      medical_notes: row.medical_notes || "",
+      emergency_contact_name: row.emergency_contact_name || "",
+      emergency_contact_phone: row.emergency_contact_phone || "",
+      insurance_id: row.insurance_id || "",
     });
     setFormError("");
     setModalOpen(true);
@@ -767,6 +780,20 @@ export default function CustomersRedesign() {
                     </div>
                   </SectionCard>
 
+                  {/* Medical Info — clinic only */}
+                  {industry_type === "clinic" && (detail.blood_group || detail.allergies || detail.medical_notes || detail.emergency_contact_name || detail.insurance_id) && (
+                    <SectionCard className="p-2">
+                      <p className="text-xs font-semibold text-(--ui-text-muted) mb-1.5">Medical Information</p>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                        {detail.blood_group && <><span className="text-(--ui-text-muted)">Blood Group</span><span className="text-(--ui-text) font-medium">{detail.blood_group}</span></>}
+                        {detail.insurance_id && <><span className="text-(--ui-text-muted)">Insurance ID</span><span className="text-(--ui-text)">{detail.insurance_id}</span></>}
+                        {detail.allergies && <><span className="text-(--ui-text-muted)">Allergies</span><span className="text-red-600 font-medium">{detail.allergies}</span></>}
+                        {detail.emergency_contact_name && <><span className="text-(--ui-text-muted)">Emergency Contact</span><span className="text-(--ui-text)">{detail.emergency_contact_name}{detail.emergency_contact_phone ? ` · ${detail.emergency_contact_phone}` : ""}</span></>}
+                      </div>
+                      {detail.medical_notes && <p className="mt-1 text-xs text-(--ui-text-muted) italic">{detail.medical_notes}</p>}
+                    </SectionCard>
+                  )}
+
                   {/* Tags */}
                   <SectionCard className="p-2">
                     <p className="text-xs font-semibold text-(--ui-text-muted) mb-1.5">
@@ -1232,6 +1259,48 @@ export default function CustomersRedesign() {
                   WhatsApp
                 </label>
               </div>
+
+              {/* Medical Information — clinic only */}
+              {industry_type === "clinic" && (
+                <>
+                  <p className="text-xs font-semibold text-(--ui-text-muted) uppercase tracking-wide pt-1">Medical Information</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-medium text-(--ui-text-muted)">Blood Group</label>
+                      <select className="w-full rounded border border-(--ui-border) bg-(--ui-bg) px-2.5 py-1.5 text-sm text-(--ui-text)" value={form.blood_group} onChange={(e) => setForm((p) => ({ ...p, blood_group: e.target.value }))}>
+                        {BLOOD_GROUPS.map((o) => <option key={o} value={o}>{o || "— Select —"}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-medium text-(--ui-text-muted)">Insurance ID</label>
+                      <Input placeholder="Insurance / Policy ID" value={form.insurance_id} onChange={(e) => setForm((p) => ({ ...p, insurance_id: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-medium text-(--ui-text-muted)">Allergies</label>
+                    <Input placeholder="Known allergies" value={form.allergies} onChange={(e) => setForm((p) => ({ ...p, allergies: e.target.value }))} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-medium text-(--ui-text-muted)">Emergency Contact Name</label>
+                      <Input placeholder="Emergency contact" value={form.emergency_contact_name} onChange={(e) => setForm((p) => ({ ...p, emergency_contact_name: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-medium text-(--ui-text-muted)">Emergency Contact Phone</label>
+                      <Input placeholder="Phone number" value={form.emergency_contact_phone} onChange={(e) => setForm((p) => ({ ...p, emergency_contact_phone: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-medium text-(--ui-text-muted)">Medical Notes</label>
+                    <textarea
+                      className="w-full rounded border border-(--ui-border) bg-(--ui-bg) px-2.5 py-1.5 text-sm text-(--ui-text) min-h-16 resize-y"
+                      placeholder="Medical conditions, ongoing treatments..."
+                      value={form.medical_notes}
+                      onChange={(e) => setForm((p) => ({ ...p, medical_notes: e.target.value }))}
+                    />
+                  </div>
+                </>
+              )}
 
               {/* Notes */}
               <p className="text-xs font-semibold text-(--ui-text-muted) uppercase tracking-wide pt-1">Notes</p>

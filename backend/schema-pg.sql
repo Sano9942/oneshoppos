@@ -302,7 +302,13 @@ CREATE TABLE IF NOT EXISTS customers (
   price_list_id INTEGER,
   email_consent BOOLEAN DEFAULT false,
   sms_consent BOOLEAN DEFAULT false,
-  whatsapp_consent BOOLEAN DEFAULT false
+  whatsapp_consent BOOLEAN DEFAULT false,
+  blood_group VARCHAR(5),
+  allergies TEXT,
+  medical_notes TEXT,
+  emergency_contact_name TEXT,
+  emergency_contact_phone TEXT,
+  insurance_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS customer_wallet_ledger (

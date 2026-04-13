@@ -374,14 +374,17 @@ module.exports = function registerCustomerRoutes(app, deps) {
   app.post("/api/customers", validate(CreateCustomerSchema), async (req, res) => {
     const { name, mobile, email, address, cnic, occupation, balance, ntn_cnic,
             date_of_birth, gender, city, customer_group_id, notes, tags,
-            preferred_payment_method, preferred_contact } = req.body;
+            preferred_payment_method, preferred_contact,
+            blood_group, allergies, medical_notes, emergency_contact_name,
+            emergency_contact_phone, insurance_id } = req.body;
     if (!name)
       return res.status(400).json({ error: "Customer name is required" });
     try {
       const { rows } = await db.query(
         `INSERT INTO customers (name, mobile, email, address, cnic, occupation, balance, ntn_cnic,
-         date_of_birth, gender, city, customer_group_id, notes, tags, preferred_payment_method, preferred_contact)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
+         date_of_birth, gender, city, customer_group_id, notes, tags, preferred_payment_method, preferred_contact,
+         blood_group, allergies, medical_notes, emergency_contact_name, emergency_contact_phone, insurance_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22) RETURNING *`,
         [
           name, mobile || null, email || null, address || null, cnic || null,
           occupation || null, balance || 0, ntn_cnic || null,
@@ -389,6 +392,8 @@ module.exports = function registerCustomerRoutes(app, deps) {
           customer_group_id || null, notes || null,
           tags && tags.length ? tags : null,
           preferred_payment_method || null, preferred_contact || null,
+          blood_group || null, allergies || null, medical_notes || null,
+          emergency_contact_name || null, emergency_contact_phone || null, insurance_id || null,
         ],
       );
       res.json({ ...rows[0], order_count: 0, total_spent: 0 });
@@ -402,7 +407,9 @@ module.exports = function registerCustomerRoutes(app, deps) {
     const { id } = req.params;
     const { name, mobile, email, address, cnic, occupation, balance, ntn_cnic,
             date_of_birth, gender, city, customer_group_id, notes, tags,
-            preferred_payment_method, preferred_contact } = req.body;
+            preferred_payment_method, preferred_contact,
+            blood_group, allergies, medical_notes, emergency_contact_name,
+            emergency_contact_phone, insurance_id } = req.body;
     if (!name)
       return res.status(400).json({ error: "Customer name is required" });
     try {
@@ -410,15 +417,20 @@ module.exports = function registerCustomerRoutes(app, deps) {
         `UPDATE customers SET name = $1, mobile = $2, email = $3, address = $4, cnic = $5,
          occupation = $6, balance = COALESCE($7, balance), ntn_cnic = $8,
          date_of_birth = $9, gender = $10, city = $11, customer_group_id = $12,
-         notes = $13, tags = $14, preferred_payment_method = $15, preferred_contact = $16
-         WHERE id = $17`,
+         notes = $13, tags = $14, preferred_payment_method = $15, preferred_contact = $16,
+         blood_group = $17, allergies = $18, medical_notes = $19,
+         emergency_contact_name = $20, emergency_contact_phone = $21, insurance_id = $22
+         WHERE id = $23`,
         [
           name, mobile || null, email || null, address || null, cnic || null,
           occupation || null, balance !== undefined ? balance : null, ntn_cnic || null,
           date_of_birth || null, gender || null, city || null,
           customer_group_id || null, notes || null,
           tags && tags.length ? tags : null,
-          preferred_payment_method || null, preferred_contact || null, id,
+          preferred_payment_method || null, preferred_contact || null,
+          blood_group || null, allergies || null, medical_notes || null,
+          emergency_contact_name || null, emergency_contact_phone || null, insurance_id || null,
+          id,
         ],
       );
       if (rowCount === 0)

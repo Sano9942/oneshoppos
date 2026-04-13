@@ -2853,6 +2853,21 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 33,
+    description: "M4 — clinic patient extension columns on customers",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE customers
+          ADD COLUMN IF NOT EXISTS blood_group VARCHAR(5),
+          ADD COLUMN IF NOT EXISTS allergies TEXT,
+          ADD COLUMN IF NOT EXISTS medical_notes TEXT,
+          ADD COLUMN IF NOT EXISTS emergency_contact_name TEXT,
+          ADD COLUMN IF NOT EXISTS emergency_contact_phone TEXT,
+          ADD COLUMN IF NOT EXISTS insurance_id TEXT
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {
