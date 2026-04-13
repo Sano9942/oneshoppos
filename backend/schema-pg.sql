@@ -388,7 +388,8 @@ CREATE TABLE IF NOT EXISTS sale_payments (
   id SERIAL PRIMARY KEY,
   sale_id INTEGER REFERENCES sales(id),
   payment_method TEXT NOT NULL,
-  amount NUMERIC(12,2) NOT NULL
+  amount NUMERIC(12,2) NOT NULL,
+  gateway_ref TEXT
 );
 
 CREATE TABLE IF NOT EXISTS invoice_sequences (
@@ -427,7 +428,8 @@ CREATE TABLE IF NOT EXISTS returns (
   timestamp TIMESTAMPTZ DEFAULT NOW(),
   shift_id INTEGER REFERENCES cash_shifts(id),
   fbr_status TEXT DEFAULT 'not_applicable',
-  fbr_irn TEXT
+  fbr_irn TEXT,
+  gateway_refund_ref TEXT
 );
 
 CREATE TABLE IF NOT EXISTS return_items (

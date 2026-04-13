@@ -318,6 +318,35 @@ module.exports = function registerReturnsRoutes(app, deps) {
         return retId;
       });
 
+      // Process gateway refund for card returns
+      if (refund_method === "card" && original_sale_id) {
+        const paymentGateway = require("../services/payment-gateway");
+        if (paymentGateway.isEnabled()) {
+          try {
+            const { rows: [cardPayment] } = await db.query(
+              "SELECT gateway_ref FROM sale_payments WHERE sale_id = $1 AND payment_method = 'Card' AND gateway_ref IS NOT NULL LIMIT 1",
+              [original_sale_id]
+            );
+            if (cardPayment?.gateway_ref) {
+              const result = await paymentGateway.refund({
+                transaction_id: cardPayment.gateway_ref,
+                amount: total_refund,
+                reason: reason || "customer_return",
+              });
+              await db.query(
+                "UPDATE returns SET gateway_refund_ref = $1 WHERE id = $2",
+                [result.refund_id, returnId]
+              );
+              logger.info({ returnId, refundId: result.refund_id }, "Gateway refund processed");
+            } else {
+              logger.warn({ returnId, original_sale_id }, "Card refund requested but no gateway_ref on original sale — recording as offline refund");
+            }
+          } catch (refundErr) {
+            logger.error({ err: refundErr, returnId }, "Gateway refund failed — return recorded but refund pending");
+          }
+        }
+      }
+
       const syncChanges = items.map((item) => ({
         product_id: item.product_id,
         outlet_id,

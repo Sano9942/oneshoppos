@@ -130,6 +130,56 @@ async function processRenewal(db, boss, tenantSlug, subscriptionId) {
     }
   );
 
+  // Auto-charge: generate payment link and email it to the customer
+  if (sub.auto_charge) {
+    try {
+      const paymentGateway = require("./payment-gateway");
+      if (paymentGateway.isEnabled()) {
+        const crypto = require("crypto");
+        const linkToken = crypto.randomBytes(16).toString("hex");
+        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+
+        const { checkout_url, gateway_ref } = await paymentGateway.createCheckout({
+          amount: Number(sub.price),
+          currency: "PKR",
+          reference: `sub-renew-${subscriptionId}-${linkToken}`,
+          description: `${sub.plan_name} subscription renewal`,
+          returnUrl: `${frontendUrl}/subscription-renewed?subscription=${subscriptionId}`,
+          cancelUrl: `${frontendUrl}/customer-invoices`,
+        });
+
+        // Record the payment link on the invoice
+        await db.query(
+          `INSERT INTO customer_invoice_payment_links (invoice_id, link_token, gateway_ref, amount, status, expires_at)
+           VALUES ($1, $2, $3, $4, 'pending', NOW() + INTERVAL '7 days')`,
+          [invoice.id, linkToken, gateway_ref, Number(sub.price)]
+        );
+
+        // Email the payment link to the customer
+        const { rows: [customer] } = await db.query(
+          "SELECT name, email FROM customers WHERE id = $1",
+          [sub.customer_id]
+        );
+        if (customer?.email) {
+          const { enqueueEmail } = require("./email");
+          await enqueueEmail(db, {
+            tenantSlug,
+            emailType: "subscription_renewal_payment",
+            toEmail: customer.email,
+            subject: `Payment due: ${sub.plan_name} subscription renewal`,
+            htmlBody: `<p>Hi ${customer.name || ""},</p>
+              <p>Your <strong>${sub.plan_name}</strong> subscription has been renewed. Please complete payment of <strong>PKR ${Number(sub.price).toLocaleString()}</strong>.</p>
+              <p><a href="${checkout_url}" style="display:inline-block;padding:12px 24px;background:#10b981;color:white;text-decoration:none;border-radius:8px;font-weight:600;">Pay Now</a></p>
+              <p>This link expires in 7 days.</p>`,
+          });
+          logger.info({ subscriptionId, invoiceId: invoice.id, customerEmail: customer.email }, "Subscription renewal payment link emailed");
+        }
+      }
+    } catch (chargeErr) {
+      logger.error({ err: chargeErr, subscriptionId }, "Auto-charge payment link generation failed (non-blocking)");
+    }
+  }
+
   logger.info({ subscriptionId, invoiceId: invoice.id, nextEnd }, "Subscription renewed — invoice created");
   return invoice;
 }

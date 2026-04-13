@@ -150,6 +150,11 @@ module.exports = function registerAllRoutes(app, deps) {
   // Payment gateway webhooks — no auth, no tenant context (identifies via payment_intents)
   require("./webhooks")(app, deps);
 
+  // Sandbox payment simulation — only available when PAYMENT_GATEWAY=sandbox
+  if (process.env.PAYMENT_GATEWAY === "sandbox") {
+    require("./sandbox")(app, deps);
+  }
+
   // Public receipt endpoint — no auth required, manually resolves tenant DB
   require("./receipts")(app, deps);
 

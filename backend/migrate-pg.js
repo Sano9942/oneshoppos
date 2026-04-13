@@ -2868,6 +2868,20 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 32,
+    description: "SanoPay sandbox — gateway_ref on sale_payments + returns for payment tracing",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE sale_payments
+          ADD COLUMN IF NOT EXISTS gateway_ref TEXT
+      `);
+      await client.query(`
+        ALTER TABLE returns
+          ADD COLUMN IF NOT EXISTS gateway_refund_ref TEXT
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

@@ -719,11 +719,25 @@ module.exports = function registerSalesRoutes(app, deps) {
           }
         }
 
-        // 4. Insert Payments
+        // 4. Insert Payments (with gateway bridge for card payments)
+        const paymentGateway = require("../services/payment-gateway");
         for (const payment of finalPayments) {
+          let gatewayRef = null;
+          if (payment.method === "Card" && paymentGateway.isEnabled()) {
+            try {
+              const result = await paymentGateway.processInlinePayment({
+                amount: payment.amount,
+                currency: "PKR",
+                reference: `pos-sale-${newSaleId}`,
+              });
+              gatewayRef = result.gateway_ref;
+            } catch (gwErr) {
+              throw Object.assign(new Error("Card payment processing failed: " + gwErr.message), { statusCode: 402 });
+            }
+          }
           await client.query(
-            "INSERT INTO sale_payments (sale_id, payment_method, amount) VALUES ($1, $2, $3)",
-            [newSaleId, payment.method, payment.amount]
+            "INSERT INTO sale_payments (sale_id, payment_method, amount, gateway_ref) VALUES ($1, $2, $3, $4)",
+            [newSaleId, payment.method, payment.amount, gatewayRef]
           );
         }
 
@@ -884,8 +898,8 @@ module.exports = function registerSalesRoutes(app, deps) {
         });
       }
     } catch (err) {
-      if (err.statusCode === 400) {
-        return res.status(400).json({ error: err.message, code: err.code });
+      if (err.statusCode) {
+        return res.status(err.statusCode).json({ error: err.message, code: err.code });
       }
       res.status(500).json({ error: err.message || "Transaction failed" });
     }

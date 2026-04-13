@@ -11,8 +11,9 @@
  *   3. Set PAYMENT_GATEWAY env var to the adapter key
  *
  * Configuration via env vars:
- *   PAYMENT_GATEWAY=xpay|manual (default: manual)
+ *   PAYMENT_GATEWAY=sandbox|xpay|manual (default: manual)
  *   XPAY_API_KEY, XPAY_WEBHOOK_SECRET
+ *   SANDBOX_WEBHOOK_SECRET (for sandbox adapter)
  */
 
 const logger = require("./logger").child({ component: "payment-gateway" });
@@ -51,6 +52,30 @@ class BasePaymentAdapter {
   async verifyWebhook(headers, rawBody) {
     return { valid: false, error: "Not implemented" };
   }
+
+  /**
+   * Process a refund against a previous transaction.
+   * @param {Object} opts
+   * @param {string} opts.transaction_id - Original transaction/gateway reference
+   * @param {number} opts.amount - Refund amount
+   * @param {string} [opts.reason] - Refund reason
+   * @returns {Promise<{ refund_id: string, status: string }>}
+   */
+  async refund(opts) {
+    throw new Error("Not implemented");
+  }
+
+  /**
+   * Process an inline (non-redirect) payment — used for POS card payments.
+   * @param {Object} opts
+   * @param {number} opts.amount
+   * @param {string} [opts.currency]
+   * @param {string} opts.reference
+   * @returns {Promise<{ gateway_ref: string, status: string }>}
+   */
+  async processInlinePayment(opts) {
+    throw new Error("Inline payment not supported by this adapter");
+  }
 }
 
 // ── Manual Adapter (no gateway configured) ────────────────────────────
@@ -64,6 +89,10 @@ class ManualAdapter extends BasePaymentAdapter {
 
   async verifyWebhook() {
     return { valid: false, error: "No gateway configured" };
+  }
+
+  async refund() {
+    return { refund_id: null, status: "not_supported" };
   }
 }
 
@@ -133,11 +162,66 @@ class XPayAdapter extends BasePaymentAdapter {
   }
 }
 
+// ── Sandbox Adapter (development/testing) ────────────────────────────
+
+class SandboxAdapter extends BasePaymentAdapter {
+  isEnabled() { return true; }
+
+  async createCheckout({ amount, currency = "PKR", reference, description, returnUrl, cancelUrl }) {
+    // Sandbox payment page is served by the backend at GET /api/sandbox/pay/:gatewayRef
+    const backendUrl = process.env.APP_PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+    const gatewayRef = `sandbox_${Date.now()}_${reference}`;
+    logger.info({ amount, currency, reference, gatewayRef }, "Sandbox checkout created");
+    return {
+      checkout_url: `${backendUrl}/api/sandbox/pay/${encodeURIComponent(gatewayRef)}`,
+      gateway_ref: gatewayRef,
+    };
+  }
+
+  async verifyWebhook(headers, rawBody) {
+    const secret = process.env.SANDBOX_WEBHOOK_SECRET;
+    if (!secret) return { valid: false, error: "SANDBOX_WEBHOOK_SECRET not configured" };
+
+    const crypto = require("crypto");
+    const signature = headers["x-sandbox-signature"];
+    if (!signature) return { valid: false, error: "Missing sandbox signature header" };
+
+    const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+    const valid = crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+
+    if (!valid) return { valid: false, error: "Invalid sandbox signature" };
+
+    const payload = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
+
+    return {
+      valid: true,
+      event_type: payload.event_type,
+      transaction_id: payload.transaction_id,
+      status: payload.status,
+      amount: payload.amount,
+      raw: payload,
+    };
+  }
+
+  async refund({ transaction_id, amount, reason }) {
+    const refundId = `sandbox_refund_${Date.now()}`;
+    logger.info({ transaction_id, amount, reason, refundId }, "Sandbox refund processed");
+    return { refund_id: refundId, status: "completed" };
+  }
+
+  async processInlinePayment({ amount, currency = "PKR", reference }) {
+    const gatewayRef = `sandbox_inline_${Date.now()}_${reference}`;
+    logger.info({ amount, currency, reference, gatewayRef }, "Sandbox inline payment processed");
+    return { gateway_ref: gatewayRef, status: "completed" };
+  }
+}
+
 // ── Adapter Registry & Factory ────────────────────────────────────────
 
 const ADAPTERS = {
   manual: ManualAdapter,
   xpay: XPayAdapter,
+  sandbox: SandboxAdapter,
 };
 
 /**
@@ -182,11 +266,23 @@ function isEnabled() {
   return adapter.isEnabled();
 }
 
+async function refund(opts) {
+  const adapter = getPaymentAdapter();
+  return adapter.refund(opts);
+}
+
+async function processInlinePayment(opts) {
+  const adapter = getPaymentAdapter();
+  return adapter.processInlinePayment(opts);
+}
+
 module.exports = {
   createCheckout,
   createInvoiceCheckout,
   verifyWebhook,
   isEnabled,
+  refund,
+  processInlinePayment,
   getPaymentAdapter,
   BasePaymentAdapter,
   ADAPTERS,

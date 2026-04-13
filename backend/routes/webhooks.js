@@ -5,14 +5,278 @@
  *
  * Mounted BEFORE tenant middleware (no auth, no tenant context).
  * Identifies tenant via payment_intents.tenant_id lookup.
+ *
+ * processWebhookEvent() is exported for reuse by the sandbox simulate endpoint.
  */
 
+// ── Shared webhook processing logic ──────────────────────────────────
+// Extracted so that both real gateway webhooks (xPay, Bank Alfalah, etc.)
+// and the sandbox simulate endpoint can reuse the same processing path.
+
+const masterDb = require("../master-db-pg");
+const _logger = require("../services/logger").child({ component: "webhooks" });
+const { PLAN_DEFAULTS } = require("../middleware/plan-limits");
+const { TEMPLATES } = require("../services/email-templates");
+
+/**
+ * Process a verified payment webhook event.
+ * @param {Object} opts
+ * @param {string} opts.provider - Payment provider key (e.g. 'xpay', 'sandbox')
+ * @param {string} opts.event_type - Event type (payment.completed, payment.failed, payment.cancelled)
+ * @param {string} opts.transaction_id - Gateway transaction/session ID (matches gateway_ref/provider_ref)
+ * @param {string} opts.status - Payment status string
+ * @param {number} opts.amount - Payment amount
+ * @param {Object} opts.raw - Raw webhook payload
+ * @returns {Promise<{ ok: boolean, message?: string, statusCode?: number, error?: string }>}
+ */
+async function processWebhookEvent({ provider, event_type, transaction_id, status, amount, raw }) {
+  _logger.info({ provider, event_type, transaction_id, status }, "Processing webhook event");
+
+  // Log to payment_webhook_events for idempotency and auditability
+  try {
+    await masterDb.query(
+      `INSERT INTO payment_webhook_events (provider, event_id, event_type, raw_payload)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (provider, event_id) DO NOTHING`,
+      [provider, transaction_id + ":" + (event_type || status), event_type, JSON.stringify(raw)]
+    );
+  } catch (logErr) {
+    _logger.warn({ err: logErr }, "Failed to log webhook event (non-fatal)");
+  }
+
+  // ── Context 1: Platform billing (payment_intents in public schema) ──
+  const { rows: [intent] } = await masterDb.query(
+    "SELECT id, tenant_id, amount, plan, cycle, outlet_count, status AS intent_status FROM payment_intents WHERE gateway_ref = $1",
+    [transaction_id]
+  );
+
+  if (intent) {
+    // Idempotency: already processed
+    if (intent.intent_status === "completed") {
+      _logger.info({ intent_id: intent.id }, `${provider} webhook: already processed (idempotent)`);
+      return { ok: true, message: "Already processed" };
+    }
+
+    if (status === "completed" || event_type === "payment.completed") {
+      const now = new Date();
+      const daysToAdd = intent.cycle === "annual" ? 365 : 30;
+      const periodEnd = new Date(now.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+      const graceEnd = new Date(periodEnd.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+      const limits = PLAN_DEFAULTS[intent.plan] || PLAN_DEFAULTS.free;
+
+      await masterDb.query(
+        `UPDATE payment_intents SET status = 'completed', completed_at = NOW(), gateway_data = $1 WHERE id = $2`,
+        [JSON.stringify(raw), intent.id]
+      );
+
+      await masterDb.query(
+        `UPDATE tenants
+         SET plan = $1, billing_cycle = $2, plan_expires_at = $3, grace_ends_at = $4,
+             payment_status = 'active', max_employees = $5, max_outlets = $6, max_products = $7, updated_at = NOW()
+         WHERE id = $8`,
+        [intent.plan, intent.cycle, periodEnd.toISOString(), graceEnd.toISOString(),
+         limits.max_employees, Math.max(limits.max_outlets, intent.outlet_count), limits.max_products, intent.tenant_id]
+      );
+
+      await masterDb.query(
+        `INSERT INTO payment_records (tenant_id, amount, plan, cycle, period_start, period_end, payment_method, reference_note, recorded_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [intent.tenant_id, intent.amount, intent.plan, intent.cycle,
+         now.toISOString(), periodEnd.toISOString(), provider, `intent:${intent.id}`, `webhook:${provider}`]
+      );
+
+      // Enqueue confirmation email (fire-and-forget)
+      try {
+        const { rows: [tenant] } = await masterDb.query("SELECT slug, name FROM tenants WHERE id = $1", [intent.tenant_id]);
+        if (tenant) {
+          const { rows: [cp] } = await masterDb.query(
+            `SELECT email FROM tenant_${tenant.slug}.company_profile WHERE id = 1`
+          );
+          if (cp?.email) {
+            const template = TEMPLATES.billing_payment_recorded({
+              storeName: tenant.name,
+              amount: `PKR ${Number(intent.amount).toLocaleString()}`,
+              plan: intent.plan,
+              cycle: intent.cycle,
+              periodEnd: periodEnd.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+            });
+            const fromAddress = process.env.RESEND_FROM_EMAIL || "SanoPOS <noreply@sanopos.com>";
+            await masterDb.query(
+              `INSERT INTO email_queue (tenant_id, email_type, to_email, subject, html_body, from_address)
+               VALUES ($1, $2, $3, $4, $5, $6)`,
+              [intent.tenant_id, "billing_payment_recorded", cp.email, template.subject, template.html, fromAddress]
+            );
+          }
+        }
+      } catch (emailErr) {
+        _logger.error({ err: emailErr }, "Failed to enqueue payment confirmation email");
+      }
+
+      _logger.info({ intent_id: intent.id, tenant_id: intent.tenant_id }, "Payment confirmed — tenant activated");
+      return { ok: true };
+
+    } else if (status === "failed" || event_type === "payment.failed") {
+      await masterDb.query(
+        `UPDATE payment_intents SET status = 'failed', gateway_data = $1 WHERE id = $2`,
+        [JSON.stringify(raw), intent.id]
+      );
+      _logger.info({ intent_id: intent.id }, "Payment failed");
+      return { ok: true };
+
+    } else if (status === "cancelled" || event_type === "payment.cancelled") {
+      await masterDb.query(
+        `UPDATE payment_intents SET status = 'cancelled', gateway_data = $1 WHERE id = $2`,
+        [JSON.stringify(raw), intent.id]
+      );
+      _logger.info({ intent_id: intent.id }, "Payment cancelled");
+      return { ok: true };
+    }
+
+    _logger.info({ event_type, transaction_id }, `${provider} webhook: unhandled event type`);
+    return { ok: true, message: "Event acknowledged" };
+  }
+
+  // ── Context 2: Invoice payment links (tenant schema) ──
+  const db = require("../db-pg");
+  const { rows: [link] } = await db.query(
+    "SELECT * FROM customer_invoice_payment_links WHERE gateway_ref = $1",
+    [transaction_id]
+  );
+  if (link) {
+    if (status === "completed" || event_type === "payment.completed") {
+      try {
+        await db.query(
+          "UPDATE customer_invoice_payment_links SET status = 'completed', completed_at = NOW(), raw_completion_payload = $1 WHERE id = $2",
+          [JSON.stringify(raw), link.id]
+        );
+        await db.query(
+          `INSERT INTO customer_invoice_payments (invoice_id, amount, payment_method, payment_type, reference)
+           VALUES ($1, $2, 'online', 'payment', $3)`,
+          [link.invoice_id, link.amount, `gateway:${transaction_id}`]
+        );
+        const { recomputeBalance } = require("../services/customer-invoicing");
+        await recomputeBalance(db, link.invoice_id);
+        _logger.info({ invoiceId: link.invoice_id, linkId: link.id }, "Invoice payment link completed");
+      } catch (linkErr) {
+        _logger.error({ err: linkErr }, "Invoice payment link processing failed");
+      }
+    }
+    return { ok: true };
+  }
+
+  // ── Context 3: Storefront payment sessions (tenant schema) ──
+  const { rows: [session] } = await db.query(
+    "SELECT * FROM storefront_payment_sessions WHERE provider_ref = $1",
+    [transaction_id]
+  );
+  if (session) {
+    if (status === "completed" || event_type === "payment.completed") {
+      try {
+        await db.query(
+          "UPDATE storefront_payment_sessions SET status = 'completed', completed_at = NOW() WHERE id = $1",
+          [session.id]
+        );
+        await db.query(
+          `UPDATE web_orders SET payment_status = 'paid', updated_at = NOW() WHERE id = $1`,
+          [session.web_order_id]
+        );
+        await db.query(
+          `INSERT INTO web_order_transactions (web_order_id, external_txn_id, gateway, kind, status, amount, processed_at, provider_ref, payment_context)
+           VALUES ($1, $2, $3, 'sale', 'completed', $4, NOW(), $5, 'storefront')`,
+          [session.web_order_id, transaction_id, provider, session.amount, transaction_id]
+        );
+        _logger.info({ orderId: session.web_order_id, sessionId: session.id }, "Storefront payment completed");
+      } catch (sfErr) {
+        _logger.error({ err: sfErr }, "Storefront payment processing failed");
+      }
+    } else if (status === "failed" || event_type === "payment.failed") {
+      try {
+        await db.query(
+          "UPDATE storefront_payment_sessions SET status = 'failed' WHERE id = $1",
+          [session.id]
+        );
+        await db.query(
+          `UPDATE web_orders SET payment_status = 'failed', updated_at = NOW() WHERE id = $1`,
+          [session.web_order_id]
+        );
+        // Release inventory reservations
+        const { rows: reservations } = await db.query(
+          `SELECT r.id, r.product_id, r.variant_id, r.outlet_id, r.quantity
+           FROM storefront_cart_reservations r
+           JOIN web_orders wo ON wo.id = $1
+           WHERE r.status = 'converted' AND r.outlet_id IS NOT NULL`,
+          [session.web_order_id]
+        );
+        for (const r of reservations) {
+          await db.query(
+            `UPDATE outlet_stock SET quantity = quantity + $1 WHERE product_id = $2 AND outlet_id = $3`,
+            [r.quantity, r.product_id, r.outlet_id]
+          );
+          if (r.variant_id) {
+            await db.query(
+              `UPDATE product_variants SET stock = stock + $1 WHERE id = $2`,
+              [r.quantity, r.variant_id]
+            );
+          }
+          await db.query(
+            `UPDATE storefront_cart_reservations SET status = 'released' WHERE id = $1`,
+            [r.id]
+          );
+        }
+        _logger.info({ orderId: session.web_order_id, sessionId: session.id, releasedCount: reservations.length }, "Storefront payment failed — inventory released");
+      } catch (sfErr) {
+        _logger.error({ err: sfErr }, "Storefront payment failure processing failed");
+      }
+    } else if (status === "cancelled" || event_type === "payment.cancelled") {
+      try {
+        await db.query(
+          "UPDATE storefront_payment_sessions SET status = 'cancelled' WHERE id = $1",
+          [session.id]
+        );
+        await db.query(
+          `UPDATE web_orders SET payment_status = 'cancelled', updated_at = NOW() WHERE id = $1`,
+          [session.web_order_id]
+        );
+        _logger.info({ orderId: session.web_order_id, sessionId: session.id }, "Storefront payment cancelled");
+      } catch (sfErr) {
+        _logger.error({ err: sfErr }, "Storefront payment cancellation processing failed");
+      }
+    }
+    return { ok: true };
+  }
+
+  // ── Context 4: Wallet top-up (tenant schema, reference pattern match) ──
+  if (transaction_id.includes("wallet-topup-") && (status === "completed" || event_type === "payment.completed")) {
+    try {
+      // Extract customer ID from the reference pattern: wallet-topup-{customerId}-{timestamp}
+      const match = transaction_id.match(/wallet-topup-(\d+)-/);
+      if (match && amount > 0) {
+        const customerId = match[1];
+        await db.query(
+          "UPDATE customers SET balance = COALESCE(balance, 0) + $1 WHERE id = $2",
+          [amount, customerId]
+        );
+        await db.query(
+          `INSERT INTO customer_wallet_ledger (customer_id, type, amount, reference_type, note)
+           VALUES ($1, 'credit', $2, 'online_topup', $3)`,
+          [customerId, amount, `Online top-up via ${provider} (ref: ${transaction_id})`]
+        );
+        _logger.info({ customerId, amount, provider }, "Wallet top-up completed via payment");
+        return { ok: true };
+      }
+    } catch (walletErr) {
+      _logger.error({ err: walletErr, transaction_id }, "Wallet top-up processing failed");
+    }
+  }
+
+  _logger.warn({ transaction_id, provider }, "Webhook: unknown transaction");
+  return { ok: false, statusCode: 404, error: "Unknown transaction" };
+}
+
 module.exports = function registerWebhookRoutes(app, deps) {
-  const masterDb = require("../master-db-pg");
   const paymentGateway = require("../services/payment-gateway");
-  const logger = require("../services/logger").child({ component: "webhooks" });
-  const { PLAN_DEFAULTS } = require("../middleware/plan-limits");
-  const { TEMPLATES } = require("../services/email-templates");
+  const logger = _logger;
 
   // Note: raw body is captured by express.json() verify callback in index.js
   // and available as req.rawBody for HMAC verification.
@@ -28,173 +292,12 @@ module.exports = function registerWebhookRoutes(app, deps) {
         return res.status(400).json({ error: "Invalid signature" });
       }
 
-      logger.info({ event_type, transaction_id, status }, "xPay webhook received");
+      const result = await processWebhookEvent({ provider: "xpay", event_type, transaction_id, status, amount, raw });
 
-      // Log to payment_webhook_events for idempotency and auditability
-      try {
-        await masterDb.query(
-          `INSERT INTO payment_webhook_events (provider, event_id, event_type, raw_payload)
-           VALUES ('xpay', $1, $2, $3)
-           ON CONFLICT (provider, event_id) DO NOTHING`,
-          [transaction_id + ":" + (event_type || status), event_type, JSON.stringify(raw)]
-        );
-      } catch (logErr) {
-        logger.warn({ err: logErr }, "Failed to log webhook event (non-fatal)");
+      if (result.error) {
+        return res.status(result.statusCode || 400).json({ error: result.error });
       }
-
-      // Look up payment intent by gateway reference
-      const { rows: [intent] } = await masterDb.query(
-        "SELECT id, tenant_id, amount, plan, cycle, outlet_count, status AS intent_status FROM payment_intents WHERE gateway_ref = $1",
-        [transaction_id]
-      );
-
-      if (!intent) {
-        // Check if this is an invoice payment link
-        const db = require("../db-pg");
-        const { rows: [link] } = await db.query(
-          "SELECT * FROM customer_invoice_payment_links WHERE gateway_ref = $1",
-          [transaction_id]
-        );
-        if (link && (status === "completed" || event_type === "payment.completed")) {
-          try {
-            await db.query(
-              "UPDATE customer_invoice_payment_links SET status = 'completed', completed_at = NOW(), raw_completion_payload = $1 WHERE id = $2",
-              [JSON.stringify(raw), link.id]
-            );
-            await db.query(
-              `INSERT INTO customer_invoice_payments (invoice_id, amount, payment_method, payment_type, reference)
-               VALUES ($1, $2, 'online', 'payment', $3)`,
-              [link.invoice_id, link.amount, `gateway:${transaction_id}`]
-            );
-            const { recomputeBalance } = require("../services/customer-invoicing");
-            await recomputeBalance(db, link.invoice_id);
-            logger.info({ invoiceId: link.invoice_id, linkId: link.id }, "Invoice payment link completed");
-          } catch (linkErr) {
-            logger.error({ err: linkErr }, "Invoice payment link processing failed");
-          }
-          return res.json({ ok: true });
-        }
-
-        // Check if this is a storefront payment session
-        const { rows: [session] } = await db.query(
-          "SELECT * FROM storefront_payment_sessions WHERE provider_ref = $1",
-          [transaction_id]
-        );
-        if (session && (status === "completed" || event_type === "payment.completed")) {
-          try {
-            await db.query(
-              "UPDATE storefront_payment_sessions SET status = 'completed', completed_at = NOW() WHERE id = $1",
-              [session.id]
-            );
-            await db.query(
-              `UPDATE web_orders SET payment_status = 'paid', updated_at = NOW() WHERE id = $1`,
-              [session.web_order_id]
-            );
-            await db.query(
-              `INSERT INTO web_order_transactions (web_order_id, external_txn_id, gateway, kind, status, amount, processed_at, provider_ref, payment_context)
-               VALUES ($1, $2, 'xpay', 'sale', 'completed', $3, NOW(), $4, 'storefront')`,
-              [session.web_order_id, transaction_id, session.amount, transaction_id]
-            );
-            logger.info({ orderId: session.web_order_id, sessionId: session.id }, "Storefront payment completed");
-          } catch (sfErr) {
-            logger.error({ err: sfErr }, "Storefront payment processing failed");
-          }
-          return res.json({ ok: true });
-        }
-
-        logger.warn({ transaction_id }, "xPay webhook: unknown transaction");
-        return res.status(404).json({ error: "Unknown transaction" });
-      }
-
-      // Idempotency: already processed
-      if (intent.intent_status === "completed") {
-        logger.info({ intent_id: intent.id }, "xPay webhook: already processed (idempotent)");
-        return res.json({ ok: true, message: "Already processed" });
-      }
-
-      if (status === "completed" || event_type === "payment.completed") {
-        // ── Payment confirmed ─────────────────────────────────────────
-        const now = new Date();
-        const daysToAdd = intent.cycle === "annual" ? 365 : 30;
-        const periodEnd = new Date(now.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
-        const graceEnd = new Date(periodEnd.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-        const limits = PLAN_DEFAULTS[intent.plan] || PLAN_DEFAULTS.free;
-
-        // Update payment intent
-        await masterDb.query(
-          `UPDATE payment_intents SET status = 'completed', completed_at = NOW(), gateway_data = $1 WHERE id = $2`,
-          [JSON.stringify(raw), intent.id]
-        );
-
-        // Activate tenant
-        await masterDb.query(
-          `UPDATE tenants
-           SET plan = $1, billing_cycle = $2, plan_expires_at = $3, grace_ends_at = $4,
-               payment_status = 'active', max_employees = $5, max_outlets = $6, max_products = $7, updated_at = NOW()
-           WHERE id = $8`,
-          [intent.plan, intent.cycle, periodEnd.toISOString(), graceEnd.toISOString(),
-           limits.max_employees, Math.max(limits.max_outlets, intent.outlet_count), limits.max_products, intent.tenant_id]
-        );
-
-        // Insert payment record
-        await masterDb.query(
-          `INSERT INTO payment_records (tenant_id, amount, plan, cycle, period_start, period_end, payment_method, reference_note, recorded_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [intent.tenant_id, intent.amount, intent.plan, intent.cycle,
-           now.toISOString(), periodEnd.toISOString(), "xpay", `intent:${intent.id}`, "webhook:xpay"]
-        );
-
-        // Enqueue confirmation email (fire-and-forget)
-        try {
-          const { rows: [tenant] } = await masterDb.query("SELECT slug, name FROM tenants WHERE id = $1", [intent.tenant_id]);
-          if (tenant) {
-            const { rows: [cp] } = await masterDb.query(
-              `SELECT email FROM tenant_${tenant.slug}.company_profile WHERE id = 1`
-            );
-            if (cp?.email) {
-              const template = TEMPLATES.billing_payment_recorded({
-                storeName: tenant.name,
-                amount: `PKR ${Number(intent.amount).toLocaleString()}`,
-                plan: intent.plan,
-                cycle: intent.cycle,
-                periodEnd: periodEnd.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
-              });
-              const fromAddress = process.env.RESEND_FROM_EMAIL || "SanoPOS <noreply@sanopos.com>";
-              await masterDb.query(
-                `INSERT INTO email_queue (tenant_id, email_type, to_email, subject, html_body, from_address)
-                 VALUES ($1, $2, $3, $4, $5, $6)`,
-                [intent.tenant_id, "billing_payment_recorded", cp.email, template.subject, template.html, fromAddress]
-              );
-            }
-          }
-        } catch (emailErr) {
-          logger.error({ err: emailErr }, "Failed to enqueue payment confirmation email");
-        }
-
-        logger.info({ intent_id: intent.id, tenant_id: intent.tenant_id }, "Payment confirmed — tenant activated");
-        return res.json({ ok: true });
-
-      } else if (status === "failed" || event_type === "payment.failed") {
-        await masterDb.query(
-          `UPDATE payment_intents SET status = 'failed', gateway_data = $1 WHERE id = $2`,
-          [JSON.stringify(raw), intent.id]
-        );
-        logger.info({ intent_id: intent.id }, "Payment failed");
-        return res.json({ ok: true });
-
-      } else if (status === "cancelled" || event_type === "payment.cancelled") {
-        await masterDb.query(
-          `UPDATE payment_intents SET status = 'cancelled', gateway_data = $1 WHERE id = $2`,
-          [JSON.stringify(raw), intent.id]
-        );
-        logger.info({ intent_id: intent.id }, "Payment cancelled");
-        return res.json({ ok: true });
-      }
-
-      // Unknown event type — acknowledge but don't process
-      logger.info({ event_type, transaction_id }, "xPay webhook: unhandled event type");
-      return res.json({ ok: true, message: "Event acknowledged" });
+      return res.json({ ok: true, message: result.message });
 
     } catch (err) {
       logger.error({ err }, "xPay webhook processing error");
@@ -295,3 +398,6 @@ module.exports = function registerWebhookRoutes(app, deps) {
     }
   });
 };
+
+// Export processWebhookEvent for reuse by sandbox simulate endpoint
+module.exports.processWebhookEvent = processWebhookEvent;
