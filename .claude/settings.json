@@ -156,7 +156,15 @@
       "mcp__claude_ai_Supabase__list_tables",
       "Read(//c/Users/HP/.railway/**)",
       "WebFetch(domain:medium.com)",
-      "mcp__claude_ai_Supabase__list_projects"
+      "mcp__claude_ai_Supabase__list_projects",
+      "WebFetch(domain:squareup.com)",
+      "WebFetch(domain:www.nerdwallet.com)",
+      "WebFetch(domain:www.merchantmaverick.com)",
+      "WebFetch(domain:www.posusa.com)",
+      "WebFetch(domain:vizologi.com)",
+      "WebFetch(domain:fourweekmba.com)",
+      "WebFetch(domain:fitsmallbusiness.com)",
+      "WebFetch(domain:litcommerce.com)"
     ],
     "additionalDirectories": [
       "\\tmp",
