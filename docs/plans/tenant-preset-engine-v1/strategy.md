@@ -465,11 +465,191 @@ CREATE TABLE IF NOT EXISTS tenant_modes (
 6. ~~**Execute Milestone 3** — Additional presets (grocery, cafe, clinic, repair shop, gym, wholesale, photography studio)~~ Done (21/21 unit tests passing, frontend builds clean)
 7. ~~**Execute Milestone 4** — Deepen preset adaptation surfaces (country packs, receipt labels, report defaults, POS search, sample data, clinic extension)~~ Done (25/25 unit tests passing, 6 features delivered 2026-04-14)
 
-**Preset Engine v1 is COMPLETE.** All 4 milestones delivered. 10 industry presets, 10 adaptation surfaces, 6 business modes, 23 country packs. Remaining work is operational: deploy migration v33 to production, run E2E acceptance tests on new tenant onboarding flows.
+**Preset Engine v1 is COMPLETE.** All 4 milestones delivered. 10 industry presets, 10 adaptation surfaces, 6 business modes, 23 country packs.
 
 ---
 
-## 12. Relationship to Other Strategic Documents
+## 12. Preset Engine v2 Roadmap — Expanding Industry Coverage
+
+### Current Coverage (v1)
+
+| What | Count | Details |
+|------|-------|---------|
+| Industry presets | 10 | retail, grocery, wholesale, restaurant, cafe, salon, clinic, repair_shop, gym, photography_studio |
+| Business modes | 6 | retail, restaurant, appointments, service_projects, subscriptions, workflow_tickets |
+| Country packs | 23 | PK, US, GB, CA, AU, IN, AE, SA, BD, NG, KE, GH, ZA, EG, DE, FR, NL, SG, MY, ID, PH, NZ, OTHER |
+| Adaptation surfaces | 10 | Nav, labels, dashboard widgets, POS layout, onboarding, receipts, reports, POS search, sample data, clinic fields |
+
+The 10 presets honestly cover **~30 of 54 industries** from the coverage matrix — businesses where the existing 6 modes genuinely support the required workflows. The remaining ~24 industries need new operational capabilities before we can add presets without them being hollow labels.
+
+### What's Missing — Three Tiers
+
+**Tier 1: Small Extensions** — 80% of the workflow exists, one missing piece makes the preset incomplete.
+
+| Feature | Industries It Unlocks | Effort | What to Build |
+|---------|----------------------|--------|---------------|
+| Weight/unit-based selling | Atta chakki, butcher, sweet shop, textile, dry fruits (~5 industries) | 2-3 days | `sell_by_weight` flag on products, decimal quantity input + unit label (kg/m/lb), POS tare weight field |
+| Walk-in service assignment on POS | Car wash, laundry, tailoring (~3 industries) | 2-3 days | Time estimate per service, staff picker at checkout for walk-in services (not appointment-based — immediate assignment) |
+| Recurring auto-charge wiring | Coworking, tuition center (~2 industries) | 3-5 days | `subscription_autocharge` tables exist but no payment gateway wiring — needs Stripe/JazzCash recurring billing integration |
+
+**Tier 2: New Modes** — genuinely new operational concepts that don't map to any existing mode.
+
+| New Mode | Industries It Unlocks | Effort | What to Build |
+|----------|----------------------|--------|---------------|
+| `rentals` | Car rental, equipment hire, party supplies, camera gear rental (~4 industries) | 2 weeks | Asset register (items with serial numbers), check-out/return workflow, duration-based pricing (hourly/daily/weekly), deposit hold + release, overdue tracking, damage assessment on return |
+| `room_management` | Hotel, guesthouse, hostel (~3 industries) | 2 weeks | Room inventory (type/floor/capacity — not product inventory), date-range availability calendar (not time-slot appointments), check-in/check-out status board, housekeeping status, rate calendar (seasonal/weekend pricing), guest folio (tab of charges across stay) |
+| `manufacturing` | Small factory, bakery production, packaging unit (~2 industries) | 2 weeks | Bill of materials (BOM — recipe of inputs per output), work orders (produce X units of Y), input consumption tracking (deduct raw materials on production), cost roll-up (actual cost per unit produced) |
+| `treatment_plans` | Dental clinic, veterinary, physiotherapy (~3 industries) | 2 weeks | Multi-visit treatment plan (plan → sessions → completion), per-tooth/per-area charting (dental), medical history timeline (richer than the 6 M4 clinic fields), lab order integration, consent forms |
+
+**Tier 3: Platform Capabilities** — cross-cutting features that multiple industries need, not a single mode.
+
+| Capability | Who Needs It | Effort | What to Build |
+|-----------|-------------|--------|---------------|
+| Online booking page | Salon, clinic, gym, car wash, photography — any appointment-based business (~8 industries) | 1 week | Public tenant-branded booking page. `public-bookings.js` routes exist (API-only) but no consumer-facing UI. Needs: service catalog display, staff availability picker, payment collection, confirmation email, calendar sync |
+| Customer portal | B2B wholesale, service businesses, clinic patients — all verticals benefit | 2 weeks | Authenticated customer login (separate from employee login), view invoices/appointments/orders, pay outstanding balance, download receipts. Currently all customer interaction is staff-mediated |
+| Multi-location intelligence | Franchise retail, chain restaurants, multi-branch wholesale | 2 weeks | Transfer optimization (suggest transfers from overstocked to understocked), consolidated reporting across outlets, central purchasing with per-outlet allocation. Tables exist (`outlet_stock`, `inventory_transfers`) but UX is single-branch focused |
+| Own-fleet delivery | Restaurant (own delivery), grocery, any local delivery | 1-2 weeks | Driver assignment, route management, real-time tracking, proof of delivery. 13 third-party courier adapters exist, but not own-fleet dispatch |
+
+### Priority Map — Industries Unlocked Per Effort
+
+```
+Effort →
+  ┃
+  ┃  ★ Weight-based selling      +5 industries  (2-3 days)
+  ┃  ★ Online booking page       +8 industries  (1 week)
+  ┃  ★ Rentals mode              +4 industries  (2 weeks)
+  ┃  ○ Customer portal           all verticals   (2 weeks)
+  ┃  ○ Room management           +3 industries  (2 weeks)
+  ┃  ○ Treatment plans           +3 industries  (2 weeks)
+  ┃  ○ Manufacturing             +2 industries  (2 weeks)
+  ┃
+  ★ = high ROI (most industries per day of effort)
+  ○ = build when customers ask
+```
+
+### Proposed Milestones (v2)
+
+#### Milestone 5: Quick Wins — Weight-Based Selling + POS Label Polish
+
+**Goal:** Unlock ~5 more industries with minimal effort, polish remaining POS hardcoded labels.
+
+**Scope:**
+- A. `sell_by_weight` / `sell_by_unit` product flag + decimal quantity input in POS
+- B. Unit labels (kg, m, lb, piece, dozen) on product form + POS display
+- C. POS tare weight field (for scale-connected selling)
+- D. POS sidebar label adaptation (hardcoded "Search customer..." → preset-aware "Search patient..." etc.)
+- E. New presets: `butcher`, `sweet_shop`, `textile` (all retail mode + weight selling)
+
+**Effort:** ~1 week
+
+#### Milestone 6: Online Booking Page
+
+**Goal:** Give every appointment-based preset a public booking URL they can share with customers.
+
+**Scope:**
+- A. Public tenant-branded booking page at `/{tenant-slug}/book` or `book.sanopos.com/{slug}`
+- B. Service catalog display (from existing `booking_services` table)
+- C. Staff + time slot availability picker (from existing `booking_availability_rules`)
+- D. Customer self-registration + booking confirmation email
+- E. Optional deposit collection via payment gateway
+- F. Calendar embed / share link for WhatsApp/Instagram bio
+
+**Effort:** ~1-2 weeks. Routes exist (`public-bookings.js`), this is primarily frontend.
+
+**Unlocks:** Salon, clinic, gym, car wash, photography, spa, driving school, veterinary (~8 industries gain a customer-facing entry point)
+
+#### Milestone 7: Rentals Mode
+
+**Goal:** New business mode for asset-based businesses.
+
+**Scope:**
+- A. `rental_assets` table (serial number, condition, daily/hourly/weekly rate, deposit amount, current status)
+- B. `rental_contracts` table (asset, customer, check-out date, expected return, actual return, charges, damage notes)
+- C. Rental check-out flow (select asset → customer → duration → deposit → contract)
+- D. Return flow (condition check → damage assessment → final charge → deposit release)
+- E. Availability calendar per asset
+- F. Overdue tracking + alerts
+- G. New presets: `car_rental`, `equipment_hire`
+- H. Mode: `rentals`, nav group: "Rentals" (Assets, Active Contracts, Returns, Calendar)
+
+**Effort:** ~2 weeks
+
+#### Milestone 8: Customer Portal
+
+**Goal:** Give customers their own login to view history, pay invoices, book appointments.
+
+**Scope:**
+- A. Customer authentication (separate from employee auth — email/phone + OTP or password)
+- B. Customer dashboard: order history, upcoming appointments, outstanding invoices, loyalty balance
+- C. Pay invoice online (via existing payment gateway)
+- D. Book/reschedule appointments (connects to booking engine)
+- E. Download receipts + invoices
+- F. Tenant-branded portal at `portal.sanopos.com/{slug}` or `/{slug}/portal`
+
+**Effort:** ~2 weeks. Benefits every vertical — B2B wholesale buyers check invoices, salon clients book appointments, clinic patients see visit history.
+
+#### Milestone 9: Room Management Mode (if hotel demand exists)
+
+**Goal:** Support hotel/guesthouse/hostel businesses.
+
+**Scope:**
+- A. `rooms` table (room number, type, floor, capacity, rate, status)
+- B. `room_bookings` table (guest, room, check-in, check-out, rate, folio)
+- C. Availability calendar (date-range, not time-slot)
+- D. Check-in/check-out status board
+- E. Guest folio (charges during stay — minibar, room service, laundry)
+- F. Housekeeping status tracking
+- G. Seasonal/weekend rate calendar
+- H. New presets: `hotel`, `guesthouse`
+- I. Mode: `room_management`
+
+**Effort:** ~2 weeks
+
+#### Milestone 10: Manufacturing Mode (if factory demand exists)
+
+**Goal:** Support small production/assembly businesses.
+
+**Scope:**
+- A. `bill_of_materials` table (output product → input items + quantities)
+- B. `work_orders` table (produce X units of Y, status, start/complete dates)
+- C. Input consumption tracking (deduct raw materials from inventory on production)
+- D. Cost roll-up (actual production cost per unit)
+- E. Production dashboard (active work orders, material availability, output tracking)
+- F. New presets: `small_factory`, `bakery_production`
+- G. Mode: `manufacturing`
+
+**Effort:** ~2 weeks
+
+### Coverage Projection
+
+| After Milestone | Presets | Modes | Industries Covered (of 54) |
+|----------------|---------|-------|---------------------------|
+| v1 (M1-M4) — current | 10 | 6 | ~30 |
+| M5 (weight selling) | 13 | 6 | ~35 |
+| M6 (online booking) | 13 | 6 | ~38 (existing presets gain customer-facing entry) |
+| M7 (rentals) | 15 | 7 | ~42 |
+| M8 (customer portal) | 15 | 7 | ~42 (all verticals gain customer self-service) |
+| M9 (room management) | 17 | 8 | ~45 |
+| M10 (manufacturing) | 19 | 9 | ~47 |
+
+The remaining ~7 industries (niche verticals like charity kitchen, medical lab, auction house) would need further assessment when demand materializes.
+
+### Build Triggers
+
+Not all milestones should be built speculatively. The decision framework:
+
+| Milestone | Build When |
+|-----------|-----------|
+| **M5 (weight selling)** | Before next marketing push — it's cheap and broadens the pitch |
+| **M6 (online booking)** | When any appointment-based tenant asks "can my customers book online?" |
+| **M7 (rentals)** | When a rental business signs up or expresses interest |
+| **M8 (customer portal)** | When 5+ tenants are active — it's a retention/stickiness play |
+| **M9 (room management)** | Only when a hotel/guesthouse pays or commits |
+| **M10 (manufacturing)** | Only when a factory/production business pays or commits |
+
+---
+
+## 13. Relationship to Other Strategic Documents (unchanged)
 
 | Document | Relationship |
 |----------|-------------|
