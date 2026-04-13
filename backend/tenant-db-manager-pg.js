@@ -57,10 +57,17 @@ async function getDb(tenantId) {
     query: async (sql, params) => {
       const client = await _pool.pool.connect();
       try {
-        await client.query(`SET search_path TO '${schemaName}', public`);
-        return await client.query(sql, params);
+        // Wrap SET + query in a transaction so PgBouncer (transaction mode)
+        // keeps them on the same backend connection.
+        await client.query("BEGIN");
+        await client.query(`SET LOCAL search_path TO '${schemaName}', public`);
+        const result = await client.query(sql, params);
+        await client.query("COMMIT");
+        return result;
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
       } finally {
-        await client.query("SET search_path TO public").catch(() => {});
         client.release();
       }
     },
@@ -68,8 +75,8 @@ async function getDb(tenantId) {
     transaction: async (fn) => {
       const client = await _pool.pool.connect();
       try {
-        await client.query(`SET search_path TO '${schemaName}', public`);
         await client.query("BEGIN");
+        await client.query(`SET LOCAL search_path TO '${schemaName}', public`);
         const result = await fn(client);
         await client.query("COMMIT");
         return result;
@@ -77,7 +84,6 @@ async function getDb(tenantId) {
         await client.query("ROLLBACK").catch(() => {});
         throw err;
       } finally {
-        await client.query("SET search_path TO public").catch(() => {});
         client.release();
       }
     },
