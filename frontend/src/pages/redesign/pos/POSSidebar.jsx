@@ -29,7 +29,10 @@ export default function POSSidebar({ mobile }) {
     checkoutCustomerTier,
     appliedPromotions,
     promoDiscount,
+    presetLabels,
   } = usePOS();
+
+  const customerLabel = presetLabels?.customer || "Customer";
 
   return (
     <div className={`${mobile ? "w-full" : "w-80 shrink-0"} bg-[#0A0A0A] text-white flex flex-col p-4 shadow-2xl z-10`}>
@@ -41,7 +44,7 @@ export default function POSSidebar({ mobile }) {
         />
         <input
           type="text"
-          placeholder="Search customer…"
+          placeholder={`Search ${customerLabel.toLowerCase()}…`}
           data-pos-customer-search
           value={customerSearch}
           onFocus={() => setShowCustomerDD(true)}
@@ -62,7 +65,7 @@ export default function POSSidebar({ mobile }) {
               }}
               className="px-3 py-2 border-b border-slate-100 text-slate-500 text-sm cursor-pointer hover:bg-slate-50"
             >
-              Walk-in Customer
+              Walk-in {customerLabel}
             </div>
             {filteredCustomers.map((c) => (
               <div

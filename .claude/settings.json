@@ -164,7 +164,8 @@
       "WebFetch(domain:vizologi.com)",
       "WebFetch(domain:fourweekmba.com)",
       "WebFetch(domain:fitsmallbusiness.com)",
-      "WebFetch(domain:litcommerce.com)"
+      "WebFetch(domain:litcommerce.com)",
+      "WebFetch(domain:sanopos.com)"
     ],
     "additionalDirectories": [
       "\\tmp",

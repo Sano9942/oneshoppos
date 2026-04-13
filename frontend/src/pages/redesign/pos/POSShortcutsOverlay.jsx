@@ -1,20 +1,22 @@
 import { usePOS } from "./POSContext";
 import { Keyboard, X } from "lucide-react";
 
-const SHORTCUTS = [
-  { key: "F1", action: "Toggle this help" },
-  { key: "F2", action: "Apply discount" },
-  { key: "F3", action: "Park sale" },
-  { key: "F4", action: "Customer search" },
-  { key: "F5", action: "View parked sales" },
-  { key: "F8", action: "Remove last item" },
-  { key: "F9", action: "Checkout / Pay" },
-  { key: "F10", action: "Clear cart" },
-  { key: "Esc", action: "Close modal" },
-];
-
 export default function POSShortcutsOverlay() {
-  const { showShortcutsOverlay, setShowShortcutsOverlay } = usePOS();
+  const { showShortcutsOverlay, setShowShortcutsOverlay, presetLabels } = usePOS();
+
+  const customerLabel = presetLabels?.customer || "Customer";
+
+  const SHORTCUTS = [
+    { key: "F1", action: "Toggle this help" },
+    { key: "F2", action: "Apply discount" },
+    { key: "F3", action: "Park sale" },
+    { key: "F4", action: `${customerLabel} search` },
+    { key: "F5", action: "View parked sales" },
+    { key: "F8", action: "Remove last item" },
+    { key: "F9", action: "Checkout / Pay" },
+    { key: "F10", action: "Clear cart" },
+    { key: "Esc", action: "Close modal" },
+  ];
   if (!showShortcutsOverlay) return null;
 
   return (
