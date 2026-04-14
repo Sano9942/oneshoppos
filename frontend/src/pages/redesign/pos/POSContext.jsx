@@ -106,6 +106,11 @@ export const POSProvider = ({ children }) => {
   const [submitting, setSubmitting] = useState(false);
   const payAmountRef = useRef(null);
 
+  // ── M9 Charge-to-room (room_management mode only) ───────────────────────
+  const [chargeToRoomFolioId, setChargeToRoomFolioId] = useState("");
+  const [openBookings, setOpenBookings] = useState([]);
+  const [openBookingsLoading, setOpenBookingsLoading] = useState(false);
+
   // ── Loyalty & Wallet (checkout) ───────────────────────────────────────────
   // TODO: make earn rate configurable from Company Settings
   const LOYALTY_EARN_RATE = 1; // 1 point per PKR 100 spent
@@ -771,7 +776,25 @@ export const POSProvider = ({ children }) => {
     setNewCustError("");
     setRedeemPointsOn(false);
     setPayWithWalletOn(false);
+    setChargeToRoomFolioId("");
     setCheckoutOpen(true);
+
+    // M9: load open room bookings for charge-to-room dropdown when the
+    // tenant has room_management mode enabled. Silent fail — dropdown just
+    // won't appear for tenants without the feature.
+    (async () => {
+      try {
+        setOpenBookingsLoading(true);
+        const data = await api.get(
+          `/api/room-bookings?status=checked_in&outlet_id=${selectedOutletId}`
+        );
+        setOpenBookings(Array.isArray(data?.bookings) ? data.bookings : []);
+      } catch {
+        setOpenBookings([]);
+      } finally {
+        setOpenBookingsLoading(false);
+      }
+    })();
   };
   openCheckoutRef.current = openCheckout;
 
@@ -850,7 +873,10 @@ export const POSProvider = ({ children }) => {
   };
 
   const completeSale = async () => {
-    if (!selectedOutletId || !cart.length || remaining > 0) return;
+    // M9: charge-to-room bypasses payment entry — skip the `remaining > 0` check
+    // because no payments are collected when the sale is billed to an open folio.
+    if (!selectedOutletId || !cart.length) return;
+    if (!chargeToRoomFolioId && remaining > 0) return;
     if (!activeShift) {
       setError("Cannot checkout until a shift is open.");
       return;
@@ -877,6 +903,7 @@ export const POSProvider = ({ children }) => {
       points_earned: checkoutCustomerId ? pointsEarned : 0,
       points_redeemed: checkoutCustomerId ? pointsRedeemed : 0,
       idempotency_key: crypto.randomUUID(),
+      folio_id: chargeToRoomFolioId ? Number(chargeToRoomFolioId) : null,
     };
 
     const queueSaleOffline = () => {
@@ -1287,6 +1314,11 @@ export const POSProvider = ({ children }) => {
     addPayment,
     printSlip,
     completeSale,
+    // M9 charge-to-room
+    chargeToRoomFolioId,
+    setChargeToRoomFolioId,
+    openBookings,
+    openBookingsLoading,
     handleLock,
     handleUnlock,
     recentSalesOpen,

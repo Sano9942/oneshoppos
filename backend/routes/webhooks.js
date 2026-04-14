@@ -137,8 +137,36 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
     return { ok: true, message: "Event acknowledged" };
   }
 
-  // ── Context 2: Invoice payment links (tenant schema) ──
+  // ── Context 2: Room deposit pre-auth (tenant schema, M9) ──
+  // A single webhook endpoint serves every payment-gateway adapter (sandbox,
+  // xpay, etc.) because verifyWebhook() is dispatched on adapter up front.
+  // room_bookings.deposit_payment_intent_id is set by room-deposits.js when
+  // a pre-auth is created, and the webhook looks it up here.
   const db = require("../db-pg");
+  try {
+    const { rows: [booking] } = await db.query(
+      "SELECT id, deposit_status FROM room_bookings WHERE deposit_payment_intent_id = $1",
+      [transaction_id]
+    );
+    if (booking) {
+      const { handleDepositWebhook } = require("../services/room-deposits");
+      const result = await handleDepositWebhook(db, {
+        gatewayRef: transaction_id,
+        eventType: event_type,
+        status,
+      });
+      _logger.info({ bookingId: booking.id, result }, "Room deposit webhook handled");
+      return { ok: true };
+    }
+  } catch (depositErr) {
+    // Table may not exist for tenants that haven't migrated to v38 yet — fall
+    // through to remaining contexts silently.
+    if (!String(depositErr.message || "").includes("does not exist")) {
+      _logger.error({ err: depositErr, transaction_id }, "Room deposit webhook lookup failed");
+    }
+  }
+
+  // ── Context 3: Invoice payment links (tenant schema) ──
   const { rows: [link] } = await db.query(
     "SELECT * FROM customer_invoice_payment_links WHERE gateway_ref = $1",
     [transaction_id]
@@ -165,7 +193,7 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
     return { ok: true };
   }
 
-  // ── Context 3: Storefront payment sessions (tenant schema) ──
+  // ── Context 4: Storefront payment sessions (tenant schema) ──
   const { rows: [session] } = await db.query(
     "SELECT * FROM storefront_payment_sessions WHERE provider_ref = $1",
     [transaction_id]
@@ -246,7 +274,7 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
     return { ok: true };
   }
 
-  // ── Context 4: Wallet top-up (tenant schema, reference pattern match) ──
+  // ── Context 5: Wallet top-up (tenant schema, reference pattern match) ──
   if (transaction_id.includes("wallet-topup-") && (status === "completed" || event_type === "payment.completed")) {
     try {
       // Extract customer ID from the reference pattern: wallet-topup-{customerId}-{timestamp}

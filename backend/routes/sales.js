@@ -443,7 +443,40 @@ module.exports = function registerSalesRoutes(app, deps) {
       points_redeemed = 0,
       notes = null,
       idempotency_key = null,
+      folio_id = null,
     } = req.body;
+
+    // M9 — folio_id (POS "charge to room") pre-validation.
+    let chargeToFolio = null;
+    if (folio_id) {
+      const folioId = Number(folio_id);
+      if (!Number.isInteger(folioId) || folioId <= 0) {
+        return res.status(400).json({ error: "Invalid folio_id" });
+      }
+      try {
+        const { rows: [folioRow] } = await db.query(
+          `SELECT gf.id, gf.status, gf.booking_id, b.outlet_id AS booking_outlet_id
+           FROM guest_folios gf
+           LEFT JOIN room_bookings b ON b.id = gf.booking_id
+           WHERE gf.id = $1`,
+          [folioId]
+        );
+        if (!folioRow) return res.status(404).json({ error: "Folio not found" });
+        if (folioRow.status !== "open") {
+          return res.status(400).json({ error: "Folio is not open" });
+        }
+        if (folioRow.booking_outlet_id && Number(folioRow.booking_outlet_id) !== Number(outlet_id)) {
+          return res.status(400).json({ error: "Folio belongs to a different outlet" });
+        }
+        chargeToFolio = folioRow;
+      } catch (folioErr) {
+        // If guest_folios table doesn't exist yet (pre-v38 tenant), surface a clear error.
+        if (String(folioErr.message || "").includes("does not exist")) {
+          return res.status(400).json({ error: "Room management is not enabled for this tenant" });
+        }
+        return res.status(500).json({ error: folioErr.message });
+      }
+    }
 
     const authenticatedEmployeeId =
       Number(req.headers["x-employee-id"] || employee_id || 0) || null;
@@ -517,7 +550,12 @@ module.exports = function registerSalesRoutes(app, deps) {
     let finalPayments = payments;
     let mainPaymentMethod = paymentMethod || "Cash";
 
-    if (!finalPayments || finalPayments.length === 0) {
+    if (chargeToFolio) {
+      // Charge-to-room bypasses payment entry — the sale amount is added
+      // as a folio line and settled later when the folio is closed.
+      mainPaymentMethod = "charge_to_room";
+      finalPayments = [];
+    } else if (!finalPayments || finalPayments.length === 0) {
       finalPayments = [{ method: mainPaymentMethod, amount: totalAmount }];
     } else if (finalPayments.length > 1) {
       mainPaymentMethod = "Split";
@@ -660,7 +698,7 @@ module.exports = function registerSalesRoutes(app, deps) {
 
         // 2. Insert into Sales Table
         const { rows: [saleRow] } = await client.query(
-          "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
+          "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key, folio_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id",
           [
             totalAmount,
             mainPaymentMethod,
@@ -674,6 +712,7 @@ module.exports = function registerSalesRoutes(app, deps) {
             notes || null,
             activeShift.id,
             idempotency_key || null,
+            chargeToFolio ? chargeToFolio.id : null,
           ]
         );
         const newSaleId = saleRow.id;
@@ -756,6 +795,20 @@ module.exports = function registerSalesRoutes(app, deps) {
             "INSERT INTO sale_payments (sale_id, payment_method, amount, gateway_ref) VALUES ($1, $2, $3, $4)",
             [newSaleId, payment.method, payment.amount, gatewayRef]
           );
+        }
+
+        // M9 — if this is a charge-to-room sale, attach it to the open folio.
+        // Runs inside the sale transaction: if the folio write fails, the sale
+        // rolls back too (cross-domain atomicity).
+        if (chargeToFolio) {
+          const roomService = require("../services/room-service");
+          await roomService.attachSaleToFolio(client, {
+            saleId: newSaleId,
+            folioId: chargeToFolio.id,
+            amount: totalAmount,
+            description: `POS sale #${newSaleId}`,
+            employeeId: authenticatedEmployeeId,
+          });
         }
 
         // Update customer loyalty: tier-aware points + total_spend + auto-upgrade

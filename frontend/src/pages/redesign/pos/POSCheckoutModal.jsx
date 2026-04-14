@@ -61,9 +61,15 @@ export default function POSCheckoutModal() {
     checkoutCustomerTier,
     pointsDiscount,
     total,
+    // M9 charge-to-room
+    chargeToRoomFolioId,
+    setChargeToRoomFolioId,
+    openBookings,
+    openBookingsLoading,
   } = usePOS();
-  const { labels = {} } = usePreset();
+  const { labels = {}, hasMode } = usePreset();
   const customerLabel = labels.customer || "Customer";
+  const roomManagementOn = hasMode && hasMode("room_management");
 
   const isOffline = !navigator.onLine;
 
@@ -126,6 +132,35 @@ export default function POSCheckoutModal() {
               {money(remaining)}
             </p>
           </div>
+
+          {/* M9 — Charge to room (room_management mode only) */}
+          {roomManagementOn && (
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+                Charge to room (optional)
+              </label>
+              <select
+                value={chargeToRoomFolioId || ""}
+                onChange={(e) => setChargeToRoomFolioId(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm font-medium border border-slate-200 rounded-xl focus:outline-none focus:border-[#8066FF]"
+                disabled={openBookingsLoading}
+              >
+                <option value="">— Pay now (cash / card / etc.) —</option>
+                {(openBookings || [])
+                  .filter((b) => b.folio_id && b.folio_status === "open")
+                  .map((b) => (
+                    <option key={b.folio_id} value={b.folio_id}>
+                      Room {b.room_number || "?"} — {b.customer_name || "Guest"} ({b.booking_number})
+                    </option>
+                  ))}
+              </select>
+              {chargeToRoomFolioId && (
+                <p className="text-xs text-violet-600 mt-1.5">
+                  This sale will be added to the folio — no payment is collected now.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Customer at checkout — quick search + create */}
           <div>

@@ -45,6 +45,12 @@ const MODE_REGISTRY = Object.freeze({
       "phase4_rentals",
     ],
   },
+  room_management: {
+    description: "Hotel / guesthouse / hostel — room inventory, bookings, folios, housekeeping",
+    feature_flags_to_enable: [
+      "phase4_room_management",
+    ],
+  },
 });
 
 const VALID_MODES = Object.keys(MODE_REGISTRY);

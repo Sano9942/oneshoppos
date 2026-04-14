@@ -52,6 +52,7 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "manage_contracts",
     "manage_tickets",
     "manage_rentals",
+    "manage_rooms",
   ],
   Cashier: ["view_reports", "pos_discount", "pos_park"],
 };
@@ -253,6 +254,22 @@ const PERMISSION_RULES = [
     methods: ["GET", "POST", "PUT", "DELETE"],
     path: /^\/api\/rental-contracts(\/|$)/,
     anyPerms: ["manage_rentals"],
+  },
+  // M9 — Room management
+  {
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    path: /^\/api\/room-types(\/|$)/,
+    anyPerms: ["manage_rooms"],
+  },
+  {
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    path: /^\/api\/rooms(\/|$)/,
+    anyPerms: ["manage_rooms"],
+  },
+  {
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    path: /^\/api\/room-bookings(\/|$)/,
+    anyPerms: ["manage_rooms"],
   },
 ];
 

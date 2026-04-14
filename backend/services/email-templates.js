@@ -581,6 +581,95 @@ function customerPortalPaymentReceipt({ storeName, customerName, invoiceNumber, 
   };
 }
 
+// -- M9 Room Management --------------------------------------------------
+function roomBookingConfirmation({ storeName, guestName, bookingNumber, roomType, checkInDate, checkOutDate, nights, subtotal, depositPaymentUrl }) {
+  return {
+    subject: `Booking confirmed — ${bookingNumber}`,
+    html: wrapEmailHtml("Stay Confirmed", `
+      <p>Hi ${guestName || "Guest"},</p>
+      <p>Your booking at <strong>${storeName || "our property"}</strong> is confirmed.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f0fdf4;border-radius:8px">
+        <tr><td style="padding:10px 16px;color:#64748b">Booking</td><td style="padding:10px 16px;font-weight:600">${bookingNumber || ""}</td></tr>
+        ${roomType ? `<tr><td style="padding:10px 16px;color:#64748b">Room</td><td style="padding:10px 16px">${roomType}</td></tr>` : ""}
+        <tr><td style="padding:10px 16px;color:#64748b">Check-in</td><td style="padding:10px 16px;font-weight:600">${checkInDate || ""}</td></tr>
+        <tr><td style="padding:10px 16px;color:#64748b">Check-out</td><td style="padding:10px 16px;font-weight:600">${checkOutDate || ""}</td></tr>
+        <tr><td style="padding:10px 16px;color:#64748b">Nights</td><td style="padding:10px 16px">${nights || 0}</td></tr>
+        ${subtotal ? `<tr><td style="padding:10px 16px;color:#64748b">Room total</td><td style="padding:10px 16px;font-weight:600">${subtotal}</td></tr>` : ""}
+      </table>
+      ${depositPaymentUrl ? btn("Pay your security deposit", depositPaymentUrl) : ""}
+      ${footer("We look forward to your stay. Present this email at check-in.")}
+    `),
+  };
+}
+
+function roomDepositReceived({ storeName, guestName, bookingNumber, amount }) {
+  return {
+    subject: `Deposit received — ${bookingNumber}`,
+    html: wrapEmailHtml("Deposit Received", `
+      <p>Hi ${guestName || "Guest"},</p>
+      <p>We've received your security deposit of <strong>${amount}</strong> for booking <strong>${bookingNumber}</strong> at <strong>${storeName}</strong>.</p>
+      <p>The deposit is held as a pre-authorization and will be released after check-out if no damage or extra charges are incurred.</p>
+      ${footer("Thank you — we look forward to welcoming you.")}
+    `),
+  };
+}
+
+function roomCheckinReminder({ storeName, guestName, bookingNumber, checkInDate, roomType, storeAddress, storePhone }) {
+  return {
+    subject: `Your stay at ${storeName} is tomorrow`,
+    html: wrapEmailHtml("See you soon", `
+      <p>Hi ${guestName || "Guest"},</p>
+      <p>Just a reminder that your stay at <strong>${storeName}</strong> begins on <strong>${checkInDate}</strong>.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0">
+        <tr><td style="padding:10px 16px;color:#64748b">Booking</td><td style="padding:10px 16px;font-weight:600">${bookingNumber || ""}</td></tr>
+        ${roomType ? `<tr><td style="padding:10px 16px;color:#64748b">Room</td><td style="padding:10px 16px">${roomType}</td></tr>` : ""}
+        ${storeAddress ? `<tr><td style="padding:10px 16px;color:#64748b">Address</td><td style="padding:10px 16px">${storeAddress}</td></tr>` : ""}
+        ${storePhone ? `<tr><td style="padding:10px 16px;color:#64748b">Phone</td><td style="padding:10px 16px">${storePhone}</td></tr>` : ""}
+      </table>
+      ${footer("Safe travels.")}
+    `),
+  };
+}
+
+function roomFolioReceipt({ storeName, guestName, bookingNumber, invoiceNumber, grandTotal, depositApplied, depositStatus, balanceDue, invoiceUrl }) {
+  const depositLine = depositApplied
+    ? `<tr><td style="padding:10px 16px;color:#64748b">Deposit applied</td><td style="padding:10px 16px">−${depositApplied} (${depositStatus || "—"})</td></tr>`
+    : "";
+  return {
+    subject: `Thanks for staying with us — ${invoiceNumber || bookingNumber}`,
+    html: wrapEmailHtml("Folio & Invoice", `
+      <p>Hi ${guestName || "Guest"},</p>
+      <p>Thanks for staying at <strong>${storeName}</strong>. Here is a summary of your final bill.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f1f5f9;border-radius:8px">
+        <tr><td style="padding:10px 16px;color:#64748b">Booking</td><td style="padding:10px 16px;font-weight:600">${bookingNumber || ""}</td></tr>
+        ${invoiceNumber ? `<tr><td style="padding:10px 16px;color:#64748b">Invoice</td><td style="padding:10px 16px;font-weight:600">${invoiceNumber}</td></tr>` : ""}
+        <tr><td style="padding:10px 16px;color:#64748b">Grand total</td><td style="padding:10px 16px;font-weight:700">${grandTotal || 0}</td></tr>
+        ${depositLine}
+        <tr><td style="padding:10px 16px;color:#64748b">Balance due</td><td style="padding:10px 16px;font-weight:700;color:${Number(balanceDue) > 0 ? "#b91c1c" : "#059669"}">${balanceDue || 0}</td></tr>
+      </table>
+      ${invoiceUrl ? btn("View invoice", invoiceUrl) : ""}
+      ${footer("We hope to welcome you back.")}
+    `),
+  };
+}
+
+function roomOverdueCheckout({ storeName, guestName, bookingNumber, roomNumber, checkOutDate, daysOverdue }) {
+  return {
+    subject: `Overdue check-out — ${bookingNumber}`,
+    html: wrapEmailHtml(
+      "Overdue Check-out",
+      `<p>Guest <strong>${guestName || "(unknown)"}</strong> is past the scheduled check-out date for booking <strong>${bookingNumber}</strong> at <strong>${storeName || "this property"}</strong>.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#fef2f2;border-radius:8px">
+         <tr><td style="padding:10px 16px;color:#64748b">Room</td><td style="padding:10px 16px;font-weight:600">${roomNumber || "—"}</td></tr>
+         <tr><td style="padding:10px 16px;color:#64748b">Check-out date</td><td style="padding:10px 16px;color:#b91c1c;font-weight:600">${checkOutDate || ""}</td></tr>
+         <tr><td style="padding:10px 16px;color:#64748b">Days overdue</td><td style="padding:10px 16px;color:#b91c1c;font-weight:700">${daysOverdue || 0}</td></tr>
+       </table>
+       <p>Please contact the guest and process check-out or extend the stay.</p>
+       ${footer("This is an automated staff alert.")}`
+    ),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
   campaign_test: campaignTest,
@@ -605,6 +694,12 @@ const TEMPLATES = {
   subscription_renewal_due: subscriptionRenewalDue,
   booking_confirmation: bookingConfirmation,
   rental_overdue: rentalOverdue,
+  // M9 Room Management
+  room_booking_confirmation: roomBookingConfirmation,
+  room_deposit_received: roomDepositReceived,
+  room_checkin_reminder: roomCheckinReminder,
+  room_folio_receipt: roomFolioReceipt,
+  room_overdue_checkout: roomOverdueCheckout,
   // M8 Customer Portal
   customer_portal_welcome: customerPortalWelcome,
   customer_portal_otp_login: customerPortalOtpLogin,

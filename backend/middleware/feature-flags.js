@@ -61,6 +61,9 @@ const DEFAULT_FEATURE_FLAGS = {
   // Mode-gated: flipped ON only by setup/company-profile when a rental preset
   // is selected. Leaving globally ON would show rental nav to retail tenants.
   phase4_rentals: false,
+  // Mode-gated (M9): flipped ON only when a hotel/guesthouse/hostel preset
+  // is selected. Keeps "Rooms" nav hidden from retail/restaurant tenants.
+  phase4_room_management: false,
   // Phase 5 — Pakistan Integration Depth
   phase5_shipping_automation: false,
   phase5_cod_reconciliation: false,

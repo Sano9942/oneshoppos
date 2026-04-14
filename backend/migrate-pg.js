@@ -3137,6 +3137,175 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 38,
+    description: "M9 — room management mode (types, rooms, bookings, folios, lines, rate overrides) + phase4_room_management flag + sales.folio_id",
+    up: async (client) => {
+      // ── Room types (the "Deluxe Room", "Standard Twin" catalog) ───
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS room_types (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER REFERENCES outlets(id),
+          name TEXT NOT NULL,
+          description TEXT,
+          capacity INTEGER NOT NULL DEFAULT 2,
+          base_rate NUMERIC(12,2) NOT NULL DEFAULT 0,
+          deposit_required NUMERIC(12,2) NOT NULL DEFAULT 0,
+          amenities JSONB NOT NULL DEFAULT '[]'::jsonb,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_room_types_outlet ON room_types(outlet_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_room_types_active ON room_types(is_active)`);
+
+      // ── Rooms (physical units — "Room 201", "Room 202") ───────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS rooms (
+          id SERIAL PRIMARY KEY,
+          room_type_id INTEGER REFERENCES room_types(id),
+          outlet_id INTEGER REFERENCES outlets(id),
+          room_number TEXT NOT NULL,
+          floor TEXT,
+          occupancy_status TEXT NOT NULL DEFAULT 'vacant'
+            CHECK (occupancy_status IN ('vacant','occupied','reserved')),
+          housekeeping_status TEXT NOT NULL DEFAULT 'clean'
+            CHECK (housekeeping_status IN ('clean','dirty','inspected','out_of_order')),
+          notes TEXT,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE (outlet_id, room_number)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_rooms_type ON rooms(room_type_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_rooms_outlet ON rooms(outlet_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_rooms_active ON rooms(is_active)`);
+
+      // ── Per-date rate overrides (weekend, seasonal, holiday) ──────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS room_rate_overrides (
+          id SERIAL PRIMARY KEY,
+          room_type_id INTEGER NOT NULL REFERENCES room_types(id) ON DELETE CASCADE,
+          from_date DATE NOT NULL,
+          to_date DATE NOT NULL,
+          rate NUMERIC(12,2) NOT NULL,
+          label TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          CHECK (from_date <= to_date)
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_room_rate_overrides_range
+          ON room_rate_overrides(room_type_id, from_date, to_date)
+      `);
+
+      // ── Bookings / reservations ───────────────────────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS room_bookings (
+          id SERIAL PRIMARY KEY,
+          booking_number TEXT NOT NULL UNIQUE,
+          customer_id INTEGER REFERENCES customers(id),
+          outlet_id INTEGER REFERENCES outlets(id),
+          created_by INTEGER REFERENCES employees(id),
+          room_id INTEGER REFERENCES rooms(id),
+          room_type_id INTEGER REFERENCES room_types(id),
+          status TEXT NOT NULL DEFAULT 'reserved'
+            CHECK (status IN ('reserved','confirmed','checked_in','checked_out','completed','invoiced','cancelled','no_show')),
+          check_in_date DATE NOT NULL,
+          check_out_date DATE NOT NULL,
+          actual_checkin TIMESTAMPTZ,
+          actual_checkout TIMESTAMPTZ,
+          nights INTEGER NOT NULL,
+          rate_snapshot NUMERIC(12,2) NOT NULL DEFAULT 0,
+          deposit_collected NUMERIC(12,2) NOT NULL DEFAULT 0,
+          deposit_method TEXT,
+          deposit_payment_intent_id TEXT,
+          deposit_status TEXT NOT NULL DEFAULT 'pending'
+            CHECK (deposit_status IN ('pending','authorized','captured','released','failed')),
+          notes TEXT,
+          cancellation_reason TEXT,
+          overdue_email_sent_at TIMESTAMPTZ,
+          invoice_id INTEGER REFERENCES customer_invoices(id),
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          CHECK (check_out_date > check_in_date)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_room_bookings_dates ON room_bookings(room_id, check_in_date, check_out_date)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_room_bookings_status ON room_bookings(status)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_room_bookings_customer ON room_bookings(customer_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_room_bookings_outlet ON room_bookings(outlet_id)`);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_room_bookings_overdue
+          ON room_bookings(check_out_date)
+          WHERE status = 'checked_in'
+      `);
+
+      // ── Guest folios (running tab during stay) ────────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS guest_folios (
+          id SERIAL PRIMARY KEY,
+          booking_id INTEGER NOT NULL REFERENCES room_bookings(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'open'
+            CHECK (status IN ('open','settled','voided')),
+          room_charge_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+          pos_charge_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+          tax_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+          deposit_applied NUMERIC(12,2) NOT NULL DEFAULT 0,
+          grand_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+          settled_at TIMESTAMPTZ,
+          invoice_id INTEGER REFERENCES customer_invoices(id),
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_guest_folios_booking ON guest_folios(booking_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_guest_folios_status ON guest_folios(status)`);
+
+      // ── Folio line items ──────────────────────────────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS folio_lines (
+          id SERIAL PRIMARY KEY,
+          folio_id INTEGER NOT NULL REFERENCES guest_folios(id) ON DELETE CASCADE,
+          line_type TEXT NOT NULL
+            CHECK (line_type IN ('room_night','pos_sale','manual_charge','discount','tax')),
+          description TEXT NOT NULL,
+          quantity NUMERIC(10,3) NOT NULL DEFAULT 1,
+          unit_price NUMERIC(12,2) NOT NULL DEFAULT 0,
+          line_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+          sale_id INTEGER REFERENCES sales(id),
+          added_by INTEGER REFERENCES employees(id),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_folio_lines_folio ON folio_lines(folio_id)`);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_folio_lines_sale
+          ON folio_lines(sale_id)
+          WHERE sale_id IS NOT NULL
+      `);
+
+      // ── POS -> folio link on sales ────────────────────────────────
+      await client.query(`
+        ALTER TABLE sales
+          ADD COLUMN IF NOT EXISTS folio_id INTEGER REFERENCES guest_folios(id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sales_folio_id
+          ON sales(folio_id) WHERE folio_id IS NOT NULL
+      `);
+
+      // ── Feature flag ──────────────────────────────────────────────
+      // Mode-gated flag, flipped ON only when a hotel/guesthouse/hostel
+      // preset is selected during setup or via industry edit.
+      await client.query(`
+        INSERT INTO feature_flags (key, enabled) VALUES ('phase4_room_management', false)
+        ON CONFLICT (key) DO NOTHING
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

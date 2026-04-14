@@ -475,6 +475,103 @@ const INDUSTRY_PRESETS = Object.freeze({
     visible_report_groups: ["Sales", "Customers", "Finance", "HR", "Governance"],
     pos_search_config: { show_barcode: true, show_sku: true, show_price: true },
   },
+  // --- M9 room management presets ---
+  hotel: {
+    industry_type: "hotel",
+    business_model: "room_management",
+    display_name: "Hotel",
+    modes: ["room_management"],
+    labels: {
+      product: "Room",
+      products: "Rooms",
+      customer: "Guest",
+      customers: "Guests",
+      sale: "Charge",
+      order: "Booking",
+    },
+    public_booking_labels: {
+      booking_cta: "Book a stay",
+      service_singular: "Room",
+      staff_singular: "Attendant",
+      customer_singular: "Guest",
+    },
+    dashboard_widgets: {
+      inventory_alerts: false,
+      top_products: false,
+      trends: true,
+      attendance: true,
+      floor_plan: false,
+      appointments_today: false,
+    },
+    onboarding_steps: ["store", "room", "rate", "employees", "booking", "checkin"],
+    pos_layout_mode: "list",
+    visible_report_groups: ["Sales", "Customers", "Finance", "HR", "Governance"],
+    pos_search_config: { show_barcode: false, show_sku: false, show_price: true },
+  },
+  guesthouse: {
+    industry_type: "guesthouse",
+    business_model: "room_management",
+    display_name: "Guesthouse",
+    modes: ["room_management"],
+    labels: {
+      product: "Room",
+      products: "Rooms",
+      customer: "Guest",
+      customers: "Guests",
+      sale: "Charge",
+      order: "Booking",
+    },
+    public_booking_labels: {
+      booking_cta: "Book a room",
+      service_singular: "Room",
+      staff_singular: "Attendant",
+      customer_singular: "Guest",
+    },
+    dashboard_widgets: {
+      inventory_alerts: false,
+      top_products: false,
+      trends: true,
+      attendance: true,
+      floor_plan: false,
+      appointments_today: false,
+    },
+    onboarding_steps: ["store", "room", "rate", "employees", "booking", "checkin"],
+    pos_layout_mode: "list",
+    visible_report_groups: ["Sales", "Customers", "Finance", "HR", "Governance"],
+    pos_search_config: { show_barcode: false, show_sku: false, show_price: true },
+  },
+  hostel: {
+    industry_type: "hostel",
+    business_model: "room_management",
+    display_name: "Hostel",
+    modes: ["room_management"],
+    labels: {
+      product: "Bed",
+      products: "Beds",
+      customer: "Guest",
+      customers: "Guests",
+      sale: "Charge",
+      order: "Booking",
+    },
+    public_booking_labels: {
+      booking_cta: "Book a bed",
+      service_singular: "Bed",
+      staff_singular: "Attendant",
+      customer_singular: "Guest",
+    },
+    dashboard_widgets: {
+      inventory_alerts: false,
+      top_products: false,
+      trends: true,
+      attendance: true,
+      floor_plan: false,
+      appointments_today: false,
+    },
+    onboarding_steps: ["store", "room", "rate", "employees", "booking", "checkin"],
+    pos_layout_mode: "list",
+    visible_report_groups: ["Sales", "Customers", "Finance", "HR", "Governance"],
+    pos_search_config: { show_barcode: false, show_sku: false, show_price: true },
+  },
 });
 
 const VALID_INDUSTRY_TYPES = Object.keys(INDUSTRY_PRESETS);
@@ -522,6 +619,7 @@ const DEFAULT_PORTAL_LABELS = Object.freeze({
   appointments_tab: "Appointments",
   subscriptions_tab: "Subscriptions",
   contracts_tab: "Rentals",
+  stays_tab: "My Stays",
   tickets_tab: "Service Tickets",
   loyalty_tab: "Loyalty",
   wallet_tab: "Wallet",
@@ -551,6 +649,9 @@ const PORTAL_ENABLED_TABS_BY_PRESET = Object.freeze({
   equipment_hire: ["contracts", "invoices", "profile"],
   furniture_rental: ["contracts", "invoices", "profile"],
   party_supplies: ["contracts", "invoices", "profile"],
+  hotel: ["stays", "invoices", "profile"],
+  guesthouse: ["stays", "invoices", "profile"],
+  hostel: ["stays", "invoices", "profile"],
 });
 
 // Preset-specific portal label overrides. Missing keys fall back to defaults.
@@ -567,6 +668,9 @@ const PORTAL_LABEL_OVERRIDES = Object.freeze({
   furniture_rental: { contracts_tab: "Rental Contracts" },
   party_supplies: { contracts_tab: "Event Bookings" },
   photography_studio: { appointments_tab: "Photo Shoots" },
+  hotel: { portal_title: "Guest Portal", dashboard_heading: "Welcome back", book_cta: "Book a stay" },
+  guesthouse: { portal_title: "Guest Portal", dashboard_heading: "Welcome back", book_cta: "Book a room" },
+  hostel: { portal_title: "Guest Portal", dashboard_heading: "Welcome back", book_cta: "Book a bed" },
 });
 
 function getPreset(industryType) {

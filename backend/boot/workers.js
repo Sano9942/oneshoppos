@@ -279,6 +279,11 @@ function startAll(deps) {
           await registerRentalOverdueWorker(boss, pool);
         }
 
+        if (String(process.env.ROOM_OVERDUE_WORKER_ENABLED || "0") === "1") {
+          const { registerRoomOverdueCheckoutWorker } = require("../workers/room-overdue-checkout-worker-boss");
+          await registerRoomOverdueCheckoutWorker(boss, pool);
+        }
+
         // Booking reminders — tenant-aware setInterval poll. Uses
         // forEachActiveTenant to iterate active tenants (since it's a
         // scheduled poll, not a per-event job — there's no tenantSlug
