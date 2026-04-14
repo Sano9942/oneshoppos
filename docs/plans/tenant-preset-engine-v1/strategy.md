@@ -1,7 +1,29 @@
 # Tenant Preset Engine v1 — Strategy & Implementation Specification
 
 **Date:** 2026-04-13 (last updated 2026-04-15)
-**Status:** v1 COMPLETE (M1-M4, 2026-04-14). v2 IN PROGRESS — M5, M6, M7 shipped 2026-04-14; M8 shipped 2026-04-15.
+**Status:** v1 COMPLETE (M1-M4, 2026-04-14). v2 IN PROGRESS — M5, M6, M7 shipped 2026-04-14; M8, M9 shipped 2026-04-15.
+
+---
+
+## ⚡ Dev Infrastructure — SanoPay Sandbox (IMPORTANT FOR ALL FUTURE FEATURES)
+
+**SanoPay sandbox is wired on BOTH local dev and Railway** for end-to-end payment testing. When building any feature that involves payments (checkouts, deposits, invoices, subscriptions, refunds), use the sandbox adapter — do NOT mock the payment layer in tests or require real xPay credentials.
+
+| Mode | `PAYMENT_GATEWAY` env | Use case |
+|------|----------------------|----------|
+| `sandbox` | `sandbox` | Local dev + Railway testing. Simulates auth/capture/release/refund via `/api/sandbox/pay/:ref` + webhook simulator |
+| `xpay` | `xpay` | Production only. Real xPay API calls. |
+| `manual` | `manual` or unset | Fallback — admin manually records payments, no online flow |
+
+**Key files to study when adding payment-touching features:**
+- [`backend/services/payment-gateway.js`](../../../backend/services/payment-gateway.js) — adapter registry (`ADAPTERS` at line 221). `getPaymentAdapter()` dispatches on env var, so sandbox/xpay/manual all share the same code path. Never hardcode xPay.
+- [`backend/routes/sandbox.js`](../../../backend/routes/sandbox.js) — hosted sandbox payment page + webhook simulator endpoint. Use this in integration tests to fire `authorized` / `captured` / `released` events without real HTTP callbacks.
+- [`backend/routes/webhooks.js`](../../../backend/routes/webhooks.js) — single webhook endpoint. Adapter-agnostic: `verifyWebhook()` dispatches on the active provider. When adding a new payment context (like M9's room deposits), add a new lookup block here — do NOT create a separate `/api/webhooks/<provider>` route.
+- [`backend/tests/integration/pg-sandbox-payment.test.js`](../../../backend/tests/integration/pg-sandbox-payment.test.js) — the canonical template for testing any payment-gateway flow. Copy this pattern for new payment-touching features.
+
+**Why this matters:** Historically, features that touched payments (M8 invoice pay, M9 room deposits) skipped real end-to-end tests because the payment layer was too expensive to exercise. With the sandbox wired on both environments, there is no excuse — every new payment flow MUST have an integration test that drives it through `PAYMENT_GATEWAY=sandbox` with a simulated webhook. Doing so catches adapter-dispatch bugs, webhook-signature bugs, and state-machine bugs before they reach production.
+
+**Rule of thumb:** If your feature writes a `gateway_ref` anywhere, or listens for a webhook, your PR needs at least one test that runs with `PAYMENT_GATEWAY=sandbox` and simulates the full lifecycle.
 **Author:** Hassan + Claude (session 2026-04-13)
 
 ---
@@ -468,26 +490,27 @@ CREATE TABLE IF NOT EXISTS tenant_modes (
 9. ~~**Execute Milestone 6** — Online booking page polish: confirmation email, share link UI, industry-aware labels, validation + rate limiting + time guards, `.ics` calendar download, integration + unit test coverage~~ Done (commit `760344b`, 29 new automated tests, no migration required)
 10. ~~**Execute Milestone 7** — Rentals mode: `rentals` business mode + 4 asset-rental presets (car_rental, equipment_hire, furniture_rental, party_supplies_rental), 5 new tables, 18 endpoints, 3-tab UI with Gantt timeline, overdue worker + email, 41 new automated tests~~ Done 2026-04-14 (commits `2afaf2d` + `8f94816` test fixup + `6688a43` mode-flag reset hardening, migration v36, 21 files touched)
 11. ~~**Execute Milestone 8** — Customer portal at `/portal/:tenantSlug`: email+password / email-OTP auth, preset-driven tabs, invoice pay (reuses `customer_invoice_payment_links` + existing webhook Context 2), self-service appointments (book/reschedule/cancel), profile + addresses editing, 8 new email templates, 34 new automated tests~~ Done 2026-04-15 (commit `cb41110`, migration v37 applied to public + all 3 tenant schemas on Railway, 30 files touched)
+12. ~~**Execute Milestone 9** — Room Management mode: `room_management` business mode + 3 hospitality presets (hotel, guesthouse, hostel), 6 new tables (room_types, rooms, room_rate_overrides, room_bookings, guest_folios, folio_lines) + `sales.folio_id` column, ~25 endpoints, 5-tab UI (Rooms, Rates, Bookings, Calendar Gantt, Arrivals/Departures), POS "Charge to room" context picker, customer portal "My Stays" tab, adapter-agnostic deposit pre-auth via `payment-gateway.js` (works with sandbox, xpay, manual), overdue-checkout worker, 5 email templates, 57 new automated tests (37 unit + 20 integration)~~ Done 2026-04-15 (commits `b861755` + `f559fdd`, migration v38, 34 files touched)
 
 **Preset Engine v1 is COMPLETE.** All 4 milestones delivered. 10 industry presets, 10 adaptation surfaces, 6 business modes, 23 country packs.
 
-**Preset Engine v2 is IN PROGRESS.** M5, M6, M7, M8 shipped between 2026-04-14 and 2026-04-15 — now at 17 presets, 7 business modes, ~42 industries covered. Every appointment-based tenant has a public booking URL, rental businesses (car hire, equipment, furniture, party supplies) are fully supported with asset tracking + overdue alerts, and **every vertical now has a customer portal** at `/portal/:slug` for invoice pay, appointment self-service, and account management.
+**Preset Engine v2 is IN PROGRESS.** M5, M6, M7, M8, M9 shipped between 2026-04-14 and 2026-04-15 — now at **20 presets, 8 business modes, ~45 industries covered**. Every appointment-based tenant has a public booking URL, rental businesses (car hire, equipment, furniture, party supplies) are fully supported with asset tracking + overdue alerts, every vertical has a customer portal at `/portal/:slug` for invoice pay, appointment self-service, and account management, and **hotels / guesthouses / hostels** are fully supported with room inventory, per-date rate overrides, guest folios (with POS charge-to-room), housekeeping status, and adapter-agnostic security deposits.
 
 ---
 
 ## 12. Preset Engine v2 Roadmap — Expanding Industry Coverage
 
-### Current Coverage (v1 + M5 + M6 + M7 + M8)
+### Current Coverage (v1 + M5 + M6 + M7 + M8 + M9)
 
 | What | Count | Details |
 |------|-------|---------|
-| Industry presets | 17 | retail, grocery, wholesale, restaurant, cafe, salon, clinic, repair_shop, gym, photography_studio, butcher, sweet_shop, textile (M5), **car_rental, equipment_hire, furniture_rental, party_supplies_rental** (M7) |
-| Business modes | 7 | retail, restaurant, appointments, service_projects, subscriptions, workflow_tickets, **rentals** (M7) |
+| Industry presets | 20 | retail, grocery, wholesale, restaurant, cafe, salon, clinic, repair_shop, gym, photography_studio, butcher, sweet_shop, textile (M5), car_rental, equipment_hire, furniture_rental, party_supplies_rental (M7), **hotel, guesthouse, hostel** (M9) |
+| Business modes | 8 | retail, restaurant, appointments, service_projects, subscriptions, workflow_tickets, rentals (M7), **room_management** (M9) |
 | Country packs | 23 | PK, US, GB, CA, AU, IN, AE, SA, BD, NG, KE, GH, ZA, EG, DE, FR, NL, SG, MY, ID, PH, NZ, OTHER |
-| Adaptation surfaces | 14 | Nav, labels, dashboard widgets, POS layout, onboarding, receipts, reports, POS search, sample data, clinic fields, unit vocabulary / weight-based selling (M5), public booking labels (M6), rental asset/contract UX (M7), **portal labels + per-preset tab list** (M8) |
-| Public customer-facing surfaces | 3 | Public receipt URL (v1), public booking page at `/book/:slug` with per-preset labels, share link UI, ICS download, confirmation email (M6), **customer portal at `/portal/:slug`** with preset-driven tabs, invoice pay, self-service appointments, profile/address editing (M8) |
+| Adaptation surfaces | 15 | Nav, labels, dashboard widgets, POS layout, onboarding, receipts, reports, POS search, sample data, clinic fields, unit vocabulary / weight-based selling (M5), public booking labels (M6), rental asset/contract UX (M7), portal labels + per-preset tab list (M8), **room inventory + rate calendar + folio UX** (M9) |
+| Public customer-facing surfaces | 3 | Public receipt URL (v1), public booking page at `/book/:slug` with per-preset labels, share link UI, ICS download, confirmation email (M6), customer portal at `/portal/:slug` with preset-driven tabs, invoice pay, self-service appointments, profile/address editing (M8), **"My Stays" portal tab** with past/upcoming bookings and linked invoices (M9) |
 
-The 17 presets now cover **~42 of 54 industries** (up from 38 — M7 adds 4 asset-rental verticals on the new `rentals` mode). M8 ships an authenticated customer portal that every preset benefits from — B2B wholesale gets invoice pay, salon/clinic clients get self-service booking, and all verticals get account management without staff involvement. The remaining ~12 industries need new operational capabilities (room management, manufacturing, treatment plans) before we can add presets without them being hollow labels.
+The 20 presets now cover **~45 of 54 industries** (up from 42 — M9 adds 3 hospitality verticals on the new `room_management` mode). M9 ships a full hotel operating model: unique room inventory (not asset pool), per-date rate overrides (weekend/seasonal pricing), open-tab guest folios that accumulate room-night + POS charges during the stay, housekeeping status, overdue-checkout alerts, and adapter-agnostic deposit pre-auth (via `payment-gateway.js` — works with `sandbox`, `xpay`, or `manual`). The remaining ~9 industries need new operational capabilities (manufacturing, treatment plans) before we can add presets without them being hollow labels.
 
 ### What's Missing — Three Tiers
 
@@ -503,8 +526,8 @@ The 17 presets now cover **~42 of 54 industries** (up from 38 — M7 adds 4 asse
 
 | New Mode | Industries It Unlocks | Effort | What to Build |
 |----------|----------------------|--------|---------------|
-| `rentals` | Car rental, equipment hire, party supplies, camera gear rental (~4 industries) | 2 weeks | Asset register (items with serial numbers), check-out/return workflow, duration-based pricing (hourly/daily/weekly), deposit hold + release, overdue tracking, damage assessment on return |
-| `room_management` | Hotel, guesthouse, hostel (~3 industries) | 2 weeks | Room inventory (type/floor/capacity — not product inventory), date-range availability calendar (not time-slot appointments), check-in/check-out status board, housekeeping status, rate calendar (seasonal/weekend pricing), guest folio (tab of charges across stay) |
+| ~~`rentals`~~ | ~~Car rental, equipment hire, party supplies, camera gear rental (~4 industries)~~ | ~~2 weeks~~ | **DONE M7 (2026-04-14)** — Asset register (items with serial numbers), check-out/return workflow, duration-based pricing (hourly/daily/weekly), deposit hold + release, overdue tracking, damage assessment on return |
+| ~~`room_management`~~ | ~~Hotel, guesthouse, hostel (~3 industries)~~ | ~~2 weeks~~ | **DONE M9 (2026-04-15)** — Room inventory (type/floor/capacity — not product inventory), date-range availability calendar (not time-slot appointments), check-in/check-out status board, housekeeping status, rate calendar (seasonal/weekend pricing), guest folio (tab of charges across stay), adapter-agnostic deposit pre-auth |
 | `manufacturing` | Small factory, bakery production, packaging unit (~2 industries) | 2 weeks | Bill of materials (BOM — recipe of inputs per output), work orders (produce X units of Y), input consumption tracking (deduct raw materials on production), cost roll-up (actual cost per unit produced) |
 | `treatment_plans` | Dental clinic, veterinary, physiotherapy (~3 industries) | 2 weeks | Multi-visit treatment plan (plan → sessions → completion), per-tooth/per-area charting (dental), medical history timeline (richer than the 6 M4 clinic fields), lab order integration, consent forms |
 
@@ -526,7 +549,7 @@ Effort →
   ┃  ★ Online booking page       +8 industries  (1 week)    [SHIPPED M6]
   ┃  ★ Rentals mode              +4 industries  (2 weeks)   [SHIPPED M7]
   ┃  ★ Customer portal           all verticals   (2 weeks)  [SHIPPED M8]
-  ┃  ○ Room management           +3 industries  (2 weeks)
+  ┃  ★ Room management           +3 industries  (2 weeks)   [SHIPPED M9]
   ┃  ○ Treatment plans           +3 industries  (2 weeks)
   ┃  ○ Manufacturing             +2 industries  (2 weeks)
   ┃
@@ -652,22 +675,45 @@ Effort →
 
 **Out of scope (explicitly deferred):** portal subdomain (`portal.sanopos.com`), per-tenant custom domains, mobile PWA install prompt, in-portal staff chat, loyalty redemption from portal (view-only), wallet top-up from portal (pay-invoice is the only money-in path), storefront cart integration (orders remain read-only in portal), social login.
 
-#### Milestone 9: Room Management Mode (if hotel demand exists)
+#### Milestone 9: Room Management Mode — COMPLETE
 
 **Goal:** Support hotel/guesthouse/hostel businesses.
 
-**Scope:**
-- A. `rooms` table (room number, type, floor, capacity, rate, status)
-- B. `room_bookings` table (guest, room, check-in, check-out, rate, folio)
-- C. Availability calendar (date-range, not time-slot)
-- D. Check-in/check-out status board
-- E. Guest folio (charges during stay — minibar, room service, laundry)
-- F. Housekeeping status tracking
-- G. Seasonal/weekend rate calendar
-- H. New presets: `hotel`, `guesthouse`
-- I. Mode: `room_management`
+**Shipped 2026-04-15** — commits `b861755` (backend + POS + portal + deposits) + `f559fdd` (frontend + tests). Migration v38. 34 files touched. 57 new automated tests (37 unit + 20 integration), all passing.
 
-**Effort:** ~2 weeks
+**What shipped:**
+- **6 new tables** — `room_types`, `rooms`, `room_rate_overrides`, `room_bookings`, `guest_folios`, `folio_lines` + `sales.folio_id` column + `room_bookings.deposit_payment_intent_id` / `deposit_status` for adapter-agnostic deposit tracking
+- **Mode + 3 presets** — `room_management` mode in `MODE_REGISTRY`; `hotel`, `guesthouse`, `hostel` presets with Room/Guest/Bed labels and hospitality-specific onboarding steps (store, room, rate, employees, booking, checkin)
+- **~25 endpoints** under `/api/room-types`, `/api/rooms`, `/api/room-bookings` — double-gated by `phase4_room_management` feature flag + `manage_rooms` permission
+- **Rate model** — `resolveRateForDate()` pure function picks override rate if a row covers the date, else falls back to `room_types.base_rate`. `calculateStayTotal()` loops dates to return per-night breakdown. Rate UI has inline override editor with weekend/seasonal labels.
+- **Folio lifecycle** — Check-in auto-opens a folio seeded with one `room_night` line per night at the resolved rate. POS sales route to the folio via `sales.folio_id`; `attachSaleToFolio()` runs inside the sale transaction so a sale only links if the folio line also writes successfully (cross-domain atomicity). Settlement generates a `customer_invoice` with deposit-applied line.
+- **Deposit pre-auth** — `room-deposits.js` wraps the existing `payment-gateway.js` adapter registry. Same code path works under `PAYMENT_GATEWAY=sandbox` (local + Railway testing) and `PAYMENT_GATEWAY=xpay` (production). Webhook context added to `routes/webhooks.js` — single endpoint serves every adapter because `verifyWebhook()` dispatches upstream.
+- **POS "Charge to room" picker** — Context-driven dropdown appears in `POSCheckoutModal` only when `hasMode("room_management")`. Selecting a folio bypasses payment entry, marks the sale `payment_method='charge_to_room'`, and closes with a confirmation toast.
+- **5-tab UI** — Rooms (CRUD + housekeeping picker), Rates (per-date override table), Bookings (filter + actions + folio drawer), Calendar (CSS-grid Gantt), Arrivals/Departures (today's board). Route chunk 29.9 KB gzipped 7.14 KB.
+- **Customer portal "My Stays" tab** — gated by `phase4_room_management`; lists past + upcoming bookings with folio totals and linked invoices. Reuses M8 portal auth.
+- **Overdue-checkout worker** — `room-overdue-checkout-worker-boss.js`, daily 11 AM cron, `ROOM_OVERDUE_WORKER_ENABLED=1` gate, heartbeat exposed at `/api/admin/worker-status`.
+- **5 email templates** — `room_booking_confirmation`, `room_deposit_received`, `room_checkin_reminder`, `room_folio_receipt`, `room_overdue_checkout`.
+
+**Explicitly Out of Scope — Deferred to M9.1 / M10+:**
+
+These features were scoped out of M9 to keep the milestone at ~2 weeks. Each is a legitimate hospitality-industry feature that we would build when customer demand materializes or when bundling with a later milestone.
+
+| # | Deferred Feature | Why deferred | When to build |
+|---|-----------------|--------------|---------------|
+| 1 | **Channel manager** (Airbnb, Booking.com, Expedia sync) | Each provider is a multi-week integration project on its own. Would likely be its own milestone (M9.2 or beyond). | When a tenant onboards who explicitly needs multi-channel distribution, OR when we can bundle with a broader "marketplace integrations v2" push |
+| 2 | **Dynamic / revenue-management pricing** (demand-based rate adjustment) | Requires a pricing algorithm + historical occupancy data we don't have yet. M9 shipped flat per-date overrides which cover 90% of small-hotel use cases. | When we have real occupancy data from 3+ hotel tenants to train reasonable pricing rules |
+| 3 | **Group bookings** (one reservation covering multiple rooms under one folio) | Requires a `booking_groups` parent table and multi-room folio aggregation. UI gets significantly more complex. | When a guesthouse or hostel with function/event business signs up |
+| 4 | **Housekeeping staff assignment dashboard** (assign rooms to cleaners, track progress) | M9 shipped per-room status pickers (clean/dirty/inspected/OOO). Full staff-assignment dashboard requires shift integration + mobile-friendly cleaner UI. | When a tenant has ≥ 10 rooms and reports housekeeping coordination pain |
+| 5 | **Late-checkout automated fees** | Currently the overdue worker only emails staff. Auto-charging requires a configurable fee policy + a capture step against the deposit. | Bundle with M9.1 "hotel polish" when we have the first hotel tenant in production for ≥ 30 days |
+| 6 | **Multi-property chain management** (one tenant owns several hotels, consolidated reporting) | SanoPOS multi-outlet already supports this via the `outlets` table, but there's no roll-up reporting layer. | When a 2nd-property tenant actually signs up |
+| 7 | **Public reservation page at `/reserve/:tenantSlug`** | Would extend M6's public booking scaffolding. M9 shipped admin-created bookings only. Adding a public reserve page requires date-range picker, real-time availability query, and optional guest-payment handoff. | When a tenant asks for it, OR bundle with a broader "public storefront expansion" push |
+| 8 | **Loyalty point redemption on stay** | Points already *earn* on the final invoice via the existing customer-invoicing path. Redemption at booking time requires a new discount line type on folios. | When loyalty usage is ≥ 10% on hotel invoices |
+| 9 | **Length-of-stay discounts / advance-booking discounts / package deals** | Hotel-specific pricing rules (e.g. "stay 5 nights get 1 free"). Partially overlaps with Tier 4's promotions engine but needs hotel-specific rule types. | Bundle with a future "hotel promotions" milestone, or extend the existing promotions engine if overlap is clean |
+| 10 | **Room blocks / maintenance holds** (take a room out of inventory for a period without booking it) | Currently the only way to block a room is to mark it `out_of_order` via housekeeping status, which doesn't integrate with availability queries. | Small extension — half-day task. Pick up whenever a tenant reports the need. |
+| 11 | **Split folios / per-guest billing** (two guests share a room, split the final bill) | Current folio is 1:1 with booking. Splitting requires tracking which folio line belongs to which guest. | When a business hotel (corporate travel) signs up and requests it |
+| 12 | **Tax-inclusive room rates vs. tax-added-at-checkout toggle** | M9 shipped rates stored as-is; tax handling inherits from the existing `tax_total` column on invoices. Regions that require inclusive pricing (e.g. PK 16% sales tax baked into displayed rate) need an explicit config. | Bundle with a future "FBR hotel integration" pass — FBR has specific hospitality rules |
+
+**Build triggers for deferred items:** Do not build speculatively. Follow the table above — each deferred feature has a concrete signal (tenant sign-up, real-world usage data, pain reported) that justifies the work.
 
 #### Milestone 10: Manufacturing Mode (if factory demand exists)
 
@@ -692,9 +738,9 @@ Effort →
 | M5 (weight selling) | 13 | 6 | ~35 |
 | M6 (online booking) | 13 | 6 | ~38 (existing presets gain customer-facing entry) |
 | M7 (rentals) | 17 | 7 | ~42 (4 asset-rental verticals activated) |
-| **M8 (customer portal) — current** | **17** | **7** | **~42 (all verticals gain customer self-service)** |
-| M9 (room management) | 19 | 8 | ~45 |
-| M10 (manufacturing) | 21 | 9 | ~47 |
+| M8 (customer portal) | 17 | 7 | ~42 (all verticals gain customer self-service) |
+| **M9 (room management) — current** | **20** | **8** | **~45 (3 hospitality verticals activated)** |
+| M10 (manufacturing) | 22 | 9 | ~47 |
 
 The remaining ~7 industries (niche verticals like charity kitchen, medical lab, auction house) would need further assessment when demand materializes.
 
@@ -708,7 +754,7 @@ Not all milestones should be built speculatively. The decision framework:
 | ~~**M6 (online booking)**~~ | ~~When any appointment-based tenant asks "can my customers book online?"~~ **DONE 2026-04-14** — scaffolding was mostly already built, so shipped pre-emptively |
 | ~~**M7 (rentals)**~~ | ~~When a rental business signs up or expresses interest~~ **DONE 2026-04-14** — built pre-emptively to unlock 4 verticals |
 | ~~**M8 (customer portal)**~~ | ~~When 5+ tenants are active — it's a retention/stickiness play~~ **DONE 2026-04-15** — built pre-emptively; retention/stickiness benefit activates as tenant count grows |
-| **M9 (room management)** | Only when a hotel/guesthouse pays or commits |
+| ~~**M9 (room management)**~~ | ~~Only when a hotel/guesthouse pays or commits~~ **DONE 2026-04-15** — built pre-emptively to unlock 3 hospitality verticals; 12 deferred sub-features listed in §12 Milestone 9 for demand-driven follow-up |
 | **M10 (manufacturing)** | Only when a factory/production business pays or commits |
 
 ---
