@@ -1,7 +1,7 @@
 # Tenant Preset Engine v1 — Strategy & Implementation Specification
 
 **Date:** 2026-04-13 (last updated 2026-04-15)
-**Status:** v1 COMPLETE (M1-M4, 2026-04-14). v2 IN PROGRESS — M5, M6, M7 shipped 2026-04-14.
+**Status:** v1 COMPLETE (M1-M4, 2026-04-14). v2 IN PROGRESS — M5, M6, M7 shipped 2026-04-14; M8 shipped 2026-04-15.
 **Author:** Hassan + Claude (session 2026-04-13)
 
 ---
@@ -467,26 +467,27 @@ CREATE TABLE IF NOT EXISTS tenant_modes (
 8. ~~**Execute Milestone 5** — Weight-based selling + POS label polish + 3 new presets (butcher, sweet_shop, textile)~~ Done (26/26 unit tests passing, migration v34 deployed to all 3 production tenants, commit `c3fa47d`)
 9. ~~**Execute Milestone 6** — Online booking page polish: confirmation email, share link UI, industry-aware labels, validation + rate limiting + time guards, `.ics` calendar download, integration + unit test coverage~~ Done (commit `760344b`, 29 new automated tests, no migration required)
 10. ~~**Execute Milestone 7** — Rentals mode: `rentals` business mode + 4 asset-rental presets (car_rental, equipment_hire, furniture_rental, party_supplies_rental), 5 new tables, 18 endpoints, 3-tab UI with Gantt timeline, overdue worker + email, 41 new automated tests~~ Done 2026-04-14 (commits `2afaf2d` + `8f94816` test fixup + `6688a43` mode-flag reset hardening, migration v36, 21 files touched)
+11. ~~**Execute Milestone 8** — Customer portal at `/portal/:tenantSlug`: email+password / email-OTP auth, preset-driven tabs, invoice pay (reuses `customer_invoice_payment_links` + existing webhook Context 2), self-service appointments (book/reschedule/cancel), profile + addresses editing, 8 new email templates, 34 new automated tests~~ Done 2026-04-15 (commit `cb41110`, migration v37 applied to public + all 3 tenant schemas on Railway, 30 files touched)
 
 **Preset Engine v1 is COMPLETE.** All 4 milestones delivered. 10 industry presets, 10 adaptation surfaces, 6 business modes, 23 country packs.
 
-**Preset Engine v2 is IN PROGRESS.** M5, M6, M7 shipped 2026-04-14 — now at 17 presets, 7 business modes, ~42 industries covered. Every appointment-based tenant has a public booking URL, and rental businesses (car hire, equipment, furniture, party supplies) are fully supported with asset tracking, duration pricing, deposits, and overdue alerts.
+**Preset Engine v2 is IN PROGRESS.** M5, M6, M7, M8 shipped between 2026-04-14 and 2026-04-15 — now at 17 presets, 7 business modes, ~42 industries covered. Every appointment-based tenant has a public booking URL, rental businesses (car hire, equipment, furniture, party supplies) are fully supported with asset tracking + overdue alerts, and **every vertical now has a customer portal** at `/portal/:slug` for invoice pay, appointment self-service, and account management.
 
 ---
 
 ## 12. Preset Engine v2 Roadmap — Expanding Industry Coverage
 
-### Current Coverage (v1 + M5 + M6 + M7)
+### Current Coverage (v1 + M5 + M6 + M7 + M8)
 
 | What | Count | Details |
 |------|-------|---------|
 | Industry presets | 17 | retail, grocery, wholesale, restaurant, cafe, salon, clinic, repair_shop, gym, photography_studio, butcher, sweet_shop, textile (M5), **car_rental, equipment_hire, furniture_rental, party_supplies_rental** (M7) |
 | Business modes | 7 | retail, restaurant, appointments, service_projects, subscriptions, workflow_tickets, **rentals** (M7) |
 | Country packs | 23 | PK, US, GB, CA, AU, IN, AE, SA, BD, NG, KE, GH, ZA, EG, DE, FR, NL, SG, MY, ID, PH, NZ, OTHER |
-| Adaptation surfaces | 13 | Nav, labels, dashboard widgets, POS layout, onboarding, receipts, reports, POS search, sample data, clinic fields, unit vocabulary / weight-based selling (M5), public booking labels (M6), **rental asset/contract UX** (M7) |
-| Public customer-facing surfaces | 2 | Public receipt URL (v1), public booking page at `/book/:slug` with per-preset labels, share link UI, ICS download, confirmation email (M6) |
+| Adaptation surfaces | 14 | Nav, labels, dashboard widgets, POS layout, onboarding, receipts, reports, POS search, sample data, clinic fields, unit vocabulary / weight-based selling (M5), public booking labels (M6), rental asset/contract UX (M7), **portal labels + per-preset tab list** (M8) |
+| Public customer-facing surfaces | 3 | Public receipt URL (v1), public booking page at `/book/:slug` with per-preset labels, share link UI, ICS download, confirmation email (M6), **customer portal at `/portal/:slug`** with preset-driven tabs, invoice pay, self-service appointments, profile/address editing (M8) |
 
-The 17 presets now cover **~42 of 54 industries** (up from 38 — M7 adds 4 asset-rental verticals on the new `rentals` mode). The remaining ~12 industries need new operational capabilities (room management, customer portal, manufacturing, treatment plans) before we can add presets without them being hollow labels.
+The 17 presets now cover **~42 of 54 industries** (up from 38 — M7 adds 4 asset-rental verticals on the new `rentals` mode). M8 ships an authenticated customer portal that every preset benefits from — B2B wholesale gets invoice pay, salon/clinic clients get self-service booking, and all verticals get account management without staff involvement. The remaining ~12 industries need new operational capabilities (room management, manufacturing, treatment plans) before we can add presets without them being hollow labels.
 
 ### What's Missing — Three Tiers
 
@@ -512,7 +513,7 @@ The 17 presets now cover **~42 of 54 industries** (up from 38 — M7 adds 4 asse
 | Capability | Who Needs It | Effort | What to Build |
 |-----------|-------------|--------|---------------|
 | ~~Online booking page~~ | ~~Salon, clinic, gym, car wash, photography — any appointment-based business (~8 industries)~~ | ~~1 week~~ | **SHIPPED in M6 (2026-04-14).** Public page at `/book/:tenantSlug` with industry-aware labels, share-link card in admin UI, confirmation email, `.ics` download, 15-min min-notice + `max_advance_days` guards, rate limiting. Deposit collection deferred to future M6.5 (xPay hookup). |
-| Customer portal | B2B wholesale, service businesses, clinic patients — all verticals benefit | 2 weeks | Authenticated customer login (separate from employee login), view invoices/appointments/orders, pay outstanding balance, download receipts. Currently all customer interaction is staff-mediated |
+| ~~Customer portal~~ | ~~B2B wholesale, service businesses, clinic patients — all verticals benefit~~ | ~~2 weeks~~ | **SHIPPED in M8 (2026-04-15).** Authenticated portal at `/portal/:tenantSlug` with email+password / email-OTP auth (separate JWT pipeline, scope=customer). Preset-driven tabs (invoices/orders/appointments/subscriptions/contracts/tickets/loyalty/wallet/profile) ANDed with tenant feature flags. Invoice pay reuses `customer_invoice_payment_links` + existing webhook Context 2 — no gateway changes. Self-service appointment book/reschedule/cancel with 15-min notice guard. Profile + saved addresses + marketing consent editing. Migration v37, 30 files touched, 34 new tests. |
 | Multi-location intelligence | Franchise retail, chain restaurants, multi-branch wholesale | 2 weeks | Transfer optimization (suggest transfers from overstocked to understocked), consolidated reporting across outlets, central purchasing with per-outlet allocation. Tables exist (`outlet_stock`, `inventory_transfers`) but UX is single-branch focused |
 | Own-fleet delivery | Restaurant (own delivery), grocery, any local delivery | 1-2 weeks | Driver assignment, route management, real-time tracking, proof of delivery. 13 third-party courier adapters exist, but not own-fleet dispatch |
 
@@ -521,10 +522,10 @@ The 17 presets now cover **~42 of 54 industries** (up from 38 — M7 adds 4 asse
 ```
 Effort →
   ┃
-  ┃  ★ Weight-based selling      +5 industries  (2-3 days)
-  ┃  ★ Online booking page       +8 industries  (1 week)
-  ┃  ★ Rentals mode              +4 industries  (2 weeks)
-  ┃  ○ Customer portal           all verticals   (2 weeks)
+  ┃  ★ Weight-based selling      +5 industries  (2-3 days)  [SHIPPED M5]
+  ┃  ★ Online booking page       +8 industries  (1 week)    [SHIPPED M6]
+  ┃  ★ Rentals mode              +4 industries  (2 weeks)   [SHIPPED M7]
+  ┃  ★ Customer portal           all verticals   (2 weeks)  [SHIPPED M8]
   ┃  ○ Room management           +3 industries  (2 weeks)
   ┃  ○ Treatment plans           +3 industries  (2 weeks)
   ┃  ○ Manufacturing             +2 industries  (2 weeks)
@@ -626,19 +627,30 @@ Effort →
 
 **Unlocks:** Car rental, equipment hire (tools/tents/sound), furniture rental, party supplies — any asset-rental business with serial-numbered inventory, duration-based pricing, and deposit tracking.
 
-#### Milestone 8: Customer Portal
+#### Milestone 8: Customer Portal — COMPLETE
 
-**Goal:** Give customers their own login to view history, pay invoices, book appointments.
+> **Status:** Done — shipped 2026-04-15 (commit `cb41110`). 13/13 portal unit tests + 21/21 integration tests passing, frontend builds clean (portal chunks all <8KB uncompressed), migration v37 applied to public + 3 production tenant schemas (handicraft, khantoys, packagesmall) on Railway.
+>
+> **Migration v37:** 5 new columns on `customers` (`portal_password_hash`, `portal_enabled_at`, `portal_tokens_revoked_before`, `portal_last_login_at`, `portal_email_verified_at`), 3 new tables (`customer_portal_otps`, `customer_portal_reset_tokens`, `customer_portal_refresh_tokens`), partial unique index on `LOWER(email)` for portal-enabled customers, `appointments.source` CHECK broadened to include `'portal'`.
+>
+> **Env:** `CUSTOMER_PORTAL_JWT_SECRET` set on Railway (falls back to `JWT_SECRET` with boot warning if unset).
 
-**Scope:**
-- A. Customer authentication (separate from employee auth — email/phone + OTP or password)
-- B. Customer dashboard: order history, upcoming appointments, outstanding invoices, loyalty balance
-- C. Pay invoice online (via existing payment gateway)
-- D. Book/reschedule appointments (connects to booking engine)
-- E. Download receipts + invoices
-- F. Tenant-branded portal at `portal.sanopos.com/{slug}` or `/{slug}/portal`
+**Scope delivered:**
+- A. **Auth** — email+password primary + email-OTP fallback ("Email me a code instead"). Signup → email-verify OTP → auto-login. Password reset via long-token email link (revokes all refresh tokens on reset). Separate JWT pipeline with `scope: "customer"` (staff tokens can't cross-auth). Refresh token rotation on every refresh, SHA-256 hashed in DB, `httpOnly; SameSite=None; Secure; Path=/api/portal/auth` cookie (cross-site `sanopos.com` → `api.sanopos.com`).
+- B. **Preset-driven tabs** — new `portal_labels` + `portal_enabled_tabs` surfaces in `backend/config/industry-config.js`. Preset tab list ANDed with tenant feature flags (`customer_invoicing`, `phase4_appointments`, `subscription_billing`, `phase4_rentals`, `phase4_service_projects`). Salon shows appointments+invoices+loyalty; wholesale shows invoices+orders; rentals show contracts+invoices; gym shows subscriptions+appointments+invoices; etc.
+- C. **Invoice pay** — `POST /api/portal/me/invoices/:id/pay` reuses `customer_invoice_payment_links` + the existing webhook Context 2 in `routes/webhooks.js`. **Zero webhook changes needed.** `PortalInvoicePaidPage` polls invoice status after return from gateway to handle webhook race.
+- D. **Self-service appointments** — book/reschedule/cancel via `services/booking-services.js` with `source='portal'`. 15-minute minimum notice guard enforced at the route layer. Ownership check via `customer_id`. All three actions enqueue branded confirmation emails.
+- E. **Profile + addresses** — whitelisted profile fields (name, mobile, address, city, DOB, gender, 3 consent toggles, preferred contact). Full CRUD on `customer_addresses`.
+- F. **URL** — `/portal/:tenantSlug` (no subdomain in v1). Slug-scoped frontend auth store (`customerPortalSession:${slug}`) so one browser can be logged into multiple tenants.
+- G. **Rate limits** — 3 new limiters: `customerPortalAuthLimiter` (10/15m tenant+IP), `customerPortalOtpLimiter` (5/15m email+IP to prevent enumeration), `customerPortalDataLimiter` (120/min per customer_id).
+- H. **Emails** — 8 new templates (welcome, OTP login, password reset, email verify, appointment confirmation / rescheduled / cancelled, payment receipt) registered in `TEMPLATES` map.
+- I. **Tests** — 2 unit files (13 tests: JWT signing/verification, OTP hashing, preset tabs across all 17 industries) + 2 integration files (21 tests: password flow, OTP flow, data scoping, sandbox-payment link creation, appointment lifecycle with ownership + 15-min notice rejection).
 
-**Effort:** ~2 weeks. Benefits every vertical — B2B wholesale buyers check invoices, salon clients book appointments, clinic patients see visit history.
+**Effort (actual):** ~1 day end-to-end (planned 2 weeks). Most of the work was reuse — auth middleware mirrors `routes/admin/auth.js`, payment flow uses the already-live `customer_invoice_payment_links` primitive, appointment lifecycle delegates to existing `booking-services.js`.
+
+**Unlocks:** Every vertical benefits. B2B wholesale buyers check and pay invoices without calling the office; salon/clinic clients book and reschedule appointments 24/7; gym members see upcoming classes + active subscriptions; rental customers see open contracts; all customers update their own marketing consent + addresses.
+
+**Out of scope (explicitly deferred):** portal subdomain (`portal.sanopos.com`), per-tenant custom domains, mobile PWA install prompt, in-portal staff chat, loyalty redemption from portal (view-only), wallet top-up from portal (pay-invoice is the only money-in path), storefront cart integration (orders remain read-only in portal), social login.
 
 #### Milestone 9: Room Management Mode (if hotel demand exists)
 
@@ -679,8 +691,8 @@ Effort →
 | v1 (M1-M4) | 10 | 6 | ~30 |
 | M5 (weight selling) | 13 | 6 | ~35 |
 | M6 (online booking) | 13 | 6 | ~38 (existing presets gain customer-facing entry) |
-| **M7 (rentals) — current** | **17** | **7** | **~42 (4 asset-rental verticals activated)** |
-| M8 (customer portal) | 17 | 7 | ~42 (all verticals gain customer self-service) |
+| M7 (rentals) | 17 | 7 | ~42 (4 asset-rental verticals activated) |
+| **M8 (customer portal) — current** | **17** | **7** | **~42 (all verticals gain customer self-service)** |
 | M9 (room management) | 19 | 8 | ~45 |
 | M10 (manufacturing) | 21 | 9 | ~47 |
 
@@ -695,7 +707,7 @@ Not all milestones should be built speculatively. The decision framework:
 | ~~**M5 (weight selling)**~~ | ~~Before next marketing push — it's cheap and broadens the pitch~~ **DONE 2026-04-14** |
 | ~~**M6 (online booking)**~~ | ~~When any appointment-based tenant asks "can my customers book online?"~~ **DONE 2026-04-14** — scaffolding was mostly already built, so shipped pre-emptively |
 | ~~**M7 (rentals)**~~ | ~~When a rental business signs up or expresses interest~~ **DONE 2026-04-14** — built pre-emptively to unlock 4 verticals |
-| **M8 (customer portal)** | When 5+ tenants are active — it's a retention/stickiness play |
+| ~~**M8 (customer portal)**~~ | ~~When 5+ tenants are active — it's a retention/stickiness play~~ **DONE 2026-04-15** — built pre-emptively; retention/stickiness benefit activates as tenant count grows |
 | **M9 (room management)** | Only when a hotel/guesthouse pays or commits |
 | **M10 (manufacturing)** | Only when a factory/production business pays or commits |
 
