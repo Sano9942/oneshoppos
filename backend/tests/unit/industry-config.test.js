@@ -5,10 +5,12 @@ import {
   DEFAULT_INDUSTRY_TYPE,
   WEIGHTED_UNITS,
   DEFAULT_UNIT_VOCABULARY,
+  DEFAULT_PUBLIC_BOOKING_LABELS,
   getPreset,
   getPresetLabels,
   getUnitVocabulary,
   isWeightedUnit,
+  getPublicBookingLabels,
 } from "../../config/industry-config.js";
 
 describe("industry-config", () => {
@@ -192,5 +194,44 @@ describe("industry-config", () => {
       expect(getPreset(key).modes).toEqual([]);
       expect(getPreset(key).business_model).toBe("buy_sell");
     }
+  });
+
+  // --- M6 public booking labels ---
+
+  it("getPublicBookingLabels returns preset overrides for salon (Stylist)", () => {
+    const labels = getPublicBookingLabels("salon");
+    expect(labels.booking_cta).toBe("Book an appointment");
+    expect(labels.staff_singular).toBe("Stylist");
+    expect(labels.service_singular).toBe("Service");
+  });
+
+  it("getPublicBookingLabels returns preset overrides for clinic (Provider)", () => {
+    const labels = getPublicBookingLabels("clinic");
+    expect(labels.booking_cta).toBe("Book a visit");
+    expect(labels.staff_singular).toBe("Provider");
+  });
+
+  it("getPublicBookingLabels returns preset overrides for gym (Trainer + Class)", () => {
+    const labels = getPublicBookingLabels("gym");
+    expect(labels.booking_cta).toBe("Book a session");
+    expect(labels.staff_singular).toBe("Trainer");
+    expect(labels.service_singular).toBe("Class");
+  });
+
+  it("getPublicBookingLabels returns preset overrides for photography_studio (Photographer)", () => {
+    const labels = getPublicBookingLabels("photography_studio");
+    expect(labels.staff_singular).toBe("Photographer");
+    expect(labels.service_singular).toBe("Package");
+  });
+
+  it("getPublicBookingLabels falls back to defaults for presets without overrides", () => {
+    const labels = getPublicBookingLabels("general_retail");
+    expect(labels).toEqual(DEFAULT_PUBLIC_BOOKING_LABELS);
+    expect(labels.staff_singular).toBe("Staff");
+  });
+
+  it("getPublicBookingLabels falls back to defaults for unknown industry", () => {
+    const labels = getPublicBookingLabels("unknown_thing");
+    expect(labels).toEqual(DEFAULT_PUBLIC_BOOKING_LABELS);
   });
 });

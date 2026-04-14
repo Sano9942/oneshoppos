@@ -357,6 +357,62 @@ function subscriptionRenewalAdmin(data) {
   };
 }
 
+// -- Booking Confirmation (public booking page) ---------------------------
+function bookingConfirmation(data) {
+  const {
+    storeName,
+    customerName,
+    serviceName,
+    staffName,
+    startAt,
+    endAt,
+    duration,
+    notes,
+    bookingId,
+    storeAddress,
+    storePhone,
+    status,
+    icsUrl,
+  } = data || {};
+
+  const pending = status === "pending";
+  const title = pending ? "Booking Received" : "Booking Confirmed";
+  const heading = pending ? "Your booking is pending confirmation" : "Your booking is confirmed";
+
+  let startDisplay = startAt;
+  let endDisplay = endAt;
+  try {
+    if (startAt) startDisplay = new Date(startAt).toLocaleString();
+    if (endAt) endDisplay = new Date(endAt).toLocaleString();
+  } catch { /* leave as-is */ }
+
+  return {
+    subject: pending
+      ? `Booking received — ${storeName || "our store"}`
+      : `Booking confirmed — ${storeName || "our store"}`,
+    html: wrapEmailHtml(
+      title,
+      `<p>Hi ${customerName || "there"},</p>
+       <p>${heading} at <strong>${storeName || "our store"}</strong>.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f0fdf4;border-radius:8px">
+         ${serviceName ? `<tr><td style="padding:10px 16px;color:#64748b">Service</td><td style="padding:10px 16px;font-weight:600">${serviceName}</td></tr>` : ""}
+         ${staffName ? `<tr><td style="padding:10px 16px;color:#64748b">With</td><td style="padding:10px 16px">${staffName}</td></tr>` : ""}
+         <tr><td style="padding:10px 16px;color:#64748b">Starts</td><td style="padding:10px 16px;font-weight:600">${startDisplay || ""}</td></tr>
+         ${endDisplay ? `<tr><td style="padding:10px 16px;color:#64748b">Ends</td><td style="padding:10px 16px">${endDisplay}</td></tr>` : ""}
+         ${duration ? `<tr><td style="padding:10px 16px;color:#64748b">Duration</td><td style="padding:10px 16px">${duration} min</td></tr>` : ""}
+         <tr><td style="padding:10px 16px;color:#64748b">Booking #</td><td style="padding:10px 16px;font-weight:600">${bookingId || ""}</td></tr>
+       </table>
+       ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ""}
+       ${icsUrl ? btn("Add to calendar", icsUrl) : ""}
+       ${(storeAddress || storePhone) ? `<hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0"/>
+         <p style="color:#475569;margin:0 0 4px"><strong>${storeName || "Our store"}</strong></p>
+         ${storeAddress ? `<p style="color:#64748b;font-size:14px;margin:0 0 4px">${storeAddress}</p>` : ""}
+         ${storePhone ? `<p style="color:#64748b;font-size:14px;margin:0">If you need to cancel or reschedule, please call ${storePhone}.</p>` : ""}` : ""}
+       ${footer("This is an automated confirmation of your booking.")}`
+    ),
+  };
+}
+
 function subscriptionRenewalDue(data) {
   return {
     subject: `Your subscription renewal is due — ${data.plan_name}`,
@@ -394,6 +450,7 @@ const TEMPLATES = {
   announcement,
   subscription_renewal_admin: subscriptionRenewalAdmin,
   subscription_renewal_due: subscriptionRenewalDue,
+  booking_confirmation: bookingConfirmation,
 };
 
 module.exports = { TEMPLATES, wrapEmailHtml };

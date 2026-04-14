@@ -1,4 +1,9 @@
 const { resolvePublicTenantDb } = require("../services/public-tenant-context");
+const { validate } = require("../middleware/validate");
+const { publicBookingLimiter } = require("../middleware/rate-limit");
+const { publicBookingSchema } = require("../schemas/bookings");
+const { getPublicBookingLabels } = require("../config/industry-config");
+const { buildIcsEvent } = require("../utils/ics");
 
 module.exports = function registerPublicBookingRoutes(app, deps) {
 
@@ -10,7 +15,7 @@ module.exports = function registerPublicBookingRoutes(app, deps) {
       const { db } = resolved;
 
       const { rows: [profile] } = await db.query(
-        "SELECT company_name, logo_url, currency_symbol FROM company_profile LIMIT 1"
+        "SELECT company_name, logo_url, currency_symbol, industry_type FROM company_profile LIMIT 1"
       );
 
       const { rows: services } = await db.query(
@@ -23,10 +28,14 @@ module.exports = function registerPublicBookingRoutes(app, deps) {
          ORDER BY bs.name`
       );
 
+      const labels = getPublicBookingLabels(profile?.industry_type || null);
+
       res.json({
         company_name: profile?.company_name || "",
         logo_url: profile?.logo_url || null,
         currency_symbol: profile?.currency_symbol || "Rs",
+        industry_type: profile?.industry_type || null,
+        labels,
         services,
       });
     } catch (err) {
@@ -57,32 +66,121 @@ module.exports = function registerPublicBookingRoutes(app, deps) {
   });
 
   // POST /api/public/bookings — create public booking
-  app.post("/api/public/bookings", async (req, res) => {
+  app.post(
+    "/api/public/bookings",
+    publicBookingLimiter,
+    validate(publicBookingSchema),
+    async (req, res) => {
+      try {
+        const resolved = await resolvePublicTenantDb(req, deps);
+        if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+        const { db, tenant } = resolved;
+
+        const {
+          service_id, employee_id, start_at,
+          customer_name, customer_phone, customer_email, notes,
+        } = req.body;
+
+        let companyProfile = null;
+        try {
+          const { rows: [p] } = await db.query(
+            "SELECT company_name, address, phone FROM company_profile LIMIT 1"
+          );
+          companyProfile = p || null;
+        } catch { /* optional */ }
+
+        const tenantCtx = tenant
+          ? { id: tenant.id, slug: tenant.slug, name: companyProfile?.company_name || tenant.slug }
+          : null;
+
+        const { createAppointment } = require("../services/booking-services");
+        const appt = await createAppointment(
+          db,
+          { service_id, employee_id, start_at, customer_name, customer_phone, customer_email, notes },
+          "public",
+          {
+            tenant: tenantCtx,
+            companyProfile,
+            frontendUrl: process.env.FRONTEND_URL || "",
+          }
+        );
+
+        res.status(201).json({
+          id: appt.id,
+          status: appt.status,
+          start_at: appt.start_at,
+          end_at: appt.end_at,
+          message: appt.status === "pending" ? "Your booking is pending confirmation" : "Your booking is confirmed",
+        });
+      } catch (err) {
+        const status = err.statusCode || 500;
+        res.status(status).json({ error: status === 500 ? "Internal server error" : err.message });
+      }
+    }
+  );
+
+  // GET /api/public/bookings/:id/ics — calendar download
+  app.get("/api/public/bookings/:id/ics", async (req, res) => {
     try {
       const resolved = await resolvePublicTenantDb(req, deps);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const { db } = resolved;
 
-      const { service_id, employee_id, start_at, customer_name, customer_phone, customer_email, notes } = req.body || {};
-      if (!service_id || !start_at || !customer_name || !customer_phone) {
-        return res.status(400).json({ error: "service_id, start_at, customer_name, customer_phone required" });
+      const id = Number(req.params.id);
+      if (!Number.isFinite(id) || id <= 0) {
+        return res.status(400).json({ error: "Invalid booking id" });
       }
 
-      const { createAppointment } = require("../services/booking-services");
-      const appt = await createAppointment(db, {
-        service_id, employee_id, start_at, customer_name, customer_phone, customer_email, notes,
-      }, "public");
+      const { rows: [appt] } = await db.query(
+        `SELECT a.id, a.start_at, a.end_at, a.customer_name, a.notes, a.source,
+                bs.name AS service_name
+         FROM appointments a
+         JOIN booking_services bs ON bs.id = a.service_id
+         WHERE a.id = $1 AND a.source = 'public'`,
+        [id]
+      );
+      if (!appt) return res.status(404).json({ error: "Booking not found" });
 
-      res.status(201).json({
-        id: appt.id,
-        status: appt.status,
-        start_at: appt.start_at,
-        end_at: appt.end_at,
-        message: appt.status === "pending" ? "Your booking is pending confirmation" : "Your booking is confirmed",
+      let companyName = "";
+      let address = "";
+      try {
+        const { rows: [p] } = await db.query(
+          "SELECT company_name, address FROM company_profile LIMIT 1"
+        );
+        companyName = p?.company_name || "";
+        address = p?.address || "";
+      } catch { /* optional */ }
+
+      const host = (process.env.FRONTEND_URL || "sanopos.com").replace(/^https?:\/\//, "");
+      const uid = `booking-${appt.id}@${host}`;
+
+      const summary = companyName
+        ? `${appt.service_name} at ${companyName}`
+        : appt.service_name;
+
+      const description = [
+        companyName ? `Booking at ${companyName}` : null,
+        `Booking #${appt.id}`,
+        appt.notes ? `Notes: ${appt.notes}` : null,
+      ].filter(Boolean).join("\n");
+
+      const ics = buildIcsEvent({
+        uid,
+        start: appt.start_at,
+        end: appt.end_at,
+        summary,
+        description,
+        location: address || undefined,
       });
+
+      res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="booking-${appt.id}.ics"`
+      );
+      res.status(200).send(ics);
     } catch (err) {
-      const status = err.statusCode || 500;
-      res.status(status).json({ error: status === 500 ? "Internal server error" : err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 };

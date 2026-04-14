@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge, Input } from "../../ui/primitives";
-import { Plus, Pencil, Clock, Users, X } from "lucide-react";
+import { Plus, Pencil, Clock, Users, X, Copy, ExternalLink, Link2 } from "lucide-react";
 import { api } from "../../api";
+import { readTenantSlug } from "../../auth/authStore";
 
 export default function AppointmentServicesRedesign() {
   const { authHeaders } = useAuth();
@@ -38,6 +39,36 @@ export default function AppointmentServicesRedesign() {
   }, []);
 
   useEffect(() => { loadServices(); loadEmployees(); }, [loadServices, loadEmployees]);
+
+  const tenantSlug = useMemo(() => readTenantSlug(), []);
+  const publicBookingUrl = useMemo(() => {
+    if (!tenantSlug) return null;
+    const origin = typeof window !== "undefined" && window.location ? window.location.origin : "";
+    return `${origin}/book/${tenantSlug}`;
+  }, [tenantSlug]);
+  const qrSrc = publicBookingUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(publicBookingUrl)}`
+    : null;
+
+  const copyBookingLink = async () => {
+    if (!publicBookingUrl) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(publicBookingUrl);
+      } else {
+        // Fallback for non-secure contexts
+        const ta = document.createElement("textarea");
+        ta.value = publicBookingUrl;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      toast.success("Booking link copied");
+    } catch {
+      toast.error("Could not copy link");
+    }
+  };
 
   if (flagsLoading) return null;
   if (!flags.phase4_appointments) return <Navigate to="/dashboard" replace />;
@@ -98,6 +129,50 @@ export default function AppointmentServicesRedesign() {
     <PageShell title="Booking Services" subtitle="Manage your service catalog" right={
       <Button size="sm" onClick={openCreate}><Plus className="w-4 h-4 mr-1" /> New Service</Button>
     }>
+      {publicBookingUrl && (
+        <SectionCard className="mb-4">
+          <div className="flex flex-col sm:flex-row gap-4 sm:items-center">
+            <div className="shrink-0">
+              {qrSrc ? (
+                <img
+                  src={qrSrc}
+                  alt="Public booking QR code"
+                  width={120}
+                  height={120}
+                  className="rounded border border-(--ui-border) bg-white"
+                />
+              ) : null}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 text-sm font-semibold text-(--ui-text)">
+                <Link2 className="w-4 h-4" />
+                Public booking link
+              </div>
+              <p className="text-xs text-(--ui-text-muted) mt-1 mb-2">
+                Share this URL on WhatsApp, Instagram, or your website so customers can book themselves.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                <code className="block sm:flex-1 truncate rounded border border-(--ui-border) bg-(--ui-surface) px-3 py-1.5 text-xs text-(--ui-text)">
+                  {publicBookingUrl}
+                </code>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="ghost" onClick={copyBookingLink}>
+                    <Copy className="w-3.5 h-3.5 mr-1" /> Copy
+                  </Button>
+                  <a
+                    href={publicBookingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border border-(--ui-border) text-(--ui-text-muted) hover:text-(--ui-text) hover:border-(--ui-accent)"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" /> Test booking page
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+      )}
       {loading ? (
         <div className="text-center py-12 text-(--ui-text-muted)">Loading...</div>
       ) : services.length === 0 ? (

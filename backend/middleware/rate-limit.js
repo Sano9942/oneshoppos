@@ -97,4 +97,18 @@ const reviewLimiter = rateLimit({
   },
 });
 
-module.exports = { globalLimiter, authLimiter, webhookLimiter, reviewLimiter };
+// Public booking POST: 10 bookings / 15 min / IP (per tenant).
+const publicBookingLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitExceededHandler,
+  skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => {
+    const tenantKey = req.query?.tenant || req.headers["x-tenant-slug"] || "unknown";
+    return `pubbook:${tenantKey}:${req.ip}`;
+  },
+});
+
+module.exports = { globalLimiter, authLimiter, webhookLimiter, reviewLimiter, publicBookingLimiter };

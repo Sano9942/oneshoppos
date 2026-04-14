@@ -140,6 +140,10 @@ export default function PublicBookingPage() {
   const logoUrl = config?.logo_url;
   const currencySymbol = config?.currency_symbol || "Rs";
   const services = config?.services || [];
+  const labels = config?.labels || {};
+  const bookingCta = labels.booking_cta || "Book an appointment";
+  const serviceSingular = labels.service_singular || "service";
+  const staffSingular = labels.staff_singular || "Staff";
 
   if (confirmation) {
     return (
@@ -174,18 +178,29 @@ export default function PublicBookingPage() {
                 <div><span className="text-gray-500">End:</span> <span className="font-medium text-gray-900">{new Date(confirmation.end_at).toLocaleString()}</span></div>
               )}
             </div>
-            <button
-              onClick={() => {
-                setConfirmation(null);
-                setSelectedService(null);
-                setSelectedEmployeeId("");
-                setSelectedSlot(null);
-                setForm({ customer_name: "", customer_phone: "", customer_email: "", notes: "" });
-              }}
-              className="mt-6 text-sm font-medium text-indigo-600 hover:text-indigo-700"
-            >
-              Book another appointment
-            </button>
+            <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <a
+                href={`${API_BASE}/api/public/bookings/${confirmation.id}/ics?tenant=${encodeURIComponent(tenantSlug)}`}
+                className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                </svg>
+                Add to calendar
+              </a>
+              <button
+                onClick={() => {
+                  setConfirmation(null);
+                  setSelectedService(null);
+                  setSelectedEmployeeId("");
+                  setSelectedSlot(null);
+                  setForm({ customer_name: "", customer_phone: "", customer_email: "", notes: "" });
+                }}
+                className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+              >
+                Book another
+              </button>
+            </div>
           </div>
           <p className="mt-4 text-center text-xs text-gray-400">Powered by SanoPOS</p>
         </main>
@@ -205,14 +220,14 @@ export default function PublicBookingPage() {
             </div>
           )}
           <span className="text-lg font-semibold text-gray-900">{storeName}</span>
-          <span className="ml-auto text-sm text-gray-500">Book an appointment</span>
+          <span className="ml-auto text-sm text-gray-500">{bookingCta}</span>
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Step 1: Service selection */}
         <section className="mb-6">
-          <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide mb-3">1. Choose a service</h2>
+          <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide mb-3">1. Choose a {serviceSingular.toLowerCase()}</h2>
           {services.length === 0 ? (
             <div className="bg-white border border-gray-200 rounded-xl p-6 text-center text-sm text-gray-500">
               No services are currently available for booking.
@@ -248,7 +263,7 @@ export default function PublicBookingPage() {
         {/* Step 2: Staff + date */}
         {selectedService && (
           <section className="mb-6 bg-white border border-gray-200 rounded-xl p-5">
-            <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide mb-3">2. Pick date & staff</h2>
+            <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide mb-3">2. Pick date & {staffSingular.toLowerCase()}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Date</label>
@@ -262,7 +277,7 @@ export default function PublicBookingPage() {
               </div>
               {selectedService.staff && selectedService.staff.length > 0 && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Staff (optional)</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{staffSingular} (optional)</label>
                   <select
                     value={selectedEmployeeId}
                     onChange={(e) => setSelectedEmployeeId(e.target.value)}

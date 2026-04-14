@@ -66,6 +66,12 @@ const INDUSTRY_PRESETS = Object.freeze({
       sale: "Appointment",
       order: "Booking",
     },
+    public_booking_labels: {
+      booking_cta: "Book an appointment",
+      service_singular: "Service",
+      staff_singular: "Stylist",
+      customer_singular: "Client",
+    },
     dashboard_widgets: {
       inventory_alerts: false,
       top_products: true,
@@ -144,6 +150,12 @@ const INDUSTRY_PRESETS = Object.freeze({
       sale: "Visit",
       order: "Appointment",
     },
+    public_booking_labels: {
+      booking_cta: "Book a visit",
+      service_singular: "Service",
+      staff_singular: "Provider",
+      customer_singular: "Patient",
+    },
     dashboard_widgets: {
       inventory_alerts: false,
       top_products: true,
@@ -196,6 +208,12 @@ const INDUSTRY_PRESETS = Object.freeze({
       sale: "Enrollment",
       order: "Booking",
     },
+    public_booking_labels: {
+      booking_cta: "Book a session",
+      service_singular: "Class",
+      staff_singular: "Trainer",
+      customer_singular: "Member",
+    },
     dashboard_widgets: {
       inventory_alerts: false,
       top_products: true,
@@ -247,6 +265,12 @@ const INDUSTRY_PRESETS = Object.freeze({
       customers: "Clients",
       sale: "Session",
       order: "Booking",
+    },
+    public_booking_labels: {
+      booking_cta: "Book a session",
+      service_singular: "Package",
+      staff_singular: "Photographer",
+      customer_singular: "Client",
     },
     dashboard_widgets: {
       inventory_alerts: false,
@@ -368,6 +392,15 @@ const DEFAULT_EXTENDED_LABELS = Object.freeze({
   customer_search_placeholder: "Search customer...",
 });
 
+// Default labels for the public booking page (M6). Presets that offer
+// `appointments` mode override these via `public_booking_labels`.
+const DEFAULT_PUBLIC_BOOKING_LABELS = Object.freeze({
+  booking_cta: "Book an appointment",
+  service_singular: "Service",
+  staff_singular: "Staff",
+  customer_singular: "Customer",
+});
+
 function getPreset(industryType) {
   return INDUSTRY_PRESETS[industryType] || INDUSTRY_PRESETS[DEFAULT_INDUSTRY_TYPE];
 }
@@ -390,14 +423,21 @@ function isWeightedUnit(unit) {
   return WEIGHTED_UNITS.includes(String(unit).toLowerCase());
 }
 
+function getPublicBookingLabels(industryType) {
+  const preset = getPreset(industryType);
+  return { ...DEFAULT_PUBLIC_BOOKING_LABELS, ...(preset.public_booking_labels || {}) };
+}
+
 module.exports = {
   INDUSTRY_PRESETS,
   VALID_INDUSTRY_TYPES,
   DEFAULT_INDUSTRY_TYPE,
   WEIGHTED_UNITS,
   DEFAULT_UNIT_VOCABULARY,
+  DEFAULT_PUBLIC_BOOKING_LABELS,
   getPreset,
   getPresetLabels,
   getUnitVocabulary,
   isWeightedUnit,
+  getPublicBookingLabels,
 };

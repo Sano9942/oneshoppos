@@ -2,7 +2,9 @@
  * Booking service CRUD and appointment lifecycle.
  */
 
-async function createAppointment(db, data, source = "admin") {
+const MIN_NOTICE_MS = 15 * 60 * 1000;
+
+async function createAppointment(db, data, source = "admin", options = {}) {
   const { rows: [service] } = await db.query(
     "SELECT * FROM booking_services WHERE id = $1",
     [data.service_id]
@@ -10,7 +12,29 @@ async function createAppointment(db, data, source = "admin") {
   if (!service) throw Object.assign(new Error("Service not found"), { statusCode: 404 });
 
   const startAt = new Date(data.start_at);
+  if (Number.isNaN(startAt.getTime())) {
+    throw Object.assign(new Error("Invalid start_at"), { statusCode: 400 });
+  }
   const endAt = new Date(startAt.getTime() + service.duration_minutes * 60 * 1000);
+
+  // Time guards (enforced for public bookings; admin bypasses).
+  if (source !== "admin") {
+    const now = Date.now();
+    if (startAt.getTime() < now + MIN_NOTICE_MS) {
+      throw Object.assign(
+        new Error("Bookings must be made at least 15 minutes in advance"),
+        { statusCode: 400 }
+      );
+    }
+    const maxAdvanceDays = Number(service.max_advance_days) || 90;
+    const maxAhead = now + maxAdvanceDays * 24 * 60 * 60 * 1000;
+    if (startAt.getTime() > maxAhead) {
+      throw Object.assign(
+        new Error(`Bookings can be made up to ${maxAdvanceDays} days ahead`),
+        { statusCode: 400 }
+      );
+    }
+  }
 
   // Check overlap if employee assigned
   if (data.employee_id) {
@@ -41,6 +65,65 @@ async function createAppointment(db, data, source = "admin") {
          VALUES ($1, 60, $2, $3)`,
         [appt.id, data.customer_email ? "email" : "sms", reminderTime.toISOString()]
       );
+    }
+  }
+
+  // Public booking: send confirmation email (non-fatal).
+  if (source === "public" && data.customer_email && options.tenant) {
+    try {
+      const { enqueueEmail } = require("./email");
+      const tenant = options.tenant;
+      let staffName = null;
+      if (data.employee_id) {
+        try {
+          const { rows: [emp] } = await db.query(
+            "SELECT name FROM employees WHERE id = $1",
+            [data.employee_id]
+          );
+          if (emp) staffName = emp.name;
+        } catch { /* staff name is optional */ }
+      }
+      let profile = options.companyProfile || null;
+      if (!profile) {
+        try {
+          const { rows: [p] } = await db.query(
+            "SELECT company_name, address, phone FROM company_profile LIMIT 1"
+          );
+          profile = p || null;
+        } catch { /* profile optional */ }
+      }
+
+      const icsUrl = options.frontendUrl && tenant.slug
+        ? `${String(options.frontendUrl).replace(/\/$/, "")}/api/public/bookings/${appt.id}/ics?tenant=${encodeURIComponent(tenant.slug)}`
+        : null;
+
+      await enqueueEmail(db, {
+        tenantId: tenant.id || null,
+        type: "booking_confirmation",
+        to: data.customer_email,
+        tenant: { slug: tenant.slug, name: profile?.company_name || tenant.name || tenant.slug },
+        data: {
+          storeName: profile?.company_name || tenant.name || tenant.slug,
+          customerName: data.customer_name,
+          serviceName: service.name,
+          staffName,
+          startAt: startAt.toISOString(),
+          endAt: endAt.toISOString(),
+          duration: service.duration_minutes,
+          notes: data.notes || null,
+          bookingId: appt.id,
+          storeAddress: profile?.address || null,
+          storePhone: profile?.phone || null,
+          status,
+          icsUrl,
+        },
+      });
+    } catch (err) {
+      // Non-fatal: log via console since services don't uniformly have a logger
+      try {
+        // eslint-disable-next-line no-console
+        console.warn("[booking] failed to enqueue confirmation email:", err.message);
+      } catch { /* ignore */ }
     }
   }
 
