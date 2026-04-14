@@ -378,10 +378,12 @@ CREATE TABLE IF NOT EXISTS sale_items (
   id SERIAL PRIMARY KEY,
   sale_id INTEGER REFERENCES sales(id),
   product_id INTEGER REFERENCES products(id),
-  quantity INTEGER NOT NULL,
+  quantity NUMERIC(10,3) NOT NULL,
   price_at_sale NUMERIC(12,2) NOT NULL,
   cost_price_at_sale NUMERIC(12,2) DEFAULT 0.0,
-  variant_id INTEGER REFERENCES product_variants(id)
+  variant_id INTEGER REFERENCES product_variants(id),
+  gross_weight NUMERIC(10,3),
+  tare_weight NUMERIC(10,3) DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS sale_payments (

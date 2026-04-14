@@ -5,6 +5,7 @@ import { api } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { Button, PageShell, Input, SectionCard, Select } from "../../ui/primitives";
+import { usePreset, DEFAULT_UNIT_VOCABULARY, isWeightedUnit } from "../../contexts/PresetContext";
 import { sortCategories, indentLabel } from "../../utils/categoryTree";
 import { X, Package, Plus, Trash2, Search, ShieldCheck, Globe, Store, ShoppingBag, Eye } from "lucide-react";
 import { StarDisplay, StarPicker } from "../../ui/StarRating";
@@ -57,6 +58,8 @@ export default function ProductFormPage() {
   const navigate = useNavigate();
   const { authHeaders } = useAuth();
   const { flags } = useFeatureFlags(authHeaders);
+  const preset = usePreset();
+  const unitOptions = preset.unit_vocabulary || DEFAULT_UNIT_VOCABULARY;
   const [form, setForm] = useState({ ...BLANK_FORM });
   const [outletVisibility, setOutletVisibility] = useState([]);
   const [variants, setVariants] = useState([]);
@@ -813,7 +816,16 @@ export default function ProductFormPage() {
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-medium text-(--ui-text-muted)">Unit</label>
-                <Input value={form.unit} onChange={(e) => upd("unit", e.target.value)} placeholder="pcs" />
+                <Select value={form.unit || "pcs"} onChange={(e) => upd("unit", e.target.value)}>
+                  {unitOptions.map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </Select>
+                {isWeightedUnit(form.unit) && (
+                  <div className="text-[11px] text-(--ui-text-muted) mt-0.5">
+                    Weighted unit — POS will accept decimal quantities for this product.
+                  </div>
+                )}
               </div>
             </div>
           </SectionCard>

@@ -3,8 +3,12 @@ import {
   INDUSTRY_PRESETS,
   VALID_INDUSTRY_TYPES,
   DEFAULT_INDUSTRY_TYPE,
+  WEIGHTED_UNITS,
+  DEFAULT_UNIT_VOCABULARY,
   getPreset,
   getPresetLabels,
+  getUnitVocabulary,
+  isWeightedUnit,
 } from "../../config/industry-config.js";
 
 describe("industry-config", () => {
@@ -55,8 +59,8 @@ describe("industry-config", () => {
     expect(labels).not.toHaveProperty("modes");
   });
 
-  it("has 10 industry presets", () => {
-    expect(VALID_INDUSTRY_TYPES).toHaveLength(10);
+  it("has 13 industry presets (10 v1 + 3 M5 weighted)", () => {
+    expect(VALID_INDUSTRY_TYPES).toHaveLength(13);
   });
 
   it("grocery preset has no extra modes (base retail)", () => {
@@ -105,5 +109,88 @@ describe("industry-config", () => {
     expect(p.modes).toContain("service_projects");
     expect(p.modes).toContain("appointments");
     expect(p.labels.product).toBe("Package");
+  });
+
+  // --- M5 weight-based selling presets ---
+
+  it("butcher preset: weight labels + kg vocabulary + tare enabled", () => {
+    const p = getPreset("butcher");
+    expect(p.modes).toEqual([]);
+    expect(p.labels.product).toBe("Cut");
+    expect(p.labels.quantity_label).toBe("Weight");
+    expect(p.unit_vocabulary).toContain("kg");
+    expect(p.unit_vocabulary).toContain("lb");
+    expect(p.pos_search_config.show_tare).toBe(true);
+  });
+
+  it("sweet_shop preset: mithai + dozen unit + grid POS", () => {
+    const p = getPreset("sweet_shop");
+    expect(p.labels.product).toBe("Sweet");
+    expect(p.labels.quantity_label).toBe("Weight");
+    expect(p.unit_vocabulary).toContain("dozen");
+    expect(p.pos_layout_mode).toBe("grid");
+    expect(p.pos_search_config.show_tare).toBe(true);
+  });
+
+  it("textile preset: length labels + metre vocabulary + no tare", () => {
+    const p = getPreset("textile");
+    expect(p.labels.product).toBe("Fabric");
+    expect(p.labels.quantity_label).toBe("Length");
+    expect(p.unit_vocabulary).toEqual(["m", "cm", "pcs", "pack"]);
+    expect(p.pos_search_config.show_tare).toBe(false);
+  });
+
+  // --- M5 helpers ---
+
+  it("WEIGHTED_UNITS includes kg/g/lb/oz/m/cm", () => {
+    expect(WEIGHTED_UNITS).toEqual(
+      expect.arrayContaining(["kg", "g", "lb", "oz", "m", "cm"])
+    );
+  });
+
+  it("DEFAULT_UNIT_VOCABULARY is a non-empty array", () => {
+    expect(Array.isArray(DEFAULT_UNIT_VOCABULARY)).toBe(true);
+    expect(DEFAULT_UNIT_VOCABULARY.length).toBeGreaterThan(0);
+  });
+
+  it("isWeightedUnit returns true for weight units, false for pieces", () => {
+    expect(isWeightedUnit("kg")).toBe(true);
+    expect(isWeightedUnit("KG")).toBe(true); // case insensitive
+    expect(isWeightedUnit("m")).toBe(true);
+    expect(isWeightedUnit("pcs")).toBe(false);
+    expect(isWeightedUnit("dozen")).toBe(false);
+    expect(isWeightedUnit(null)).toBe(false);
+    expect(isWeightedUnit(undefined)).toBe(false);
+    expect(isWeightedUnit("")).toBe(false);
+  });
+
+  it("getUnitVocabulary returns preset-specific vocabulary", () => {
+    expect(getUnitVocabulary("butcher")).toEqual(["kg", "g", "lb", "pcs"]);
+    expect(getUnitVocabulary("textile")).toEqual(["m", "cm", "pcs", "pack"]);
+  });
+
+  it("getUnitVocabulary falls back to default when preset has none", () => {
+    const v = getUnitVocabulary("general_retail");
+    expect(v).toEqual(DEFAULT_UNIT_VOCABULARY);
+  });
+
+  it("getPresetLabels merges M5 label defaults for presets that don't override", () => {
+    // general_retail doesn't set quantity_label — should inherit default "Qty"
+    const labels = getPresetLabels("general_retail");
+    expect(labels.quantity_label).toBe("Qty");
+    expect(labels.customer_search_placeholder).toBe("Search customer...");
+  });
+
+  it("getPresetLabels respects preset overrides of M5 keys", () => {
+    // butcher overrides quantity_label to "Weight"
+    const labels = getPresetLabels("butcher");
+    expect(labels.quantity_label).toBe("Weight");
+  });
+
+  it("weighted presets do not enable any business modes (pure retail base)", () => {
+    for (const key of ["butcher", "sweet_shop", "textile"]) {
+      expect(getPreset(key).modes).toEqual([]);
+      expect(getPreset(key).business_model).toBe("buy_sell");
+    }
   });
 });

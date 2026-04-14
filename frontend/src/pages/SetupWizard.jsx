@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Package, ChefHat, Scissors, ShoppingCart, Coffee, Stethoscope, Wrench, Dumbbell, Warehouse, Camera } from "lucide-react";
+import { Package, ChefHat, Scissors, ShoppingCart, Coffee, Stethoscope, Wrench, Dumbbell, Warehouse, Camera, Beef, Candy, Shirt } from "lucide-react";
 import { api } from "../api";
 
 const BUSINESS_TYPE_CATEGORIES = [
@@ -10,6 +10,14 @@ const BUSINESS_TYPE_CATEGORIES = [
       { value: "general_retail", label: "Retail Store", description: "Sell products, manage inventory & stock", icon: Package, iconBg: "bg-blue-100", iconColor: "text-blue-600" },
       { value: "grocery", label: "Grocery / Supermarket", description: "Barcode scanning, perishables, stock alerts", icon: ShoppingCart, iconBg: "bg-green-100", iconColor: "text-green-600" },
       { value: "wholesale", label: "Wholesale / Distribution", description: "B2B bulk sales, price lists, buyer accounts", icon: Warehouse, iconBg: "bg-slate-100", iconColor: "text-slate-600" },
+    ],
+  },
+  {
+    label: "Weight / Length Based",
+    types: [
+      { value: "butcher", label: "Butcher / Meat Shop", description: "Sell cuts by kg or lb with gross/tare tracking", icon: Beef, iconBg: "bg-red-100", iconColor: "text-red-600" },
+      { value: "sweet_shop", label: "Sweet Shop / Mithai", description: "Sell by weight, pieces, or dozen", icon: Candy, iconBg: "bg-pink-100", iconColor: "text-pink-600" },
+      { value: "textile", label: "Textile / Fabric", description: "Sell fabric by metre or centimetre", icon: Shirt, iconBg: "bg-sky-100", iconColor: "text-sky-600" },
     ],
   },
   {

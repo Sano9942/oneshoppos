@@ -673,8 +673,10 @@ module.exports = function registerSalesRoutes(app, deps) {
 
         // 3. Loop through cart to insert Line Items AND deduct stock
         for (const item of cartItems) {
+          // M5: gross_weight/tare_weight persist audit trail for weighted items.
+          // Non-weighted items pass null/0 and behave identically to pre-M5.
           await client.query(
-            "INSERT INTO sale_items (sale_id, product_id, variant_id, quantity, price_at_sale, cost_price_at_sale) VALUES ($1, $2, $3, $4, $5, $6)",
+            "INSERT INTO sale_items (sale_id, product_id, variant_id, quantity, price_at_sale, cost_price_at_sale, gross_weight, tare_weight) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             [
               newSaleId,
               item.original_product_id || item.id,
@@ -682,15 +684,23 @@ module.exports = function registerSalesRoutes(app, deps) {
               item.quantity,
               item.price,
               item.cost_price || 0,
+              item.gross_weight != null ? Number(item.gross_weight) : null,
+              item.tare_weight != null ? Number(item.tare_weight) : 0,
             ]
           );
+
+          // M5: stock columns are still INTEGER (partial-stock is out of scope for M5).
+          // For weighted items (fractional quantity), round UP on stock deduction so
+          // sale of 1.25 kg deducts 2 from stock — pessimistic but prevents overselling.
+          // Sale_items.quantity keeps full precision; only the stock math rounds.
+          const stockDeductQty = Math.ceil(Number(item.quantity));
 
           if (item.is_bundle) {
             // Deduct stock from each component product, not the bundle itself
             const productId = item.original_product_id || item.id;
             const comps = bundleComponentsMap.get(productId) || [];
             for (const comp of comps) {
-              const deductQty = comp.quantity * item.quantity;
+              const deductQty = comp.quantity * stockDeductQty;
               if (comp.component_variant_id) {
                 await client.query(
                   "UPDATE product_variants SET stock = stock - $1 WHERE id = $2",
@@ -705,16 +715,16 @@ module.exports = function registerSalesRoutes(app, deps) {
           } else if (item.variant_id) {
             await client.query(
               "UPDATE product_variants SET stock = stock - $1 WHERE id = $2",
-              [item.quantity, item.variant_id]
+              [stockDeductQty, item.variant_id]
             );
             await client.query(
               "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
-              [item.quantity, item.original_product_id || item.id, outlet_id]
+              [stockDeductQty, item.original_product_id || item.id, outlet_id]
             );
           } else {
             await client.query(
               "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
-              [item.quantity, item.id, outlet_id]
+              [stockDeductQty, item.id, outlet_id]
             );
           }
         }

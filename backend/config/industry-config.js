@@ -261,23 +261,143 @@ const INDUSTRY_PRESETS = Object.freeze({
     visible_report_groups: ["Sales", "Customers", "Finance", "HR", "Governance"],
     pos_search_config: { show_barcode: false, show_sku: false, show_price: true },
   },
+  // --- M5 weight-based selling presets ---
+  butcher: {
+    industry_type: "butcher",
+    business_model: "buy_sell",
+    display_name: "Butcher / Meat Shop",
+    modes: [],
+    labels: {
+      product: "Cut",
+      products: "Cuts",
+      customer: "Customer",
+      customers: "Customers",
+      sale: "Sale",
+      order: "Order",
+      quantity_label: "Weight",
+    },
+    dashboard_widgets: {
+      inventory_alerts: true,
+      top_products: true,
+      trends: true,
+      attendance: true,
+      floor_plan: false,
+      appointments_today: false,
+    },
+    onboarding_steps: ["store", "product", "employees", "shift", "sale"],
+    pos_layout_mode: "list",
+    visible_report_groups: null,
+    pos_search_config: { show_barcode: true, show_sku: false, show_price: true, show_tare: true },
+    unit_vocabulary: ["kg", "g", "lb", "pcs"],
+  },
+  sweet_shop: {
+    industry_type: "sweet_shop",
+    business_model: "buy_sell",
+    display_name: "Sweet Shop / Mithai",
+    modes: [],
+    labels: {
+      product: "Sweet",
+      products: "Sweets",
+      customer: "Customer",
+      customers: "Customers",
+      sale: "Sale",
+      order: "Order",
+      quantity_label: "Weight",
+    },
+    dashboard_widgets: {
+      inventory_alerts: true,
+      top_products: true,
+      trends: true,
+      attendance: true,
+      floor_plan: false,
+      appointments_today: false,
+    },
+    onboarding_steps: ["store", "product", "employees", "shift", "sale"],
+    pos_layout_mode: "grid",
+    visible_report_groups: null,
+    pos_search_config: { show_barcode: true, show_sku: true, show_price: true, show_tare: true },
+    unit_vocabulary: ["kg", "g", "dozen", "pcs", "pack"],
+  },
+  textile: {
+    industry_type: "textile",
+    business_model: "buy_sell",
+    display_name: "Textile / Fabric",
+    modes: [],
+    labels: {
+      product: "Fabric",
+      products: "Fabrics",
+      customer: "Customer",
+      customers: "Customers",
+      sale: "Sale",
+      order: "Order",
+      quantity_label: "Length",
+    },
+    dashboard_widgets: {
+      inventory_alerts: true,
+      top_products: true,
+      trends: true,
+      attendance: true,
+      floor_plan: false,
+      appointments_today: false,
+    },
+    onboarding_steps: ["store", "product", "employees", "shift", "sale"],
+    pos_layout_mode: "grid",
+    visible_report_groups: null,
+    pos_search_config: { show_barcode: true, show_sku: true, show_price: true, show_tare: false },
+    unit_vocabulary: ["m", "cm", "pcs", "pack"],
+  },
 });
 
 const VALID_INDUSTRY_TYPES = Object.keys(INDUSTRY_PRESETS);
 const DEFAULT_INDUSTRY_TYPE = "general_retail";
+
+// Canonical set of units that represent weight or length. Products using any
+// of these units are treated as "weighted" (decimal quantity input in POS,
+// gross/tare/net support on receipt). Keep aligned with the same constant
+// mirrored in frontend/src/contexts/PresetContext.jsx.
+const WEIGHTED_UNITS = Object.freeze(["kg", "g", "lb", "oz", "m", "cm"]);
+
+// Default unit vocabulary for presets that don't specify one.
+const DEFAULT_UNIT_VOCABULARY = Object.freeze([
+  "pcs", "kg", "g", "lb", "oz", "m", "cm", "dozen", "pack",
+]);
+
+// Fallback label keys added in M5 — presets may override.
+const DEFAULT_EXTENDED_LABELS = Object.freeze({
+  quantity_label: "Qty",
+  customer_search_placeholder: "Search customer...",
+});
 
 function getPreset(industryType) {
   return INDUSTRY_PRESETS[industryType] || INDUSTRY_PRESETS[DEFAULT_INDUSTRY_TYPE];
 }
 
 function getPresetLabels(industryType) {
-  return { ...getPreset(industryType).labels };
+  const preset = getPreset(industryType);
+  // Merge defaults for M5-added keys without mutating frozen preset.
+  return { ...DEFAULT_EXTENDED_LABELS, ...preset.labels };
+}
+
+function getUnitVocabulary(industryType) {
+  const preset = getPreset(industryType);
+  return preset.unit_vocabulary
+    ? [...preset.unit_vocabulary]
+    : [...DEFAULT_UNIT_VOCABULARY];
+}
+
+function isWeightedUnit(unit) {
+  if (!unit) return false;
+  return WEIGHTED_UNITS.includes(String(unit).toLowerCase());
 }
 
 module.exports = {
   INDUSTRY_PRESETS,
   VALID_INDUSTRY_TYPES,
   DEFAULT_INDUSTRY_TYPE,
+  WEIGHTED_UNITS,
+  DEFAULT_UNIT_VOCABULARY,
   getPreset,
   getPresetLabels,
+  getUnitVocabulary,
+  isWeightedUnit,
 };

@@ -125,20 +125,37 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
     b.appendChild(txt("div", `${labels.customer || "Customer"}: ${s.customer.name}${s.customer.mobile ? " · " + s.customer.mobile : ""}`, "c"));
   b.appendChild(hr());
 
+  // M5: format weighted item rows with decimal qty + unit; add gross/tare breakdown when tare > 0
+  const WEIGHT_UNITS = ["kg", "g", "lb", "oz", "m", "cm"];
+  const isWeighted = (item) => item.unit && WEIGHT_UNITS.includes(String(item.unit).toLowerCase());
+  const qtyLabel = (item) => isWeighted(item)
+    ? `${Number(item.quantity).toFixed(3)} ${item.unit}`
+    : `x${item.quantity}`;
+  const appendItemRow = (item, prefix = "") => {
+    const label = `${item.name} ${qtyLabel(item)}`;
+    b.appendChild(row(label, `${prefix}${fmt(item.price * item.quantity)}`, prefix ? "ret" : ""));
+    // Breakdown line for weighted items with tare
+    if (isWeighted(item) && Number(item.tare_weight || 0) > 0) {
+      const g = Number(item.gross_weight || item.quantity).toFixed(3);
+      const t = Number(item.tare_weight).toFixed(3);
+      const n = Number(item.quantity).toFixed(3);
+      const note = d.createElement("div");
+      note.className = "small";
+      note.textContent = `  gross ${g} − tare ${t} = net ${n} ${item.unit}`;
+      b.appendChild(note);
+    }
+  };
+
   // Returned items (exchange receipts only)
   if (s.returnedItems.length > 0) {
     b.appendChild(txt("div", "Returned", "label"));
-    s.returnedItems.forEach((item) =>
-      b.appendChild(row(`${item.name} x${item.quantity}`, `- ${fmt(item.price * item.quantity)}`, "ret")),
-    );
+    s.returnedItems.forEach((item) => appendItemRow(item, "- "));
     b.appendChild(hr());
     b.appendChild(txt("div", "New Items", "label"));
   }
 
   // Cart items
-  s.cartItems.forEach((item) =>
-    b.appendChild(row(`${item.name} x${item.quantity}`, fmt(item.price * item.quantity))),
-  );
+  s.cartItems.forEach((item) => appendItemRow(item));
   b.appendChild(hr());
 
   // Totals block

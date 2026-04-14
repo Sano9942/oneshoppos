@@ -571,6 +571,28 @@ export const POSProvider = ({ children }) => {
     );
   };
 
+  // M5: setQty accepts an absolute decimal value for weighted items (kg, g, lb, m, cm).
+  // Also optionally captures gross_weight / tare_weight (persisted on sale_items).
+  // For non-weighted items, use updateQty(id, delta) — unchanged +/- button behavior.
+  const setQty = (id, value, opts = {}) => {
+    const num = Number(value);
+    if (!Number.isFinite(num) || num <= 0) return;
+    setCart((prev) =>
+      prev.map((x) => {
+        if (x.id !== id) return x;
+        if (x.availableStock > 0 && num > x.availableStock) {
+          showNotice(`Note: Selling past available stock (${x.availableStock} in stock).`);
+        }
+        const plMatch = resolvePriceListPrice(x.id, x.variant_id, num);
+        const resolvedPrice = plMatch ? Number(plMatch.price) : (x.originalPrice ?? x.price);
+        const next = { ...x, quantity: num, price: resolvedPrice };
+        if (opts.gross_weight != null) next.gross_weight = Number(opts.gross_weight);
+        if (opts.tare_weight != null) next.tare_weight = Number(opts.tare_weight);
+        return next;
+      }),
+    );
+  };
+
   const removeFromCart = (id) =>
     setCart((prev) => prev.filter((x) => x.id !== id));
   removeFromCartRef.current = removeFromCart;
@@ -1245,6 +1267,7 @@ export const POSProvider = ({ children }) => {
     handleSearchChange,
     addToCart,
     updateQty,
+    setQty,
     removeFromCart,
     grossTotal,
     discountValue,

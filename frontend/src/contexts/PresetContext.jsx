@@ -7,7 +7,23 @@ const DEFAULT_LABELS = {
   customers: "Customers",
   sale: "Sale",
   order: "Order",
+  // M5 — extended label keys (preset may override)
+  quantity_label: "Qty",
+  customer_search_placeholder: "Search customer...",
 };
+
+// Canonical weight/length units — mirrors backend/config/industry-config.js WEIGHTED_UNITS
+export const WEIGHTED_UNITS = ["kg", "g", "lb", "oz", "m", "cm"];
+
+// Default unit vocabulary — mirrors backend DEFAULT_UNIT_VOCABULARY
+export const DEFAULT_UNIT_VOCABULARY = [
+  "pcs", "kg", "g", "lb", "oz", "m", "cm", "dozen", "pack",
+];
+
+export function isWeightedUnit(unit) {
+  if (!unit) return false;
+  return WEIGHTED_UNITS.includes(String(unit).toLowerCase());
+}
 
 const DEFAULT_PRESET = {
   industry_type: "general_retail",
@@ -22,6 +38,7 @@ const DEFAULT_PRESET = {
   visible_report_groups: null,
   pos_search_config: { show_barcode: true, show_sku: true, show_price: true },
   enabled_modes: [],
+  unit_vocabulary: DEFAULT_UNIT_VOCABULARY,
 };
 
 const PresetContext = createContext({

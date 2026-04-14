@@ -14,6 +14,7 @@ import {
   ToggleRight,
 } from "lucide-react";
 import { usePOS } from "./POSContext";
+import { usePreset } from "../../../contexts/PresetContext";
 
 export default function POSCheckoutModal() {
   const {
@@ -61,6 +62,8 @@ export default function POSCheckoutModal() {
     pointsDiscount,
     total,
   } = usePOS();
+  const { labels = {} } = usePreset();
+  const customerLabel = labels.customer || "Customer";
 
   const isOffline = !navigator.onLine;
 
@@ -127,7 +130,7 @@ export default function POSCheckoutModal() {
           {/* Customer at checkout — quick search + create */}
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
-              Customer (optional)
+              {customerLabel} (optional)
             </label>
 
             {checkoutCustomerId ? (

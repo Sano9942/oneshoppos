@@ -4,7 +4,8 @@ import { usePOS } from "./POSContext";
 import { usePreset } from "../../../contexts/PresetContext";
 
 export default function POSSearchArea() {
-  const { pos_layout_mode, pos_search_config } = usePreset();
+  const { pos_layout_mode, pos_search_config, labels = {} } = usePreset();
+  const productsWord = (labels.products || "products").toLowerCase();
   const [viewMode, setViewMode] = useState(
     () => localStorage.getItem("pos_view_mode") || pos_layout_mode || "grid"
   );
@@ -75,7 +76,7 @@ export default function POSSearchArea() {
               addToCart(results[0]);
             }
           }}
-          placeholder="Search by Name, Barcode, SKU… (F2)"
+          placeholder={`Search ${productsWord} by name, barcode, SKU… (F2)`}
           className="block w-full pl-9 pr-10 py-2.5 border border-slate-200 rounded-xl bg-white font-medium text-sm placeholder-slate-300 focus:outline-none focus:border-[#8066FF] focus:ring-1 focus:ring-[#8066FF] transition shadow-sm"
         />
         {/* View toggle */}

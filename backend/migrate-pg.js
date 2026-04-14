@@ -2869,7 +2869,32 @@ const MIGRATIONS = [
     },
   },
   {
-    version: 32,
+    version: 34,
+    description: "M5 — decimal quantity support + gross/tare weight columns on sale_items",
+    up: async (client) => {
+      // Widen quantity to NUMERIC(10,3) for weight/length-based selling.
+      // Lossless cast — existing integer values widen cleanly. Brief ACCESS
+      // EXCLUSIVE lock; no table rewrite in PG 12+.
+      await client.query(`
+        ALTER TABLE sale_items
+          ALTER COLUMN quantity TYPE NUMERIC(10,3) USING quantity::numeric
+      `);
+      // Gross/tare columns preserve audit trail for weighted sales.
+      // Nullable — non-weighted rows leave them NULL.
+      await client.query(`
+        ALTER TABLE sale_items
+          ADD COLUMN IF NOT EXISTS gross_weight NUMERIC(10,3),
+          ADD COLUMN IF NOT EXISTS tare_weight NUMERIC(10,3) DEFAULT 0
+      `);
+    },
+  },
+  {
+    // Originally authored as a duplicate "version: 32" (collision with M2's v32).
+    // The migration runner's `pending.filter(v > currentVersion)` skipped this
+    // block because M2 v32 already bumped schema_version. Re-numbered to v35
+    // so the SanoPay gateway_ref columns actually get applied in production.
+    // Idempotent — uses ADD COLUMN IF NOT EXISTS.
+    version: 35,
     description: "SanoPay sandbox — gateway_ref on sale_payments + returns for payment tracing",
     up: async (client) => {
       await client.query(`

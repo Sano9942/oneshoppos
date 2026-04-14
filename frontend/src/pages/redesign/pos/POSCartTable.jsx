@@ -1,14 +1,20 @@
 import React from "react";
-import { ShoppingCart, Minus, Plus, Trash2, Package, Tag } from "lucide-react";
+import { ShoppingCart, Minus, Plus, Trash2, Package, Tag, Scale } from "lucide-react";
 import { usePOS } from "./POSContext";
+import { usePreset, isWeightedUnit } from "../../../contexts/PresetContext";
 
 export default function POSCartTable() {
-  const { cart, updateQty, removeFromCart, money } = usePOS();
+  const { cart, updateQty, setQty, removeFromCart, money } = usePOS();
+  const preset = usePreset();
+  const labels = preset.labels || {};
+  const showTareField = preset.pos_search_config?.show_tare === true;
+  const productsLabel = labels.products || "Products";
+  const qtyLabel = labels.quantity_label || "Qty";
 
   return (
     <div className="bg-white rounded-xl border border-slate-100 shadow-sm flex-1 overflow-hidden flex flex-col">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
-        <span className="text-sm font-bold text-slate-800">Products List</span>
+        <span className="text-sm font-bold text-slate-800">{productsLabel} List</span>
         {cart.length > 0 && (
           <span className="bg-[#8066FF] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
             {cart.length} item{cart.length !== 1 ? "s" : ""}
@@ -29,8 +35,8 @@ export default function POSCartTable() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-[10px] uppercase text-slate-400 tracking-wider border-b border-slate-100 bg-slate-50">
-                <th className="px-3 md:px-4 py-2.5 text-left font-bold">Product</th>
-                <th className="px-2 md:px-3 py-2.5 text-center font-bold">Qty</th>
+                <th className="px-3 md:px-4 py-2.5 text-left font-bold">{labels.product || "Product"}</th>
+                <th className="px-2 md:px-3 py-2.5 text-center font-bold">{qtyLabel}</th>
                 <th className="hidden md:table-cell px-3 py-2.5 text-right font-bold">Unit</th>
                 <th className="px-2 md:px-3 py-2.5 text-right font-bold">Total</th>
                 <th className="hidden md:table-cell px-3 py-2.5"></th>
@@ -83,25 +89,33 @@ export default function POSCartTable() {
                     )}
                   </td>
                   <td className="px-2 md:px-3 py-3 text-center">
-                    <div className="inline-flex items-center gap-0.5 md:gap-1">
-                      <button
-                        onClick={() => updateQty(item.id, -1)}
-                        className="w-8 h-8 md:w-7 md:h-7 flex items-center justify-center text-[#8066FF] hover:bg-[#8066FF]/10 rounded-full font-bold transition"
-                      >
-                        <Minus size={14} className="md:hidden" />
-                        <Minus size={12} className="hidden md:block" />
-                      </button>
-                      <span className="w-7 md:w-8 text-center font-bold text-slate-800">
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={() => updateQty(item.id, 1)}
-                        className="w-8 h-8 md:w-7 md:h-7 flex items-center justify-center text-[#8066FF] hover:bg-[#8066FF]/10 rounded-full font-bold transition"
-                      >
-                        <Plus size={14} className="md:hidden" />
-                        <Plus size={12} className="hidden md:block" />
-                      </button>
-                    </div>
+                    {isWeightedUnit(item.unit) ? (
+                      <WeightedQtyCell
+                        item={item}
+                        setQty={setQty}
+                        showTare={showTareField}
+                      />
+                    ) : (
+                      <div className="inline-flex items-center gap-0.5 md:gap-1">
+                        <button
+                          onClick={() => updateQty(item.id, -1)}
+                          className="w-8 h-8 md:w-7 md:h-7 flex items-center justify-center text-[#8066FF] hover:bg-[#8066FF]/10 rounded-full font-bold transition"
+                        >
+                          <Minus size={14} className="md:hidden" />
+                          <Minus size={12} className="hidden md:block" />
+                        </button>
+                        <span className="w-7 md:w-8 text-center font-bold text-slate-800">
+                          {item.quantity}
+                        </span>
+                        <button
+                          onClick={() => updateQty(item.id, 1)}
+                          className="w-8 h-8 md:w-7 md:h-7 flex items-center justify-center text-[#8066FF] hover:bg-[#8066FF]/10 rounded-full font-bold transition"
+                        >
+                          <Plus size={14} className="md:hidden" />
+                          <Plus size={12} className="hidden md:block" />
+                        </button>
+                      </div>
+                    )}
                   </td>
                   <td className="hidden md:table-cell px-3 py-3 text-right font-bold">
                     {item.originalPrice != null && item.originalPrice !== item.price ? (
@@ -114,6 +128,11 @@ export default function POSCartTable() {
                     )}
                   </td>
                   <td className="px-2 md:px-3 py-3 text-right font-black text-slate-900">
+                    {isWeightedUnit(item.unit) && (
+                      <div className="text-[10px] font-normal text-slate-400">
+                        {Number(item.quantity).toFixed(3)} {item.unit} × {money(item.price)}
+                      </div>
+                    )}
                     {money(item.price * item.quantity)}
                   </td>
                   <td className="hidden md:table-cell px-3 py-3 text-right">
@@ -128,6 +147,56 @@ export default function POSCartTable() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * WeightedQtyCell — inline decimal quantity input for weighted items (kg, g, lb, m, cm).
+ *
+ * Default mode: gross only, tare=0, net=gross.
+ * When `showTare` (preset.pos_search_config.show_tare), a second small input appears
+ * for tare weight. Net is computed (gross - tare) and committed via setQty().
+ */
+function WeightedQtyCell({ item, setQty, showTare }) {
+  const gross = item.gross_weight != null ? Number(item.gross_weight) : Number(item.quantity);
+  const tare = Number(item.tare_weight || 0);
+
+  const commit = (nextGross, nextTare) => {
+    const g = Math.max(0, Number(nextGross) || 0);
+    const t = Math.max(0, Number(nextTare) || 0);
+    const net = Math.max(0.001, g - t);
+    setQty(item.id, net, { gross_weight: g, tare_weight: t });
+  };
+
+  return (
+    <div className="inline-flex flex-col items-center gap-1">
+      <div className="inline-flex items-center gap-1">
+        <Scale size={12} className="text-[#8066FF]" />
+        <input
+          type="number"
+          step="0.001"
+          min="0.001"
+          value={gross}
+          onChange={(e) => commit(e.target.value, tare)}
+          className="w-20 px-2 py-1 text-center text-sm font-bold text-slate-800 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#8066FF]/30 focus:border-[#8066FF]"
+        />
+        <span className="text-[10px] font-semibold text-slate-500 uppercase">{item.unit}</span>
+      </div>
+      {showTare && (
+        <div className="inline-flex items-center gap-1 text-[10px] text-slate-400">
+          <span>Tare:</span>
+          <input
+            type="number"
+            step="0.001"
+            min="0"
+            value={tare}
+            onChange={(e) => commit(gross, e.target.value)}
+            className="w-14 px-1 py-0.5 text-center text-[11px] border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-[#8066FF]/40"
+          />
+          <span>{item.unit}</span>
         </div>
       )}
     </div>

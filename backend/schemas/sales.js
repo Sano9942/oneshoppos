@@ -1,11 +1,13 @@
 const { z } = require("zod");
 
 // POST /api/sales — cartItems uses `id` (not product_id), `price` (not unit_price)
+// M5: quantity allows decimals for weight/length-based items (kg, g, lb, m, cm).
+// Optional gross_weight / tare_weight persist audit trail for weighted sales.
 const CartItemSchema = z.object({
   id: z.coerce.number().int().positive(),
   price: z.coerce.number(),
-  quantity: z.coerce.number().int().positive(),
-}).passthrough(); // preserve name, cost_price, tax, gst, barcode, variant_id, etc.
+  quantity: z.coerce.number().positive(),
+}).passthrough(); // preserve name, cost_price, tax, gst, barcode, variant_id, gross_weight, tare_weight, unit, etc.
 
 const CreateSaleSchema = z.object({
   cartItems: z.array(CartItemSchema).min(1, "Cart is empty"),

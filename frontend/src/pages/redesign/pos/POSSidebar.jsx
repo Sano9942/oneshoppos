@@ -139,7 +139,7 @@ export default function POSSidebar({ mobile }) {
         ) : (
           <div className="opacity-40 flex flex-col items-center">
             <ShoppingCart size={28} className="mb-2" />
-            <span className="text-sm font-bold">Walk-in Customer</span>
+            <span className="text-sm font-bold">Walk-in {customerLabel}</span>
           </div>
         )}
       </div>
