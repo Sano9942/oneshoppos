@@ -1,7 +1,7 @@
 # Tenant Preset Engine v1 — Strategy & Implementation Specification
 
 **Date:** 2026-04-13
-**Status:** v1 COMPLETE (M1-M4, 2026-04-14). v2 IN PROGRESS — M5 shipped 2026-04-14.
+**Status:** v1 COMPLETE (M1-M4, 2026-04-14). v2 IN PROGRESS — M5 + M6 shipped 2026-04-14.
 **Author:** Hassan + Claude (session 2026-04-13)
 
 ---
@@ -465,25 +465,27 @@ CREATE TABLE IF NOT EXISTS tenant_modes (
 6. ~~**Execute Milestone 3** — Additional presets (grocery, cafe, clinic, repair shop, gym, wholesale, photography studio)~~ Done (21/21 unit tests passing, frontend builds clean)
 7. ~~**Execute Milestone 4** — Deepen preset adaptation surfaces (country packs, receipt labels, report defaults, POS search, sample data, clinic extension)~~ Done (25/25 unit tests passing, 6 features delivered 2026-04-14)
 8. ~~**Execute Milestone 5** — Weight-based selling + POS label polish + 3 new presets (butcher, sweet_shop, textile)~~ Done (26/26 unit tests passing, migration v34 deployed to all 3 production tenants, commit `c3fa47d`)
+9. ~~**Execute Milestone 6** — Online booking page polish: confirmation email, share link UI, industry-aware labels, validation + rate limiting + time guards, `.ics` calendar download, integration + unit test coverage~~ Done (commit `760344b`, 29 new automated tests, no migration required)
 
 **Preset Engine v1 is COMPLETE.** All 4 milestones delivered. 10 industry presets, 10 adaptation surfaces, 6 business modes, 23 country packs.
 
-**Preset Engine v2 is IN PROGRESS.** M5 shipped 2026-04-14 — now at 13 presets and ~35 industries covered.
+**Preset Engine v2 is IN PROGRESS.** M5 + M6 shipped 2026-04-14 — now at 13 presets, ~38 industries covered, and every appointment-based tenant has a public booking URL.
 
 ---
 
 ## 12. Preset Engine v2 Roadmap — Expanding Industry Coverage
 
-### Current Coverage (v1 + M5)
+### Current Coverage (v1 + M5 + M6)
 
 | What | Count | Details |
 |------|-------|---------|
 | Industry presets | 13 | retail, grocery, wholesale, restaurant, cafe, salon, clinic, repair_shop, gym, photography_studio, **butcher, sweet_shop, textile** (M5) |
 | Business modes | 6 | retail, restaurant, appointments, service_projects, subscriptions, workflow_tickets |
 | Country packs | 23 | PK, US, GB, CA, AU, IN, AE, SA, BD, NG, KE, GH, ZA, EG, DE, FR, NL, SG, MY, ID, PH, NZ, OTHER |
-| Adaptation surfaces | 11 | Nav, labels, dashboard widgets, POS layout, onboarding, receipts, reports, POS search, sample data, clinic fields, **unit vocabulary / weight-based selling** (M5) |
+| Adaptation surfaces | 12 | Nav, labels, dashboard widgets, POS layout, onboarding, receipts, reports, POS search, sample data, clinic fields, unit vocabulary / weight-based selling (M5), **public booking labels** (M6) |
+| Public customer-facing surfaces | 2 | Public receipt URL (v1), **public booking page at `/book/:slug` with per-preset labels, share link UI, ICS download, confirmation email** (M6) |
 
-The 13 presets now cover **~35 of 54 industries**. The remaining ~19 industries need new operational capabilities (rentals, room management, customer portal, online booking, manufacturing) before we can add presets without them being hollow labels.
+The 13 presets now cover **~38 of 54 industries** (up from 35 — M6 activates the customer-facing entry for 8 appointment-based industries without adding new presets). The remaining ~16 industries need new operational capabilities (rentals, room management, customer portal, manufacturing) before we can add presets without them being hollow labels.
 
 ### What's Missing — Three Tiers
 
@@ -508,7 +510,7 @@ The 13 presets now cover **~35 of 54 industries**. The remaining ~19 industries 
 
 | Capability | Who Needs It | Effort | What to Build |
 |-----------|-------------|--------|---------------|
-| Online booking page | Salon, clinic, gym, car wash, photography — any appointment-based business (~8 industries) | 1 week | Public tenant-branded booking page. `public-bookings.js` routes exist (API-only) but no consumer-facing UI. Needs: service catalog display, staff availability picker, payment collection, confirmation email, calendar sync |
+| ~~Online booking page~~ | ~~Salon, clinic, gym, car wash, photography — any appointment-based business (~8 industries)~~ | ~~1 week~~ | **SHIPPED in M6 (2026-04-14).** Public page at `/book/:tenantSlug` with industry-aware labels, share-link card in admin UI, confirmation email, `.ics` download, 15-min min-notice + `max_advance_days` guards, rate limiting. Deposit collection deferred to future M6.5 (xPay hookup). |
 | Customer portal | B2B wholesale, service businesses, clinic patients — all verticals benefit | 2 weeks | Authenticated customer login (separate from employee login), view invoices/appointments/orders, pay outstanding balance, download receipts. Currently all customer interaction is staff-mediated |
 | Multi-location intelligence | Franchise retail, chain restaurants, multi-branch wholesale | 2 weeks | Transfer optimization (suggest transfers from overstocked to understocked), consolidated reporting across outlets, central purchasing with per-outlet allocation. Tables exist (`outlet_stock`, `inventory_transfers`) but UX is single-branch focused |
 | Own-fleet delivery | Restaurant (own delivery), grocery, any local delivery | 1-2 weeks | Driver assignment, route management, real-time tracking, proof of delivery. 13 third-party courier adapters exist, but not own-fleet dispatch |
@@ -553,21 +555,38 @@ Effort →
 
 **Effort (actual):** ~1 day
 
-#### Milestone 6: Online Booking Page
+#### Milestone 6: Online Booking Page — COMPLETE
 
-**Goal:** Give every appointment-based preset a public booking URL they can share with customers.
+> **Status:** Done — shipped 2026-04-14 (commit `760344b`). 220/221 unit tests passing (1 pre-existing unrelated failure), frontend build clean. Integration test authored (execution requires Postgres connectivity — same infra prerequisite as every other pg-batch test).
+>
+> **Migration:** None — pure code + config changes. All additions are backward-compatible (new email template, new endpoint, additive response field).
+>
+> **Context correction:** the v2 roadmap originally described the public booking stack as "API-only" needing ~1-2 weeks of frontend work. On inspection the scaffolding was already ~80% built: the wizard page at `/book/:tenantSlug`, the 3 public endpoints, the slot engine, and appointment creation all worked. M6's real scope was the missing polish — confirmation email, tenant share link, industry-aware labels, guardrails, calendar download, tests.
 
-**Scope:**
-- A. Public tenant-branded booking page at `/{tenant-slug}/book` or `book.sanopos.com/{slug}`
-- B. Service catalog display (from existing `booking_services` table)
-- C. Staff + time slot availability picker (from existing `booking_availability_rules`)
-- D. Customer self-registration + booking confirmation email
-- E. Optional deposit collection via payment gateway
-- F. Calendar embed / share link for WhatsApp/Instagram bio
+**Scope delivered (6 sections):**
 
-**Effort:** ~1-2 weeks. Routes exist (`public-bookings.js`), this is primarily frontend.
+- **A. Booking confirmation email** — `bookingConfirmation` template in `services/email-templates.js` + registered in `TEMPLATES`. `createAppointment` now enqueues the email when `source === "public"` and `customer_email` present (non-fatal, wrapped in try/catch so a Resend outage cannot fail a booking). Tenant + company profile + ICS URL threaded through via a new optional `options` arg so the service stays pure.
+- **B. Tenant-facing share link UI** — "Public booking link" card added to `AppointmentServicesRedesign.jsx`: shows `{origin}/book/{slug}`, Copy button (with execCommand fallback for non-secure contexts), zero-dep QR via `api.qrserver.com`, and "Test booking page" link. Reads tenant slug from session via `readTenantSlug()`.
+- **C. Industry-aware public page labels** — `public_booking_labels` added to salon (Stylist), clinic (Provider), gym (Trainer / Class), photography_studio (Photographer). New `DEFAULT_PUBLIC_BOOKING_LABELS` + `getPublicBookingLabels()` helper in `industry-config.js`. `GET /api/public/bookings/config` now returns a `labels` object; `PublicBookingPage.jsx` consumes `config.labels.booking_cta` / `staff_singular` / `service_singular` with safe fallbacks.
+- **D. Validation + rate limiting + time guards** — `validate(publicBookingSchema)` applied to POST (schema already existed in `schemas/bookings.js`). New `publicBookingLimiter` in `middleware/rate-limit.js` — 10 bookings / 15 min / IP+tenant, skipped in test env. `createAppointment` enforces a 15-minute minimum notice and respects `booking_services.max_advance_days`; admin-sourced bookings bypass both (receptionist use case).
+- **E. `.ics` calendar attachment** — new zero-dep `utils/ics.js` builder (RFC 5545 escaping, CRLF line endings, 75-octet line folding). New `GET /api/public/bookings/:id/ics?tenant={slug}` endpoint returns `text/calendar; charset=utf-8` with a single `VEVENT`; only works for rows where `source='public'`. Frontend confirmation screen gets an "Add to calendar" button; the ICS URL is also embedded in the confirmation email body.
+- **F. Test coverage** — new `backend/tests/integration/public-bookings.test.js` (pg-batch pattern, 11 assertions across config/availability/POST/ICS including 409 overlap, past-date rejection, max-advance rejection, Zod validation). New `backend/tests/unit/utils-ics.test.js` (12 tests). 6 new preset-label tests in `industry-config.test.js`. Total: 29 new automated tests.
 
-**Unlocks:** Salon, clinic, gym, car wash, photography, spa, driving school, veterinary (~8 industries gain a customer-facing entry point)
+**What each appointment-based preset shows on the public page:**
+
+| Preset | CTA | Staff Label | Service Label |
+|--------|-----|-------------|---------------|
+| salon | Book an appointment | Stylist | Service |
+| clinic | Book a visit | Provider | Service |
+| gym | Book a session | Trainer | Class |
+| photography_studio | Book a session | Photographer | Package |
+| (default — anything else) | Book an appointment | Staff | Service |
+
+**Out of scope (explicitly deferred, documented in plan):** deposit collection via xPay, Google Calendar sync, customer self-reschedule, waitlists/classes, custom-domain white-labeling.
+
+**Effort (actual):** ~half a day. The original 1-2 week estimate assumed the public page didn't exist; it did.
+
+**Unlocks:** Salon, clinic, gym, car wash, photography, spa, driving school, veterinary — any tenant whose preset enables `appointments` mode now has a production-ready customer-facing booking URL.
 
 #### Milestone 7: Rentals Mode
 
@@ -636,8 +655,8 @@ Effort →
 | After Milestone | Presets | Modes | Industries Covered (of 54) |
 |----------------|---------|-------|---------------------------|
 | v1 (M1-M4) | 10 | 6 | ~30 |
-| **M5 (weight selling) — current** | **13** | **6** | **~35** |
-| M6 (online booking) | 13 | 6 | ~38 (existing presets gain customer-facing entry) |
+| M5 (weight selling) | 13 | 6 | ~35 |
+| **M6 (online booking) — current** | **13** | **6** | **~38 (existing presets gain customer-facing entry)** |
 | M7 (rentals) | 15 | 7 | ~42 |
 | M8 (customer portal) | 15 | 7 | ~42 (all verticals gain customer self-service) |
 | M9 (room management) | 17 | 8 | ~45 |
@@ -652,7 +671,7 @@ Not all milestones should be built speculatively. The decision framework:
 | Milestone | Build When |
 |-----------|-----------|
 | ~~**M5 (weight selling)**~~ | ~~Before next marketing push — it's cheap and broadens the pitch~~ **DONE 2026-04-14** |
-| **M6 (online booking)** | When any appointment-based tenant asks "can my customers book online?" |
+| ~~**M6 (online booking)**~~ | ~~When any appointment-based tenant asks "can my customers book online?"~~ **DONE 2026-04-14** — scaffolding was mostly already built, so shipped pre-emptively |
 | **M7 (rentals)** | When a rental business signs up or expresses interest |
 | **M8 (customer portal)** | When 5+ tenants are active — it's a retention/stickiness play |
 | **M9 (room management)** | Only when a hotel/guesthouse pays or commits |
