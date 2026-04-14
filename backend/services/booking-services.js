@@ -68,7 +68,8 @@ async function createAppointment(db, data, source = "admin", options = {}) {
     }
   }
 
-  // Public booking: send confirmation email (non-fatal).
+  // Public / portal booking: send confirmation email (non-fatal).
+  // Portal sends its own branded template from the route, so skip duplicate.
   if (source === "public" && data.customer_email && options.tenant) {
     try {
       const { enqueueEmail } = require("./email");

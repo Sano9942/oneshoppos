@@ -26,6 +26,24 @@ const StorefrontOrderStatus = lazy(() => import("../pages/storefront/StorefrontO
 const PublicBookingPage = lazy(() => import("../pages/public/PublicBookingPage"));
 const PublicRestaurantMenuPage = lazy(() => import("../pages/public/PublicRestaurantMenuPage"));
 
+// M8 — Customer portal (lazy, isolated chunk). Portal is NOT wrapped in
+// the main AuthProvider; it uses its own PortalAuthProvider via PortalLayout.
+const PortalLayout = lazy(() => import("../pages/portal/PortalLayout"));
+const PortalLogin = lazy(() => import("../pages/portal/PortalLogin"));
+const PortalSignup = lazy(() => import("../pages/portal/PortalSignup"));
+const PortalOtpVerify = lazy(() => import("../pages/portal/PortalOtpVerify"));
+const PortalForgotPassword = lazy(() => import("../pages/portal/PortalForgotPassword"));
+const PortalResetPassword = lazy(() => import("../pages/portal/PortalResetPassword"));
+const PortalDashboard = lazy(() => import("../pages/portal/PortalDashboard"));
+const PortalInvoices = lazy(() => import("../pages/portal/PortalInvoices"));
+const PortalInvoiceDetail = lazy(() => import("../pages/portal/PortalInvoiceDetail"));
+const PortalInvoicePaidPage = lazy(() => import("../pages/portal/PortalInvoicePaidPage"));
+const PortalAppointments = lazy(() => import("../pages/portal/PortalAppointments"));
+const PortalOrders = lazy(() => import("../pages/portal/PortalOrders"));
+const PortalLoyalty = lazy(() => import("../pages/portal/PortalLoyalty"));
+const PortalWallet = lazy(() => import("../pages/portal/PortalWallet"));
+const PortalProfile = lazy(() => import("../pages/portal/PortalProfile"));
+
 function HomeRedirect() {
   const { isAuthenticated, isBootstrapping } = useAuth();
   const navigate = useNavigate();
@@ -105,4 +123,30 @@ export const publicRoutes = [
     path="/menu/:token"
     element={<Suspense fallback={<RouteLoading />}><PublicRestaurantMenuPage /></Suspense>}
   />,
+  <Route
+    key="portal"
+    path="/portal/:tenantSlug"
+    element={
+      <ErrorBoundary level="page">
+        <Suspense fallback={<RouteLoading />}>
+          <PortalLayout />
+        </Suspense>
+      </ErrorBoundary>
+    }
+  >
+    <Route index element={<Suspense fallback={<RouteLoading />}><PortalDashboard /></Suspense>} />
+    <Route path="login" element={<Suspense fallback={<RouteLoading />}><PortalLogin /></Suspense>} />
+    <Route path="signup" element={<Suspense fallback={<RouteLoading />}><PortalSignup /></Suspense>} />
+    <Route path="verify-otp" element={<Suspense fallback={<RouteLoading />}><PortalOtpVerify /></Suspense>} />
+    <Route path="forgot" element={<Suspense fallback={<RouteLoading />}><PortalForgotPassword /></Suspense>} />
+    <Route path="reset" element={<Suspense fallback={<RouteLoading />}><PortalResetPassword /></Suspense>} />
+    <Route path="invoices" element={<Suspense fallback={<RouteLoading />}><PortalInvoices /></Suspense>} />
+    <Route path="invoices/:invoiceId" element={<Suspense fallback={<RouteLoading />}><PortalInvoiceDetail /></Suspense>} />
+    <Route path="invoice-paid" element={<Suspense fallback={<RouteLoading />}><PortalInvoicePaidPage /></Suspense>} />
+    <Route path="appointments" element={<Suspense fallback={<RouteLoading />}><PortalAppointments /></Suspense>} />
+    <Route path="orders" element={<Suspense fallback={<RouteLoading />}><PortalOrders /></Suspense>} />
+    <Route path="loyalty" element={<Suspense fallback={<RouteLoading />}><PortalLoyalty /></Suspense>} />
+    <Route path="wallet" element={<Suspense fallback={<RouteLoading />}><PortalWallet /></Suspense>} />
+    <Route path="profile" element={<Suspense fallback={<RouteLoading />}><PortalProfile /></Suspense>} />
+  </Route>,
 ];

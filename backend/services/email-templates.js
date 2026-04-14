@@ -461,6 +461,126 @@ function rentalOverdue(data) {
   };
 }
 
+// -- Customer Portal (M8) -------------------------------------------------
+function fmtDateTime(iso) {
+  if (!iso) return "";
+  try { return new Date(iso).toLocaleString(); } catch { return String(iso); }
+}
+
+function customerPortalWelcome({ storeName, customerName, portalUrl }) {
+  return {
+    subject: `Welcome to ${storeName} — your customer portal is ready`,
+    html: wrapEmailHtml("Portal Access", `
+      <p>Hi ${customerName || "there"},</p>
+      <p>Your account at <strong>${storeName}</strong> is now set up. From the portal you can view invoices, book appointments, and manage your profile.</p>
+      ${portalUrl ? btn("Open your portal", portalUrl) : ""}
+      ${footer("You're receiving this because you just signed up for the customer portal.")}
+    `),
+  };
+}
+
+function customerPortalOtpLogin({ storeName, customerName, code }) {
+  return {
+    subject: `Your login code for ${storeName}`,
+    html: wrapEmailHtml("Login Code", `
+      <p>Hi ${customerName || "there"},</p>
+      <p>Enter this code to sign in to the <strong>${storeName}</strong> customer portal:</p>
+      <p style="font-size:28px;letter-spacing:6px;font-weight:700;background:#f1f5f9;padding:16px;border-radius:8px;text-align:center;margin:24px 0">${code}</p>
+      <p style="color:#64748b">This code expires in 15 minutes. If you didn't request it, you can ignore this email.</p>
+    `),
+  };
+}
+
+function customerPortalPasswordReset({ storeName, customerName, code, resetUrl, expiresInMinutes }) {
+  const body = resetUrl
+    ? `${btn("Reset your password", resetUrl)}<p style="color:#64748b">This link expires in ${expiresInMinutes || 60} minutes.</p>`
+    : `<p style="font-size:28px;letter-spacing:6px;font-weight:700;background:#f1f5f9;padding:16px;border-radius:8px;text-align:center;margin:24px 0">${code}</p><p style="color:#64748b">This code expires in 15 minutes.</p>`;
+  return {
+    subject: `Reset your password — ${storeName}`,
+    html: wrapEmailHtml("Password Reset", `
+      <p>Hi ${customerName || "there"},</p>
+      <p>We received a request to reset your password for the <strong>${storeName}</strong> portal.</p>
+      ${body}
+      <p style="color:#64748b">If you didn't request this, you can ignore this email — your password will remain unchanged.</p>
+    `),
+  };
+}
+
+function customerPortalEmailVerify({ storeName, customerName, code }) {
+  return {
+    subject: `Verify your email — ${storeName}`,
+    html: wrapEmailHtml("Verify Email", `
+      <p>Hi ${customerName || "there"},</p>
+      <p>Thanks for signing up to the <strong>${storeName}</strong> customer portal. Enter this code to confirm your email address:</p>
+      <p style="font-size:28px;letter-spacing:6px;font-weight:700;background:#f1f5f9;padding:16px;border-radius:8px;text-align:center;margin:24px 0">${code}</p>
+      <p style="color:#64748b">This code expires in 15 minutes.</p>
+    `),
+  };
+}
+
+function customerPortalAppointmentConfirmation({ storeName, customerName, serviceName, startAt, endAt, status, storeAddress, storePhone }) {
+  return {
+    subject: `Appointment ${status === "pending" ? "requested" : "confirmed"} — ${storeName}`,
+    html: wrapEmailHtml("Appointment", `
+      <p>Hi ${customerName || "there"},</p>
+      <p>Your appointment at <strong>${storeName}</strong> is ${status === "pending" ? "pending confirmation" : "confirmed"}.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f0fdf4;border-radius:8px">
+        <tr><td style="padding:10px 16px;color:#64748b">Service</td><td style="padding:10px 16px;font-weight:600">${serviceName}</td></tr>
+        <tr><td style="padding:10px 16px;color:#64748b">Starts</td><td style="padding:10px 16px;font-weight:600">${fmtDateTime(startAt)}</td></tr>
+        <tr><td style="padding:10px 16px;color:#64748b">Ends</td><td style="padding:10px 16px">${fmtDateTime(endAt)}</td></tr>
+        ${storeAddress ? `<tr><td style="padding:10px 16px;color:#64748b">Address</td><td style="padding:10px 16px">${storeAddress}</td></tr>` : ""}
+        ${storePhone ? `<tr><td style="padding:10px 16px;color:#64748b">Phone</td><td style="padding:10px 16px">${storePhone}</td></tr>` : ""}
+      </table>
+      ${footer("Manage or reschedule this booking from your customer portal.")}
+    `),
+  };
+}
+
+function customerPortalAppointmentRescheduled({ storeName, customerName, serviceName, oldStartAt, newStartAt, endAt }) {
+  return {
+    subject: `Appointment rescheduled — ${storeName}`,
+    html: wrapEmailHtml("Rescheduled", `
+      <p>Hi ${customerName || "there"},</p>
+      <p>Your <strong>${serviceName}</strong> appointment at <strong>${storeName}</strong> has been moved.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0">
+        <tr><td style="padding:10px 16px;color:#64748b">Was</td><td style="padding:10px 16px;text-decoration:line-through">${fmtDateTime(oldStartAt)}</td></tr>
+        <tr><td style="padding:10px 16px;color:#64748b">Now</td><td style="padding:10px 16px;font-weight:700;color:#059669">${fmtDateTime(newStartAt)}</td></tr>
+        <tr><td style="padding:10px 16px;color:#64748b">Ends</td><td style="padding:10px 16px">${fmtDateTime(endAt)}</td></tr>
+      </table>
+      ${footer("If this change wasn't you, please contact the store.")}
+    `),
+  };
+}
+
+function customerPortalAppointmentCancelled({ storeName, customerName, serviceName, startAt, reason }) {
+  return {
+    subject: `Appointment cancelled — ${storeName}`,
+    html: wrapEmailHtml("Cancelled", `
+      <p>Hi ${customerName || "there"},</p>
+      <p>Your <strong>${serviceName}</strong> appointment at <strong>${storeName}</strong> scheduled for ${fmtDateTime(startAt)} has been cancelled.</p>
+      ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ""}
+      ${footer("You can book a new appointment any time from your customer portal.")}
+    `),
+  };
+}
+
+function customerPortalPaymentReceipt({ storeName, customerName, invoiceNumber, amount, paidAt, method }) {
+  return {
+    subject: `Payment received — ${storeName} invoice ${invoiceNumber}`,
+    html: wrapEmailHtml("Payment Received", `
+      <p>Hi ${customerName || "there"},</p>
+      <p>We've received your payment for <strong>${storeName}</strong>.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f0fdf4;border-radius:8px">
+        <tr><td style="padding:10px 16px;color:#64748b">Invoice</td><td style="padding:10px 16px;font-weight:600">${invoiceNumber}</td></tr>
+        <tr><td style="padding:10px 16px;color:#64748b">Amount</td><td style="padding:10px 16px;font-weight:600">${amount}</td></tr>
+        <tr><td style="padding:10px 16px;color:#64748b">Method</td><td style="padding:10px 16px">${method || "online"}</td></tr>
+        <tr><td style="padding:10px 16px;color:#64748b">Paid at</td><td style="padding:10px 16px">${fmtDateTime(paidAt)}</td></tr>
+      </table>
+      ${footer("Thank you for your payment.")}
+    `),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
   campaign_test: campaignTest,
@@ -485,6 +605,15 @@ const TEMPLATES = {
   subscription_renewal_due: subscriptionRenewalDue,
   booking_confirmation: bookingConfirmation,
   rental_overdue: rentalOverdue,
+  // M8 Customer Portal
+  customer_portal_welcome: customerPortalWelcome,
+  customer_portal_otp_login: customerPortalOtpLogin,
+  customer_portal_password_reset: customerPortalPasswordReset,
+  customer_portal_email_verify: customerPortalEmailVerify,
+  customer_portal_appointment_confirmation: customerPortalAppointmentConfirmation,
+  customer_portal_appointment_rescheduled: customerPortalAppointmentRescheduled,
+  customer_portal_appointment_cancelled: customerPortalAppointmentCancelled,
+  customer_portal_payment_receipt: customerPortalPaymentReceipt,
 };
 
 module.exports = { TEMPLATES, wrapEmailHtml };

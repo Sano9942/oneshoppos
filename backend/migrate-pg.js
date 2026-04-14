@@ -3045,6 +3045,98 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 37,
+    description: "M8 — customer portal auth (customers columns + OTP/reset/refresh tables)",
+    up: async (client) => {
+      // Extend customers with portal auth columns.
+      await client.query(`
+        ALTER TABLE customers
+          ADD COLUMN IF NOT EXISTS portal_password_hash TEXT,
+          ADD COLUMN IF NOT EXISTS portal_enabled_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS portal_tokens_revoked_before TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS portal_last_login_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS portal_email_verified_at TIMESTAMPTZ
+      `);
+
+      // Partial unique index — only enforced once a customer has enabled portal access.
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS customers_portal_email_unique
+          ON customers (LOWER(email))
+          WHERE portal_enabled_at IS NOT NULL AND email IS NOT NULL AND deleted_at IS NULL
+      `);
+
+      // One-time passcodes (login, reset, verify) — short-lived, hashed.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS customer_portal_otps (
+          id SERIAL PRIMARY KEY,
+          customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
+          email TEXT NOT NULL,
+          code_hash TEXT NOT NULL,
+          purpose TEXT NOT NULL CHECK (purpose IN ('login','password_reset','email_verify')),
+          expires_at TIMESTAMPTZ NOT NULL,
+          used_at TIMESTAMPTZ,
+          ip TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS customer_portal_otps_lookup
+          ON customer_portal_otps (LOWER(email), purpose, expires_at)
+      `);
+
+      // Password-reset tokens — long, single-use.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS customer_portal_reset_tokens (
+          id SERIAL PRIMARY KEY,
+          customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+          token_hash TEXT NOT NULL UNIQUE,
+          expires_at TIMESTAMPTZ NOT NULL,
+          used_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
+      // Refresh tokens — SHA-256 hashed, revocable, UA/IP trail for session management.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS customer_portal_refresh_tokens (
+          id SERIAL PRIMARY KEY,
+          customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+          token_hash TEXT NOT NULL UNIQUE,
+          expires_at TIMESTAMPTZ NOT NULL,
+          revoked_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          last_used_at TIMESTAMPTZ,
+          user_agent TEXT,
+          ip TEXT
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS customer_portal_refresh_tokens_customer
+          ON customer_portal_refresh_tokens (customer_id) WHERE revoked_at IS NULL
+      `);
+
+      // Broaden the appointments.source CHECK to include 'portal'. Idempotent:
+      // drop-if-exists then re-add. Safe because we never change the values,
+      // only the allowed set.
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_name = 'appointments' AND constraint_name = 'appointments_source_check'
+          ) THEN
+            ALTER TABLE appointments DROP CONSTRAINT appointments_source_check;
+          END IF;
+        END$$;
+      `);
+      await client.query(`
+        ALTER TABLE appointments
+          ADD CONSTRAINT appointments_source_check
+          CHECK (source IN ('admin','public','import','portal'))
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

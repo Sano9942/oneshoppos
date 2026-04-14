@@ -19,7 +19,7 @@ async function resolvePublicTenantDb(req, deps) {
   const {
     rows: [tenant],
   } = await masterDb.query(
-    "SELECT id, slug, status FROM tenants WHERE slug = $1 AND status = 'active'",
+    "SELECT id, slug, name, status FROM tenants WHERE slug = $1 AND status = 'active'",
     [String(tenantSlug).trim()]
   );
   if (!tenant) {

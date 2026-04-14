@@ -506,6 +506,69 @@ const DEFAULT_PUBLIC_BOOKING_LABELS = Object.freeze({
   customer_singular: "Customer",
 });
 
+// ── M8 Customer Portal ──────────────────────────────────────────────
+// Per-preset portal labels + enabled tab list. Tabs are ANDed with tenant
+// feature flags inside the portal /config endpoint (see
+// routes/customer-portal/data.js TAB_FEATURE_FLAGS map).
+//
+// Valid tab keys: dashboard (implicit), invoices, orders, appointments,
+// subscriptions, contracts, tickets, loyalty, wallet, profile, addresses.
+
+const DEFAULT_PORTAL_LABELS = Object.freeze({
+  portal_title: "Customer Portal",
+  dashboard_heading: "Welcome back",
+  invoices_tab: "Invoices",
+  orders_tab: "Orders",
+  appointments_tab: "Appointments",
+  subscriptions_tab: "Subscriptions",
+  contracts_tab: "Rentals",
+  tickets_tab: "Service Tickets",
+  loyalty_tab: "Loyalty",
+  wallet_tab: "Wallet",
+  profile_tab: "Profile",
+  pay_cta: "Pay now",
+  book_cta: "Book appointment",
+});
+
+const DEFAULT_PORTAL_TABS = Object.freeze(["invoices", "orders", "profile"]);
+
+// Preset → portal tab list. Keep in sync with plan §4 mapping.
+const PORTAL_ENABLED_TABS_BY_PRESET = Object.freeze({
+  general_retail: ["invoices", "orders", "loyalty", "profile"],
+  restaurant: ["orders", "loyalty", "profile"],
+  cafe: ["orders", "loyalty", "profile"],
+  salon: ["appointments", "invoices", "loyalty", "profile"],
+  clinic: ["appointments", "invoices", "loyalty", "profile"],
+  grocery: ["invoices", "orders", "loyalty", "profile"],
+  repair_shop: ["tickets", "invoices", "profile"],
+  gym: ["subscriptions", "invoices", "appointments", "profile"],
+  wholesale: ["invoices", "orders", "profile"],
+  photography_studio: ["invoices", "orders", "appointments", "profile"],
+  butcher: ["invoices", "orders", "profile"],
+  sweet_shop: ["invoices", "orders", "loyalty", "profile"],
+  textile: ["invoices", "orders", "profile"],
+  car_rental: ["contracts", "invoices", "profile"],
+  equipment_hire: ["contracts", "invoices", "profile"],
+  furniture_rental: ["contracts", "invoices", "profile"],
+  party_supplies: ["contracts", "invoices", "profile"],
+});
+
+// Preset-specific portal label overrides. Missing keys fall back to defaults.
+const PORTAL_LABEL_OVERRIDES = Object.freeze({
+  salon: { appointments_tab: "My Bookings", book_cta: "Book a service" },
+  clinic: { appointments_tab: "My Appointments", book_cta: "Book a visit" },
+  restaurant: { orders_tab: "My Orders", dashboard_heading: "Welcome" },
+  cafe: { orders_tab: "My Orders", dashboard_heading: "Welcome" },
+  wholesale: { invoices_tab: "Account Invoices", orders_tab: "Purchase Orders" },
+  gym: { subscriptions_tab: "My Memberships", appointments_tab: "Class Bookings" },
+  repair_shop: { tickets_tab: "Repair Tickets" },
+  car_rental: { contracts_tab: "Rental Agreements" },
+  equipment_hire: { contracts_tab: "Equipment Rentals" },
+  furniture_rental: { contracts_tab: "Rental Contracts" },
+  party_supplies: { contracts_tab: "Event Bookings" },
+  photography_studio: { appointments_tab: "Photo Shoots" },
+});
+
 function getPreset(industryType) {
   return INDUSTRY_PRESETS[industryType] || INDUSTRY_PRESETS[DEFAULT_INDUSTRY_TYPE];
 }
@@ -533,6 +596,16 @@ function getPublicBookingLabels(industryType) {
   return { ...DEFAULT_PUBLIC_BOOKING_LABELS, ...(preset.public_booking_labels || {}) };
 }
 
+function getPortalLabels(industryType) {
+  const key = INDUSTRY_PRESETS[industryType] ? industryType : DEFAULT_INDUSTRY_TYPE;
+  return { ...DEFAULT_PORTAL_LABELS, ...(PORTAL_LABEL_OVERRIDES[key] || {}) };
+}
+
+function getPortalEnabledTabs(industryType) {
+  const key = INDUSTRY_PRESETS[industryType] ? industryType : DEFAULT_INDUSTRY_TYPE;
+  return [...(PORTAL_ENABLED_TABS_BY_PRESET[key] || DEFAULT_PORTAL_TABS)];
+}
+
 module.exports = {
   INDUSTRY_PRESETS,
   VALID_INDUSTRY_TYPES,
@@ -540,9 +613,15 @@ module.exports = {
   WEIGHTED_UNITS,
   DEFAULT_UNIT_VOCABULARY,
   DEFAULT_PUBLIC_BOOKING_LABELS,
+  DEFAULT_PORTAL_LABELS,
+  DEFAULT_PORTAL_TABS,
+  PORTAL_ENABLED_TABS_BY_PRESET,
+  PORTAL_LABEL_OVERRIDES,
   getPreset,
   getPresetLabels,
   getUnitVocabulary,
   isWeightedUnit,
   getPublicBookingLabels,
+  getPortalLabels,
+  getPortalEnabledTabs,
 };

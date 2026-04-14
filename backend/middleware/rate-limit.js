@@ -111,4 +111,61 @@ const publicBookingLimiter = rateLimit({
   },
 });
 
-module.exports = { globalLimiter, authLimiter, webhookLimiter, reviewLimiter, publicBookingLimiter };
+// ── M8 Customer Portal ────────────────────────────────────────────────
+// These limiters key on identifiers visible before auth runs — the portal
+// routes mount BEFORE tenant middleware, so req.tenantSlug is not set; we
+// use the query param or header slug directly.
+
+// Login / signup / password-reset: 10 / 15 min / (tenant + IP)
+const customerPortalAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitExceededHandler,
+  skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => {
+    const slug = req.query?.tenant || req.headers["x-tenant-slug"] || "unknown";
+    return `portal-auth:${slug}:${req.ip}`;
+  },
+});
+
+// OTP requests (verify-otp + request-otp + email verify): 5 / 15 min / (email + IP)
+const customerPortalOtpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitExceededHandler,
+  skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => {
+    const email = String(req.body?.email || req.query?.email || "no-email").toLowerCase();
+    return `portal-otp:${email}:${req.ip}`;
+  },
+});
+
+// Portal data reads: 120 / min keyed on customer_id (falls back to tenant+IP pre-auth).
+const customerPortalDataLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitExceededHandler,
+  skip: () => process.env.NODE_ENV === 'test',
+  keyGenerator: (req) => {
+    if (req.customerId) return `portal-data:${req.customerId}`;
+    const slug = req.query?.tenant || req.headers["x-tenant-slug"] || "unknown";
+    return `portal-data:${slug}:${req.ip}`;
+  },
+});
+
+module.exports = {
+  globalLimiter,
+  authLimiter,
+  webhookLimiter,
+  reviewLimiter,
+  publicBookingLimiter,
+  customerPortalAuthLimiter,
+  customerPortalOtpLimiter,
+  customerPortalDataLimiter,
+};

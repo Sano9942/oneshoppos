@@ -2751,7 +2751,7 @@ CREATE TABLE IF NOT EXISTS appointments (
   customer_phone TEXT,
   customer_email TEXT,
   notes TEXT,
-  source TEXT DEFAULT 'admin' CHECK (source IN ('admin','public','import')),
+  source TEXT DEFAULT 'admin' CHECK (source IN ('admin','public','import','portal')),
   cancelled_at TIMESTAMPTZ,
   cancellation_reason TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -3284,6 +3284,56 @@ CREATE TABLE IF NOT EXISTS rental_contract_activities (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_rental_contract_activities_contract ON rental_contract_activities(contract_id);
+
+-- ── M8 Customer Portal (migration v37) ─────────────────────────────
+
+ALTER TABLE customers
+  ADD COLUMN IF NOT EXISTS portal_password_hash TEXT,
+  ADD COLUMN IF NOT EXISTS portal_enabled_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS portal_tokens_revoked_before TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS portal_last_login_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS portal_email_verified_at TIMESTAMPTZ;
+
+CREATE UNIQUE INDEX IF NOT EXISTS customers_portal_email_unique
+  ON customers (LOWER(email))
+  WHERE portal_enabled_at IS NOT NULL AND email IS NOT NULL AND deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS customer_portal_otps (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  purpose TEXT NOT NULL CHECK (purpose IN ('login','password_reset','email_verify')),
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  ip TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS customer_portal_otps_lookup
+  ON customer_portal_otps (LOWER(email), purpose, expires_at);
+
+CREATE TABLE IF NOT EXISTS customer_portal_reset_tokens (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS customer_portal_refresh_tokens (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  last_used_at TIMESTAMPTZ,
+  user_agent TEXT,
+  ip TEXT
+);
+CREATE INDEX IF NOT EXISTS customer_portal_refresh_tokens_customer
+  ON customer_portal_refresh_tokens (customer_id) WHERE revoked_at IS NULL;
 
 -- ── Schema versioning ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schema_version (

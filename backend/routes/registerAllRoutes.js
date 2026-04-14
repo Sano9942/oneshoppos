@@ -167,6 +167,14 @@ module.exports = function registerAllRoutes(app, deps) {
   // Public booking page — no auth required, manually resolves tenant DB
   require("./public-bookings")(app, deps);
 
+  // M8 — Customer portal (end-customer app). Mounted BEFORE tenant
+  // middleware; each route resolves the tenant via resolvePublicTenantDb()
+  // and verifies the portal JWT separately (scope="customer").
+  require("./customer-portal/auth")(app, deps);
+  require("./customer-portal/data")(app, deps);
+  require("./customer-portal/payments")(app, deps);
+  require("./customer-portal/appointments")(app, deps);
+
   // Setup wizard — must be BEFORE auth middleware (no session exists yet)
   const createSetupRouter = require("./setup");
   const IS_MULTI_TENANT = process.env.MULTI_TENANT === "1";
