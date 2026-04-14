@@ -69,6 +69,9 @@ const LABELS = {
   projects: "Projects",
   contracts: "Contracts",
   "service-tickets": "Service Tickets",
+  rentals: "Rentals",
+  items: "Items",
+  timeline: "Timeline",
 };
 
 const SKIP = ["/dashboard", "/pos", "/kiosk", "/customer-display"];

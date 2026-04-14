@@ -187,6 +187,14 @@ export const SHOPIFY_NAV_GROUPS = [
     ],
   },
   {
+    label: "Rentals",
+    items: [
+      { name: "Rental Items", path: "/rentals/items", icon: Package, requiredPerm: "manage_rentals", requiredFlag: "phase4_rentals", requiredMode: "rentals" },
+      { name: "Contracts", path: "/rentals/contracts", icon: FileSignature, requiredPerm: "manage_rentals", requiredFlag: "phase4_rentals", requiredMode: "rentals" },
+      { name: "Timeline", path: "/rentals/timeline", icon: Calendar, requiredPerm: "manage_rentals", requiredFlag: "phase4_rentals", requiredMode: "rentals" },
+    ],
+  },
+  {
     label: "Online Store",
     items: [
       { name: "View Storefront", path: "__STOREFRONT__", icon: MonitorPlay, newTab: true },

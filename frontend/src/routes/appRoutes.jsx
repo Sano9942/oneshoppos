@@ -93,6 +93,7 @@ const AppointmentsRoute = lazy(() => import("../pages/AppointmentsRoute"));
 const ProjectsRoute = lazy(() => import("../pages/ProjectsRoute"));
 const ContractsRoute = lazy(() => import("../pages/ContractsRoute"));
 const ServiceTicketsRoute = lazy(() => import("../pages/ServiceTicketsRoute"));
+const RentalsRoute = lazy(() => import("../pages/RentalsRoute"));
 
 const wrap = (Component) => <Suspense fallback={<RouteLoading />}><Component /></Suspense>;
 const perm = (p, el) => <RequirePerm perm={p}>{el}</RequirePerm>;
@@ -225,5 +226,11 @@ export const appRoutes = [
     <Route path="/projects" element={perm("manage_projects", wrap(ProjectsRoute))} />
     <Route path="/contracts" element={perm("manage_contracts", wrap(ContractsRoute))} />
     <Route path="/service-tickets" element={perm("manage_tickets", wrap(ServiceTicketsRoute))} />
+
+    {/* M7 — Rentals */}
+    <Route path="/rentals" element={perm("manage_rentals", wrap(RentalsRoute))} />
+    <Route path="/rentals/items" element={perm("manage_rentals", wrap(RentalsRoute))} />
+    <Route path="/rentals/contracts" element={perm("manage_rentals", wrap(RentalsRoute))} />
+    <Route path="/rentals/timeline" element={perm("manage_rentals", wrap(RentalsRoute))} />
   </Route>,
 ];

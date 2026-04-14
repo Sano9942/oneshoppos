@@ -3180,6 +3180,111 @@ CREATE TABLE IF NOT EXISTS service_ticket_activities (
 );
 CREATE INDEX IF NOT EXISTS idx_ticket_activities_ticket ON service_ticket_activities(ticket_id);
 
+-- ── M7 Rentals (migration v36) ──────────────────────────────────────
+CREATE TABLE IF NOT EXISTS rental_items (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  sku TEXT,
+  description TEXT,
+  outlet_id INTEGER REFERENCES outlets(id),
+  total_quantity INTEGER NOT NULL DEFAULT 1,
+  daily_rate NUMERIC(12,2) NOT NULL DEFAULT 0,
+  hourly_rate NUMERIC(12,2),
+  weekly_rate NUMERIC(12,2),
+  deposit_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+  payment_policy TEXT NOT NULL DEFAULT 'upfront'
+    CHECK (payment_policy IN ('upfront','on_return')),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rental_items_outlet ON rental_items(outlet_id);
+CREATE INDEX IF NOT EXISTS idx_rental_items_active ON rental_items(is_active);
+
+CREATE TABLE IF NOT EXISTS rental_assets (
+  id SERIAL PRIMARY KEY,
+  rental_item_id INTEGER NOT NULL REFERENCES rental_items(id) ON DELETE CASCADE,
+  serial_number TEXT,
+  label TEXT,
+  status TEXT NOT NULL DEFAULT 'available'
+    CHECK (status IN ('available','rented','maintenance','retired')),
+  condition_notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rental_assets_item ON rental_assets(rental_item_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rental_assets_serial
+  ON rental_assets(rental_item_id, serial_number)
+  WHERE serial_number IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS rental_contracts (
+  id SERIAL PRIMARY KEY,
+  contract_number TEXT NOT NULL UNIQUE,
+  customer_id INTEGER REFERENCES customers(id),
+  outlet_id INTEGER REFERENCES outlets(id),
+  created_by INTEGER NOT NULL REFERENCES employees(id),
+  status TEXT NOT NULL DEFAULT 'reserved'
+    CHECK (status IN ('reserved','confirmed','checked_out','returned','completed','invoiced','cancelled')),
+  rental_start TIMESTAMPTZ NOT NULL,
+  rental_end TIMESTAMPTZ,
+  expected_return TIMESTAMPTZ NOT NULL,
+  actual_checkin TIMESTAMPTZ,
+  actual_return TIMESTAMPTZ,
+  deposit_collected NUMERIC(12,2) NOT NULL DEFAULT 0,
+  deposit_method TEXT,
+  deposit_paid_at TIMESTAMPTZ,
+  payment_policy TEXT NOT NULL DEFAULT 'upfront'
+    CHECK (payment_policy IN ('upfront','on_return')),
+  rental_fee_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+  late_fee NUMERIC(12,2) NOT NULL DEFAULT 0,
+  late_fee_overridden BOOLEAN NOT NULL DEFAULT FALSE,
+  discount_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+  final_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+  invoice_id INTEGER REFERENCES customer_invoices(id),
+  overdue_email_sent_at TIMESTAMPTZ,
+  cancellation_reason TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rental_contracts_status ON rental_contracts(status);
+CREATE INDEX IF NOT EXISTS idx_rental_contracts_customer ON rental_contracts(customer_id);
+CREATE INDEX IF NOT EXISTS idx_rental_contracts_outlet ON rental_contracts(outlet_id);
+CREATE INDEX IF NOT EXISTS idx_rental_contracts_overdue
+  ON rental_contracts(expected_return)
+  WHERE status = 'checked_out';
+
+CREATE TABLE IF NOT EXISTS rental_contract_lines (
+  id SERIAL PRIMARY KEY,
+  contract_id INTEGER NOT NULL REFERENCES rental_contracts(id) ON DELETE CASCADE,
+  rental_item_id INTEGER NOT NULL REFERENCES rental_items(id),
+  rental_asset_id INTEGER REFERENCES rental_assets(id),
+  quantity INTEGER NOT NULL DEFAULT 1,
+  rate_type TEXT NOT NULL DEFAULT 'daily'
+    CHECK (rate_type IN ('hourly','daily','weekly')),
+  rate_snapshot NUMERIC(12,2) NOT NULL,
+  duration_value NUMERIC(10,2) NOT NULL DEFAULT 1,
+  line_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+  deposit_snapshot NUMERIC(12,2) NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rental_contract_lines_contract ON rental_contract_lines(contract_id);
+CREATE INDEX IF NOT EXISTS idx_rental_contract_lines_asset
+  ON rental_contract_lines(rental_asset_id)
+  WHERE rental_asset_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS rental_contract_activities (
+  id SERIAL PRIMARY KEY,
+  contract_id INTEGER NOT NULL REFERENCES rental_contracts(id) ON DELETE CASCADE,
+  actor_id INTEGER REFERENCES employees(id),
+  activity_type TEXT NOT NULL
+    CHECK (activity_type IN ('status_change','note','deposit_recorded','late_fee_applied','invoice_generated','overdue_alert_sent','checkin','return')),
+  description TEXT,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rental_contract_activities_contract ON rental_contract_activities(contract_id);
+
 -- ── Schema versioning ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schema_version (
   version    INTEGER PRIMARY KEY,

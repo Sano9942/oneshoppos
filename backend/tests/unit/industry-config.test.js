@@ -61,8 +61,8 @@ describe("industry-config", () => {
     expect(labels).not.toHaveProperty("modes");
   });
 
-  it("has 13 industry presets (10 v1 + 3 M5 weighted)", () => {
-    expect(VALID_INDUSTRY_TYPES).toHaveLength(13);
+  it("has 17 industry presets (10 v1 + 3 M5 weighted + 4 M7 rentals)", () => {
+    expect(VALID_INDUSTRY_TYPES).toHaveLength(17);
   });
 
   it("grocery preset has no extra modes (base retail)", () => {

@@ -428,6 +428,39 @@ function subscriptionRenewalDue(data) {
   };
 }
 
+function rentalOverdue(data) {
+  const {
+    storeName,
+    customerName,
+    contractNumber,
+    itemNames,
+    expectedReturn,
+    daysOverdue,
+    contactUrl,
+  } = data;
+  let expectedDisplay = expectedReturn;
+  try {
+    if (expectedReturn) expectedDisplay = new Date(expectedReturn).toLocaleString();
+  } catch { /* leave as-is */ }
+  return {
+    subject: `Overdue rental — ${contractNumber}`,
+    html: wrapEmailHtml(
+      "Rental Overdue",
+      `<p>Hi ${customerName || "Customer"},</p>
+       <p>Our records show your rental from <strong>${storeName || "our store"}</strong> is past its expected return date.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#fef2f2;border-radius:8px">
+         <tr><td style="padding:10px 16px;color:#64748b">Contract</td><td style="padding:10px 16px;font-weight:600">${contractNumber || ""}</td></tr>
+         ${itemNames ? `<tr><td style="padding:10px 16px;color:#64748b">Item(s)</td><td style="padding:10px 16px">${itemNames}</td></tr>` : ""}
+         <tr><td style="padding:10px 16px;color:#64748b">Expected return</td><td style="padding:10px 16px;color:#b91c1c;font-weight:600">${expectedDisplay || ""}</td></tr>
+         <tr><td style="padding:10px 16px;color:#64748b">Days overdue</td><td style="padding:10px 16px;color:#b91c1c;font-weight:700">${daysOverdue || 0}</td></tr>
+       </table>
+       <p>Please return the item as soon as possible. A late fee may apply to your final invoice.</p>
+       ${contactUrl ? btn("Contact the store", contactUrl) : ""}
+       ${footer("This is an automated overdue notice.")}`
+    ),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
   campaign_test: campaignTest,
@@ -451,6 +484,7 @@ const TEMPLATES = {
   subscription_renewal_admin: subscriptionRenewalAdmin,
   subscription_renewal_due: subscriptionRenewalDue,
   booking_confirmation: bookingConfirmation,
+  rental_overdue: rentalOverdue,
 };
 
 module.exports = { TEMPLATES, wrapEmailHtml };

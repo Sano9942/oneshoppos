@@ -27,6 +27,10 @@ const INDUSTRY_OPTIONS = [
   { value: "repair_shop", label: "Repair / Service Shop" },
   { value: "gym", label: "Gym / Fitness Studio" },
   { value: "photography_studio", label: "Photography / Creative Studio" },
+  { value: "car_rental", label: "Car Rental / Vehicle Hire" },
+  { value: "equipment_hire", label: "Equipment Hire / Tool Rental" },
+  { value: "furniture_rental", label: "Furniture / Events Rental" },
+  { value: "party_supplies", label: "Party Supplies / Event Rental" },
 ];
 
 const DEFAULT_FORM = {

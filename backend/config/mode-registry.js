@@ -39,6 +39,12 @@ const MODE_REGISTRY = Object.freeze({
       "phase4_workflow_tickets",
     ],
   },
+  rentals: {
+    description: "Asset/equipment rental with check-out, return, and late-fee tracking",
+    feature_flags_to_enable: [
+      "phase4_rentals",
+    ],
+  },
 });
 
 const VALID_MODES = Object.keys(MODE_REGISTRY);

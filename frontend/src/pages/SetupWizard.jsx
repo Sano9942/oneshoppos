@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Package, ChefHat, Scissors, ShoppingCart, Coffee, Stethoscope, Wrench, Dumbbell, Warehouse, Camera, Beef, Candy, Shirt } from "lucide-react";
+import { Package, ChefHat, Scissors, ShoppingCart, Coffee, Stethoscope, Wrench, Dumbbell, Warehouse, Camera, Beef, Candy, Shirt, Car, HardHat, Sofa, Sparkles } from "lucide-react";
 import { api } from "../api";
 
 const BUSINESS_TYPE_CATEGORIES = [
@@ -35,6 +35,15 @@ const BUSINESS_TYPE_CATEGORIES = [
       { value: "repair_shop", label: "Repair / Service Shop", description: "Job tickets, deposits, repair tracking", icon: Wrench, iconBg: "bg-zinc-100", iconColor: "text-zinc-600" },
       { value: "gym", label: "Gym / Fitness Studio", description: "Memberships, class bookings, member tracking", icon: Dumbbell, iconBg: "bg-indigo-100", iconColor: "text-indigo-600" },
       { value: "photography_studio", label: "Photography / Creative Studio", description: "Projects, session bookings, packages", icon: Camera, iconBg: "bg-teal-100", iconColor: "text-teal-600" },
+    ],
+  },
+  {
+    label: "Rentals",
+    types: [
+      { value: "car_rental", label: "Car Rental / Vehicle Hire", description: "Fleet bookings, deposits, overdue alerts", icon: Car, iconBg: "bg-blue-100", iconColor: "text-blue-600" },
+      { value: "equipment_hire", label: "Equipment Hire / Tool Rental", description: "Track assets, hourly/daily/weekly rates", icon: HardHat, iconBg: "bg-yellow-100", iconColor: "text-yellow-700" },
+      { value: "furniture_rental", label: "Furniture / Events Rental", description: "Event rentals with deposit & late-fee tracking", icon: Sofa, iconBg: "bg-emerald-100", iconColor: "text-emerald-700" },
+      { value: "party_supplies", label: "Party Supplies / Event Rental", description: "Checkout, return, and return-condition flows", icon: Sparkles, iconBg: "bg-fuchsia-100", iconColor: "text-fuchsia-600" },
     ],
   },
 ];

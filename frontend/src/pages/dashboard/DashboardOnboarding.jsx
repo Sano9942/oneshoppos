@@ -91,6 +91,24 @@ function buildSteps(data, onNavigate, presetSteps, labelFn) {
       done: false,
       navigate: () => onNavigate("/subscriptions"),
     },
+    rental_item: {
+      id: "rental_item",
+      label: `Add your first ${labelFn("product").toLowerCase()}`,
+      done: hasProducts,
+      navigate: () => onNavigate("/rentals/items"),
+    },
+    contract: {
+      id: "contract",
+      label: "Create your first rental contract",
+      done: false,
+      navigate: () => onNavigate("/rentals/contracts"),
+    },
+    checkout: {
+      id: "checkout",
+      label: "Check out a rental",
+      done: false,
+      navigate: () => onNavigate("/rentals/contracts"),
+    },
   };
 
   return presetSteps.map((key) => ALL_STEPS[key]).filter(Boolean);

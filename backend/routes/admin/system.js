@@ -17,6 +17,7 @@ module.exports = function registerSystemRoutes(app, deps) {
       const reservationStatus = global.__reservationWorkerStatus || null;
       const marketplaceSyncStatus = global.__marketplaceSyncWorkerStatus || null;
       const bookingReminderStatus = global.__bookingReminderWorkerStatus || null;
+      const rentalOverdueStatus = global.__rentalOverdueWorkerStatus || null;
 
       function workerInfo(status, pollIntervalMs) {
         if (!status) return { enabled: false, running: false };
@@ -38,6 +39,7 @@ module.exports = function registerSystemRoutes(app, deps) {
         reservation: workerInfo(reservationStatus, 60_000),
         marketplace_sync: workerInfo(marketplaceSyncStatus, 5 * 60_000),
         booking_reminder: workerInfo(bookingReminderStatus, 5 * 60_000),
+        rental_overdue: workerInfo(rentalOverdueStatus, 24 * 60 * 60 * 1000),
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });

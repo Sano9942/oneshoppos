@@ -51,6 +51,7 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "manage_projects",
     "manage_contracts",
     "manage_tickets",
+    "manage_rentals",
   ],
   Cashier: ["view_reports", "pos_discount", "pos_park"],
 };
@@ -242,6 +243,16 @@ const PERMISSION_RULES = [
     methods: ["GET", "POST", "PUT", "DELETE"],
     path: /^\/api\/service-tickets(\/|$)/,
     anyPerms: ["manage_tickets"],
+  },
+  {
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    path: /^\/api\/rental-items(\/|$)/,
+    anyPerms: ["manage_rentals"],
+  },
+  {
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    path: /^\/api\/rental-contracts(\/|$)/,
+    anyPerms: ["manage_rentals"],
   },
 ];
 
