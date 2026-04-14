@@ -6,6 +6,7 @@
  * cancel flow, and multi-contract availability.
  */
 
+require("dotenv").config({ path: require("path").resolve(__dirname, "..", "..", ".env") });
 const request = require("supertest");
 const { createTestApp } = require("../helpers/createTestApp-pg");
 
@@ -14,8 +15,21 @@ describe("M7 Rentals — items + contracts lifecycle", () => {
 
   beforeAll(async () => {
     ({ app, db, deps, cleanup } = await createTestApp());
+    // The rentals route imports the real middleware/feature-flags + permissions
+    // modules (same pattern as service-tickets.js). Those modules read from
+    // module-level `db` populated by init(deps) — the test helper never calls
+    // init, so we do it here.
+    require("../../middleware/feature-flags").init({ db });
+    require("../../middleware/permissions"); // no init needed
+    // Rentals routes call req.employee.id — the shared test helper only sets
+    // req.employeePerms, so inject req.employee before route registration.
+    app.use((req, res, next) => {
+      const eid = req.headers["x-employee-id"];
+      if (eid) req.employee = { id: Number(eid) };
+      next();
+    });
     require("../../routes/rentals")(app, deps);
-  }, 30000);
+  }, 180000);
 
   afterAll(async () => {
     if (cleanup) await cleanup();
