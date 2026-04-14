@@ -1,7 +1,7 @@
 # Tenant Preset Engine v1 — Strategy & Implementation Specification
 
-**Date:** 2026-04-13
-**Status:** v1 COMPLETE (M1-M4, 2026-04-14). v2 IN PROGRESS — M5 + M6 shipped 2026-04-14.
+**Date:** 2026-04-13 (last updated 2026-04-15)
+**Status:** v1 COMPLETE (M1-M4, 2026-04-14). v2 IN PROGRESS — M5, M6, M7 shipped 2026-04-14.
 **Author:** Hassan + Claude (session 2026-04-13)
 
 ---
@@ -466,26 +466,27 @@ CREATE TABLE IF NOT EXISTS tenant_modes (
 7. ~~**Execute Milestone 4** — Deepen preset adaptation surfaces (country packs, receipt labels, report defaults, POS search, sample data, clinic extension)~~ Done (25/25 unit tests passing, 6 features delivered 2026-04-14)
 8. ~~**Execute Milestone 5** — Weight-based selling + POS label polish + 3 new presets (butcher, sweet_shop, textile)~~ Done (26/26 unit tests passing, migration v34 deployed to all 3 production tenants, commit `c3fa47d`)
 9. ~~**Execute Milestone 6** — Online booking page polish: confirmation email, share link UI, industry-aware labels, validation + rate limiting + time guards, `.ics` calendar download, integration + unit test coverage~~ Done (commit `760344b`, 29 new automated tests, no migration required)
+10. ~~**Execute Milestone 7** — Rentals mode: `rentals` business mode + 4 asset-rental presets (car_rental, equipment_hire, furniture_rental, party_supplies_rental), 5 new tables, 18 endpoints, 3-tab UI with Gantt timeline, overdue worker + email, 41 new automated tests~~ Done 2026-04-14 (commits `2afaf2d` + `8f94816` test fixup + `6688a43` mode-flag reset hardening, migration v36, 21 files touched)
 
 **Preset Engine v1 is COMPLETE.** All 4 milestones delivered. 10 industry presets, 10 adaptation surfaces, 6 business modes, 23 country packs.
 
-**Preset Engine v2 is IN PROGRESS.** M5 + M6 shipped 2026-04-14 — now at 13 presets, ~38 industries covered, and every appointment-based tenant has a public booking URL.
+**Preset Engine v2 is IN PROGRESS.** M5, M6, M7 shipped 2026-04-14 — now at 17 presets, 7 business modes, ~42 industries covered. Every appointment-based tenant has a public booking URL, and rental businesses (car hire, equipment, furniture, party supplies) are fully supported with asset tracking, duration pricing, deposits, and overdue alerts.
 
 ---
 
 ## 12. Preset Engine v2 Roadmap — Expanding Industry Coverage
 
-### Current Coverage (v1 + M5 + M6)
+### Current Coverage (v1 + M5 + M6 + M7)
 
 | What | Count | Details |
 |------|-------|---------|
-| Industry presets | 13 | retail, grocery, wholesale, restaurant, cafe, salon, clinic, repair_shop, gym, photography_studio, **butcher, sweet_shop, textile** (M5) |
-| Business modes | 6 | retail, restaurant, appointments, service_projects, subscriptions, workflow_tickets |
+| Industry presets | 17 | retail, grocery, wholesale, restaurant, cafe, salon, clinic, repair_shop, gym, photography_studio, butcher, sweet_shop, textile (M5), **car_rental, equipment_hire, furniture_rental, party_supplies_rental** (M7) |
+| Business modes | 7 | retail, restaurant, appointments, service_projects, subscriptions, workflow_tickets, **rentals** (M7) |
 | Country packs | 23 | PK, US, GB, CA, AU, IN, AE, SA, BD, NG, KE, GH, ZA, EG, DE, FR, NL, SG, MY, ID, PH, NZ, OTHER |
-| Adaptation surfaces | 12 | Nav, labels, dashboard widgets, POS layout, onboarding, receipts, reports, POS search, sample data, clinic fields, unit vocabulary / weight-based selling (M5), **public booking labels** (M6) |
-| Public customer-facing surfaces | 2 | Public receipt URL (v1), **public booking page at `/book/:slug` with per-preset labels, share link UI, ICS download, confirmation email** (M6) |
+| Adaptation surfaces | 13 | Nav, labels, dashboard widgets, POS layout, onboarding, receipts, reports, POS search, sample data, clinic fields, unit vocabulary / weight-based selling (M5), public booking labels (M6), **rental asset/contract UX** (M7) |
+| Public customer-facing surfaces | 2 | Public receipt URL (v1), public booking page at `/book/:slug` with per-preset labels, share link UI, ICS download, confirmation email (M6) |
 
-The 13 presets now cover **~38 of 54 industries** (up from 35 — M6 activates the customer-facing entry for 8 appointment-based industries without adding new presets). The remaining ~16 industries need new operational capabilities (rentals, room management, customer portal, manufacturing) before we can add presets without them being hollow labels.
+The 17 presets now cover **~42 of 54 industries** (up from 38 — M7 adds 4 asset-rental verticals on the new `rentals` mode). The remaining ~12 industries need new operational capabilities (room management, customer portal, manufacturing, treatment plans) before we can add presets without them being hollow labels.
 
 ### What's Missing — Three Tiers
 
@@ -588,21 +589,42 @@ Effort →
 
 **Unlocks:** Salon, clinic, gym, car wash, photography, spa, driving school, veterinary — any tenant whose preset enables `appointments` mode now has a production-ready customer-facing booking URL.
 
-#### Milestone 7: Rentals Mode
+#### Milestone 7: Rentals Mode — COMPLETE
 
-**Goal:** New business mode for asset-based businesses.
+> **Status:** Done — shipped 2026-04-14. 29/29 new rental unit tests passing, full preset+mode+rental suite 67/67 green, frontend build clean in 22.5s (RentalsRoute: 27.4 KB / 6.75 KB gzip). All 7 new/modified backend modules load cleanly.
+>
+> **Migration:** v36 — 5 new tables (`rental_assets`, `rental_contracts`, `rental_line_items`, `rental_returns`, `rental_overdue_alerts`) + `phase4_rentals` feature flag. `schema-pg.sql` kept in parity.
+>
+> **Pre-existing failures (untouched, unrelated to M7):** `services.test.js` payment-gateway env-ordering, `middleware.test.js` missing `beforeEach`.
 
-**Scope:**
-- A. `rental_assets` table (serial number, condition, daily/hourly/weekly rate, deposit amount, current status)
-- B. `rental_contracts` table (asset, customer, check-out date, expected return, actual return, charges, damage notes)
-- C. Rental check-out flow (select asset → customer → duration → deposit → contract)
-- D. Return flow (condition check → damage assessment → final charge → deposit release)
-- E. Availability calendar per asset
-- F. Overdue tracking + alerts
-- G. New presets: `car_rental`, `equipment_hire`
-- H. Mode: `rentals`, nav group: "Rentals" (Assets, Active Contracts, Returns, Calendar)
+**Scope delivered (21 files touched):**
 
-**Effort:** ~2 weeks
+| Layer | Files |
+|-------|-------|
+| Migration | `migrate-pg.js` v36 (5 tables + feature flag) + `schema-pg.sql` parity |
+| Mode / preset config | `config/mode-registry.js`, `config/industry-config.js` (4 new presets) |
+| Middleware | `middleware/feature-flags.js`, `middleware/permissions.js` |
+| Backend core | `schemas/rentals.js`, `services/rental-service.js` (~20 functions), `routes/rentals.js` (18 endpoints), `routes/registerAllRoutes.js` |
+| Worker + email | `services/email-templates.js`, `workers/rental-overdue-worker-boss.js`, `boot/workers.js`, `routes/admin/system.js` |
+| Frontend | `ui/nav-config.js`, `ui/Breadcrumbs.jsx`, `pages/RentalsRoute.jsx`, `pages/redesign/RentalsRedesign.jsx` (~900 lines — 3 tabs + 6 modals + CSS-grid Gantt), `routes/appRoutes.jsx`, `pages/SetupWizard.jsx`, `pages/redesign/CompanySettingsRedesign.jsx`, `pages/redesign/DashboardOnboarding.jsx` |
+| Tests | `tests/unit/rentals.test.js` (29 unit tests), `tests/integration/pg-rental-contracts.test.js` (12 integration tests — requires DATABASE_URL) |
+
+**What M7 delivered vs. original plan:**
+
+| Original Scope Item | Delivered |
+|---------------------|-----------|
+| A. `rental_assets` table (serial, condition, rates, deposit, status) | ✅ Migration v36 |
+| B. `rental_contracts` table (asset, customer, dates, charges, damage) | ✅ Migration v36 + `rental_line_items` for multi-asset contracts |
+| C. Rental check-out flow (asset → customer → duration → deposit) | ✅ Contract create modal in `RentalsRedesign.jsx` |
+| D. Return flow (condition check → damage → final charge → deposit release) | ✅ Return modal + `rental_returns` table |
+| E. Availability calendar per asset | ✅ CSS-grid Gantt in Timeline tab |
+| F. Overdue tracking + alerts | ✅ `rental-overdue-worker-boss.js` + `rental_overdue_alerts` table + email template |
+| G. New presets: `car_rental`, `equipment_hire` | ✅ Plus bonus: `furniture_rental`, `party_supplies_rental` (4 total vs 2 planned) |
+| H. Mode: `rentals`, nav group "Rentals" (Items, Contracts, Timeline) | ✅ 3 tabs — bonus refinement from "Assets/Active Contracts/Returns/Calendar" to cleaner "Items/Contracts/Timeline" |
+
+**Effort (actual):** ~1 day end-to-end (planned 2 weeks). Leverage from existing preset/mode machinery — new mode slotted in through `mode-registry.js` + `industry-config.js` without touching any other preset.
+
+**Unlocks:** Car rental, equipment hire (tools/tents/sound), furniture rental, party supplies — any asset-rental business with serial-numbered inventory, duration-based pricing, and deposit tracking.
 
 #### Milestone 8: Customer Portal
 
@@ -656,11 +678,11 @@ Effort →
 |----------------|---------|-------|---------------------------|
 | v1 (M1-M4) | 10 | 6 | ~30 |
 | M5 (weight selling) | 13 | 6 | ~35 |
-| **M6 (online booking) — current** | **13** | **6** | **~38 (existing presets gain customer-facing entry)** |
-| M7 (rentals) | 15 | 7 | ~42 |
-| M8 (customer portal) | 15 | 7 | ~42 (all verticals gain customer self-service) |
-| M9 (room management) | 17 | 8 | ~45 |
-| M10 (manufacturing) | 19 | 9 | ~47 |
+| M6 (online booking) | 13 | 6 | ~38 (existing presets gain customer-facing entry) |
+| **M7 (rentals) — current** | **17** | **7** | **~42 (4 asset-rental verticals activated)** |
+| M8 (customer portal) | 17 | 7 | ~42 (all verticals gain customer self-service) |
+| M9 (room management) | 19 | 8 | ~45 |
+| M10 (manufacturing) | 21 | 9 | ~47 |
 
 The remaining ~7 industries (niche verticals like charity kitchen, medical lab, auction house) would need further assessment when demand materializes.
 
@@ -672,7 +694,7 @@ Not all milestones should be built speculatively. The decision framework:
 |-----------|-----------|
 | ~~**M5 (weight selling)**~~ | ~~Before next marketing push — it's cheap and broadens the pitch~~ **DONE 2026-04-14** |
 | ~~**M6 (online booking)**~~ | ~~When any appointment-based tenant asks "can my customers book online?"~~ **DONE 2026-04-14** — scaffolding was mostly already built, so shipped pre-emptively |
-| **M7 (rentals)** | When a rental business signs up or expresses interest |
+| ~~**M7 (rentals)**~~ | ~~When a rental business signs up or expresses interest~~ **DONE 2026-04-14** — built pre-emptively to unlock 4 verticals |
 | **M8 (customer portal)** | When 5+ tenants are active — it's a retention/stickiness play |
 | **M9 (room management)** | Only when a hotel/guesthouse pays or commits |
 | **M10 (manufacturing)** | Only when a factory/production business pays or commits |
@@ -687,3 +709,49 @@ Not all milestones should be built speculatively. The decision framework:
 | `sanopos-54-industry-coverage-matrix.md` | Industry coverage analysis — this engine is the implementation of the "presets over verticals" strategy recommended there |
 | `sano-vs-square-vs-shopify-gap-analysis.md` | Competitive gap analysis — closing restaurant/appointments/omnichannel gaps requires the preset engine to exist first |
 | `square-complete-platform-research.md` | Square's mode system is the reference model for SanoPOS's preset/mode architecture |
+
+---
+
+## 14. Known Gaps — Queued for Next Session
+
+Findings discovered while verifying M7 (2026-04-15). Not in M7 scope; tracked here to prevent loss.
+
+### Gap 14.1 — Subscriptions nav is flag-gated only, missing mode gate
+
+**Finding:** [frontend/src/ui/nav-config.js:162](../../../frontend/src/ui/nav-config.js#L162) defines the Subscriptions nav item with `requiredFlag: "subscription_billing"` but **no `requiredMode`**. Every other mode-isolated nav item (Restaurant, Appointments, Service Work, Rentals, Commissions) uses the `flag + mode` double-gate pattern established in M1 and reinforced in M7. Subscriptions is the lone exception.
+
+**Impact:**
+- `subscription_billing` is DEFAULT `true` in [backend/middleware/feature-flags.js:45](../../../backend/middleware/feature-flags.js#L45) — so every tenant inherits it regardless of preset.
+- Retail-only / grocery / wholesale / restaurant / cafe / clinic / repair_shop tenants all see "Subscriptions" in their sidebar even though subscriptions is a vertical-specific feature only used by the `gym` preset.
+- Violates the separation-of-concerns principle established in §4: *"Feature flags are for operations, modes are for identity."* Subscriptions is business identity (do you sell memberships?), not an operational toggle.
+
+**Investigation results (completed 2026-04-15):**
+
+| Check | Result |
+|-------|--------|
+| Does `subscriptions` mode exist in `MODE_REGISTRY`? | ✅ YES — `backend/config/mode-registry.js:30-35` — already maps to `subscription_billing` flag |
+| Which presets opt into `subscriptions`? | Only `gym` — `industry-config.js:202` has `modes: ["subscriptions", "appointments"]` |
+| What's the default flag state? | `subscription_billing: true` globally (the bug) |
+| Does `reconcile-mode-flags.js` auto-heal drift? | ✅ YES — it uses `getFeatureFlagsForModes(VALID_MODES)` as source of truth |
+
+**Proposed scope (call this M7.5 or bundle into M8):**
+
+1. **Frontend nav gate (1 line)** — Add `requiredMode: "subscriptions"` to [nav-config.js:162](../../../frontend/src/ui/nav-config.js#L162). Brings Subscriptions in line with the Restaurant/Rentals/Appointments pattern.
+2. **Default flag flip (1 line)** — Change `subscription_billing: true` → `false` in `DEFAULT_FEATURE_FLAGS`. New tenants no longer inherit the flag; the mode-enable path turns it on when `gym` preset (or explicit mode toggle) is selected.
+3. **Backfill migration (~30 lines)** — For every active tenant with `subscription_billing=true` AND no `subscriptions` row in `tenant_modes`, decide whether to:
+   - **Option A (safer):** INSERT `subscriptions` into `tenant_modes` to preserve existing access. Accept that tenants who aren't using it will still see the nav.
+   - **Option B (cleaner):** INSERT only for tenants who actually have data in `customer_subscriptions` or `subscription_plans`. Disable the flag for the rest.
+4. **Smoke test update** — `frontend/tests/smoke/m2-tickets-subscriptions.smoke.spec.js` likely asserts Subscriptions visibility; update to seed the mode first.
+5. **Reconcile script verification** — Run `node backend/scripts/reconcile-mode-flags.js` in production after backfill to confirm data drift is zero.
+
+**Risk if we ship nav gate without backfill:** Existing tenants using `/subscriptions` in production (e.g., if packagesmall or any gym tenant has real data) lose the nav link overnight until their `tenant_modes` is backfilled. **Do not ship #1 alone.**
+
+**Effort estimate:** ~half a day. Two one-line edits + a careful backfill script + smoke test update + production reconcile run.
+
+**Related observation:** This class of drift (flag default true but no matching mode row) should be audited across the full flag list. Commissions had the same shape before M1 gated it properly. A one-time audit script — *"find flags seeded `true` by default that correspond to a registered mode"* — would surface any remaining instances in a few lines.
+
+### Gap 14.2 — Subscriptions "Service Work" group terminology ambiguity (minor)
+
+While investigating 14.1, noticed that the "Service Work" sidebar group in `nav-config.js` bundles two different modes under one label: `service_projects` (Projects + Contracts) and `workflow_tickets` (Tickets). A tenant with only one of the two modes sees a group with partial children. This is functionally correct but visually inconsistent with the one-group-per-mode pattern used everywhere else.
+
+**Proposed fix (low priority):** Split into two sidebar groups — "Service Projects" and "Service Tickets". One-line refactor in `nav-config.js`. Defer until a tenant reports confusion; currently no user impact.
