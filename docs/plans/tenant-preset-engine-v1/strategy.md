@@ -1,7 +1,7 @@
 # Tenant Preset Engine v1 — Strategy & Implementation Specification
 
 **Date:** 2026-04-13
-**Status:** COMPLETE — all 4 milestones delivered (M1-M4), 2026-04-14
+**Status:** v1 COMPLETE (M1-M4, 2026-04-14). v2 IN PROGRESS — M5 shipped 2026-04-14.
 **Author:** Hassan + Claude (session 2026-04-13)
 
 ---
@@ -464,23 +464,26 @@ CREATE TABLE IF NOT EXISTS tenant_modes (
 5. ~~**Execute Milestone 2** — Workflow/ticket engine + recurring billing polish~~ Done (deployed 2026-04-14, 6/6 smoke tests passing)
 6. ~~**Execute Milestone 3** — Additional presets (grocery, cafe, clinic, repair shop, gym, wholesale, photography studio)~~ Done (21/21 unit tests passing, frontend builds clean)
 7. ~~**Execute Milestone 4** — Deepen preset adaptation surfaces (country packs, receipt labels, report defaults, POS search, sample data, clinic extension)~~ Done (25/25 unit tests passing, 6 features delivered 2026-04-14)
+8. ~~**Execute Milestone 5** — Weight-based selling + POS label polish + 3 new presets (butcher, sweet_shop, textile)~~ Done (26/26 unit tests passing, migration v34 deployed to all 3 production tenants, commit `c3fa47d`)
 
 **Preset Engine v1 is COMPLETE.** All 4 milestones delivered. 10 industry presets, 10 adaptation surfaces, 6 business modes, 23 country packs.
+
+**Preset Engine v2 is IN PROGRESS.** M5 shipped 2026-04-14 — now at 13 presets and ~35 industries covered.
 
 ---
 
 ## 12. Preset Engine v2 Roadmap — Expanding Industry Coverage
 
-### Current Coverage (v1)
+### Current Coverage (v1 + M5)
 
 | What | Count | Details |
 |------|-------|---------|
-| Industry presets | 10 | retail, grocery, wholesale, restaurant, cafe, salon, clinic, repair_shop, gym, photography_studio |
+| Industry presets | 13 | retail, grocery, wholesale, restaurant, cafe, salon, clinic, repair_shop, gym, photography_studio, **butcher, sweet_shop, textile** (M5) |
 | Business modes | 6 | retail, restaurant, appointments, service_projects, subscriptions, workflow_tickets |
 | Country packs | 23 | PK, US, GB, CA, AU, IN, AE, SA, BD, NG, KE, GH, ZA, EG, DE, FR, NL, SG, MY, ID, PH, NZ, OTHER |
-| Adaptation surfaces | 10 | Nav, labels, dashboard widgets, POS layout, onboarding, receipts, reports, POS search, sample data, clinic fields |
+| Adaptation surfaces | 11 | Nav, labels, dashboard widgets, POS layout, onboarding, receipts, reports, POS search, sample data, clinic fields, **unit vocabulary / weight-based selling** (M5) |
 
-The 10 presets honestly cover **~30 of 54 industries** from the coverage matrix — businesses where the existing 6 modes genuinely support the required workflows. The remaining ~24 industries need new operational capabilities before we can add presets without them being hollow labels.
+The 13 presets now cover **~35 of 54 industries**. The remaining ~19 industries need new operational capabilities (rentals, room management, customer portal, online booking, manufacturing) before we can add presets without them being hollow labels.
 
 ### What's Missing — Three Tiers
 
@@ -529,18 +532,26 @@ Effort →
 
 ### Proposed Milestones (v2)
 
-#### Milestone 5: Quick Wins — Weight-Based Selling + POS Label Polish
+#### Milestone 5: Quick Wins — Weight-Based Selling + POS Label Polish — COMPLETE
 
-**Goal:** Unlock ~5 more industries with minimal effort, polish remaining POS hardcoded labels.
+> **Status:** Done — shipped 2026-04-14 (commit `c3fa47d`). 26/26 unit tests passing, sales-decimal-quantity integration test passing, frontend builds clean.
+>
+> **Migration:** v34 (widen `sale_items.quantity` to `NUMERIC(10,3)`, add `gross_weight` + `tare_weight`) applied to public + 3 production tenant schemas on 2026-04-14.
+>
+> **Bonus fix bundled in the same commit:** the SanoPay sandbox migration was authored as a duplicate `version: 32` and silently skipped by the runner. Re-numbered to v35 so `sale_payments.gateway_ref` and `returns.gateway_refund_ref` actually land on production.
 
-**Scope:**
-- A. `sell_by_weight` / `sell_by_unit` product flag + decimal quantity input in POS
-- B. Unit labels (kg, m, lb, piece, dozen) on product form + POS display
-- C. POS tare weight field (for scale-connected selling)
-- D. POS sidebar label adaptation (hardcoded "Search customer..." → preset-aware "Search patient..." etc.)
-- E. New presets: `butcher`, `sweet_shop`, `textile` (all retail mode + weight selling)
+**Scope delivered:**
+- A. Decimal quantity (`NUMERIC(10,3)`) accepted end-to-end — `schemas/sales.js`, `routes/sales.js`, POS cart, receipts
+- B. Unit vocabulary per preset — `WEIGHTED_UNITS` + `DEFAULT_UNIT_VOCABULARY` + `getUnitVocabulary()` in `backend/config/industry-config.js`; ProductFormPage dropdown driven by `preset.unit_vocabulary`
+- C. Inline `WeightedQtyCell` in `POSCartTable` with optional tare input; non-weighted items keep the existing +/- button UX
+- D. Hardcoded POS strings migrated to `usePreset()` labels — `POSSearchArea`, `POSSidebar`, `POSCheckoutModal`
+- E. 3 new presets added: `butcher`, `sweet_shop`, `textile` (all retail mode + weight selling; wired into SetupWizard + CompanySettings)
+- F. Receipt rendering (`utils/receipt.js`) shows decimal qty and gross/tare/net breakdown row when weighted
+- G. Stock deduction uses `Math.ceil()` for weighted items (v1 keeps `outlet_stock` as INTEGER; upgrade to NUMERIC deferred)
 
-**Effort:** ~1 week
+**Known limitation (in scope for v2 later):** `return_items.quantity` and `stock_adjustments.quantity` remain INTEGER. Returning a weighted item will truncate the return quantity. Widening these is explicitly deferred.
+
+**Effort (actual):** ~1 day
 
 #### Milestone 6: Online Booking Page
 
@@ -624,8 +635,8 @@ Effort →
 
 | After Milestone | Presets | Modes | Industries Covered (of 54) |
 |----------------|---------|-------|---------------------------|
-| v1 (M1-M4) — current | 10 | 6 | ~30 |
-| M5 (weight selling) | 13 | 6 | ~35 |
+| v1 (M1-M4) | 10 | 6 | ~30 |
+| **M5 (weight selling) — current** | **13** | **6** | **~35** |
 | M6 (online booking) | 13 | 6 | ~38 (existing presets gain customer-facing entry) |
 | M7 (rentals) | 15 | 7 | ~42 |
 | M8 (customer portal) | 15 | 7 | ~42 (all verticals gain customer self-service) |
@@ -640,7 +651,7 @@ Not all milestones should be built speculatively. The decision framework:
 
 | Milestone | Build When |
 |-----------|-----------|
-| **M5 (weight selling)** | Before next marketing push — it's cheap and broadens the pitch |
+| ~~**M5 (weight selling)**~~ | ~~Before next marketing push — it's cheap and broadens the pitch~~ **DONE 2026-04-14** |
 | **M6 (online booking)** | When any appointment-based tenant asks "can my customers book online?" |
 | **M7 (rentals)** | When a rental business signs up or expresses interest |
 | **M8 (customer portal)** | When 5+ tenants are active — it's a retention/stickiness play |

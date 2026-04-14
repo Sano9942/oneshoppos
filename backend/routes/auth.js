@@ -221,6 +221,9 @@ module.exports = function registerAuthRoutes(app, deps) {
           dashboard_widgets: presetConfig.dashboard_widgets,
           onboarding_steps: presetConfig.onboarding_steps,
           pos_layout_mode: presetConfig.pos_layout_mode,
+          pos_search_config: presetConfig.pos_search_config,
+          visible_report_groups: presetConfig.visible_report_groups,
+          unit_vocabulary: presetConfig.unit_vocabulary,
           enabled_modes: enabledModes,
         };
       } catch {

@@ -289,6 +289,13 @@ module.exports = function registerSalesRoutes(app, deps) {
 
           // Restore stock for each item back to the outlet
           for (const item of items) {
+            // M5: sale_items.quantity is NUMERIC(10,3) (pg returns it as string).
+            // outlet_stock.quantity + product_variants.stock are still INTEGER,
+            // so we round UP on restore — mirrors the Math.ceil deduction path
+            // in the sale-creation flow above. Loses fractional precision on
+            // weighted items (acceptable for v1 — see M5 plan out-of-scope).
+            const restoreQtyInt = Math.ceil(Number(item.quantity));
+
             // Check if this item is a bundle — restore component stock instead
             const { rows: [prod] } = await client.query(
               "SELECT is_bundle FROM products WHERE id = $1",
@@ -301,7 +308,7 @@ module.exports = function registerSalesRoutes(app, deps) {
                 [item.product_id]
               );
               for (const comp of comps) {
-                const restoreQty = comp.quantity * item.quantity;
+                const restoreQty = comp.quantity * restoreQtyInt;
                 await client.query(
                   `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, $2, $3)
                    ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
@@ -318,14 +325,14 @@ module.exports = function registerSalesRoutes(app, deps) {
               await client.query(
                 `INSERT INTO outlet_stock (product_id, outlet_id, quantity) VALUES ($1, $2, $3)
                  ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
-                [item.product_id, sale.outlet_id, item.quantity, item.quantity]
+                [item.product_id, sale.outlet_id, restoreQtyInt, restoreQtyInt]
               );
 
               // Restore variant global stock if item has a variant
               if (item.variant_id) {
                 await client.query(
                   `UPDATE product_variants SET stock = stock + $1 WHERE id = $2`,
-                  [item.quantity, item.variant_id]
+                  [restoreQtyInt, item.variant_id]
                 );
               }
             }
