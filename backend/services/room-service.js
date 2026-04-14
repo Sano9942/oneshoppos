@@ -719,11 +719,18 @@ async function markNoShow(db, id) {
 
 // ── Folios ────────────────────────────────────────────────────────
 
+function normalizeDate(d) {
+  if (!d) return null;
+  if (typeof d === "string") return d.slice(0, 10);
+  if (d instanceof Date) return d.toISOString().slice(0, 10);
+  return String(d).slice(0, 10);
+}
+
 async function openFolioInternal(client, booking) {
   const { nights, rate_breakdown, subtotal } = await calculateStayTotal(client, {
     roomTypeId: booking.room_type_id,
-    checkIn: booking.check_in_date,
-    checkOut: booking.check_out_date,
+    checkIn: normalizeDate(booking.check_in_date),
+    checkOut: normalizeDate(booking.check_out_date),
   });
   const { rows: [folio] } = await client.query(
     `INSERT INTO guest_folios (booking_id, status, room_charge_total, grand_total)

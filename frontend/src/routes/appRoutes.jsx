@@ -94,6 +94,7 @@ const ProjectsRoute = lazy(() => import("../pages/ProjectsRoute"));
 const ContractsRoute = lazy(() => import("../pages/ContractsRoute"));
 const ServiceTicketsRoute = lazy(() => import("../pages/ServiceTicketsRoute"));
 const RentalsRoute = lazy(() => import("../pages/RentalsRoute"));
+const RoomManagementRoute = lazy(() => import("../pages/RoomManagementRoute"));
 
 const wrap = (Component) => <Suspense fallback={<RouteLoading />}><Component /></Suspense>;
 const perm = (p, el) => <RequirePerm perm={p}>{el}</RequirePerm>;
@@ -232,5 +233,12 @@ export const appRoutes = [
     <Route path="/rentals/items" element={perm("manage_rentals", wrap(RentalsRoute))} />
     <Route path="/rentals/contracts" element={perm("manage_rentals", wrap(RentalsRoute))} />
     <Route path="/rentals/timeline" element={perm("manage_rentals", wrap(RentalsRoute))} />
+
+    {/* M9 — Room management */}
+    <Route path="/rooms" element={perm("manage_rooms", wrap(RoomManagementRoute))} />
+    <Route path="/rooms/rates" element={perm("manage_rooms", wrap(RoomManagementRoute))} />
+    <Route path="/rooms/bookings" element={perm("manage_rooms", wrap(RoomManagementRoute))} />
+    <Route path="/rooms/calendar" element={perm("manage_rooms", wrap(RoomManagementRoute))} />
+    <Route path="/rooms/arrivals-departures" element={perm("manage_rooms", wrap(RoomManagementRoute))} />
   </Route>,
 ];

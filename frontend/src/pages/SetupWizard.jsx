@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Package, ChefHat, Scissors, ShoppingCart, Coffee, Stethoscope, Wrench, Dumbbell, Warehouse, Camera, Beef, Candy, Shirt, Car, HardHat, Sofa, Sparkles } from "lucide-react";
+import { Package, ChefHat, Scissors, ShoppingCart, Coffee, Stethoscope, Wrench, Dumbbell, Warehouse, Camera, Beef, Candy, Shirt, Car, HardHat, Sofa, Sparkles, BedDouble, Home, Building } from "lucide-react";
 import { api } from "../api";
 
 const BUSINESS_TYPE_CATEGORIES = [
@@ -44,6 +44,14 @@ const BUSINESS_TYPE_CATEGORIES = [
       { value: "equipment_hire", label: "Equipment Hire / Tool Rental", description: "Track assets, hourly/daily/weekly rates", icon: HardHat, iconBg: "bg-yellow-100", iconColor: "text-yellow-700" },
       { value: "furniture_rental", label: "Furniture / Events Rental", description: "Event rentals with deposit & late-fee tracking", icon: Sofa, iconBg: "bg-emerald-100", iconColor: "text-emerald-700" },
       { value: "party_supplies", label: "Party Supplies / Event Rental", description: "Checkout, return, and return-condition flows", icon: Sparkles, iconBg: "bg-fuchsia-100", iconColor: "text-fuchsia-600" },
+    ],
+  },
+  {
+    label: "Hospitality",
+    types: [
+      { value: "hotel", label: "Hotel", description: "Rooms, folios, housekeeping, overnight stays", icon: BedDouble, iconBg: "bg-violet-100", iconColor: "text-violet-600" },
+      { value: "guesthouse", label: "Guesthouse / B&B", description: "Small-property bookings with per-date rates", icon: Home, iconBg: "bg-cyan-100", iconColor: "text-cyan-600" },
+      { value: "hostel", label: "Hostel", description: "Bed inventory, open folios, group stays", icon: Building, iconBg: "bg-teal-100", iconColor: "text-teal-700" },
     ],
   },
 ];

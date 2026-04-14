@@ -31,6 +31,9 @@ const INDUSTRY_OPTIONS = [
   { value: "equipment_hire", label: "Equipment Hire / Tool Rental" },
   { value: "furniture_rental", label: "Furniture / Events Rental" },
   { value: "party_supplies", label: "Party Supplies / Event Rental" },
+  { value: "hotel", label: "Hotel" },
+  { value: "guesthouse", label: "Guesthouse / B&B" },
+  { value: "hostel", label: "Hostel" },
 ];
 
 const DEFAULT_FORM = {

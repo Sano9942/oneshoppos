@@ -72,6 +72,9 @@ const LABELS = {
   rentals: "Rentals",
   items: "Items",
   timeline: "Timeline",
+  rooms: "Rooms",
+  rates: "Rates",
+  "arrivals-departures": "Arrivals / Departures",
 };
 
 const SKIP = ["/dashboard", "/pos", "/kiosk", "/customer-display"];

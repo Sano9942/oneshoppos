@@ -109,6 +109,25 @@ function buildSteps(data, onNavigate, presetSteps, labelFn) {
       done: false,
       navigate: () => onNavigate("/rentals/contracts"),
     },
+    // M9 — Room management
+    room: {
+      id: "room",
+      label: "Add rooms and room types",
+      done: false,
+      navigate: () => onNavigate("/rooms"),
+    },
+    rate: {
+      id: "rate",
+      label: "Set your nightly rates",
+      done: false,
+      navigate: () => onNavigate("/rooms/rates"),
+    },
+    checkin: {
+      id: "checkin",
+      label: "Check in your first guest",
+      done: false,
+      navigate: () => onNavigate("/rooms/bookings"),
+    },
   };
 
   return presetSteps.map((key) => ALL_STEPS[key]).filter(Boolean);

@@ -195,6 +195,16 @@ export const SHOPIFY_NAV_GROUPS = [
     ],
   },
   {
+    label: "Rooms",
+    items: [
+      { name: "Rooms", path: "/rooms", icon: Package, requiredPerm: "manage_rooms", requiredFlag: "phase4_room_management", requiredMode: "room_management" },
+      { name: "Rates", path: "/rooms/rates", icon: Receipt, requiredPerm: "manage_rooms", requiredFlag: "phase4_room_management", requiredMode: "room_management" },
+      { name: "Bookings", path: "/rooms/bookings", icon: FileSignature, requiredPerm: "manage_rooms", requiredFlag: "phase4_room_management", requiredMode: "room_management" },
+      { name: "Calendar", path: "/rooms/calendar", icon: Calendar, requiredPerm: "manage_rooms", requiredFlag: "phase4_room_management", requiredMode: "room_management" },
+      { name: "Arrivals/Departures", path: "/rooms/arrivals-departures", icon: CalendarDays, requiredPerm: "manage_rooms", requiredFlag: "phase4_room_management", requiredMode: "room_management" },
+    ],
+  },
+  {
     label: "Online Store",
     items: [
       { name: "View Storefront", path: "__STOREFRONT__", icon: MonitorPlay, newTab: true },

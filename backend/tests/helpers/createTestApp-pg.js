@@ -78,6 +78,7 @@ const DEFAULT_FEATURE_FLAGS = {
   phase4_service_contracts: true,
   phase4_workflow_tickets: true,
   phase4_rentals: true,
+  phase4_room_management: true,
 };
 
 const PERMISSION_RULES = [
