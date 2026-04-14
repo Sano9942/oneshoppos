@@ -1,7 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const { getPreset, VALID_INDUSTRY_TYPES } = require("../../config/industry-config");
-const { getFeatureFlagsForModes } = require("../../config/mode-registry");
+const { getFeatureFlagsForModes, VALID_MODES } = require("../../config/mode-registry");
 const { invalidateModeCache, invalidateFeatureFlagCache } = require("../../middleware/feature-flags");
 
 module.exports = function createCompanyProfileRouter({
@@ -150,13 +150,12 @@ module.exports = function createCompanyProfileRouter({
             );
           }
 
-          // Disable all mode-related flags first, then enable the new preset's
-          const ALL_MODE_FLAGS = [
-            "phase4_restaurant", "phase4_restaurant_kds",
-            "phase4_appointments", "phase2_commissions",
-            "phase4_service_projects", "phase4_service_contracts",
-            "subscription_billing", "phase4_workflow_tickets",
-          ];
+          // Disable all mode-related flags first, then enable the new preset's.
+          // Derived from MODE_REGISTRY so adding a new mode auto-extends the
+          // reset list — no more missed-a-flag bugs when a new mode ships
+          // (see M7 post-mortem: phase4_rentals was missed from the old
+          // hardcoded array, leaving stale flags on production tenants).
+          const ALL_MODE_FLAGS = getFeatureFlagsForModes(VALID_MODES);
           for (const flagKey of ALL_MODE_FLAGS) {
             await db.query(
               `INSERT INTO feature_flags (key, enabled) VALUES ($1, false) ON CONFLICT (key) DO UPDATE SET enabled = false`,

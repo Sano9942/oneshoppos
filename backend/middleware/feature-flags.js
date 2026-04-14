@@ -58,7 +58,9 @@ const DEFAULT_FEATURE_FLAGS = {
   phase4_service_contracts: true,
   phase4_contract_ai: false,
   phase4_workflow_tickets: true,
-  phase4_rentals: true,
+  // Mode-gated: flipped ON only by setup/company-profile when a rental preset
+  // is selected. Leaving globally ON would show rental nav to retail tenants.
+  phase4_rentals: false,
   // Phase 5 — Pakistan Integration Depth
   phase5_shipping_automation: false,
   phase5_cod_reconciliation: false,

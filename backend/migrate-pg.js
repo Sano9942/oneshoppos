@@ -3037,8 +3037,10 @@ const MIGRATIONS = [
       await client.query(`CREATE INDEX IF NOT EXISTS idx_rental_contract_activities_contract ON rental_contract_activities(contract_id)`);
 
       // ── Feature flag ──────────────────────────────────────────────
+      // Seeded as FALSE — mode-gated flag, flipped ON only when a rental
+      // preset is selected during setup or via company-profile industry edit.
       await client.query(`
-        INSERT INTO feature_flags (key, enabled) VALUES ('phase4_rentals', true)
+        INSERT INTO feature_flags (key, enabled) VALUES ('phase4_rentals', false)
         ON CONFLICT (key) DO NOTHING
       `);
     },
