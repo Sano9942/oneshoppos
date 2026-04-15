@@ -47,18 +47,36 @@ async function provision(db, { slug, name, ownerEmail, timezone, pin }) {
   // Defense-in-depth: convert any hyphens to underscores for Postgres schema name safety
   const safeSlug = slug.replace(/-/g, "_");
   const schemaName = `tenant_${safeSlug}`;
+  const crypto = require("crypto");
+  const setupToken = crypto.randomBytes(32).toString("hex");
+  const pinHash = await bcrypt.hash(String(pin), BCRYPT_ROUNDS);
 
-  // Step 1: Create schema
+  // Step 1 — create schema. Autocommit on purpose: CREATE SCHEMA IF NOT EXISTS
+  // is not rolled back cleanly on some PgBouncer configurations, so we do it
+  // outside the transaction. The schema becomes an "orphan" only if the
+  // subsequent transaction fails AND the explicit DROP SCHEMA cleanup below
+  // also fails — at which point `GET /api/admin/orphaned-schemas` picks it up.
   await db.query(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
 
-  // Step 2: Run DDL in the new schema
   const client = await db.getClient();
   try {
-    await client.query(`SET search_path = '${schemaName}'`);
+    // --- Tenant schema: DDL + seed (all inside ONE transaction on ONE client) ---
+    //
+    // Why SET LOCAL instead of session-level SET search_path:
+    //   Supabase uses PgBouncer transaction-mode pooling. Session-level SET
+    //   persists on the connection and can leak to another caller after
+    //   release(). SET LOCAL scopes to the current transaction and reverts
+    //   automatically on COMMIT/ROLLBACK — no leakage possible.
+    //
+    // Why a single BEGIN…COMMIT covering everything:
+    //   Previously the 7 seed INSERTs ran autocommit. Any mid-sequence failure
+    //   left partial rows in the tenant schema, and retries on the same
+    //   connection hit unique-key violations ('roles_name_key', 'taxes_name_key')
+    //   or dangling FK errors ('employee_outlets_outlet_id_fkey'). One atomic
+    //   unit = either everything seeds or nothing does.
+    await client.query("BEGIN");
+    await client.query(`SET LOCAL search_path = '${schemaName}'`);
     await client.query(SCHEMA_SQL);
-
-    // Step 3: Seed data
-    const pinHash = await bcrypt.hash(String(pin), BCRYPT_ROUNDS);
 
     // Outlet
     const outletRes = await client.query(
@@ -95,8 +113,6 @@ async function provision(db, { slug, name, ownerEmail, timezone, pin }) {
     );
 
     // Company profile with setup token
-    const crypto = require("crypto");
-    const setupToken = crypto.randomBytes(32).toString("hex");
     await client.query(
       `INSERT INTO company_profile (id, company_name, timezone, setup_token, setup_token_expires_at, setup_complete)
        VALUES (1, $1, $2, $3, NOW() + INTERVAL '48 hours', false)
@@ -109,11 +125,11 @@ async function provision(db, { slug, name, ownerEmail, timezone, pin }) {
       "INSERT INTO taxes (name, rate) VALUES ('Default Tax', 0)"
     );
 
-    // Reset search_path
-    await client.query("SET search_path = 'public'");
+    await client.query("COMMIT");
 
-    // Step 4: Register in public.tenants + audit log (transaction)
+    // --- Public master: tenants + audit (separate transaction, separate schema) ---
     await client.query("BEGIN");
+    await client.query("SET LOCAL search_path = 'public'");
     const tenantRes = await client.query(
       `INSERT INTO tenants (slug, name, owner_email, timezone)
        VALUES ($1, $2, $3, $4)
@@ -131,7 +147,9 @@ async function provision(db, { slug, name, ownerEmail, timezone, pin }) {
 
     return { tenantId, employeeId, outletId, setupToken };
   } catch (err) {
-    // Attempt to drop the schema on failure
+    // Roll back whichever transaction is open, then drop the schema to keep
+    // the orphan list clean. Both cleanup operations are best-effort —
+    // orphaned-schemas admin endpoint is the safety net.
     await client.query("ROLLBACK").catch(() => {});
     await client.query(`DROP SCHEMA IF EXISTS ${schemaName} CASCADE`).catch(() => {});
     throw err;
