@@ -315,7 +315,7 @@ const PAIN_POINTS = [
     icon: Zap,
     title: "All Features. Every Plan.",
     problem: "Competitors charge PKR 5,000-15,000/month and lock features behind paid tiers.",
-    solution: "Every feature is included on every plan — Free and Pro. No feature locks. No surprises. Pro removes capacity limits at PKR 8,000/mo per outlet — add as many outlets as your business needs.",
+    solution: "Every feature is included on every plan — Free and Pro. No feature locks. No surprises. Pro starts at PKR 8,000/month per outlet. Add extra outlets as paid add-ons whenever your business grows.",
   },
   {
     icon: BarChart3,
@@ -550,7 +550,7 @@ const PLANS = [
     price: "PKR 8,000",
     period: "/month per outlet",
     desc: "For growing businesses that need more capacity",
-    features: ["Add as many outlets as you need (billed per outlet)", "Unlimited employees", "Unlimited products", "All integrations", "Priority support", "45-day free trial"],
+    features: ["Extra outlets available as paid add-ons", "Unlimited employees", "Unlimited products", "All integrations", "Priority support", "45-day free trial"],
     cta: "Start Free Trial",
     plan: "pro",
     highlight: true,

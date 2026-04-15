@@ -11,6 +11,7 @@ import ContextSelect from "../pages/ContextSelect";
 import RouteLoading from "./RouteLoading";
 
 const POSRoute = lazy(() => import("../pages/POSRoute"));
+const LandingPagePreview = lazy(() => import("../pages/LandingPagePreview"));
 const KioskRedesign = lazy(() => import("../pages/redesign/KioskRedesign"));
 const CustomerDisplayPage = lazy(() => import("../pages/CustomerDisplayPage"));
 const ReceiptPublicPage = lazy(() => import("../pages/ReceiptPublicPage"));
@@ -64,11 +65,16 @@ function HomeRedirect() {
 
   if (isBootstrapping) return null;
   if (isAuthenticated) return <Navigate to="/context-select" replace />;
-  return <LandingPage />;
+  return (
+    <Suspense fallback={<RouteLoading />}>
+      <LandingPagePreview />
+    </Suspense>
+  );
 }
 
 export const publicRoutes = [
   <Route key="home" path="/" element={<HomeRedirect />} />,
+  <Route key="landing-preview" path="/landing-preview" element={<Suspense fallback={<RouteLoading />}><LandingPagePreview /></Suspense>} />,
   <Route key="setup" path="/setup" element={<SetupWizard />} />,
   <Route key="login" path="/login" element={<LandingPage />} />,
   <Route key="reset-password" path="/reset-password" element={<Suspense fallback={<RouteLoading />}><ResetPassword /></Suspense>} />,
