@@ -1,7 +1,7 @@
 # Tenant Preset Engine v1 — Strategy & Implementation Specification
 
 **Date:** 2026-04-13 (last updated 2026-04-15)
-**Status:** v1 COMPLETE (M1-M4, 2026-04-14). v2 IN PROGRESS — M5, M6, M7 shipped 2026-04-14; M8, M9 shipped 2026-04-15.
+**Status:** v1 COMPLETE (M1-M4, 2026-04-14). v2 IN PROGRESS — M5, M6, M7 shipped 2026-04-14; M8, M9, M10 shipped 2026-04-15.
 
 ---
 
@@ -491,26 +491,27 @@ CREATE TABLE IF NOT EXISTS tenant_modes (
 10. ~~**Execute Milestone 7** — Rentals mode: `rentals` business mode + 4 asset-rental presets (car_rental, equipment_hire, furniture_rental, party_supplies_rental), 5 new tables, 18 endpoints, 3-tab UI with Gantt timeline, overdue worker + email, 41 new automated tests~~ Done 2026-04-14 (commits `2afaf2d` + `8f94816` test fixup + `6688a43` mode-flag reset hardening, migration v36, 21 files touched)
 11. ~~**Execute Milestone 8** — Customer portal at `/portal/:tenantSlug`: email+password / email-OTP auth, preset-driven tabs, invoice pay (reuses `customer_invoice_payment_links` + existing webhook Context 2), self-service appointments (book/reschedule/cancel), profile + addresses editing, 8 new email templates, 34 new automated tests~~ Done 2026-04-15 (commit `cb41110`, migration v37 applied to public + all 3 tenant schemas on Railway, 30 files touched)
 12. ~~**Execute Milestone 9** — Room Management mode: `room_management` business mode + 3 hospitality presets (hotel, guesthouse, hostel), 6 new tables (room_types, rooms, room_rate_overrides, room_bookings, guest_folios, folio_lines) + `sales.folio_id` column, ~25 endpoints, 5-tab UI (Rooms, Rates, Bookings, Calendar Gantt, Arrivals/Departures), POS "Charge to room" context picker, customer portal "My Stays" tab, adapter-agnostic deposit pre-auth via `payment-gateway.js` (works with sandbox, xpay, manual), overdue-checkout worker, 5 email templates, 57 new automated tests (37 unit + 20 integration)~~ Done 2026-04-15 (commits `b861755` + `f559fdd`, migration v38, 34 files touched)
+13. ~~**Execute Milestone 10** — Treatment Plans mode: `treatment_plans` business mode + 3 clinical presets (dental_clinic, veterinary, physiotherapy), 13 new tables (patient_subjects, treatment_plans, treatment_sessions, vital_signs, prescriptions, chart_areas, session_chart_entries, lab_orders, consent_forms, clinical_documents, treatment_folios, treatment_folio_lines, treatment_plan_activities) + 3 column additions (customers: diagnosis_history/current_medications/primary_provider_id; appointments: treatment_plan_id/treatment_session_id; sales: treatment_folio_id), ~30 endpoints, 7-tab plan detail UI (Overview / Sessions / Chart / Labs / Consent / Documents / Folio) + DentalChart SVG component + BodyChart region grid, POS "Charge to treatment plan" context picker, customer portal "Treatment Plans" tab with whitelisted SOAP subjective + chart + prescriptions + shared-only labs/docs, adapter-agnostic deposit pre-auth on plans, reminder+overdue worker, 6 email templates, 5 clinical report endpoints, 104 new automated tests (47 backend unit + 28 integration plan lifecycle + 8 integration sandbox deposit + 11 frontend unit + 10 Playwright scope)~~ Done 2026-04-15 (migration v39 with seeded chart_areas, ~40 files touched)
 
 **Preset Engine v1 is COMPLETE.** All 4 milestones delivered. 10 industry presets, 10 adaptation surfaces, 6 business modes, 23 country packs.
 
-**Preset Engine v2 is IN PROGRESS.** M5, M6, M7, M8, M9 shipped between 2026-04-14 and 2026-04-15 — now at **20 presets, 8 business modes, ~45 industries covered**. Every appointment-based tenant has a public booking URL, rental businesses (car hire, equipment, furniture, party supplies) are fully supported with asset tracking + overdue alerts, every vertical has a customer portal at `/portal/:slug` for invoice pay, appointment self-service, and account management, and **hotels / guesthouses / hostels** are fully supported with room inventory, per-date rate overrides, guest folios (with POS charge-to-room), housekeeping status, and adapter-agnostic security deposits.
+**Preset Engine v2 is IN PROGRESS.** M5, M6, M7, M8, M9, M10 shipped between 2026-04-14 and 2026-04-15 — now at **23 presets, 9 business modes, ~48 industries covered**. Every appointment-based tenant has a public booking URL, rental businesses are fully supported with asset tracking + overdue alerts, every vertical has a customer portal at `/portal/:slug` for invoice pay, appointment self-service, and account management, hotels / guesthouses / hostels are fully supported with room inventory + folios, and **dental clinics, veterinary practices, physiotherapy clinics** have a full multi-visit treatment plan platform: plan lifecycle (draft → active → on_hold → completed → invoiced), per-tooth/per-body-region charting, SOAP visit notes, vital signs, prescription pad, lab order tracking with patient-share toggle, consent forms with signature capture, R2-backed clinical document uploads (50MB cap), pet/dependent subject entities, and plan folios that consolidate session fees + POS charges into a single settle-and-invoice action.
 
 ---
 
 ## 12. Preset Engine v2 Roadmap — Expanding Industry Coverage
 
-### Current Coverage (v1 + M5 + M6 + M7 + M8 + M9)
+### Current Coverage (v1 + M5 + M6 + M7 + M8 + M9 + M10)
 
 | What | Count | Details |
 |------|-------|---------|
-| Industry presets | 20 | retail, grocery, wholesale, restaurant, cafe, salon, clinic, repair_shop, gym, photography_studio, butcher, sweet_shop, textile (M5), car_rental, equipment_hire, furniture_rental, party_supplies_rental (M7), **hotel, guesthouse, hostel** (M9) |
-| Business modes | 8 | retail, restaurant, appointments, service_projects, subscriptions, workflow_tickets, rentals (M7), **room_management** (M9) |
+| Industry presets | 23 | retail, grocery, wholesale, restaurant, cafe, salon, clinic, repair_shop, gym, photography_studio, butcher, sweet_shop, textile (M5), car_rental, equipment_hire, furniture_rental, party_supplies_rental (M7), hotel, guesthouse, hostel (M9), **dental_clinic, veterinary, physiotherapy** (M10) |
+| Business modes | 9 | retail, restaurant, appointments, service_projects, subscriptions, workflow_tickets, rentals (M7), room_management (M9), **treatment_plans** (M10) |
 | Country packs | 23 | PK, US, GB, CA, AU, IN, AE, SA, BD, NG, KE, GH, ZA, EG, DE, FR, NL, SG, MY, ID, PH, NZ, OTHER |
-| Adaptation surfaces | 15 | Nav, labels, dashboard widgets, POS layout, onboarding, receipts, reports, POS search, sample data, clinic fields, unit vocabulary / weight-based selling (M5), public booking labels (M6), rental asset/contract UX (M7), portal labels + per-preset tab list (M8), **room inventory + rate calendar + folio UX** (M9) |
-| Public customer-facing surfaces | 3 | Public receipt URL (v1), public booking page at `/book/:slug` with per-preset labels, share link UI, ICS download, confirmation email (M6), customer portal at `/portal/:slug` with preset-driven tabs, invoice pay, self-service appointments, profile/address editing (M8), **"My Stays" portal tab** with past/upcoming bookings and linked invoices (M9) |
+| Adaptation surfaces | 16 | Nav, labels, dashboard widgets, POS layout, onboarding, receipts, reports, POS search, sample data, clinic fields, unit vocabulary / weight-based selling (M5), public booking labels (M6), rental asset/contract UX (M7), portal labels + per-preset tab list (M8), room inventory + rate calendar + folio UX (M9), **clinical_config (chart preset + subject type default + consent templates)** (M10) |
+| Public customer-facing surfaces | 3 | Public receipt URL (v1), public booking page at `/book/:slug` with per-preset labels, share link UI, ICS download, confirmation email (M6), customer portal at `/portal/:slug` with preset-driven tabs, invoice pay, self-service appointments, profile/address editing (M8), "My Stays" portal tab with past/upcoming bookings and linked invoices (M9), **"Treatment Plans" portal tab** with plan/session timeline, whitelisted SOAP subjective, prescriptions, chart (read-only), consent PDFs, and shared-only lab results/documents (M10) |
 
-The 20 presets now cover **~45 of 54 industries** (up from 42 — M9 adds 3 hospitality verticals on the new `room_management` mode). M9 ships a full hotel operating model: unique room inventory (not asset pool), per-date rate overrides (weekend/seasonal pricing), open-tab guest folios that accumulate room-night + POS charges during the stay, housekeeping status, overdue-checkout alerts, and adapter-agnostic deposit pre-auth (via `payment-gateway.js` — works with `sandbox`, `xpay`, or `manual`). The remaining ~9 industries need new operational capabilities (manufacturing, treatment plans) before we can add presets without them being hollow labels.
+The 23 presets now cover **~48 of 54 industries** (up from 45 — M10 adds 3 clinical verticals on the new `treatment_plans` mode). M10 ships a full multi-visit clinical platform: plan lifecycle with status machine (draft → active → on_hold → completed → invoiced), per-tooth dental charting (32 adult + 20 primary, Universal numbering) + body-region chart for physio + simplified canine/feline vet anatomy chart, SOAP visit notes captured in one tx alongside vital signs + prescriptions + chart entries, lab orders with patient-share toggle, consent forms with signature capture (R2-backed), clinical document uploads up to 50 MB, `patient_subjects` pet/dependent entities, and plan folios parallel to M9 room folios that consolidate session fees + POS charges into a single settle-and-invoice flow. Adapter-agnostic deposit pre-auth on plans uses the same `payment-gateway.js` dispatch pattern as M9 — sandbox, xpay, and manual all work. The remaining ~6 industries need a `manufacturing` mode before we can add presets without them being hollow labels.
 
 ### What's Missing — Three Tiers
 
@@ -529,7 +530,7 @@ The 20 presets now cover **~45 of 54 industries** (up from 42 — M9 adds 3 hosp
 | ~~`rentals`~~ | ~~Car rental, equipment hire, party supplies, camera gear rental (~4 industries)~~ | ~~2 weeks~~ | **DONE M7 (2026-04-14)** — Asset register (items with serial numbers), check-out/return workflow, duration-based pricing (hourly/daily/weekly), deposit hold + release, overdue tracking, damage assessment on return |
 | ~~`room_management`~~ | ~~Hotel, guesthouse, hostel (~3 industries)~~ | ~~2 weeks~~ | **DONE M9 (2026-04-15)** — Room inventory (type/floor/capacity — not product inventory), date-range availability calendar (not time-slot appointments), check-in/check-out status board, housekeeping status, rate calendar (seasonal/weekend pricing), guest folio (tab of charges across stay), adapter-agnostic deposit pre-auth |
 | `manufacturing` | Small factory, bakery production, packaging unit (~2 industries) | 2 weeks | Bill of materials (BOM — recipe of inputs per output), work orders (produce X units of Y), input consumption tracking (deduct raw materials on production), cost roll-up (actual cost per unit produced) |
-| `treatment_plans` | Dental clinic, veterinary, physiotherapy (~3 industries) | 2 weeks | Multi-visit treatment plan (plan → sessions → completion), per-tooth/per-area charting (dental), medical history timeline (richer than the 6 M4 clinic fields), lab order integration, consent forms |
+| ~~`treatment_plans`~~ | ~~Dental clinic, veterinary, physiotherapy (~3 industries)~~ | ~~2.5–3 weeks~~ | **DONE M10 (2026-04-15)** — Multi-visit plan lifecycle (draft → active → on_hold → completed → invoiced), per-tooth dental chart (32 adult + 20 primary, Universal notation) + body-region chart for physio + simplified dog/cat anatomy for vet, SOAP session notes, vital signs, prescription pad, lab order tracking with patient-share toggle, consent forms with signature capture, R2-backed clinical document uploads (50MB), pet/dependent subjects, plan folios with deposit pre-auth, reminder+overdue worker, 6 email templates, 5 clinical report endpoints |
 
 **Tier 3: Platform Capabilities** — cross-cutting features that multiple industries need, not a single mode.
 
@@ -715,7 +716,54 @@ These features were scoped out of M9 to keep the milestone at ~2 weeks. Each is 
 
 **Build triggers for deferred items:** Do not build speculatively. Follow the table above — each deferred feature has a concrete signal (tenant sign-up, real-world usage data, pain reported) that justifies the work.
 
-#### Milestone 10: Manufacturing Mode (if factory demand exists)
+#### Milestone 10: Treatment Plans Mode — Deferrals (shipped 2026-04-15)
+
+M10 delivered the full clinical suite as planned, but a few items were scoped out during implementation or left as TODOs. Pick these up when bandwidth frees OR when the first clinical tenant reports friction against them.
+
+**Category A — Deferred per plan §13 (unchanged from original scope):**
+
+| # | Deferred Feature | Why deferred | When to build |
+|---|-----------------|--------------|---------------|
+| A1 | **ICD-10 / SNOMED autocomplete** on diagnosis codes | v1 uses free-text `diagnosis_code`. Autocomplete requires an external terminology service subscription. | When a tenant needs insurance-claim-ready coding |
+| A2 | **E-prescribing direct-to-pharmacy** | Pakistan has no nationwide e-prescription API; country-specific regulation varies. | When we ship in a country with e-Rx infrastructure |
+| A3 | **Insurance claim generation** (X12 837 in US, local schemes elsewhere) | Requires country-specific claim format. | Bundle with a country-pack "insurance integration" milestone |
+| A4 | **DICOM imaging viewer** | Medical imaging format. v1 accepts images as regular R2 file attachments. | When a tenant imports real X-rays/CTs and needs DICOM-native viewing |
+| A5 | **AI drug-interaction warnings** | Clinical decision support layer. | Layer onto `ai_insights` flag when AI infra matures |
+| A6 | **Multi-provider SOAP co-signing** | Single-provider per session in v1. | When a teaching-hospital-style tenant signs up |
+| A7 | **Recurring plan templates** ("Standard root canal plan" library) | Plan-create-from-template flow + template CRUD. | ~1 week task. Pick up when ≥ 3 clinical tenants live |
+| A8 | **Patient intake forms pre-visit via portal** | Portal v1 is view-only for clinical data. | Extension of portal self-service |
+| A9 | **Portal self-book for a plan session** | Portal self-book works for one-off appointments (M8). Booking a specific plan session from portal needs extra flow. | Small extension — half-day task |
+| A10 | **Dental perio chart** (pocket depth per tooth grid) | v1 chart is condition-marker only. Perio chart needs per-tooth 6-point grid UI. | When a periodontal-specialist dental tenant signs up |
+
+**Category B — Newly deferred during M10 execution (NOT in the original plan — flag for follow-up):**
+
+| # | Deferred Feature | What landed vs. what was planned | Impact | Effort |
+|---|-----------------|-----------------------------------|--------|--------|
+| B1 | **Frontend file split** | Plan called for 10 component files under `pages/redesign/treatment/`; shipped as internal components inside `TreatmentPlansRedesign.jsx` (~800 lines) + 2 separate chart files | Code organization only — works identically | 2–3 hours, pick up when file approaches 1500 lines |
+| B2 | **Signature canvas capture** | Consent backend accepts `signature_image_base64` → R2, but the UI records typed-name only — no HTML5 canvas signature pad | **Legal concern**: typed name is weaker evidence than a drawn signature. Acceptable for v1 but tighten before scale | Half day — add a signature-pad React component + pass base64 through existing endpoint |
+| B3 | **Customers page clinical extensions** (`CustomersRedesign.jsx`) | Plan §6 called for inline Subjects + Treatment Plans + medical-info extended fields sections on the customer detail page. **Not implemented.** Subjects can currently only be created via the "New Plan" modal's subject dropdown — no inline create. | **Real UX gap**: admin cannot manage pets/dependents outside the plan-create flow. Fix before first clinical tenant ships | 1 day — add 3 new sections with inline CRUD |
+| B4 | **POS "quick create plan" fallback** | POS charge-to-plan picker only shows if the customer already has an open plan. No inline "Create plan now" for walk-ins. | Minor — admin can open a plan from the customer page, then POS picker will populate | 2 hours |
+| B5 | **Onboard dental-clinic Playwright spec** (`onboard-dental-clinic.spec.js`) | Shipped `treatment-plans.spec.js` that verifies the negative case (retail tenant doesn't see Clinical nav) + route gating. The full onboarding + plan-lifecycle E2E that creates a real clinical tenant, walks the 13-step QA flow, then deletes the tenant was **not written**. | Test coverage gap for end-to-end smoke | 45–60 min — copy `onboard-pro.spec.js` structure, swap preset to `dental_clinic` |
+| B6 | **Calendar tab richness** | `CalendarTab` in `TreatmentPlansRedesign.jsx` is intentionally a stub (links to existing `/appointments/calendar`). Plan suggested a plan-focused calendar view. | None — appointments calendar already shows plan sessions via the `appointments.treatment_plan_id` FK | Skip unless a user reports friction |
+| B7 | **Setup wizard flag-flip verification** | Did NOT trace end-to-end that `routes/setup.js` flips `treatment_plans` mode + `phase4_treatment_plans` flag when a user selects a clinical preset in the wizard. Should work automatically via `getPreset().modes` + `getFeatureFlagsForModes()` since M9 hotel uses the same path, but not verified. | Test risk — broken wizard would make clinical presets unreachable via self-service | 20 min manual QA per §15 steps 2–8 |
+| B8 | **Vet body preset split** (delivered differently than plan) | Plan said `vet_body` single preset. **Shipped** `vet_body_canine` + `vet_body_feline` as two identical 15-region presets per clarification during execution. Species differentiation lives in `patient_subjects.species`. | None — this is an improvement, flagged here so no one "fixes" it back | Already done |
+| B9 | **Integration test boss.stop() cleanup** | `pg-treatment-plans.test.js` prints "Jest did not exit" warning — pg-boss timers + pool handles not explicitly closed. Matches behavior of all other `pg-*` integration tests in the suite. | Cosmetic — not a test failure | Low priority; whole suite would benefit from a shared teardown helper |
+| B10 | **Production migration rollout** | Migration v39 is in the repo but not yet applied to Railway / Supabase. Per rollout sequence §12, applies on next deploy via `start.sh`. | Expected — just needs a deploy + `node backend/scripts/reconcile-mode-flags.js` verification | Deploy day |
+
+**Priority ranking (recommended order):**
+
+1. **B3 (Customers page clinical sections)** — biggest admin UX gap, do before first clinical tenant ships
+2. **B2 (signature canvas)** — legal/compliance tightening, do before scale
+3. **B7 (setup wizard manual QA)** — 20-min validation, quick de-risk
+4. **B10 (prod migration deploy + reconcile-mode-flags)** — whenever next Railway deploy lands
+5. **B5 (onboard-dental-clinic.spec.js)** — nice for CI confidence
+6. **A7 (plan templates)** — first actual feature ask likely to surface from real tenants
+7. **B1 (file split), B4 (POS walk-in), B6 (calendar), B9 (test cleanup)** — only if pain reported
+8. **A1–A10 (original §13 deferrals)** — all wait for concrete customer signal
+
+#### Milestone 11: Manufacturing Mode (if factory demand exists)
+
+> **Note:** What was originally slotted as "Milestone 10" in this roadmap has been renumbered — M10 actually shipped as Treatment Plans (2026-04-15). The manufacturing mode below is now M11 and remains deferred with no changes to scope.
 
 **Goal:** Support small production/assembly businesses.
 
