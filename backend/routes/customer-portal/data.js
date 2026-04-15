@@ -31,6 +31,7 @@ const TAB_FEATURE_FLAGS = {
   subscriptions: "subscription_billing",
   contracts: "phase4_rentals",
   stays: "phase4_room_management",
+  treatments: "phase4_treatment_plans",
   tickets: "phase4_service_projects",
   orders: null,
   loyalty: null,

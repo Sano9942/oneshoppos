@@ -75,6 +75,9 @@ const LABELS = {
   rooms: "Rooms",
   rates: "Rates",
   "arrivals-departures": "Arrivals / Departures",
+  "treatment-plans": "Treatment Plans",
+  labs: "Lab Orders",
+  chart: "Chart",
 };
 
 const SKIP = ["/dashboard", "/pos", "/kiosk", "/customer-display"];

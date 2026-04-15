@@ -111,6 +111,10 @@ export const POSProvider = ({ children }) => {
   const [openBookings, setOpenBookings] = useState([]);
   const [openBookingsLoading, setOpenBookingsLoading] = useState(false);
 
+  // ── M10 Charge-to-plan (treatment_plans mode only) ──────────────────────
+  const [chargeToTreatmentFolioId, setChargeToTreatmentFolioId] = useState("");
+  const [openTreatmentPlans, setOpenTreatmentPlans] = useState([]);
+
   // ── Loyalty & Wallet (checkout) ───────────────────────────────────────────
   // TODO: make earn rate configurable from Company Settings
   const LOYALTY_EARN_RATE = 1; // 1 point per PKR 100 spent
@@ -466,6 +470,14 @@ export const POSProvider = ({ children }) => {
       .catch(() => setCheckoutWalletBalance(0))
       .finally(() => setCheckoutWalletLoading(false));
   }, [checkoutCustomerId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // M10 — fetch open treatment plans for this customer (silently noop if mode off)
+  useEffect(() => {
+    if (!checkoutCustomerId) { setOpenTreatmentPlans([]); setChargeToTreatmentFolioId(""); return; }
+    api.get("/api/treatment-plans", { customer_id: checkoutCustomerId, status: "active" })
+      .then((r) => setOpenTreatmentPlans(r.plans || []))
+      .catch(() => setOpenTreatmentPlans([]));
+  }, [checkoutCustomerId]);
 
   // ── Price list fetch on customer change ──────────────────────────────────
   useEffect(() => {
@@ -873,10 +885,11 @@ export const POSProvider = ({ children }) => {
   };
 
   const completeSale = async () => {
-    // M9: charge-to-room bypasses payment entry — skip the `remaining > 0` check
-    // because no payments are collected when the sale is billed to an open folio.
+    // M9/M10: charge-to-room or charge-to-plan bypasses payment entry — skip the
+    // `remaining > 0` check because no payments are collected when the sale is
+    // billed to an open folio.
     if (!selectedOutletId || !cart.length) return;
-    if (!chargeToRoomFolioId && remaining > 0) return;
+    if (!chargeToRoomFolioId && !chargeToTreatmentFolioId && remaining > 0) return;
     if (!activeShift) {
       setError("Cannot checkout until a shift is open.");
       return;
@@ -904,6 +917,7 @@ export const POSProvider = ({ children }) => {
       points_redeemed: checkoutCustomerId ? pointsRedeemed : 0,
       idempotency_key: crypto.randomUUID(),
       folio_id: chargeToRoomFolioId ? Number(chargeToRoomFolioId) : null,
+      treatment_folio_id: chargeToTreatmentFolioId ? Number(chargeToTreatmentFolioId) : null,
     };
 
     const queueSaleOffline = () => {
@@ -1319,6 +1333,10 @@ export const POSProvider = ({ children }) => {
     setChargeToRoomFolioId,
     openBookings,
     openBookingsLoading,
+    // M10 charge-to-plan
+    chargeToTreatmentFolioId,
+    setChargeToTreatmentFolioId,
+    openTreatmentPlans,
     handleLock,
     handleUnlock,
     recentSalesOpen,

@@ -34,6 +34,9 @@ const INDUSTRY_OPTIONS = [
   { value: "hotel", label: "Hotel" },
   { value: "guesthouse", label: "Guesthouse / B&B" },
   { value: "hostel", label: "Hostel" },
+  { value: "dental_clinic", label: "Dental Clinic" },
+  { value: "veterinary", label: "Veterinary Practice" },
+  { value: "physiotherapy", label: "Physiotherapy Clinic" },
 ];
 
 const DEFAULT_FORM = {

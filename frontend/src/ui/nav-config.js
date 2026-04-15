@@ -205,6 +205,14 @@ export const SHOPIFY_NAV_GROUPS = [
     ],
   },
   {
+    label: "Clinical",
+    items: [
+      { name: "Treatment Plans", path: "/treatment-plans/active", icon: ClipboardList, requiredPerm: "manage_treatment_plans", requiredFlag: "phase4_treatment_plans", requiredMode: "treatment_plans" },
+      { name: "Calendar", path: "/treatment-plans/calendar", icon: Calendar, requiredPerm: "manage_treatment_plans", requiredFlag: "phase4_treatment_plans", requiredMode: "treatment_plans" },
+      { name: "Lab Orders", path: "/treatment-plans/labs", icon: FileText, requiredPerm: "manage_treatment_plans", requiredFlag: "phase4_treatment_plans", requiredMode: "treatment_plans" },
+    ],
+  },
+  {
     label: "Online Store",
     items: [
       { name: "View Storefront", path: "__STOREFRONT__", icon: MonitorPlay, newTab: true },

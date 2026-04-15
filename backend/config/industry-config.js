@@ -572,6 +572,123 @@ const INDUSTRY_PRESETS = Object.freeze({
     visible_report_groups: ["Sales", "Customers", "Finance", "HR", "Governance"],
     pos_search_config: { show_barcode: false, show_sku: false, show_price: true },
   },
+  dental_clinic: {
+    industry_type: "dental_clinic",
+    business_model: "clinical_treatment",
+    display_name: "Dental Clinic",
+    modes: ["treatment_plans", "appointments"],
+    labels: {
+      product: "Procedure",
+      products: "Procedures",
+      customer: "Patient",
+      customers: "Patients",
+      sale: "Visit",
+      order: "Treatment Plan",
+    },
+    public_booking_labels: {
+      booking_cta: "Book a consultation",
+      service_singular: "Procedure",
+      staff_singular: "Dentist",
+      customer_singular: "Patient",
+    },
+    dashboard_widgets: {
+      inventory_alerts: false,
+      top_products: true,
+      trends: true,
+      attendance: true,
+      floor_plan: false,
+      appointments_today: true,
+      active_treatment_plans: true,
+      overdue_sessions: true,
+    },
+    onboarding_steps: ["store", "service", "employees", "calendar", "chart", "plan"],
+    pos_layout_mode: "list",
+    visible_report_groups: ["Sales", "Customers", "Finance", "HR", "Governance", "Clinical"],
+    pos_search_config: { show_barcode: false, show_sku: false, show_price: true },
+    clinical_config: {
+      chart_preset: "dental",
+      subject_type_default: "self",
+      consent_templates: ["general_treatment", "anaesthesia", "extraction", "implant"],
+    },
+  },
+  veterinary: {
+    industry_type: "veterinary",
+    business_model: "clinical_treatment",
+    display_name: "Veterinary Practice",
+    modes: ["treatment_plans", "appointments"],
+    labels: {
+      product: "Procedure",
+      products: "Procedures",
+      customer: "Owner",
+      customers: "Owners",
+      sale: "Visit",
+      order: "Treatment Plan",
+    },
+    public_booking_labels: {
+      booking_cta: "Book your pet",
+      service_singular: "Procedure",
+      staff_singular: "Veterinarian",
+      customer_singular: "Owner",
+    },
+    dashboard_widgets: {
+      inventory_alerts: false,
+      top_products: true,
+      trends: true,
+      attendance: true,
+      floor_plan: false,
+      appointments_today: true,
+      active_treatment_plans: true,
+      overdue_sessions: true,
+    },
+    onboarding_steps: ["store", "service", "employees", "calendar", "plan"],
+    pos_layout_mode: "list",
+    visible_report_groups: ["Sales", "Customers", "Finance", "HR", "Governance", "Clinical"],
+    pos_search_config: { show_barcode: false, show_sku: false, show_price: true },
+    clinical_config: {
+      chart_preset: "vet_body",
+      subject_type_default: "pet",
+      consent_templates: ["general_treatment", "anaesthesia", "surgery", "euthanasia"],
+    },
+  },
+  physiotherapy: {
+    industry_type: "physiotherapy",
+    business_model: "clinical_treatment",
+    display_name: "Physiotherapy Clinic",
+    modes: ["treatment_plans", "appointments"],
+    labels: {
+      product: "Service",
+      products: "Services",
+      customer: "Patient",
+      customers: "Patients",
+      sale: "Session",
+      order: "Treatment Plan",
+    },
+    public_booking_labels: {
+      booking_cta: "Book a session",
+      service_singular: "Service",
+      staff_singular: "Therapist",
+      customer_singular: "Patient",
+    },
+    dashboard_widgets: {
+      inventory_alerts: false,
+      top_products: true,
+      trends: true,
+      attendance: true,
+      floor_plan: false,
+      appointments_today: true,
+      active_treatment_plans: true,
+      overdue_sessions: true,
+    },
+    onboarding_steps: ["store", "service", "employees", "calendar", "plan"],
+    pos_layout_mode: "list",
+    visible_report_groups: ["Sales", "Customers", "Finance", "HR", "Governance", "Clinical"],
+    pos_search_config: { show_barcode: false, show_sku: false, show_price: true },
+    clinical_config: {
+      chart_preset: "body",
+      subject_type_default: "self",
+      consent_templates: ["general_treatment", "manual_therapy", "exercise_plan"],
+    },
+  },
 });
 
 const VALID_INDUSTRY_TYPES = Object.keys(INDUSTRY_PRESETS);
@@ -620,6 +737,7 @@ const DEFAULT_PORTAL_LABELS = Object.freeze({
   subscriptions_tab: "Subscriptions",
   contracts_tab: "Rentals",
   stays_tab: "My Stays",
+  treatments_tab: "Treatment Plans",
   tickets_tab: "Service Tickets",
   loyalty_tab: "Loyalty",
   wallet_tab: "Wallet",
@@ -652,6 +770,9 @@ const PORTAL_ENABLED_TABS_BY_PRESET = Object.freeze({
   hotel: ["stays", "invoices", "profile"],
   guesthouse: ["stays", "invoices", "profile"],
   hostel: ["stays", "invoices", "profile"],
+  dental_clinic: ["treatments", "appointments", "invoices", "loyalty", "profile"],
+  veterinary: ["treatments", "appointments", "invoices", "profile"],
+  physiotherapy: ["treatments", "appointments", "invoices", "profile"],
 });
 
 // Preset-specific portal label overrides. Missing keys fall back to defaults.
@@ -671,6 +792,9 @@ const PORTAL_LABEL_OVERRIDES = Object.freeze({
   hotel: { portal_title: "Guest Portal", dashboard_heading: "Welcome back", book_cta: "Book a stay" },
   guesthouse: { portal_title: "Guest Portal", dashboard_heading: "Welcome back", book_cta: "Book a room" },
   hostel: { portal_title: "Guest Portal", dashboard_heading: "Welcome back", book_cta: "Book a bed" },
+  dental_clinic: { treatments_tab: "My Treatment Plans", appointments_tab: "My Appointments", book_cta: "Book a consultation" },
+  veterinary: { treatments_tab: "Pet Treatment Plans", appointments_tab: "Appointments", book_cta: "Book your pet" },
+  physiotherapy: { treatments_tab: "My Treatment", appointments_tab: "Sessions", book_cta: "Book a session" },
 });
 
 function getPreset(industryType) {
@@ -710,6 +834,11 @@ function getPortalEnabledTabs(industryType) {
   return [...(PORTAL_ENABLED_TABS_BY_PRESET[key] || DEFAULT_PORTAL_TABS)];
 }
 
+function getClinicalConfig(industryType) {
+  const preset = getPreset(industryType);
+  return preset.clinical_config || null;
+}
+
 module.exports = {
   INDUSTRY_PRESETS,
   VALID_INDUSTRY_TYPES,
@@ -728,4 +857,5 @@ module.exports = {
   getPublicBookingLabels,
   getPortalLabels,
   getPortalEnabledTabs,
+  getClinicalConfig,
 };

@@ -670,6 +670,133 @@ function roomOverdueCheckout({ storeName, guestName, bookingNumber, roomNumber, 
   };
 }
 
+// -- M10 Treatment Plans --------------------------------------------------
+
+function treatmentPlanCreated({ storeName, customerName, planNumber, planTitle, totalSessions, depositAmount, nextSessionDate, portalUrl }) {
+  let nextDisplay = nextSessionDate;
+  try { if (nextSessionDate) nextDisplay = new Date(nextSessionDate).toLocaleString(); } catch {}
+  return {
+    subject: `Your treatment plan — ${planNumber}`,
+    html: wrapEmailHtml(
+      "Treatment Plan Created",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>Your treatment plan at <strong>${storeName || "the clinic"}</strong> has been set up.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f8fafc;border-radius:8px">
+         <tr><td style="padding:10px 16px;color:#64748b">Plan</td><td style="padding:10px 16px;font-weight:600">${planNumber || ""}</td></tr>
+         ${planTitle ? `<tr><td style="padding:10px 16px;color:#64748b">Treatment</td><td style="padding:10px 16px">${planTitle}</td></tr>` : ""}
+         ${totalSessions ? `<tr><td style="padding:10px 16px;color:#64748b">Sessions planned</td><td style="padding:10px 16px">${totalSessions}</td></tr>` : ""}
+         ${depositAmount ? `<tr><td style="padding:10px 16px;color:#64748b">Deposit received</td><td style="padding:10px 16px;color:#059669;font-weight:600">${depositAmount}</td></tr>` : ""}
+         ${nextDisplay ? `<tr><td style="padding:10px 16px;color:#64748b">Next session</td><td style="padding:10px 16px;font-weight:600">${nextDisplay}</td></tr>` : ""}
+       </table>
+       ${portalUrl ? btn("View in portal", portalUrl) : ""}
+       ${footer("You can review and manage your plan in the patient portal.")}`
+    ),
+  };
+}
+
+function treatmentSessionReminder({ storeName, customerName, planNumber, sessionNumber, providerName, scheduledAt, portalUrl }) {
+  let when = scheduledAt;
+  try { if (scheduledAt) when = new Date(scheduledAt).toLocaleString(); } catch {}
+  return {
+    subject: `Reminder — session ${sessionNumber || ""} tomorrow`,
+    html: wrapEmailHtml(
+      "Upcoming Session",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>This is a friendly reminder of your upcoming session at <strong>${storeName || "the clinic"}</strong>.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#eff6ff;border-radius:8px">
+         <tr><td style="padding:10px 16px;color:#64748b">Plan</td><td style="padding:10px 16px;font-weight:600">${planNumber || ""}</td></tr>
+         ${sessionNumber ? `<tr><td style="padding:10px 16px;color:#64748b">Session</td><td style="padding:10px 16px">#${sessionNumber}</td></tr>` : ""}
+         ${providerName ? `<tr><td style="padding:10px 16px;color:#64748b">Provider</td><td style="padding:10px 16px">${providerName}</td></tr>` : ""}
+         <tr><td style="padding:10px 16px;color:#64748b">When</td><td style="padding:10px 16px;font-weight:600">${when || ""}</td></tr>
+       </table>
+       <p>Please arrive 10 minutes early. If you need to reschedule, contact us as soon as possible.</p>
+       ${portalUrl ? btn("View in portal", portalUrl) : ""}
+       ${footer("This is an automated reminder.")}`
+    ),
+  };
+}
+
+function treatmentSessionCompleted({ storeName, customerName, planNumber, sessionNumber, soapSubjective, prescriptions, nextSessionDate, portalUrl }) {
+  let nextDisplay = nextSessionDate;
+  try { if (nextSessionDate) nextDisplay = new Date(nextSessionDate).toLocaleString(); } catch {}
+  const rxList = Array.isArray(prescriptions) && prescriptions.length
+    ? `<ul style="margin:8px 0 16px 24px;padding:0">${prescriptions.map((p) => `<li style="margin:4px 0">${p.medication_name}${p.strength ? ` ${p.strength}` : ""}${p.dosage ? ` — ${p.dosage}` : ""}</li>`).join("")}</ul>`
+    : "";
+  return {
+    subject: `Session summary — ${planNumber}`,
+    html: wrapEmailHtml(
+      "Session Summary",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>Here's a summary of your session at <strong>${storeName || "the clinic"}</strong>.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f8fafc;border-radius:8px">
+         <tr><td style="padding:10px 16px;color:#64748b">Plan</td><td style="padding:10px 16px;font-weight:600">${planNumber || ""}</td></tr>
+         ${sessionNumber ? `<tr><td style="padding:10px 16px;color:#64748b">Session</td><td style="padding:10px 16px">#${sessionNumber}</td></tr>` : ""}
+         ${nextDisplay ? `<tr><td style="padding:10px 16px;color:#64748b">Next session</td><td style="padding:10px 16px;font-weight:600">${nextDisplay}</td></tr>` : ""}
+       </table>
+       ${soapSubjective ? `<p style="margin-top:16px"><strong>Visit notes:</strong><br>${soapSubjective}</p>` : ""}
+       ${rxList ? `<p style="margin-top:16px"><strong>Prescriptions:</strong></p>${rxList}` : ""}
+       ${portalUrl ? btn("View full record in portal", portalUrl) : ""}
+       ${footer("Your full record is available in the patient portal.")}`
+    ),
+  };
+}
+
+function treatmentPlanCompleted({ storeName, customerName, planNumber, planTitle, totalSessions, invoiceUrl, portalUrl }) {
+  return {
+    subject: `Treatment complete — ${planNumber}`,
+    html: wrapEmailHtml(
+      "Treatment Plan Completed",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>Congratulations — your treatment plan at <strong>${storeName || "the clinic"}</strong> is complete.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#ecfdf5;border-radius:8px">
+         <tr><td style="padding:10px 16px;color:#64748b">Plan</td><td style="padding:10px 16px;font-weight:600">${planNumber || ""}</td></tr>
+         ${planTitle ? `<tr><td style="padding:10px 16px;color:#64748b">Treatment</td><td style="padding:10px 16px">${planTitle}</td></tr>` : ""}
+         ${totalSessions ? `<tr><td style="padding:10px 16px;color:#64748b">Sessions completed</td><td style="padding:10px 16px;color:#059669;font-weight:700">${totalSessions}</td></tr>` : ""}
+       </table>
+       <p>Follow-up care instructions and your final invoice are available below.</p>
+       ${invoiceUrl ? btn("View final invoice", invoiceUrl) : ""}
+       ${portalUrl ? `<p style="margin-top:12px"><a href="${portalUrl}" style="color:#2563eb">Open patient portal</a></p>` : ""}
+       ${footer("Thank you for trusting us with your care.")}`
+    ),
+  };
+}
+
+function treatmentPlanOverdue({ storeName, providerName, planNumber, customerName, sessionsCompleted, sessionsPlanned, daysOverdue }) {
+  return {
+    subject: `Overdue treatment plan — ${planNumber}`,
+    html: wrapEmailHtml(
+      "Overdue Treatment Plan",
+      `<p>Hi ${providerName || "Provider"},</p>
+       <p>Plan <strong>${planNumber}</strong> at <strong>${storeName || "the clinic"}</strong> has not completed within the expected window.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#fef2f2;border-radius:8px">
+         <tr><td style="padding:10px 16px;color:#64748b">Patient</td><td style="padding:10px 16px;font-weight:600">${customerName || ""}</td></tr>
+         <tr><td style="padding:10px 16px;color:#64748b">Progress</td><td style="padding:10px 16px">${sessionsCompleted || 0} / ${sessionsPlanned || 0} sessions</td></tr>
+         <tr><td style="padding:10px 16px;color:#64748b">Days overdue</td><td style="padding:10px 16px;color:#b91c1c;font-weight:700">${daysOverdue || 0}</td></tr>
+       </table>
+       <p>Please follow up with the patient to reschedule or discontinue the plan.</p>
+       ${footer("This is an automated staff alert.")}`
+    ),
+  };
+}
+
+function treatmentLabResultReceived({ storeName, customerName, planNumber, testName, labVendor, portalUrl }) {
+  return {
+    subject: `Lab result available — ${testName || planNumber}`,
+    html: wrapEmailHtml(
+      "Lab Result Available",
+      `<p>Hi ${customerName || "there"},</p>
+       <p>A lab result has been received for your treatment at <strong>${storeName || "the clinic"}</strong>.</p>
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f8fafc;border-radius:8px">
+         <tr><td style="padding:10px 16px;color:#64748b">Plan</td><td style="padding:10px 16px;font-weight:600">${planNumber || ""}</td></tr>
+         ${testName ? `<tr><td style="padding:10px 16px;color:#64748b">Test</td><td style="padding:10px 16px">${testName}</td></tr>` : ""}
+         ${labVendor ? `<tr><td style="padding:10px 16px;color:#64748b">Lab</td><td style="padding:10px 16px">${labVendor}</td></tr>` : ""}
+       </table>
+       ${portalUrl ? btn("View in portal", portalUrl) : ""}
+       ${footer("Please review the result in the patient portal or contact your provider with any questions.")}`
+    ),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
   campaign_test: campaignTest,
@@ -700,6 +827,13 @@ const TEMPLATES = {
   room_checkin_reminder: roomCheckinReminder,
   room_folio_receipt: roomFolioReceipt,
   room_overdue_checkout: roomOverdueCheckout,
+  // M10 Treatment Plans
+  treatment_plan_created: treatmentPlanCreated,
+  treatment_session_reminder: treatmentSessionReminder,
+  treatment_session_completed: treatmentSessionCompleted,
+  treatment_plan_completed: treatmentPlanCompleted,
+  treatment_plan_overdue: treatmentPlanOverdue,
+  treatment_lab_result_received: treatmentLabResultReceived,
   // M8 Customer Portal
   customer_portal_welcome: customerPortalWelcome,
   customer_portal_otp_login: customerPortalOtpLogin,

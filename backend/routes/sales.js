@@ -444,7 +444,44 @@ module.exports = function registerSalesRoutes(app, deps) {
       notes = null,
       idempotency_key = null,
       folio_id = null,
+      treatment_folio_id = null,
     } = req.body;
+
+    // Mutually-exclusive: a sale can be on a room folio OR a treatment folio, not both.
+    if (folio_id && treatment_folio_id) {
+      return res.status(400).json({ error: "Sale cannot be attached to both a room folio and a treatment folio" });
+    }
+
+    // M10 — treatment_folio_id (POS "charge to plan") pre-validation.
+    let chargeToTreatmentFolio = null;
+    if (treatment_folio_id) {
+      const tfid = Number(treatment_folio_id);
+      if (!Number.isInteger(tfid) || tfid <= 0) {
+        return res.status(400).json({ error: "Invalid treatment_folio_id" });
+      }
+      try {
+        const { rows: [tfRow] } = await db.query(
+          `SELECT tf.id, tf.status, tf.plan_id, p.outlet_id AS plan_outlet_id
+           FROM treatment_folios tf
+           LEFT JOIN treatment_plans p ON p.id = tf.plan_id
+           WHERE tf.id = $1`,
+          [tfid]
+        );
+        if (!tfRow) return res.status(404).json({ error: "Treatment folio not found" });
+        if (tfRow.status !== "open") {
+          return res.status(400).json({ error: "Treatment folio is not open" });
+        }
+        if (tfRow.plan_outlet_id && Number(tfRow.plan_outlet_id) !== Number(outlet_id)) {
+          return res.status(400).json({ error: "Treatment folio belongs to a different outlet" });
+        }
+        chargeToTreatmentFolio = tfRow;
+      } catch (tfErr) {
+        if (String(tfErr.message || "").includes("does not exist")) {
+          return res.status(400).json({ error: "Treatment plans are not enabled for this tenant" });
+        }
+        return res.status(500).json({ error: tfErr.message });
+      }
+    }
 
     // M9 — folio_id (POS "charge to room") pre-validation.
     let chargeToFolio = null;
@@ -550,7 +587,12 @@ module.exports = function registerSalesRoutes(app, deps) {
     let finalPayments = payments;
     let mainPaymentMethod = paymentMethod || "Cash";
 
-    if (chargeToFolio) {
+    if (chargeToTreatmentFolio) {
+      // Charge-to-plan bypasses payment entry — the sale amount is added
+      // as a treatment folio line and settled later when the plan is closed.
+      mainPaymentMethod = "charge_to_plan";
+      finalPayments = [];
+    } else if (chargeToFolio) {
       // Charge-to-room bypasses payment entry — the sale amount is added
       // as a folio line and settled later when the folio is closed.
       mainPaymentMethod = "charge_to_room";
@@ -698,7 +740,7 @@ module.exports = function registerSalesRoutes(app, deps) {
 
         // 2. Insert into Sales Table
         const { rows: [saleRow] } = await client.query(
-          "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key, folio_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id",
+          "INSERT INTO sales (total_amount, payment_method, outlet_id, employee_id, customer_id, discount_amount, discount_type, points_earned, points_redeemed, notes, shift_id, idempotency_key, folio_id, treatment_folio_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id",
           [
             totalAmount,
             mainPaymentMethod,
@@ -713,6 +755,7 @@ module.exports = function registerSalesRoutes(app, deps) {
             activeShift.id,
             idempotency_key || null,
             chargeToFolio ? chargeToFolio.id : null,
+            chargeToTreatmentFolio ? chargeToTreatmentFolio.id : null,
           ]
         );
         const newSaleId = saleRow.id;
@@ -809,6 +852,24 @@ module.exports = function registerSalesRoutes(app, deps) {
             description: `POS sale #${newSaleId}`,
             employeeId: authenticatedEmployeeId,
           });
+        }
+
+        // M10 — same pattern for treatment folios.
+        if (chargeToTreatmentFolio) {
+          const tpService = require("../services/treatment-plan-service");
+          await client.query(
+            `INSERT INTO treatment_folio_lines
+               (folio_id, line_type, description, quantity, unit_price, line_total, sale_id, added_by)
+             VALUES ($1, 'pos_sale', $2, 1, $3, $3, $4, $5)`,
+            [
+              chargeToTreatmentFolio.id,
+              `POS sale #${newSaleId}`,
+              totalAmount,
+              newSaleId,
+              authenticatedEmployeeId,
+            ]
+          );
+          await tpService.recalcFolioTotals(client, chargeToTreatmentFolio.id);
         }
 
         // Update customer loyalty: tier-aware points + total_spend + auto-upgrade

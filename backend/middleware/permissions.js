@@ -53,6 +53,7 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "manage_tickets",
     "manage_rentals",
     "manage_rooms",
+    "manage_treatment_plans",
   ],
   Cashier: ["view_reports", "pos_discount", "pos_park"],
 };
@@ -270,6 +271,12 @@ const PERMISSION_RULES = [
     methods: ["GET", "POST", "PUT", "DELETE"],
     path: /^\/api\/room-bookings(\/|$)/,
     anyPerms: ["manage_rooms"],
+  },
+  // M10 — Treatment plans
+  {
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    path: /^\/api\/(treatment-plans|treatment-sessions|treatment-folios|patient-subjects|chart-areas|session-chart-entries|lab-orders|consent-templates|clinical-documents)(\/|$)/,
+    anyPerms: ["manage_treatment_plans"],
   },
 ];
 

@@ -39,6 +39,7 @@ const PortalInvoices = lazy(() => import("../pages/portal/PortalInvoices"));
 const PortalInvoiceDetail = lazy(() => import("../pages/portal/PortalInvoiceDetail"));
 const PortalInvoicePaidPage = lazy(() => import("../pages/portal/PortalInvoicePaidPage"));
 const PortalAppointments = lazy(() => import("../pages/portal/PortalAppointments"));
+const PortalTreatments = lazy(() => import("../pages/portal/PortalTreatments"));
 const PortalOrders = lazy(() => import("../pages/portal/PortalOrders"));
 const PortalLoyalty = lazy(() => import("../pages/portal/PortalLoyalty"));
 const PortalWallet = lazy(() => import("../pages/portal/PortalWallet"));
@@ -144,6 +145,7 @@ export const publicRoutes = [
     <Route path="invoices/:invoiceId" element={<Suspense fallback={<RouteLoading />}><PortalInvoiceDetail /></Suspense>} />
     <Route path="invoice-paid" element={<Suspense fallback={<RouteLoading />}><PortalInvoicePaidPage /></Suspense>} />
     <Route path="appointments" element={<Suspense fallback={<RouteLoading />}><PortalAppointments /></Suspense>} />
+    <Route path="treatments" element={<Suspense fallback={<RouteLoading />}><PortalTreatments /></Suspense>} />
     <Route path="orders" element={<Suspense fallback={<RouteLoading />}><PortalOrders /></Suspense>} />
     <Route path="loyalty" element={<Suspense fallback={<RouteLoading />}><PortalLoyalty /></Suspense>} />
     <Route path="wallet" element={<Suspense fallback={<RouteLoading />}><PortalWallet /></Suspense>} />

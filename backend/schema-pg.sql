@@ -3462,6 +3462,323 @@ ALTER TABLE sales ADD COLUMN IF NOT EXISTS folio_id INTEGER REFERENCES guest_fol
 CREATE INDEX IF NOT EXISTS idx_sales_folio_id
   ON sales(folio_id) WHERE folio_id IS NOT NULL;
 
+-- ── M10 Treatment plans (dental / vet / physio) ─────────────────────
+CREATE TABLE IF NOT EXISTS patient_subjects (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  subject_type TEXT NOT NULL DEFAULT 'self'
+    CHECK (subject_type IN ('self','dependent','pet')),
+  name TEXT NOT NULL,
+  species TEXT,
+  breed TEXT,
+  dob DATE,
+  sex TEXT,
+  weight_kg NUMERIC(10,2),
+  identifier TEXT,
+  photo_url TEXT,
+  notes TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_patient_subjects_customer
+  ON patient_subjects(customer_id) WHERE is_active = TRUE;
+
+CREATE TABLE IF NOT EXISTS treatment_plans (
+  id SERIAL PRIMARY KEY,
+  plan_number TEXT NOT NULL UNIQUE,
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  subject_id INTEGER REFERENCES patient_subjects(id),
+  outlet_id INTEGER REFERENCES outlets(id),
+  created_by INTEGER NOT NULL REFERENCES employees(id),
+  provider_id INTEGER REFERENCES employees(id),
+  title TEXT NOT NULL,
+  diagnosis_code TEXT,
+  diagnosis_notes TEXT,
+  status TEXT NOT NULL DEFAULT 'draft'
+    CHECK (status IN ('draft','active','on_hold','completed','discontinued','invoiced')),
+  start_date DATE,
+  expected_end_date DATE,
+  actual_end_date DATE,
+  total_sessions_planned INTEGER NOT NULL DEFAULT 1,
+  sessions_completed INTEGER NOT NULL DEFAULT 0,
+  estimated_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+  deposit_collected NUMERIC(12,2) NOT NULL DEFAULT 0,
+  deposit_method TEXT,
+  deposit_paid_at TIMESTAMPTZ,
+  deposit_payment_intent_id TEXT,
+  deposit_status TEXT
+    CHECK (deposit_status IS NULL OR deposit_status IN ('pending','authorized','captured','released','failed')),
+  final_invoice_id INTEGER REFERENCES customer_invoices(id),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_treatment_plans_status ON treatment_plans(status);
+CREATE INDEX IF NOT EXISTS idx_treatment_plans_customer ON treatment_plans(customer_id);
+CREATE INDEX IF NOT EXISTS idx_treatment_plans_subject ON treatment_plans(subject_id);
+CREATE INDEX IF NOT EXISTS idx_treatment_plans_provider ON treatment_plans(provider_id);
+CREATE INDEX IF NOT EXISTS idx_treatment_plans_overdue
+  ON treatment_plans(expected_end_date) WHERE status = 'active';
+
+CREATE TABLE IF NOT EXISTS treatment_sessions (
+  id SERIAL PRIMARY KEY,
+  plan_id INTEGER NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+  session_number INTEGER NOT NULL,
+  appointment_id INTEGER REFERENCES appointments(id),
+  provider_id INTEGER REFERENCES employees(id),
+  scheduled_at TIMESTAMPTZ,
+  actual_start_at TIMESTAMPTZ,
+  actual_end_at TIMESTAMPTZ,
+  status TEXT NOT NULL DEFAULT 'scheduled'
+    CHECK (status IN ('scheduled','in_progress','completed','no_show','cancelled')),
+  chief_complaint TEXT,
+  soap_subjective TEXT,
+  soap_objective TEXT,
+  soap_assessment TEXT,
+  soap_plan TEXT,
+  next_session_notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (plan_id, session_number)
+);
+CREATE INDEX IF NOT EXISTS idx_treatment_sessions_plan ON treatment_sessions(plan_id);
+CREATE INDEX IF NOT EXISTS idx_treatment_sessions_appointment
+  ON treatment_sessions(appointment_id) WHERE appointment_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_treatment_sessions_status_scheduled ON treatment_sessions(status, scheduled_at);
+
+CREATE TABLE IF NOT EXISTS vital_signs (
+  id SERIAL PRIMARY KEY,
+  session_id INTEGER NOT NULL REFERENCES treatment_sessions(id) ON DELETE CASCADE,
+  measured_at TIMESTAMPTZ DEFAULT NOW(),
+  blood_pressure_sys INTEGER,
+  blood_pressure_dia INTEGER,
+  heart_rate INTEGER,
+  respiratory_rate INTEGER,
+  temperature_c NUMERIC(5,2),
+  oxygen_saturation NUMERIC(5,2),
+  weight_kg NUMERIC(6,2),
+  height_cm NUMERIC(6,2),
+  pain_score INTEGER CHECK (pain_score IS NULL OR (pain_score >= 0 AND pain_score <= 10)),
+  custom_vitals JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_vital_signs_session ON vital_signs(session_id);
+
+CREATE TABLE IF NOT EXISTS prescriptions (
+  id SERIAL PRIMARY KEY,
+  session_id INTEGER NOT NULL REFERENCES treatment_sessions(id) ON DELETE CASCADE,
+  plan_id INTEGER REFERENCES treatment_plans(id),
+  medication_name TEXT NOT NULL,
+  strength TEXT,
+  dosage TEXT,
+  frequency TEXT,
+  duration TEXT,
+  instructions TEXT,
+  refills_remaining INTEGER NOT NULL DEFAULT 0,
+  prescribed_at TIMESTAMPTZ DEFAULT NOW(),
+  prescriber_id INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_prescriptions_session ON prescriptions(session_id);
+CREATE INDEX IF NOT EXISTS idx_prescriptions_plan ON prescriptions(plan_id);
+
+CREATE TABLE IF NOT EXISTS chart_areas (
+  id SERIAL PRIMARY KEY,
+  preset_key TEXT NOT NULL,
+  area_code TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  parent_area_code TEXT,
+  svg_path TEXT,
+  display_order INTEGER NOT NULL DEFAULT 0,
+  UNIQUE (preset_key, area_code)
+);
+CREATE INDEX IF NOT EXISTS idx_chart_areas_preset ON chart_areas(preset_key);
+
+-- Seed chart_areas: dental_adult (32), dental_primary (20), body (15), vet_body_canine/feline (15 each)
+INSERT INTO chart_areas (preset_key, area_code, display_name, parent_area_code, display_order)
+SELECT 'dental_adult', n::text, 'Tooth ' || n,
+  CASE WHEN n BETWEEN 1 AND 8 THEN 'upper_right'
+       WHEN n BETWEEN 9 AND 16 THEN 'upper_left'
+       WHEN n BETWEEN 17 AND 24 THEN 'lower_left'
+       ELSE 'lower_right' END,
+  n
+FROM generate_series(1, 32) n
+ON CONFLICT (preset_key, area_code) DO NOTHING;
+
+INSERT INTO chart_areas (preset_key, area_code, display_name, parent_area_code, display_order) VALUES
+  ('dental_primary','A','Tooth A','upper_right_primary',100),('dental_primary','B','Tooth B','upper_right_primary',101),
+  ('dental_primary','C','Tooth C','upper_right_primary',102),('dental_primary','D','Tooth D','upper_right_primary',103),
+  ('dental_primary','E','Tooth E','upper_right_primary',104),('dental_primary','F','Tooth F','upper_left_primary',105),
+  ('dental_primary','G','Tooth G','upper_left_primary',106),('dental_primary','H','Tooth H','upper_left_primary',107),
+  ('dental_primary','I','Tooth I','upper_left_primary',108),('dental_primary','J','Tooth J','upper_left_primary',109),
+  ('dental_primary','K','Tooth K','lower_left_primary',110),('dental_primary','L','Tooth L','lower_left_primary',111),
+  ('dental_primary','M','Tooth M','lower_left_primary',112),('dental_primary','N','Tooth N','lower_left_primary',113),
+  ('dental_primary','O','Tooth O','lower_left_primary',114),('dental_primary','P','Tooth P','lower_right_primary',115),
+  ('dental_primary','Q','Tooth Q','lower_right_primary',116),('dental_primary','R','Tooth R','lower_right_primary',117),
+  ('dental_primary','S','Tooth S','lower_right_primary',118),('dental_primary','T','Tooth T','lower_right_primary',119)
+ON CONFLICT (preset_key, area_code) DO NOTHING;
+
+INSERT INTO chart_areas (preset_key, area_code, display_name, parent_area_code, display_order) VALUES
+  ('body','head','Head',NULL,0),('body','neck','Neck',NULL,1),
+  ('body','shoulder_left','Left Shoulder',NULL,2),('body','shoulder_right','Right Shoulder',NULL,3),
+  ('body','arm_left','Left Arm',NULL,4),('body','arm_right','Right Arm',NULL,5),
+  ('body','torso_anterior','Torso (Anterior)',NULL,6),('body','torso_posterior','Torso (Posterior)',NULL,7),
+  ('body','hip_left','Left Hip',NULL,8),('body','hip_right','Right Hip',NULL,9),
+  ('body','leg_left','Left Leg',NULL,10),('body','leg_right','Right Leg',NULL,11),
+  ('body','foot_left','Left Foot',NULL,12),('body','foot_right','Right Foot',NULL,13),
+  ('body','spine','Spine',NULL,14)
+ON CONFLICT (preset_key, area_code) DO NOTHING;
+
+INSERT INTO chart_areas (preset_key, area_code, display_name, parent_area_code, display_order)
+SELECT preset_key, area_code, display_name, NULL, display_order FROM (VALUES
+  ('head','Head',0),('ears','Ears',1),('neck','Neck',2),('thorax','Thorax',3),('abdomen','Abdomen',4),
+  ('back','Back',5),('tail','Tail',6),('forelimb_left','Left Forelimb',7),('forelimb_right','Right Forelimb',8),
+  ('hindlimb_left','Left Hindlimb',9),('hindlimb_right','Right Hindlimb',10),
+  ('paw_front_left','Front Left Paw',11),('paw_front_right','Front Right Paw',12),
+  ('paw_rear_left','Rear Left Paw',13),('paw_rear_right','Rear Right Paw',14)
+) AS regions(area_code, display_name, display_order)
+CROSS JOIN (VALUES ('vet_body_canine'),('vet_body_feline')) AS presets(preset_key)
+ON CONFLICT (preset_key, area_code) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS session_chart_entries (
+  id SERIAL PRIMARY KEY,
+  session_id INTEGER NOT NULL REFERENCES treatment_sessions(id) ON DELETE CASCADE,
+  area_code TEXT NOT NULL,
+  condition_code TEXT NOT NULL
+    CHECK (condition_code IN ('healthy','caries','restoration','extraction','crown','root_canal','missing','implant','mobility','plaque','gingivitis','custom')),
+  severity TEXT CHECK (severity IS NULL OR severity IN ('mild','moderate','severe')),
+  notes TEXT,
+  color_marker TEXT,
+  treated_in_session_id INTEGER REFERENCES treatment_sessions(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_session_chart_entries_session ON session_chart_entries(session_id);
+CREATE INDEX IF NOT EXISTS idx_session_chart_entries_treated
+  ON session_chart_entries(treated_in_session_id) WHERE treated_in_session_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS clinical_documents (
+  id SERIAL PRIMARY KEY,
+  plan_id INTEGER NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+  session_id INTEGER REFERENCES treatment_sessions(id),
+  document_type TEXT NOT NULL
+    CHECK (document_type IN ('lab_report','imaging_xray','imaging_ct','imaging_mri','photo','referral_letter','discharge_summary','other')),
+  title TEXT NOT NULL,
+  file_url TEXT NOT NULL,
+  file_mime TEXT,
+  file_size_bytes BIGINT,
+  uploaded_by INTEGER REFERENCES employees(id),
+  uploaded_at TIMESTAMPTZ DEFAULT NOW(),
+  notes TEXT,
+  shared_with_patient BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_clinical_documents_plan ON clinical_documents(plan_id);
+CREATE INDEX IF NOT EXISTS idx_clinical_documents_session
+  ON clinical_documents(session_id) WHERE session_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS lab_orders (
+  id SERIAL PRIMARY KEY,
+  plan_id INTEGER NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+  session_id INTEGER REFERENCES treatment_sessions(id),
+  order_number TEXT NOT NULL UNIQUE,
+  lab_vendor TEXT,
+  test_name TEXT NOT NULL,
+  test_code TEXT,
+  status TEXT NOT NULL DEFAULT 'ordered'
+    CHECK (status IN ('ordered','in_transit','received','completed','cancelled')),
+  ordered_at TIMESTAMPTZ DEFAULT NOW(),
+  result_received_at TIMESTAMPTZ,
+  result_summary TEXT,
+  result_document_id INTEGER REFERENCES clinical_documents(id),
+  cost NUMERIC(12,2) NOT NULL DEFAULT 0,
+  ordered_by INTEGER REFERENCES employees(id),
+  notes TEXT,
+  shared_with_patient BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_lab_orders_plan ON lab_orders(plan_id);
+CREATE INDEX IF NOT EXISTS idx_lab_orders_status ON lab_orders(status);
+
+CREATE TABLE IF NOT EXISTS consent_forms (
+  id SERIAL PRIMARY KEY,
+  plan_id INTEGER NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+  session_id INTEGER REFERENCES treatment_sessions(id),
+  form_template_key TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body_markdown TEXT NOT NULL,
+  signed_by_name TEXT NOT NULL,
+  signed_by_relation TEXT NOT NULL DEFAULT 'self'
+    CHECK (signed_by_relation IN ('self','parent','guardian','owner','next_of_kin')),
+  signature_image_url TEXT,
+  signed_at TIMESTAMPTZ DEFAULT NOW(),
+  witnessed_by_id INTEGER REFERENCES employees(id),
+  document_pdf_url TEXT,
+  ip_address TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_consent_forms_plan ON consent_forms(plan_id);
+
+CREATE TABLE IF NOT EXISTS treatment_folios (
+  id SERIAL PRIMARY KEY,
+  plan_id INTEGER NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'open'
+    CHECK (status IN ('open','settled','voided')),
+  session_charge_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+  pos_charge_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+  tax_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+  deposit_applied NUMERIC(12,2) NOT NULL DEFAULT 0,
+  grand_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+  settled_at TIMESTAMPTZ,
+  invoice_id INTEGER REFERENCES customer_invoices(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_treatment_folios_plan ON treatment_folios(plan_id);
+CREATE INDEX IF NOT EXISTS idx_treatment_folios_status ON treatment_folios(status);
+
+CREATE TABLE IF NOT EXISTS treatment_folio_lines (
+  id SERIAL PRIMARY KEY,
+  folio_id INTEGER NOT NULL REFERENCES treatment_folios(id) ON DELETE CASCADE,
+  line_type TEXT NOT NULL
+    CHECK (line_type IN ('session_fee','pos_sale','lab_cost','manual_charge','discount','tax')),
+  description TEXT NOT NULL,
+  quantity NUMERIC(10,3) NOT NULL DEFAULT 1,
+  unit_price NUMERIC(12,2) NOT NULL DEFAULT 0,
+  line_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+  session_id INTEGER REFERENCES treatment_sessions(id),
+  sale_id INTEGER REFERENCES sales(id),
+  added_by INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_treatment_folio_lines_folio ON treatment_folio_lines(folio_id);
+CREATE INDEX IF NOT EXISTS idx_treatment_folio_lines_sale
+  ON treatment_folio_lines(sale_id) WHERE sale_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS treatment_plan_activities (
+  id SERIAL PRIMARY KEY,
+  plan_id INTEGER NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+  actor_id INTEGER REFERENCES employees(id),
+  activity_type TEXT NOT NULL
+    CHECK (activity_type IN ('status_change','note','deposit_recorded','session_completed','consent_signed','lab_ordered','document_uploaded','invoice_generated')),
+  description TEXT,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_treatment_plan_activities_plan ON treatment_plan_activities(plan_id);
+
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS diagnosis_history JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS current_medications JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS primary_provider_id INTEGER REFERENCES employees(id);
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS treatment_plan_id INTEGER REFERENCES treatment_plans(id);
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS treatment_session_id INTEGER REFERENCES treatment_sessions(id);
+CREATE INDEX IF NOT EXISTS idx_appointments_treatment_plan
+  ON appointments(treatment_plan_id) WHERE treatment_plan_id IS NOT NULL;
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS treatment_folio_id INTEGER REFERENCES treatment_folios(id);
+CREATE INDEX IF NOT EXISTS idx_sales_treatment_folio_id
+  ON sales(treatment_folio_id) WHERE treatment_folio_id IS NOT NULL;
+
 -- ── Schema versioning ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schema_version (
   version    INTEGER PRIMARY KEY,

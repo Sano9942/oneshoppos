@@ -175,6 +175,7 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./customer-portal/payments")(app, deps);
   require("./customer-portal/appointments")(app, deps);
   require("./customer-portal/stays")(app, deps);
+  require("./customer-portal/treatments")(app, deps);
 
   // Setup wizard — must be BEFORE auth middleware (no session exists yet)
   const createSetupRouter = require("./setup");
@@ -609,6 +610,7 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./service-tickets")(app, deps);
   require("./rentals")(app, deps);
   require("./rooms")(app, deps);
+  require("./treatment-plans")(app, deps);
 
   return {
     processPendingShopifyInventoryEvents:

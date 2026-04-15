@@ -64,6 +64,9 @@ const DEFAULT_FEATURE_FLAGS = {
   // Mode-gated (M9): flipped ON only when a hotel/guesthouse/hostel preset
   // is selected. Keeps "Rooms" nav hidden from retail/restaurant tenants.
   phase4_room_management: false,
+  // Mode-gated (M10): flipped ON only when a dental_clinic / veterinary /
+  // physiotherapy preset is selected. Keeps Clinical nav hidden otherwise.
+  phase4_treatment_plans: false,
   // Phase 5 — Pakistan Integration Depth
   phase5_shipping_automation: false,
   phase5_cod_reconciliation: false,

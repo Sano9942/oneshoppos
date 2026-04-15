@@ -166,6 +166,32 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
     }
   }
 
+  // ── Context 2b: Treatment plan deposit pre-auth (tenant schema, M10) ──
+  // Same dispatch pattern as room deposits. treatment_plans.deposit_payment_intent_id
+  // is set by treatment-plan-deposits.js; the webhook looks it up here.
+  try {
+    const { rows: [plan] } = await db.query(
+      "SELECT id, deposit_status FROM treatment_plans WHERE deposit_payment_intent_id = $1",
+      [transaction_id]
+    );
+    if (plan) {
+      const { handleDepositWebhook } = require("../services/treatment-plan-deposits");
+      const result = await handleDepositWebhook(db, {
+        gatewayRef: transaction_id,
+        eventType: event_type,
+        status,
+      });
+      _logger.info({ planId: plan.id, result }, "Treatment plan deposit webhook handled");
+      return { ok: true };
+    }
+  } catch (depositErr) {
+    // Table may not exist for tenants that haven't migrated to v39 yet — fall
+    // through silently.
+    if (!String(depositErr.message || "").includes("does not exist")) {
+      _logger.error({ err: depositErr, transaction_id }, "Treatment plan deposit webhook lookup failed");
+    }
+  }
+
   // ── Context 3: Invoice payment links (tenant schema) ──
   const { rows: [link] } = await db.query(
     "SELECT * FROM customer_invoice_payment_links WHERE gateway_ref = $1",

@@ -3306,6 +3306,485 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 39,
+    description: "M10 — treatment_plans mode (patient subjects, plans, sessions, chart, labs, consent, documents, folios) + phase4_treatment_plans flag",
+    up: async (client) => {
+      // ── Pets / dependents — generic subject sub-entity of customer ──
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS patient_subjects (
+          id SERIAL PRIMARY KEY,
+          customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+          subject_type TEXT NOT NULL DEFAULT 'self'
+            CHECK (subject_type IN ('self','dependent','pet')),
+          name TEXT NOT NULL,
+          species TEXT,
+          breed TEXT,
+          dob DATE,
+          sex TEXT,
+          weight_kg NUMERIC(10,2),
+          identifier TEXT,
+          photo_url TEXT,
+          notes TEXT,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_patient_subjects_customer
+          ON patient_subjects(customer_id)
+          WHERE is_active = TRUE
+      `);
+
+      // ── Treatment plans (the durable multi-visit record) ──────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS treatment_plans (
+          id SERIAL PRIMARY KEY,
+          plan_number TEXT NOT NULL UNIQUE,
+          customer_id INTEGER NOT NULL REFERENCES customers(id),
+          subject_id INTEGER REFERENCES patient_subjects(id),
+          outlet_id INTEGER REFERENCES outlets(id),
+          created_by INTEGER NOT NULL REFERENCES employees(id),
+          provider_id INTEGER REFERENCES employees(id),
+          title TEXT NOT NULL,
+          diagnosis_code TEXT,
+          diagnosis_notes TEXT,
+          status TEXT NOT NULL DEFAULT 'draft'
+            CHECK (status IN ('draft','active','on_hold','completed','discontinued','invoiced')),
+          start_date DATE,
+          expected_end_date DATE,
+          actual_end_date DATE,
+          total_sessions_planned INTEGER NOT NULL DEFAULT 1,
+          sessions_completed INTEGER NOT NULL DEFAULT 0,
+          estimated_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+          deposit_collected NUMERIC(12,2) NOT NULL DEFAULT 0,
+          deposit_method TEXT,
+          deposit_paid_at TIMESTAMPTZ,
+          deposit_payment_intent_id TEXT,
+          deposit_status TEXT
+            CHECK (deposit_status IS NULL OR deposit_status IN ('pending','authorized','captured','released','failed')),
+          final_invoice_id INTEGER REFERENCES customer_invoices(id),
+          notes TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_treatment_plans_status ON treatment_plans(status)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_treatment_plans_customer ON treatment_plans(customer_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_treatment_plans_subject ON treatment_plans(subject_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_treatment_plans_provider ON treatment_plans(provider_id)`);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_treatment_plans_overdue
+          ON treatment_plans(expected_end_date)
+          WHERE status = 'active'
+      `);
+
+      // ── Treatment sessions (a visit within a plan) ────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS treatment_sessions (
+          id SERIAL PRIMARY KEY,
+          plan_id INTEGER NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+          session_number INTEGER NOT NULL,
+          appointment_id INTEGER,
+          provider_id INTEGER REFERENCES employees(id),
+          scheduled_at TIMESTAMPTZ,
+          actual_start_at TIMESTAMPTZ,
+          actual_end_at TIMESTAMPTZ,
+          status TEXT NOT NULL DEFAULT 'scheduled'
+            CHECK (status IN ('scheduled','in_progress','completed','no_show','cancelled')),
+          chief_complaint TEXT,
+          soap_subjective TEXT,
+          soap_objective TEXT,
+          soap_assessment TEXT,
+          soap_plan TEXT,
+          next_session_notes TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE (plan_id, session_number)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_treatment_sessions_plan ON treatment_sessions(plan_id)`);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_treatment_sessions_appointment
+          ON treatment_sessions(appointment_id)
+          WHERE appointment_id IS NOT NULL
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_treatment_sessions_status_scheduled ON treatment_sessions(status, scheduled_at)`);
+
+      // ── Vital signs per session ───────────────────────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS vital_signs (
+          id SERIAL PRIMARY KEY,
+          session_id INTEGER NOT NULL REFERENCES treatment_sessions(id) ON DELETE CASCADE,
+          measured_at TIMESTAMPTZ DEFAULT NOW(),
+          blood_pressure_sys INTEGER,
+          blood_pressure_dia INTEGER,
+          heart_rate INTEGER,
+          respiratory_rate INTEGER,
+          temperature_c NUMERIC(5,2),
+          oxygen_saturation NUMERIC(5,2),
+          weight_kg NUMERIC(6,2),
+          height_cm NUMERIC(6,2),
+          pain_score INTEGER CHECK (pain_score IS NULL OR (pain_score >= 0 AND pain_score <= 10)),
+          custom_vitals JSONB DEFAULT '{}',
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_vital_signs_session ON vital_signs(session_id)`);
+
+      // ── Prescriptions (captured during a session) ─────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS prescriptions (
+          id SERIAL PRIMARY KEY,
+          session_id INTEGER NOT NULL REFERENCES treatment_sessions(id) ON DELETE CASCADE,
+          plan_id INTEGER REFERENCES treatment_plans(id),
+          medication_name TEXT NOT NULL,
+          strength TEXT,
+          dosage TEXT,
+          frequency TEXT,
+          duration TEXT,
+          instructions TEXT,
+          refills_remaining INTEGER NOT NULL DEFAULT 0,
+          prescribed_at TIMESTAMPTZ DEFAULT NOW(),
+          prescriber_id INTEGER REFERENCES employees(id),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_prescriptions_session ON prescriptions(session_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_prescriptions_plan ON prescriptions(plan_id)`);
+
+      // ── Chart areas (catalog of chartable anatomy) ────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS chart_areas (
+          id SERIAL PRIMARY KEY,
+          preset_key TEXT NOT NULL,
+          area_code TEXT NOT NULL,
+          display_name TEXT NOT NULL,
+          parent_area_code TEXT,
+          svg_path TEXT,
+          display_order INTEGER NOT NULL DEFAULT 0,
+          UNIQUE (preset_key, area_code)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_chart_areas_preset ON chart_areas(preset_key)`);
+
+      // Seed chart_areas:
+      //   dental_adult    — Universal numbering 1-32
+      //   dental_primary  — Universal letters A-T
+      //   body            — 15 physio regions (feet split out from legs)
+      //   vet_body_canine — 15 simplified dog body regions
+      //   vet_body_feline — 15 simplified cat body regions (same macro anatomy)
+      const seedAreas = [];
+      // Dental adult (Universal 1-32): 1-16 upper (right to left), 17-32 lower (left to right)
+      const upperQuadRight = [1, 2, 3, 4, 5, 6, 7, 8];
+      const upperQuadLeft = [9, 10, 11, 12, 13, 14, 15, 16];
+      const lowerQuadLeft = [17, 18, 19, 20, 21, 22, 23, 24];
+      const lowerQuadRight = [25, 26, 27, 28, 29, 30, 31, 32];
+      for (const n of upperQuadRight) seedAreas.push(["dental_adult", String(n), `Tooth ${n}`, "upper_right", n]);
+      for (const n of upperQuadLeft) seedAreas.push(["dental_adult", String(n), `Tooth ${n}`, "upper_left", n]);
+      for (const n of lowerQuadLeft) seedAreas.push(["dental_adult", String(n), `Tooth ${n}`, "lower_left", n]);
+      for (const n of lowerQuadRight) seedAreas.push(["dental_adult", String(n), `Tooth ${n}`, "lower_right", n]);
+      // Dental primary (Universal A-T): A-E upper right, F-J upper left, K-O lower left, P-T lower right
+      const primaryLetters = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T"];
+      primaryLetters.forEach((ltr, idx) => {
+        const quad = idx < 5 ? "upper_right_primary"
+                    : idx < 10 ? "upper_left_primary"
+                    : idx < 15 ? "lower_left_primary"
+                    : "lower_right_primary";
+        seedAreas.push(["dental_primary", ltr, `Tooth ${ltr}`, quad, 100 + idx]);
+      });
+      // Body regions — 15 physio regions
+      const bodyRegions = [
+        ["head", "Head"],
+        ["neck", "Neck"],
+        ["shoulder_left", "Left Shoulder"],
+        ["shoulder_right", "Right Shoulder"],
+        ["arm_left", "Left Arm"],
+        ["arm_right", "Right Arm"],
+        ["torso_anterior", "Torso (Anterior)"],
+        ["torso_posterior", "Torso (Posterior)"],
+        ["hip_left", "Left Hip"],
+        ["hip_right", "Right Hip"],
+        ["leg_left", "Left Leg"],
+        ["leg_right", "Right Leg"],
+        ["foot_left", "Left Foot"],
+        ["foot_right", "Right Foot"],
+        ["spine", "Spine"],
+      ];
+      bodyRegions.forEach(([code, name], idx) => {
+        seedAreas.push(["body", code, name, null, idx]);
+      });
+      // Vet body — canine (15 regions)
+      const vetCanineRegions = [
+        ["head", "Head"],
+        ["ears", "Ears"],
+        ["neck", "Neck"],
+        ["thorax", "Thorax"],
+        ["abdomen", "Abdomen"],
+        ["back", "Back"],
+        ["tail", "Tail"],
+        ["forelimb_left", "Left Forelimb"],
+        ["forelimb_right", "Right Forelimb"],
+        ["hindlimb_left", "Left Hindlimb"],
+        ["hindlimb_right", "Right Hindlimb"],
+        ["paw_front_left", "Front Left Paw"],
+        ["paw_front_right", "Front Right Paw"],
+        ["paw_rear_left", "Rear Left Paw"],
+        ["paw_rear_right", "Rear Right Paw"],
+      ];
+      vetCanineRegions.forEach(([code, name], idx) => {
+        seedAreas.push(["vet_body_canine", code, name, null, idx]);
+      });
+      // Vet body — feline (same 15 regions; species differentiation happens
+      // in patient_subjects.species, not in chart code)
+      vetCanineRegions.forEach(([code, name], idx) => {
+        seedAreas.push(["vet_body_feline", code, name, null, idx]);
+      });
+
+      for (const [preset, code, name, parent, order] of seedAreas) {
+        await client.query(
+          `INSERT INTO chart_areas (preset_key, area_code, display_name, parent_area_code, display_order)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (preset_key, area_code) DO NOTHING`,
+          [preset, code, name, parent, order]
+        );
+      }
+
+      // ── Session chart entries ─────────────────────────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS session_chart_entries (
+          id SERIAL PRIMARY KEY,
+          session_id INTEGER NOT NULL REFERENCES treatment_sessions(id) ON DELETE CASCADE,
+          area_code TEXT NOT NULL,
+          condition_code TEXT NOT NULL
+            CHECK (condition_code IN ('healthy','caries','restoration','extraction','crown','root_canal','missing','implant','mobility','plaque','gingivitis','custom')),
+          severity TEXT CHECK (severity IS NULL OR severity IN ('mild','moderate','severe')),
+          notes TEXT,
+          color_marker TEXT,
+          treated_in_session_id INTEGER REFERENCES treatment_sessions(id),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_session_chart_entries_session ON session_chart_entries(session_id)`);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_session_chart_entries_treated
+          ON session_chart_entries(treated_in_session_id)
+          WHERE treated_in_session_id IS NOT NULL
+      `);
+
+      // ── Lab orders ────────────────────────────────────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS lab_orders (
+          id SERIAL PRIMARY KEY,
+          plan_id INTEGER NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+          session_id INTEGER REFERENCES treatment_sessions(id),
+          order_number TEXT NOT NULL,
+          lab_vendor TEXT,
+          test_name TEXT NOT NULL,
+          test_code TEXT,
+          status TEXT NOT NULL DEFAULT 'ordered'
+            CHECK (status IN ('ordered','in_transit','received','completed','cancelled')),
+          ordered_at TIMESTAMPTZ DEFAULT NOW(),
+          result_received_at TIMESTAMPTZ,
+          result_summary TEXT,
+          result_document_id INTEGER,
+          cost NUMERIC(12,2) NOT NULL DEFAULT 0,
+          ordered_by INTEGER REFERENCES employees(id),
+          notes TEXT,
+          shared_with_patient BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE (order_number)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_lab_orders_plan ON lab_orders(plan_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_lab_orders_status ON lab_orders(status)`);
+
+      // ── Consent forms ─────────────────────────────────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS consent_forms (
+          id SERIAL PRIMARY KEY,
+          plan_id INTEGER NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+          session_id INTEGER REFERENCES treatment_sessions(id),
+          form_template_key TEXT NOT NULL,
+          title TEXT NOT NULL,
+          body_markdown TEXT NOT NULL,
+          signed_by_name TEXT NOT NULL,
+          signed_by_relation TEXT NOT NULL DEFAULT 'self'
+            CHECK (signed_by_relation IN ('self','parent','guardian','owner','next_of_kin')),
+          signature_image_url TEXT,
+          signed_at TIMESTAMPTZ DEFAULT NOW(),
+          witnessed_by_id INTEGER REFERENCES employees(id),
+          document_pdf_url TEXT,
+          ip_address TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_consent_forms_plan ON consent_forms(plan_id)`);
+
+      // ── Clinical documents (R2-backed attachments) ────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS clinical_documents (
+          id SERIAL PRIMARY KEY,
+          plan_id INTEGER NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+          session_id INTEGER REFERENCES treatment_sessions(id),
+          document_type TEXT NOT NULL
+            CHECK (document_type IN ('lab_report','imaging_xray','imaging_ct','imaging_mri','photo','referral_letter','discharge_summary','other')),
+          title TEXT NOT NULL,
+          file_url TEXT NOT NULL,
+          file_mime TEXT,
+          file_size_bytes BIGINT,
+          uploaded_by INTEGER REFERENCES employees(id),
+          uploaded_at TIMESTAMPTZ DEFAULT NOW(),
+          notes TEXT,
+          shared_with_patient BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_clinical_documents_plan ON clinical_documents(plan_id)`);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_clinical_documents_session
+          ON clinical_documents(session_id)
+          WHERE session_id IS NOT NULL
+      `);
+
+      // Add the FK from lab_orders.result_document_id now that clinical_documents exists
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'lab_orders_result_document_fk'
+          ) THEN
+            ALTER TABLE lab_orders
+              ADD CONSTRAINT lab_orders_result_document_fk
+              FOREIGN KEY (result_document_id) REFERENCES clinical_documents(id);
+          END IF;
+        END $$
+      `);
+
+      // ── Treatment folios (running tab per plan) ───────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS treatment_folios (
+          id SERIAL PRIMARY KEY,
+          plan_id INTEGER NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'open'
+            CHECK (status IN ('open','settled','voided')),
+          session_charge_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+          pos_charge_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+          tax_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+          deposit_applied NUMERIC(12,2) NOT NULL DEFAULT 0,
+          grand_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+          settled_at TIMESTAMPTZ,
+          invoice_id INTEGER REFERENCES customer_invoices(id),
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_treatment_folios_plan ON treatment_folios(plan_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_treatment_folios_status ON treatment_folios(status)`);
+
+      // ── Treatment folio lines ─────────────────────────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS treatment_folio_lines (
+          id SERIAL PRIMARY KEY,
+          folio_id INTEGER NOT NULL REFERENCES treatment_folios(id) ON DELETE CASCADE,
+          line_type TEXT NOT NULL
+            CHECK (line_type IN ('session_fee','pos_sale','lab_cost','manual_charge','discount','tax')),
+          description TEXT NOT NULL,
+          quantity NUMERIC(10,3) NOT NULL DEFAULT 1,
+          unit_price NUMERIC(12,2) NOT NULL DEFAULT 0,
+          line_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+          session_id INTEGER REFERENCES treatment_sessions(id),
+          sale_id INTEGER REFERENCES sales(id),
+          added_by INTEGER REFERENCES employees(id),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_treatment_folio_lines_folio ON treatment_folio_lines(folio_id)`);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_treatment_folio_lines_sale
+          ON treatment_folio_lines(sale_id)
+          WHERE sale_id IS NOT NULL
+      `);
+
+      // ── Plan activity log ─────────────────────────────────────────
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS treatment_plan_activities (
+          id SERIAL PRIMARY KEY,
+          plan_id INTEGER NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+          actor_id INTEGER REFERENCES employees(id),
+          activity_type TEXT NOT NULL
+            CHECK (activity_type IN ('status_change','note','deposit_recorded','session_completed','consent_signed','lab_ordered','document_uploaded','invoice_generated')),
+          description TEXT,
+          metadata JSONB DEFAULT '{}',
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_treatment_plan_activities_plan ON treatment_plan_activities(plan_id)`);
+
+      // ── Column additions to existing tables ───────────────────────
+      await client.query(`
+        ALTER TABLE customers
+          ADD COLUMN IF NOT EXISTS diagnosis_history JSONB NOT NULL DEFAULT '[]'::jsonb
+      `);
+      await client.query(`
+        ALTER TABLE customers
+          ADD COLUMN IF NOT EXISTS current_medications JSONB NOT NULL DEFAULT '[]'::jsonb
+      `);
+      await client.query(`
+        ALTER TABLE customers
+          ADD COLUMN IF NOT EXISTS primary_provider_id INTEGER REFERENCES employees(id)
+      `);
+
+      await client.query(`
+        ALTER TABLE appointments
+          ADD COLUMN IF NOT EXISTS treatment_plan_id INTEGER REFERENCES treatment_plans(id)
+      `);
+      await client.query(`
+        ALTER TABLE appointments
+          ADD COLUMN IF NOT EXISTS treatment_session_id INTEGER REFERENCES treatment_sessions(id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_appointments_treatment_plan
+          ON appointments(treatment_plan_id)
+          WHERE treatment_plan_id IS NOT NULL
+      `);
+
+      // Back-fill the FK on treatment_sessions.appointment_id now that both tables exist
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'treatment_sessions_appointment_fk'
+          ) THEN
+            ALTER TABLE treatment_sessions
+              ADD CONSTRAINT treatment_sessions_appointment_fk
+              FOREIGN KEY (appointment_id) REFERENCES appointments(id);
+          END IF;
+        END $$
+      `);
+
+      await client.query(`
+        ALTER TABLE sales
+          ADD COLUMN IF NOT EXISTS treatment_folio_id INTEGER REFERENCES treatment_folios(id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sales_treatment_folio_id
+          ON sales(treatment_folio_id)
+          WHERE treatment_folio_id IS NOT NULL
+      `);
+
+      // ── Feature flag ──────────────────────────────────────────────
+      // Mode-gated flag, flipped ON only when a clinical preset is selected.
+      await client.query(`
+        INSERT INTO feature_flags (key, enabled) VALUES ('phase4_treatment_plans', false)
+        ON CONFLICT (key) DO NOTHING
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

@@ -66,10 +66,15 @@ export default function POSCheckoutModal() {
     setChargeToRoomFolioId,
     openBookings,
     openBookingsLoading,
+    // M10 charge-to-plan
+    chargeToTreatmentFolioId,
+    setChargeToTreatmentFolioId,
+    openTreatmentPlans,
   } = usePOS();
   const { labels = {}, hasMode } = usePreset();
   const customerLabel = labels.customer || "Customer";
   const roomManagementOn = hasMode && hasMode("room_management");
+  const treatmentPlansOn = hasMode && hasMode("treatment_plans");
 
   const isOffline = !navigator.onLine;
 
@@ -157,6 +162,34 @@ export default function POSCheckoutModal() {
               {chargeToRoomFolioId && (
                 <p className="text-xs text-violet-600 mt-1.5">
                   This sale will be added to the folio — no payment is collected now.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* M10 — Charge to treatment plan (treatment_plans mode only) */}
+          {treatmentPlansOn && (openTreatmentPlans || []).length > 0 && (
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+                Charge to treatment plan (optional)
+              </label>
+              <select
+                value={chargeToTreatmentFolioId || ""}
+                onChange={(e) => setChargeToTreatmentFolioId(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm font-medium border border-slate-200 rounded-xl focus:outline-none focus:border-[#8066FF]"
+              >
+                <option value="">— Pay now (cash / card / etc.) —</option>
+                {(openTreatmentPlans || [])
+                  .filter((p) => p.folio_id)
+                  .map((p) => (
+                    <option key={p.id} value={p.folio_id}>
+                      {p.plan_number} — {p.customer_name} ({p.sessions_completed || 0}/{p.total_sessions_planned})
+                    </option>
+                  ))}
+              </select>
+              {chargeToTreatmentFolioId && (
+                <p className="text-xs text-violet-600 mt-1.5">
+                  This sale will be added to the plan folio — no payment is collected now.
                 </p>
               )}
             </div>

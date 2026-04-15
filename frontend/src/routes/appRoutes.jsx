@@ -95,6 +95,7 @@ const ContractsRoute = lazy(() => import("../pages/ContractsRoute"));
 const ServiceTicketsRoute = lazy(() => import("../pages/ServiceTicketsRoute"));
 const RentalsRoute = lazy(() => import("../pages/RentalsRoute"));
 const RoomManagementRoute = lazy(() => import("../pages/RoomManagementRoute"));
+const TreatmentPlansRoute = lazy(() => import("../pages/TreatmentPlansRoute"));
 
 const wrap = (Component) => <Suspense fallback={<RouteLoading />}><Component /></Suspense>;
 const perm = (p, el) => <RequirePerm perm={p}>{el}</RequirePerm>;
@@ -240,5 +241,13 @@ export const appRoutes = [
     <Route path="/rooms/bookings" element={perm("manage_rooms", wrap(RoomManagementRoute))} />
     <Route path="/rooms/calendar" element={perm("manage_rooms", wrap(RoomManagementRoute))} />
     <Route path="/rooms/arrivals-departures" element={perm("manage_rooms", wrap(RoomManagementRoute))} />
+
+    {/* M10 — Treatment plans */}
+    <Route path="/treatment-plans" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
+    <Route path="/treatment-plans/active" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
+    <Route path="/treatment-plans/calendar" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
+    <Route path="/treatment-plans/labs" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
+    <Route path="/treatment-plans/chart/:planId" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
+    <Route path="/treatment-plans/:planId" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
   </Route>,
 ];

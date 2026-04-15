@@ -51,6 +51,12 @@ const MODE_REGISTRY = Object.freeze({
       "phase4_room_management",
     ],
   },
+  treatment_plans: {
+    description: "Multi-visit clinical plans (dental, vet, physio) — charting, lab orders, consent, folios",
+    feature_flags_to_enable: [
+      "phase4_treatment_plans",
+    ],
+  },
 });
 
 const VALID_MODES = Object.keys(MODE_REGISTRY);

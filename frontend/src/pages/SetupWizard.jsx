@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Package, ChefHat, Scissors, ShoppingCart, Coffee, Stethoscope, Wrench, Dumbbell, Warehouse, Camera, Beef, Candy, Shirt, Car, HardHat, Sofa, Sparkles, BedDouble, Home, Building } from "lucide-react";
+import { Package, ChefHat, Scissors, ShoppingCart, Coffee, Stethoscope, Wrench, Dumbbell, Warehouse, Camera, Beef, Candy, Shirt, Car, HardHat, Sofa, Sparkles, BedDouble, Home, Building, PawPrint, Activity } from "lucide-react";
 import { api } from "../api";
 
 const BUSINESS_TYPE_CATEGORIES = [
@@ -52,6 +52,14 @@ const BUSINESS_TYPE_CATEGORIES = [
       { value: "hotel", label: "Hotel", description: "Rooms, folios, housekeeping, overnight stays", icon: BedDouble, iconBg: "bg-violet-100", iconColor: "text-violet-600" },
       { value: "guesthouse", label: "Guesthouse / B&B", description: "Small-property bookings with per-date rates", icon: Home, iconBg: "bg-cyan-100", iconColor: "text-cyan-600" },
       { value: "hostel", label: "Hostel", description: "Bed inventory, open folios, group stays", icon: Building, iconBg: "bg-teal-100", iconColor: "text-teal-700" },
+    ],
+  },
+  {
+    label: "Clinical / Medical",
+    types: [
+      { value: "dental_clinic", label: "Dental Clinic", description: "Multi-visit treatment plans, charting, prescriptions", icon: Stethoscope, iconBg: "bg-sky-100", iconColor: "text-sky-700" },
+      { value: "veterinary", label: "Veterinary Practice", description: "Pet records, owners, lab orders, consent", icon: PawPrint, iconBg: "bg-rose-100", iconColor: "text-rose-600" },
+      { value: "physiotherapy", label: "Physiotherapy Clinic", description: "Session plans, body-chart notes, progress tracking", icon: Activity, iconBg: "bg-emerald-100", iconColor: "text-emerald-700" },
     ],
   },
 ];

@@ -35,6 +35,9 @@ module.exports = function registerReportsRoutes(app, deps) {
   // Multi-channel reports (Wave 6)
   require("./multichannel")(app, deps, helpers);
 
+  // Clinical reports (M10) — treatment_plans mode
+  require("./clinical")(app, deps, helpers);
+
   // Return the processPendingReportSchedules function required by registerAllRoutes.js
   return {
     processPendingReportSchedules:
