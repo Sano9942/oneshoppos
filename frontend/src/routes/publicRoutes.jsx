@@ -4,7 +4,6 @@ import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { useAuth } from "../auth/AuthProvider";
 import { IS_MULTI_TENANT, API_BASE } from "../config";
 import RequireAuth from "../components/RequireAuth";
-import LandingPage from "../pages/LandingPage";
 import SetupWizard from "../pages/SetupWizard";
 import AccessDenied from "../pages/AccessDenied";
 import ContextSelect from "../pages/ContextSelect";
@@ -12,6 +11,7 @@ import RouteLoading from "./RouteLoading";
 
 const POSRoute = lazy(() => import("../pages/POSRoute"));
 const LandingPagePreview = lazy(() => import("../pages/LandingPagePreview"));
+const LoginPage = lazy(() => import("../pages/LoginPage"));
 const KioskRedesign = lazy(() => import("../pages/redesign/KioskRedesign"));
 const CustomerDisplayPage = lazy(() => import("../pages/CustomerDisplayPage"));
 const ReceiptPublicPage = lazy(() => import("../pages/ReceiptPublicPage"));
@@ -76,7 +76,7 @@ export const publicRoutes = [
   <Route key="home" path="/" element={<HomeRedirect />} />,
   <Route key="landing-preview" path="/landing-preview" element={<Suspense fallback={<RouteLoading />}><LandingPagePreview /></Suspense>} />,
   <Route key="setup" path="/setup" element={<SetupWizard />} />,
-  <Route key="login" path="/login" element={<LandingPage />} />,
+  <Route key="login" path="/login" element={<Suspense fallback={<RouteLoading />}><LoginPage /></Suspense>} />,
   <Route key="reset-password" path="/reset-password" element={<Suspense fallback={<RouteLoading />}><ResetPassword /></Suspense>} />,
   <Route key="signup" path="/signup" element={<Suspense fallback={<RouteLoading />}><SignupPage /></Suspense>} />,
   <Route key="receipt" path="/receipt/:invoiceNumber" element={<Suspense fallback={<RouteLoading />}><ReceiptPublicPage /></Suspense>} />,

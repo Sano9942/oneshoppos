@@ -246,7 +246,7 @@ function PreviewNav() {
   return (
     <nav className="sticky top-0 z-40 border-b border-neutral-200 bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3">
-        <a href="/landing-preview" className="flex items-center gap-2 text-lg font-bold text-neutral-950">
+        <a href="/" className="flex items-center gap-2 text-lg font-bold text-neutral-950">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white">
             <Zap size={17} />
           </span>
@@ -259,8 +259,8 @@ function PreviewNav() {
           <a href="#pricing" className="hover:text-emerald-700">Pricing</a>
         </div>
         <div className="flex items-center gap-2">
-          <a href="/" className="hidden rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-800 hover:bg-neutral-50 sm:inline-flex">
-            Current Page
+          <a href="/signup?plan=free" className="hidden rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-800 hover:bg-neutral-50 sm:inline-flex">
+            Start Free
           </a>
           <a href="/login" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
             Sign In
@@ -626,8 +626,8 @@ export default function LandingPagePreview() {
               <a href="/signup?plan=free" className="rounded-lg bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700">
                 Start Free
               </a>
-              <a href="/" className="rounded-lg border border-white/35 px-5 py-3 text-sm font-bold text-white hover:bg-white/10">
-                Back To Current Page
+              <a href="/login" className="rounded-lg border border-white/35 px-5 py-3 text-sm font-bold text-white hover:bg-white/10">
+                Sign In
               </a>
             </div>
           </div>
