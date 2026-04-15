@@ -5,7 +5,7 @@ const crypto = require("crypto");
 const path = require("path");
 
 module.exports = function registerTreatmentPlanRoutes(app, deps) {
-  const { requireFeature } = require("../middleware/feature-flags");
+  const { requireFeature, requireMode } = require("../middleware/feature-flags");
   const { requirePerm } = require("../middleware/permissions");
   const { validate } = require("../middleware/validate");
   const {
@@ -34,7 +34,7 @@ module.exports = function registerTreatmentPlanRoutes(app, deps) {
   const deposits = require("../services/treatment-plan-deposits");
   const { uploadToR2 } = require("../utils/r2");
 
-  const gate = [requireFeature("phase4_treatment_plans"), requirePerm("manage_treatment_plans")];
+  const gate = [requireMode("treatment_plans"), requireFeature("phase4_treatment_plans"), requirePerm("manage_treatment_plans")];
 
   // Multer for clinical document uploads — 50MB limit per the plan
   const docUpload = multer({

@@ -187,6 +187,73 @@ module.exports = function registerSandboxRoutes(app, deps) {
       return res.status(500).json({ error: "Simulation failed" });
     }
   });
+
+  // ── POST /api/sandbox/tokenize — returns a fake saved-instrument token ──
+  // For Item 22 (recurring auto-charge). Real xPay tokenization is not yet
+  // wired; the sandbox provides a stand-in so the renewal worker can be
+  // exercised end-to-end without a real card on file.
+  app.post("/api/sandbox/tokenize", async (req, res) => {
+    try {
+      const { customerRef, last4 } = req.body || {};
+      const token = `sbx_tok_${Buffer.from(
+        `${customerRef || "anon"}-${Date.now()}-${Math.random()}`
+      ).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}`;
+      logger.info({ token, customerRef, last4 }, "Sandbox tokenize");
+      return res.json({
+        ok: true,
+        gateway_token: token,
+        last4: last4 || "4242",
+        brand: "VISA",
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── POST /api/sandbox/charge-saved — charges a saved token ──
+  // Synchronous result + simulated webhook for the renewal worker. The
+  // outcome can be controlled via `forceOutcome` for failure-path tests.
+  app.post("/api/sandbox/charge-saved", async (req, res) => {
+    try {
+      const { gateway_token, amount, reference, forceOutcome } = req.body || {};
+      if (!gateway_token || !amount) {
+        return res.status(400).json({ error: "gateway_token and amount required" });
+      }
+      const outcome = forceOutcome === "fail" ? "payment.failed" : "payment.completed";
+      const transactionId = `sbx_chg_${Date.now()}_${reference || "ref"}`;
+
+      // Fire the webhook synchronously so the caller can read the result.
+      const result = await processWebhookEvent({
+        provider: "sandbox",
+        event_type: outcome,
+        transaction_id: transactionId,
+        status: outcome === "payment.completed" ? "completed" : "failed",
+        amount: Number(amount),
+        raw: {
+          event_type: outcome,
+          transaction_id: transactionId,
+          gateway_token,
+          status: outcome === "payment.completed" ? "completed" : "failed",
+          amount: Number(amount),
+          currency: "PKR",
+          sandbox: true,
+          source: "charge-saved",
+          simulated_at: new Date().toISOString(),
+        },
+      });
+
+      return res.json({
+        ok: outcome === "payment.completed",
+        gateway_ref: transactionId,
+        amount: Number(amount),
+        status: outcome === "payment.completed" ? "captured" : "failed",
+        webhook_result: result,
+      });
+    } catch (err) {
+      logger.error({ err }, "Sandbox charge-saved error");
+      return res.status(500).json({ error: err.message });
+    }
+  });
 };
 
 // ── Server-rendered sandbox payment page ─────────────────────────────

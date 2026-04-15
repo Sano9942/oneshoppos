@@ -762,7 +762,7 @@ module.exports = function registerSalesRoutes(app, deps) {
           // M5: gross_weight/tare_weight persist audit trail for weighted items.
           // Non-weighted items pass null/0 and behave identically to pre-M5.
           await client.query(
-            "INSERT INTO sale_items (sale_id, product_id, variant_id, quantity, price_at_sale, cost_price_at_sale, gross_weight, tare_weight) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            "INSERT INTO sale_items (sale_id, product_id, variant_id, quantity, price_at_sale, cost_price_at_sale, gross_weight, tare_weight, staff_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             [
               newSaleId,
               item.original_product_id || item.id,
@@ -772,6 +772,8 @@ module.exports = function registerSalesRoutes(app, deps) {
               item.cost_price || 0,
               item.gross_weight != null ? Number(item.gross_weight) : null,
               item.tare_weight != null ? Number(item.tare_weight) : 0,
+              // v49: service items (car wash, tailoring) can be assigned to staff.
+              item.staff_id ? Number(item.staff_id) : null,
             ]
           );
 

@@ -3863,6 +3863,93 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 46,
+    description:
+      "Treatment plan templates — clone-to-create for recurring clinical plans (A7)",
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS treatment_plan_templates (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT,
+          default_title TEXT,
+          default_diagnosis_code TEXT,
+          default_diagnosis_notes TEXT,
+          default_sessions_planned INTEGER NOT NULL DEFAULT 1,
+          default_estimated_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+          default_notes TEXT,
+          default_activities JSONB NOT NULL DEFAULT '[]'::jsonb,
+          created_by INTEGER REFERENCES employees(id),
+          is_archived BOOLEAN NOT NULL DEFAULT false,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_treatment_plan_templates_archived
+         ON treatment_plan_templates(is_archived)`
+      );
+    },
+  },
+  {
+    version: 47,
+    description:
+      "Appointments + booking services deposit columns — mirror room_bookings deposit schema for public booking deposit flow (M6 gap)",
+    up: async (client) => {
+      // Per-service deposit policy configured by admin (require_deposit +
+      // deposit_amount). Controls whether the public booking page asks for a
+      // deposit before confirming the appointment.
+      await client.query(`
+        ALTER TABLE booking_services
+          ADD COLUMN IF NOT EXISTS require_deposit BOOLEAN NOT NULL DEFAULT false,
+          ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(12,2) DEFAULT 0
+      `);
+      // Per-appointment deposit tracking.
+      await client.query(`
+        ALTER TABLE appointments
+          ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(12,2) DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS deposit_collected NUMERIC(12,2) DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS deposit_method TEXT,
+          ADD COLUMN IF NOT EXISTS deposit_payment_intent_id TEXT,
+          ADD COLUMN IF NOT EXISTS deposit_status TEXT
+            CHECK (deposit_status IS NULL OR deposit_status IN
+                   ('pending','authorized','captured','released','failed'))
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_appointments_deposit_intent
+          ON appointments(deposit_payment_intent_id)
+          WHERE deposit_payment_intent_id IS NOT NULL
+      `);
+    },
+  },
+  {
+    version: 48,
+    description:
+      "Tax-inclusive room rates — room_types.tax_inclusive flag (M9 Option A)",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE room_types
+          ADD COLUMN IF NOT EXISTS tax_inclusive BOOLEAN NOT NULL DEFAULT false
+      `);
+    },
+  },
+  {
+    version: 49,
+    description:
+      "Walk-in service staff assignment on POS — sale_items.staff_id (for car wash, tailoring, etc.)",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE sale_items
+          ADD COLUMN IF NOT EXISTS staff_id INTEGER REFERENCES employees(id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sale_items_staff_id
+          ON sale_items(staff_id)
+          WHERE staff_id IS NOT NULL
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

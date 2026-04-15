@@ -247,6 +247,7 @@ export const appRoutes = [
     <Route path="/treatment-plans/active" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
     <Route path="/treatment-plans/calendar" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
     <Route path="/treatment-plans/labs" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
+    <Route path="/treatment-plans/templates" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
     <Route path="/treatment-plans/chart/:planId" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
     <Route path="/treatment-plans/:planId" element={perm("manage_treatment_plans", wrap(TreatmentPlansRoute))} />
   </Route>,

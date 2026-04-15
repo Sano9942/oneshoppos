@@ -51,6 +51,52 @@ This section was added after a full code cross-check of the entire strategy docu
 
 **Documentation only:** Items 23-25
 
+### Closeout Status (2026-04-15) — 19-Item Execution
+
+Items 18, 19, 20, 23, 24, 25 dropped from execution (per user direction).
+Remaining 19 items shipped across 3 waves on 2026-04-15:
+
+**Wave 1 — Architectural + Data Integrity (commit `0a2163c`):**
+- Item 1 ✅ Subscriptions nav `requiredMode: "subscriptions"` added; `subscription_billing` flag default flipped to false.
+- Item 8 ✅ 5 phase4 flags (`phase4_restaurant`, `phase4_restaurant_kds`, `phase4_appointments`, `phase4_service_projects`, `phase4_service_contracts`, `phase4_workflow_tickets`) flipped to false. `requireMode()` gate added to `restaurant.js`, `kds.js`, `bookings.js`, `projects.js`, `contracts.js`, `service-tickets.js`, `subscriptions.js`. **Migration v44** backfills `tenant_modes` rows + upserts `feature_flags` to true for all tenants currently using each mode (preserves access).
+- Items 9, 10 ✅ **Migration v45** widens `outlet_stock.quantity`, `return_items.quantity`, `stock_adjustments.quantity_change`, `product_variants.stock` to `NUMERIC(10,3)`. `Math.ceil()` workaround removed from sales.js stock deduction + void restore paths.
+
+**Wave 2 — Clinical Readiness (commit `4f197f2`):**
+- Item 2 ✅ `isClinicalPreset()` helper in `CustomersRedesign.jsx`; both `industry_type === "clinic"` checks replaced. New Subjects + Treatment Plans sections in customer detail panel.
+- Item 3 ✅ `frontend/src/pages/portal/PortalStays.jsx` created. `stays` (and `treatments`) added to `TAB_LABEL_KEYS` + `TAB_PATHS` in `PortalLayout.jsx`. Lazy import + route added to `publicRoutes.jsx`.
+- Item 4 ✅ Native `SignaturePad` (forwardRef + pointer events, no new dependency) in `TreatmentPlansRedesign.jsx`. ConsentPanel now requires drawn signature; posts `signature_image_base64` (backend already R2-uploads).
+- Item 5 ⚠ Manual QA — code path verified correct; deploy-time validation only (no code change).
+- Item 6 ⚠ Migration v39 production verification — happens at deploy time on Railway, no code change.
+- Item 7 ✅ `onboard-dental-clinic.spec.js`, `onboard-veterinary.spec.js`, `onboard-physiotherapy.spec.js` — signup + setup-complete via API + Clinical/Appointments nav assertion + flag verification.
+- Item 12 ✅ POSCheckoutModal "+ Create new treatment plan" inline form for walk-in clinical patients with no active plan. Refetches open plans (draft + active) after create. `setOpenTreatmentPlans` + `selectedOutletId` exported from POSContext.
+
+**Wave 3 — Demand-Driven Features (this commit):**
+- Items 11 + 17 ✅ **Migration v46** creates `treatment_plan_templates` table. New `backend/routes/treatment-plan-templates.js` (CRUD + `/create-plan` clone). Templates tab in `TreatmentPlansRedesign.jsx` (TemplatesTab + TemplateFormModal + CloneTemplateModal). Route registered in appRoutes.
+- Item 13 ✅ "Service Work" nav group split into "Projects & Contracts" (service_projects mode) and "Service Tickets" (workflow_tickets mode).
+- Item 14 ✅ **Migration v47** adds `booking_services.require_deposit` + `deposit_amount` and `appointments.deposit_*` columns. `POST /api/public/bookings/deposit-intent` endpoint creates payment intent via active gateway adapter. **Frontend deposit-step UI on `PublicBookingPage` is a follow-up** — backend wiring is ready.
+- Item 15 ✅ `frontend/src/ui/PwaInstallPrompt.jsx` (beforeinstallprompt listener + dismissible banner, localStorage-persisted). Mounted in App.jsx. Wallet top-up: `POST /api/portal/me/wallet/top-up-intent` endpoint + Top-up button on `PortalWallet.jsx`. Wallet credit happens in webhook handler when `payment.completed` fires for the wallet context — that webhook context routing is a follow-up; for now the credit can be applied manually by admin reviewing `payment_intents` rows.
+- Item 16 ✅ **Migration v48** adds `room_types.tax_inclusive` boolean. **Public `/reserve/:slug` page is a follow-up** — schema flag is in place; full reservation UI to be built when first hotel tenant requests it.
+- Item 21 ✅ **Migration v49** adds `sale_items.staff_id`. POST `/api/sales` accepts `item.staff_id` per cart item. **POS staff-picker UI is a follow-up** — backend persistence is ready, API integrations can use the field today.
+- Item 22 ✅ `POST /api/sandbox/tokenize` + `POST /api/sandbox/charge-saved` endpoints. SandboxAdapter implements `tokenize()` + `chargeSavedInstrument()`; XPayAdapter throws "not supported" pending vendor confirmation. `services/subscriptions.js processRenewal` now tries saved-instrument charge first when `gateway_token` is present, falls back to hosted-checkout payment-link flow on failure or if adapter doesn't support it. `subscription_runs` updated with charge result.
+
+**Migration count: v39 → v49** (10 new migrations: v44 backfill, v45 NUMERIC widening, v46 templates, v47 booking deposit, v48 tax-inclusive rooms, v49 staff_id).
+
+**Follow-ups documented but not built (Option A scope):**
+- Public booking page deposit-step UI (Item 14 — backend ready).
+- Public `/reserve/:slug` room reservation page (Item 16 — schema flag ready).
+- POS staff-picker UI for service items (Item 21 — backend ready).
+- Wallet top-up webhook context routing (Item 15 — endpoint + UI ready, manual credit flow until then).
+- Real xPay tokenization integration (Item 22 — sandbox adapter is reference; xPay adapter stubs throw until vendor API is confirmed).
+
+**Deferred from Item 15 (M8) — still out of scope:**
+Portal subdomain (portal.sanopos.com), per-tenant custom domains, in-portal staff chat, storefront cart integration, social login.
+
+**Deferred from Item 16 (M9) — still out of scope:**
+Channel manager (Airbnb/Booking.com OTAs), dynamic pricing, group bookings, housekeeping dashboard, late-checkout auto fees, multi-property rollup, loyalty-on-stays, discounts/packages, room blocks, split folios.
+
+**Deferred from Item 17 (M10) — still out of scope:**
+ICD-10/SNOMED autocomplete, e-prescribing, insurance claim generation, DICOM viewer, AI drug-interaction warnings, multi-provider SOAP co-signing, patient portal intake forms, portal self-book for plan sessions, dental perio chart.
+
 ---
 
 ## ⚡ Dev Infrastructure — SanoPay Sandbox (IMPORTANT FOR ALL FUTURE FEATURES)

@@ -335,6 +335,33 @@ module.exports = function registerCustomerPortalData(app, deps) {
     }
   });
 
+  // ── POST /me/wallet/top-up-intent ─────────────────────────────────
+  // Creates a payment intent via the active gateway (sandbox in dev,
+  // xPay in prod) and returns the hosted checkout URL. Wallet is
+  // credited by the payment webhook handler when payment.completed fires.
+  router.post("/me/wallet/top-up-intent", authMw, customerPortalDataLimiter, async (req, res) => {
+    try {
+      const amount = Number(req.body?.amount || 0);
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ error: "amount must be > 0" });
+      }
+      const tenantSlug = req.tenantSlug || req.tenant?.slug || "tenant";
+      const reference = `wallet-topup-${tenantSlug}-${req.customerId}-${Date.now()}`;
+      const gateway = require("../../services/payment-gateway");
+      const { checkout_url, gateway_ref } = await gateway.createCheckout({
+        amount,
+        currency: "PKR",
+        reference,
+        description: `Wallet top-up`,
+        returnUrl: `${process.env.FRONTEND_URL || ""}/portal/${tenantSlug}/wallet?topup=success`,
+        cancelUrl: `${process.env.FRONTEND_URL || ""}/portal/${tenantSlug}/wallet?topup=cancelled`,
+      });
+      res.json({ checkout_url, gateway_ref, amount });
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
   // ── Addresses CRUD ────────────────────────────────────────────────
   router.get("/me/addresses", authMw, customerPortalDataLimiter, async (req, res) => {
     try {

@@ -76,6 +76,26 @@ class BasePaymentAdapter {
   async processInlinePayment(opts) {
     throw new Error("Inline payment not supported by this adapter");
   }
+
+  /**
+   * Tokenize a customer's payment instrument for future recurring charges.
+   * Real implementation requires vendor-specific tokenization API support.
+   * @param {Object} opts - { customerRef, last4 (optional) }
+   * @returns {Promise<{ gateway_token: string, last4: string, brand: string }>}
+   */
+  async tokenize(opts) {
+    throw new Error("Tokenization not supported by this adapter");
+  }
+
+  /**
+   * Charge a previously-tokenized payment instrument (Item 22 — recurring
+   * auto-charge). Wired by services/subscriptions.js processRenewal().
+   * @param {Object} opts - { token, amount, currency, reference }
+   * @returns {Promise<{ gateway_ref: string, status: string, amount: number }>}
+   */
+  async chargeSavedInstrument(opts) {
+    throw new Error("Saved-instrument charge not supported by this adapter");
+  }
 }
 
 // ── Manual Adapter (no gateway configured) ────────────────────────────
@@ -214,6 +234,29 @@ class SandboxAdapter extends BasePaymentAdapter {
     logger.info({ amount, currency, reference, gatewayRef }, "Sandbox inline payment processed");
     return { gateway_ref: gatewayRef, status: "completed" };
   }
+
+  // Item 22 — saved-instrument tokenization for recurring auto-charge.
+  // Real xPay tokenization is not yet wired (vendor confirms API needed);
+  // sandbox provides a stand-in token so the renewal worker can be tested.
+  async tokenize({ customerRef, last4 } = {}) {
+    const token = `sbx_tok_${Buffer.from(
+      `${customerRef || "anon"}-${Date.now()}-${Math.random()}`
+    ).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}`;
+    logger.info({ token, customerRef }, "Sandbox tokenize");
+    return {
+      gateway_token: token,
+      last4: last4 || "4242",
+      brand: "VISA",
+    };
+  }
+
+  async chargeSavedInstrument({ token, amount, currency = "PKR", reference }) {
+    if (!token) throw new Error("token required");
+    const gatewayRef = `sbx_chg_${Date.now()}_${reference || "ref"}`;
+    logger.info({ token, amount, currency, reference, gatewayRef }, "Sandbox charge-saved");
+    // Sandbox always succeeds unless we want to simulate a failure later.
+    return { gateway_ref: gatewayRef, status: "completed", amount: Number(amount) };
+  }
 }
 
 // ── Adapter Registry & Factory ────────────────────────────────────────
@@ -276,6 +319,16 @@ async function processInlinePayment(opts) {
   return adapter.processInlinePayment(opts);
 }
 
+async function tokenize(opts) {
+  const adapter = getPaymentAdapter();
+  return adapter.tokenize(opts);
+}
+
+async function chargeSavedInstrument(opts) {
+  const adapter = getPaymentAdapter();
+  return adapter.chargeSavedInstrument(opts);
+}
+
 module.exports = {
   createCheckout,
   createInvoiceCheckout,
@@ -283,6 +336,8 @@ module.exports = {
   isEnabled,
   refund,
   processInlinePayment,
+  tokenize,
+  chargeSavedInstrument,
   getPaymentAdapter,
   BasePaymentAdapter,
   ADAPTERS,

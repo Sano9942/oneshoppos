@@ -119,6 +119,52 @@ module.exports = function registerPublicBookingRoutes(app, deps) {
     }
   );
 
+  // POST /api/public/bookings/deposit-intent — creates a payment intent via the
+  // active payment adapter (sandbox in dev/staging, xPay in prod) and returns
+  // the hosted checkout URL. The frontend redirects the customer there, then
+  // the payment webhook (routes/webhooks.js) finalises the appointment and
+  // marks deposit_status = captured. See docs/plans/tenant-preset-engine-v1
+  // /strategy.md for the full flow.
+  app.post("/api/public/bookings/deposit-intent", publicBookingLimiter, async (req, res) => {
+    try {
+      const resolved = await resolvePublicTenantDb(req, deps);
+      if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+      const { db, tenant } = resolved;
+      const { service_id, amount, returnUrl, cancelUrl, booking_draft_id } = req.body || {};
+      if (!service_id || !amount) {
+        return res.status(400).json({ error: "service_id and amount required" });
+      }
+      // Verify service exists and deposit is expected.
+      const { rows: [svc] } = await db.query(
+        "SELECT id, name, require_deposit, deposit_amount FROM booking_services WHERE id = $1",
+        [Number(service_id)]
+      );
+      if (!svc) return res.status(404).json({ error: "Service not found" });
+
+      const gateway = require("../services/payment-gateway");
+      const reference = `booking-deposit-${tenant?.slug || "local"}-${service_id}-${Date.now()}`;
+      const { checkout_url, gateway_ref } = await gateway.createCheckout({
+        amount: Number(amount),
+        currency: "PKR",
+        reference,
+        description: `Booking deposit — ${svc.name}`,
+        returnUrl: returnUrl || `${process.env.FRONTEND_URL || ""}/book/${tenant?.slug || ""}?deposit=success`,
+        cancelUrl: cancelUrl || `${process.env.FRONTEND_URL || ""}/book/${tenant?.slug || ""}?deposit=cancelled`,
+      });
+
+      res.json({
+        checkout_url,
+        gateway_ref,
+        service: { id: svc.id, name: svc.name },
+        amount: Number(amount),
+        booking_draft_id: booking_draft_id || null,
+      });
+    } catch (err) {
+      const status = err.statusCode || 500;
+      res.status(status).json({ error: err.message });
+    }
+  });
+
   // GET /api/public/bookings/:id/ics — calendar download
   app.get("/api/public/bookings/:id/ics", async (req, res) => {
     try {

@@ -383,7 +383,8 @@ CREATE TABLE IF NOT EXISTS sale_items (
   cost_price_at_sale NUMERIC(12,2) DEFAULT 0.0,
   variant_id INTEGER REFERENCES product_variants(id),
   gross_weight NUMERIC(10,3),
-  tare_weight NUMERIC(10,3) DEFAULT 0
+  tare_weight NUMERIC(10,3) DEFAULT 0,
+  staff_id INTEGER REFERENCES employees(id)
 );
 
 CREATE TABLE IF NOT EXISTS sale_payments (
@@ -3347,6 +3348,7 @@ CREATE TABLE IF NOT EXISTS room_types (
   deposit_required NUMERIC(12,2) NOT NULL DEFAULT 0,
   amenities JSONB NOT NULL DEFAULT '[]'::jsonb,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  tax_inclusive BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

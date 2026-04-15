@@ -130,10 +130,40 @@ async function processRenewal(db, boss, tenantSlug, subscriptionId) {
     }
   );
 
-  // Auto-charge: generate payment link and email it to the customer
+  // Auto-charge: when the subscription has a saved gateway_token (Item 22),
+  // try the saved-instrument charge first. If that succeeds, the invoice is
+  // marked paid in the webhook handler — no email link needed. Falls back to
+  // a hosted checkout link if no token, charge fails, or the active adapter
+  // doesn't support saved-instrument charges (real xPay tokenization is TBD).
   if (sub.auto_charge) {
-    try {
-      const paymentGateway = require("./payment-gateway");
+    const paymentGateway = require("./payment-gateway");
+    let savedChargeOk = false;
+    if (sub.gateway_token && paymentGateway.isEnabled()) {
+      try {
+        const charge = await paymentGateway.chargeSavedInstrument({
+          token: sub.gateway_token,
+          amount: Number(sub.price),
+          currency: "PKR",
+          reference: `sub-renew-${subscriptionId}-${invoice.id}`,
+        });
+        if (charge?.status === "completed") {
+          savedChargeOk = true;
+          await db.query(
+            `UPDATE subscription_runs
+             SET charge_status = 'completed', charge_amount = $2
+             WHERE subscription_id = $1 AND period_end = $3`,
+            [subscriptionId, Number(sub.price), nextEnd]
+          );
+          logger.info({ subscriptionId, gateway_ref: charge.gateway_ref },
+            "Auto-charge succeeded against saved instrument");
+        }
+      } catch (chargeErr) {
+        logger.warn({ err: chargeErr.message, subscriptionId },
+          "Saved-instrument charge failed, falling back to payment link");
+      }
+    }
+
+    if (!savedChargeOk) try {
       if (paymentGateway.isEnabled()) {
         const crypto = require("crypto");
         const linkToken = crypto.randomBytes(16).toString("hex");

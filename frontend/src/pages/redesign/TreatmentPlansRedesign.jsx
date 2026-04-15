@@ -52,6 +52,7 @@ export default function TreatmentPlansRedesign() {
   // Tab dispatch
   const path = location.pathname;
   const tab =
+    path.includes("/treatment-plans/templates") ? "templates" :
     path.includes("/treatment-plans/labs") ? "labs" :
     path.includes("/treatment-plans/calendar") ? "calendar" :
     path.includes("/treatment-plans/chart/") ? "chart" :
@@ -68,6 +69,7 @@ export default function TreatmentPlansRedesign() {
       {tab === "detail" && <PlanDetailView planId={planId} />}
       {tab === "calendar" && <CalendarTab />}
       {tab === "labs" && <LabsTab />}
+      {tab === "templates" && <TemplatesTab />}
       {tab === "chart" && <PlanDetailView planId={planId} initialInnerTab="chart" />}
     </PageShell>
   );
@@ -78,6 +80,7 @@ function TabNav({ currentTab }) {
     ["list", "Plans", "/treatment-plans/active"],
     ["calendar", "Calendar", "/treatment-plans/calendar"],
     ["labs", "Lab Orders", "/treatment-plans/labs"],
+    ["templates", "Templates", "/treatment-plans/templates"],
   ];
   return (
     <div className="flex gap-1">
@@ -1332,6 +1335,233 @@ function LabsTab() {
         </table>
       )}
     </SectionCard>
+  );
+}
+
+// ── Templates tab (A7) ───────────────────────────────────────────────
+
+function TemplatesTab() {
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(null); // null | "new" | template row
+  const [showCloneFor, setShowCloneFor] = useState(null); // template row
+  const toast = useToast();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("/api/treatment-plan-templates");
+      setTemplates(res.templates || []);
+    } catch (err) {
+      toast.error(err.message || "Failed to load templates");
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const archive = async (tpl) => {
+    if (!confirm(`Archive "${tpl.name}"? Past plans referencing it are unaffected.`)) return;
+    try {
+      await api.del(`/api/treatment-plan-templates/${tpl.id}`);
+      toast.success("Template archived");
+      load();
+    } catch (err) {
+      toast.error(err.message || "Failed to archive");
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <div>
+          <p className="text-sm text-slate-600">
+            Save commonly-used plan structures as templates — create new plans for patients with one click.
+          </p>
+        </div>
+        <Button onClick={() => setShowForm("new")}><Plus className="w-4 h-4 mr-1 inline" /> New Template</Button>
+      </div>
+
+      <SectionCard>
+        {loading ? (
+          <div className="p-6 text-center text-slate-500">Loading…</div>
+        ) : templates.length === 0 ? (
+          <EmptyState
+            title="No templates yet"
+            body="Save a template to streamline creating recurring plans like standard root-canal or physiotherapy programs."
+          />
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b text-slate-600">
+                <th className="py-2 px-3">Name</th>
+                <th>Title</th>
+                <th>Sessions</th>
+                <th>Est. Total</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {templates.map((t) => (
+                <tr key={t.id} className="border-b hover:bg-slate-50">
+                  <td className="py-2 px-3 font-medium">
+                    {t.name}
+                    {t.is_archived && <Badge tone="default">archived</Badge>}
+                  </td>
+                  <td>{t.default_title || "—"}</td>
+                  <td>{t.default_sessions_planned}</td>
+                  <td>{Number(t.default_estimated_total || 0)}</td>
+                  <td className="text-right pr-2">
+                    <Button size="sm" tone="primary" onClick={() => setShowCloneFor(t)} disabled={t.is_archived}>
+                      Create Plan
+                    </Button>
+                    <Button size="sm" tone="plain" onClick={() => setShowForm(t)}>Edit</Button>
+                    {!t.is_archived && (
+                      <Button size="sm" tone="plain" onClick={() => archive(t)}>Archive</Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </SectionCard>
+
+      {showForm && (
+        <TemplateFormModal
+          template={showForm === "new" ? null : showForm}
+          onClose={() => setShowForm(null)}
+          onSaved={() => { setShowForm(null); load(); }}
+        />
+      )}
+      {showCloneFor && (
+        <CloneTemplateModal
+          template={showCloneFor}
+          onClose={() => setShowCloneFor(null)}
+          onCreated={() => { setShowCloneFor(null); load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function TemplateFormModal({ template, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    name: template?.name || "",
+    description: template?.description || "",
+    default_title: template?.default_title || "",
+    default_diagnosis_code: template?.default_diagnosis_code || "",
+    default_diagnosis_notes: template?.default_diagnosis_notes || "",
+    default_sessions_planned: template?.default_sessions_planned || 1,
+    default_estimated_total: template?.default_estimated_total || 0,
+    default_notes: template?.default_notes || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+
+  const submit = async () => {
+    if (!form.name.trim()) { toast.error("Name is required"); return; }
+    setSaving(true);
+    try {
+      if (template) {
+        await api.put(`/api/treatment-plan-templates/${template.id}`, form);
+        toast.success("Template updated");
+      } else {
+        await api.post("/api/treatment-plan-templates", form);
+        toast.success("Template created");
+      }
+      onSaved();
+    } catch (err) {
+      toast.error(err.message || "Failed to save template");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title={template ? "Edit Template" : "New Template"} onClose={onClose} width="max-w-2xl">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Template name *" full>
+          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Standard Root Canal" />
+        </Field>
+        <Field label="Description" full>
+          <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        </Field>
+        <Field label="Default plan title">
+          <Input value={form.default_title} onChange={(e) => setForm({ ...form, default_title: e.target.value })} />
+        </Field>
+        <Field label="Default diagnosis code">
+          <Input value={form.default_diagnosis_code} onChange={(e) => setForm({ ...form, default_diagnosis_code: e.target.value })} />
+        </Field>
+        <Field label="Sessions planned">
+          <Input type="number" min="1" value={form.default_sessions_planned} onChange={(e) => setForm({ ...form, default_sessions_planned: e.target.value })} />
+        </Field>
+        <Field label="Estimated total">
+          <Input type="number" min="0" value={form.default_estimated_total} onChange={(e) => setForm({ ...form, default_estimated_total: e.target.value })} />
+        </Field>
+        <Field label="Default diagnosis notes" full>
+          <Input value={form.default_diagnosis_notes} onChange={(e) => setForm({ ...form, default_diagnosis_notes: e.target.value })} />
+        </Field>
+        <Field label="Default notes" full>
+          <Input value={form.default_notes} onChange={(e) => setForm({ ...form, default_notes: e.target.value })} />
+        </Field>
+      </div>
+      <div className="flex justify-end gap-2 mt-4">
+        <Button tone="plain" onClick={onClose}>Cancel</Button>
+        <Button onClick={submit} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function CloneTemplateModal({ template, onClose, onCreated }) {
+  const [customers, setCustomers] = useState([]);
+  const [form, setForm] = useState({ customer_id: "", subject_id: "", start_date: "" });
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    api.get("/api/customers").then((d) => setCustomers(d.customers || d || [])).catch(() => {});
+  }, []);
+
+  const submit = async () => {
+    if (!form.customer_id) { toast.error("Select a patient"); return; }
+    setSaving(true);
+    try {
+      const res = await api.post(`/api/treatment-plan-templates/${template.id}/create-plan`, form);
+      toast.success(`Plan ${res.plan?.plan_number || ""} created`);
+      onCreated();
+      if (res.plan?.id) navigate(`/treatment-plans/${res.plan.id}`);
+    } catch (err) {
+      toast.error(err.message || "Failed to create plan");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title={`Create Plan from "${template.name}"`} onClose={onClose}>
+      <div className="space-y-3">
+        <Field label="Patient *">
+          <Select value={form.customer_id} onChange={(e) => setForm({ ...form, customer_id: e.target.value })}>
+            <option value="">Select patient…</option>
+            {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Start date">
+          <Input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
+        </Field>
+        <p className="text-xs text-slate-500">
+          This will create a new plan in draft status, pre-filled from the template. You can edit sessions, charting, and pricing afterward.
+        </p>
+      </div>
+      <div className="flex justify-end gap-2 mt-4">
+        <Button tone="plain" onClick={onClose}>Cancel</Button>
+        <Button onClick={submit} disabled={saving}>{saving ? "Creating…" : "Create Plan"}</Button>
+      </div>
+    </ModalShell>
   );
 }
 

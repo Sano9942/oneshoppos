@@ -5,6 +5,7 @@ initTheme();
 import { useAuth } from "./auth/AuthProvider";
 import ImpersonationBanner from "./ui/ImpersonationBanner";
 import SubscriptionBanner from "./ui/SubscriptionBanner";
+import PwaInstallPrompt from "./ui/PwaInstallPrompt";
 import { publicRoutes } from "./routes/publicRoutes";
 import { appRoutes } from "./routes/appRoutes";
 import { adminRoutes } from "./routes/adminRoutes";
@@ -17,6 +18,7 @@ function App() {
       {isImpersonating && <ImpersonationBanner />}
       <Router>
         <SubscriptionBanner />
+        <PwaInstallPrompt />
         <Routes>
           {publicRoutes}
           {appRoutes}
