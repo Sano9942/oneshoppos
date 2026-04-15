@@ -289,12 +289,9 @@ module.exports = function registerSalesRoutes(app, deps) {
 
           // Restore stock for each item back to the outlet
           for (const item of items) {
-            // M5: sale_items.quantity is NUMERIC(10,3) (pg returns it as string).
-            // outlet_stock.quantity + product_variants.stock are still INTEGER,
-            // so we round UP on restore — mirrors the Math.ceil deduction path
-            // in the sale-creation flow above. Loses fractional precision on
-            // weighted items (acceptable for v1 — see M5 plan out-of-scope).
-            const restoreQtyInt = Math.ceil(Number(item.quantity));
+            // v45: outlet_stock.quantity + product_variants.stock are NUMERIC(10,3),
+            // matching sale_items.quantity — restore with full fractional precision.
+            const restoreQtyInt = Number(item.quantity);
 
             // Check if this item is a bundle — restore component stock instead
             const { rows: [prod] } = await client.query(
@@ -778,11 +775,9 @@ module.exports = function registerSalesRoutes(app, deps) {
             ]
           );
 
-          // M5: stock columns are still INTEGER (partial-stock is out of scope for M5).
-          // For weighted items (fractional quantity), round UP on stock deduction so
-          // sale of 1.25 kg deducts 2 from stock — pessimistic but prevents overselling.
-          // Sale_items.quantity keeps full precision; only the stock math rounds.
-          const stockDeductQty = Math.ceil(Number(item.quantity));
+          // v45: stock columns are NUMERIC(10,3) — deduct the exact sold quantity,
+          // no rounding. Weighted sales (e.g. 1.25 kg) deduct 1.25 from stock.
+          const stockDeductQty = Number(item.quantity);
 
           if (item.is_bundle) {
             // Deduct stock from each component product, not the bundle itself

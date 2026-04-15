@@ -1,11 +1,11 @@
 module.exports = function registerKdsRoutes(app, deps) {
-  const { requireFeature } = require("../middleware/feature-flags");
+  const { requireFeature, requireMode } = require("../middleware/feature-flags");
   const { requirePerm } = require("../middleware/permissions");
   const { validate } = require("../middleware/validate");
   const { createKdsStationSchema, updateKdsStationSchema } = require("../schemas/restaurant");
   const kds = require("../services/restaurant-kds");
 
-  const gate = [requireFeature("phase4_restaurant_kds"), requirePerm("manage_kds")];
+  const gate = [requireMode("restaurant"), requireFeature("phase4_restaurant_kds"), requirePerm("manage_kds")];
 
   app.get("/api/kds/stations", ...gate, async (req, res) => {
     try {

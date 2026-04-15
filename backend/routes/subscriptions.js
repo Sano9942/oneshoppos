@@ -13,7 +13,7 @@
  */
 
 module.exports = function registerSubscriptionRoutes(app, deps) {
-  const { requireFeature } = require("../middleware/feature-flags");
+  const { requireFeature, requireMode } = require("../middleware/feature-flags");
   const { requirePerm } = require("../middleware/permissions");
   const { validate } = require("../middleware/validate");
   const { createPlanSchema, updatePlanSchema, createSubscriptionSchema } = require("../schemas/subscriptions");
@@ -25,7 +25,7 @@ module.exports = function registerSubscriptionRoutes(app, deps) {
   } = require("../services/subscriptions");
   const { getBoss } = require("../services/boss");
 
-  const gate = [requireFeature("subscription_billing"), requirePerm("all_access")];
+  const gate = [requireMode("subscriptions"), requireFeature("subscription_billing"), requirePerm("all_access")];
 
   // ── Plans ─────────────────────────────────────────────────────────────
 

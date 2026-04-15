@@ -1,5 +1,5 @@
 module.exports = function registerRestaurantRoutes(app, deps) {
-  const { requireFeature } = require("../middleware/feature-flags");
+  const { requireFeature, requireMode } = require("../middleware/feature-flags");
   const { requirePerm } = require("../middleware/permissions");
   const { validate } = require("../middleware/validate");
   const {
@@ -13,7 +13,7 @@ module.exports = function registerRestaurantRoutes(app, deps) {
   const checks = require("../services/restaurant-checks");
   const kds = require("../services/restaurant-kds");
 
-  const gate = [requireFeature("phase4_restaurant"), requirePerm("manage_restaurant")];
+  const gate = [requireMode("restaurant"), requireFeature("phase4_restaurant"), requirePerm("manage_restaurant")];
 
   // ── Floor Plans ──────────────────────────────────────────────
 

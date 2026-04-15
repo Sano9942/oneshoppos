@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS product_variants (
   sku TEXT UNIQUE NOT NULL,
   price NUMERIC(12,2),
   cost_price NUMERIC(12,2),
-  stock INTEGER DEFAULT 0,
+  stock NUMERIC(10,3) DEFAULT 0,
   timestamp TIMESTAMPTZ DEFAULT NOW(),
   weight NUMERIC(10,3) DEFAULT 0,
   weight_unit TEXT DEFAULT 'kg',
@@ -184,7 +184,7 @@ CREATE TABLE IF NOT EXISTS outlet_stock (
   id SERIAL PRIMARY KEY,
   product_id INTEGER NOT NULL REFERENCES products(id),
   outlet_id INTEGER NOT NULL REFERENCES outlets(id),
-  quantity INTEGER NOT NULL DEFAULT 0,
+  quantity NUMERIC(10,3) NOT NULL DEFAULT 0,
   UNIQUE(product_id, outlet_id)
 );
 
@@ -193,7 +193,7 @@ CREATE TABLE IF NOT EXISTS stock_adjustments (
   product_id INTEGER NOT NULL REFERENCES products(id),
   outlet_id INTEGER NOT NULL REFERENCES outlets(id),
   employee_id INTEGER REFERENCES employees(id),
-  quantity_change INTEGER NOT NULL,
+  quantity_change NUMERIC(10,3) NOT NULL,
   reason TEXT NOT NULL,
   notes TEXT,
   timestamp TIMESTAMPTZ DEFAULT NOW()
@@ -439,7 +439,7 @@ CREATE TABLE IF NOT EXISTS return_items (
   return_id INTEGER NOT NULL REFERENCES returns(id),
   product_id INTEGER NOT NULL REFERENCES products(id),
   variant_id INTEGER REFERENCES product_variants(id),
-  quantity INTEGER NOT NULL,
+  quantity NUMERIC(10,3) NOT NULL,
   refund_price NUMERIC(12,2) NOT NULL
 );
 

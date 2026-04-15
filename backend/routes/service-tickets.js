@@ -1,11 +1,11 @@
 module.exports = function registerServiceTicketRoutes(app, deps) {
-  const { requireFeature } = require("../middleware/feature-flags");
+  const { requireFeature, requireMode } = require("../middleware/feature-flags");
   const { requirePerm } = require("../middleware/permissions");
   const { validate } = require("../middleware/validate");
   const { createTicketSchema, updateTicketSchema, addNoteSchema } = require("../schemas/service-tickets");
   const tickets = require("../services/service-tickets");
 
-  const gate = [requireFeature("phase4_workflow_tickets"), requirePerm("manage_tickets")];
+  const gate = [requireMode("workflow_tickets"), requireFeature("phase4_workflow_tickets"), requirePerm("manage_tickets")];
 
   // List tickets (filterable by status, customer_id, outlet_id, assigned_to, search)
   app.get("/api/service-tickets", ...gate, async (req, res) => {

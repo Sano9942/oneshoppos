@@ -3785,6 +3785,84 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 44,
+    description:
+      "Mode-gate backfill — seed tenant_modes for tenants currently using restaurant / appointments / service_projects / workflow_tickets / subscriptions before flag defaults flip to false",
+    up: async (client) => {
+      // For existing tenants: if a phase4 flag is currently enabled (row exists
+      // and is true, OR row is missing — previously defaulted true), insert the
+      // matching tenant_modes row so the flag keeps resolving true after the
+      // default flip. Pairs with the feature-flags.js default change to false.
+      //
+      // Flag → mode mapping (source of truth: backend/config/mode-registry.js):
+      //   phase4_restaurant            → restaurant
+      //   phase4_restaurant_kds        → restaurant
+      //   phase4_appointments          → appointments
+      //   phase4_service_projects      → service_projects
+      //   phase4_service_contracts     → service_projects
+      //   phase4_workflow_tickets      → workflow_tickets
+      //   subscription_billing         → subscriptions
+      const flagToMode = [
+        ["phase4_restaurant", "restaurant"],
+        ["phase4_restaurant_kds", "restaurant"],
+        ["phase4_appointments", "appointments"],
+        ["phase4_service_projects", "service_projects"],
+        ["phase4_service_contracts", "service_projects"],
+        ["phase4_workflow_tickets", "workflow_tickets"],
+        ["subscription_billing", "subscriptions"],
+      ];
+
+      for (const [flag, mode] of flagToMode) {
+        // Treat missing row as "enabled" (matches previous default=true behavior)
+        const { rows } = await client.query(
+          "SELECT enabled FROM feature_flags WHERE key = $1",
+          [flag]
+        );
+        const wasEnabled = rows.length === 0 ? true : rows[0].enabled === true;
+        if (wasEnabled) {
+          await client.query(
+            `INSERT INTO tenant_modes (mode, enabled) VALUES ($1, true)
+             ON CONFLICT (mode) DO NOTHING`,
+            [mode]
+          );
+          // Also ensure the flag is explicitly true in the DB (not relying on
+          // the code default anymore — it just flipped to false).
+          await client.query(
+            `INSERT INTO feature_flags (key, enabled) VALUES ($1, true)
+             ON CONFLICT (key) DO UPDATE SET enabled = true`,
+            [flag]
+          );
+        }
+      }
+    },
+  },
+  {
+    version: 45,
+    description:
+      "Widen weighted-quantity columns to NUMERIC(10,3) — outlet_stock, return_items, stock_adjustments",
+    up: async (client) => {
+      // Lossless cast — existing integer values widen cleanly. Brief ACCESS
+      // EXCLUSIVE lock; no table rewrite in PG 12+. Mirrors M5's v34 pattern
+      // which already widened sale_items.quantity.
+      await client.query(`
+        ALTER TABLE outlet_stock
+          ALTER COLUMN quantity TYPE NUMERIC(10,3) USING quantity::numeric
+      `);
+      await client.query(`
+        ALTER TABLE return_items
+          ALTER COLUMN quantity TYPE NUMERIC(10,3) USING quantity::numeric
+      `);
+      await client.query(`
+        ALTER TABLE stock_adjustments
+          ALTER COLUMN quantity_change TYPE NUMERIC(10,3) USING quantity_change::numeric
+      `);
+      await client.query(`
+        ALTER TABLE product_variants
+          ALTER COLUMN stock TYPE NUMERIC(10,3) USING stock::numeric
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

@@ -159,7 +159,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Campaigns", path: "/marketing/campaigns", icon: Mail, requiredPerm: "all_access", requiredFlag: "marketing_campaigns" },
       { name: "Inbox", path: "/messaging/inbox", icon: MessageSquare, requiredPerm: "manage_orders", requiredFlag: "customer_messaging" },
       { name: "Customer Invoices", path: "/customer-invoices", icon: FileText, requiredPerm: "manage_orders", requiredFlag: "customer_invoicing" },
-      { name: "Subscriptions", path: "/subscriptions", icon: RefreshCw, requiredPerm: "all_access", requiredFlag: "subscription_billing" },
+      { name: "Subscriptions", path: "/subscriptions", icon: RefreshCw, requiredPerm: "all_access", requiredFlag: "subscription_billing", requiredMode: "subscriptions" },
     ],
   },
   {

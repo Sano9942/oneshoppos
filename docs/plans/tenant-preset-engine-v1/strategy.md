@@ -5,6 +5,54 @@
 
 ---
 
+## 🔍 Cross-Verified Gap & Deferred Item Registry (2026-04-15)
+
+This section was added after a full code cross-check of the entire strategy document against git history and the live codebase. Every item below was confirmed by reading actual files — not inferred from doc claims.
+
+### Complete Open Items — Sorted by Urgency
+
+| # | Item | Source | Type | Effort | Do Not Ship Without |
+|---|------|--------|------|--------|---------------------|
+| 1 | **Gap 14.1: Subscriptions nav missing `requiredMode`** — `nav-config.js:162` has `requiredFlag: "subscription_billing"` but no `requiredMode: "subscriptions"`. Every other mode-isolated nav uses the double-gate. `subscription_billing` defaults `true` so ALL tenants see Subscriptions regardless of preset. Fix = 1-line nav change + flag default flip `true→false` + backfill migration + smoke test update + `reconcile-mode-flags.js` on production. | §14.1 | Bug | Half day | **Backfill migration must land before nav gate — do not ship nav change alone or existing users lose the link overnight** |
+| 2 | **B3: Customers page clinical sections missing** — `CustomersRedesign.jsx` only checks `industry_type === "clinic"` (old preset). `dental_clinic`, `veterinary`, `physiotherapy` tenants get zero clinical UI on the customers page. No Subjects section, no Treatment Plans section, no extended medical fields for new clinical presets. | M10-B3 | UX gap | 1 day | Before first clinical tenant ships |
+| 3 | **My Stays portal tab — backend exists, frontend missing** — `backend/routes/customer-portal/stays.js` exists with `GET /me/stays`. `industry-config.js` lists `"stays"` in hotel/guesthouse/hostel `portal_enabled_tabs`. But `PortalStays.jsx` does not exist, `/portal/:slug/stays` has no route in `publicRoutes.jsx`, and `"stays"` is missing from `TAB_LABEL_KEYS` + `TAB_PATHS` in `PortalLayout.jsx`. For a hotel tenant today, the portal nav renders a broken link that hits a 404. **This gap is not listed anywhere in the doc's deferred lists** — it was found by code audit only. | Code audit | Broken feature | 2-3 hrs | Before any hotel/guesthouse/hostel tenant uses the portal |
+| 4 | **B2: Consent form signature canvas not implemented** — Backend `treatment-plans.js:304` accepts `signature_image_base64` and uploads to R2. Frontend `ConsentPanel` only posts `signed_by_name` + `signed_by_relation` — no canvas, no drawn signature. Legal concern: typed name is weaker evidence than a drawn signature. | M10-B2 | Legal/compliance | Half day | Before clinical scale |
+| 5 | **B7: Setup wizard flow for clinical presets unverified** — Code path looks correct (`setup.js:153` → `getPreset()` → `getFeatureFlagsForModes()` → seeds `treatment_plans` mode + `phase4_treatment_plans` flag). But this was NOT manually QA'd end-to-end. If broken, clinical presets are unreachable via self-service signup. | M10-B7 | Test risk | 20 min QA | Quick de-risk, do before first clinical tenant |
+| 6 | **B10: Migration v39 not yet confirmed on production** — Present in `migrate-pg.js:3310`. Cannot confirm Railway/Supabase state from local git. Needs deploy + `node backend/scripts/reconcile-mode-flags.js` verification. | M10-B10 | Deploy | Deploy day | Next Railway deploy |
+| 7 | **B5: `onboard-dental-clinic.spec.js` not written** — `treatment-plans.spec.js` only tests the negative case (retail tenant, no clinical nav). Full onboarding + plan lifecycle E2E that creates a real clinical tenant and cleans up does not exist. | M10-B5 | Test coverage | 45-60 min | CI confidence before clinical GA |
+| 8 | **Broader flag-default-true audit (same pattern as Gap 14.1)** — Five more mode-mapped flags default `true` in `feature-flags.js`: `phase4_restaurant`, `phase4_restaurant_kds`, `phase4_appointments`, `phase4_service_projects`, `phase4_workflow_tickets`. Nav is correctly double-gated (mode AND flag, so UI is fine), but the **API endpoints** for these features only check `requireFeature(flag)` — not mode. A retail tenant with no restaurant mode row can call `/api/floors`, `/api/checks`, `/api/appointments`, etc., because the flag defaults true. Data comes back empty but endpoints should not be accessible. Fix = flip all five defaults to `false` + bundle into the same backfill migration as Gap 14.1. | Code audit | Architecture debt / API exposure | Half day | Bundle with Gap 14.1 backfill |
+| 9 | **M5: `outlet_stock.quantity` still INTEGER** — `sale_items.quantity` was widened to `NUMERIC(10,3)` in M5 (migration v34). But `outlet_stock.quantity` (schema-pg.sql:187) remains INTEGER. Stock deduction for weighted items uses `Math.ceil()` as a workaround. Will cause rounding errors at volume. | M5 known limitation | Data integrity | Migration | When first weight-selling tenant reports stock drift |
+| 10 | **M5: `return_items.quantity` + `stock_adjustments.quantity_change` still INTEGER** — Returning a weighted item (e.g. 1.5 kg) truncates the return quantity. `return_items.quantity` at schema-pg.sql:442 and `stock_adjustments.quantity_change` at schema-pg.sql:196 both INTEGER. | M5 known limitation | Data integrity | Migration | Same trigger as #9 |
+| 11 | **A7: Recurring treatment plan templates not built** — No plan-create-from-template flow, no template CRUD. Likely to be the first real feature request from clinical tenants. | M10-A7 | Feature | ~1 week | When ≥3 clinical tenants live |
+| 12 | **B4: POS quick-create plan fallback missing** — `POSCheckoutModal.jsx:171` only renders the treatment-plan picker if `openTreatmentPlans.length > 0`. A walk-in clinical patient with no existing plan sees no picker and no way to create one inline. Admin must open a plan from the customer page first. | M10-B4 | UX gap | 2 hrs | When walk-in clinical complaint reported |
+| 13 | **Gap 14.2: "Service Work" nav group bundles two modes** — `service_projects` (Projects + Contracts) and `workflow_tickets` (Tickets) share one sidebar group. A tenant with only one of the two modes sees a partially-populated group. Low user impact. | §14.2 | UX polish | 30 min | When user reports confusion |
+| 14 | **M6 deferred: public booking deposit collection** — Online booking page `/book/:slug` has no payment step. Deposit via xPay was explicitly deferred from M6. | M6 out-of-scope | Feature | 1-2 days | When appointment tenant requests paid deposits at booking |
+| 15 | **M8 deferred (portal features)** — Portal subdomain (`portal.sanopos.com`), per-tenant custom domains, mobile PWA install prompt, in-portal staff chat, loyalty redemption from portal (view-only currently), wallet top-up from portal, storefront cart integration (orders read-only), social login. None were added post-M8. | M8 out-of-scope | Features | Varies | Demand-driven |
+| 16 | **M9 deferred (12 hospitality sub-features)** — Channel manager (Airbnb/Booking.com), dynamic pricing, group bookings, housekeeping staff assignment dashboard, late-checkout auto fees, multi-property rollup reporting, public `/reserve/:slug` page, loyalty redemption on stays, hotel discounts/packages, room blocks/maintenance holds, split folios, tax-inclusive room rates. Full detail in §12 M9. | M9 out-of-scope | Features | Varies | Demand-driven |
+| 17 | **M10 deferred (A1-A10 clinical advanced features)** — ICD-10/SNOMED autocomplete, e-prescribing, insurance claim generation, DICOM viewer, AI drug-interaction warnings, multi-provider SOAP co-signing, recurring plan templates (A7 above), patient portal intake forms, portal self-book for plan sessions, dental perio chart. Full detail in §12 M10. | M10 out-of-scope | Features | Varies | Demand-driven |
+| 18 | **M11: Manufacturing mode** — BOMs, work orders, raw-material consumption, production costing, production dashboard. Presets: `small_factory`, `bakery_production`. | §12 M11 | New mode | ~2 weeks | Factory/production business pays or commits |
+| 19 | **Platform: Multi-location intelligence** — Transfer optimization, consolidated reporting, central purchasing with per-outlet allocation. Tables exist (`outlet_stock`, `inventory_transfers`) but UX is single-branch focused. | §12 Tier 3 | Platform feature | ~2 weeks | Multi-branch franchise signs up |
+| 20 | **Platform: Own-fleet delivery** — Driver assignment, route management, real-time tracking, proof of delivery. 13 third-party courier adapters exist but not own-fleet dispatch. | §12 Tier 3 | Platform feature | 1-2 weeks | Restaurant with own delivery drivers signs up |
+| 21 | **Walk-in service assignment on POS** — Time estimate per service + staff picker at checkout for immediate walk-in assignment (not appointment-based). Needed for car wash, laundry, tailoring. | §12 Tier 1 | Feature | 2-3 days | When a relevant preset tenant reports friction |
+| 22 | **Recurring auto-charge wiring** — `subscription_autocharge` tables exist but no payment gateway wiring for true saved-instrument recurring billing (Stripe/JazzCash). Needed for coworking, tuition centers. | §12 Tier 1 | Feature | 3-5 days | When a gym/coworking tenant requests it |
+| 23 | **Doc drift: coverage projection table in §12 is stale** — Table still shows M9 as "current" with M10=manufacturing. Actual current: 23 presets, 9 modes, ~48/54 industries. Build-triggers table also labels M10 as manufacturing (should be M11). | Doc | Doc update | 5 min | Next doc pass |
+| 24 | **`ui_redesign_*` flags already cleaned** — §3 lists these as "cleanup separately." Confirmed: zero live code references in backend or frontend. Only in archived SQLite backups. This item is done, just not marked as such in the doc. | Code audit | Done | — | Already complete |
+| 25 | **Phase 2 nav cleanup (intentionally deferred)** — Nav items for Restaurant, Appointments, Service Work still carry both `requiredFlag` AND `requiredMode` (dual-gate). §3 says Phase 2 will remove the `requiredFlag` from items that migrated to modes. Not done — correct per plan. | §3 | Deferred cleanup | — | After all tenants migrated to modes |
+
+### Priority Tiers
+
+**Do before first clinical tenant ships:** Items 2, 3, 4, 5, 6, 7
+
+**Do before more tenants onboard (architectural):** Items 1, 8
+
+**Do when first weight-selling tenant reports issues:** Items 9, 10
+
+**Demand-driven (do not build speculatively):** Items 11-22
+
+**Documentation only:** Items 23-25
+
+---
+
 ## ⚡ Dev Infrastructure — SanoPay Sandbox (IMPORTANT FOR ALL FUTURE FEATURES)
 
 **SanoPay sandbox is wired on BOTH local dev and Railway** for end-to-end payment testing. When building any feature that involves payments (checkouts, deposits, invoices, subscriptions, refunds), use the sandbox adapter — do NOT mock the payment layer in tests or require real xPay credentials.

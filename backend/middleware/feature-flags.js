@@ -42,22 +42,32 @@ const DEFAULT_FEATURE_FLAGS = {
   customer_messaging: true,
   customer_invoicing: true,
   payment_links: false,
-  subscription_billing: true,
+  // Mode-gated (subscriptions mode): flag default flipped false so retail
+  // tenants without the subscriptions mode don't see the Subscriptions nav.
+  // Tenants on the subscriptions mode get the flag enabled via v44 backfill.
+  subscription_billing: false,
   sms_campaigns: false,
   subscription_autocharge: false,
   // Phase 4 — New Verticals
-  phase4_restaurant: true,
+  // Mode-gated (restaurant mode): flag default false. Enabled for tenants
+  // whose mode row is seeded by setup wizard (restaurant / cafe presets)
+  // or by the v44 backfill for existing tenants already using restaurant.
+  phase4_restaurant: false,
   phase4_restaurant_qr: false,
-  phase4_restaurant_kds: true,
+  // Mode-gated (restaurant mode).
+  phase4_restaurant_kds: false,
   phase4_restaurant_preauth: false,
-  phase4_appointments: true,
+  // Mode-gated (appointments mode).
+  phase4_appointments: false,
   phase4_appointments_waitlists: false,
   phase4_appointments_classes: false,
   phase4_google_calendar_sync: false,
-  phase4_service_projects: true,
-  phase4_service_contracts: true,
+  // Mode-gated (service_projects mode).
+  phase4_service_projects: false,
+  phase4_service_contracts: false,
   phase4_contract_ai: false,
-  phase4_workflow_tickets: true,
+  // Mode-gated (workflow_tickets mode).
+  phase4_workflow_tickets: false,
   // Mode-gated: flipped ON only by setup/company-profile when a rental preset
   // is selected. Leaving globally ON would show rental nav to retail tenants.
   phase4_rentals: false,

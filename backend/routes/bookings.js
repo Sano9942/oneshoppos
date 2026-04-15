@@ -1,12 +1,12 @@
 module.exports = function registerBookingRoutes(app, deps) {
-  const { requireFeature } = require("../middleware/feature-flags");
+  const { requireFeature, requireMode } = require("../middleware/feature-flags");
   const { requirePerm } = require("../middleware/permissions");
   const { validate } = require("../middleware/validate");
   const { createServiceSchema, updateServiceSchema, createAppointmentSchema, rescheduleSchema, cancelSchema } = require("../schemas/bookings");
   const { getAvailableSlots } = require("../services/booking-availability");
   const { createAppointment, rescheduleAppointment, cancelAppointment } = require("../services/booking-services");
 
-  const gate = [requireFeature("phase4_appointments"), requirePerm("manage_bookings")];
+  const gate = [requireMode("appointments"), requireFeature("phase4_appointments"), requirePerm("manage_bookings")];
 
   // ── Booking Services ─────────────────────────────────────────
 

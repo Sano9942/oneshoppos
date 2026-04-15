@@ -1,11 +1,11 @@
 module.exports = function registerContractRoutes(app, deps) {
-  const { requireFeature } = require("../middleware/feature-flags");
+  const { requireFeature, requireMode } = require("../middleware/feature-flags");
   const { requirePerm } = require("../middleware/permissions");
   const { validate } = require("../middleware/validate");
   const { createContractSchema, updateContractSchema, createTemplateSchema, signContractSchema } = require("../schemas/contracts");
   const contracts = require("../services/contracts");
 
-  const gate = [requireFeature("phase4_service_contracts"), requirePerm("manage_contracts")];
+  const gate = [requireMode("service_projects"), requireFeature("phase4_service_contracts"), requirePerm("manage_contracts")];
 
   app.get("/api/contracts", ...gate, async (req, res) => {
     try {

@@ -1,12 +1,12 @@
 module.exports = function registerProjectRoutes(app, deps) {
-  const { requireFeature } = require("../middleware/feature-flags");
+  const { requireFeature, requireMode } = require("../middleware/feature-flags");
   const { requirePerm } = require("../middleware/permissions");
   const { validate } = require("../middleware/validate");
   const { createProjectSchema, updateProjectSchema, createMilestoneSchema, updateMilestoneSchema } = require("../schemas/projects");
   const projects = require("../services/projects");
   const billing = require("../services/project-billing");
 
-  const gate = [requireFeature("phase4_service_projects"), requirePerm("manage_projects")];
+  const gate = [requireMode("service_projects"), requireFeature("phase4_service_projects"), requirePerm("manage_projects")];
 
   app.get("/api/projects", ...gate, async (req, res) => {
     try {
