@@ -1,4 +1,5 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { api } from "../../../api";
 import {
   Award,
   Banknote,
@@ -70,6 +71,8 @@ export default function POSCheckoutModal() {
     chargeToTreatmentFolioId,
     setChargeToTreatmentFolioId,
     openTreatmentPlans,
+    setOpenTreatmentPlans,
+    selectedOutletId,
   } = usePOS();
   const { labels = {}, hasMode } = usePreset();
   const customerLabel = labels.customer || "Customer";
@@ -77,6 +80,55 @@ export default function POSCheckoutModal() {
   const treatmentPlansOn = hasMode && hasMode("treatment_plans");
 
   const isOffline = !navigator.onLine;
+
+  // B4 — Quick-create plan for walk-in clinical patients who don't have
+  // an active plan yet. Skips the dashboard detour; plan is saved in draft
+  // state, then the updated openTreatmentPlans list re-renders and the user
+  // selects it from the charge-to-plan dropdown.
+  const [quickPlanOpen, setQuickPlanOpen] = useState(false);
+  const [quickPlanTitle, setQuickPlanTitle] = useState("");
+  const [quickPlanSessions, setQuickPlanSessions] = useState("1");
+  const [quickPlanNotes, setQuickPlanNotes] = useState("");
+  const [quickPlanBusy, setQuickPlanBusy] = useState(false);
+  const [quickPlanError, setQuickPlanError] = useState("");
+
+  const submitQuickPlan = async () => {
+    setQuickPlanError("");
+    if (!quickPlanTitle.trim()) {
+      setQuickPlanError("Plan title required");
+      return;
+    }
+    setQuickPlanBusy(true);
+    try {
+      await api.post("/api/treatment-plans", {
+        customer_id: Number(checkoutCustomerId),
+        outlet_id: selectedOutletId ? Number(selectedOutletId) : null,
+        title: quickPlanTitle.trim(),
+        total_sessions_planned: Math.max(1, Number(quickPlanSessions) || 1),
+        notes: quickPlanNotes || null,
+      });
+      // Refetch open plans so the new plan appears in the dropdown
+      const r = await api.get("/api/treatment-plans", {
+        customer_id: checkoutCustomerId,
+        status: "active",
+      });
+      const plans = r.plans || [];
+      // Newly-created plans start in "draft" status, not "active" — also pull drafts.
+      const draftRes = await api.get("/api/treatment-plans", {
+        customer_id: checkoutCustomerId,
+        status: "draft",
+      });
+      setOpenTreatmentPlans([...(draftRes.plans || []), ...plans]);
+      setQuickPlanOpen(false);
+      setQuickPlanTitle("");
+      setQuickPlanSessions("1");
+      setQuickPlanNotes("");
+    } catch (err) {
+      setQuickPlanError(err.message || "Failed to create plan");
+    } finally {
+      setQuickPlanBusy(false);
+    }
+  };
 
   // Force-disable wallet and points when going offline
   useEffect(() => {
@@ -167,26 +219,85 @@ export default function POSCheckoutModal() {
             </div>
           )}
 
-          {/* M10 — Charge to treatment plan (treatment_plans mode only) */}
-          {treatmentPlansOn && (openTreatmentPlans || []).length > 0 && (
+          {/* M10 — Charge to treatment plan (treatment_plans mode only). Shows
+              the dropdown when open plans exist, or a quick-create button for
+              walk-in patients with no active plan (B4 fallback). */}
+          {treatmentPlansOn && checkoutCustomerId && (
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
                 Charge to treatment plan (optional)
               </label>
-              <select
-                value={chargeToTreatmentFolioId || ""}
-                onChange={(e) => setChargeToTreatmentFolioId(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm font-medium border border-slate-200 rounded-xl focus:outline-none focus:border-[#8066FF]"
-              >
-                <option value="">— Pay now (cash / card / etc.) —</option>
-                {(openTreatmentPlans || [])
-                  .filter((p) => p.folio_id)
-                  .map((p) => (
-                    <option key={p.id} value={p.folio_id}>
-                      {p.plan_number} — {p.customer_name} ({p.sessions_completed || 0}/{p.total_sessions_planned})
-                    </option>
-                  ))}
-              </select>
+              {(openTreatmentPlans || []).length > 0 ? (
+                <select
+                  value={chargeToTreatmentFolioId || ""}
+                  onChange={(e) => setChargeToTreatmentFolioId(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm font-medium border border-slate-200 rounded-xl focus:outline-none focus:border-[#8066FF]"
+                >
+                  <option value="">— Pay now (cash / card / etc.) —</option>
+                  {(openTreatmentPlans || [])
+                    .filter((p) => p.folio_id)
+                    .map((p) => (
+                      <option key={p.id} value={p.folio_id}>
+                        {p.plan_number} — {p.customer_name} ({p.sessions_completed || 0}/{p.total_sessions_planned})
+                      </option>
+                    ))}
+                </select>
+              ) : !quickPlanOpen ? (
+                <button
+                  type="button"
+                  onClick={() => setQuickPlanOpen(true)}
+                  className="w-full px-3 py-2.5 text-sm font-medium border border-dashed border-[#8066FF] text-[#8066FF] rounded-xl hover:bg-violet-50 transition"
+                >
+                  <Plus size={14} className="inline mr-1" /> Create new treatment plan
+                </button>
+              ) : (
+                <div className="space-y-2 p-3 rounded-xl border border-violet-200 bg-violet-50/40">
+                  <input
+                    type="text"
+                    placeholder="Plan title (e.g. Root canal — upper molar)"
+                    value={quickPlanTitle}
+                    onChange={(e) => setQuickPlanTitle(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-[#8066FF]"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="Sessions"
+                      value={quickPlanSessions}
+                      onChange={(e) => setQuickPlanSessions(e.target.value)}
+                      className="w-24 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-[#8066FF]"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Notes (optional)"
+                      value={quickPlanNotes}
+                      onChange={(e) => setQuickPlanNotes(e.target.value)}
+                      className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-[#8066FF]"
+                    />
+                  </div>
+                  {quickPlanError && (
+                    <p className="text-xs text-red-600">{quickPlanError}</p>
+                  )}
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => { setQuickPlanOpen(false); setQuickPlanError(""); }}
+                      className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={submitQuickPlan}
+                      disabled={quickPlanBusy || !quickPlanTitle.trim()}
+                      className="px-3 py-1.5 text-xs font-bold text-white bg-[#8066FF] rounded-lg hover:bg-[#6d55e6] disabled:opacity-50"
+                    >
+                      {quickPlanBusy ? "Creating…" : "Create plan"}
+                    </button>
+                  </div>
+                </div>
+              )}
               {chargeToTreatmentFolioId && (
                 <p className="text-xs text-violet-600 mt-1.5">
                   This sale will be added to the plan folio — no payment is collected now.

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, forwardRef, useImperativeHandle } from "react";
 import { useLocation, useParams, useNavigate, Navigate, Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
@@ -895,10 +895,88 @@ function LabOrdersPanel({ planId, orders, onReload }) {
 
 // ── Consent panel ────────────────────────────────────────────────────
 
+// Native signature pad — intentionally dependency-free. Pointer events cover
+// mouse, touch, and stylus. Exposes `toDataURL()` + `clear()` + `isEmpty()`
+// via the forwarded ref so the parent can read/reset the drawn signature.
+const SignaturePad = forwardRef(function SignaturePad({ height = 150 }, ref) {
+  const canvasRef = useRef(null);
+  const drawingRef = useRef(false);
+  const hasStrokeRef = useRef(false);
+
+  useImperativeHandle(ref, () => ({
+    isEmpty: () => !hasStrokeRef.current,
+    clear: () => {
+      const c = canvasRef.current;
+      if (!c) return;
+      const ctx = c.getContext("2d");
+      ctx.clearRect(0, 0, c.width, c.height);
+      hasStrokeRef.current = false;
+    },
+    toDataURL: () => canvasRef.current?.toDataURL("image/png") || null,
+  }));
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    // Match canvas backing resolution to CSS size so strokes aren't blurred.
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = rect.height * window.devicePixelRatio;
+      const ctx = canvas.getContext("2d");
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "#0f172a";
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
+
+  const pos = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+
+  const onDown = (e) => {
+    e.preventDefault();
+    const { x, y } = pos(e);
+    const ctx = canvasRef.current.getContext("2d");
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    drawingRef.current = true;
+    hasStrokeRef.current = true;
+  };
+  const onMove = (e) => {
+    if (!drawingRef.current) return;
+    const { x, y } = pos(e);
+    const ctx = canvasRef.current.getContext("2d");
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+  const onUp = () => {
+    drawingRef.current = false;
+  };
+
+  return (
+    <canvas
+      ref={canvasRef}
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+      onPointerLeave={onUp}
+      style={{ touchAction: "none", height, width: "100%" }}
+      className="rounded border border-slate-300 bg-white"
+    />
+  );
+});
+
 function ConsentPanel({ planId, consents, onReload }) {
   const [templates, setTemplates] = useState([]);
   const [signing, setSigning] = useState(null);
   const [form, setForm] = useState({ signed_by_name: "", signed_by_relation: "self" });
+  const sigRef = useRef(null);
   const toast = useToast();
 
   useEffect(() => {
@@ -910,6 +988,16 @@ function ConsentPanel({ planId, consents, onReload }) {
       toast.error("Patient name required");
       return;
     }
+    // Require a drawn signature — typed-name-only is weaker evidence for
+    // clinical consent. Backend (treatment-plans.js:304) already handles
+    // the image_base64 → R2 upload when present.
+    if (!sigRef.current || sigRef.current.isEmpty()) {
+      toast.error("Please draw your signature");
+      return;
+    }
+    const signatureDataUrl = sigRef.current.toDataURL();
+    // Strip the `data:image/png;base64,` prefix — backend expects raw base64.
+    const signature_image_base64 = signatureDataUrl?.split(",")[1] || null;
     try {
       await api.post(`/api/treatment-plans/${planId}/consents`, {
         form_template_key: signing.key,
@@ -917,10 +1005,12 @@ function ConsentPanel({ planId, consents, onReload }) {
         body_markdown: signing.body,
         signed_by_name: form.signed_by_name,
         signed_by_relation: form.signed_by_relation,
+        signature_image_base64,
       });
       toast.success("Consent recorded");
       setSigning(null);
       setForm({ signed_by_name: "", signed_by_relation: "self" });
+      sigRef.current?.clear();
       onReload();
     } catch (err) {
       toast.error(err.message || "Failed to record consent");
@@ -959,6 +1049,19 @@ function ConsentPanel({ planId, consents, onReload }) {
                 <option value="next_of_kin">Next of Kin</option>
               </Select>
             </Field>
+            <div className="col-span-2">
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-medium text-slate-600">Signature *</label>
+                <button
+                  type="button"
+                  className="text-xs text-slate-500 hover:text-slate-700"
+                  onClick={() => sigRef.current?.clear()}
+                >
+                  Clear
+                </button>
+              </div>
+              <SignaturePad ref={sigRef} height={140} />
+            </div>
             <div className="col-span-2 flex gap-2 justify-end">
               <Button tone="plain" size="sm" onClick={() => setSigning(null)}>Cancel</Button>
               <Button size="sm" onClick={sign}>Record Consent</Button>

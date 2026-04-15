@@ -1337,6 +1337,7 @@ export const POSProvider = ({ children }) => {
     chargeToTreatmentFolioId,
     setChargeToTreatmentFolioId,
     openTreatmentPlans,
+    setOpenTreatmentPlans,
     handleLock,
     handleUnlock,
     recentSalesOpen,

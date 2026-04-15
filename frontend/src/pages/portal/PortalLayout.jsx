@@ -13,6 +13,8 @@ const TAB_LABEL_KEYS = {
   loyalty: "loyalty_tab",
   wallet: "wallet_tab",
   profile: "profile_tab",
+  stays: "stays_tab",
+  treatments: "treatments_tab",
 };
 
 const TAB_PATHS = {
@@ -25,6 +27,8 @@ const TAB_PATHS = {
   loyalty: "loyalty",
   wallet: "wallet",
   profile: "profile",
+  stays: "stays",
+  treatments: "treatments",
 };
 
 function PortalShell() {

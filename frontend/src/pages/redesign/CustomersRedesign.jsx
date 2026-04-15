@@ -44,6 +44,19 @@ const EMPTY = {
   insurance_id: "",
 };
 
+// Clinical presets share the medical UI block on the customer page.
+// `clinic` is the legacy preset; `dental_clinic`, `veterinary`, and
+// `physiotherapy` are the M10 presets whose `treatment_plans` mode maps here.
+const CLINICAL_PRESETS = new Set([
+  "clinic",
+  "dental_clinic",
+  "veterinary",
+  "physiotherapy",
+]);
+function isClinicalPreset(industryType) {
+  return CLINICAL_PRESETS.has(industryType);
+}
+
 const BLOOD_GROUPS = ["", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDER_OPTIONS = ["", "Male", "Female", "Other"];
 const PAYMENT_OPTIONS = ["", "Cash", "Card", "Bank Transfer", "Mobile Wallet", "Credit"];
@@ -121,6 +134,10 @@ export default function CustomersRedesign() {
   const [ledgerTo, setLedgerTo] = useState("");
   const [ledgerLoading, setLedgerLoading] = useState(false);
 
+  // Clinical subjects + treatment plans (M10) — only fetched for clinical presets
+  const [clinicalSubjects, setClinicalSubjects] = useState([]);
+  const [clinicalPlans, setClinicalPlans] = useState([]);
+
   // Order history
   const [orderHistory, setOrderHistory] = useState([]);
   const [ohPage, setOhPage] = useState(1);
@@ -174,6 +191,8 @@ export default function CustomersRedesign() {
     setOhPage(1);
     setOhTotal(0);
     setProfileData(null);
+    setClinicalSubjects([]);
+    setClinicalPlans([]);
     try {
       const [salesData, walletData, profileRes] = await Promise.all([
         api.get(`/api/customers/${customer.id}/sales`),
@@ -188,6 +207,22 @@ export default function CustomersRedesign() {
       setCustomerSales([]);
       setWalletBalance(0);
       setWalletLedger([]);
+    }
+    // Clinical presets: fetch subjects + treatment plans in parallel.
+    // Endpoints are mode/flag-gated on the backend — a 503 means the clinical
+    // feature isn't enabled, so swallow and leave the arrays empty.
+    if (isClinicalPreset(industry_type)) {
+      try {
+        const [subjectsRes, plansRes] = await Promise.all([
+          api.get(`/api/patient-subjects`, { customer_id: customer.id }),
+          api.get(`/api/treatment-plans`, { customer_id: customer.id }),
+        ]);
+        setClinicalSubjects(subjectsRes.subjects || []);
+        setClinicalPlans(plansRes.plans || []);
+      } catch {
+        setClinicalSubjects([]);
+        setClinicalPlans([]);
+      }
     }
   };
 
@@ -780,8 +815,8 @@ export default function CustomersRedesign() {
                     </div>
                   </SectionCard>
 
-                  {/* Medical Info — clinic only */}
-                  {industry_type === "clinic" && (detail.blood_group || detail.allergies || detail.medical_notes || detail.emergency_contact_name || detail.insurance_id) && (
+                  {/* Medical Info — clinical presets (clinic, dental_clinic, veterinary, physiotherapy) */}
+                  {isClinicalPreset(industry_type) && (detail.blood_group || detail.allergies || detail.medical_notes || detail.emergency_contact_name || detail.insurance_id) && (
                     <SectionCard className="p-2">
                       <p className="text-xs font-semibold text-(--ui-text-muted) mb-1.5">Medical Information</p>
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
@@ -791,6 +826,54 @@ export default function CustomersRedesign() {
                         {detail.emergency_contact_name && <><span className="text-(--ui-text-muted)">Emergency Contact</span><span className="text-(--ui-text)">{detail.emergency_contact_name}{detail.emergency_contact_phone ? ` · ${detail.emergency_contact_phone}` : ""}</span></>}
                       </div>
                       {detail.medical_notes && <p className="mt-1 text-xs text-(--ui-text-muted) italic">{detail.medical_notes}</p>}
+                    </SectionCard>
+                  )}
+
+                  {/* Clinical — Subjects (M10): self / dependent / pet. Only shown for clinical presets. */}
+                  {isClinicalPreset(industry_type) && clinicalSubjects.length > 0 && (
+                    <SectionCard className="p-2">
+                      <p className="text-xs font-semibold text-(--ui-text-muted) mb-1.5">
+                        {industry_type === "veterinary" ? "Pets & Subjects" : "Patients & Dependents"}
+                      </p>
+                      <div className="space-y-1">
+                        {clinicalSubjects.map((s) => (
+                          <div key={s.id} className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2">
+                              <Badge tone="default">{s.subject_type}</Badge>
+                              <span className="font-medium text-(--ui-text)">{s.name}</span>
+                              {s.species && <span className="text-(--ui-text-muted)">· {s.species}{s.breed ? `, ${s.breed}` : ""}</span>}
+                              {s.weight_kg && <span className="text-(--ui-text-muted)">· {s.weight_kg} kg</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </SectionCard>
+                  )}
+
+                  {/* Clinical — Treatment Plans (M10). Only shown for clinical presets. */}
+                  {isClinicalPreset(industry_type) && clinicalPlans.length > 0 && (
+                    <SectionCard className="p-2">
+                      <p className="text-xs font-semibold text-(--ui-text-muted) mb-1.5">Treatment Plans</p>
+                      <div className="space-y-1">
+                        {clinicalPlans.map((p) => (
+                          <a
+                            key={p.id}
+                            href={`/treatment-plans/${p.id}`}
+                            className="flex items-center justify-between text-xs hover:bg-(--ui-bg) rounded px-1 py-0.5"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Badge tone={p.status === "active" ? "success" : p.status === "completed" ? "default" : "warning"}>
+                                {p.status}
+                              </Badge>
+                              <span className="font-medium text-(--ui-text)">{p.plan_number || `#${p.id}`}</span>
+                              {p.diagnosis && <span className="text-(--ui-text-muted) truncate max-w-40">· {p.diagnosis}</span>}
+                            </div>
+                            <span className="text-(--ui-text-muted)">
+                              {p.sessions_completed || 0} / {p.total_sessions_planned || "?"}
+                            </span>
+                          </a>
+                        ))}
+                      </div>
                     </SectionCard>
                   )}
 
@@ -1260,8 +1343,8 @@ export default function CustomersRedesign() {
                 </label>
               </div>
 
-              {/* Medical Information — clinic only */}
-              {industry_type === "clinic" && (
+              {/* Medical Information — clinical presets (clinic, dental_clinic, veterinary, physiotherapy) */}
+              {isClinicalPreset(industry_type) && (
                 <>
                   <p className="text-xs font-semibold text-(--ui-text-muted) uppercase tracking-wide pt-1">Medical Information</p>
                   <div className="grid grid-cols-2 gap-2">
