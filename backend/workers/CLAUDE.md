@@ -1,6 +1,6 @@
 # Workers — Claude Guide
 
-- **8 files** — background job processors. Legacy polling (`*-worker.js`) + durable pg-boss (`*-worker-boss.js`) + shared utility (`tenant-job-context.js`)
+- **10 files** — background job processors. Legacy polling (`*-worker.js`) + durable pg-boss (`*-worker-boss.js`) + shared utility (`tenant-job-context.js`)
 - **Prefer pg-boss versions** — legacy kept as fallback only
 - **pg-boss v12+ gotcha**: Must call `boss.createQueue(name)` before `boss.work()` or `boss.schedule()`
 - **Heartbeat pattern**: Workers set `global.__<name>WorkerStatus` (`{ lastPollAt, processedToday, queueDepth }`) for `/api/admin/worker-status`
@@ -20,7 +20,7 @@ Export: `registerEmailWorker(boss, pool)`
 | `"campaign-email"` | on-demand | Send one marketing delivery; teamSize 5/5 |
 | `"campaign-scheduled-send"` | delayed/scheduled | Fan-out a scheduled campaign via `services/marketing` |
 | `"invoice-reminder"` | on-demand | Send customer invoice reminder; skips if invoice paid/void |
-| `"subscription-renewal"` | on-demand | Process renewal via `services/subscriptions.processRenewal()` |
+| `"subscription-renewal"` | on-demand | Process renewal via `services/subscriptions.processRenewal()` (customer recurring subscriptions — not tenant billing) |
 
 **Billing lifecycle check (7 transitions, all in one hourly run):**
 1. Trial warning — sent when `trial_ends_at` within 7 days
@@ -140,6 +140,55 @@ Export: `startFbrWorker(db)` — also runnable standalone
 - **Exponential backoff**: uses `services/fbr.getNextRetryDelay(retryCount)` (not available in boss version which uses fixed 60s)
 - **Standalone health endpoint**: `GET /health` on `FBR_WORKER_PORT` (default 8081) returns `{ status: "ok", activeGlobal }`
 - **SIGTERM drain**: waits for `activeGlobal === 0` before closing pool and exiting
+
+---
+
+## `rental-overdue-worker-boss.js`
+
+Export: `registerRentalOverdueWorker(boss, pool)`
+
+- Cron: `"rental-overdue-check"` at `0 8 * * *` (daily 8 AM UTC)
+- Calls `rental-service.getOverdueContracts()` across all active tenants
+- Enqueues `rental_overdue` email for contracts in `checked_out` status past `expected_return` where `overdue_email_sent_at IS NULL OR < NOW() - 24h`; calls `markOverdueEmailSent()` + `logActivity()` per contract
+- Heartbeat: `global.__rentalOverdueWorkerStatus`
+- Env: `RENTAL_OVERDUE_WORKER_ENABLED=1`
+
+---
+
+## `room-overdue-checkout-worker-boss.js`
+
+Export: `registerRoomOverdueCheckoutWorker(boss, pool)`
+
+- Cron: `"room-overdue-check"` at `0 11 * * *` (daily 11 AM UTC)
+- Calls `room-service.getOverdueCheckouts()` across all active tenants
+- Emails both `company_profile.email` (staff alert) AND `customer_email` (guest) for bookings still `checked_in` past `check_out_date`
+- Silently skips tenants whose tables don't exist yet (catches `does not exist` errors)
+- Heartbeat: `global.__roomOverdueWorkerStatus`
+
+---
+
+## `subscription-grace-worker-boss.js`
+
+Export: `registerSubscriptionGraceWorker(boss, pool)`
+
+- Cron: `"subscription-grace-check"` hourly `0 * * * *`
+- Two-step transition per tenant: `active` subscriptions past `grace_period_end` with unpaid renewal invoices → `past_due`; `past_due` subscriptions 7 days beyond `grace_period_end` → `expired`
+- **Note**: handles *customer* subscription grace (in `customer_subscriptions` table), NOT tenant billing grace — that is handled in `email-worker-boss.js` billing lifecycle check
+- Heartbeat: `global.__subscriptionGraceWorkerStatus`
+- Env: `SUBSCRIPTION_GRACE_WORKER_ENABLED=1`
+
+---
+
+## `treatment-plan-worker-boss.js`
+
+Export: `registerTreatmentPlanWorker(boss, pool)`
+
+- Cron: `"treatment-plan-daily-check"` at `0 9 * * *` (daily 9 AM UTC)
+- Two tasks per run: (1) upcoming session reminders — calls `treatment-plan-service.getUpcomingSessionsNeedingReminder()`, enqueues `treatment_session_reminder` email per session; (2) overdue plan check — calls `getOverduePlans()`, enqueues `treatment_plan_overdue` email to provider (staff-facing)
+- `queueDepth` measured from `email_queue` where `email_type IN ('treatment_session_reminder','treatment_plan_overdue')`
+- Silently skips tenants whose `treatment_plans` table doesn't exist (catches `does not exist` errors)
+- Heartbeat: `global.__treatmentPlanWorkerStatus`
+- Env: `TREATMENT_PLAN_WORKER_ENABLED=1`
 
 ---
 

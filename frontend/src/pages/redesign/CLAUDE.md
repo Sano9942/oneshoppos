@@ -1,6 +1,6 @@
 # Redesign Pages — Claude Guide
 
-- **ALL active pages live here** as `*Redesign.jsx` — these are the real implementations (~88 JSX files + CLAUDE.md + pos/ subdirectory)
+- **ALL active pages live here** as `*Redesign.jsx` — these are the real implementations (~89 JSX files + CLAUDE.md + pos/, cod/, treatment/ subdirectories)
 - **Use `PageShell`** from `ui/primitives.jsx` for page layout (props: `title`, `subtitle`, `right`)
 - **Use `SectionCard`** for content sections (props: `children`, `className` only — no `title` prop)
 - **Use `api.js`** for all API calls (`api.get`, `api.post`, `api.put`, `api.del`) — never raw `fetch()`
@@ -92,6 +92,12 @@ Standalone product create/edit form. NOT a `*Redesign.jsx`. Uses `useParams()` f
 ### `CODSettlementsRedesign.jsx`
 Orchestrates 3 sub-components from `cod/` subdirectory: `BatchList`, `ImportWizard`, `BatchDetail`. Feature-flag gated (`phase5_cod_settlements`). View state machine: `{ name: "list" }` → `{ name: "import" }` → `{ name: "detail", batchId }`.
 
+### `CustomersRedesign.jsx`
+Full customer list + detail panel (3 tabs: Profile, Ledger, Order History). Wave 3 additions:
+- **Wallet**: fetches `GET /api/customers/:id/wallet` on customer open — shows balance, top-up form (`POST /api/customers/:id/wallet/topup`), and last 10 wallet ledger entries on the Profile tab. Full wallet ledger (credit/debit + points) on the Ledger tab.
+- **Blacklist modal**: toggle blacklist status with a reason field.
+- **Clinical preset detection**: `CLINICAL_PRESETS = { clinic, dental_clinic, veterinary, physiotherapy }` — shows medical fields (blood group, allergies, medical notes, emergency contact, insurance ID) in the edit form when `industryType` matches.
+
 ---
 
 ## Wave-16 Feature Pages
@@ -103,14 +109,20 @@ All follow the standard pattern: `PageShell` + `SectionCard` + `useFeatureFlags`
 | `AppointmentsRedesign`, `AppointmentsCalendarRedesign`, `AppointmentServicesRedesign` | `phase4_appointments` |
 | `RestaurantChecksRedesign`, `RestaurantFloorRedesign`, `KioskOrderingRedesign` | `phase4_restaurant` |
 | `KDSRedesign` | `phase4_restaurant_kds` |
+| `TreatmentPlansRedesign` | `phase4_treatment_plans` + `manage_treatment_plans` perm — multi-tab (Plans, Calendar, Lab Orders, Templates); detail + chart views via `useParams().planId`; imports `DentalChart`/`BodyChart` from `treatment/` subdirectory |
 | `ContractsRedesign` | `phase4_service_contracts` |
 | `ProjectsRedesign` | `phase4_service_projects` |
 | `CustomerInvoicesRedesign`, `SubscriptionsRedesign` | `customer_invoicing` / `subscription_billing` |
 | `MarketingCampaignsRedesign`, `MessagingInboxRedesign` | `marketing_campaigns` / `customer_messaging` |
-| `CommissionPlansRedesign`, `LoyaltyTiersRedesign`, `ReviewModerationRedesign` | no flag guard (always visible) |
+| `CommissionPlansRedesign` | `phase2_commissions` |
+| `LoyaltyTiersRedesign`, `ReviewModerationRedesign` | no flag guard (always visible) |
 | `POSLayoutsRedesign`, `ReturnPoliciesRedesign`, `ScheduledChangesRedesign`, `SchedulingRedesign`, `SmartCollectionsRedesign`, `OutletTaxProfilesRedesign` | Phase 2 flags (`phase2_*`) |
 | `ReportBuilderRedesign` | `phase2_report_builder` |
-| `CODSettlementsRedesign`, `FulfillmentRedesign` | `phase5_cod_settlements` / `phase5_fulfillment` |
+| `CODSettlementsRedesign` | `phase5_cod_reconciliation` |
+| `FulfillmentRedesign` | no flag guard (gated by perm only) |
+| `RoomManagementRedesign` | `phase4_room_management` |
+| `RentalsRedesign` | `phase4_rentals` + `manage_rentals` perm |
+| `ServiceTicketsRedesign` | `phase4_workflow_tickets` |
 | `ChartOfAccountsRedesign`, `JournalEntriesRedesign`, `CreditDebitNotesRedesign`, `PostdatedChequesRedesign` | `accounting_core` |
 | `CustomerGroupsRedesign`, `PriceListsRedesign`, `ReorderAlertsRedesign`, `StockCountRedesign`, `ParkedSalesRedesign`, `NotificationsRedesign` | no flag guard or Phase 2 |
 

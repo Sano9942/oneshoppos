@@ -12,7 +12,7 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 
 ## Sub-Guides (loaded automatically when working in those directories)
 
-- **`backend/CLAUDE.md`** — Postgres query patterns, backend gotchas, test suites (64 integration files + 10 unit files), production env
+- **`backend/CLAUDE.md`** — Postgres query patterns, backend gotchas, test suites (74 integration files + 20 unit files), production env
 - **`frontend/CLAUDE.md`** — route wrapper skip list, conventions (Tailwind v4, timestamps, currency, API calls), POS architecture, test suites
 
 ## Efficiency Rules (Read First)
@@ -78,11 +78,11 @@ oneshoppos/
 │   │   ├── receipt-templates.js  # /api/receipt-templates
 │   │   ├── supplier-returns.js   # /api/supplier-returns
 │   │   ├── customer-display.js   # /api/customer-display
-│   │   ├── reports/              # /api/reports/* (14 report files incl. helpers + index, modular — includes fbr-export)
+│   │   ├── reports/              # /api/reports/* (15 report files incl. helpers + index, modular — includes fbr-export, clinical)
 │   │   ├── integrations/          # /api/integrations/* (hub, credentials, daraz, facebook, whatsapp, google-merchant)
 │   │   ├── shopify/              # /api/integrations/shopify* (9 files, modular)
 │   │   ├── tier4/                # Tier 4 features (7 files, modular)
-│   │   └── [other domain files]  # taxes, categories, outlets, roles, brands, suppliers, promotions, orders, attribute-sets, barcode-expenses, parked-sales, shifts, etc.
+│   │   └── [other domain files]  # taxes, categories, outlets, roles, brands, suppliers, promotions, orders, attribute-sets, barcode-expenses, parked-sales, shifts, service-tickets, rentals, rooms, treatment-plans, treatment-plan-templates, country-packs, sandbox, etc.
 │   ├── middleware/plan-limits.js  # Tenant plan cap + subscription enforcement
 │   ├── middleware/rate-limit.js   # Rate limiter config (global, auth, webhook)
 │   ├── middleware/tenant-auth.js  # JWT auth, tenant resolution, company profile cache, context resolution
@@ -90,7 +90,7 @@ oneshoppos/
 │   ├── middleware/feature-flags.js # Feature flag cache, requireFeature, notification helpers
 │   ├── middleware/validate.js     # Zod validation helper — validate(schema) middleware factory
 │   ├── middleware/upload-validation.js # Centralized MIME + extension whitelist for file uploads
-│   ├── schemas/                   # Zod schemas (23 files): auth, billing, employees, products, sales, returns, customers, purchase-orders, inventory, orders, admin, integrations, bookings, commissions, contracts, customer-invoices, marketing, messaging, projects, restaurant, scheduled-changes, smart-collections, subscriptions
+│   ├── schemas/                   # Zod schemas (28 files): auth, billing, employees, products, sales, returns, customers, purchase-orders, inventory, orders, admin, integrations, bookings, commissions, contracts, customer-invoices, marketing, messaging, projects, restaurant, scheduled-changes, smart-collections, subscriptions, customer-portal, rentals, rooms, service-tickets, treatment-plans
 │   ├── boot/workers.js            # All worker startup (email, FBR, cleanup, Shopify, scheduled tasks)
 │   ├── shopify/crypto.js          # Shopify secret encryption/decryption + event logging
 │   ├── services/crypto.js          # Generalized AES-256-GCM encryption (all integrations)
@@ -117,6 +117,10 @@ oneshoppos/
 │   ├── workers/fbr-worker-boss.js # FBR background worker (pg-boss backed)
 │   ├── workers/cleanup-worker-boss.js # Dead tenant cleanup (pg-boss backed)
 │   ├── workers/marketplace-sync-worker-boss.js # Marketplace order poll + feed check (pg-boss)
+│   ├── workers/rental-overdue-worker-boss.js # Rental contract overdue checker (pg-boss, daily 8 AM UTC)
+│   ├── workers/room-overdue-checkout-worker-boss.js # Room booking overdue checker (pg-boss, daily 11 AM UTC)
+│   ├── workers/subscription-grace-worker-boss.js # Customer subscription grace transitions (pg-boss, hourly)
+│   ├── workers/treatment-plan-worker-boss.js # Treatment plan reminders + overdue (pg-boss, daily 9 AM UTC)
 │   ├── scripts/seed-tax-rates.js # One-time seed for tax_rate_reference (~96 HS codes)
 │   ├── shared/                   # (reserved — constants currently inline in middleware/permissions.js + middleware/feature-flags.js)
 │   └── utils/                    # tz.js, r2.js, receiptEmail.js, digestEmail.js, backup-pg.js, resendEmail.js, alertEmail.js
@@ -131,6 +135,8 @@ oneshoppos/
     ├── routes/                   # Route config split: publicRoutes.jsx, appRoutes.jsx, adminRoutes.jsx, RouteLoading.jsx
     ├── contexts/CurrencyContext.jsx  # useCurrency() → { symbol, code, fmt, refresh, denominations }
     ├── contexts/ToastContext.jsx    # useToast() → { toast, success, error, warning }
+    ├── contexts/PresetContext.jsx   # usePreset() → { labels, hasMode, label, enabled_modes, unit_vocabulary, pos_layout_mode }
+    ├── auth/customerPortalStore.js  # Portal session storage (slug-scoped localStorage)
     ├── ui/primitives.jsx         # Design system (PageShell, Button, Input, etc.)
     ├── ui/Breadcrumbs.jsx        # Route-based breadcrumb nav (auto-derived from pathname)
     ├── ui/ErrorBoundary.jsx      # React error boundary (global + page-level)
@@ -169,7 +175,8 @@ oneshoppos/
         ├── ReceiptPublicPage.jsx # Public shareable receipt (/receipt/:invoiceNumber)
         ├── SignupPage.jsx        # Public self-service signup (/signup)
         ├── Reports.jsx           # Reports orchestrator (NOT legacy)
-        └── [*Route.jsx]          # ~60 thin wrappers — never edit (includes MyTicketsRoute.jsx)
+        ├── portal/               # Customer self-service portal (separate auth via PortalAuthProvider)
+        └── [*Route.jsx]          # ~64 thin wrappers — never edit (includes MyTicketsRoute.jsx)
 ```
 
 ## Key Architecture Facts
@@ -225,7 +232,7 @@ oneshoppos/
 - **Dead letter queue**: `/admin/dead-letters` — failed webhook events with retry/dismiss actions.
 - **Tenant impersonation**: `POST /api/admin/impersonate/:tenantId` — 1-hour JWT, amber banner, audit trail in `impersonation_sessions` table. Actions tagged "(impersonated by Super-Admin)". Impersonation JWT is verified server-side (not decoded via atob() client-side).
 - **Admin activity logging**: All admin mutations logged to `admin_activity_log` table. Security events (login success/failure) logged to `admin_security_log`. Cross-tenant activity via `GET /api/admin/tenant-activity`.
-- **Worker monitoring**: `GET /api/admin/worker-status` reads heartbeat globals (`__emailWorkerStatus`, `__fbrWorkerStatus`, `__cleanupWorkerStatus`, `__marketplaceSyncWorkerStatus`, `__reservationWorkerStatus`, `__bookingReminderWorkerStatus`). `queueDepth` is a real `SELECT COUNT(*)` from the queue table (not always-0). Dashboard shows running/stopped status, real queue depth, processed today.
+- **Worker monitoring**: `GET /api/admin/worker-status` reads heartbeat globals (`__emailWorkerStatus`, `__fbrWorkerStatus`, `__cleanupWorkerStatus`, `__marketplaceSyncWorkerStatus`, `__reservationWorkerStatus`, `__bookingReminderWorkerStatus`, `__rentalOverdueWorkerStatus`, `__roomOverdueWorkerStatus`, `__treatmentPlanWorkerStatus`). `queueDepth` is a real `SELECT COUNT(*)` from the queue table (not always-0). Dashboard shows running/stopped status, real queue depth, processed today.
 - **Cleanup worker**: `CLEANUP_WORKER_ENABLED=1` env var. Runs `jobs/cleanup-dead-tenants.js` every 24h inline.
 - **Orphaned schema detection**: `GET /api/admin/orphaned-schemas` + `POST /api/admin/orphaned-schemas/cleanup`.
 - **Announcements**: `GET/POST/PUT/DELETE /api/admin/announcements` (admin), `GET /api/announcements/active` (public, no auth). Tenant-side banner via `ui/AnnouncementBanner.jsx` in AppLayout.
@@ -234,18 +241,18 @@ oneshoppos/
 
 ## Running Tests
 
-### Postgres Integration Tests (primary — 64 files) + Unit Tests (10 backend + 4 frontend)
+### Postgres Integration Tests (primary — 74 files) + Unit Tests (20 backend + 5 frontend)
 - `npx jest backend/tests/integration/pg-batch1-crud.test.js` (requires `DATABASE_URL`)
-- 64 integration files: 19 pg-batch files (16 numbered + 3 phase batches), 37 full-audit domain tests, 7 pg-standalone, 1 legacy smoke-gate
-- Unit tests: `backend/tests/unit/` (10 files — Vitest) + `frontend/tests/unit/` (4 files — Vitest)
+- 74 integration files: 19 pg-batch files (16 numbered + 3 phase batches), 39 full-audit domain tests, 15 pg-standalone, 1 legacy smoke-gate
+- Unit tests: `backend/tests/unit/` (20 files — Vitest) + `frontend/tests/unit/` (5 files — Vitest)
 
-### Production E2E Tests (24 specs, ~290 tests — full system audit against production)
+### Production E2E Tests (28 specs, ~290 tests — full system audit against production)
 - `cd frontend && npx playwright test tests/auth.spec.js`
-- 24 self-contained Playwright specs at `frontend/tests/*.spec.js`, targets `sanopos.com` (tenant `packagesmall`)
+- 28 self-contained Playwright specs at `frontend/tests/*.spec.js`, targets `sanopos.com` (tenant `packagesmall`)
 - Single config: `playwright.config.js` (no separate live/onboarding configs)
 - Global setup: `global-setup.js` logs in once, saves `auth.json` + `token.json`
 - Helpers: `helpers/auth.js`, `helpers/api.js`, `helpers/nav.js`
-- Includes 3 onboarding specs (`onboard-free`, `onboard-starter`, `onboard-pro`) — create real test tenants, delete from `/admin` after each run
+- Includes 6 onboarding specs (`onboard-free`, `onboard-starter`, `onboard-pro`, `onboard-dental-clinic`, `onboard-physiotherapy`, `onboard-veterinary`) — create real test tenants, delete from `/admin` after each run
 
 ### Legacy SQLite Tests (do not use unless explicitly asked)
 - `smoke-gate.test.js` has **22/25 pre-existing failures on main** — do NOT investigate
@@ -263,16 +270,16 @@ oneshoppos/
 
 ## Permission System
 
-- **Roles**: Administrator (`all_access`), Manager (13 permissions), Cashier (3 permissions)
+- **Roles**: Administrator (`all_access`), Manager (17 permissions), Cashier (3 permissions)
 - **Middleware**: `requirePerm("perm")` and `requireAnyPerm(["perm1", "perm2"])` in route handlers
 - **Frontend**: `hasPerm("perm")` from `useAuth()` — returns true if `all_access` or specific permission
 - **Admin-only routes**: employees CRUD, outlets, email config, printer config, roles, action-history logging
-- **Manager+Admin routes**: products (write), orders, purchase orders, inventory, attribute sets, barcode print jobs, restaurant ops (`manage_restaurant`), KDS (`manage_kds`), bookings (`manage_bookings`), projects (`manage_projects`), contracts (`manage_contracts`)
+- **Manager+Admin routes**: products (write), orders, purchase orders, inventory, attribute sets, barcode print jobs, restaurant ops (`manage_restaurant`), KDS (`manage_kds`), bookings (`manage_bookings`), projects (`manage_projects`), contracts (`manage_contracts`), service tickets (`manage_tickets`), rentals (`manage_rentals`), room management (`manage_rooms`), treatment plans (`manage_treatment_plans`)
 - **All authenticated**: view reports, read-only data, send receipts, POS operations
 
 ## Migrations
 
-- **Current version**: 30 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns, v6: setup_token_expires_at, v7: billing tables, v8: support_tickets/impersonation_sessions, v9: FBR digital invoicing — fbr_invoices queue, category tax/HS inheritance, tax_rate_reference, tax_rate_suggestions, v10: email_queue for unified email service, v11: payment_intents for gateway checkout tracking, v12: super admin enhancements — admin_activity_log, admin_security_log, tenant_notes, announcements, broadcast_log, support_tickets reply columns, v13: performance indexes — sales, sale_items, products, customers, cash_shifts, returns; return_items variant_id column, v14: pin_code column nullable — plaintext PIN storage removed, v15: pg-boss pgboss_job_id column on fbr_invoices, v16: competitive features — 13 new tables, customer/product enhancements, stock counts, fulfillment, reporting, loyalty, v17: integrations hub — extend integration_settings, marketplace mapping tables, new courier seeds, v18: omnichannel — sales_channels, inventory_reservations, storefront_carts, customer_addresses, v19: Phase 2 — scheduled_shifts, price_list_assignments, draft_orders, approval_policies, return_policies, smart_collections, outlet_product_visibility, outlet_tax_profiles, scheduled_catalog_changes, commission_plans, custom_report_definitions, pos_layouts, product_affinities, v20: marketing & messaging — marketing_campaigns, message_threads, customer_invoices family (5 tables), subscription_plans, customer_subscriptions, v21: Phase 4 restaurant — floor plans, tables, sessions, checks, coursing, tabs, preauth, KDS stations/tickets, v22: Phase 4 appointments/projects/contracts — booking_services, appointments, calendar_sync, service_projects, contracts, v23: Phase 4 feature flags seeded, v24: Phase 5 feature flags + payment_webhook_events + sms_provider_messages, v25: Phase 5 shipping — order_shipments, shipment_tracking_events, cod_settlement_batches, v26: backfill Phase 2 feature flags, v27: supplier_payments voided columns, v28: draft_orders partial UNIQUE index, v29: kds_ticket_items junction, v30: products.created_at column)
+- **Current version**: 49 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns, v6: setup_token_expires_at, v7: billing tables, v8: support_tickets/impersonation_sessions, v9: FBR digital invoicing — fbr_invoices queue, category tax/HS inheritance, tax_rate_reference, tax_rate_suggestions, v10: email_queue for unified email service, v11: payment_intents for gateway checkout tracking, v12: super admin enhancements — admin_activity_log, admin_security_log, tenant_notes, announcements, broadcast_log, support_tickets reply columns, v13: performance indexes — sales, sale_items, products, customers, cash_shifts, returns; return_items variant_id column, v14: pin_code column nullable — plaintext PIN storage removed, v15: pg-boss pgboss_job_id column on fbr_invoices, v16: competitive features — 13 new tables, customer/product enhancements, stock counts, fulfillment, reporting, loyalty, v17: integrations hub — extend integration_settings, marketplace mapping tables, new courier seeds, v18: omnichannel — sales_channels, inventory_reservations, storefront_carts, customer_addresses, v19: Phase 2 — scheduled_shifts, price_list_assignments, draft_orders, approval_policies, return_policies, smart_collections, outlet_product_visibility, outlet_tax_profiles, scheduled_catalog_changes, commission_plans, custom_report_definitions, pos_layouts, product_affinities, v20: marketing & messaging — marketing_campaigns, message_threads, customer_invoices family (5 tables), subscription_plans, customer_subscriptions, v21: Phase 4 restaurant — floor plans, tables, sessions, checks, coursing, tabs, preauth, KDS stations/tickets, v22: Phase 4 appointments/projects/contracts — booking_services, appointments, calendar_sync, service_projects, contracts, v23: Phase 4 feature flags seeded, v24: Phase 5 feature flags + payment_webhook_events + sms_provider_messages, v25: Phase 5 shipping — order_shipments, shipment_tracking_events, cod_settlement_batches, v26: backfill Phase 2 feature flags, v27: supplier_payments voided columns, v28: draft_orders partial UNIQUE index, v29: kds_ticket_items junction, v30: products.created_at column, v31: preset_engine — industry_presets table, tenant preset column, v32: customer_portal — portal_sessions, portal_refresh_tokens, portal_otps, v33: service_tickets — workflow_tickets, ticket_comments, ticket_attachments, v34: rentals — rental_items, rental_contracts, rental_contract_items, rental_payments, v35: room_management — rooms, room_bookings, room_folios, room_folio_items, v36: treatment_plans — treatment_plans, treatment_sessions, treatment_notes, treatment_lab_orders, treatment_templates, v37: deposits — booking_deposits, room_booking_deposits, treatment_plan_deposits, v38: country_packs — country_pack_applications log, v39: mode_feature_flags — per-mode flag defaults seeded, v40: clinical_customers — medical fields on customers (blood_group, allergies, medical_notes, emergency_contact, insurance_id), v41: rental_permissions — manage_rentals + manage_rooms + manage_tickets + manage_treatment_plans seeded, v42: treatment_plan_templates — reusable clinical plan templates table, v43: rental_assets — asset catalog for rentals, v44: room_booking_deposits index, v45: portal_appointments — customer_portal_appointments junction, v46: sales_decimal_quantity — sale_items.quantity NUMERIC(10,3), v47: rental_overdue_flags — overdue_notified_at columns, v48: treatment_folio — treatment_folio_items charges table, v49: preset_unit_vocabulary — unit_vocabulary JSONB column on company_profile)
 - **migrate-pg.js CLI**: `node backend/migrate-pg.js` — migrates public schema AND all active tenant schemas
 - **Tenant migration gotcha**: existing tenants need `schema_version` table seeded with previous versions before first run
 

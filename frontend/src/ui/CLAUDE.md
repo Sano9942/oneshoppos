@@ -1,6 +1,6 @@
 # UI — Claude Guide
 
-**10 files** — shared design system components, layout helpers, and theme tokens. All components use CSS custom property classes (`text-(--ui-text)`) for dark mode theming. **Exception: POS uses hardcoded colors.**
+**11 files** — shared design system components, layout helpers, and theme tokens. All components use CSS custom property classes (`text-(--ui-text)`) for dark mode theming. **Exception: POS uses hardcoded colors.**
 
 ---
 
@@ -175,3 +175,15 @@ Two named exports:
 |--------|-------|-------|
 | `StarDisplay` | `{ rating, size=16, className? }` | Read-only. Rounds `rating` to nearest integer. |
 | `StarPicker` | `{ value, onChange, size=24, className? }` | Interactive. Stars hover to yellow-300 on hover. Calls `onChange(n)` on click. |
+
+---
+
+## `PwaInstallPrompt.jsx`
+
+Default export. Dismissible install banner for Chrome/Edge desktop and Android Chrome.
+
+- Listens for the `beforeinstallprompt` browser event on mount. Does nothing on iOS Safari (event never fires) or when already installed.
+- Renders a fixed bottom-left card with a `Download` icon, "Install SanoPOS" heading, and two buttons: "Install" and "Not now".
+- "Install" calls `prompt.prompt()` then awaits `prompt.userChoice`. Dismissal is persisted so the banner won't reappear.
+- "Not now" (and the `X` close button) hides the banner and persists dismissal.
+- **Persistence key**: `localStorage["pwa_install_dismissed"] = "1"` — banner never re-shows after any dismissal path.

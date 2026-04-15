@@ -1,7 +1,7 @@
 # POS Module — Claude Guide
 
 - **22 files** — entire POS terminal, driven by a single React Context (`POSContext`)
-- **`POSContext.jsx`** — central state machine (~1318 lines). `POSProvider` wraps the page, `usePOS()` hook for all children. **~145 exports** (state values + setters + computed values + functions). Lock state in `sessionStorage` (`posLocked=1`, clears on tab close). Offline queue uses `localStorage` keyed per employee ID (`pos_offline_queue_<employeeId>`).
+- **`POSContext.jsx`** — central state machine (~1394 lines). `POSProvider` wraps the page, `usePOS()` hook for all children. **~165 exports** (state values + setters + computed values + functions). Lock state in `sessionStorage` (`posLocked=1`, clears on tab close). Offline queue uses `localStorage` keyed per employee ID (`pos_offline_queue_<employeeId>`). M9 exports: `chargeToRoomFolioId`, `setChargeToRoomFolioId`, `openBookings`, `openBookingsLoading`. M10 exports: `chargeToTreatmentFolioId`, `setChargeToTreatmentFolioId`, `openTreatmentPlans`, `setOpenTreatmentPlans`. Also exports `presetLabels` (from `usePreset()`) used by `printSlip`.
 - **`cartMath.js`** — pure utility, zero React. `calcGrossTotal`, `calcDiscountValue` (percent/flat), `calcTaxTotal` (inclusive only — exclusive adds tax in calling code), `calcTotal` (always ≥ 0)
 
 ## Context Bootstrap Behavior

@@ -1,6 +1,6 @@
 # Auth — Claude Guide
 
-**3 files** — authentication layer for tenant (app) and admin portals.
+**4 files** — authentication layer for tenant (app), admin, and customer portals.
 
 ---
 
@@ -120,3 +120,21 @@ localStorage key: `"adminSession"`. Mirror of `authStore.js` for the `/admin` po
 | `getAdminSession()` | Returns full session object |
 
 No `isSessionStructValid` — admin session has no required-field check.
+
+---
+
+## `customerPortalStore.js`
+
+localStorage key: `customerPortalSession:${slug}` (slug-scoped — one browser can be logged into multiple tenant portals simultaneously).
+
+**Exports:**
+
+| Export | Purpose |
+|--------|---------|
+| `readPortalSession(slug)` | Returns full session object or null |
+| `writePortalSession(slug, session)` | Stores session keyed by tenant slug |
+| `clearPortalSession(slug)` | Removes session for this slug |
+| `getPortalToken(slug)` | Returns `session.access_token \| null` |
+| `getPortalCustomer(slug)` | Returns `session.customer \| null` |
+
+Used exclusively by `PortalAuthProvider` in `pages/portal/`. NOT interchangeable with `authStore.js` (tenant app) or `adminAuthStore.js` (super-admin).

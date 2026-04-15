@@ -24,6 +24,30 @@ Routes accessible without authentication (or with special auth handling):
 | `/store/:tenantSlug` | `StorefrontLayout` | Public storefront — 6 nested routes: `index`, `products`, `products/:productId`, `cart`, `checkout`, `order/:orderToken` |
 | `/book/:tenantSlug` | `PublicBookingPage` | Public appointment booking |
 | `/menu/:token` | `PublicRestaurantMenuPage` | Public restaurant QR menu |
+| `/portal/:tenantSlug` | `PortalLayout` | M8 customer portal — 16 nested routes (see below). Uses its own `PortalAuthProvider`; NOT wrapped in the main `AuthProvider` |
+
+### Portal nested routes (`/portal/:tenantSlug/...`)
+
+| Sub-path | Component |
+|----------|-----------|
+| (index) | `PortalDashboard` |
+| `login` | `PortalLogin` |
+| `signup` | `PortalSignup` |
+| `verify-otp` | `PortalOtpVerify` |
+| `forgot` | `PortalForgotPassword` |
+| `reset` | `PortalResetPassword` |
+| `invoices` | `PortalInvoices` |
+| `invoices/:invoiceId` | `PortalInvoiceDetail` |
+| `invoice-paid` | `PortalInvoicePaidPage` |
+| `appointments` | `PortalAppointments` |
+| `treatments` | `PortalTreatments` |
+| `stays` | `PortalStays` |
+| `orders` | `PortalOrders` |
+| `loyalty` | `PortalLoyalty` |
+| `wallet` | `PortalWallet` |
+| `profile` | `PortalProfile` |
+
+All portal components live in `pages/portal/`.
 
 ### `HomeRedirect` logic
 1. If `isBootstrapping` → render null (wait)
@@ -85,8 +109,10 @@ Every route in this file automatically gets auth, context enforcement, and the a
 | `/appointments/*` | `manage_bookings` | Phase 4 |
 | `/projects` | `manage_projects` | Phase 4 |
 | `/contracts` | `manage_contracts` | Phase 4 |
+| `/service-tickets` | `manage_tickets` | Phase 4 |
+| `/treatment-plans`, `/treatment-plans/active`, `/treatment-plans/calendar`, `/treatment-plans/labs`, `/treatment-plans/templates`, `/treatment-plans/:planId`, `/treatment-plans/chart/:planId` | `manage_treatment_plans` | M10 |
 
-**Standalone report deep-links (16 routes):**
+**Standalone report deep-links (17 routes):**
 Each maps a URL to a `ReportTabStandaloneRoute` with a `tabId`:
 
 | Path | tabId |

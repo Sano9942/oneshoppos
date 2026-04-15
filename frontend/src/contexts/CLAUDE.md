@@ -1,6 +1,6 @@
 # Contexts — Claude Guide
 
-- **2 files** — React contexts, both wrap the app globally
+- **3 files** — React contexts, both `CurrencyProvider` and `ToastProvider` wrap the app globally; `PresetProvider` wraps inside `AuthProvider`
 
 ## `CurrencyContext.jsx`
 
@@ -52,3 +52,20 @@
 | `info` (default) | CSS vars: `bg-(--ui-surface) text-(--ui-text) border-(--ui-border)` |
 
 **Gotcha:** `useToast()` throws `"useToast must be inside ToastProvider"` if called outside the provider — this is a hard error, not a silent null return.
+
+---
+
+## `PresetContext.jsx`
+
+`PresetProvider` + `usePreset()`.
+
+**Provides:** `{ industry_type, business_model, labels, dashboard_widgets, onboarding_steps, pos_layout_mode, visible_report_groups, pos_search_config, enabled_modes, unit_vocabulary, presetLoaded, updatePreset, hasMode, label }`
+
+Key methods:
+- `hasMode(modeName)` — returns `true` if `enabled_modes` includes the mode. Returns `true` before preset loads (fail-open) so feature flags remain the sole gate
+- `label(key)` — returns `preset.labels[key] || key` — use for industry-aware UI labels (e.g. `label("customer")` → "Patient" in clinic mode)
+- `updatePreset(data)` — merges incoming data over `DEFAULT_PRESET` and sets `presetLoaded = true`
+
+Also exports: `WEIGHTED_UNITS` (array of weight/length unit strings), `DEFAULT_UNIT_VOCABULARY` (array), `isWeightedUnit(unit)` (boolean), `DEFAULT_PRESET` (plain object).
+
+Mounted in `main.jsx` inside `AuthProvider` (after auth loads). Called by `AppLayoutRedesign`, `DashboardRedesign`, `POSContext`, `CompanySettingsRedesign`, and many others.

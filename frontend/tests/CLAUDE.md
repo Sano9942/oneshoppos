@@ -1,7 +1,7 @@
 # Test Suite Guide
 
 ## Overview
-24 self-contained Playwright specs (~290 tests) auditing every page and feature against production.
+28 self-contained Playwright specs (~290 tests) auditing every page and feature against production.
 
 ## Running Tests
 
@@ -61,8 +61,8 @@ Token is read from `tests/token.json` (written by `global-setup.js`). Headers se
 | `waitForPageShell` | async fn | `(page, titleText)` — waits for heading with text (15s timeout) |
 | `clickSidebarLink` | async fn | `(page, linkText)` — clicks sidebar nav link by text + waits for load |
 
-## Spec Files (24 specs)
-`auth`, `products`, `customers`, `inventory`, `purchasing`, `orders`, `pos-core`, `pos-advanced`, `employees-hr`, `crm`, `reports`, `accounting`, `settings`, `billing`, `fbr`, `integrations`, `import-export`, `permissions`, `navigation-ux`, `admin-panel`, `public-pages`, `onboard-free`, `onboard-starter`, `onboard-pro`
+## Spec Files (28 specs)
+`auth`, `products`, `customers`, `inventory`, `purchasing`, `orders`, `pos-core`, `pos-advanced`, `employees-hr`, `crm`, `reports`, `accounting`, `settings`, `billing`, `fbr`, `integrations`, `import-export`, `permissions`, `navigation-ux`, `admin-panel`, `public-pages`, `onboard-free`, `onboard-starter`, `onboard-pro`, `onboard-dental-clinic`, `onboard-physiotherapy`, `onboard-veterinary`, `customer-portal`
 
 ## Smoke Tests (14 specs)
 - Location: `tests/smoke/` — broader E2E coverage for competitive features
@@ -92,7 +92,7 @@ Token is read from `tests/token.json` (written by `global-setup.js`). Headers se
 | `cleanupAll()` | async — deletes all tracked resources in reverse order (children before parents); swallows per-resource failures; call in `afterAll`/`afterEach` |
 | `__clearBag()` | Empties the bag without deleting (test isolation) |
 
-Resource types registered in `DELETERS` (38 types): `product`, `customer`, `category`, `return-policy`, `return-reason`, `schedule`, `price-list`, `price-list-assignment`, `draft-order`, `smart-collection`, `outlet-tax-profile`, `scheduled-change`, `commission-plan`, `product-affinity`, `pos-layout`, `report-definition`, `marketing-campaign`, `marketing-template`, `customer-invoice`, `subscription-plan`, `customer-subscription`, `restaurant-floor`, `restaurant-table`, `restaurant-check`, `restaurant-session`, `kds-station`, `booking-service`, `appointment`, `project`, `contract`, `contract-template`, `cod-settlement`, `integration-credential`.
+Resource types registered in `DELETERS` (33 types): `product`, `customer`, `category`, `return-policy`, `return-reason`, `price-list`, `price-list-assignment`, `draft-order`, `smart-collection`, `outlet-tax-profile`, `commission-plan`, `product-affinity`, `pos-layout`, `report-definition`, `marketing-campaign`, `marketing-template`, `customer-invoice`, `subscription-plan`, `customer-subscription`, `restaurant-floor`, `restaurant-table`, `restaurant-check`, `restaurant-session`, `kds-station`, `booking-service`, `appointment`, `project`, `contract`, `contract-template`, `cod-settlement`, `integration-credential`, `rental-contract`, `room-booking`.
 
 **`mockPaymentGateway.js`** — Playwright route-interception stubs
 | Export | Stubs | Returns |
@@ -105,15 +105,16 @@ Resource types registered in `DELETERS` (38 types): `product`, `customer`, `cate
 
 Each returns a bag array that gets the request body pushed into it — assert on `bag.at(-1)` after the flow.
 
-## Unit Tests (35 tests — 4 files, Vitest)
+## Unit Tests (48 tests — 5 files, Vitest)
 - Run: `npx vitest run tests/unit/`
 
 | File | Tests | What it covers |
 |------|-------|----------------|
 | `auth_guards.test.jsx` | 5 | `RequireAuth` (loading/authenticated/redirect) + `RequirePerm` (allow/redirect-to-access-denied) |
 | `contexts.test.jsx` | 19 | `cartMath.js` (calcGrossTotal×4, calcDiscountValue×4, calcTaxTotal×4, calcTotal×5) + `CurrencyContext` fmt()×2 |
-| `layout.test.jsx` | 4 | `PageShell` (title+subtitle, right-side content) + `NotificationBell` (badge count, dropdown, empty state) |
-| `primitives.test.jsx` | 7 | `Button` (render, click, primary/danger tones) + `Input` (placeholder, onChange) + `Badge` (3 tones) + `EmptyState` |
+| `layout.test.jsx` | 5 | `PageShell` (title+subtitle, right-side content) + `NotificationBell` (badge count, dropdown, empty state) + breadcrumb rendering |
+| `primitives.test.jsx` | 8 | `Button` (render, click, primary/danger tones) + `Input` (placeholder, onChange) + `Badge` (3 tones) + `EmptyState` + `StarDisplay` |
+| `dental_chart.test.jsx` | 11 | `DentalChart` (tooth states: healthy/caries/missing/filled/crown) + `BodyChart` (region mapping, click handler) |
 
 **Gotcha**: `contexts.test.jsx` is named "contexts" but its primary coverage is `cartMath.js` (17 of 19 tests). `CurrencyContext` is tested via `renderHook` with a stubbed `fetch`. No POSContext unit tests exist.
 

@@ -11,7 +11,7 @@
 
 ## DO NOT READ These Files (token waste)
 
-### Route Wrappers (60 files — skip all, they are 5-line pass-throughs)
+### Route Wrappers (64 files — skip all, they are 5-line pass-throughs)
 Any `pages/*Route.jsx` file. Each one just does:
 `import XRedesign from './redesign/XRedesign'; export default function XRoute() { return <XRedesign />; }`
 
@@ -53,7 +53,9 @@ Examples: `POSRoute.jsx`, `DashboardRoute.jsx`, `CustomersRoute.jsx`, `OrdersRou
 | Support widget | `ui/SupportWidget.jsx` — floating ticket form |
 | Star rating | `ui/StarRating.jsx` — two named exports: `StarDisplay` (read-only) + `StarPicker` (interactive) |
 | API error type guard | `types/api.ts` — `isApiError(res)` runtime guard, narrows `ApiResponse` to error case |
-| Standalone report deep-link | `routes/appRoutes.jsx` — 16 `/reports/:tabId` deep-link routes (e.g. `/reports/sales-summary`) |
+| Standalone report deep-link | `routes/appRoutes.jsx` — 17 `/reports/:tabId` deep-link routes (e.g. `/reports/sales-summary`) |
+| Industry preset labels/modes | `contexts/PresetContext.jsx` — `usePreset()` → `{ labels, hasMode, label, enabled_modes, unit_vocabulary, pos_layout_mode }` |
+| Customer portal session | `auth/customerPortalStore.js` — slug-scoped portal session helpers (`readPortalSession`, `writePortalSession`, `clearPortalSession`, `getPortalToken`, `getPortalCustomer`) |
 | Impersonation banner | `ui/ImpersonationBanner.jsx` — amber bar during impersonation |
 | Announcement banner | `ui/AnnouncementBanner.jsx` — platform announcements, dismissible per session |
 | Subscription banner | `ui/SubscriptionBanner.jsx` — global trial countdown / grace warning / expired state banner |
@@ -198,10 +200,11 @@ Examples: `POSRoute.jsx`, `DashboardRoute.jsx`, `CustomersRoute.jsx`, `OrdersRou
 ## Provider Hierarchy & Hooks
 
 ```
-ToastProvider          → useToast()     — available everywhere
-  └─ CurrencyProvider  → useCurrency()  — available everywhere
-       └─ AuthProvider  → useAuth()     — available inside authenticated routes
-            └─ RouterProvider
+CurrencyProvider  → useCurrency()  — available everywhere
+  └─ ToastProvider  → useToast()   — available everywhere
+       └─ AuthProvider  → useAuth()  — available inside authenticated routes
+            └─ PresetProvider  → usePreset()  — available inside authenticated routes
+                 └─ App (BrowserRouter)
 ```
 
 ### Available hooks
@@ -209,8 +212,9 @@ ToastProvider          → useToast()     — available everywhere
 |------|--------|---------|
 | `useToast()` | `contexts/ToastContext.jsx` | `{ toast, success, error, warning }` — max 3 visible, 4s auto-dismiss |
 | `useCurrency()` | `contexts/CurrencyContext.jsx` | `{ symbol, code, fmt, refresh, denominations }` |
-| `useAuth()` | `auth/AuthProvider.jsx` | `{ user, hasPerm, logout, token, employee, isAuthenticated, isBootstrapping, authHeaders, subscriptionStatus, subscriptionDaysLeft, impersonationTenantName, impersonationSessionId }` |
+| `useAuth()` | `auth/AuthProvider.jsx` | `{ session, employee, permissions, isAuthenticated, isBootstrapping, login, logout, refreshPermissions, refreshAccessToken, hasPerm, authHeaders, token, isImpersonating, impersonationTenantName, impersonationSessionId, subscriptionStatus, subscriptionDaysLeft }` |
 | `useFeatureFlags()` | `hooks/useFeatureFlags.js` | `{ flags, loading }` |
+| `usePreset()` | `contexts/PresetContext.jsx` | `{ labels, preset, presetLoaded, updatePreset, hasMode, label, enabled_modes, unit_vocabulary, pos_layout_mode }` |
 
 ### API patterns
 | Pattern | Usage |
@@ -232,15 +236,15 @@ ToastProvider          → useToast()     — available everywhere
 
 ## Test Suites
 
-### Production E2E Tests (24 specs, ~290 tests — full system audit)
-- Location: `tests/*.spec.js` (24 self-contained Playwright specs)
+### Production E2E Tests (28 specs, ~290 tests — full system audit)
+- Location: `tests/*.spec.js` (28 self-contained Playwright specs)
 - Config: `playwright.config.js` (single config, production target)
 - Target: `https://sanopos.com` (tenant `packagesmall`)
 - Run: `npx playwright test tests/auth.spec.js`
 - Global setup: `global-setup.js` logs in once, saves `auth.json` + `token.json` (gitignored)
 - Helpers: `helpers/auth.js` (credentials), `helpers/api.js` (REST), `helpers/nav.js` (navigation)
 - Self-contained: each spec sets up its own data via API, no shared state
-- Includes 3 onboarding specs (`onboard-free`, `onboard-starter`, `onboard-pro`) — create real test tenants, **delete from `/admin` after each run**
+- Includes 6 onboarding specs (`onboard-free`, `onboard-starter`, `onboard-pro`, `onboard-dental-clinic`, `onboard-physiotherapy`, `onboard-veterinary`) — create real test tenants, **delete from `/admin` after each run**
 - Key gotchas:
   - Login form is `LandingPage.jsx` — placeholders are `"e.g. aceshardware"` / `"Enter your password"` / button `"Sign In"`
   - Clock-in: use `/api/attendance/pin-checkin?tenant=${slug}` with `{ pin_code, outlet_id }` — NOT `/clock-in`
@@ -250,7 +254,7 @@ ToastProvider          → useToast()     — available everywhere
 - Location: `tests/smoke/` — bookings, catalog-advanced, commissions-reports, draft-orders-returns, insights-dashboard, invoicing-subscriptions, marketing-messaging, omnichannel-admin, phase5-pakistan, pricing-promotions, restaurant, service-workspace, storefront-public, workforce
 - Smoke helpers: `tests/smoke/helpers/` — cleanup, featureFlags, mockPaymentGateway, smokeRunId
 
-### Unit Tests (35 tests)
-- Location: `tests/unit/` — `auth_guards` (5), `contexts` (19 — cartMath × 17 + CurrencyContext × 2), `layout` (4 — PageShell + NotificationBell), `primitives` (7 — Button + Input + Badge + EmptyState)
+### Unit Tests (48 tests)
+- Location: `tests/unit/` — `auth_guards` (5), `contexts` (19 — cartMath × 17 + CurrencyContext × 2), `layout` (5 — PageShell + NotificationBell), `primitives` (8 — Button + Input + Badge + EmptyState + StarDisplay), `dental_chart` (11 — DentalChart tooth states, BodyChart region mapping)
 - Run: `npx vitest run tests/unit/` (vitest with @vitest/coverage-v8)
 - Note: `contexts.test.jsx` tests `cartMath.js` functions (calcGrossTotal, calcDiscountValue, calcTaxTotal, calcTotal) + `CurrencyContext` — no POSContext hook unit tests exist

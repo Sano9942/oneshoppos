@@ -1,8 +1,8 @@
 # Zod Schemas — Claude Guide
 
-- **23 files** — all use Zod. One file per domain. Imported by routes via `validate(Schema)` middleware
+- **28 files** — all use Zod. One file per domain. Imported by routes via `validate(Schema)` middleware
 - **Pattern**: Required fields strict, optional fields use `.passthrough()` to preserve extra DB columns
-- **Export naming**: all schemas PascalCase *except* `integrations.js` (lowercase: `connectProviderSchema`, `disconnectProviderSchema`)
+- **Export naming**: all schemas PascalCase *except* `integrations.js` and `customer-portal.js` (both use camelCase exports)
 
 ---
 
@@ -184,6 +184,40 @@ Exports: `createPlanSchema`, `updatePlanSchema`, `createSubscriptionSchema`
 - `createPlanSchema` — `price` (positive), `billing_interval: "monthly" | "quarterly" | "yearly"` (default `"monthly"`), `billing_interval_count` (default 1), `trial_days` (min 0, default 0)
 - `updatePlanSchema` — partial update; `is_active` boolean
 - `createSubscriptionSchema` — `plan_id` + `customer_id` + `auto_charge: boolean` (default false — manual renewal by default)
+
+### `customer-portal.js` (M8 customer portal)
+Exports (all camelCase): `loginSchema`, `signupSchema`, `requestOtpSchema`, `verifyOtpSchema`, `requestPasswordResetSchema`, `resetPasswordSchema`, `verifyEmailSchema`, `updateProfileSchema`, `addressSchema`, `bookAppointmentSchema`, `rescheduleAppointmentSchema`, `cancelAppointmentSchema`
+
+- OTP codes are 6-digit strings
+- `resetPasswordSchema` — `new_password` min 8, max 128
+- `bookAppointmentSchema` — customer self-service booking; `service_id` required, `start_time` ISO datetime
+
+### `rentals.js` (M7 rentals mode)
+Exports: `createRentalItemSchema`, `updateRentalItemSchema`, `createRentalAssetSchema`, `updateRentalAssetSchema`, `contractLineSchema`, `createContractSchema`, `updateContractSchema`, `checkoutSchema`, `returnSchema`, `cancelSchema`, `noteSchema`, `availabilityQuerySchema`
+
+- Constants: `PAYMENT_POLICIES` (`["upfront","on_return"]`), `RATE_TYPES` (`["hourly","daily","weekly"]`), `ASSET_STATUSES` (`["available","rented","maintenance","retired"]`), `CONTRACT_STATUSES` (7 values: draft, confirmed, checked_out, returned, completed, cancelled, overdue)
+- `updateContractSchema` is `.strict()`
+- `createContractSchema` — `customer_id` + `lines: contractLineSchema[]` (min 1), optional `deposit_amount`, `payment_policy`
+
+### `rooms.js` (M9 room management)
+Exports: `createRoomTypeSchema`, `updateRoomTypeSchema`, `createRateOverrideSchema`, `updateRateOverrideSchema`, `createRoomSchema`, `updateRoomSchema`, `housekeepingSchema`, `createBookingSchema`, `updateBookingSchema`, `cancelBookingSchema`, `checkInSchema`, `checkOutSchema`, `addFolioLineSchema`, `attachSaleSchema`, `settleFolioSchema`, `depositPreAuthSchema`
+
+- Constants: `OCCUPANCY_STATUSES`, `HOUSEKEEPING_STATUSES`, `BOOKING_STATUSES`, `FOLIO_LINE_TYPES`, `DEPOSIT_STATUSES`
+- `createRateOverrideSchema` has `.refine()` that `from_date <= to_date`
+- `createBookingSchema` requires `check_out_date > check_in_date`
+- `updateBookingSchema` is `.strict()`
+
+### `service-tickets.js` (phase4_workflow_tickets)
+Exports: `createTicketSchema`, `updateTicketSchema`, `addNoteSchema`
+
+- `STATUSES` (also exported): `["intake","approved","in_progress","on_hold","completed","invoiced","cancelled"]`
+- `updateTicketSchema` is `.strict()`
+
+### `treatment-plans.js` (M10 clinical)
+Exports: `createPatientSubjectSchema`, `updatePatientSubjectSchema`, `createPlanSchema`, `updatePlanSchema`, `planStatusTransitionSchema`, `planNoteSchema`, `createSessionSchema`, `updateSessionSchema`, `completeSessionSchema`, `addChartEntrySchema`, `updateChartEntrySchema`, `createLabOrderSchema`, `updateLabOrderSchema`, `recordLabResultSchema`, `signConsentSchema`, `uploadClinicalDocumentSchema`, `createPrescriptionSchema`, `addFolioLineSchema`, `attachSaleToFolioSchema`, `settleFolioSchema`
+
+- Constants: `SUBJECT_TYPES`, `PLAN_STATUSES`, `SESSION_STATUSES`, `CONDITION_CODES` (12 values), `SEVERITY_LEVELS`, `LAB_STATUSES`, `CONSENT_RELATIONS`, `DOCUMENT_TYPES`, `FOLIO_LINE_TYPES`
+- Most complex schema file — covers dental/vet/physio clinical suite: SOAP notes, vitals, prescriptions, chart entries, lab orders, consent, documents, folio management
 
 ---
 

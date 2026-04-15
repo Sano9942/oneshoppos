@@ -1,6 +1,6 @@
 # Unit Tests — Claude Guide
 
-- **10 files**, Vitest with ESM imports (`import { describe, it, expect, vi }`), no DB/network
+- **20 files**, Vitest with ESM imports (`import { describe, it, expect, vi }`), no DB/network
 - **Run**: `npx vitest run backend/tests/unit/`
 - **Pattern**: Pure function testing with `vi.fn()` / `vi.mock()` / `vi.spyOn()`. No supertest, no Express
 
@@ -147,6 +147,66 @@ Tests `workers/tenant-job-context.js` — `assertSafeSlug`, `withTenantContext`
 - Happy path: sets `search_path TO tenant_{slug}`, runs callback, resets to `public` in finally
 - Error path: callback throws → still resets search_path, rethrows
 - Transaction proxy: `client.transaction()` wraps in `BEGIN`/`COMMIT`/`ROLLBACK`
+
+---
+
+## `customer-portal-auth.test.js`
+
+Tests customer portal auth middleware (`middleware/customer-auth.js`). Covers: missing token → 401, invalid token → 401, wrong scope → 401, valid `scope: "customer"` → passes through with `req.customer` populated.
+
+---
+
+## `feature-flags-modes.test.js`
+
+Tests mode-based feature flag resolution from `middleware/feature-flags.js`. Covers: flags enabled by active modes, flags disabled when mode absent, flag cache invalidation.
+
+---
+
+## `industry-config.test.js`
+
+Tests industry/business model configuration resolution. Covers: preset lookup by `industry_type`, fallback to defaults when type unknown, label overrides per industry.
+
+---
+
+## `mode-registry.test.js`
+
+Tests `config/mode-registry.js` — `getFeatureFlagsForModes`, `VALID_MODES`. Covers: flags returned for each mode, invalid mode returns empty, combined mode flag union.
+
+---
+
+## `portal-presets.test.js`
+
+Tests customer portal preset defaults and label resolution. Covers: `DEFAULT_PRESET` shape, `label(key)` fallback behavior, `hasMode(mode)` logic when `enabled_modes` is populated vs empty.
+
+---
+
+## `rentals.test.js`
+
+Tests `services/rental-service.js` — status transition logic, `computeLateFee`, `generateContractNumber`. Covers: valid transitions (`confirmed → checked_out → returned → completed`), invalid transitions throw, late fee calculation with daily rate.
+
+---
+
+## `rooms.test.js`
+
+Tests `services/room-service.js` — `resolveRateForDate`, `calculateStayTotal`, `checkRoomAvailability`. Covers: rate override precedence (date-specific > day-of-week > base), stay total with tax, availability gap detection.
+
+---
+
+## `treatment-folio.test.js`
+
+Tests `services/treatment-plan-service.js` folio sub-system — `computeFolioTotals`, `recalcFolioTotals`, `writeSessionFeeLine`. Covers: line item aggregation, tax calculation, folio balance after settlement.
+
+---
+
+## `treatment-plans.test.js`
+
+Tests `services/treatment-plan-service.js` core — `validateStatusTransition`, `calculateSessionCompletionPct`, `generatePlanNumber`. Covers: valid/invalid status transitions, completion percentage for partial/full sessions, plan number format.
+
+---
+
+## `utils-ics.test.js`
+
+Tests `utils/ics.js` — `buildIcsEvent`, `escapeIcsText`, `toIcsUtcStamp`. Covers: required field validation (throws on missing uid/start/end/summary), UTC timestamp formatting (Z suffix), text escaping (commas, semicolons, newlines), full VEVENT output shape.
 
 ---
 

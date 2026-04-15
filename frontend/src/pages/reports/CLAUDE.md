@@ -1,6 +1,6 @@
 # Report Pages — Claude Guide
 
-- **24 files** — all report tab components, orchestrated by `pages/Reports.jsx`
+- **25 files** — all report tab components, orchestrated by `pages/Reports.jsx`
 - All use `api.js` (not raw fetch) except `ReportsAudit.jsx` which uses `api.raw()` for 503 feature-gate detection
 - Charts: Recharts (`BarChart`, `AreaChart`, `PieChart` — `ReportsMultichannel.jsx` uses PieChart)
 - All CSV exports use `exportCSV(filename, cols, rows)` from `ReportShared.jsx` EXCEPT `ReportsCommissions.jsx` which uses `downloadCsv` from `utils/csvExport.js` directly
@@ -294,3 +294,20 @@ Default export: `CommissionSummaryTab`.
 **Uses `fmtUtcDateTime` from `utils/dates.js` directly** (not via `ReportShared`).
 
 Fetches `GET /api/commissions/earnings`. Status filter (pending/approved/paid/reversed). Summary cards: pending_total, approved_total, paid_total. `Badge` from `ui/primitives` for status chips.
+
+---
+
+## Clinical Module (`ClinicalTab.jsx`)
+
+Default export: `ClinicalTab`.
+
+**Feature flag**: `phase4_treatment_plans` (checked in parent orchestrator, not inside this file).
+
+5 parallel requests on mount (all `GET`):
+- `/api/reports/clinical/plan-completion`
+- `/api/reports/clinical/session-attendance`
+- `/api/reports/clinical/revenue-per-plan`
+- `/api/reports/clinical/patient-retention`
+- `/api/reports/clinical/lab-turnaround`
+
+Uses `api.js` + `useCurrency()`. Does NOT use `exportCSV` from `ReportShared` or `api.raw()`.

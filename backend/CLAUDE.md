@@ -25,7 +25,7 @@
 | Tenant provisioning | `tenant-provisioner-pg.js` — exports `provision(db, opts)` and `validateSlug(slug)`. 6-step sequence: CREATE SCHEMA → run DDL → seed (outlet, admin role + 10 perms, admin employee, employee-outlet link, company_profile with 48h setupToken, default 0% tax) → register in public.tenants + audit log. On failure: DROP SCHEMA CASCADE. Slug regex: `^[a-z0-9_]{3,40}$` (no hyphens). Returns `{ tenantId, employeeId, outletId, setupToken }`. |
 | Super-admin seeding | `seed-admin-pg.js` — CLI flags: `--email`, `--password` (min 8 chars), `--name` (default: "Super Admin"). Idempotent — prints existing ID and exits cleanly if email already exists. Email stored lowercased+trimmed. |
 | JWT auth utilities | `jwt-auth.js` — 6 exports: `signAccessToken`, `signRefreshToken`, `verifyAccessToken`, `verifyRefreshToken`, `hashToken`, `defaults`. Access token payload: `{ tid, eid, rid, oid, scope, jti }` (jti=random UUID per token). Refresh token: SHA-256 hashed before DB storage; raw token → httpOnly cookie. Default TTLs: 24h access, 7d refresh (overridable via env). |
-| OpenAPI/Swagger spec | `swagger.js` — `swagger-jsdoc` config; scans `./routes/*.js` + `./routes/**/*.js` for `@openapi` JSDoc. 4 inline schemas: Product, Sale, Customer, Order, Error. 8 tags. Bearer auth scheme. Served at `/api-docs?key=API_DOCS_KEY` — returns 404 if `API_DOCS_KEY` unset, 401 if wrong key. |
+| OpenAPI/Swagger spec | `swagger.js` — `swagger-jsdoc` config; scans `./routes/*.js` + `./routes/**/*.js` for `@openapi` JSDoc. 5 inline schemas: Product, Sale, Customer, Order, Error. 8 tags. Bearer auth scheme. Served at `/api-docs?key=API_DOCS_KEY` — returns 404 if `API_DOCS_KEY` unset, 401 if wrong key. |
 | Production startup script | `start.sh` — Railway entrypoint: sets `TZ`, runs `migrate-pg.js`, then `exec node index.js`. SQLite branch is dead code |
 | Railway deployment config | `railway.toml` — Dockerfile builder, healthcheck `/api/health` (120s timeout), restart on failure (max 3), `/data` volume mount |
 | Plan limit enforcement | `middleware/plan-limits.js` |
@@ -33,7 +33,7 @@
 | Route registration | `routes/registerAllRoutes.js` (orchestrator only — no route logic here) |
 | Route logic for a domain | `routes/<domain>.js` (e.g., `routes/sales.js`, `routes/products.js`) |
 | Super-admin + infra monitoring | `routes/admin/` (10 files: auth, tenants, monitoring, billing, operations, compliance, messaging, system, helpers, index) — infra, tax rates, FBR health, activity/security logs, revenue stats, worker status, orphaned schemas, tenant notes, announcements, broadcast log, support ticket replies, backup trigger |
-| Report endpoints | `routes/reports/` (14 files, modular) |
+| Report endpoints | `routes/reports/` (15 files, modular) |
 | Shopify integration | `routes/shopify/` (9 files) + `shopify/` (3 files) |
 | Integrations hub | `routes/integrations/` (hub, credentials, daraz, facebook, whatsapp, google-merchant) |
 | Marketplace clients | `services/marketplace/` (base, daraz, meta-commerce, whatsapp, google-merchant) |
@@ -68,6 +68,12 @@
 | Worker startup | `boot/workers.js` — all worker init (email, FBR, cleanup, Shopify, scheduled tasks) |
 | Shopify crypto | `shopify/crypto.js` — secret encrypt/decrypt + event logging |
 | Tax rate seed data | `scripts/seed-tax-rates.js` (one-time, ~96 HS codes with Urdu descriptions) |
+| Country packs | `routes/country-packs.js` — `GET /api/country-packs/:country` (no auth — mounted before tenant middleware); delivers pre-seeded tax rates + feature flags for a country |
+| Service tickets | `routes/service-tickets.js` — CRUD workflow tickets (phase4_workflow_tickets gated) |
+| Rentals management | `routes/rentals.js` — rental contracts, asset check-out/in, overdue tracking (phase4_rentals gated) |
+| Room management | `routes/rooms.js` — room CRUD, bookings, folio, check-in/check-out (phase4_room_management gated) |
+| Treatment plan templates | `routes/treatment-plan-templates.js` — reusable clinical plan templates (phase4_treatment_plans gated) |
+| Sandbox payments | `routes/sandbox.js` — test payment endpoints (sandbox mode only, `SANDBOX_WEBHOOK_SECRET` required) |
 
 ## Efficiency Rules
 
@@ -94,22 +100,22 @@
 
 ## Test Suites
 
-### Postgres Integration Tests (64 files — primary) + unit tests
-- Location: `tests/integration/` (64 files): 19 pg-batch files (16 numbered + 3 phase batches), 37 full-audit domain tests, 7 pg-standalone, 1 legacy smoke-gate
-- Unit tests: `tests/unit/` (10 files — middleware, services, tz, utils + routes-admin-worker-status, routes-orders-transactions, services-booking-reminders, services-catalog-scheduler, workers-email-worker-boss, workers-tenant-job-context)
+### Postgres Integration Tests (74 files — primary) + unit tests
+- Location: `tests/integration/` (74 files): 19 pg-batch files (16 numbered + 3 phase batches), 39 full-audit domain tests, 15 pg-standalone, 1 legacy smoke-gate
+- Unit tests: `tests/unit/` (20 files — middleware, services, tz, utils + routes-admin-worker-status, routes-orders-transactions, services-booking-reminders, services-catalog-scheduler, workers-email-worker-boss, workers-tenant-job-context + customer-portal-auth, feature-flags-modes, industry-config, mode-registry, portal-presets, rentals, rooms, treatment-folio, treatment-plans, utils-ics)
 - Unit test runner: `vitest` with `@vitest/coverage-v8` (see `vitest.config.js`)
 - Factory: `tests/helpers/createTestApp-pg.js` (isolated schema per test)
 - Schema: `tests/helpers/seedSchema-pg.js`
 - Run: `npx jest tests/integration/pg-batch1-crud.test.js` (requires `DATABASE_URL`)
 
-### Production E2E Tests (24 specs, ~290 tests — full system audit)
-- Location: `frontend/tests/*.spec.js` (24 self-contained Playwright specs)
+### Production E2E Tests (28 specs, ~290 tests — full system audit)
+- Location: `frontend/tests/*.spec.js` (28 self-contained Playwright specs)
 - Config: `frontend/playwright.config.js` (single config, production target)
 - Target: `https://sanopos.com` (tenant `packagesmall`)
 - Run: `cd frontend && npx playwright test tests/auth.spec.js`
 - Global setup: `global-setup.js` logs in once, saves `auth.json` + `token.json`
 - Helpers: `helpers/auth.js` (credentials), `helpers/api.js` (REST), `helpers/nav.js` (navigation)
-- Includes 3 onboarding specs (`onboard-free`, `onboard-starter`, `onboard-pro`) — create real test tenants, delete from `/admin` after each run
+- Includes 6 onboarding specs (`onboard-free`, `onboard-starter`, `onboard-pro`, `onboard-dental-clinic`, `onboard-physiotherapy`, `onboard-veterinary`) — create real test tenants, delete from `/admin` after each run
 - **Key gotcha**: clock-in uses `/api/attendance/pin-checkin?tenant=${slug}` (NOT `/clock-in`) — writes `attendance_sessions` which POS checkout validates
 
 ### Legacy (do not use)
@@ -288,6 +294,10 @@
 | `phase4_service_projects` | `routes/projects.js` | ProjectsRedesign |
 | `phase4_service_contracts` | `routes/contracts.js` | ContractsRedesign |
 | `phase4_contract_ai` | `routes/contracts.js` | (AI contract analysis) |
+| `phase4_workflow_tickets` | `routes/service-tickets.js` | ServiceTicketsRedesign |
+| `phase4_rentals` | `routes/rentals.js` | RentalsRedesign |
+| `phase4_room_management` | `routes/rooms.js` | RoomManagementRedesign |
+| `phase4_treatment_plans` | `routes/treatment-plans.js`, `routes/treatment-plan-templates.js` | TreatmentPlansRedesign |
 | `phase5_shipping_automation` | `routes/fulfillment.js` | FulfillmentRedesign |
 | `phase5_cod_reconciliation` | `routes/fulfillment.js` | CODSettlementsRedesign |
 | `phase5_payment_gateways` | `routes/webhooks.js` | (multi-gateway) |
@@ -297,8 +307,8 @@
 | `marketing_campaigns` | `routes/marketing.js` | MarketingCampaignsRedesign |
 | `payment_links` | `routes/customer-invoices.js` | (payment link on invoices) |
 | `subscription_billing` | `routes/subscriptions.js` | SubscriptionsRedesign |
-| `subscription_autocharge` | `routes/subscriptions.js` | (auto-charge renewals) |
-| `sms_campaigns` | `routes/marketing.js` | (SMS campaign sends) |
+| `subscription_autocharge` | (flag-only — no route gate; read by subscription workers) | (auto-charge renewals) |
+| `sms_campaigns` | (flag-only — no route gate; read in `routes/marketing.js` at runtime) | (SMS campaign sends) |
 | `context_selection_required` | context middleware | ContextSelect page |
 | `context_header_enforced` | context middleware | — |
 | `kiosk_context_locked` | kiosk context | KioskRedesign |
@@ -358,6 +368,18 @@
 - `RESERVATION_WORKER_ENABLED` — "1" enables inventory reservation expiry worker (5-min cron)
 - `BOOKING_REMINDER_WORKER_ENABLED` — "1" enables appointment reminder worker (Phase 4)
 - `SCHEDULED_CATALOG_WORKER_ENABLED` — "1" enables scheduled catalog changes worker (Phase 2)
+- `RENTAL_OVERDUE_WORKER_ENABLED` — "1" enables rental overdue checker (daily 8 AM UTC)
+- `ROOM_OVERDUE_WORKER_ENABLED` — "1" enables room checkout overdue checker (daily 11 AM UTC)
+- `SUBSCRIPTION_GRACE_WORKER_ENABLED` — "1" enables customer subscription grace period transitions (hourly)
+- `TREATMENT_PLAN_WORKER_ENABLED` — "1" enables treatment plan session reminder + overdue checker (daily 9 AM UTC)
+
+### Customer Portal
+- `CUSTOMER_PORTAL_JWT_SECRET` — JWT signing key for customer portal sessions (separate from employee `JWT_SECRET`)
+- `CUSTOMER_PORTAL_ACCESS_TTL` — Portal access token TTL (default: "1h")
+- `CUSTOMER_PORTAL_REFRESH_TTL` — Portal refresh token TTL (default: "30d")
+
+### Sandbox
+- `SANDBOX_WEBHOOK_SECRET` — HMAC secret for sandbox payment webhook verification (only required in sandbox/dev mode)
 
 ### Payments
 - `PAYMENT_GATEWAY` — Active processor: "manual" (default), "xpay", "stripe"

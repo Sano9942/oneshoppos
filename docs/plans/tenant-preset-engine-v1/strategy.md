@@ -1,6 +1,8 @@
 # Tenant Preset Engine v1 — Strategy & Implementation Specification
 
-**Date:** 2026-04-13 (last updated 2026-04-15)
+**Date:** 2026-04-13 (last updated 2026-04-16)
+**Current strategy note:** v2 has shipped through M10. The next phase is shared-core hardening, not speculative vertical sprawl; M11 manufacturing remains deferred until factory/production demand commits.
+
 **Status:** v1 COMPLETE (M1-M4, 2026-04-14). v2 IN PROGRESS — M5, M6, M7 shipped 2026-04-14; M8, M9, M10 shipped 2026-04-15.
 
 ---
@@ -8,6 +10,8 @@
 ## 🔍 Cross-Verified Gap & Deferred Item Registry (2026-04-15)
 
 This section was added after a full code cross-check of the entire strategy document against git history and the live codebase. Every item below was confirmed by reading actual files — not inferred from doc claims.
+
+**Important:** This registry is now partly historical. The closeout section below supersedes the original "open" labels for items that were shipped after the audit. Use the 2026-04-16 strategy update for current product direction.
 
 ### Complete Open Items — Sorted by Urgency
 
@@ -34,7 +38,7 @@ This section was added after a full code cross-check of the entire strategy docu
 | 19 | **Platform: Multi-location intelligence** — Transfer optimization, consolidated reporting, central purchasing with per-outlet allocation. Tables exist (`outlet_stock`, `inventory_transfers`) but UX is single-branch focused. | §12 Tier 3 | Platform feature | ~2 weeks | Multi-branch franchise signs up |
 | 20 | **Platform: Own-fleet delivery** — Driver assignment, route management, real-time tracking, proof of delivery. 13 third-party courier adapters exist but not own-fleet dispatch. | §12 Tier 3 | Platform feature | 1-2 weeks | Restaurant with own delivery drivers signs up |
 | 21 | **Walk-in service assignment on POS** — Time estimate per service + staff picker at checkout for immediate walk-in assignment (not appointment-based). Needed for car wash, laundry, tailoring. | §12 Tier 1 | Feature | 2-3 days | When a relevant preset tenant reports friction |
-| 22 | **Recurring auto-charge wiring** — `subscription_autocharge` tables exist but no payment gateway wiring for true saved-instrument recurring billing (Stripe/JazzCash). Needed for coworking, tuition centers. | §12 Tier 1 | Feature | 3-5 days | When a gym/coworking tenant requests it |
+| 22 | **Recurring auto-charge wiring** — backend + sandbox path shipped: `auto_charge`, `gateway_token`, `subscription_runs.charge_status`, `/api/sandbox/tokenize`, `/api/sandbox/charge-saved`, and `chargeSavedInstrument()` are wired. Remaining work is real-provider saved-instrument tokenization plus UI to collect/store the token. | §12 Tier 1 | Feature polish | Provider-dependent | When xPay/another provider confirms tokenization API or a gym/coworking tenant needs live auto-charge |
 | 23 | **Doc drift: coverage projection table in §12 is stale** — Table still shows M9 as "current" with M10=manufacturing. Actual current: 23 presets, 9 modes, ~48/54 industries. Build-triggers table also labels M10 as manufacturing (should be M11). | Doc | Doc update | 5 min | Next doc pass |
 | 24 | **`ui_redesign_*` flags already cleaned** — §3 lists these as "cleanup separately." Confirmed: zero live code references in backend or frontend. Only in archived SQLite backups. This item is done, just not marked as such in the doc. | Code audit | Done | — | Already complete |
 | 25 | **Phase 2 nav cleanup (intentionally deferred)** — Nav items for Restaurant, Appointments, Service Work still carry both `requiredFlag` AND `requiredMode` (dual-gate). §3 says Phase 2 will remove the `requiredFlag` from items that migrated to modes. Not done — correct per plan. | §3 | Deferred cleanup | — | After all tenants migrated to modes |
@@ -118,6 +122,84 @@ ICD-10/SNOMED autocomplete, e-prescribing, insurance claim generation, DICOM vie
 **Why this matters:** Historically, features that touched payments (M8 invoice pay, M9 room deposits) skipped real end-to-end tests because the payment layer was too expensive to exercise. With the sandbox wired on both environments, there is no excuse — every new payment flow MUST have an integration test that drives it through `PAYMENT_GATEWAY=sandbox` with a simulated webhook. Doing so catches adapter-dispatch bugs, webhook-signature bugs, and state-machine bugs before they reach production.
 
 **Rule of thumb:** If your feature writes a `gateway_ref` anywhere, or listens for a webhook, your PR needs at least one test that runs with `PAYMENT_GATEWAY=sandbox` and simulates the full lifecycle.
+
+---
+
+## Strategy Update - Core-First Platform Direction (2026-04-16)
+
+This update captures the product direction agreed after M10 and a fresh code check of the subscription/SanoPay paths. The strategic answer is **not** to build 54 separate mini-products. The answer is one strong shared core, a small set of real business modes, and industry presets that make the same platform feel purpose-built for each merchant.
+
+### The Operating Model
+
+SanoPOS should behave like a Square/Shopify-class platform:
+
+1. **One shared core app** handles the universal business foundation: POS checkout, catalog, customers, employees, permissions, inventory, invoices, payments, reports, accounting, loyalty/wallet, tenant setup, feature flags, integrations, customer portal, receipts, and shifts.
+2. **Business modes** turn on real workflows: restaurant, appointments, service projects, subscriptions, workflow tickets, rentals, room management, treatment plans, and later manufacturing.
+3. **Industry presets** configure labels, nav, dashboard widgets, onboarding, POS layout, portal tabs, reports, sample data, and mode defaults so each tenant feels like the app was made for their business.
+
+This keeps the codebase maintainable. Improving the core improves every industry at once; adding an industry becomes mostly configuration unless the business needs a genuinely new operational mode.
+
+### Current Reality Check
+
+| Layer | Status | Notes |
+|-------|--------|-------|
+| Shared core foundation | Built | All listed core areas have working code paths: POS, catalog, customers, employees/permissions, inventory, invoices, payments, reports, accounting, loyalty/wallet, setup, flags, integrations, portal, receipts, and shifts. |
+| Industry presets | Built through M10 | 23 presets are live/current in config, covering about 48 of the 54 assessed industries. |
+| Business modes | Built except manufacturing | `restaurant`, `appointments`, `service_projects`, `subscriptions`, `workflow_tickets`, `rentals`, `room_management`, and `treatment_plans` exist. `retail` is the implicit base. |
+| Manufacturing | Deferred | Still the major missing mode: BOMs, work orders, raw-material consumption, production costing, and production dashboard. Build only when factory/production demand commits. |
+
+### Mode Status
+
+| Mode | Status | Notes |
+|------|--------|-------|
+| `retail` | Done | Base/default behavior; not always represented as an explicit mode row. |
+| `restaurant` | Done | Floor plans, checks, KDS, QR/public ordering foundations. |
+| `appointments` | Done | Services, staff calendar, bookings, public booking page, reminders/polish. |
+| `service_projects` | Done | Quotations, projects, contracts, milestone/customer invoicing. |
+| `subscriptions` | Done; real saved-card provider swap pending | Plans, customer subscriptions, pause/resume/cancel, renewal worker, grace/past_due/expired worker, renewal invoices, renewal history/stats, and mode gates exist. SanoPay sandbox implements `tokenize()` and `chargeSavedInstrument()` so recurring auto-charge can be built/tested without real money. Final real-provider saved-instrument tokenization remains pending until xPay/another provider confirms the API. |
+| `workflow_tickets` | Done | Generic service ticket/intake/job workflow with deposits and invoice generation. |
+| `rentals` | Done | Rental assets, contracts, returns, timeline, overdue alerts. |
+| `room_management` | Done | Rooms, rates, bookings, folios, arrivals/departures, stay portal surface. |
+| `treatment_plans` | Done | Dental/vet/physio treatment plans, sessions, charting, labs, consent, documents, folios, portal treatment view. |
+| `manufacturing` | Not built | Deferred M11. |
+
+### Subscription Clarification
+
+Do not describe subscriptions as an unfinished mode. The mode is built. The remaining work is provider-specific payment capture/product polish:
+
+- `customer_subscriptions.auto_charge`, `gateway_token`, `subscription_runs.charge_status`, renewal invoice generation, and pg-boss renewal scheduling exist.
+- `services/subscriptions.js` tries saved-instrument charge first when `auto_charge` and `gateway_token` are present, then falls back to hosted checkout/payment-link flow.
+- `payment-gateway.js` exposes the adapter methods `tokenize()` and `chargeSavedInstrument()`.
+- `SandboxAdapter` implements both methods and `routes/sandbox.js` exposes `/api/sandbox/tokenize` and `/api/sandbox/charge-saved`.
+- Real xPay saved-card tokenization is intentionally pending. When the vendor/API is ready, implement the real adapter behind the existing interface rather than changing subscription business logic.
+- Product polish still needed later: a customer/admin UI flow to collect a saved instrument, store the resulting gateway token, and clearly display auto-charge status.
+
+### New Improvement Strategy
+
+Now that most modes and presets exist, the next competitive advantage is not more vertical sprawl. It is **hardening the shared core** so every preset becomes more reliable, faster, and easier to sell.
+
+Priority order:
+
+1. **POS offline durability** - replace the lightweight `localStorage` offline queue with IndexedDB or another durable local store; add sync states, retry history, conflict visibility, queue aging, and crash recovery.
+2. **Payment lifecycle maturity** - keep SanoPay sandbox as the default dev/test gateway; finish provider-specific saved-instrument support; add stronger payment-intent state machines for POS card, deposits, invoices, wallet top-up, refunds, subscriptions, and reconciliation.
+3. **POS state architecture** - split the large POS context into domain modules/hooks: cart, checkout, shift gate, search, offline sync, receipts, customer display, loyalty/wallet, room/treatment charging, and approvals.
+4. **Audit and reconciliation** - strengthen traceability from sale/invoice/payment/refund/shift/offline sync to reports; add duplicate-payment and duplicate-sale detection; expose reconciliation screens for admins.
+5. **Typed/API contracts** - progressively add Zod/OpenAPI/shared client contracts for high-risk flows: sales, payments, invoices, subscriptions, rooms, treatment plans, rentals, and returns.
+6. **Operational observability** - add metrics and alerts for checkout latency, failed payments, queue depth, sync lag, stuck payment intents, worker health, failed webhooks, shift variance, and receipt/printer failures.
+7. **Device/hardware layer** - mature scanner/printer/cash-drawer/card-terminal integration paths. Browser/PWA is fine for reach; hardware reliability is what makes the POS feel serious in-store.
+8. **Manufacturing only on demand** - build `manufacturing` after a factory/production business commits. Scope remains BOMs, work orders, raw-material consumption, production costing, and dashboard.
+
+### Product Rule Going Forward
+
+Before adding a new preset, ask:
+
+1. Can an existing mode handle this with labels, nav, sample data, and portal/report defaults?
+2. Is the missing piece a small extension to a current mode?
+3. Is this actually a new operational mode?
+4. Will improving the core solve this for many industries at once?
+
+Build a new mode only when the answer to #3 is clearly yes. Otherwise, improve the core or add preset configuration.
+
 **Author:** Hassan + Claude (session 2026-04-13)
 
 ---
@@ -589,6 +671,8 @@ CREATE TABLE IF NOT EXISTS tenant_modes (
 
 **Preset Engine v1 is COMPLETE.** All 4 milestones delivered. 10 industry presets, 10 adaptation surfaces, 6 business modes, 23 country packs.
 
+**Strategic shift after M10:** v2 has delivered the major planned vertical modes except manufacturing. From here, product work should prioritize core reliability, payment maturity, offline durability, reconciliation, API contracts, observability, and POS state cleanup. Add new presets only when they fit existing modes cleanly, and add new modes only when a committed customer proves the operational model is genuinely new.
+
 **Preset Engine v2 is IN PROGRESS.** M5, M6, M7, M8, M9, M10 shipped between 2026-04-14 and 2026-04-15 — now at **23 presets, 9 business modes, ~48 industries covered**. Every appointment-based tenant has a public booking URL, rental businesses are fully supported with asset tracking + overdue alerts, every vertical has a customer portal at `/portal/:slug` for invoice pay, appointment self-service, and account management, hotels / guesthouses / hostels are fully supported with room inventory + folios, and **dental clinics, veterinary practices, physiotherapy clinics** have a full multi-visit treatment plan platform: plan lifecycle (draft → active → on_hold → completed → invoiced), per-tooth/per-body-region charting, SOAP visit notes, vital signs, prescription pad, lab order tracking with patient-share toggle, consent forms with signature capture, R2-backed clinical document uploads (50MB cap), pet/dependent subject entities, and plan folios that consolidate session fees + POS charges into a single settle-and-invoice action.
 
 ---
@@ -615,7 +699,7 @@ The 23 presets now cover **~48 of 54 industries** (up from 45 — M10 adds 3 cli
 |---------|----------------------|--------|---------------|
 | Weight/unit-based selling | Atta chakki, butcher, sweet shop, textile, dry fruits (~5 industries) | 2-3 days | `sell_by_weight` flag on products, decimal quantity input + unit label (kg/m/lb), POS tare weight field |
 | Walk-in service assignment on POS | Car wash, laundry, tailoring (~3 industries) | 2-3 days | Time estimate per service, staff picker at checkout for walk-in services (not appointment-based — immediate assignment) |
-| Recurring auto-charge wiring | Coworking, tuition center (~2 industries) | 3-5 days | `subscription_autocharge` tables exist but no payment gateway wiring — needs Stripe/JazzCash recurring billing integration |
+| ~~Recurring auto-charge wiring~~ | ~~Coworking, tuition center (~2 industries)~~ | ~~3-5 days~~ | **Backend/sandbox path shipped.** `auto_charge`, `gateway_token`, `subscription_runs.charge_status`, `SandboxAdapter.tokenize()`, and `chargeSavedInstrument()` exist. Remaining work is real-provider saved-instrument integration plus admin/customer UI to collect and store a token. |
 
 **Tier 2: New Modes** — genuinely new operational concepts that don't map to any existing mode.
 
@@ -645,8 +729,8 @@ Effort →
   ┃  ★ Rentals mode              +4 industries  (2 weeks)   [SHIPPED M7]
   ┃  ★ Customer portal           all verticals   (2 weeks)  [SHIPPED M8]
   ┃  ★ Room management           +3 industries  (2 weeks)   [SHIPPED M9]
-  ┃  ○ Treatment plans           +3 industries  (2 weeks)
-  ┃  ○ Manufacturing             +2 industries  (2 weeks)
+  ┃  ★ Treatment plans           +3 industries  (2.5-3 weeks) [SHIPPED M10]
+  ┃  ○ Manufacturing             +2 industries  (2 weeks)    [DEFERRED M11]
   ┃
   ★ = high ROI (most industries per day of effort)
   ○ = build when customers ask
