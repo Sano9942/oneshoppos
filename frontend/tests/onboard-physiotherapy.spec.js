@@ -39,7 +39,7 @@ test.describe.serial("Onboarding — Physiotherapy", () => {
     test.skip(!storeCode || !setupToken, "No signup result");
     const res = await request.post(`${BACKEND}/api/setup/complete?tenant=${storeCode}`, {
       data: {
-        setup_token: setupToken,
+        token: setupToken,
         industry_type: "physiotherapy",
         company_name: tenantName,
         country_code: "PK",

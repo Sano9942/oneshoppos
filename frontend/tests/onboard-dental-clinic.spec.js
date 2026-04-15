@@ -48,7 +48,7 @@ test.describe.serial("Onboarding — Dental Clinic", () => {
 
     const res = await request.post(`${BACKEND}/api/setup/complete?tenant=${storeCode}`, {
       data: {
-        setup_token: setupToken,
+        token: setupToken,
         industry_type: "dental_clinic",
         company_name: tenantName,
         country_code: "PK",

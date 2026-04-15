@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRightLeft, Award, Ban, BookOpen, Calendar, ChevronLeft, ChevronRight, Clock, Download, Package, Plus, Search, ShieldCheck, Tag, UserRound, Wallet, X } from "lucide-react";
+import { ArrowRightLeft, Award, Ban, BookOpen, Calendar, ChevronLeft, ChevronRight, Clock, Download, Package, Pencil, Plus, Search, ShieldCheck, Tag, Trash2, UserRound, Wallet, X } from "lucide-react";
 import { api } from "../../api";
 import { fmtDate, fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -56,6 +56,28 @@ const CLINICAL_PRESETS = new Set([
 function isClinicalPreset(industryType) {
   return CLINICAL_PRESETS.has(industryType);
 }
+
+function defaultSubjectType(industryType) {
+  return industryType === "veterinary" ? "pet" : "dependent";
+}
+
+const SUBJECT_TYPE_OPTIONS = [
+  { value: "self", label: "Self" },
+  { value: "dependent", label: "Dependent" },
+  { value: "pet", label: "Pet" },
+];
+
+const EMPTY_SUBJECT = {
+  subject_type: "dependent",
+  name: "",
+  species: "",
+  breed: "",
+  dob: "",
+  sex: "",
+  weight_kg: "",
+  identifier: "",
+  notes: "",
+};
 
 const BLOOD_GROUPS = ["", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const GENDER_OPTIONS = ["", "Male", "Female", "Other"];
@@ -137,6 +159,11 @@ export default function CustomersRedesign() {
   // Clinical subjects + treatment plans (M10) — only fetched for clinical presets
   const [clinicalSubjects, setClinicalSubjects] = useState([]);
   const [clinicalPlans, setClinicalPlans] = useState([]);
+  const [subjectModalOpen, setSubjectModalOpen] = useState(false);
+  const [subjectEditing, setSubjectEditing] = useState(null);
+  const [subjectForm, setSubjectForm] = useState(EMPTY_SUBJECT);
+  const [subjectError, setSubjectError] = useState("");
+  const [subjectSaving, setSubjectSaving] = useState(false);
 
   // Order history
   const [orderHistory, setOrderHistory] = useState([]);
@@ -223,6 +250,90 @@ export default function CustomersRedesign() {
         setClinicalSubjects([]);
         setClinicalPlans([]);
       }
+    }
+  };
+
+  const refreshClinicalSubjects = async (customerId) => {
+    try {
+      const res = await api.get(`/api/patient-subjects`, { customer_id: customerId });
+      setClinicalSubjects(res.subjects || []);
+    } catch {
+      // Endpoint 503 (mode off) or transient error — leave prior list intact.
+    }
+  };
+
+  const openSubjectCreate = () => {
+    setSubjectEditing(null);
+    setSubjectForm({ ...EMPTY_SUBJECT, subject_type: defaultSubjectType(industry_type) });
+    setSubjectError("");
+    setSubjectModalOpen(true);
+  };
+
+  const openSubjectEdit = (subject) => {
+    setSubjectEditing(subject);
+    setSubjectForm({
+      subject_type: subject.subject_type || "dependent",
+      name: subject.name || "",
+      species: subject.species || "",
+      breed: subject.breed || "",
+      dob: subject.dob ? String(subject.dob).slice(0, 10) : "",
+      sex: subject.sex || "",
+      weight_kg: subject.weight_kg != null ? String(subject.weight_kg) : "",
+      identifier: subject.identifier || "",
+      notes: subject.notes || "",
+    });
+    setSubjectError("");
+    setSubjectModalOpen(true);
+  };
+
+  const submitSubject = async (e) => {
+    e.preventDefault();
+    if (!detail) return;
+    if (!subjectForm.name.trim()) {
+      setSubjectError("Name is required");
+      return;
+    }
+    const payload = {
+      customer_id: detail.id,
+      subject_type: subjectForm.subject_type,
+      name: subjectForm.name.trim(),
+      species: subjectForm.species.trim() || null,
+      breed: subjectForm.breed.trim() || null,
+      dob: subjectForm.dob || null,
+      sex: subjectForm.sex.trim() || null,
+      weight_kg: subjectForm.weight_kg === "" ? null : Number(subjectForm.weight_kg),
+      identifier: subjectForm.identifier.trim() || null,
+      notes: subjectForm.notes.trim() || null,
+    };
+    setSubjectSaving(true);
+    setSubjectError("");
+    try {
+      if (subjectEditing) {
+        const { customer_id, ...rest } = payload;
+        await api.put(`/api/patient-subjects/${subjectEditing.id}`, rest);
+        toast.success("Subject updated");
+      } else {
+        await api.post(`/api/patient-subjects`, payload);
+        toast.success("Subject added");
+      }
+      setSubjectModalOpen(false);
+      await refreshClinicalSubjects(detail.id);
+    } catch (err) {
+      setSubjectError(err.body?.error || err.message || "Save failed");
+    } finally {
+      setSubjectSaving(false);
+    }
+  };
+
+  const deleteSubject = async (subject) => {
+    if (!detail) return;
+    if (!window.confirm(`Remove ${subject.name}?`)) return;
+    try {
+      await api.del(`/api/patient-subjects/${subject.id}`);
+      toast.success("Subject removed");
+      await refreshClinicalSubjects(detail.id);
+    } catch (err) {
+      toast.error(err.body?.error || err.message || "Delete failed");
     }
   };
 
@@ -830,23 +941,61 @@ export default function CustomersRedesign() {
                   )}
 
                   {/* Clinical — Subjects (M10): self / dependent / pet. Only shown for clinical presets. */}
-                  {isClinicalPreset(industry_type) && clinicalSubjects.length > 0 && (
+                  {isClinicalPreset(industry_type) && (
                     <SectionCard className="p-2">
-                      <p className="text-xs font-semibold text-(--ui-text-muted) mb-1.5">
-                        {industry_type === "veterinary" ? "Pets & Subjects" : "Patients & Dependents"}
-                      </p>
-                      <div className="space-y-1">
-                        {clinicalSubjects.map((s) => (
-                          <div key={s.id} className="flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-2">
-                              <Badge tone="default">{s.subject_type}</Badge>
-                              <span className="font-medium text-(--ui-text)">{s.name}</span>
-                              {s.species && <span className="text-(--ui-text-muted)">· {s.species}{s.breed ? `, ${s.breed}` : ""}</span>}
-                              {s.weight_kg && <span className="text-(--ui-text-muted)">· {s.weight_kg} kg</span>}
-                            </div>
-                          </div>
-                        ))}
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="text-xs font-semibold text-(--ui-text-muted)">
+                          {industry_type === "veterinary" ? "Pets & Subjects" : "Patients & Dependents"}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={openSubjectCreate}
+                          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                          data-testid="subject-add"
+                        >
+                          <Plus size={12} /> Add
+                        </button>
                       </div>
+                      {clinicalSubjects.length === 0 ? (
+                        <p className="text-xs text-(--ui-text-muted) italic">
+                          {industry_type === "veterinary"
+                            ? "No pets on file. Add one to link treatment plans."
+                            : "No dependents on file. Add one to link treatment plans."}
+                        </p>
+                      ) : (
+                        <div className="space-y-1">
+                          {clinicalSubjects.map((s) => (
+                            <div key={s.id} className="flex items-center justify-between text-xs group">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Badge tone="default">{s.subject_type}</Badge>
+                                <span className="font-medium text-(--ui-text) truncate">{s.name}</span>
+                                {s.species && <span className="text-(--ui-text-muted) truncate">· {s.species}{s.breed ? `, ${s.breed}` : ""}</span>}
+                                {s.weight_kg && <span className="text-(--ui-text-muted)">· {s.weight_kg} kg</span>}
+                              </div>
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => openSubjectEdit(s)}
+                                  className="p-1 rounded hover:bg-(--ui-bg) text-(--ui-text-muted) hover:text-(--ui-text)"
+                                  aria-label={`Edit ${s.name}`}
+                                  data-testid={`subject-edit-${s.id}`}
+                                >
+                                  <Pencil size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteSubject(s)}
+                                  className="p-1 rounded hover:bg-rose-50 text-(--ui-text-muted) hover:text-rose-600"
+                                  aria-label={`Remove ${s.name}`}
+                                  data-testid={`subject-delete-${s.id}`}
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </SectionCard>
                   )}
 
@@ -1397,6 +1546,132 @@ export default function CustomersRedesign() {
               <div className="flex gap-2 pt-2">
                 <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
                 <Button tone="primary" type="submit" disabled={busy}>{editing ? "Save" : "Create"}</Button>
+              </div>
+            </form>
+          </SectionCard>
+        </div>
+      ) : null}
+
+      {subjectModalOpen && detail ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
+          <SectionCard className="w-full max-w-md p-4 max-h-[90vh] overflow-auto">
+            <h3 className="text-lg font-semibold text-(--ui-text)">
+              {subjectEditing ? "Edit Subject" : (industry_type === "veterinary" ? "Add Pet" : "Add Subject")}
+            </h3>
+            <p className="mt-1 text-xs text-(--ui-text-muted)">
+              For <strong>{detail.name}</strong>
+            </p>
+            <form className="mt-3 space-y-3" onSubmit={submitSubject}>
+              {subjectError ? (
+                <p className="rounded bg-rose-50 p-2 text-sm text-rose-700">{subjectError}</p>
+              ) : null}
+
+              <div>
+                <label className="text-[10px] font-medium text-(--ui-text-muted)">Type</label>
+                <select
+                  className="w-full rounded border border-(--ui-border) bg-(--ui-bg) px-2.5 py-1.5 text-sm text-(--ui-text)"
+                  value={subjectForm.subject_type}
+                  onChange={(e) => setSubjectForm((p) => ({ ...p, subject_type: e.target.value }))}
+                  data-testid="subject-type"
+                >
+                  {SUBJECT_TYPE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-medium text-(--ui-text-muted)">Name</label>
+                <Input
+                  required
+                  autoFocus
+                  placeholder={subjectForm.subject_type === "pet" ? "Pet name" : "Full name"}
+                  value={subjectForm.name}
+                  onChange={(e) => setSubjectForm((p) => ({ ...p, name: e.target.value }))}
+                  data-testid="subject-name"
+                />
+              </div>
+
+              {subjectForm.subject_type === "pet" ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-medium text-(--ui-text-muted)">Species</label>
+                    <Input
+                      placeholder="Dog, Cat, Bird…"
+                      value={subjectForm.species}
+                      onChange={(e) => setSubjectForm((p) => ({ ...p, species: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-medium text-(--ui-text-muted)">Breed</label>
+                    <Input
+                      placeholder="Breed"
+                      value={subjectForm.breed}
+                      onChange={(e) => setSubjectForm((p) => ({ ...p, breed: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-medium text-(--ui-text-muted)">Date of birth</label>
+                  <Input
+                    type="date"
+                    value={subjectForm.dob}
+                    onChange={(e) => setSubjectForm((p) => ({ ...p, dob: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-(--ui-text-muted)">Sex</label>
+                  <Input
+                    placeholder={subjectForm.subject_type === "pet" ? "M / F / Neutered" : "Male / Female / Other"}
+                    value={subjectForm.sex}
+                    onChange={(e) => setSubjectForm((p) => ({ ...p, sex: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {subjectForm.subject_type === "pet" ? (
+                <div>
+                  <label className="text-[10px] font-medium text-(--ui-text-muted)">Weight (kg)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    placeholder="Optional"
+                    value={subjectForm.weight_kg}
+                    onChange={(e) => setSubjectForm((p) => ({ ...p, weight_kg: e.target.value }))}
+                  />
+                </div>
+              ) : null}
+
+              <div>
+                <label className="text-[10px] font-medium text-(--ui-text-muted)">
+                  {subjectForm.subject_type === "pet" ? "Microchip / tag ID" : "Identifier (MRN, passport…)"}
+                </label>
+                <Input
+                  placeholder="Optional"
+                  value={subjectForm.identifier}
+                  onChange={(e) => setSubjectForm((p) => ({ ...p, identifier: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-medium text-(--ui-text-muted)">Notes</label>
+                <textarea
+                  className="w-full rounded border border-(--ui-border) bg-(--ui-bg) px-2.5 py-1.5 text-sm text-(--ui-text) min-h-16 resize-y"
+                  placeholder="Relationship, allergies, special notes..."
+                  value={subjectForm.notes}
+                  onChange={(e) => setSubjectForm((p) => ({ ...p, notes: e.target.value }))}
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button type="button" onClick={() => setSubjectModalOpen(false)}>Cancel</Button>
+                <Button tone="primary" type="submit" disabled={subjectSaving} data-testid="subject-save">
+                  {subjectEditing ? "Save" : "Add"}
+                </Button>
               </div>
             </form>
           </SectionCard>
