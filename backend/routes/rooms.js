@@ -1,7 +1,7 @@
 "use strict";
 
 module.exports = function registerRoomRoutes(app, deps) {
-  const { requireFeature } = require("../middleware/feature-flags");
+  const { requireFeature, requireMode } = require("../middleware/feature-flags");
   const { requirePerm } = require("../middleware/permissions");
   const { validate } = require("../middleware/validate");
   const {
@@ -25,7 +25,7 @@ module.exports = function registerRoomRoutes(app, deps) {
   const rooms = require("../services/room-service");
   const deposits = require("../services/room-deposits");
 
-  const gate = [requireFeature("phase4_room_management"), requirePerm("manage_rooms")];
+  const gate = [requireMode("room_management"), requireFeature("phase4_room_management"), requirePerm("manage_rooms")];
 
   // ── Room types ──────────────────────────────────────────────────
 

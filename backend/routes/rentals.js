@@ -1,5 +1,5 @@
 module.exports = function registerRentalRoutes(app, deps) {
-  const { requireFeature } = require("../middleware/feature-flags");
+  const { requireFeature, requireMode } = require("../middleware/feature-flags");
   const { requirePerm } = require("../middleware/permissions");
   const { validate } = require("../middleware/validate");
   const {
@@ -16,7 +16,7 @@ module.exports = function registerRentalRoutes(app, deps) {
   } = require("../schemas/rentals");
   const rentals = require("../services/rental-service");
 
-  const gate = [requireFeature("phase4_rentals"), requirePerm("manage_rentals")];
+  const gate = [requireMode("rentals"), requireFeature("phase4_rentals"), requirePerm("manage_rentals")];
 
   // ── Rental items ────────────────────────────────────────────────
 
