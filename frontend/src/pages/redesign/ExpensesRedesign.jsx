@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Plus, RefreshCw, Tag, Trash2, X } from "lucide-react";
+import { Download, Plus, RefreshCw, Tag, Trash2 } from "lucide-react";
 import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   Select,
@@ -433,23 +435,18 @@ export default function ExpensesRedesign() {
         </SectionCard>
       ) : null}
 
-      {modal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-lg p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-(--ui-text)">
-                {modal === "add" ? "Add Expense" : "Edit Expense"}
-              </h3>
-              <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={closeModal}>
-                <X size={16} />
-              </button>
-            </div>
-            {formError ? (
-              <div className="mb-3 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">
-                {formError}
-              </div>
-            ) : null}
-            <form className="space-y-3" onSubmit={saveExpense}>
+      <Modal
+        open={!!modal}
+        onClose={saving ? undefined : closeModal}
+        title={modal === "add" ? "Add Expense" : "Edit Expense"}
+        size="lg"
+      >
+        {formError ? (
+          <div className="mb-3 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">
+            {formError}
+          </div>
+        ) : null}
+        <form className="space-y-3" onSubmit={saveExpense}>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs text-(--ui-text-muted)">Amount</label>
@@ -531,32 +528,24 @@ export default function ExpensesRedesign() {
                   </Select>
                 </div>
               </div>
-              <div className="flex justify-end gap-2">
-                <Button type="button" onClick={closeModal}>
-                  Cancel
-                </Button>
-                <Button tone="primary" type="submit" disabled={saving}>
-                  {saving ? "Saving..." : modal === "add" ? "Add Expense" : "Save Changes"}
-                </Button>
-              </div>
-            </form>
-          </SectionCard>
-        </div>
-      ) : null}
+          <ModalFooter>
+            <Button type="button" onClick={closeModal} disabled={saving}>
+              Cancel
+            </Button>
+            <Button tone="primary" type="submit" disabled={saving}>
+              {saving ? "Saving..." : modal === "add" ? "Add Expense" : "Save Changes"}
+            </Button>
+          </ModalFooter>
+        </form>
+      </Modal>
 
-      {catPanelOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-md p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-(--ui-text)">Expense Categories</h3>
-              <button
-                className="text-(--ui-text-muted) hover:text-(--ui-text)"
-                onClick={() => setCatPanelOpen(false)}
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <form className="mb-3 flex gap-2" onSubmit={addCategory}>
+      <Modal
+        open={catPanelOpen}
+        onClose={() => setCatPanelOpen(false)}
+        title="Expense Categories"
+        size="md"
+      >
+        <form className="mb-3 flex gap-2" onSubmit={addCategory}>
               <Input
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
@@ -566,30 +555,28 @@ export default function ExpensesRedesign() {
                 {catSaving ? "Adding..." : "Add"}
               </Button>
             </form>
-            <div className="max-h-64 overflow-auto rounded border border-(--ui-border)">
-              {!categories.length ? (
-                <p className="p-4 text-center text-sm text-(--ui-text-muted)">No categories yet.</p>
-              ) : (
-                <table className="min-w-full text-sm">
-                  <tbody>
-                    {categories.map((c) => (
-                      <tr key={c.id} className="border-t border-(--ui-border) first:border-t-0">
-                        <td className="px-3 py-2 text-(--ui-text)">{c.name}</td>
-                        <td className="px-3 py-2 text-right">
-                          <Button size="sm" tone="danger" onClick={() => deleteCategory(c.id)}>
-                            <Trash2 size={12} className="mr-1 inline" />
-                            Delete
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </SectionCard>
+        <div className="max-h-64 overflow-auto rounded border border-(--ui-border)">
+          {!categories.length ? (
+            <p className="p-4 text-center text-sm text-(--ui-text-muted)">No categories yet.</p>
+          ) : (
+            <table className="min-w-full text-sm">
+              <tbody>
+                {categories.map((c) => (
+                  <tr key={c.id} className="border-t border-(--ui-border) first:border-t-0">
+                    <td className="px-3 py-2 text-(--ui-text)">{c.name}</td>
+                    <td className="px-3 py-2 text-right">
+                      <Button size="sm" tone="danger" onClick={() => deleteCategory(c.id)}>
+                        <Trash2 size={12} className="mr-1 inline" />
+                        Delete
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
-      ) : null}
+      </Modal>
     </PageShell>
   );
 }
