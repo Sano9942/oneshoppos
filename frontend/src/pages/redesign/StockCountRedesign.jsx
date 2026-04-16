@@ -10,7 +10,6 @@ import {
   Play,
   Plus,
   Search,
-  X,
 } from "lucide-react";
 import { api } from "../../api";
 import { fmtUtcDateTime } from "../../utils/dates";
@@ -22,6 +21,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   Select,
@@ -111,7 +112,7 @@ function CountListView({ counts, loading, onSelect, onNew }) {
                       <td className="py-2 pr-4">{fmtUtcDateTime(c.started_at)}</td>
                       <td className="py-2">
                         <Button
-                          variant="ghost"
+                          tone="plain"
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -135,43 +136,52 @@ function CountListView({ counts, loading, onSelect, onNew }) {
 
 // ── New Count Dialog ──────────────────────────────────────────────────────
 
-function NewCountDialog({ outlets, onConfirm, onCancel, saving }) {
+function NewCountDialog({ open, outlets, onConfirm, onCancel, saving }) {
   const [outletId, setOutletId] = useState(outlets[0]?.id || "");
   const [notes, setNotes] = useState("");
 
+  useEffect(() => {
+    if (open) {
+      setOutletId(outlets[0]?.id || "");
+      setNotes("");
+    }
+  }, [open, outlets]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-        <h2 className="text-lg font-semibold mb-4">Start New Stock Count</h2>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Outlet</label>
-            <Select
-              value={outletId}
-              onChange={(e) => setOutletId(e.target.value)}
-            >
-              {outlets.map((o) => (
-                <option key={o.id} value={o.id}>{o.name}</option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Notes (optional)</label>
-            <Input
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Monthly audit"
-            />
-          </div>
+    <Modal
+      open={open}
+      onClose={saving ? undefined : onCancel}
+      title="Start New Stock Count"
+      size="md"
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium mb-1">Outlet</label>
+          <Select
+            value={outletId}
+            onChange={(e) => setOutletId(e.target.value)}
+          >
+            {outlets.map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </Select>
         </div>
-        <div className="flex justify-end gap-2 mt-6">
-          <Button variant="ghost" onClick={onCancel} disabled={saving}>Cancel</Button>
-          <Button onClick={() => onConfirm(Number(outletId), notes)} disabled={saving || !outletId}>
-            {saving ? "Creating..." : "Start Count"}
-          </Button>
+        <div>
+          <label className="block text-sm font-medium mb-1">Notes (optional)</label>
+          <Input
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="e.g. Monthly audit"
+          />
         </div>
       </div>
-    </div>
+      <ModalFooter>
+        <Button onClick={onCancel} disabled={saving}>Cancel</Button>
+        <Button tone="primary" onClick={() => onConfirm(Number(outletId), notes)} disabled={saving || !outletId}>
+          {saving ? "Creating..." : "Start Count"}
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 
@@ -359,10 +369,10 @@ function CountingView({ countId, onBack }) {
             )}
           </SectionCard>
           <div className="flex justify-center gap-3">
-            <Button variant="ghost" onClick={onBack}>
+            <Button tone="plain" onClick={onBack}>
               <ArrowLeft className="w-4 h-4 mr-1" /> Back to List
             </Button>
-            <Button variant="ghost" onClick={handleExportVariance}>
+            <Button tone="plain" onClick={handleExportVariance}>
               <Download className="w-4 h-4 mr-1" /> Export Report
             </Button>
           </div>
@@ -378,10 +388,10 @@ function CountingView({ countId, onBack }) {
         subtitle={`${count.outlet_name} — ${isActive ? "In Progress" : count.status}`}
         right={
           <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={onBack}>
+            <Button tone="plain" onClick={onBack}>
               <ArrowLeft className="w-4 h-4 mr-1" /> Back
             </Button>
-            <Button variant="ghost" onClick={handleExportVariance}>
+            <Button tone="plain" onClick={handleExportVariance}>
               <Download className="w-4 h-4 mr-1" /> Export
             </Button>
             {isActive && (
@@ -582,40 +592,40 @@ function CountingView({ countId, onBack }) {
       </div>
 
       {/* Complete modal */}
-      {showComplete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-            <h2 className="text-lg font-semibold mb-2">Complete Stock Count</h2>
-            <p className="text-sm text-gray-500 mb-4">
-              {countedCount} of {items.length} products have been counted.
-              {items.length - countedCount > 0 && (
-                <span className="text-amber-600 font-medium">
-                  {" "}{items.length - countedCount} products were not scanned (will show 0 counted).
-                </span>
-              )}
-            </p>
-            <label className="flex items-center gap-2 mb-4 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={autoAdjust}
-                onChange={(e) => setAutoAdjust(e.target.checked)}
-                className="rounded"
-              />
-              <span className="text-sm">
-                Auto-adjust stock to match counted quantities
-              </span>
-            </label>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setShowComplete(false)} disabled={completing}>
-                Cancel
-              </Button>
-              <Button onClick={handleComplete} disabled={completing}>
-                {completing ? "Completing..." : "Finalize Count"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={showComplete}
+        onClose={completing ? undefined : () => setShowComplete(false)}
+        title="Complete Stock Count"
+        size="md"
+      >
+        <p className="text-sm text-gray-500 mb-4">
+          {countedCount} of {items.length} products have been counted.
+          {items.length - countedCount > 0 && (
+            <span className="text-amber-600 font-medium">
+              {" "}{items.length - countedCount} products were not scanned (will show 0 counted).
+            </span>
+          )}
+        </p>
+        <label className="flex items-center gap-2 mb-4 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={autoAdjust}
+            onChange={(e) => setAutoAdjust(e.target.checked)}
+            className="rounded"
+          />
+          <span className="text-sm">
+            Auto-adjust stock to match counted quantities
+          </span>
+        </label>
+        <ModalFooter>
+          <Button onClick={() => setShowComplete(false)} disabled={completing}>
+            Cancel
+          </Button>
+          <Button tone="primary" onClick={handleComplete} disabled={completing}>
+            {completing ? "Completing..." : "Finalize Count"}
+          </Button>
+        </ModalFooter>
+      </Modal>
     </>
   );
 }
@@ -700,14 +710,13 @@ export default function StockCountRedesign() {
         onSelect={handleSelect}
         onNew={handleNew}
       />
-      {view === "new" && (
-        <NewCountDialog
-          outlets={outlets}
-          onConfirm={handleCreateCount}
-          onCancel={() => setView("list")}
-          saving={saving}
-        />
-      )}
+      <NewCountDialog
+        open={view === "new"}
+        outlets={outlets}
+        onConfirm={handleCreateCount}
+        onCancel={() => setView("list")}
+        saving={saving}
+      />
     </>
   );
 }
