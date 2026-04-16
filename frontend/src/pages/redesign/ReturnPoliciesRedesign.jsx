@@ -3,8 +3,8 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
-import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
-import { Plus, Shield, Tag, X } from "lucide-react";
+import { PageShell, SectionCard, Button, Badge, Modal, ModalFooter, TabBar } from "../../ui/primitives";
+import { Plus, Shield, Tag } from "lucide-react";
 import { api } from "../../api";
 
 export default function ReturnPoliciesRedesign() {
@@ -84,16 +84,12 @@ export default function ReturnPoliciesRedesign() {
         </Button>
       }
     >
-      {/* Tabs */}
-      <div className="flex gap-1 mb-4">
-        {["policies", "reasons"].map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === t ? "bg-(--accent) text-white" : "bg-(--ui-bg) text-(--ui-text-muted) hover:bg-(--ui-bg-hover)"
-            }`}>
-            {t === "policies" ? "Policies" : "Return Reasons"}
-          </button>
-        ))}
+      <div className="mb-4">
+        <TabBar
+          value={tab}
+          onChange={setTab}
+          tabs={[{ value: "policies", label: "Policies" }, { value: "reasons", label: "Return Reasons" }]}
+        />
       </div>
 
       <SectionCard>
@@ -150,17 +146,23 @@ export default function ReturnPoliciesRedesign() {
         )}
       </SectionCard>
 
-      {showPolicyModal && (
-        <PolicyModal policy={editPolicy} onSave={handleSavePolicy} onClose={() => { setShowPolicyModal(false); setEditPolicy(null); }} />
-      )}
-      {showReasonModal && (
-        <ReasonModal reason={editReason} onSave={handleSaveReason} onClose={() => { setShowReasonModal(false); setEditReason(null); }} />
-      )}
+      <PolicyModal
+        open={showPolicyModal}
+        policy={editPolicy}
+        onSave={handleSavePolicy}
+        onClose={() => { setShowPolicyModal(false); setEditPolicy(null); }}
+      />
+      <ReasonModal
+        open={showReasonModal}
+        reason={editReason}
+        onSave={handleSaveReason}
+        onClose={() => { setShowReasonModal(false); setEditReason(null); }}
+      />
     </PageShell>
   );
 }
 
-function PolicyModal({ policy, onSave, onClose }) {
+function PolicyModal({ open, policy, onSave, onClose }) {
   const [form, setForm] = useState({
     name: policy?.name || "",
     return_window_days: policy?.return_window_days ?? "",
@@ -168,83 +170,88 @@ function PolicyModal({ policy, onSave, onClose }) {
     restocking_fee_percent: policy?.restocking_fee_percent || 0,
     is_default: policy?.is_default || false,
   });
+  useEffect(() => {
+    setForm({
+      name: policy?.name || "",
+      return_window_days: policy?.return_window_days ?? "",
+      receipt_required: policy?.receipt_required !== false,
+      restocking_fee_percent: policy?.restocking_fee_percent || 0,
+      is_default: policy?.is_default || false,
+    });
+  }, [policy]);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-(--ui-bg) rounded-lg shadow-xl p-6 w-full max-w-md">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">{policy ? "Edit Policy" : "New Return Policy"}</h3>
-          <button onClick={onClose}><X className="h-5 w-5" /></button>
-        </div>
-        <div className="space-y-3">
-          <label className="block text-sm font-medium">Name
-            <input value={form.name} onChange={e => set("name", e.target.value)}
-              className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
-          </label>
-          <label className="block text-sm font-medium">Return Window (days, blank=unlimited)
-            <input type="number" value={form.return_window_days} onChange={e => set("return_window_days", e.target.value ? Number(e.target.value) : null)}
-              className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
-          </label>
-          <label className="block text-sm font-medium">Restocking Fee (%)
-            <input type="number" step="0.01" value={form.restocking_fee_percent} onChange={e => set("restocking_fee_percent", Number(e.target.value))}
-              className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.receipt_required} onChange={e => set("receipt_required", e.target.checked)} />
-            Receipt required
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.is_default} onChange={e => set("is_default", e.target.checked)} />
-            Set as default policy
-          </label>
-        </div>
-        <div className="flex justify-end gap-2 mt-5">
-          <Button size="sm" onClick={onClose}>Cancel</Button>
-          <Button tone="primary" size="sm" onClick={() => onSave(form)}>Save</Button>
-        </div>
+    <Modal open={open} onClose={onClose} title={policy ? "Edit Policy" : "New Return Policy"} size="md">
+      <div className="space-y-3">
+        <label className="block text-sm font-medium">Name
+          <input value={form.name} onChange={e => set("name", e.target.value)}
+            className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
+        </label>
+        <label className="block text-sm font-medium">Return Window (days, blank=unlimited)
+          <input type="number" value={form.return_window_days} onChange={e => set("return_window_days", e.target.value ? Number(e.target.value) : null)}
+            className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
+        </label>
+        <label className="block text-sm font-medium">Restocking Fee (%)
+          <input type="number" step="0.01" value={form.restocking_fee_percent} onChange={e => set("restocking_fee_percent", Number(e.target.value))}
+            className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={form.receipt_required} onChange={e => set("receipt_required", e.target.checked)} />
+          Receipt required
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={form.is_default} onChange={e => set("is_default", e.target.checked)} />
+          Set as default policy
+        </label>
       </div>
-    </div>
+      <ModalFooter>
+        <Button size="sm" onClick={onClose}>Cancel</Button>
+        <Button tone="primary" size="sm" onClick={() => onSave(form)}>Save</Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 
-function ReasonModal({ reason, onSave, onClose }) {
+function ReasonModal({ open, reason, onSave, onClose }) {
   const [form, setForm] = useState({
     code: reason?.code || "",
     label: reason?.label || "",
     requires_note: reason?.requires_note || false,
     sort_order: reason?.sort_order || 0,
   });
+  useEffect(() => {
+    setForm({
+      code: reason?.code || "",
+      label: reason?.label || "",
+      requires_note: reason?.requires_note || false,
+      sort_order: reason?.sort_order || 0,
+    });
+  }, [reason]);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-(--ui-bg) rounded-lg shadow-xl p-6 w-full max-w-md">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">{reason ? "Edit Reason" : "New Return Reason"}</h3>
-          <button onClick={onClose}><X className="h-5 w-5" /></button>
-        </div>
-        <div className="space-y-3">
-          <label className="block text-sm font-medium">Code
-            <input value={form.code} onChange={e => set("code", e.target.value)} placeholder="e.g. defective"
-              className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
-          </label>
-          <label className="block text-sm font-medium">Label
-            <input value={form.label} onChange={e => set("label", e.target.value)} placeholder="e.g. Defective Product"
-              className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
-          </label>
-          <label className="block text-sm font-medium">Sort Order
-            <input type="number" value={form.sort_order} onChange={e => set("sort_order", Number(e.target.value))}
-              className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.requires_note} onChange={e => set("requires_note", e.target.checked)} />
-            Requires note from staff
-          </label>
-        </div>
-        <div className="flex justify-end gap-2 mt-5">
-          <Button size="sm" onClick={onClose}>Cancel</Button>
-          <Button tone="primary" size="sm" onClick={() => onSave(form)}>Save</Button>
-        </div>
+    <Modal open={open} onClose={onClose} title={reason ? "Edit Reason" : "New Return Reason"} size="md">
+      <div className="space-y-3">
+        <label className="block text-sm font-medium">Code
+          <input value={form.code} onChange={e => set("code", e.target.value)} placeholder="e.g. defective"
+            className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
+        </label>
+        <label className="block text-sm font-medium">Label
+          <input value={form.label} onChange={e => set("label", e.target.value)} placeholder="e.g. Defective Product"
+            className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
+        </label>
+        <label className="block text-sm font-medium">Sort Order
+          <input type="number" value={form.sort_order} onChange={e => set("sort_order", Number(e.target.value))}
+            className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={form.requires_note} onChange={e => set("requires_note", e.target.checked)} />
+          Requires note from staff
+        </label>
       </div>
-    </div>
+      <ModalFooter>
+        <Button size="sm" onClick={onClose}>Cancel</Button>
+        <Button tone="primary" size="sm" onClick={() => onSave(form)}>Save</Button>
+      </ModalFooter>
+    </Modal>
   );
 }
