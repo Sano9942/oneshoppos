@@ -6,6 +6,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   Select,
@@ -241,67 +243,67 @@ export default function ReturnedStockRedesign() {
         </SectionCard>
       </div>
 
-      {modalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="max-h-[90vh] w-full max-w-4xl overflow-auto p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">New Supplier Return</h3>
-            <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-12">
-              <div className="xl:col-span-7">
-                <SectionCard className="p-3">
-                  <p className="mb-2 text-sm font-semibold text-(--ui-text)">Items</p>
-                  <Select onChange={(e) => { addItemToDraft(e.target.value); e.target.value = ""; }}>
-                    <option value="">Add product...</option>
-                    {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.barcode || p.sku || "-"})</option>)}
-                  </Select>
-                  <div className="mt-2 max-h-72 overflow-auto">
-                    {draftItems.length === 0 ? (
-                      <p className="text-xs text-(--ui-text-muted)">No items added.</p>
-                    ) : (
-                      draftItems.map((item, idx) => (
-                        <div key={`${item.product_id}-${idx}`} className="mt-2 rounded border border-(--ui-border) p-2">
-                          <p className="text-sm font-medium text-(--ui-text)">{item.name}</p>
-                          <div className="mt-1 grid grid-cols-3 gap-2">
-                            <Input type="number" min="1" value={item.quantity} onChange={(e) => setDraftItems((prev) => prev.map((x, i) => i === idx ? { ...x, quantity: Number(e.target.value || 1) } : x))} />
-                            <Input type="number" min="0" step="0.01" value={item.unit_price} onChange={(e) => setDraftItems((prev) => prev.map((x, i) => i === idx ? { ...x, unit_price: Number(e.target.value || 0) } : x))} />
-                            <Button tone="danger" onClick={() => setDraftItems((prev) => prev.filter((_, i) => i !== idx))}>Remove</Button>
-                          </div>
-                          <Input className="mt-2" placeholder="Item reason (optional)" value={item.reason || ""} onChange={(e) => setDraftItems((prev) => prev.map((x, i) => i === idx ? { ...x, reason: e.target.value } : x))} />
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </SectionCard>
+      <Modal
+        open={modalOpen}
+        onClose={saving ? undefined : () => setModalOpen(false)}
+        title="New Supplier Return"
+        size="xl"
+      >
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
+          <div className="xl:col-span-7">
+            <SectionCard className="p-3">
+              <p className="mb-2 text-sm font-semibold text-(--ui-text)">Items</p>
+              <Select onChange={(e) => { addItemToDraft(e.target.value); e.target.value = ""; }}>
+                <option value="">Add product...</option>
+                {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.barcode || p.sku || "-"})</option>)}
+              </Select>
+              <div className="mt-2 max-h-72 overflow-auto">
+                {draftItems.length === 0 ? (
+                  <p className="text-xs text-(--ui-text-muted)">No items added.</p>
+                ) : (
+                  draftItems.map((item, idx) => (
+                    <div key={`${item.product_id}-${idx}`} className="mt-2 rounded border border-(--ui-border) p-2">
+                      <p className="text-sm font-medium text-(--ui-text)">{item.name}</p>
+                      <div className="mt-1 grid grid-cols-3 gap-2">
+                        <Input type="number" min="1" value={item.quantity} onChange={(e) => setDraftItems((prev) => prev.map((x, i) => i === idx ? { ...x, quantity: Number(e.target.value || 1) } : x))} />
+                        <Input type="number" min="0" step="0.01" value={item.unit_price} onChange={(e) => setDraftItems((prev) => prev.map((x, i) => i === idx ? { ...x, unit_price: Number(e.target.value || 0) } : x))} />
+                        <Button tone="danger" onClick={() => setDraftItems((prev) => prev.filter((_, i) => i !== idx))}>Remove</Button>
+                      </div>
+                      <Input className="mt-2" placeholder="Item reason (optional)" value={item.reason || ""} onChange={(e) => setDraftItems((prev) => prev.map((x, i) => i === idx ? { ...x, reason: e.target.value } : x))} />
+                    </div>
+                  ))
+                )}
               </div>
+            </SectionCard>
+          </div>
 
-              <form className="xl:col-span-5" onSubmit={save}>
-                <SectionCard className="p-3">
-                  <p className="mb-2 text-sm font-semibold text-(--ui-text)">Return Details</p>
-                  <div className="space-y-2">
-                    <Select required value={form.outlet_id} onChange={(e) => setForm((p) => ({ ...p, outlet_id: e.target.value }))}>
-                      <option value="">Select outlet</option>
-                      {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                    </Select>
-                    <Select required value={form.supplier_id} onChange={(e) => setForm((p) => ({ ...p, supplier_id: e.target.value }))}>
-                      <option value="">Select supplier</option>
-                      {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </Select>
-                    <Input placeholder="Reference number" value={form.reference_number} onChange={(e) => setForm((p) => ({ ...p, reference_number: e.target.value }))} />
-                    <Input placeholder="General reason" value={form.reason} onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value }))} />
-                  </div>
-                  <div className="mt-3 rounded border border-(--ui-border) p-2 text-sm">
-                    <p className="text-(--ui-text-muted)">Total Value</p>
-                    <p className="text-lg font-semibold text-(--ui-text)">{money(draftTotal)}</p>
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
-                    <Button tone="primary" type="submit" disabled={saving || !form.supplier_id || !form.outlet_id || draftItems.length === 0}>{saving ? "Saving..." : "Complete Return"}</Button>
-                  </div>
-                </SectionCard>
-              </form>
-            </div>
-          </SectionCard>
+          <form className="xl:col-span-5" onSubmit={save}>
+            <SectionCard className="p-3">
+              <p className="mb-2 text-sm font-semibold text-(--ui-text)">Return Details</p>
+              <div className="space-y-2">
+                <Select required value={form.outlet_id} onChange={(e) => setForm((p) => ({ ...p, outlet_id: e.target.value }))}>
+                  <option value="">Select outlet</option>
+                  {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </Select>
+                <Select required value={form.supplier_id} onChange={(e) => setForm((p) => ({ ...p, supplier_id: e.target.value }))}>
+                  <option value="">Select supplier</option>
+                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </Select>
+                <Input placeholder="Reference number" value={form.reference_number} onChange={(e) => setForm((p) => ({ ...p, reference_number: e.target.value }))} />
+                <Input placeholder="General reason" value={form.reason} onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value }))} />
+              </div>
+              <div className="mt-3 rounded border border-(--ui-border) p-2 text-sm">
+                <p className="text-(--ui-text-muted)">Total Value</p>
+                <p className="text-lg font-semibold text-(--ui-text)">{money(draftTotal)}</p>
+              </div>
+              <ModalFooter>
+                <Button type="button" onClick={() => setModalOpen(false)} disabled={saving}>Cancel</Button>
+                <Button tone="primary" type="submit" disabled={saving || !form.supplier_id || !form.outlet_id || draftItems.length === 0}>{saving ? "Saving..." : "Complete Return"}</Button>
+              </ModalFooter>
+            </SectionCard>
+          </form>
         </div>
-      ) : null}
+      </Modal>
     </PageShell>
   );
 }
