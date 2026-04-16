@@ -5,6 +5,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   TableToolbar,
@@ -190,41 +192,43 @@ export default function OutletsRedesign() {
         </div>
       </SectionCard>
 
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-sm p-5">
-            <h3 className="mb-3 text-lg font-semibold text-(--ui-text)">
-              {editing ? "Edit Outlet" : "Add Outlet"}
-            </h3>
-            <form className="space-y-2" onSubmit={save}>
-              <Input
-                required
-                placeholder="Outlet name"
-                value={form.name}
-                onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-              />
-              <Input
-                placeholder="Address"
-                value={form.address}
-                onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
-              />
-              <Input
-                placeholder="Phone"
-                value={form.phone}
-                onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
-              />
-              <div className="flex gap-2 pt-2">
-                <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
-                <Button tone="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
-              </div>
-            </form>
-          </SectionCard>
-        </div>
-      )}
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-sm p-5">
-            <h3 className="mb-1 text-lg font-semibold text-(--ui-text)">Delete Outlet</h3>
+      <Modal
+        open={modalOpen}
+        onClose={saving ? undefined : () => setModalOpen(false)}
+        title={editing ? "Edit Outlet" : "Add Outlet"}
+        size="sm"
+      >
+        <form className="space-y-2" onSubmit={save}>
+          <Input
+            required
+            placeholder="Outlet name"
+            value={form.name}
+            onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+          />
+          <Input
+            placeholder="Address"
+            value={form.address}
+            onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
+          />
+          <Input
+            placeholder="Phone"
+            value={form.phone}
+            onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+          />
+          <ModalFooter>
+            <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button tone="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+          </ModalFooter>
+        </form>
+      </Modal>
+      <Modal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Outlet"
+        size="sm"
+      >
+        {deleteTarget ? (
+          <>
             <p className="mb-4 text-sm text-(--ui-text-muted)">
               You are about to delete <strong>{deleteTarget.name}</strong>. Any records linked to this outlet must be reassigned first.
             </p>
@@ -246,15 +250,15 @@ export default function OutletsRedesign() {
               </select>
             </div>
             {error && <p className="mb-3 text-sm text-rose-600">{error}</p>}
-            <div className="flex gap-2">
+            <ModalFooter>
               <Button type="button" onClick={() => setDeleteTarget(null)}>Cancel</Button>
               <Button tone="danger" onClick={confirmDelete}>
                 {reassignTo ? "Reassign & Delete" : "Delete Anyway"}
               </Button>
-            </div>
-          </SectionCard>
-        </div>
-      )}
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
     </PageShell>
   );
 }
