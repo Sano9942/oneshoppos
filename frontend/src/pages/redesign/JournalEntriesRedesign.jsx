@@ -17,6 +17,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
 } from "../../ui/primitives";
@@ -364,24 +366,23 @@ export default function JournalEntriesRedesign() {
       )}
 
       {/* Create / Edit / View modal */}
-      {modal && (
-        <EntryModal
-          mode={modal}
-          form={form}
-          setForm={setForm}
-          lines={lines}
-          setLines={setLines}
-          updateLine={updateLine}
-          removeLine={removeLine}
-          lineTotals={lineTotals}
-          accounts={accounts}
-          saving={saving}
-          onSave={handleSave}
-          onClose={() => setModal(null)}
-          money={money}
-          editId={editId}
-        />
-      )}
+      <EntryModal
+        open={!!modal}
+        mode={modal || "view"}
+        form={form}
+        setForm={setForm}
+        lines={lines}
+        setLines={setLines}
+        updateLine={updateLine}
+        removeLine={removeLine}
+        lineTotals={lineTotals}
+        accounts={accounts}
+        saving={saving}
+        onSave={handleSave}
+        onClose={() => setModal(null)}
+        money={money}
+        editId={editId}
+      />
     </PageShell>
   );
 }
@@ -420,7 +421,7 @@ function EntriesTab({
         <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-36" />
         <span className="text-(--ui-text-muted)">to</span>
         <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-36" />
-        <Button variant="secondary" onClick={exportEntries}><Download className="mr-1 h-4 w-4" /> Export</Button>
+        <Button onClick={exportEntries}><Download className="mr-1 h-4 w-4" /> Export</Button>
         <Button onClick={openCreate}><Plus className="mr-1 h-4 w-4" /> New Entry</Button>
       </div>
 
@@ -504,8 +505,8 @@ function EntriesTab({
             <div className="mt-4 flex items-center justify-between text-sm text-(--ui-text-muted)">
               <span>Showing page {page} of {totalPages} ({total} entries)</span>
               <div className="flex gap-2">
-                <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Prev</Button>
-                <Button variant="secondary" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</Button>
+                <Button size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Prev</Button>
+                <Button size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</Button>
               </div>
             </div>
           )}
@@ -527,8 +528,8 @@ function TrialBalanceTab({
         <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-36" />
         <span className="text-(--ui-text-muted)">to</span>
         <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-36" />
-        <Button variant="secondary" onClick={onRefresh}>Refresh</Button>
-        <Button variant="secondary" onClick={onExport}><Download className="mr-1 h-4 w-4" /> Export</Button>
+        <Button onClick={onRefresh}>Refresh</Button>
+        <Button onClick={onExport}><Download className="mr-1 h-4 w-4" /> Export</Button>
       </div>
 
       {loading ? (
@@ -582,22 +583,20 @@ function TrialBalanceTab({
 // ── Entry Modal (Create / Edit / View) ───────────────────────────────
 
 function EntryModal({
-  mode, form, setForm, lines, setLines, updateLine, removeLine,
+  open, mode, form, setForm, lines, setLines, updateLine, removeLine,
   lineTotals, accounts, saving, onSave, onClose, money, editId,
 }) {
   const readOnly = mode === "view";
   const title = mode === "create" ? "New Journal Entry" : mode === "edit" ? "Edit Journal Entry" : "View Journal Entry";
 
   return (
-    <div className="fixed inset-0 z-200 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-16">
-      <div className="w-full max-w-4xl rounded-xl bg-(--ui-surface) shadow-xl">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-(--ui-border) px-6 py-4">
-          <h2 className="text-lg font-semibold text-(--ui-text)">{title}</h2>
-          <button onClick={onClose} className="text-2xl leading-none text-(--ui-text-muted) hover:text-(--ui-text)">&times;</button>
-        </div>
-
-        <div className="p-6 space-y-5">
+    <Modal
+      open={open}
+      onClose={saving ? undefined : onClose}
+      title={title}
+      size="xl"
+    >
+      <div className="space-y-5">
           {/* Header fields */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -626,7 +625,6 @@ function EntryModal({
               <h3 className="text-sm font-medium text-(--ui-text)">Entry Lines</h3>
               {!readOnly && (
                 <Button
-                  variant="secondary"
                   size="sm"
                   onClick={() => setLines([...lines, { account_id: "", description: "", debit: "", credit: "" }])}
                 >
@@ -700,13 +698,17 @@ function EntryModal({
                       </td>
                       {!readOnly && (
                         <td className="px-2 py-1.5 text-center">
-                          <button
+                          <Button
+                            tone="plain"
+                            size="sm"
+                            iconOnly
                             onClick={() => removeLine(i)}
-                            className="rounded p-1 text-(--ui-text-muted) hover:text-red-500"
                             title="Remove line"
+                            aria-label="Remove line"
+                            className="hover:text-red-500"
                           >
                             <Trash2 className="h-4 w-4" />
-                          </button>
+                          </Button>
                         </td>
                       )}
                     </tr>
@@ -737,20 +739,19 @@ function EntryModal({
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={onClose}>{readOnly ? "Close" : "Cancel"}</Button>
-            {!readOnly && (
-              <Button
-                onClick={onSave}
-                disabled={saving || !form.entry_date || !form.description.trim() || lineTotals.diff > 0.005}
-              >
-                {saving ? "Saving..." : editId ? "Update Entry" : "Create Entry"}
-              </Button>
-            )}
-          </div>
-        </div>
       </div>
-    </div>
+      <ModalFooter>
+        <Button onClick={onClose} disabled={saving}>{readOnly ? "Close" : "Cancel"}</Button>
+        {!readOnly && (
+          <Button
+            tone="primary"
+            onClick={onSave}
+            disabled={saving || !form.entry_date || !form.description.trim() || lineTotals.diff > 0.005}
+          >
+            {saving ? "Saving..." : editId ? "Update Entry" : "Create Entry"}
+          </Button>
+        )}
+      </ModalFooter>
+    </Modal>
   );
 }
