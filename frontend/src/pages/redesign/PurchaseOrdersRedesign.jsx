@@ -25,6 +25,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   Select,
@@ -692,12 +694,16 @@ export default function PurchaseOrdersRedesign() {
                       <p className="text-sm font-medium text-(--ui-text)">{item.name}</p>
                       <p className="text-xs text-(--ui-text-muted)">{item.barcode || "-"}</p>
                     </div>
-                    <button
-                      className="text-(--ui-text-muted) hover:text-rose-600"
+                    <Button
+                      tone="plain"
+                      size="sm"
+                      iconOnly
+                      aria-label="Remove item"
+                      className="hover:text-rose-600"
                       onClick={() => removeCartItem(item.product_id)}
                     >
                       <X size={14} />
-                    </button>
+                    </Button>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <Input
@@ -749,77 +755,65 @@ export default function PurchaseOrdersRedesign() {
           </SectionCard>
         </div>
 
-        {/* Save as Template modal */}
-        {saveTemplateOpen ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-            <SectionCard className="w-full max-w-sm p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="font-semibold text-(--ui-text)">Save as Template</h3>
-                <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={() => setSaveTemplateOpen(false)}>
-                  <X size={16} />
-                </button>
-              </div>
-              <label className="mb-1 block text-xs text-(--ui-text-muted)">Template Name</label>
-              <Input
-                value={templateName}
-                onChange={(e) => setTemplateName(e.target.value)}
-                placeholder="e.g. Weekly Beverage Order"
-                autoFocus
-              />
-              <div className="mt-3 flex justify-end gap-2">
-                <Button onClick={() => setSaveTemplateOpen(false)}>Cancel</Button>
-                <Button tone="primary" onClick={saveAsTemplate}>
-                  <Save size={13} className="mr-1 inline" />
-                  Save Template
-                </Button>
-              </div>
-            </SectionCard>
-          </div>
-        ) : null}
+        <Modal
+          open={saveTemplateOpen}
+          onClose={() => setSaveTemplateOpen(false)}
+          title="Save as Template"
+          size="sm"
+        >
+          <label className="mb-1 block text-xs text-(--ui-text-muted)">Template Name</label>
+          <Input
+            value={templateName}
+            onChange={(e) => setTemplateName(e.target.value)}
+            placeholder="e.g. Weekly Beverage Order"
+            autoFocus
+          />
+          <ModalFooter>
+            <Button onClick={() => setSaveTemplateOpen(false)}>Cancel</Button>
+            <Button tone="primary" onClick={saveAsTemplate}>
+              <Save size={13} className="mr-1 inline" />
+              Save Template
+            </Button>
+          </ModalFooter>
+        </Modal>
 
-        {/* Load Template modal */}
-        {loadTemplateOpen ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-            <SectionCard className="w-full max-w-md p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="font-semibold text-(--ui-text)">Load Template</h3>
-                <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={() => setLoadTemplateOpen(false)}>
-                  <X size={16} />
-                </button>
-              </div>
-              {templates.length === 0 ? (
-                <p className="py-4 text-center text-sm text-(--ui-text-muted)">No templates saved yet.</p>
-              ) : (
-                <div className="max-h-[50vh] space-y-2 overflow-auto">
-                  {templates.map((t) => (
-                    <div key={t.id} className="flex items-center justify-between rounded border border-(--ui-border) p-2">
-                      <div>
-                        <p className="text-sm font-medium text-(--ui-text)">{t.name}</p>
-                        <p className="text-xs text-(--ui-text-muted)">
-                          {t.supplier_name || "No supplier"} · {t.item_count} items
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        tone="primary"
-                        onClick={() => {
-                          setForm((prev) => ({ ...prev, supplier_id: String(t.supplier_id || "") }));
-                          setLoadTemplateOpen(false);
-                          setNotice(`Template "${t.name}" loaded — supplier pre-filled. Submit the PO or modify items.`);
-                        }}
-                      >
-                        Load
-                      </Button>
-                    </div>
-                  ))}
+        <Modal
+          open={loadTemplateOpen}
+          onClose={() => setLoadTemplateOpen(false)}
+          title="Load Template"
+          size="md"
+        >
+          {templates.length === 0 ? (
+            <p className="py-4 text-center text-sm text-(--ui-text-muted)">No templates saved yet.</p>
+          ) : (
+            <div className="max-h-[50vh] space-y-2 overflow-auto">
+              {templates.map((t) => (
+                <div key={t.id} className="flex items-center justify-between rounded border border-(--ui-border) p-2">
+                  <div>
+                    <p className="text-sm font-medium text-(--ui-text)">{t.name}</p>
+                    <p className="text-xs text-(--ui-text-muted)">
+                      {t.supplier_name || "No supplier"} · {t.item_count} items
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    tone="primary"
+                    onClick={() => {
+                      setForm((prev) => ({ ...prev, supplier_id: String(t.supplier_id || "") }));
+                      setLoadTemplateOpen(false);
+                      setNotice(`Template "${t.name}" loaded — supplier pre-filled. Submit the PO or modify items.`);
+                    }}
+                  >
+                    Load
+                  </Button>
                 </div>
-              )}
-              <div className="mt-3 flex justify-end">
-                <Button onClick={() => setLoadTemplateOpen(false)}>Close</Button>
-              </div>
-            </SectionCard>
-          </div>
-        ) : null}
+              ))}
+            </div>
+          )}
+          <ModalFooter>
+            <Button onClick={() => setLoadTemplateOpen(false)}>Close</Button>
+          </ModalFooter>
+        </Modal>
       </PageShell>
     );
   }
@@ -935,95 +929,83 @@ export default function PurchaseOrdersRedesign() {
           </div>
         </SectionCard>
 
-        {grnOpen ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-            <SectionCard className="w-full max-w-2xl p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-(--ui-text)">Receive PO (Create GRN)</h3>
-                <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={() => setGrnOpen(false)}>
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Receiving Outlet</label>
-                  <Select value={grnOutletId} onChange={(e) => setGrnOutletId(e.target.value)}>
-                    <option value="">Select outlet</option>
-                    {outlets.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-(--ui-text-muted)">Received By</label>
-                  <Select value={grnReceivedBy} onChange={(e) => setGrnReceivedBy(e.target.value)}>
-                    <option value="">Select employee</option>
-                    {employees.map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              </div>
-              <div className="mt-2">
-                <label className="mb-1 block text-xs text-(--ui-text-muted)">Notes</label>
-                <Input value={grnNotes} onChange={(e) => setGrnNotes(e.target.value)} placeholder="Optional receiving notes" />
-              </div>
-              <div className="mt-3 max-h-[35vh] space-y-2 overflow-auto border-t border-(--ui-border) pt-3">
-                {items.map((item) => (
-                  <div
-                    key={item.id}
-                    className="grid grid-cols-[1fr_140px] items-center gap-2 rounded border border-(--ui-border) p-2"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-(--ui-text)">{item.name}</p>
-                      <p className="text-xs text-(--ui-text-muted)">
-                        Ordered: {item.quantity} | {item.barcode || "-"}
-                      </p>
-                    </div>
-                    <Input
-                      type="number"
-                      min="0"
-                      max={item.quantity}
-                      value={grnQtys[item.product_id] ?? item.quantity}
-                      onChange={(e) =>
-                        setGrnQtys((prev) => ({
-                          ...prev,
-                          [item.product_id]: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
+        <Modal
+          open={grnOpen}
+          onClose={saving ? undefined : () => setGrnOpen(false)}
+          title="Receive PO (Create GRN)"
+          size="xl"
+        >
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs text-(--ui-text-muted)">Receiving Outlet</label>
+              <Select value={grnOutletId} onChange={(e) => setGrnOutletId(e.target.value)}>
+                <option value="">Select outlet</option>
+                {outlets.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
                 ))}
-              </div>
-              <div className="mt-3 flex justify-end gap-2">
-                <Button onClick={() => setGrnOpen(false)}>Cancel</Button>
-                <Button tone="primary" onClick={receivePO} disabled={saving}>
-                  <CheckCircle2 size={13} className="mr-1 inline" />
-                  {saving ? "Processing..." : "Confirm & Create GRN"}
-                </Button>
-              </div>
-            </SectionCard>
+              </Select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-(--ui-text-muted)">Received By</label>
+              <Select value={grnReceivedBy} onChange={(e) => setGrnReceivedBy(e.target.value)}>
+                <option value="">Select employee</option>
+                {employees.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
-        ) : null}
-
-        {scanMode ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-            <SectionCard className="w-full max-w-3xl p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-(--ui-text)">
-                  <ScanBarcode size={18} className="mr-2 inline" />
-                  Scan &amp; Receive
-                </h3>
-                <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={() => setScanMode(false)}>
-                  <X size={16} />
-                </button>
+          <div className="mt-2">
+            <label className="mb-1 block text-xs text-(--ui-text-muted)">Notes</label>
+            <Input value={grnNotes} onChange={(e) => setGrnNotes(e.target.value)} placeholder="Optional receiving notes" />
+          </div>
+          <div className="mt-3 max-h-[35vh] space-y-2 overflow-auto border-t border-(--ui-border) pt-3">
+            {items.map((item) => (
+              <div
+                key={item.id}
+                className="grid grid-cols-[1fr_140px] items-center gap-2 rounded border border-(--ui-border) p-2"
+              >
+                <div>
+                  <p className="text-sm font-medium text-(--ui-text)">{item.name}</p>
+                  <p className="text-xs text-(--ui-text-muted)">
+                    Ordered: {item.quantity} | {item.barcode || "-"}
+                  </p>
+                </div>
+                <Input
+                  type="number"
+                  min="0"
+                  max={item.quantity}
+                  value={grnQtys[item.product_id] ?? item.quantity}
+                  onChange={(e) =>
+                    setGrnQtys((prev) => ({
+                      ...prev,
+                      [item.product_id]: e.target.value,
+                    }))
+                  }
+                />
               </div>
+            ))}
+          </div>
+          <ModalFooter>
+            <Button onClick={() => setGrnOpen(false)} disabled={saving}>Cancel</Button>
+            <Button tone="primary" onClick={receivePO} disabled={saving}>
+              <CheckCircle2 size={13} className="mr-1 inline" />
+              {saving ? "Processing..." : "Confirm & Create GRN"}
+            </Button>
+          </ModalFooter>
+        </Modal>
 
-              {/* Progress bar */}
+        <Modal
+          open={!!scanMode}
+          onClose={() => setScanMode(false)}
+          title={<><ScanBarcode size={18} className="mr-2 inline" />Scan &amp; Receive</>}
+          size="xl"
+        >
+          {/* Progress bar */}
               {(() => {
                 const totalOrdered = scanItems.reduce((s, i) => s + Number(i.qty_ordered || 0), 0);
                 const totalReceived = scanItems.reduce((s, i) => s + Number(i.qty_received || 0), 0);
@@ -1129,15 +1111,13 @@ export default function PurchaseOrdersRedesign() {
                 </table>
               </div>
 
-              <div className="mt-3 flex justify-end">
-                <Button onClick={() => setScanMode(false)}>
-                  <CheckCircle2 size={13} className="mr-1 inline" />
-                  Done
-                </Button>
-              </div>
-            </SectionCard>
-          </div>
-        ) : null}
+          <ModalFooter>
+            <Button onClick={() => setScanMode(false)}>
+              <CheckCircle2 size={13} className="mr-1 inline" />
+              Done
+            </Button>
+          </ModalFooter>
+        </Modal>
       </PageShell>
     );
   }
@@ -1277,74 +1257,60 @@ export default function PurchaseOrdersRedesign() {
         </div>
       </SectionCard>
 
-      {/* Templates Manager modal */}
-      {templatesOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-lg p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-(--ui-text)">PO Templates</h3>
-              <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={() => setTemplatesOpen(false)}>
-                <X size={16} />
-              </button>
-            </div>
-            {templates.length === 0 ? (
-              <p className="py-6 text-center text-sm text-(--ui-text-muted)">
-                No templates yet. Create a PO and use "Save as Template".
-              </p>
-            ) : (
-              <div className="max-h-[55vh] space-y-2 overflow-auto">
-                {templates.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between rounded border border-(--ui-border) p-3">
-                    <div>
-                      <p className="font-medium text-(--ui-text)">{t.name}</p>
-                      <p className="text-xs text-(--ui-text-muted)">
-                        {t.supplier_name || "No supplier"} · {t.item_count} items · {fmtDate(t.created_at)}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        tone="primary"
-                        onClick={() => createFromTemplate(t.id, t.name)}
-                      >
-                        Use
-                      </Button>
-                      <Button
-                        size="sm"
-                        tone="danger"
-                        onClick={() => deleteTemplate(t.id)}
-                      >
-                        <Trash2 size={12} />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+      <Modal
+        open={templatesOpen}
+        onClose={() => setTemplatesOpen(false)}
+        title="PO Templates"
+        size="lg"
+      >
+        {templates.length === 0 ? (
+          <p className="py-6 text-center text-sm text-(--ui-text-muted)">
+            No templates yet. Create a PO and use "Save as Template".
+          </p>
+        ) : (
+          <div className="max-h-[55vh] space-y-2 overflow-auto">
+            {templates.map((t) => (
+              <div key={t.id} className="flex items-center justify-between rounded border border-(--ui-border) p-3">
+                <div>
+                  <p className="font-medium text-(--ui-text)">{t.name}</p>
+                  <p className="text-xs text-(--ui-text-muted)">
+                    {t.supplier_name || "No supplier"} · {t.item_count} items · {fmtDate(t.created_at)}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    tone="primary"
+                    onClick={() => createFromTemplate(t.id, t.name)}
+                  >
+                    Use
+                  </Button>
+                  <Button
+                    size="sm"
+                    tone="danger"
+                    onClick={() => deleteTemplate(t.id)}
+                  >
+                    <Trash2 size={12} />
+                  </Button>
+                </div>
               </div>
-            )}
-            <div className="mt-3 flex justify-end">
-              <Button onClick={() => setTemplatesOpen(false)}>Close</Button>
-            </div>
-          </SectionCard>
-        </div>
-      ) : null}
+            ))}
+          </div>
+        )}
+        <ModalFooter>
+          <Button onClick={() => setTemplatesOpen(false)}>Close</Button>
+        </ModalFooter>
+      </Modal>
 
-      {/* Edit Draft PO Modal */}
-      {editOpen && editingPo ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="flex w-full max-w-3xl flex-col" style={{ maxHeight: "90vh" }}>
-            <div className="flex items-center justify-between border-b border-(--ui-border) p-4">
-              <h3 className="text-lg font-semibold text-(--ui-text)">
-                Edit {poNumber(editingPo.id)}
-              </h3>
-              <button
-                className="text-(--ui-text-muted) hover:text-(--ui-text)"
-                onClick={() => { setEditOpen(false); setEditingPo(null); }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="grid flex-1 grid-cols-1 gap-3 overflow-auto p-4 lg:grid-cols-[1fr_300px]">
+      <Modal
+        open={editOpen && !!editingPo}
+        onClose={saving ? undefined : () => { setEditOpen(false); setEditingPo(null); }}
+        title={editingPo ? `Edit ${poNumber(editingPo.id)}` : "Edit PO"}
+        size="xl"
+      >
+        {editingPo ? (
+          <>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_300px]">
               {/* Product search panel */}
               <div className="flex flex-col gap-2">
                 <div className="relative">
@@ -1411,12 +1377,16 @@ export default function PurchaseOrdersRedesign() {
                     <div key={item.product_id} className="rounded border border-(--ui-border) p-2">
                       <div className="mb-1 flex items-start justify-between gap-2">
                         <p className="text-sm font-medium text-(--ui-text)">{item.name}</p>
-                        <button
-                          className="text-(--ui-text-muted) hover:text-rose-600"
+                        <Button
+                          tone="plain"
+                          size="sm"
+                          iconOnly
+                          aria-label="Remove item"
+                          className="hover:text-rose-600"
                           onClick={() => removeEditCartItem(item.product_id)}
                         >
                           <X size={13} />
-                        </button>
+                        </Button>
                       </div>
                       <div className="grid grid-cols-2 gap-1.5">
                         <Input
@@ -1450,21 +1420,21 @@ export default function PurchaseOrdersRedesign() {
             </div>
 
             {error ? (
-              <div className="border-t border-(--ui-border) px-4 py-2 text-sm text-rose-600">
+              <div className="mt-3 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-600">
                 {error}
               </div>
             ) : null}
 
-            <div className="flex justify-end gap-2 border-t border-(--ui-border) p-4">
-              <Button onClick={() => { setEditOpen(false); setEditingPo(null); }}>Cancel</Button>
+            <ModalFooter>
+              <Button onClick={() => { setEditOpen(false); setEditingPo(null); }} disabled={saving}>Cancel</Button>
               <Button tone="primary" onClick={saveEdit} disabled={saving}>
                 <Save size={13} className="mr-1 inline" />
                 {saving ? "Saving..." : "Save Changes"}
               </Button>
-            </div>
-          </SectionCard>
-        </div>
-      ) : null}
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
     </PageShell>
   );
 }
