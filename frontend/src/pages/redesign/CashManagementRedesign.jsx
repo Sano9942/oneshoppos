@@ -10,10 +10,11 @@ import {
   TableToolbar,
 } from "../../ui/primitives";
 import { api } from "../../api";
-import { Calculator, Download, RefreshCw } from "lucide-react";
+import { Calculator, Download, RefreshCw, Unlock } from "lucide-react";
 import { useAuth } from "../../auth/AuthProvider";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { useToast } from "../../contexts/ToastContext";
 
 const fmtDate = fmtUtcDateTime;
 
@@ -58,7 +59,9 @@ function exportCsv(rows) {
 export default function CashManagementRedesign() {
   const { hasPerm } = useAuth();
   const { fmt: money, denominations } = useCurrency();
+  const toast = useToast();
   const canViewAllOutlets = hasPerm("all_access");
+  const [drawerOpening, setDrawerOpening] = useState(false);
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -194,6 +197,22 @@ export default function CashManagementRedesign() {
     }
   };
 
+  const openDrawer = async () => {
+    setDrawerOpening(true);
+    try {
+      const result = await api.post("/api/print/open-drawer", {});
+      if (result.ok) {
+        toast.success("Drawer opened");
+      } else {
+        toast.error(result.error || "Drawer open failed");
+      }
+    } catch (e) {
+      toast.error(e.message || "Drawer open failed");
+    } finally {
+      setDrawerOpening(false);
+    }
+  };
+
   return (
     <PageShell
       title="Cash Management"
@@ -256,7 +275,17 @@ export default function CashManagementRedesign() {
                 Open Shift
               </Button>
             ) : (
-              <Button tone="danger" onClick={() => setCloseModal(true)}>Close Shift</Button>
+              <>
+                <Button
+                  onClick={openDrawer}
+                  disabled={drawerOpening}
+                  title="Open cash drawer without a sale (no-sale / cash drop)"
+                >
+                  <Unlock size={14} className="mr-1 inline" />
+                  {drawerOpening ? "Opening..." : "Open Drawer"}
+                </Button>
+                <Button tone="danger" onClick={() => setCloseModal(true)}>Close Shift</Button>
+              </>
             )}
           </div>
         </div>
