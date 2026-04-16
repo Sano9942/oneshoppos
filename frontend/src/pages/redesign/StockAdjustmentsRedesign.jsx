@@ -6,6 +6,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   Select,
@@ -204,33 +206,33 @@ export default function StockAdjustmentsRedesign() {
         </div>
       </SectionCard>
 
-      {modalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-md p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">New Stock Adjustment</h3>
-            <form className="mt-3 space-y-2" onSubmit={save}>
-              <Select required value={form.product_id} onChange={(e) => setForm((p) => ({ ...p, product_id: e.target.value }))}>
-                <option value="">Select product</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} ({p.barcode || p.sku || "-"})</option>
-                ))}
-              </Select>
-              <Select required value={form.outlet_id} onChange={(e) => setForm((p) => ({ ...p, outlet_id: e.target.value }))}>
-                <option value="">Select outlet</option>
-                {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-              </Select>
-              <Input required type="number" placeholder="Quantity change, e.g. -5 or 3" value={form.quantity_change} onChange={(e) => setForm((p) => ({ ...p, quantity_change: e.target.value }))} />
-              <Select value={form.reason} onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value }))}>
-                {REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
-              </Select>
-              <div className="flex gap-2 pt-2">
-                <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
-                <Button tone="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Create"}</Button>
-              </div>
-            </form>
-          </SectionCard>
-        </div>
-      ) : null}
+      <Modal
+        open={modalOpen}
+        onClose={saving ? undefined : () => setModalOpen(false)}
+        title="New Stock Adjustment"
+        size="md"
+      >
+        <form className="space-y-2" onSubmit={save}>
+          <Select required value={form.product_id} onChange={(e) => setForm((p) => ({ ...p, product_id: e.target.value }))}>
+            <option value="">Select product</option>
+            {products.map((p) => (
+              <option key={p.id} value={p.id}>{p.name} ({p.barcode || p.sku || "-"})</option>
+            ))}
+          </Select>
+          <Select required value={form.outlet_id} onChange={(e) => setForm((p) => ({ ...p, outlet_id: e.target.value }))}>
+            <option value="">Select outlet</option>
+            {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </Select>
+          <Input required type="number" placeholder="Quantity change, e.g. -5 or 3" value={form.quantity_change} onChange={(e) => setForm((p) => ({ ...p, quantity_change: e.target.value }))} />
+          <Select value={form.reason} onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value }))}>
+            {REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
+          </Select>
+          <ModalFooter>
+            <Button type="button" onClick={() => setModalOpen(false)} disabled={saving}>Cancel</Button>
+            <Button tone="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Create"}</Button>
+          </ModalFooter>
+        </form>
+      </Modal>
     </PageShell>
   );
 }
