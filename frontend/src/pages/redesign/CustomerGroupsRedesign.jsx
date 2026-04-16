@@ -7,6 +7,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
 } from "../../ui/primitives";
@@ -121,6 +123,7 @@ export default function CustomerGroupsRedesign() {
                   <td className="px-4 py-2.5 font-medium text-(--ui-text)">{g.name}</td>
                   <td className="px-4 py-2.5 text-(--ui-text-muted) truncate max-w-48">{g.description || "—"}</td>
                   <td className="px-4 py-2.5 text-center">
+                    {/* Inline text-link to filtered customers view — <Button> would add background/border. */}
                     <button
                       className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
                       onClick={() => navigate(`/customers?group=${g.id}`)}
@@ -158,46 +161,44 @@ export default function CustomerGroupsRedesign() {
         </div>
       </SectionCard>
 
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-md p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">
-              {editing ? "Edit Group" : "New Customer Group"}
-            </h3>
-            <form className="mt-3 space-y-2" onSubmit={submitForm}>
-              {formError && <p className="rounded bg-rose-50 p-2 text-sm text-rose-700">{formError}</p>}
-              <Input
-                required
-                placeholder="Group name"
-                value={form.name}
-                onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                autoFocus
-              />
-              <Input
-                placeholder="Description (optional)"
-                value={form.description}
-                onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-              />
-              <div>
-                <label className="text-[10px] font-medium text-(--ui-text-muted)">Discount %</label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  placeholder="0"
-                  value={form.discount_percent}
-                  onChange={(e) => setForm((p) => ({ ...p, discount_percent: e.target.value }))}
-                />
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
-                <Button tone="primary" type="submit" disabled={busy}>{editing ? "Save" : "Create"}</Button>
-              </div>
-            </form>
-          </SectionCard>
-        </div>
-      )}
+      <Modal
+        open={modalOpen}
+        onClose={busy ? undefined : () => setModalOpen(false)}
+        title={editing ? "Edit Group" : "New Customer Group"}
+        size="md"
+      >
+        <form className="space-y-2" onSubmit={submitForm}>
+          {formError && <p className="rounded bg-rose-50 p-2 text-sm text-rose-700">{formError}</p>}
+          <Input
+            required
+            placeholder="Group name"
+            value={form.name}
+            onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+            autoFocus
+          />
+          <Input
+            placeholder="Description (optional)"
+            value={form.description}
+            onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+          />
+          <div>
+            <label className="text-[10px] font-medium text-(--ui-text-muted)">Discount %</label>
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              placeholder="0"
+              value={form.discount_percent}
+              onChange={(e) => setForm((p) => ({ ...p, discount_percent: e.target.value }))}
+            />
+          </div>
+          <ModalFooter>
+            <Button type="button" onClick={() => setModalOpen(false)} disabled={busy}>Cancel</Button>
+            <Button tone="primary" type="submit" disabled={busy}>{editing ? "Save" : "Create"}</Button>
+          </ModalFooter>
+        </form>
+      </Modal>
     </PageShell>
   );
 }
