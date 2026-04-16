@@ -6,6 +6,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   Select,
@@ -389,129 +391,130 @@ export default function CategoriesRedesign() {
         </div>
       </SectionCard>
 
-      {modalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-lg p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">
-              {form.id ? "Edit Category" : "Create Category"}
-            </h3>
-            <form className="mt-3 space-y-3" onSubmit={save}>
-              <Input
-                required
-                placeholder="Category name"
-                value={form.name}
+      <Modal
+        open={modalOpen && !conversionPrompt}
+        onClose={saving ? undefined : () => setModalOpen(false)}
+        title={form.id ? "Edit Category" : "Create Category"}
+        size="lg"
+      >
+        <form className="space-y-3" onSubmit={save}>
+          <Input
+            required
+            placeholder="Category name"
+            value={form.name}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, name: e.target.value }))
+            }
+          />
+          <Input
+            placeholder="Description"
+            value={form.description}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, description: e.target.value }))
+            }
+          />
+          <div>
+            <label className="mb-1 block text-xs text-(--ui-text-muted)">
+              Parent Category
+            </label>
+            <Select
+              value={form.parent_id}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, parent_id: e.target.value }))
+              }
+            >
+              <option value="">Top level</option>
+              {selectableParents.map((row) => (
+                <option key={row.id} value={row.id}>
+                  {indentLabel(row)}
+                </option>
+              ))}
+            </Select>
+            {form.parent_id ? (
+              <p className="mt-1 text-xs text-(--ui-text-muted)">
+                If the selected parent currently holds products, you will be
+                prompted to move them into this new child.
+              </p>
+            ) : null}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="mb-1 block text-xs text-(--ui-text-muted)">
+                Status
+              </label>
+              <Select
+                value={form.is_active}
                 onChange={(e) =>
-                  setForm((p) => ({ ...p, name: e.target.value }))
+                  setForm((p) => ({ ...p, is_active: e.target.value }))
+                }
+              >
+                <option value="1">Active</option>
+                <option value="0">Inactive</option>
+              </Select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-(--ui-text-muted)">
+                Sort Order
+              </label>
+              <Input
+                type="number"
+                value={form.sort_order}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, sort_order: e.target.value }))
                 }
               />
-              <Input
-                placeholder="Description"
-                value={form.description}
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-(--ui-text-muted)">
+                Tax
+              </label>
+              <Select
+                value={form.tax_id}
                 onChange={(e) =>
-                  setForm((p) => ({ ...p, description: e.target.value }))
+                  setForm((p) => ({ ...p, tax_id: e.target.value }))
+                }
+              >
+                <option value="">None (inherit from parent)</option>
+                {taxes.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({Number(t.rate)}%)
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-(--ui-text-muted)">
+                HS Code
+              </label>
+              <Input
+                value={form.hs_code}
+                placeholder="e.g. 4901"
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, hs_code: e.target.value }))
                 }
               />
-              <div>
-                <label className="mb-1 block text-xs text-(--ui-text-muted)">
-                  Parent Category
-                </label>
-                <Select
-                  value={form.parent_id}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, parent_id: e.target.value }))
-                  }
-                >
-                  <option value="">Top level</option>
-                  {selectableParents.map((row) => (
-                    <option key={row.id} value={row.id}>
-                      {indentLabel(row)}
-                    </option>
-                  ))}
-                </Select>
-                {form.parent_id ? (
-                  <p className="mt-1 text-xs text-(--ui-text-muted)">
-                    If the selected parent currently holds products, you will be
-                    prompted to move them into this new child.
-                  </p>
-                ) : null}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="mb-1 block text-xs text-(--ui-text-muted)">
-                    Status
-                  </label>
-                  <Select
-                    value={form.is_active}
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, is_active: e.target.value }))
-                    }
-                  >
-                    <option value="1">Active</option>
-                    <option value="0">Inactive</option>
-                  </Select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-(--ui-text-muted)">
-                    Sort Order
-                  </label>
-                  <Input
-                    type="number"
-                    value={form.sort_order}
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, sort_order: e.target.value }))
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-(--ui-text-muted)">
-                    Tax
-                  </label>
-                  <Select
-                    value={form.tax_id}
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, tax_id: e.target.value }))
-                    }
-                  >
-                    <option value="">None (inherit from parent)</option>
-                    {taxes.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} ({Number(t.rate)}%)
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-(--ui-text-muted)">
-                    HS Code
-                  </label>
-                  <Input
-                    value={form.hs_code}
-                    placeholder="e.g. 4901"
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, hs_code: e.target.value }))
-                    }
-                  />
-                </div>
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button type="button" onClick={() => setModalOpen(false)}>
-                  Cancel
-                </Button>
-                <Button tone="primary" type="submit" disabled={saving}>
-                  {saving ? "Saving..." : "Save"}
-                </Button>
-              </div>
-            </form>
-          </SectionCard>
-        </div>
-      ) : null}
-      {conversionPrompt ? (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/55 p-3">
-          <SectionCard className="w-full max-w-lg p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">
-              Convert Parent to Tree
-            </h3>
-            <p className="mt-2 text-sm text-(--ui-text-muted)">
+            </div>
+          </div>
+          <ModalFooter>
+            <Button type="button" onClick={() => setModalOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button tone="primary" type="submit" disabled={saving}>
+              {saving ? "Saving..." : "Save"}
+            </Button>
+          </ModalFooter>
+        </form>
+      </Modal>
+      {/* The conversion prompt replaces (not stacks on) the create modal — saving pauses until the user picks. */}
+      <Modal
+        open={!!conversionPrompt}
+        onClose={saving ? undefined : () => setConversionPrompt(null)}
+        title="Convert Parent to Tree"
+        size="lg"
+      >
+        {conversionPrompt ? (
+          <>
+            <p className="text-sm text-(--ui-text-muted)">
               The selected parent category currently has{" "}
               <span className="font-semibold text-(--ui-text)">
                 {conversionPrompt.directProductCount}
@@ -527,7 +530,7 @@ export default function CategoriesRedesign() {
                 Products will move to this child automatically.
               </div>
             </div>
-            <div className="mt-4 flex gap-2">
+            <ModalFooter>
               <Button
                 type="button"
                 onClick={() => setConversionPrompt(null)}
@@ -543,17 +546,19 @@ export default function CategoriesRedesign() {
               >
                 {saving ? "Creating..." : "Create Child and Move Products"}
               </Button>
-            </div>
-          </SectionCard>
-        </div>
-      ) : null}
-      {moveModal ? (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/55 p-3">
-          <SectionCard className="w-full max-w-lg p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">
-              Move Category Products
-            </h3>
-            <p className="mt-2 text-sm text-(--ui-text-muted)">
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
+      <Modal
+        open={!!moveModal}
+        onClose={moveSaving ? undefined : () => setMoveModal(null)}
+        title="Move Category Products"
+        size="lg"
+      >
+        {moveModal ? (
+          <>
+            <p className="text-sm text-(--ui-text-muted)">
               Move all directly assigned products from{" "}
               <span className="font-semibold text-(--ui-text)">
                 {moveModal.path_label || moveModal.name}
@@ -576,7 +581,7 @@ export default function CategoriesRedesign() {
                 ))}
               </Select>
             </div>
-            <div className="mt-4 flex gap-2">
+            <ModalFooter>
               <Button
                 type="button"
                 onClick={() => setMoveModal(null)}
@@ -592,10 +597,10 @@ export default function CategoriesRedesign() {
               >
                 {moveSaving ? "Moving..." : "Move Products"}
               </Button>
-            </div>
-          </SectionCard>
-        </div>
-      ) : null}
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
     </PageShell>
   );
 }
