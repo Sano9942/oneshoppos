@@ -3,8 +3,8 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
-import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
-import { Plus, Layers, Trash2, Pencil, Eye, X } from "lucide-react";
+import { PageShell, SectionCard, Button, Badge, Modal, ModalFooter } from "../../ui/primitives";
+import { Plus, Trash2, Pencil, Eye, X } from "lucide-react";
 import { api } from "../../api";
 
 const FIELDS = [
@@ -148,9 +148,9 @@ export default function SmartCollectionsRedesign() {
                   <td className="py-2">{c.sort_order}</td>
                   <td className="py-2"><Badge tone={c.is_active ? "success" : "default"}>{c.is_active ? "Active" : "Inactive"}</Badge></td>
                   <td className="py-2 text-right flex gap-1 justify-end">
-                    <button onClick={() => handleView(c.id)} className="p-1 hover:text-blue-500"><Eye size={14} /></button>
-                    <button onClick={() => openEdit(c)} className="p-1 hover:text-blue-500"><Pencil size={14} /></button>
-                    <button onClick={() => handleDelete(c.id)} className="p-1 hover:text-red-500"><Trash2 size={14} /></button>
+                    <Button tone="plain" size="sm" iconOnly onClick={() => handleView(c.id)} title="View" aria-label="View"><Eye size={14} /></Button>
+                    <Button tone="plain" size="sm" iconOnly onClick={() => openEdit(c)} title="Edit" aria-label="Edit"><Pencil size={14} /></Button>
+                    <Button tone="plain" size="sm" iconOnly onClick={() => handleDelete(c.id)} title="Delete" aria-label="Delete" className="hover:text-red-500"><Trash2 size={14} /></Button>
                   </td>
                 </tr>
               ))}
@@ -160,62 +160,58 @@ export default function SmartCollectionsRedesign() {
       </SectionCard>
 
       {/* Create / Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-(--ui-bg) rounded-lg shadow-xl w-full max-w-lg p-6 max-h-[85vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-(--ui-text)">{editing ? "Edit Collection" : "New Collection"}</h2>
-              <button onClick={() => setShowModal(false)}><X size={18} /></button>
-            </div>
+      <Modal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title={editing ? "Edit Collection" : "New Collection"}
+        size="lg"
+      >
+        <label className="block text-sm font-medium text-(--ui-muted) mb-1">Name</label>
+        <input className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
 
-            <label className="block text-sm font-medium text-(--ui-muted) mb-1">Name</label>
-            <input className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+        <label className="block text-sm font-medium text-(--ui-muted) mb-1">Description</label>
+        <textarea className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
 
-            <label className="block text-sm font-medium text-(--ui-muted) mb-1">Description</label>
-            <textarea className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
-
-            <div className="flex gap-4 mb-3">
-              <label className="flex items-center gap-2 text-sm text-(--ui-text)">
-                <input type="checkbox" checked={form.disjunctive} onChange={e => setForm(f => ({ ...f, disjunctive: e.target.checked }))} />
-                OR mode (match any rule)
-              </label>
-              <select className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text)" value={form.sort_order} onChange={e => setForm(f => ({ ...f, sort_order: e.target.value }))}>
-                {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </div>
-
-            <label className="block text-sm font-medium text-(--ui-muted) mb-2">Rules</label>
-            {form.rules.map((rule, idx) => (
-              <div key={idx} className="flex gap-2 mb-2 items-center">
-                <select className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-32" value={rule.field} onChange={e => updateRule(idx, "field", e.target.value)}>
-                  {FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-                </select>
-                <select className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-36" value={rule.operator} onChange={e => updateRule(idx, "operator", e.target.value)}>
-                  {OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-                <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) grow" placeholder="Value" value={rule.value} onChange={e => updateRule(idx, "value", e.target.value)} />
-                {form.rules.length > 1 && <button onClick={() => removeRule(idx)} className="text-red-500 p-1"><X size={14} /></button>}
-              </div>
-            ))}
-            <button onClick={addRule} className="text-sm text-blue-500 mb-4 hover:underline">+ Add rule</button>
-
-            <div className="flex gap-2 justify-end">
-              <Button tone="plain" size="sm" onClick={() => setShowModal(false)}>Cancel</Button>
-              <Button size="sm" onClick={handleSave}>{editing ? "Update" : "Create"}</Button>
-            </div>
-          </div>
+        <div className="flex gap-4 mb-3">
+          <label className="flex items-center gap-2 text-sm text-(--ui-text)">
+            <input type="checkbox" checked={form.disjunctive} onChange={e => setForm(f => ({ ...f, disjunctive: e.target.checked }))} />
+            OR mode (match any rule)
+          </label>
+          <select className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text)" value={form.sort_order} onChange={e => setForm(f => ({ ...f, sort_order: e.target.value }))}>
+            {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
         </div>
-      )}
+
+        <label className="block text-sm font-medium text-(--ui-muted) mb-2">Rules</label>
+        {form.rules.map((rule, idx) => (
+          <div key={idx} className="flex gap-2 mb-2 items-center">
+            <select className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-32" value={rule.field} onChange={e => updateRule(idx, "field", e.target.value)}>
+              {FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+            <select className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-36" value={rule.operator} onChange={e => updateRule(idx, "operator", e.target.value)}>
+              {OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) grow" placeholder="Value" value={rule.value} onChange={e => updateRule(idx, "value", e.target.value)} />
+            {form.rules.length > 1 && <Button tone="plain" size="sm" iconOnly onClick={() => removeRule(idx)} aria-label="Remove rule" className="text-red-500"><X size={14} /></Button>}
+          </div>
+        ))}
+        <Button tone="link" size="sm" onClick={addRule} className="mb-4">+ Add rule</Button>
+
+        <ModalFooter>
+          <Button size="sm" onClick={() => setShowModal(false)}>Cancel</Button>
+          <Button tone="primary" size="sm" onClick={handleSave}>{editing ? "Update" : "Create"}</Button>
+        </ModalFooter>
+      </Modal>
 
       {/* View Collection Detail */}
-      {viewCollection && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-(--ui-bg) rounded-lg shadow-xl w-full max-w-2xl p-6 max-h-[85vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-(--ui-text)">{viewCollection.name} ({viewCollection.product_count} products)</h2>
-              <button onClick={() => setViewCollection(null)}><X size={18} /></button>
-            </div>
-
+      <Modal
+        open={!!viewCollection}
+        onClose={() => setViewCollection(null)}
+        title={viewCollection ? `${viewCollection.name} (${viewCollection.product_count} products)` : ""}
+        size="xl"
+      >
+        {viewCollection && (
+          <>
             <div className="mb-3">
               <p className="text-sm text-(--ui-muted)">Rules: {viewCollection.rules?.map(r => `${r.field} ${r.operator} ${r.value}`).join(viewCollection.disjunctive ? " OR " : " AND ")}</p>
             </div>
@@ -246,9 +242,9 @@ export default function SmartCollectionsRedesign() {
             ) : (
               <p className="text-(--ui-muted) text-sm py-4 text-center">No products match these rules.</p>
             )}
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
     </PageShell>
   );
 }
