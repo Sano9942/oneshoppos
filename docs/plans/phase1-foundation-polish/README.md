@@ -13,7 +13,9 @@ Work branch: `phase1-foundation-polish` (off `main`)
 | 1.1 Tier 1 + Tier 2 results | [03-tier1-tier2-results.md](03-tier1-tier2-results.md) | Tier 1 done (3/3), Tier 2 partial (1/3, 2 deferred with reasons) |
 | 1.1 Tier 3.1 chunk-load handler | commit `c87c2db` | Done — fixes Sentry SANOPOS-FRONTEND-7 class of error after deploys |
 | 1.2 Design system audit | [04-design-system-audit.md](04-design-system-audit.md) | Audit done — 346 divergence sites identified, 5-step execution plan |
-| 1.2 Design system convergence | _(pending)_ | Plan ready, not yet started |
+| 1.2 Step 1 primitives | commit `f2f591d` | Modal/ConfirmDialog/TabBar + Button extensions, 24 unit tests |
+| 1.2 Step 2 Billing pilot | [05-billing-pilot-results.md](05-billing-pilot-results.md) | Pilot done — refined audit with intentional-divergence carve-outs |
+| 1.2 Step 2 remaining 4 pages | _(in progress)_ | CustomerInvoices, CommissionPlans, Marketing, SmartCollections |
 | 1.3 Reliability hardening | _(pending)_ | Sentry top-10 = 0 unresolved; reframed in 02 |
 | 1.4 The 1% details | _(pending)_ | Not started |
 

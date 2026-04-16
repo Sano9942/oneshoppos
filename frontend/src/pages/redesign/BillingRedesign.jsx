@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { CreditCard, ArrowUpRight, Clock, CheckCircle, AlertTriangle, XCircle, Tag } from "lucide-react";
 import { api } from "../../api";
-import { PageShell } from "../../ui/primitives";
+import { PageShell, Modal, ModalFooter, Button } from "../../ui/primitives";
 import { useToast } from "../../contexts/ToastContext";
 
 export default function BillingRedesign() {
@@ -397,33 +397,34 @@ export default function BillingRedesign() {
       </div>
 
       {/* Upgrade Modal */}
-      {showUpgradeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-semibold text-slate-800 mb-2">Request Upgrade to Pro</h3>
-            <p className="text-sm text-slate-500 mb-1">{priceLabel} per outlet</p>
-            {cycleInfo.discount_percent > 0 && (
-              <p className="text-xs text-emerald-600 font-medium mb-2">
-                {cycleInfo.discount_percent}% OFF — Save PKR {cycleInfo.savings?.toLocaleString()}
-              </p>
-            )}
-            <div className="mb-3"><CycleCards /><OutletBreakdown /></div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-600 mb-1">Message (optional)</label>
-              <textarea value={message} onChange={e => setMessage(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                rows={3} placeholder="Any questions or notes..." />
-            </div>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setShowUpgradeModal(false)} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 cursor-pointer">Cancel</button>
-              <button onClick={handleRequestUpgrade} disabled={submitting}
-                className="px-4 py-2 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 cursor-pointer">
-                {submitting ? "Sending..." : "Send Request"}
-              </button>
-            </div>
-          </div>
+      <Modal
+        open={showUpgradeModal}
+        onClose={submitting ? undefined : () => setShowUpgradeModal(false)}
+        title="Request Upgrade to Pro"
+        size="sm"
+      >
+        <p className="text-sm text-slate-500 mb-1">{priceLabel} per outlet</p>
+        {cycleInfo.discount_percent > 0 && (
+          <p className="text-xs text-emerald-600 font-medium mb-2">
+            {cycleInfo.discount_percent}% OFF — Save PKR {cycleInfo.savings?.toLocaleString()}
+          </p>
+        )}
+        <div className="mb-3"><CycleCards /><OutletBreakdown /></div>
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-slate-600 mb-1">Message (optional)</label>
+          <textarea value={message} onChange={e => setMessage(e.target.value)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            rows={3} placeholder="Any questions or notes..." />
         </div>
-      )}
+        <ModalFooter>
+          <Button onClick={() => setShowUpgradeModal(false)} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button tone="primary" onClick={handleRequestUpgrade} disabled={submitting}>
+            {submitting ? "Sending..." : "Send Request"}
+          </Button>
+        </ModalFooter>
+      </Modal>
     </PageShell>
   );
 }
