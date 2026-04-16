@@ -6,6 +6,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   Select,
@@ -340,13 +342,13 @@ export default function EmployeesRedesign() {
         </div>
       </SectionCard>
 
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto">
-            <h3 className="mb-3 text-lg font-semibold text-(--ui-text)">
-              {editing ? "Edit Employee" : "Add Employee"}
-            </h3>
-            <form className="space-y-2" onSubmit={save}>
+      <Modal
+        open={modalOpen}
+        onClose={saving ? undefined : () => setModalOpen(false)}
+        title={editing ? "Edit Employee" : "Add Employee"}
+        size="lg"
+      >
+        <form className="space-y-2" onSubmit={save}>
               <Input
                 required
                 placeholder="Full name"
@@ -488,6 +490,7 @@ export default function EmployeesRedesign() {
                           <MapPin size={12} className="text-(--ui-text-muted) shrink-0" />
                           <span className="flex-1 text-(--ui-text)">{o.name}</span>
                           {checked && (
+                            /* Primary-outlet star toggle — intentional tiny favorite icon; <Button> would add padding/border. */
                             <button
                               type="button"
                               title={isPrimary ? "Primary outlet" : "Set as primary"}
@@ -506,20 +509,22 @@ export default function EmployeesRedesign() {
                   )}
                 </div>
               )}
-              <div className="flex gap-2 pt-2">
-                <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
-                <Button tone="primary" type="submit" disabled={saving}>
-                  {saving ? "Saving..." : "Save"}
-                </Button>
-              </div>
-            </form>
-          </SectionCard>
-        </div>
-      )}
-      {revokeTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-sm p-5">
-            <h3 className="mb-2 text-lg font-semibold text-(--ui-text)">Revoke All Sessions</h3>
+          <ModalFooter>
+            <Button type="button" onClick={() => setModalOpen(false)} disabled={saving}>Cancel</Button>
+            <Button tone="primary" type="submit" disabled={saving}>
+              {saving ? "Saving..." : "Save"}
+            </Button>
+          </ModalFooter>
+        </form>
+      </Modal>
+      <Modal
+        open={!!revokeTarget}
+        onClose={revoking ? undefined : () => setRevokeTarget(null)}
+        title="Revoke All Sessions"
+        size="sm"
+      >
+        {revokeTarget ? (
+          <>
             <p className="mb-3 text-sm text-(--ui-text-muted)">
               This will force <strong>{revokeTarget.name}</strong> to log in again on all devices. Are you sure?
             </p>
@@ -529,19 +534,23 @@ export default function EmployeesRedesign() {
               onChange={(e) => setRevokeReason(e.target.value)}
               className="mb-3"
             />
-            <div className="flex gap-2">
+            <ModalFooter>
               <Button type="button" onClick={() => setRevokeTarget(null)} disabled={revoking}>Cancel</Button>
               <Button tone="danger" onClick={revokeAllSessions} disabled={revoking}>
                 {revoking ? "Revoking..." : "Revoke All Sessions"}
               </Button>
-            </div>
-          </SectionCard>
-        </div>
-      )}
-      {passwordTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-sm p-5">
-            <h3 className="mb-2 text-lg font-semibold text-(--ui-text)">Set Password</h3>
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
+      <Modal
+        open={!!passwordTarget}
+        onClose={settingPassword ? undefined : () => setPasswordTarget(null)}
+        title="Set Password"
+        size="sm"
+      >
+        {passwordTarget ? (
+          <>
             <p className="mb-3 text-sm text-(--ui-text-muted)">
               Set a dashboard login password for <strong>{passwordTarget.name}</strong>.
             </p>
@@ -565,7 +574,7 @@ export default function EmployeesRedesign() {
                 <p className="text-xs text-red-600">Min 8 characters</p>
               )}
             </div>
-            <div className="flex gap-2">
+            <ModalFooter>
               <Button type="button" onClick={() => setPasswordTarget(null)} disabled={settingPassword}>Cancel</Button>
               <Button
                 tone="primary"
@@ -574,10 +583,10 @@ export default function EmployeesRedesign() {
               >
                 {settingPassword ? "Setting..." : "Set Password"}
               </Button>
-            </div>
-          </SectionCard>
-        </div>
-      )}
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
     </PageShell>
   );
 }
