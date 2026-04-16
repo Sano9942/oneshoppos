@@ -202,9 +202,9 @@ export function useCheckout({
       treatment_folio_id: chargeToTreatmentFolioId ? Number(chargeToTreatmentFolioId) : null,
     };
 
-    const queueSaleOffline = () => {
+    const queueSaleOffline = async () => {
       try {
-        const count = enqueueSale(salePayload);
+        const count = await enqueueSale(salePayload);
         const custObj = checkoutCustomerId
           ? customers.find((c) => String(c.id) === String(checkoutCustomerId))
           : null;
@@ -236,7 +236,7 @@ export function useCheckout({
     };
 
     if (!navigator.onLine) {
-      queueSaleOffline();
+      await queueSaleOffline();
       setSubmitting(false);
       return;
     }
@@ -279,7 +279,7 @@ export function useCheckout({
       await loadParked?.(selectedOutletId);
     } catch (e) {
       if (e instanceof TypeError || !navigator.onLine) {
-        queueSaleOffline();
+        await queueSaleOffline();
       } else {
         setError?.(e.message || "Failed to complete sale");
       }

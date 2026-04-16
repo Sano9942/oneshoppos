@@ -1,7 +1,10 @@
-import React from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { Store, ArrowLeft, FileText, HelpCircle, Lock, LogOut, History, RotateCcw } from "lucide-react";
+import { Store, ArrowLeft, FileText, HelpCircle, Lock, LogOut, History, RotateCcw, AlertTriangle } from "lucide-react";
 import { usePOS } from "./POSContext";
+import { useAuth } from "../../../auth/AuthProvider";
+import { getQueueByState } from "../../../utils/offlineQueue";
+import POSStuckQueueModal from "./POSStuckQueueModal";
 
 export default function POSHeader() {
   const {
@@ -23,7 +26,28 @@ export default function POSHeader() {
     setReturnModalOpen,
     setReturnSourceSale,
     setShowShortcutsOverlay,
+    offlineQueueCount,
+    offlineSyncing,
   } = usePOS();
+  const { hasPerm } = useAuth();
+  const [stuckCount, setStuckCount] = useState(0);
+  const [stuckOpen, setStuckOpen] = useState(false);
+  const isAdmin = hasPerm?.("all_access");
+
+  const refreshStuck = useCallback(async () => {
+    if (!employee?.id || !isAdmin) return;
+    try {
+      const failed = await getQueueByState(employee.id, "failed");
+      setStuckCount(failed.length);
+    } catch {
+      setStuckCount(0);
+    }
+  }, [employee?.id, isAdmin]);
+
+  useEffect(() => {
+    refreshStuck();
+    // Re-check whenever queue count changes (sync cycle transitions may leave rows failed)
+  }, [refreshStuck, offlineQueueCount, offlineSyncing]);
 
   return (
     <div className="bg-white border-b border-slate-200 px-3 md:px-5 py-2 md:py-2.5 flex items-center justify-between shrink-0 shadow-sm z-20">
@@ -86,6 +110,15 @@ export default function POSHeader() {
             <RotateCcw size={14} /> <span className="hidden sm:inline">Return</span>
           </button>
         )}
+        {isAdmin && stuckCount > 0 && (
+          <button
+            onClick={() => setStuckOpen(true)}
+            className="flex items-center gap-1 text-amber-600 hover:text-amber-700 font-bold transition text-sm bg-amber-50 px-2 py-1 rounded-lg"
+            title="Stuck offline sales"
+          >
+            <AlertTriangle size={14} /> <span>Stuck ({stuckCount})</span>
+          </button>
+        )}
         {activeShift && canOpenShift && (
           <button
             onClick={() => setCloseShiftOpen(true)}
@@ -114,6 +147,10 @@ export default function POSHeader() {
           <LogOut size={14} /> <span className="hidden sm:inline">Logout</span>
         </button>
       </div>
+      <POSStuckQueueModal
+        open={stuckOpen}
+        onClose={() => { setStuckOpen(false); refreshStuck(); }}
+      />
     </div>
   );
 }

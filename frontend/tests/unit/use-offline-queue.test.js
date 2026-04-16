@@ -1,3 +1,4 @@
+import "fake-indexeddb/auto";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 
@@ -19,33 +20,33 @@ import { getQueue, clearQueue } from "../../src/utils/offlineQueue";
 
 const EMPLOYEE_ID = 42;
 
-beforeEach(() => {
-  clearQueue(EMPLOYEE_ID);
+beforeEach(async () => {
+  await clearQueue(EMPLOYEE_ID);
   vi.clearAllMocks();
 });
 
-afterEach(() => {
-  clearQueue(EMPLOYEE_ID);
+afterEach(async () => {
+  await clearQueue(EMPLOYEE_ID);
 });
 
 describe("useOfflineQueue", () => {
   it("enqueueSale adds to queue and increments count", async () => {
     const { result } = renderHook(() => useOfflineQueue());
 
-    // Initial count is 0 after mount effect
     await waitFor(() => expect(result.current.offlineQueueCount).toBe(0));
 
-    act(() => {
-      result.current.enqueueSale({
+    await act(async () => {
+      await result.current.enqueueSale({
         idempotency_key: "key-1",
         cartItems: [{ id: 1, name: "Test", price: 100, quantity: 1 }],
         total: 100,
       });
     });
 
-    expect(result.current.offlineQueueCount).toBe(1);
-    expect(getQueue(EMPLOYEE_ID)).toHaveLength(1);
-    expect(getQueue(EMPLOYEE_ID)[0].idempotency_key).toBe("key-1");
+    await waitFor(() => expect(result.current.offlineQueueCount).toBe(1));
+    const rows = await getQueue(EMPLOYEE_ID);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].idempotency_key).toBe("key-1");
   });
 
   it("syncQueue clears queue on 200 OK", async () => {
@@ -58,24 +59,24 @@ describe("useOfflineQueue", () => {
     const { result } = renderHook(() => useOfflineQueue());
     await waitFor(() => expect(result.current.offlineQueueCount).toBe(0));
 
-    act(() => {
-      result.current.enqueueSale({ idempotency_key: "k-ok", cartItems: [], total: 50 });
+    await act(async () => {
+      await result.current.enqueueSale({ idempotency_key: "k-ok", cartItems: [], total: 50 });
     });
-    expect(result.current.offlineQueueCount).toBe(1);
+    await waitFor(() => expect(result.current.offlineQueueCount).toBe(1));
 
     await act(async () => {
       await result.current.syncQueue();
     });
 
-    expect(result.current.offlineQueueCount).toBe(0);
-    expect(getQueue(EMPLOYEE_ID)).toHaveLength(0);
+    await waitFor(() => expect(result.current.offlineQueueCount).toBe(0));
+    expect(await getQueue(EMPLOYEE_ID)).toHaveLength(0);
     expect(api.raw).toHaveBeenCalledWith(
       "/api/sales",
       expect.objectContaining({ method: "POST" }),
     );
   });
 
-  it("syncQueue leaves entry in queue on 500 error", async () => {
+  it("syncQueue marks entry failed on 500 error", async () => {
     api.raw.mockResolvedValue({
       ok: false,
       status: 500,
@@ -85,18 +86,22 @@ describe("useOfflineQueue", () => {
     const { result } = renderHook(() => useOfflineQueue());
     await waitFor(() => expect(result.current.offlineQueueCount).toBe(0));
 
-    act(() => {
-      result.current.enqueueSale({ idempotency_key: "k-fail", cartItems: [], total: 75 });
+    await act(async () => {
+      await result.current.enqueueSale({ idempotency_key: "k-fail", cartItems: [], total: 75 });
     });
-    expect(result.current.offlineQueueCount).toBe(1);
+    await waitFor(() => expect(result.current.offlineQueueCount).toBe(1));
 
     await act(async () => {
       await result.current.syncQueue();
     });
 
-    expect(result.current.offlineQueueCount).toBe(1);
-    expect(getQueue(EMPLOYEE_ID)).toHaveLength(1);
-    expect(getQueue(EMPLOYEE_ID)[0].idempotency_key).toBe("k-fail");
+    // Row still present (but failed, not removed)
+    await waitFor(() => expect(result.current.offlineQueueCount).toBe(1));
+    const rows = await getQueue(EMPLOYEE_ID);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].idempotency_key).toBe("k-fail");
+    expect(rows[0].sync_state).toBe("failed");
+    expect(rows[0].last_error).toMatch(/server exploded|HTTP 500/);
   });
 
   it("syncQueue treats duplicate: true response as synced", async () => {
@@ -109,14 +114,14 @@ describe("useOfflineQueue", () => {
     const { result } = renderHook(() => useOfflineQueue());
     await waitFor(() => expect(result.current.offlineQueueCount).toBe(0));
 
-    act(() => {
-      result.current.enqueueSale({ idempotency_key: "k-dup", cartItems: [], total: 25 });
+    await act(async () => {
+      await result.current.enqueueSale({ idempotency_key: "k-dup", cartItems: [], total: 25 });
     });
 
     await act(async () => {
       await result.current.syncQueue();
     });
 
-    expect(result.current.offlineQueueCount).toBe(0);
+    await waitFor(() => expect(result.current.offlineQueueCount).toBe(0));
   });
 });
