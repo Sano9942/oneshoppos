@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
+import { readContext } from "../../auth/authStore";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -23,11 +24,12 @@ export default function RestaurantChecksRedesign() {
   const [splitCount, setSplitCount] = useState(2);
 
   if (!flagsLoading && !flags.phase4_restaurant) return <Navigate to="/dashboard" replace />;
+  if (!readContext()?.active_outlet_id) return <Navigate to="/" replace />;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get("/api/restaurant/checks?outlet_id=1");
+      const data = await api.get("/api/restaurant/checks");
       setChecks(data.checks || []);
     } catch (err) { toast.error(err.message); }
     finally { setLoading(false); }

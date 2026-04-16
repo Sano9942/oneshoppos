@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
+import { readContext } from "../../auth/authStore";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
@@ -35,10 +36,11 @@ export default function KDSRedesign() {
   const [loading, setLoading] = useState(true);
 
   if (!flagsLoading && !flags.phase4_restaurant_kds) return <Navigate to="/dashboard" replace />;
+  if (!readContext()?.active_outlet_id) return <Navigate to="/" replace />;
 
   const loadStations = useCallback(async () => {
     try {
-      const data = await api.get("/api/kds/stations?outlet_id=1");
+      const data = await api.get("/api/kds/stations");
       setStations(data.stations || []);
       if (data.stations?.length && !activeStation) {
         setActiveStation(data.stations[0].id);

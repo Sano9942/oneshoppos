@@ -22,6 +22,7 @@ import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
 import { api } from "../../api";
+import { readContext } from "../../auth/authStore";
 import {
   Badge,
   Button,
@@ -331,11 +332,10 @@ function OrdersQueue({ onPicklistCreated, fmt }) {
     if (!selected.size) return;
     setCreating(true);
     try {
-      // Use outlet from first selected order (or 1 as fallback)
       const firstOrder = orders.find((o) => selected.has(o.id));
       await api.post("/api/fulfillment/picklists", {
         order_ids: [...selected],
-        outlet_id: firstOrder?.outlet_id || 1,
+        outlet_id: firstOrder?.outlet_id || readContext()?.active_outlet_id || null,
       });
       success("Picklist created");
       setSelected(new Set());
@@ -1216,7 +1216,7 @@ function CreateLoadsheet({ onBack, onCreated, fmt }) {
       await api.post("/api/fulfillment/loadsheets", {
         order_ids: [...selected],
         courier_id: courierId,
-        outlet_id: 1,
+        outlet_id: selectedOrders[0]?.outlet_id || readContext()?.active_outlet_id || null,
       });
       success("Loadsheet created");
       onCreated();

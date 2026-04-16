@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
+import { readContext } from "../../auth/authStore";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
@@ -22,11 +23,12 @@ export default function RestaurantFloorRedesign() {
   const [seatForm, setSeatForm] = useState({ guest_count: 1, server_id: "" });
 
   if (!flagsLoading && !flags.phase4_restaurant) return <Navigate to="/dashboard" replace />;
+  if (!readContext()?.active_outlet_id) return <Navigate to="/" replace />;
 
   const loadPlans = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get("/api/restaurant/floor-plans?outlet_id=1");
+      const data = await api.get("/api/restaurant/floor-plans");
       setPlans(data.floor_plans || []);
       if (data.floor_plans?.length && !activePlan) {
         setActivePlan(data.floor_plans[0].id);
