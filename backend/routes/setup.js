@@ -225,7 +225,7 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
         ];
         for (const [id, name, description] of roleDefs) {
           await client.query(
-            'INSERT INTO roles (id, name, description) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+            'INSERT INTO roles (id, name, description) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING',
             [id, name, description]
           );
         }
@@ -239,7 +239,7 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
           if (!role) continue;
           for (const perm of perms) {
             await client.query(
-              'INSERT INTO role_permissions (role_id, permission) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+              'INSERT INTO role_permissions (role_id, permission) VALUES ($1, $2) ON CONFLICT (role_id, permission) DO NOTHING',
               [role.id, perm]
             );
           }
@@ -270,7 +270,7 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
         }
         if (empId) {
           await client.query(
-            'INSERT INTO employee_outlets (employee_id, outlet_id, is_primary) VALUES ($1, 1, true) ON CONFLICT DO NOTHING',
+            'INSERT INTO employee_outlets (employee_id, outlet_id, is_primary) VALUES ($1, 1, true) ON CONFLICT (employee_id, outlet_id) DO NOTHING',
             [empId]
           );
         }
