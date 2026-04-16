@@ -5,6 +5,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   TableToolbar,
@@ -173,34 +175,32 @@ export default function BrandsRedesign() {
         </div>
       </SectionCard>
 
-      {modalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-md p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">
-              {form.id ? "Edit Brand" : "Create Brand"}
-            </h3>
-            <form className="mt-3 space-y-2" onSubmit={save}>
-              <Input
-                required
-                placeholder="Brand name"
-                value={form.name}
-                onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-              />
-              <Input
-                placeholder="Description"
-                value={form.description}
-                onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-              />
-              <div className="flex gap-2 pt-2">
-                <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
-                <Button tone="primary" type="submit" disabled={saving}>
-                  {saving ? "Saving..." : "Save"}
-                </Button>
-              </div>
-            </form>
-          </SectionCard>
-        </div>
-      ) : null}
+      <Modal
+        open={modalOpen}
+        onClose={saving ? undefined : () => setModalOpen(false)}
+        title={form.id ? "Edit Brand" : "Create Brand"}
+        size="md"
+      >
+        <form className="space-y-2" onSubmit={save}>
+          <Input
+            required
+            placeholder="Brand name"
+            value={form.name}
+            onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+          />
+          <Input
+            placeholder="Description"
+            value={form.description}
+            onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+          />
+          <ModalFooter>
+            <Button type="button" onClick={() => setModalOpen(false)} disabled={saving}>Cancel</Button>
+            <Button tone="primary" type="submit" disabled={saving}>
+              {saving ? "Saving..." : "Save"}
+            </Button>
+          </ModalFooter>
+        </form>
+      </Modal>
     </PageShell>
   );
 }
