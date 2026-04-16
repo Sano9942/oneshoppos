@@ -6,6 +6,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   TableToolbar,
@@ -218,6 +220,7 @@ export default function AttributeSetsRedesign() {
                     className={`border-t border-(--ui-border) ${selectedId === row.id ? "bg-emerald-50" : ""}`}
                   >
                     <td className="px-3 py-2">
+                      {/* Unstyled 2-line row-select trigger — a <Button> would add background/border. */}
                       <button className="text-left" onClick={() => setSelectedId(row.id)}>
                         <p className="font-medium text-(--ui-text)">{row.name}</p>
                         <p className="text-xs text-(--ui-text-muted)">{row.description || "No description"}</p>
@@ -269,79 +272,78 @@ export default function AttributeSetsRedesign() {
         </SectionCard>
       </div>
 
-      {modalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="max-h-[90vh] w-full max-w-2xl overflow-auto p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">
-              {form.id ? "Edit Attribute Set" : "Create Attribute Set"}
-            </h3>
-            <form className="mt-3 space-y-3" onSubmit={save}>
-              <Input required placeholder="Set name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-              <Input placeholder="Description" value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} />
+      <Modal
+        open={modalOpen}
+        onClose={saving ? undefined : () => setModalOpen(false)}
+        title={form.id ? "Edit Attribute Set" : "Create Attribute Set"}
+        size="xl"
+      >
+        <form className="space-y-3" onSubmit={save}>
+          <Input required placeholder="Set name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+          <Input placeholder="Description" value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} />
 
-              <SectionCard className="p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-semibold text-(--ui-text)">Attributes</p>
-                  <Button size="sm" type="button" onClick={addAttribute}>Add Attribute</Button>
+          <SectionCard className="p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-semibold text-(--ui-text)">Attributes</p>
+              <Button size="sm" type="button" onClick={addAttribute}>Add Attribute</Button>
+            </div>
+            <div className="space-y-3">
+              {(form.attributes || []).map((attr, idx) => (
+                <div key={`attr-${idx}`} className="rounded border border-(--ui-border) p-2">
+                  <div className="mb-2 flex gap-2">
+                    <Input
+                      placeholder="Attribute name (e.g. Size)"
+                      value={attr.name}
+                      onChange={(e) => {
+                        const next = [...form.attributes];
+                        next[idx] = { ...next[idx], name: e.target.value };
+                        setForm((p) => ({ ...p, attributes: next }));
+                      }}
+                    />
+                    {(form.attributes || []).length > 1 ? (
+                      <Button size="sm" tone="danger" type="button" onClick={() => removeAttribute(idx)}>
+                        <X size={12} />
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  <div className="mb-2 flex flex-wrap gap-1">
+                    {(attr.options || []).map((opt, optIdx) => (
+                      <span key={`${opt}-${optIdx}`} className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">
+                        {opt}
+                        {/* Remove-option X inside a custom chip — Button would break the chip layout. */}
+                        <button type="button" onClick={() => removeOption(idx, optIdx)} aria-label="Remove option">
+                          <X size={10} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Type option(s), comma separated"
+                      value={optionInputs[idx] || ""}
+                      onChange={(e) => setOptionInputs((p) => ({ ...p, [idx]: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addOption(idx);
+                        }
+                      }}
+                    />
+                    <Button size="sm" type="button" onClick={() => addOption(idx)}>Add</Button>
+                  </div>
                 </div>
-                <div className="space-y-3">
-                  {(form.attributes || []).map((attr, idx) => (
-                    <div key={`attr-${idx}`} className="rounded border border-(--ui-border) p-2">
-                      <div className="mb-2 flex gap-2">
-                        <Input
-                          placeholder="Attribute name (e.g. Size)"
-                          value={attr.name}
-                          onChange={(e) => {
-                            const next = [...form.attributes];
-                            next[idx] = { ...next[idx], name: e.target.value };
-                            setForm((p) => ({ ...p, attributes: next }));
-                          }}
-                        />
-                        {(form.attributes || []).length > 1 ? (
-                          <Button size="sm" tone="danger" type="button" onClick={() => removeAttribute(idx)}>
-                            <X size={12} />
-                          </Button>
-                        ) : null}
-                      </div>
-
-                      <div className="mb-2 flex flex-wrap gap-1">
-                        {(attr.options || []).map((opt, optIdx) => (
-                          <span key={`${opt}-${optIdx}`} className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">
-                            {opt}
-                            <button type="button" onClick={() => removeOption(idx, optIdx)}>
-                              <X size={10} />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="Type option(s), comma separated"
-                          value={optionInputs[idx] || ""}
-                          onChange={(e) => setOptionInputs((p) => ({ ...p, [idx]: e.target.value }))}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              addOption(idx);
-                            }
-                          }}
-                        />
-                        <Button size="sm" type="button" onClick={() => addOption(idx)}>Add</Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </SectionCard>
-
-              <div className="flex gap-2 pt-1">
-                <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
-                <Button tone="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
-              </div>
-            </form>
+              ))}
+            </div>
           </SectionCard>
-        </div>
-      ) : null}
+
+          <ModalFooter>
+            <Button type="button" onClick={() => setModalOpen(false)} disabled={saving}>Cancel</Button>
+            <Button tone="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+          </ModalFooter>
+        </form>
+      </Modal>
     </PageShell>
   );
 }
