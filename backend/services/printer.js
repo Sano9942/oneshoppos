@@ -13,6 +13,25 @@ const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } =
   require("node-thermal-printer");
 const net = require("net");
 
+/**
+ * Retry a printer.execute() call with exponential backoff.
+ * Network printers on WiFi can drop briefly — one retry buys us resilience
+ * without masking genuine connectivity outages. Total window at defaults:
+ * attempt 0 (immediate) → 500ms wait → attempt 1 → 1000ms wait → attempt 2.
+ *
+ * Exported for unit testing (pure function — no DB/hardware dependencies).
+ */
+async function withRetry(fn, retries = 2, baseDelayMs = 500) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt === retries) throw err;
+      await new Promise((r) => setTimeout(r, baseDelayMs * Math.pow(2, attempt)));
+    }
+  }
+}
+
 module.exports = function makePrinterService(db) {
 
   /** Load printer_config row id=1 from DB */
@@ -208,7 +227,11 @@ module.exports = function makePrinterService(db) {
         printer.openCashDrawer();
       }
 
-      await printer.execute();
+      if (cfg.connection_type === "network") {
+        await withRetry(() => printer.execute());
+      } else {
+        await printer.execute();
+      }
       return { ok: true };
     } catch (err) {
       return { error: `Print failed: ${err.message}`, fallback: true };
@@ -317,12 +340,53 @@ module.exports = function makePrinterService(db) {
         printer.openCashDrawer();
       }
 
-      await printer.execute();
+      if (cfg.connection_type === "network") {
+        await withRetry(() => printer.execute());
+      } else {
+        await printer.execute();
+      }
       return { ok: true, message: "Test receipt printed successfully!" };
     } catch (err) {
       return { error: `Print failed: ${err.message}`, fallback: true };
     }
   }
 
-  return { printReceipt, printerStatus, printTest, printToNetwork };
+  /**
+   * Open the cash drawer without printing a receipt (no-sale / drop / safe-drop).
+   * Returns { ok: true } or { ok: false, error: string }.
+   * Callers should check result.ok — always returns 200 from the HTTP layer.
+   */
+  async function openDrawer() {
+    let cfg;
+    try {
+      cfg = await loadConfig();
+    } catch (err) {
+      return { ok: false, error: `DB error: ${err.message}` };
+    }
+
+    if (!cfg || !cfg.is_active) {
+      return { ok: false, error: "Printer not configured or inactive" };
+    }
+    if (!cfg.cash_drawer) {
+      return { ok: false, error: "Cash drawer not enabled in printer config" };
+    }
+
+    try {
+      const printer = buildPrinter(cfg);
+      printer.openCashDrawer();
+      if (cfg.connection_type === "network") {
+        await withRetry(() => printer.execute());
+      } else {
+        await printer.execute();
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: `Drawer open failed: ${err.message}` };
+    }
+  }
+
+  return { printReceipt, printerStatus, printTest, printToNetwork, openDrawer };
 };
+
+// Export withRetry for unit testing (pure function, no side effects).
+module.exports.withRetry = withRetry;
