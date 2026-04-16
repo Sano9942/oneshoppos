@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import { api } from "../../api";
 import {
   Badge,
   Button,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   Select,
@@ -239,63 +241,56 @@ export default function CRMRedesign() {
       )}
 
       {/* Add Lead Modal */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-lg p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-(--ui-text)">Add Lead</h3>
-              <button onClick={() => setModalOpen(false)} className="text-(--ui-text-muted) hover:text-(--ui-text)">
-                <X size={16} />
-              </button>
-            </div>
-            <form className="grid grid-cols-2 gap-2" onSubmit={createLead}>
-              <Input required placeholder="Lead name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-              <Input placeholder="Company" value={form.company} onChange={(e) => setForm((p) => ({ ...p, company: e.target.value }))} />
-              <Input placeholder="Phone" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
-              <Input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
-              <Input placeholder="Source" value={form.source} onChange={(e) => setForm((p) => ({ ...p, source: e.target.value }))} />
-              <Input placeholder="Expected Value" type="number" min={0} value={form.expected_value} onChange={(e) => setForm((p) => ({ ...p, expected_value: e.target.value }))} />
-              <Select value={form.priority} onChange={(e) => setForm((p) => ({ ...p, priority: e.target.value }))}>
-                <option value="low">Low Priority</option>
-                <option value="medium">Medium Priority</option>
-                <option value="high">High Priority</option>
-              </Select>
-              <Select value={form.stage} onChange={(e) => setForm((p) => ({ ...p, stage: e.target.value }))}>
-                {STAGES.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
-              </Select>
-              <Select className="col-span-2" value={form.assigned_to} onChange={(e) => setForm((p) => ({ ...p, assigned_to: e.target.value }))}>
-                <option value="">Assign to employee</option>
-                {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
-              </Select>
-              <textarea
-                className="col-span-2 rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-sm text-(--ui-text) placeholder-(--ui-text-muted) focus:outline-none focus:ring-2 focus:ring-(--ui-accent)/20"
-                rows={2}
-                placeholder="Notes"
-                value={form.notes}
-                onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
-              />
-              <div className="col-span-2 flex gap-2 pt-1">
-                <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
-                <Button tone="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Add Lead"}</Button>
-              </div>
-            </form>
-          </SectionCard>
-        </div>
-      )}
+      <Modal
+        open={modalOpen}
+        onClose={saving ? undefined : () => setModalOpen(false)}
+        title="Add Lead"
+        size="lg"
+      >
+        <form className="grid grid-cols-2 gap-2" onSubmit={createLead}>
+          <Input required placeholder="Lead name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+          <Input placeholder="Company" value={form.company} onChange={(e) => setForm((p) => ({ ...p, company: e.target.value }))} />
+          <Input placeholder="Phone" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
+          <Input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
+          <Input placeholder="Source" value={form.source} onChange={(e) => setForm((p) => ({ ...p, source: e.target.value }))} />
+          <Input placeholder="Expected Value" type="number" min={0} value={form.expected_value} onChange={(e) => setForm((p) => ({ ...p, expected_value: e.target.value }))} />
+          <Select value={form.priority} onChange={(e) => setForm((p) => ({ ...p, priority: e.target.value }))}>
+            <option value="low">Low Priority</option>
+            <option value="medium">Medium Priority</option>
+            <option value="high">High Priority</option>
+          </Select>
+          <Select value={form.stage} onChange={(e) => setForm((p) => ({ ...p, stage: e.target.value }))}>
+            {STAGES.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
+          </Select>
+          <Select className="col-span-2" value={form.assigned_to} onChange={(e) => setForm((p) => ({ ...p, assigned_to: e.target.value }))}>
+            <option value="">Assign to employee</option>
+            {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+          </Select>
+          <textarea
+            className="col-span-2 rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-sm text-(--ui-text) placeholder-(--ui-text-muted) focus:outline-none focus:ring-2 focus:ring-(--ui-accent)/20"
+            rows={2}
+            placeholder="Notes"
+            value={form.notes}
+            onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
+          />
+          <div className="col-span-2">
+            <ModalFooter>
+              <Button type="button" onClick={() => setModalOpen(false)} disabled={saving}>Cancel</Button>
+              <Button tone="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Add Lead"}</Button>
+            </ModalFooter>
+          </div>
+        </form>
+      </Modal>
 
       {/* Activity Drawer */}
-      {activityLead && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="flex w-full max-w-lg flex-col p-5" style={{ maxHeight: "80vh" }}>
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-(--ui-text)">
-                Activities — {activityLead.name}
-              </h3>
-              <button onClick={() => setActivityLead(null)} className="text-(--ui-text-muted) hover:text-(--ui-text)">
-                <X size={16} />
-              </button>
-            </div>
-
+      <Modal
+        open={!!activityLead}
+        onClose={() => setActivityLead(null)}
+        title={activityLead ? `Activities — ${activityLead.name}` : "Activities"}
+        size="lg"
+      >
+        {activityLead ? (
+          <>
             <form onSubmit={addActivity} className="mb-3 flex flex-col gap-2">
               <div className="flex gap-2">
                 <Select
@@ -319,7 +314,7 @@ export default function CRMRedesign() {
               </div>
             </form>
 
-            <div className="flex-1 overflow-auto divide-y divide-(--ui-border) rounded-lg border border-(--ui-border)">
+            <div className="max-h-[50vh] overflow-auto divide-y divide-(--ui-border) rounded-lg border border-(--ui-border)">
               {activities.length === 0 && (
                 <p className="p-4 text-center text-sm text-(--ui-text-muted)">No activities yet.</p>
               )}
@@ -337,9 +332,9 @@ export default function CRMRedesign() {
                 </div>
               ))}
             </div>
-          </SectionCard>
-        </div>
-      )}
+          </>
+        ) : null}
+      </Modal>
     </PageShell>
   );
 }
