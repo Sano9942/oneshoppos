@@ -1,11 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
-import { Award, Pencil, Plus, Trash2, Users, X } from "lucide-react";
+import { Award, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
 import {
   Button,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
 } from "../../ui/primitives";
@@ -79,19 +81,14 @@ function TierModal({ open, editing, onClose, onSaved }) {
     }
   }
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-200 flex items-center justify-center bg-black/50">
-      <div className="relative w-full max-w-md rounded-2xl bg-(--ui-bg) border border-(--ui-border) p-6 shadow-xl">
-        <button onClick={onClose} className="absolute right-4 top-4 text-(--ui-text-muted) hover:text-(--ui-text)">
-          <X size={18} />
-        </button>
-        <h2 className="text-lg font-semibold text-(--ui-text) mb-4">
-          {editing ? "Edit Tier" : "New Tier"}
-        </h2>
-
-        <div className="space-y-3">
+    <Modal
+      open={open}
+      onClose={busy ? undefined : onClose}
+      title={editing ? "Edit Tier" : "New Tier"}
+      size="md"
+    >
+      <div className="space-y-3">
           <div>
             <label className="text-xs font-medium text-(--ui-text-muted)">Name *</label>
             <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Gold" />
@@ -142,16 +139,15 @@ function TierModal({ open, editing, onClose, onSaved }) {
               placeholder="e.g. Free delivery, priority support"
             />
           </div>
-        </div>
-
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={save} disabled={busy}>
-            {busy ? "Saving…" : editing ? "Update" : "Create"}
-          </Button>
-        </div>
       </div>
-    </div>
+
+      <ModalFooter>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button tone="primary" onClick={save} disabled={busy}>
+          {busy ? "Saving…" : editing ? "Update" : "Create"}
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 
@@ -176,12 +172,8 @@ function TierCard({ tier, money, onEdit, onDelete }) {
           </div>
         </div>
         <div className="flex gap-1">
-          <button onClick={() => onEdit(tier)} className="p-1.5 rounded-lg hover:bg-(--ui-bg-elevated) text-(--ui-text-muted) hover:text-(--ui-text)">
-            <Pencil size={14} />
-          </button>
-          <button onClick={() => onDelete(tier)} className="p-1.5 rounded-lg hover:bg-red-50 text-(--ui-text-muted) hover:text-red-600">
-            <Trash2 size={14} />
-          </button>
+          <Button tone="plain" size="sm" iconOnly onClick={() => onEdit(tier)} title="Edit" aria-label="Edit"><Pencil size={14} /></Button>
+          <Button tone="plain" size="sm" iconOnly onClick={() => onDelete(tier)} title="Delete" aria-label="Delete" className="hover:text-red-600"><Trash2 size={14} /></Button>
         </div>
       </div>
 
