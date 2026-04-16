@@ -8,9 +8,10 @@ Work branch: `phase1-foundation-polish` (off `main`)
 
 | Track | Doc | Status |
 |-------|-----|--------|
-| 1.1 Performance & UX | [01-baseline.md](01-baseline.md) | Baseline captured, improvements TBD |
+| 1.1 Performance & UX baseline | [01-baseline.md](01-baseline.md) | Captured |
+| 1.1 Production snapshot | [02-prod-snapshot.md](02-prod-snapshot.md) | Captured (DB, Sentry, uptime) — revised priority list |
 | 1.2 Design system convergence | _(pending)_ | Not started |
-| 1.3 Reliability hardening | _(pending)_ | Not started |
+| 1.3 Reliability hardening | _(pending)_ | Sentry top-10 = 0 unresolved; reframed in 02 |
 | 1.4 The 1% details | _(pending)_ | Not started |
 
 ## How to run the slow-query inspector
