@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Upload, X } from "lucide-react";
-import * as XLSX from "xlsx";
 import { api } from "../../../api";
 import { Button } from "../../../ui/primitives";
 import { useCurrency } from "../../../contexts/CurrencyContext";
 import { useToast } from "../../../contexts/ToastContext";
+
+// xlsx is ~430 KB (143 KB gzip) — load on demand, not eagerly. The wizard
+// only needs it inside handleFile when the user actually picks a file.
 
 // The courier_integrations.config_json column is stored as TEXT, not JSONB.
 // Defensively parse it so the wizard does not crash on legacy data or a
@@ -63,6 +65,7 @@ export default function ImportWizard({ onCancel, onComplete }) {
   async function handleFile(file) {
     setFileName(file.name);
     try {
+      const XLSX = await import("xlsx");
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data, { type: "array" });
       const sheet = wb.Sheets[wb.SheetNames[0]];
