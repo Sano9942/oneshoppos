@@ -3,6 +3,12 @@
  */
 const alerting = require("../../services/alerting");
 
+// /api/admin/infra cache — cross-schema introspection at 380 tables/tenant is
+// expensive (one query held the DB ~104s at p100 in prod). Cache for 5 min;
+// staleness is fine on an admin dashboard polled every 30-60s.
+const INFRA_CACHE_TTL_MS = 5 * 60 * 1000;
+let _infraCache = null; // { data, timestamp }
+
 module.exports = function registerMonitoringRoutes(app, deps) {
   const { db, masterDb, requireAllowedIp, requireSuperAdmin, tenantDbManager, logAdminAction } = deps;
 
@@ -168,6 +174,12 @@ module.exports = function registerMonitoringRoutes(app, deps) {
   // ── Infrastructure ─────────────────────────────────────────────────────
   app.get("/api/admin/infra", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
+      const force = req.query.force === "1" || req.query.force === "true";
+      if (!force && _infraCache && (Date.now() - _infraCache.timestamp) < INFRA_CACHE_TTL_MS) {
+        res.set("X-Infra-Cache", "hit");
+        return res.json(_infraCache.data);
+      }
+
       const [
         connResult, maxConnResult, dbSizeResult, slowNowResult,
         cacheResult, tableHealthResult, schemaSizeResult,
@@ -269,7 +281,7 @@ module.exports = function registerMonitoringRoutes(app, deps) {
         }).catch(() => {});
       }
 
-      return res.json({
+      const payload = {
         connections,
         database: {
           size_mb: Math.round(Number(dbSizeResult.rows[0].bytes) / 1048576 * 10) / 10,
@@ -298,7 +310,13 @@ module.exports = function registerMonitoringRoutes(app, deps) {
           size_mb: Number(r.size_mb),
         })),
         slow_queries_historical: slowHistorical,
-      });
+        cached_at: new Date().toISOString(),
+        cache_ttl_seconds: INFRA_CACHE_TTL_MS / 1000,
+      };
+
+      _infraCache = { data: payload, timestamp: Date.now() };
+      res.set("X-Infra-Cache", "miss");
+      return res.json(payload);
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
