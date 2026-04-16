@@ -4,8 +4,8 @@ import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
-import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
-import { Plus, Send, CreditCard, Ban, FileText, Link2, Download, X, Trash2 } from "lucide-react";
+import { PageShell, SectionCard, Button, Badge, Modal, ModalFooter } from "../../ui/primitives";
+import { Plus, Send, CreditCard, Ban, FileText, Link2, Download, Trash2 } from "lucide-react";
 import { fmtUtcDateTime, fmtUtcDate } from "../../utils/dates";
 import { downloadCsv } from "../../utils/csvExport";
 import { api } from "../../api";
@@ -185,7 +185,7 @@ export default function CustomerInvoicesRedesign() {
           <input className="w-16 border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg)" type="number" placeholder="Qty" value={item.quantity} onChange={(e) => onUpdate(i, "quantity", e.target.value)} />
           <input className="w-24 border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg)" type="number" placeholder="Price" value={item.unit_price} onChange={(e) => onUpdate(i, "unit_price", e.target.value)} />
           <input className="w-16 border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg)" type="number" placeholder="Tax %" value={item.tax_rate} onChange={(e) => onUpdate(i, "tax_rate", e.target.value)} />
-          <button onClick={() => onRemove(i)} className="text-red-500 p-1"><Trash2 className="w-4 h-4" /></button>
+          <Button tone="plain" size="sm" iconOnly onClick={() => onRemove(i)} aria-label="Remove item" className="text-red-500"><Trash2 className="w-4 h-4" /></Button>
         </div>
       ))}
     </div>
@@ -202,6 +202,7 @@ export default function CustomerInvoicesRedesign() {
       </div>
     }>
       <SectionCard>
+        {/* Status filter: custom pill segmented control — no Pill/ToggleGroup primitive yet. */}
         <div className="flex gap-2 mb-4">
           {["", "draft", "sent", "partial", "paid", "overdue", "void"].map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)}
@@ -236,12 +237,12 @@ export default function CustomerInvoicesRedesign() {
                     <td className="py-2 px-3 text-right">
                       <div className="flex gap-1 justify-end">
                         {inv.status !== "void" && inv.status !== "paid" && <>
-                          <button onClick={() => sendInvoice(inv.id)} title="Send" className="p-1 rounded hover:bg-(--ui-bg-hover)"><Send className="w-4 h-4" /></button>
-                          <button onClick={() => { setSelectedInvoice(inv); setPaymentForm({ amount: "", payment_method: "cash", payment_type: "payment", reference: "", notes: "" }); setShowPayment(true); }} title="Record payment" className="p-1 rounded hover:bg-(--ui-bg-hover)"><CreditCard className="w-4 h-4" /></button>
-                          <button onClick={() => sendReminder(inv.id)} title="Send reminder" className="p-1 rounded hover:bg-(--ui-bg-hover)"><FileText className="w-4 h-4" /></button>
-                          {flags.payment_links && <button onClick={() => generatePaymentLink(inv.id)} title="Payment link" className="p-1 rounded hover:bg-(--ui-bg-hover)"><Link2 className="w-4 h-4" /></button>}
+                          <Button tone="plain" size="sm" iconOnly onClick={() => sendInvoice(inv.id)} title="Send" aria-label="Send"><Send className="w-4 h-4" /></Button>
+                          <Button tone="plain" size="sm" iconOnly onClick={() => { setSelectedInvoice(inv); setPaymentForm({ amount: "", payment_method: "cash", payment_type: "payment", reference: "", notes: "" }); setShowPayment(true); }} title="Record payment" aria-label="Record payment"><CreditCard className="w-4 h-4" /></Button>
+                          <Button tone="plain" size="sm" iconOnly onClick={() => sendReminder(inv.id)} title="Send reminder" aria-label="Send reminder"><FileText className="w-4 h-4" /></Button>
+                          {flags.payment_links && <Button tone="plain" size="sm" iconOnly onClick={() => generatePaymentLink(inv.id)} title="Payment link" aria-label="Payment link"><Link2 className="w-4 h-4" /></Button>}
                         </>}
-                        {inv.status === "draft" && <button onClick={() => voidInvoice(inv.id)} title="Void" className="p-1 rounded hover:bg-(--ui-bg-hover) text-red-500"><Ban className="w-4 h-4" /></button>}
+                        {inv.status === "draft" && <Button tone="plain" size="sm" iconOnly onClick={() => voidInvoice(inv.id)} title="Void" aria-label="Void" className="text-red-500"><Ban className="w-4 h-4" /></Button>}
                       </div>
                     </td>
                   </tr>
@@ -253,106 +254,103 @@ export default function CustomerInvoicesRedesign() {
       </SectionCard>
 
       {/* Create Invoice Modal */}
-      {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-(--ui-bg) rounded-lg shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold">New Invoice</h2>
-              <button onClick={() => setShowCreate(false)}><X className="w-5 h-5" /></button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Customer</label>
-                <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={form.customer_id} onChange={(e) => setForm({ ...form, customer_id: e.target.value })}>
-                  <option value="">Select customer...</option>
-                  {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-              <ItemsEditor items={form.items}
-                onAdd={() => addItem(setForm, form)}
-                onRemove={(i) => removeItem(setForm, form, i)}
-                onUpdate={(i, f, v) => updateItem(setForm, form, i, f, v)} />
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-sm font-medium mb-1">Due Date</label>
-                  <input type="date" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} /></div>
-                <div><label className="block text-sm font-medium mb-1">Discount</label>
-                  <input type="number" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={form.discount_amount} onChange={(e) => setForm({ ...form, discount_amount: e.target.value })} /></div>
-              </div>
-              <div><label className="block text-sm font-medium mb-1">Notes</label>
-                <textarea className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
-              <p className="text-right font-bold">Total: {fmt(computeTotal(form.items, form.discount_amount))}</p>
-              <div className="flex gap-2 justify-end">
-                <Button tone="plain" onClick={() => setShowCreate(false)}>Cancel</Button>
-                <Button onClick={createInvoice} disabled={saving || !form.customer_id || !form.items[0]?.description}>{saving ? "Creating..." : "Create Invoice"}</Button>
-              </div>
-            </div>
+      <Modal
+        open={showCreate}
+        onClose={saving ? undefined : () => setShowCreate(false)}
+        title="New Invoice"
+        size="xl"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Customer</label>
+            <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={form.customer_id} onChange={(e) => setForm({ ...form, customer_id: e.target.value })}>
+              <option value="">Select customer...</option>
+              {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
           </div>
+          <ItemsEditor items={form.items}
+            onAdd={() => addItem(setForm, form)}
+            onRemove={(i) => removeItem(setForm, form, i)}
+            onUpdate={(i, f, v) => updateItem(setForm, form, i, f, v)} />
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="block text-sm font-medium mb-1">Due Date</label>
+              <input type="date" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} /></div>
+            <div><label className="block text-sm font-medium mb-1">Discount</label>
+              <input type="number" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={form.discount_amount} onChange={(e) => setForm({ ...form, discount_amount: e.target.value })} /></div>
+          </div>
+          <div><label className="block text-sm font-medium mb-1">Notes</label>
+            <textarea className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
+          <p className="text-right font-bold">Total: {fmt(computeTotal(form.items, form.discount_amount))}</p>
         </div>
-      )}
+        <ModalFooter>
+          <Button onClick={() => setShowCreate(false)} disabled={saving}>Cancel</Button>
+          <Button tone="primary" onClick={createInvoice} disabled={saving || !form.customer_id || !form.items[0]?.description}>
+            {saving ? "Creating..." : "Create Invoice"}
+          </Button>
+        </ModalFooter>
+      </Modal>
 
       {/* Record Payment Modal */}
-      {showPayment && selectedInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-(--ui-bg) rounded-lg shadow-lg w-full max-w-md p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold">Record Payment — {selectedInvoice.invoice_number}</h2>
-              <button onClick={() => setShowPayment(false)}><X className="w-5 h-5" /></button>
+      <Modal
+        open={showPayment && !!selectedInvoice}
+        onClose={() => setShowPayment(false)}
+        title={selectedInvoice ? `Record Payment — ${selectedInvoice.invoice_number}` : "Record Payment"}
+        size="md"
+      >
+        {selectedInvoice && (
+          <div className="space-y-4">
+            <div><label className="block text-sm font-medium mb-1">Amount</label>
+              <input type="number" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} placeholder={`Balance: ${fmt(selectedInvoice.balance_due)}`} /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div><label className="block text-sm font-medium mb-1">Method</label>
+                <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={paymentForm.payment_method} onChange={(e) => setPaymentForm({ ...paymentForm, payment_method: e.target.value })}>
+                  <option value="cash">Cash</option><option value="card">Card</option><option value="bank_transfer">Bank Transfer</option><option value="cheque">Cheque</option><option value="online">Online</option>
+                </select></div>
+              <div><label className="block text-sm font-medium mb-1">Type</label>
+                <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={paymentForm.payment_type} onChange={(e) => setPaymentForm({ ...paymentForm, payment_type: e.target.value })}>
+                  <option value="payment">Payment</option><option value="deposit">Deposit</option><option value="refund">Refund</option>
+                </select></div>
             </div>
-            <div className="space-y-4">
-              <div><label className="block text-sm font-medium mb-1">Amount</label>
-                <input type="number" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} placeholder={`Balance: ${fmt(selectedInvoice.balance_due)}`} /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-sm font-medium mb-1">Method</label>
-                  <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={paymentForm.payment_method} onChange={(e) => setPaymentForm({ ...paymentForm, payment_method: e.target.value })}>
-                    <option value="cash">Cash</option><option value="card">Card</option><option value="bank_transfer">Bank Transfer</option><option value="cheque">Cheque</option><option value="online">Online</option>
-                  </select></div>
-                <div><label className="block text-sm font-medium mb-1">Type</label>
-                  <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={paymentForm.payment_type} onChange={(e) => setPaymentForm({ ...paymentForm, payment_type: e.target.value })}>
-                    <option value="payment">Payment</option><option value="deposit">Deposit</option><option value="refund">Refund</option>
-                  </select></div>
-              </div>
-              <div><label className="block text-sm font-medium mb-1">Reference</label>
-                <input className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={paymentForm.reference} onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })} /></div>
-              <div className="flex gap-2 justify-end">
-                <Button tone="plain" onClick={() => setShowPayment(false)}>Cancel</Button>
-                <Button onClick={() => recordPayment(selectedInvoice.id)} disabled={!paymentForm.amount || Number(paymentForm.amount) <= 0}>Record</Button>
-              </div>
-            </div>
+            <div><label className="block text-sm font-medium mb-1">Reference</label>
+              <input className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={paymentForm.reference} onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })} /></div>
           </div>
-        </div>
-      )}
+        )}
+        <ModalFooter>
+          <Button onClick={() => setShowPayment(false)}>Cancel</Button>
+          <Button tone="primary" onClick={() => recordPayment(selectedInvoice.id)} disabled={!paymentForm.amount || Number(paymentForm.amount) <= 0}>Record</Button>
+        </ModalFooter>
+      </Modal>
 
       {/* Batch Create Modal */}
-      {showBatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-(--ui-bg) rounded-lg shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold">Batch Create Invoices</h2>
-              <button onClick={() => setShowBatch(false)}><X className="w-5 h-5" /></button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Select Customers</label>
-                <select multiple className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg) min-h-[100px]"
-                  value={batchForm.customer_ids} onChange={(e) => setBatchForm({ ...batchForm, customer_ids: Array.from(e.target.selectedOptions, (o) => o.value) })}>
-                  {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                <p className="text-xs text-(--ui-text-muted) mt-1">{batchForm.customer_ids.length} selected (hold Ctrl to multi-select)</p>
-              </div>
-              <ItemsEditor items={batchForm.items}
-                onAdd={() => addItem(setBatchForm, batchForm)}
-                onRemove={(i) => removeItem(setBatchForm, batchForm, i)}
-                onUpdate={(i, f, v) => updateItem(setBatchForm, batchForm, i, f, v)} />
-              <div><label className="block text-sm font-medium mb-1">Due Date</label>
-                <input type="date" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={batchForm.due_date} onChange={(e) => setBatchForm({ ...batchForm, due_date: e.target.value })} /></div>
-              <div className="flex gap-2 justify-end">
-                <Button tone="plain" onClick={() => setShowBatch(false)}>Cancel</Button>
-                <Button onClick={createBatch} disabled={batchForm.customer_ids.length === 0}>Create {batchForm.customer_ids.length} Invoice(s)</Button>
-              </div>
-            </div>
+      <Modal
+        open={showBatch}
+        onClose={() => setShowBatch(false)}
+        title="Batch Create Invoices"
+        size="xl"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Select Customers</label>
+            <select multiple className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg) min-h-[100px]"
+              value={batchForm.customer_ids} onChange={(e) => setBatchForm({ ...batchForm, customer_ids: Array.from(e.target.selectedOptions, (o) => o.value) })}>
+              {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <p className="text-xs text-(--ui-text-muted) mt-1">{batchForm.customer_ids.length} selected (hold Ctrl to multi-select)</p>
           </div>
+          <ItemsEditor items={batchForm.items}
+            onAdd={() => addItem(setBatchForm, batchForm)}
+            onRemove={(i) => removeItem(setBatchForm, batchForm, i)}
+            onUpdate={(i, f, v) => updateItem(setBatchForm, batchForm, i, f, v)} />
+          <div><label className="block text-sm font-medium mb-1">Due Date</label>
+            <input type="date" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={batchForm.due_date} onChange={(e) => setBatchForm({ ...batchForm, due_date: e.target.value })} /></div>
         </div>
-      )}
+        <ModalFooter>
+          <Button onClick={() => setShowBatch(false)}>Cancel</Button>
+          <Button tone="primary" onClick={createBatch} disabled={batchForm.customer_ids.length === 0}>
+            Create {batchForm.customer_ids.length} Invoice(s)
+          </Button>
+        </ModalFooter>
+      </Modal>
     </PageShell>
   );
 }
