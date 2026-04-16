@@ -263,4 +263,26 @@ module.exports = function registerOperationsRoutes(app, deps) {
       return res.status(500).json({ error: err.message });
     }
   });
+
+  // ── Payment Webhook Dead-Letters ───────────────────────────────────────
+  // Returns recent payment webhook events from the public schema. Used by
+  // AdminStuckPayments.jsx to surface unprocessed or anomalous webhooks.
+  // Joins across tenants via masterDb (public schema). Last 7 days, newest first.
+  app.get("/api/admin/webhooks/payment-dead-letters", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+      const { rows } = await masterDb.query(
+        `SELECT id, provider, event_id, event_type, payment_context, context_ref,
+                raw_payload, processed_at, created_at
+         FROM payment_webhook_events
+         WHERE created_at > NOW() - INTERVAL '7 days'
+         ORDER BY created_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+      return res.json({ events: rows });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
 };
