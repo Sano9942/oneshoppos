@@ -12,6 +12,7 @@ import {
   TableToolbar,
 } from "../../ui/primitives";
 import { useAuth } from "../../auth/AuthProvider";
+import { readContext } from "../../auth/authStore";
 
 import { fmtUtcDateTime } from "../../utils/dates";
 import { downloadCsv } from "../../utils/csvExport";
@@ -23,6 +24,10 @@ const fmtDate = fmtUtcDateTime;
 export default function StockAdjustmentsRedesign() {
   const { employee, hasPerm } = useAuth();
   const isAdmin = hasPerm("all_access");
+  const _ctx = readContext();
+  const ctxOutletId = _ctx?.active_outlet_id && _ctx?.scope_mode !== "all_branches"
+    ? String(_ctx.active_outlet_id)
+    : null;
   const [rows, setRows] = useState([]);
   const [products, setProducts] = useState([]);
   const [outlets, setOutlets] = useState([]);
@@ -54,7 +59,8 @@ export default function StockAdjustmentsRedesign() {
       const outList = outData.outlets || [];
       setOutlets(outList);
       if (!form.outlet_id && outList.length) {
-        setForm((p) => ({ ...p, outlet_id: String(outList[0].id) }));
+        const preferred = ctxOutletId && outList.find((o) => String(o.id) === ctxOutletId);
+        setForm((p) => ({ ...p, outlet_id: preferred ? ctxOutletId : String(outList[0].id) }));
       }
     } catch (e) {
       setError(e.message || "Failed to load stock adjustments");
@@ -80,9 +86,10 @@ export default function StockAdjustmentsRedesign() {
   }, [rows, search, reasonFilter]);
 
   const openCreate = () => {
+    const preferred = ctxOutletId && outlets.find((o) => String(o.id) === ctxOutletId);
     setForm({
       product_id: "",
-      outlet_id: outlets[0] ? String(outlets[0].id) : "",
+      outlet_id: preferred ? ctxOutletId : outlets[0] ? String(outlets[0].id) : "",
       quantity_change: "",
       reason: "Damaged",
     });
