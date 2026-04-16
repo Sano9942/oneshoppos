@@ -1,12 +1,13 @@
 # SanoPOS Complete Platform Reference
 
-**Date:** 2026-04-16  
+**Date:** 2026-04-16 (updated post-Wave 4 hardening)
 **Purpose:** Single unified source of truth consolidating all strategic architecture, gap analysis, competitive research, and implementation spec for the tenant preset engine, business modes, industry presets, country packs, and core platform direction.
 
 **This document supersedes and merges:**
 - `sanopos-54-industry-coverage-matrix.md` (industry assessment, six-layer model, global build order)
 - `square-complete-platform-research.md` (competitive benchmarking, Square's 7 modes, gaps, strategic takeaways)
 - `tenant-preset-engine-v1/strategy.md` (implementation spec, M1-M10 delivery, architecture, code artifacts, SanoPay sandbox)
+- `core-platform-hardening-plan.md` (Wave 4 hardening — mode gates, branch context, POSContext split, IndexedDB queue)
 
 **Rule of thumb:** This document is the canonical reference for all future work. When questions arise about architecture, business model strategy, industry coverage, competitive positioning, or platform direction — **refer here first.**
 
@@ -58,9 +59,10 @@ SanoPOS is architected as a **multi-vertical, composable commerce platform** des
 - **9 business modes built and shipped** (retail, restaurant, appointments, service_projects, subscriptions, workflow_tickets, rentals, room_management, treatment_plans)
 - **v1 Complete** (M1-M4, shipped 2026-04-14): core preset engine + 3 retail/food/service presets + workflow tickets
 - **v2 Shipped** (M5-M10, shipped 2026-04-14 to 2026-04-15): weight-based selling, online public booking, customer portal, rentals, room management, treatment plans
+- **Wave 4 Hardening Shipped** (B/A/C/D, 2026-04-16): mode-gate normalization on rentals + rooms, branch context fixes (4 hard-coded outlet_id=1 sites), POSContext split into 8 domain hooks, IndexedDB-backed offline queue with retry lifecycle
 - **M11 (Manufacturing) Deferred** until a factory/production customer commits
 
-**Next Phase:** Not more verticals. Focus on **hardening the shared core** — POS offline durability, payment lifecycle maturity, state architecture refactoring, audit/reconciliation, typed API contracts, operational observability, and hardware layer depth.
+**Next Phase:** Continue core hardening — payment lifecycle maturity (real provider saved-card tokenization), audit/reconciliation, typed API contracts, operational observability, and hardware layer depth. Wave 4 closed three of the top-priority hardening items (offline durability, POS state architecture, branch context); items 2 + 4–7 from §25 remain.
 
 ---
 
@@ -1350,7 +1352,19 @@ This means:
 | **Rentals mode** | ✅ Done | M7 (2026-04-14) |
 | **Room management mode** | ✅ Done | M9 (2026-04-15) |
 | **Treatment plans mode** | ✅ Done | M10 (2026-04-15) |
+| **Wave 4 hardening (B/A/C/D)** | ✅ Done | 2026-04-16 |
 | **Manufacturing mode** | ⏸️ Deferred | M11 (on-demand) |
+
+### Wave 4 Hardening Details (2026-04-16)
+
+| Wave | Commit | Scope | Files Touched |
+|------|--------|-------|---------------|
+| **B** | `f4ca41f` | Mode-gate normalization on rentals + rooms routes (added `requireMode("rentals")` and `requireMode("room_management")` to match restaurant/bookings 3-stage gate). Backward compat preserved at `feature-flags.js:187` (empty `tenant_modes` → `next()`). | `backend/routes/rentals.js`, `backend/routes/rooms.js`, 3 new integration tests (`pg-mode-gates`, `pg-rental-deposit-sandbox`, `pg-room-deposit-sandbox`) |
+| **A** | `115d0af` | Replaced 4 hard-coded `outlet_id=1` sites with active outlet context (header pattern via `AuthProvider.jsx:354` x-outlet-id auto-injection). No silent fallback to outlet 1. | `RestaurantFloorRedesign.jsx`, `RestaurantChecksRedesign.jsx`, `KDSRedesign.jsx`, `FulfillmentRedesign.jsx` |
+| **C** | `a251467` | Split `POSContext.jsx` (1394 lines, ~165 exports) into 8 domain hooks: `useShiftGate`, `useCart`, `useReceipt`, `useCustomerDisplay`, `useLoyaltyWallet`, `useFolioCharging`, `useOfflineQueue`, `useCheckout`. Public API of `usePOS()` unchanged. | New `frontend/src/pages/redesign/pos/hooks/` directory (8 files), `POSContext.jsx` rewritten as orchestrator, new Vitest unit test for `useOfflineQueue` |
+| **D** | `c5ffd63` | Migrated offline queue from localStorage to IndexedDB using `idb` library. Added sync lifecycle states (pending/syncing/synced/failed) with retry counts + last error. One-time idempotent migration from localStorage on first load. Admin-gated `POSStuckQueueModal` for retry/discard of failed sales. | `frontend/src/utils/offlineQueue.js` (rewritten), `useOfflineQueue` hook (async API), new `POSStuckQueueModal.jsx`, `POSHeader.jsx` (stuck-queue badge), 2 new tests (`offline-queue.test.js` Vitest+fake-indexeddb, `pg-offline-sale-sync.test.js` sandbox card sale + idempotency replay) |
+
+**Sandbox payment integration:** Wave 4 added 3 new sandbox-backed integration tests (rental deposit, room deposit, offline sale sync) confirming the SanoPay sandbox adapter is wired end-to-end through these flows.
 
 ### Industry Coverage
 
@@ -1408,6 +1422,12 @@ After a full code audit on 2026-04-15, 25 items were identified as either shippe
 - ✅ Item 16: Room tax-inclusive schema flag
 - ✅ Item 21: `sale_items.staff_id` schema + API support
 - ✅ Item 22: Sandbox tokenize/charge-saved endpoints
+
+**Wave 4 — Core Hardening (2026-04-16, 4 commits):**
+- ✅ Wave B (`f4ca41f`): Mode-gate normalization on rentals + rooms routes + 3 sandbox-backed integration tests
+- ✅ Wave A (`115d0af`): Replaced 4 hard-coded `outlet_id=1` sites with active outlet context (header pattern)
+- ✅ Wave C (`a251467`): Split POSContext (1394 lines) into 8 domain hooks; `usePOS()` API unchanged
+- ✅ Wave D (`c5ffd63`): IndexedDB-backed offline queue via `idb` library; sync lifecycle (pending/syncing/synced/failed) with retry counts; idempotent localStorage→IDB migration; admin retry UI
 
 ### Remaining Open/Deferred Items
 
@@ -1507,28 +1527,42 @@ class PaymentAdapter {
 
 Now that modes and presets are built, the competitive advantage is **not** more vertical sprawl. It's **hardening the shared core** so every preset becomes more reliable, faster, and easier to sell.
 
+**Wave 4 hardening shipped 2026-04-16** closed three of the top-priority items:
+- ✅ POS offline durability (IndexedDB queue with sync lifecycle)
+- ✅ POS state architecture (8-hook split)
+- ✅ Branch context cleanliness (4 hard-coded `outlet_id=1` sites removed)
+- ✅ Mode-gate normalization on rentals + rooms (consistent with restaurant/bookings pattern)
+
+**Remaining hardening backlog:** payment lifecycle maturity (real provider tokenization), audit/reconciliation screens, typed API contracts (Zod expansion), operational observability (metrics + alerts), hardware layer depth (scanner/cash drawer/printer queueing).
+
 ---
 
 ## 25. Next 8 Improvement Priorities
 
 After M10, the platform direction is clear: improve the core, not add more presets. Priority order:
 
-### 1. POS Offline Durability (High Priority)
+### 1. POS Offline Durability (High Priority) — ✅ DONE Wave 4-D (2026-04-16)
 
-**Current:** Lightweight `localStorage` offline queue. No sync states, retry history, or conflict visibility.
+**Shipped:** IndexedDB-backed offline queue via `idb` library (commit `c5ffd63`).
+- ✅ IndexedDB store `sanopos_pos > sales_queue` (keyPath: `idempotency_key`, indexes: `by_employee`, `by_state`, `by_queued_at`)
+- ✅ Sync states: `pending → syncing → synced (deleted) | failed`
+- ✅ Retry counts + last error per row
+- ✅ Idempotent one-time migration from localStorage
+- ✅ Admin-gated `POSStuckQueueModal` for manual retry/discard
+- ✅ Tests: `offline-queue.test.js` (Vitest + fake-indexeddb), `pg-offline-sale-sync.test.js` (sandbox card sale + idempotency replay)
 
-**Build:**
-- Replace with IndexedDB for true durability
-- Add sync states: pending → syncing → synced → failed
-- Retry history and manual conflict resolution UI
-- Queue aging (delete very old failed sales)
-- Crash recovery
+**Remaining (lower priority):**
+- Queue aging policy (currently MAX_QUEUED=50 throws; no auto-delete of old failed sales)
+- Conflict resolution UI for non-idempotent failures (currently retry-or-discard only)
 
-**Why:** Offline is critical for retail/restaurant in unreliable networks. Current approach loses data on browser crash.
+### 2. Payment Lifecycle Maturity (High Priority) — 🟡 PARTIAL post-Wave 4
 
-### 2. Payment Lifecycle Maturity (High Priority)
+**Current:** SanoPay sandbox wired on both envs. Real provider saved-card integration pending. Wave 4 added sandbox-backed integration tests for rental deposits, room deposits, and offline sale sync (proves adapter dispatch + idempotency replay are correct).
 
-**Current:** SanoPay sandbox wired on both envs. Real provider saved-card integration pending.
+**Shipped in Wave 4-B and 4-D:**
+- ✅ `pg-rental-deposit-sandbox.test.js` — rental contract deposit through sandbox adapter
+- ✅ `pg-room-deposit-sandbox.test.js` — room booking deposit pre-auth/cancel/release through sandbox
+- ✅ `pg-offline-sale-sync.test.js` — offline Card sale syncs to backend with `gateway_ref` + duplicate replay returns same `gateway_ref` (no double charge)
 
 **Build:**
 - Finish provider-specific saved-instrument support (xPay tokenization API confirmation)
@@ -1538,16 +1572,22 @@ After M10, the platform direction is clear: improve the core, not add more prese
 
 **Why:** Payment failures are rare but catastrophic. Strong state machines catch bugs early.
 
-### 3. POS State Architecture (High Priority)
+### 3. POS State Architecture (High Priority) — ✅ DONE Wave 4-C (2026-04-16)
 
-**Current:** Large monolithic POS context (~130+ exports). Hard to maintain, hard to test.
+**Shipped:** `POSContext.jsx` (1394 lines, ~165 exports) split into 8 domain hooks (commit `a251467`).
+- ✅ `useCart` — cart state, discount, search/barcode, layout, suggestions, promotions
+- ✅ `useShiftGate` — outlets, active shift, attendance, gate validations
+- ✅ `useReceipt` — slip rendering, recent sales, print
+- ✅ `useCustomerDisplay` — pure side-effect, debounced 500ms POST
+- ✅ `useLoyaltyWallet` — wallet balance, points earn/redeem
+- ✅ `useFolioCharging` — room folio + treatment plan folio (mode-gated)
+- ✅ `useOfflineQueue` — thin API wrapping `utils/offlineQueue.js` (Wave 4-D swapped IDB underneath without touching this hook)
+- ✅ `useCheckout` — payments, completeSale, retryPendingSale (composes all 7 above)
+- ✅ `POSContext.jsx` reduced to ~80-line orchestrator
+- ✅ Public API of `usePOS()` unchanged — zero consumer impact
+- ✅ Test: `frontend/tests/unit/use-offline-queue.test.js`
 
-**Build:**
-- Split into domain modules/hooks: cart, checkout, shift gate, search, offline sync, receipts, customer display, loyalty/wallet, room/treatment charging, approvals
-- Each module is independently testable
-- Cleaner dependency tree
-
-**Why:** POS is the most complex part of the platform. Refactoring now prevents technical debt explosion.
+**Why this matters going forward:** Each domain is now independently testable. Adding new POS behavior (e.g., split tender, advanced approvals) extends the relevant hook rather than bloating one giant context.
 
 ### 4. Audit & Reconciliation (Medium Priority)
 
@@ -2137,15 +2177,16 @@ SanoPOS is architected as a **multi-vertical, composable commerce platform** tha
 **Current status:**
 - ✅ v1 Complete (M1-M4, 2026-04-14)
 - ✅ v2 Complete (M5-M10, 2026-04-15)
+- ✅ Wave 4 Hardening Complete (B/A/C/D, 2026-04-16) — mode gates, branch context, POSContext split, IndexedDB queue
 - ✅ 23 presets live covering ~48 of 54 industries
 - ⏸️ M11 (Manufacturing) deferred on-demand
-- → Next: Core hardening, not vertical sprawl
+- → Next: Continue core hardening — payment lifecycle, reconciliation, observability, hardware
 
 This document is the canonical reference. Use it for all future architecture, product, and strategy decisions.
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** 2026-04-16  
-**Authored by:** Hassan Siddiqui + Claude (comprehensive consolidation)  
+**Document Version:** 1.1
+**Last Updated:** 2026-04-16 (post-Wave 4)
+**Authored by:** Hassan Siddiqui + Claude (comprehensive consolidation)
 **Repository:** github.com/Sano9942/oneshoppos
