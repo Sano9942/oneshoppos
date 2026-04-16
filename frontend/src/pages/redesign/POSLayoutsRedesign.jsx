@@ -3,8 +3,8 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
-import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
-import { Plus, Trash2, Pencil, X, LayoutGrid } from "lucide-react";
+import { PageShell, SectionCard, Button, Badge, Modal, ModalFooter } from "../../ui/primitives";
+import { Plus, Trash2, Pencil, X } from "lucide-react";
 import { api } from "../../api";
 
 const SCOPE_TYPES = [
@@ -123,8 +123,8 @@ export default function POSLayoutsRedesign() {
                   <td className="py-2">{l.layout_json?.length || 0}</td>
                   <td className="py-2"><Badge tone={l.is_active ? "success" : "default"}>{l.is_active ? "Active" : "Inactive"}</Badge></td>
                   <td className="py-2 text-right flex gap-1 justify-end">
-                    <button onClick={() => openEdit(l)} className="p-1 hover:text-blue-500"><Pencil size={14} /></button>
-                    <button onClick={() => handleDelete(l.id)} className="p-1 hover:text-red-500"><Trash2 size={14} /></button>
+                    <Button tone="plain" size="sm" iconOnly onClick={() => openEdit(l)} title="Edit" aria-label="Edit"><Pencil size={14} /></Button>
+                    <Button tone="plain" size="sm" iconOnly onClick={() => handleDelete(l.id)} title="Delete" aria-label="Delete" className="hover:text-red-500"><Trash2 size={14} /></Button>
                   </td>
                 </tr>
               ))}
@@ -150,15 +150,13 @@ export default function POSLayoutsRedesign() {
       )}
 
       {/* Create/Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-(--ui-bg) rounded-lg shadow-xl w-full max-w-2xl p-6 max-h-[85vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-(--ui-text)">{editing ? "Edit Layout" : "New Layout"}</h2>
-              <button onClick={() => setShowModal(false)}><X size={18} /></button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 mb-3">
+      <Modal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title={editing ? "Edit Layout" : "New Layout"}
+        size="xl"
+      >
+        <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="block text-sm text-(--ui-muted) mb-1">Name</label>
                 <input className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
@@ -200,10 +198,10 @@ export default function POSLayoutsRedesign() {
                   <option value="1x1">1x1</option>
                   <option value="2x1">2x1</option>
                 </select>
-                <button onClick={() => removeTile(idx)} className="text-red-500 p-1"><X size={14} /></button>
+                <Button tone="plain" size="sm" iconOnly onClick={() => removeTile(idx)} aria-label="Remove tile" className="text-red-500"><X size={14} /></Button>
               </div>
             ))}
-            <button onClick={addTile} className="text-sm text-blue-500 mb-4 hover:underline">+ Add tile</button>
+            <Button tone="link" size="sm" onClick={addTile} className="mb-4">+ Add tile</Button>
 
             {/* Mini preview */}
             {form.tiles.length > 0 && (
@@ -219,13 +217,11 @@ export default function POSLayoutsRedesign() {
               </div>
             )}
 
-            <div className="flex gap-2 justify-end">
-              <Button tone="plain" size="sm" onClick={() => setShowModal(false)}>Cancel</Button>
-              <Button size="sm" onClick={handleSave}>{editing ? "Update" : "Create"}</Button>
-            </div>
-          </div>
-        </div>
-      )}
+        <ModalFooter>
+          <Button size="sm" onClick={() => setShowModal(false)}>Cancel</Button>
+          <Button tone="primary" size="sm" onClick={handleSave}>{editing ? "Update" : "Create"}</Button>
+        </ModalFooter>
+      </Modal>
     </PageShell>
   );
 }
