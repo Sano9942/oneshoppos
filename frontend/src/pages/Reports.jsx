@@ -44,6 +44,7 @@ import {
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthProvider";
+import { readContext } from "../auth/authStore";
 import { useToast } from "../contexts/ToastContext";
 import { usePreset } from "../contexts/PresetContext";
 import {
@@ -773,6 +774,10 @@ export default function Reports() {
   const sidebarGroups = visible_report_groups
     ? GROUPS.filter((g) => visible_report_groups.includes(g.label))
     : GROUPS;
+  const _ctx = readContext();
+  const ctxOutletIdNum = _ctx?.active_outlet_id && _ctx?.scope_mode !== "all_branches"
+    ? Number(_ctx.active_outlet_id)
+    : null;
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => {
     const tab = searchParams.get("tab");
@@ -784,7 +789,7 @@ export default function Reports() {
     dateTo: "",
     timeFrom: "",
     timeTo: "",
-    outletIds: [],
+    outletIds: ctxOutletIdNum ? [ctxOutletIdNum] : [],
     employeeId: "",
     shiftId: "",
     categoryId: "",
