@@ -18,7 +18,7 @@
 | Need | Read This |
 |------|-----------|
 | Database connection / queries | `db-pg.js` — exports `query`, `transaction`, `getClient`, `end`, `pool`. Pool size: 20. SSL disabled in non-prod. Dotenv NOT loaded here. |
-| Full table schema (DDL) | `schema-pg.sql` |
+| Full table schema (DDL) | `schema-pg.sql` (3,788 lines, 244 tables) |
 | Postgres migrations | `migrate-pg.js` — exports `{ migrate, MIGRATIONS }`. CLI: `node backend/migrate-pg.js` (no flags). Migrates public schema first, then all `status='active'` tenants sequentially. Each tenant has its own `schema_version` table. Tenant failures are caught per-tenant and logged (don't abort the run). |
 | Multi-tenant DB routing | `tenant-db-proxy-pg.js` (primary Proxy — exports `asyncStore`, `createDbProxy`, `getCurrentDb`; proxies `query`/`transaction`/`getClient`) + `tenant-db-manager-pg.js` (60s tenant cache, per-query search_path reset — exports `init`, `getDb`, `healthCheck`, `clearCache`, `closeDb`, `closeAll`) or `tenant-db-pg.js` (older — checks out ONE pool client per request via `runWithTenant`; exports `asyncStore`, `getProxy`, `getStore`, `runWithTenant`; `getProxy()` has `query`+`transaction` only, no `getClient`) |
 | Master tenant registry | `master-db-pg.js` — exports `init`, `createTenant`, `getTenantBySlug`, `getTenantById`, `query`. Manages 10 public tables: `tenants`, `super_admins`, `tenant_audit_log`, `schema_migrations`, `tenant_refresh_tokens`, `plan_pricing` (seeded: pro/monthly 8000 PKR, pro/annual 80000 PKR), `payment_records`, `upgrade_requests`, `payment_intents`, `impersonation_sessions`. `query()` always sets search_path to public. `init()` is idempotent (CREATE TABLE IF NOT EXISTS). |
@@ -34,7 +34,7 @@
 | Route logic for a domain | `routes/<domain>.js` (e.g., `routes/sales.js`, `routes/products.js`) |
 | Super-admin + infra monitoring | `routes/admin/` (10 files: auth, tenants, monitoring, billing, operations, compliance, messaging, system, helpers, index) — infra, tax rates, FBR health, activity/security logs, revenue stats, worker status, orphaned schemas, tenant notes, announcements, broadcast log, support ticket replies, backup trigger |
 | Report endpoints | `routes/reports/` (15 files, modular) |
-| Shopify integration | `routes/shopify/` (9 files) + `shopify/` (3 files) |
+| Shopify integration | `routes/shopify/` (9 files) + `shopify/` (4 files: client.js, crypto.js, order-service.js, utils.js) |
 | Integrations hub | `routes/integrations/` (hub, credentials, daraz, facebook, whatsapp, google-merchant) |
 | Marketplace clients | `services/marketplace/` (base, daraz, meta-commerce, whatsapp, google-merchant) |
 | Courier adapters | `services/couriers/` (13 adapters: leopards, tcs, blueex, trax, callcourier, mnp, postex, rider, swyft, bykea, pakpost, dhl, fedex) |
@@ -54,9 +54,9 @@
 | Payment gateway | `services/payment-gateway.js` — adapter (xPay impl, extensible to Stripe/JazzCash) |
 | Payment webhooks | `routes/webhooks.js` — mounted before tenant middleware, no auth |
 | Subscription enforcement | `middleware/plan-limits.js` — `requireActiveSubscription` + `requirePlanLimit` |
-| Dead tenant cleanup | `jobs/cleanup-dead-tenants.js` (removes tenants with no setup after 7 days, inline via `CLEANUP_WORKER_ENABLED=1`) |
+| Dead tenant cleanup | `workers/cleanup-worker-boss.js` (pg-boss backed, removes tenants with no setup after 7 days, toggle via `CLEANUP_WORKER_ENABLED=1`) |
 | FBR Digital Invoicing | `services/fbr.js` (API client + payload builders), `routes/fbr.js` (config/dashboard/retry), `routes/tax-lookup.js` (HS code search) |
-| FBR background worker | `workers/fbr-worker.js` (legacy inline), `workers/fbr-worker-boss.js` (pg-boss backed) |
+| FBR background worker | `workers/fbr-worker-boss.js` (pg-boss backed) — legacy inline worker (`fbr-worker.js`) no longer exists |
 | pg-boss job queue | `services/boss.js` — shared pg-boss instance factory |
 | Upload validation | `middleware/upload-validation.js` — centralized MIME + extension whitelist |
 | Tenant-aware file uploads | `tenant-multer.js` — 3 factories: `createProductImageStorage` (→ `uploads/products/`, safe-ext whitelist), `createCompanyLogoStorage` (→ `uploads/company/`), `createRestoreStorage` (→ `uploads/restore_{ts}.db`). No size limits enforced here — set limit in the `multer()` call that uses the storage. Requires `req.tenantDir` set by tenant middleware. |
@@ -103,12 +103,12 @@
 ### Postgres Integration Tests (74 files — primary) + unit tests
 - Location: `tests/integration/` (74 files): 19 pg-batch files (16 numbered + 3 phase batches), 39 full-audit domain tests, 15 pg-standalone, 1 legacy smoke-gate
 - Unit tests: `tests/unit/` (20 files — middleware, services, tz, utils + routes-admin-worker-status, routes-orders-transactions, services-booking-reminders, services-catalog-scheduler, workers-email-worker-boss, workers-tenant-job-context + customer-portal-auth, feature-flags-modes, industry-config, mode-registry, portal-presets, rentals, rooms, treatment-folio, treatment-plans, utils-ics)
-- Unit test runner: `vitest` with `@vitest/coverage-v8` (see `vitest.config.js`)
+- Unit test runner: `vitest` with `@vitest/coverage-v8` (see `vitest.config.js`) — NOT Jest
 - Factory: `tests/helpers/createTestApp-pg.js` (isolated schema per test)
 - Schema: `tests/helpers/seedSchema-pg.js`
-- Run: `npx jest tests/integration/pg-batch1-crud.test.js` (requires `DATABASE_URL`)
+- Run: `npx vitest run tests/integration/pg-batch1-crud.test.js` (requires `DATABASE_URL`) — NOT `npx jest`
 
-### Production E2E Tests (28 specs, ~290 tests — full system audit)
+### Production E2E Tests (28 specs, ~329 tests — full system audit)
 - Location: `frontend/tests/*.spec.js` (28 self-contained Playwright specs)
 - Config: `frontend/playwright.config.js` (single config, production target)
 - Target: `https://sanopos.com` (tenant `packagesmall`)
@@ -211,7 +211,7 @@
 2. Register startup in `boot/workers.js`
 3. Add env var toggle: `<NAME>_WORKER_ENABLED=1`
 4. Expose heartbeat global: `global.__<name>WorkerStatus`
-5. Add to `GET /api/admin/worker-status` in `routes/admin/monitoring.js`
+5. Add to `GET /api/admin/worker-status` in `routes/admin/system.js` (NOT monitoring.js)
 
 ## Middleware Chain (request lifecycle order)
 
@@ -382,7 +382,7 @@
 - `SANDBOX_WEBHOOK_SECRET` — HMAC secret for sandbox payment webhook verification (only required in sandbox/dev mode)
 
 ### Payments
-- `PAYMENT_GATEWAY` — Active processor: "manual" (default), "xpay", "stripe"
+- `PAYMENT_GATEWAY` — Active processor: "manual" (default), "xpay", "sandbox"
 - `XPAY_API_KEY` — xPay merchant API key
 - `XPAY_WEBHOOK_SECRET` — xPay HMAC verification secret
 
@@ -408,7 +408,7 @@
 - `RATE_LIMIT_WEBHOOK_MAX` — Webhook limit (default: 120/window)
 
 ### Admin
-- `ADMIN_ALLOWED_IPS` — Comma-separated IPs for /api/admin (empty = all blocked in prod)
+- `ADMIN_ALLOWED_IPS` — Comma-separated IPs for /api/admin (empty = all IPs allowed; warning logged at startup if unset in prod)
 
 ## Error Conventions
 
@@ -424,7 +424,7 @@
 
 - **Database**: Supabase Postgres (production is Postgres-only)
 - **Mode**: `MULTI_TENANT=1` on Railway, `VITE_MULTI_TENANT=1` on Vercel
-- **Boot**: `index.js` line 5 loads `db-pg` (Postgres)
+- **Boot**: `index.js` line 15 loads `db-pg` (Postgres)
 - **Frontend**: Vercel at `sanopos.com` (custom domain; `sanopos.vercel.app` fallback still active)
 - **Backend**: Railway at `api.sanopos.com` (custom domain; `oneshoppos-production.up.railway.app` fallback still active)
 - **Railway env vars**: `MULTI_TENANT=1`, `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `CORS_ORIGIN=https://sanopos.com,https://www.sanopos.com,https://sanopos.vercel.app`, `TZ=Asia/Karachi`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL=SanoPOS <noreply@sanopos.com>`, `SENTRY_DSN`, `ALERT_EMAIL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `FBR_WORKER_ENABLED=1`, `EMAIL_WORKER_ENABLED=1`, `CLEANUP_WORKER_ENABLED=1`
@@ -432,3 +432,20 @@
 - **Railway gotchas**: `PORT` env var is overridden by Railway (binds to 8080); this is fine
 - To seed super-admin: `railway run node backend/seed-admin-pg.js --email <email> --password <password> --name <name>`
 - To provision tenant: use super-admin dashboard at `/admin` or `railway run node backend/tenant-provisioner-pg.js --slug <slug> --name <name> --pin <pin>`
+
+## Stale Documentation Notes
+
+As of Apr 16 2026, the following sections in this guide have been verified as current and accurate:
+- Postgres is the active backend (SQLite code is deleted)
+- Migration runner (migrate-pg.js) and routing (tenant-db-proxy-pg.js + tenant-db-manager-pg.js)
+- Integration tests use Vitest, NOT Jest (package.json verified)
+- Payment gateway adapters: manual, xpay, sandbox (stripe reference removed — never implemented)
+- Worker status endpoint is in routes/admin/system.js (NOT monitoring.js)
+- Admin IP allow-list: unset = all IPs allowed, not blocked
+
+**Always verify against actual source files when in doubt:**
+- Test runner: check `backend/package.json:12` (should say `vitest`)
+- Payment adapters: check `backend/services/payment-gateway.js:267`
+- Worker status endpoint: check `backend/routes/admin/system.js:8`
+- Cleanup worker: check `backend/boot/workers.js:258`
+- Index.js boot line: check actual `require("./db-pg")` line number (was 5, verified as 15)

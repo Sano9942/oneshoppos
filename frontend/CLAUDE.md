@@ -3,7 +3,8 @@
 ## Architecture Quick Reference
 
 - **Stack**: React 19 + Vite 7 + Tailwind CSS v4
-- **All pages** are in `src/pages/redesign/` — always edit `*Redesign.jsx` files
+- **Most tenant pages** are in `src/pages/redesign/` — edit `*Redesign.jsx` files for normal business logic
+- **Pages outside redesign/** (active, not legacy): `LandingPage.jsx`, `SignupPage.jsx`, `ResetPassword.jsx`, `/public/`, `/portal/`, `/storefront/`, `/admin/`
 - **Landing page**: `src/pages/LandingPage.jsx` — public one-pager with competitive positioning, pricing (2-tier: Free + Pro), login
 - **Route files** (`*Route.jsx` in `pages/`) are 5-line thin wrappers — never edit these
 - **App.jsx** is the route orchestrator (composition only) — route definitions live in `routes/publicRoutes.jsx`, `routes/appRoutes.jsx`, `routes/adminRoutes.jsx`
@@ -21,6 +22,16 @@ Examples: `POSRoute.jsx`, `DashboardRoute.jsx`, `CustomersRoute.jsx`, `OrdersRou
 `Accounting.jsx`, `Approvals.jsx`, `Attendance.jsx`, `BarcodeTemplates.jsx`, `ReceiptTemplates.jsx`, `ShopifyIntegration.jsx`, `InvoiceView.jsx` — these are imported by their Redesign counterparts. Do NOT delete them, but don't read them unless you need to understand the wrapped component.
 
 `Reports.jsx` is NOT legacy — it's the active reports orchestrator (delegates to `pages/reports/` modules).
+
+### Active pages outside `redesign/`
+- `LandingPage.jsx` — public landing page (signup, login links)
+- `SignupPage.jsx` — public self-service signup
+- `ResetPassword.jsx` — public password reset
+- `ReceiptPublicPage.jsx` — public shareable receipt view
+- `public/` — unauthenticated pages (error pages, etc.)
+- `portal/` — customer self-service portal (separate auth)
+- `storefront/` — embedded storefront for Orders feature
+- `admin/` — super-admin panel (10 files, separate auth system)
 
 ## Where to Look Instead
 
@@ -94,9 +105,9 @@ Examples: `POSRoute.jsx`, `DashboardRoute.jsx`, `CustomersRoute.jsx`, `OrdersRou
 - Pass `currencySymbol` as param in non-component utilities (e.g., `receipt.js`)
 
 ### API Calls
-- **Use `api.js` for all API calls** — `import api from '../api'` then `api.get('/products')`, `api.post('/sales', body)`, etc. Do NOT use raw `fetch()` in non-admin pages.
+- **Use `api.js` for all authenticated tenant API calls** — `import api from '../api'` then `api.get('/products')`, `api.post('/sales', body)`, etc. Do NOT use raw `fetch()` in redesign pages.
 - **Exceptions — these intentionally use raw `fetch()`**: `storefront/` pages (self-contained, no auth), `pages/public/` pages (unauthenticated), `hooks/useFeatureFlags.js` (called before interceptor may be wired)
-- Admin pages use `adminFetch` from `AdminLogin.jsx` — separate auth system, do NOT replace with `api.js`
+- **Admin pages**: Check the specific admin page — some use `adminFetch` from `AdminLogin.jsx` (separate auth), others use raw `fetch`. Do NOT blindly replace with `api.js`
 - All fetch calls to URLs containing `/api/` get auth headers injected automatically by `AuthProvider.jsx`
 - **Interceptor skips**: non-`/api/` URLs, no authenticated employee, and public auth endpoints (`/api/auth/signup`, `/api/auth/forgot-password`, `/api/auth/reset-password`)
 - Do NOT manually set `x-employee-id` or `Authorization` headers — the interceptor does it
@@ -110,7 +121,7 @@ Examples: `POSRoute.jsx`, `DashboardRoute.jsx`, `CustomersRoute.jsx`, `OrdersRou
 - `SectionCard` props: `children`, `className` only — **no `title` prop**
 
 ### POS Architecture
-- All POS state lives in `POSContext.jsx` (128+ exports)
+- All POS state lives in `POSContext.jsx` (~143 exports)
 - New POS components must call all hooks BEFORE any conditional early return
 - Mount new POS modals in `POSRedesign.jsx`
 - **ErrorBoundary** wraps `<POSContent />` inside `<POSProvider>` — crashes show recovery UI instead of white screen
@@ -127,10 +138,11 @@ Examples: `POSRoute.jsx`, `DashboardRoute.jsx`, `CustomersRoute.jsx`, `OrdersRou
 - **POS uses hardcoded colors** (`#8066FF`, `slate-*`, `#0A0A0A` sidebar) — NOT design system CSS variables. Exception: `POSShortcutsOverlay`, `EndlessAisleModal`, `POSApprovalModal` use CSS variables.
 
 ### CSV Export
-- Shared utility: `utils/csvExport.js` — `downloadCsv(headers, rows, filename)`
-- Every table page has an "Export CSV" button using `<Download>` icon from lucide-react
-- New pages MUST use the shared utility, not inline blob code
+- Shared utility exists: `utils/csvExport.js` — `downloadCsv(headers, rows, filename)`
+- **Status**: NOT yet universally adopted. Some table pages still create Blob inline (InventoryRedesign, CustomersRedesign, OrdersRedesign, SalesHistoryRedesign)
+- **New pages MUST use the shared utility**, not inline blob code
 - Exports visible/filtered rows (respects user's current search/filter)
+- Refactor existing tables to use `downloadCsv` when touching them
 
 ### Feature Flag Gating (Apr 1 2026)
 - `useFeatureFlags(authHeaders)` hook from `hooks/useFeatureFlags.js` — returns `{ flags, loading }`
@@ -200,11 +212,12 @@ Examples: `POSRoute.jsx`, `DashboardRoute.jsx`, `CustomersRoute.jsx`, `OrdersRou
 ## Provider Hierarchy & Hooks
 
 ```
-CurrencyProvider  → useCurrency()  — available everywhere
-  └─ ToastProvider  → useToast()   — available everywhere
-       └─ AuthProvider  → useAuth()  — available inside authenticated routes
-            └─ PresetProvider  → usePreset()  — available inside authenticated routes
-                 └─ App (BrowserRouter)
+ErrorBoundary
+  └─ CurrencyProvider  → useCurrency()  — available everywhere
+       └─ ToastProvider  → useToast()   — available everywhere
+            └─ AuthProvider  → useAuth()  — available inside authenticated routes
+                 └─ PresetProvider  → usePreset()  — available inside authenticated routes
+                      └─ App (BrowserRouter)
 ```
 
 ### Available hooks
@@ -236,8 +249,8 @@ CurrencyProvider  → useCurrency()  — available everywhere
 
 ## Test Suites
 
-### Production E2E Tests (28 specs, ~290 tests — full system audit)
-- Location: `tests/*.spec.js` (28 self-contained Playwright specs)
+### Production E2E Tests (43 specs, full system audit)
+- Location: `tests/*.spec.js` (43 self-contained Playwright specs)
 - Config: `playwright.config.js` (single config, production target)
 - Target: `https://sanopos.com` (tenant `packagesmall`)
 - Run: `npx playwright test tests/auth.spec.js`
@@ -250,11 +263,11 @@ CurrencyProvider  → useCurrency()  — available everywhere
   - Clock-in: use `/api/attendance/pin-checkin?tenant=${slug}` with `{ pin_code, outlet_id }` — NOT `/clock-in`
   - Health check: use simple `/api/health` (no `?deep=true` — no tenant context available)
 
-### Smoke Tests (14 specs — competitive feature coverage)
-- Location: `tests/smoke/` — bookings, catalog-advanced, commissions-reports, draft-orders-returns, insights-dashboard, invoicing-subscriptions, marketing-messaging, omnichannel-admin, phase5-pakistan, pricing-promotions, restaurant, service-workspace, storefront-public, workforce
+### Smoke Tests (15 specs — competitive feature coverage)
+- Location: `tests/smoke/` — bookings, catalog-advanced, commissions-reports, draft-orders-returns, insights-dashboard, invoicing-subscriptions, marketing-messaging, omnichannel-admin, phase5-pakistan, pricing-promotions, restaurant, service-workspace, storefront-public, workforce, + 1 additional
 - Smoke helpers: `tests/smoke/helpers/` — cleanup, featureFlags, mockPaymentGateway, smokeRunId
 
-### Unit Tests (48 tests)
-- Location: `tests/unit/` — `auth_guards` (5), `contexts` (19 — cartMath × 17 + CurrencyContext × 2), `layout` (5 — PageShell + NotificationBell), `primitives` (8 — Button + Input + Badge + EmptyState + StarDisplay), `dental_chart` (11 — DentalChart tooth states, BodyChart region mapping)
+### Unit Tests (~72 tests)
+- Location: `tests/unit/` — `auth_guards`, `contexts`, `layout`, `primitives`, `dental_chart`
 - Run: `npx vitest run tests/unit/` (vitest with @vitest/coverage-v8)
 - Note: `contexts.test.jsx` tests `cartMath.js` functions (calcGrossTotal, calcDiscountValue, calcTaxTotal, calcTotal) + `CurrencyContext` — no POSContext hook unit tests exist
