@@ -7,6 +7,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   TableToolbar,
@@ -437,13 +439,13 @@ export default function SuppliersRedesign() {
         </div>
       </SectionCard>
 
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-xl p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">
-              {form.id ? "Edit Supplier" : "Create Supplier"}
-            </h3>
-            <form className="mt-3 space-y-3" onSubmit={save}>
+      <Modal
+        open={modalOpen}
+        onClose={saving ? undefined : () => setModalOpen(false)}
+        title={form.id ? "Edit Supplier" : "Create Supplier"}
+        size="xl"
+      >
+        <form className="space-y-3" onSubmit={save}>
               <div>
                 <label className="mb-1 block text-xs text-(--ui-text-muted)">Company Name</label>
                 <Input
@@ -494,6 +496,7 @@ export default function SuppliersRedesign() {
               {/* Credit Terms Section */}
               <div className="rounded-lg border border-(--ui-border) p-3">
                 <p className="mb-2 text-xs font-semibold uppercase text-(--ui-text-muted)">Payment Terms</p>
+                {/* Payment-terms selector — custom 2-pill radio control, needs RadioCard primitive. */}
                 <div className="flex gap-2 mb-3">
                   {["cash", "credit"].map((t) => (
                     <button
@@ -550,16 +553,14 @@ export default function SuppliersRedesign() {
                 )}
               </div>
 
-              <div className="flex gap-2 pt-1">
-                <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
+              <ModalFooter>
+                <Button type="button" onClick={() => setModalOpen(false)} disabled={saving}>Cancel</Button>
                 <Button tone="primary" type="submit" disabled={saving}>
                   {saving ? "Saving..." : "Save"}
                 </Button>
-              </div>
-            </form>
-          </SectionCard>
-        </div>
-      )}
+              </ModalFooter>
+        </form>
+      </Modal>
     </PageShell>
   );
 }
