@@ -4,6 +4,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   Select,
@@ -342,11 +344,13 @@ export default function CashManagementRedesign() {
         </div>
       </SectionCard>
 
-      {openModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-md p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">Open Shift</h3>
-            <form className="mt-3 space-y-2" onSubmit={openShift}>
+      <Modal
+        open={openModal}
+        onClose={busy ? undefined : () => setOpenModal(false)}
+        title="Open Shift"
+        size="md"
+      >
+        <form className="space-y-2" onSubmit={openShift}>
               <SectionCard className="p-3">
                 <div className="mb-2 flex items-center gap-2 text-sm text-(--ui-text)">
                   <Calculator size={14} />
@@ -394,21 +398,21 @@ export default function CashManagementRedesign() {
                   <option key={emp.id} value={emp.id}>{emp.name}</option>
                 ))}
               </Select>
-              <div className="flex gap-2 pt-2">
-                <Button type="button" onClick={() => setOpenModal(false)}>Cancel</Button>
-                <Button tone="primary" type="submit" disabled={busy || openingCash <= 0}>Open</Button>
-              </div>
-            </form>
-          </SectionCard>
-        </div>
-      ) : null}
+          <ModalFooter>
+            <Button type="button" onClick={() => setOpenModal(false)} disabled={busy}>Cancel</Button>
+            <Button tone="primary" type="submit" disabled={busy || openingCash <= 0}>Open</Button>
+          </ModalFooter>
+        </form>
+      </Modal>
 
-      {closeModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-lg p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">Close Shift {activeShift ? `#${activeShift.id}` : ""}</h3>
-            {closeResult ? (
-              <div className="mt-3 space-y-2 text-sm">
+      <Modal
+        open={closeModal}
+        onClose={busy ? undefined : () => setCloseModal(false)}
+        title={`Close Shift ${activeShift ? `#${activeShift.id}` : ""}`}
+        size="lg"
+      >
+        {closeResult ? (
+          <div className="space-y-2 text-sm">
                 <p className="text-(--ui-text)">Expected: {money(closeResult.expected_cash)}</p>
                 <p className="text-(--ui-text)">Counted: {money(closeResult.closing_cash)}</p>
                 <p className="font-semibold text-(--ui-text)">Variance: {money(closeResult.variance)}</p>
@@ -424,9 +428,9 @@ export default function CashManagementRedesign() {
                 >
                   Done
                 </Button>
-              </div>
-            ) : (
-              <form className="mt-3 space-y-3" onSubmit={closeShift}>
+          </div>
+        ) : (
+          <form className="space-y-3" onSubmit={closeShift}>
                 <SectionCard className="p-2">
                   <div className="mb-2 flex items-center gap-2 text-sm text-(--ui-text)">
                     <Calculator size={14} />
@@ -479,22 +483,24 @@ export default function CashManagementRedesign() {
                     onChange={(e) => setVarianceApprovedBy(e.target.value)}
                   />
                 ) : null}
-                <Input placeholder="Notes" value={closeNotes} onChange={(e) => setCloseNotes(e.target.value)} />
-                <div className="flex gap-2">
-                  <Button type="button" onClick={() => setCloseModal(false)}>Cancel</Button>
-                  <Button tone="danger" type="submit" disabled={busy}>Close Shift</Button>
-                </div>
-              </form>
-            )}
-          </SectionCard>
-        </div>
-      ) : null}
+            <Input placeholder="Notes" value={closeNotes} onChange={(e) => setCloseNotes(e.target.value)} />
+            <ModalFooter>
+              <Button type="button" onClick={() => setCloseModal(false)} disabled={busy}>Cancel</Button>
+              <Button tone="danger" type="submit" disabled={busy}>Close Shift</Button>
+            </ModalFooter>
+          </form>
+        )}
+      </Modal>
 
-      {denomDetail ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-md p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">Shift #{denomDetail.shift.id} Denominations</h3>
-            <div className="mt-3 max-h-72 overflow-auto">
+      <Modal
+        open={!!denomDetail}
+        onClose={() => setDenomDetail(null)}
+        title={denomDetail ? `Shift #${denomDetail.shift.id} Denominations` : ""}
+        size="md"
+      >
+        {denomDetail ? (
+          <>
+            <div className="max-h-72 overflow-auto">
               {(denomDetail.rows || []).map((r, idx) => (
                 <div key={`${r.denomination}-${idx}`} className="flex items-center justify-between border-b border-(--ui-border) py-2 text-sm">
                   <span>{r.denomination} x {r.count}</span>
@@ -502,12 +508,12 @@ export default function CashManagementRedesign() {
                 </div>
               ))}
             </div>
-            <div className="mt-3 flex justify-end">
+            <ModalFooter>
               <Button onClick={() => setDenomDetail(null)}>Close</Button>
-            </div>
-          </SectionCard>
-        </div>
-      ) : null}
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
     </PageShell>
   );
 }
