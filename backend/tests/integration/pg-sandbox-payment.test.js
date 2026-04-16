@@ -109,6 +109,8 @@ describe("SandboxAdapter", () => {
 // ── POS Card Payment Tests ───────────────────────────────────────────
 
 describe("POS card payment with gateway bridge", () => {
+  let saleId;
+
   test("Card payment stores gateway_ref in sale_payments", async () => {
     const res = await req
       .post("/api/sales")
