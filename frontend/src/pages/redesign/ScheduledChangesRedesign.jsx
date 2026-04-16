@@ -4,8 +4,8 @@ import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
-import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
-import { Plus, X, Ban } from "lucide-react";
+import { PageShell, SectionCard, Button, Badge, Modal, ModalFooter } from "../../ui/primitives";
+import { Plus, Ban } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { api } from "../../api";
 
@@ -120,46 +120,51 @@ export default function ScheduledChangesRedesign() {
         )}
       </SectionCard>
 
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-(--ui-bg) rounded-lg shadow-xl w-full max-w-md p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-(--ui-text)">Schedule a Catalog Change</h2>
-              <button onClick={() => setShowModal(false)}><X size={18} /></button>
-            </div>
-
-            <label className="block text-sm text-(--ui-muted) mb-1">Change Type</label>
-            <select className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" value={form.change_type} onChange={e => setForm(f => ({ ...f, change_type: e.target.value }))}>
+      <Modal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title="Schedule a Catalog Change"
+        size="sm"
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-sm text-(--ui-text-muted)">Change Type</label>
+            <select className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)" value={form.change_type} onChange={e => setForm(f => ({ ...f, change_type: e.target.value }))}>
               {CHANGE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
-
-            <label className="block text-sm text-(--ui-muted) mb-1">Entity Type</label>
-            <select className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" value={form.entity_type} onChange={e => setForm(f => ({ ...f, entity_type: e.target.value }))}>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-(--ui-text-muted)">Entity Type</label>
+            <select className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)" value={form.entity_type} onChange={e => setForm(f => ({ ...f, entity_type: e.target.value }))}>
               {ENTITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
-
-            <label className="block text-sm text-(--ui-muted) mb-1">Entity ID</label>
-            <input className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" type="number" placeholder="Product or variant ID" value={form.entity_id} onChange={e => setForm(f => ({ ...f, entity_id: e.target.value }))} />
-
-            <label className="block text-sm text-(--ui-muted) mb-1">Field Name</label>
-            <input className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" placeholder="e.g. price, status" value={form.field_name} onChange={e => setForm(f => ({ ...f, field_name: e.target.value }))} />
-
-            <label className="block text-sm text-(--ui-muted) mb-1">New Value</label>
-            <input className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" placeholder="New value to apply" value={form.new_value} onChange={e => setForm(f => ({ ...f, new_value: e.target.value }))} />
-
-            <label className="block text-sm text-(--ui-muted) mb-1">Scheduled At</label>
-            <input className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" type="datetime-local" value={form.scheduled_at} onChange={e => setForm(f => ({ ...f, scheduled_at: e.target.value }))} />
-
-            <label className="block text-sm text-(--ui-muted) mb-1">Notes (optional)</label>
-            <textarea className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
-
-            <div className="flex gap-2 justify-end">
-              <Button tone="plain" size="sm" onClick={() => setShowModal(false)}>Cancel</Button>
-              <Button size="sm" onClick={handleCreate}>Schedule</Button>
-            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-(--ui-text-muted)">Entity ID</label>
+            <input className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)" type="number" placeholder="Product or variant ID" value={form.entity_id} onChange={e => setForm(f => ({ ...f, entity_id: e.target.value }))} />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-(--ui-text-muted)">Field Name</label>
+            <input className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)" placeholder="e.g. price, status" value={form.field_name} onChange={e => setForm(f => ({ ...f, field_name: e.target.value }))} />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-(--ui-text-muted)">New Value</label>
+            <input className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)" placeholder="New value to apply" value={form.new_value} onChange={e => setForm(f => ({ ...f, new_value: e.target.value }))} />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-(--ui-text-muted)">Scheduled At</label>
+            <input className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)" type="datetime-local" value={form.scheduled_at} onChange={e => setForm(f => ({ ...f, scheduled_at: e.target.value }))} />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-(--ui-text-muted)">Notes (optional)</label>
+            <textarea className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)" rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
           </div>
         </div>
-      )}
+        <ModalFooter>
+          <Button tone="plain" size="sm" onClick={() => setShowModal(false)}>Cancel</Button>
+          <Button size="sm" onClick={handleCreate}>Schedule</Button>
+        </ModalFooter>
+      </Modal>
     </PageShell>
   );
 }
