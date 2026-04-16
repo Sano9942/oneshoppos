@@ -10,6 +10,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   TableToolbar,
@@ -1125,7 +1127,7 @@ export default function CustomersRedesign() {
                       </Button>
                     </div>
                     {(detail.loyalty_points || 0) > 0 && (
-                      <Button size="sm" variant="secondary" className="mt-2 w-full" onClick={openTransfer}>
+                      <Button size="sm" className="mt-2 w-full" onClick={openTransfer}>
                         <ArrowRightLeft size={13} className="mr-1" /> Transfer Points
                       </Button>
                     )}
@@ -1411,13 +1413,13 @@ export default function CustomersRedesign() {
         </SectionCard>
       </div>
 
-      {modalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-lg p-4 max-h-[90vh] overflow-auto">
-            <h3 className="text-lg font-semibold text-(--ui-text)">
-              {editing ? "Edit Customer" : "Add Customer"}
-            </h3>
-            <form className="mt-3 space-y-3" onSubmit={submitForm}>
+      <Modal
+        open={modalOpen}
+        onClose={busy ? undefined : () => setModalOpen(false)}
+        title={editing ? "Edit Customer" : "Add Customer"}
+        size="lg"
+      >
+        <form className="space-y-3" onSubmit={submitForm}>
               {formError ? (
                 <p className="rounded bg-rose-50 p-2 text-sm text-rose-700">{formError}</p>
               ) : null}
@@ -1543,25 +1545,25 @@ export default function CustomersRedesign() {
                 onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
               />
 
-              <div className="flex gap-2 pt-2">
-                <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
-                <Button tone="primary" type="submit" disabled={busy}>{editing ? "Save" : "Create"}</Button>
-              </div>
-            </form>
-          </SectionCard>
-        </div>
-      ) : null}
+          <ModalFooter>
+            <Button type="button" onClick={() => setModalOpen(false)} disabled={busy}>Cancel</Button>
+            <Button tone="primary" type="submit" disabled={busy}>{editing ? "Save" : "Create"}</Button>
+          </ModalFooter>
+        </form>
+      </Modal>
 
-      {subjectModalOpen && detail ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-md p-4 max-h-[90vh] overflow-auto">
-            <h3 className="text-lg font-semibold text-(--ui-text)">
-              {subjectEditing ? "Edit Subject" : (industry_type === "veterinary" ? "Add Pet" : "Add Subject")}
-            </h3>
-            <p className="mt-1 text-xs text-(--ui-text-muted)">
+      <Modal
+        open={subjectModalOpen && !!detail}
+        onClose={subjectSaving ? undefined : () => setSubjectModalOpen(false)}
+        title={subjectEditing ? "Edit Subject" : (industry_type === "veterinary" ? "Add Pet" : "Add Subject")}
+        size="md"
+      >
+        {detail ? (
+          <>
+            <p className="text-xs text-(--ui-text-muted) mb-3">
               For <strong>{detail.name}</strong>
             </p>
-            <form className="mt-3 space-y-3" onSubmit={submitSubject}>
+            <form className="space-y-3" onSubmit={submitSubject}>
               {subjectError ? (
                 <p className="rounded bg-rose-50 p-2 text-sm text-rose-700">{subjectError}</p>
               ) : null}
@@ -1667,52 +1669,53 @@ export default function CustomersRedesign() {
                 />
               </div>
 
-              <div className="flex gap-2 pt-2">
-                <Button type="button" onClick={() => setSubjectModalOpen(false)}>Cancel</Button>
+              <ModalFooter>
+                <Button type="button" onClick={() => setSubjectModalOpen(false)} disabled={subjectSaving}>Cancel</Button>
                 <Button tone="primary" type="submit" disabled={subjectSaving} data-testid="subject-save">
                   {subjectEditing ? "Save" : "Add"}
                 </Button>
-              </div>
+              </ModalFooter>
             </form>
-          </SectionCard>
-        </div>
-      ) : null}
+          </>
+        ) : null}
+      </Modal>
 
-      {blacklistModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-sm p-4">
-            <h3 className="text-lg font-semibold text-red-700">Blacklist Customer</h3>
-            <p className="mt-1 text-xs text-(--ui-text-muted)">
-              This will block {detail?.name} from POS checkout.
-            </p>
-            <div className="mt-3 space-y-2">
-              <Input
-                required
-                placeholder="Reason for blacklisting"
-                value={blacklistReason}
-                onChange={(e) => setBlacklistReason(e.target.value)}
-              />
-              <div className="flex gap-2 pt-1">
-                <Button type="button" onClick={() => setBlacklistModal(false)}>
-                  Cancel
-                </Button>
-                <Button tone="danger" disabled={busy || !blacklistReason.trim()} onClick={blacklistCustomer}>
-                  Confirm Blacklist
-                </Button>
-              </div>
-            </div>
-          </SectionCard>
+      <Modal
+        open={!!blacklistModal}
+        onClose={busy ? undefined : () => setBlacklistModal(false)}
+        title="Blacklist Customer"
+        size="sm"
+      >
+        <p className="text-xs text-(--ui-text-muted)">
+          This will block {detail?.name} from POS checkout.
+        </p>
+        <div className="mt-3 space-y-2">
+          <Input
+            required
+            placeholder="Reason for blacklisting"
+            value={blacklistReason}
+            onChange={(e) => setBlacklistReason(e.target.value)}
+          />
         </div>
-      ) : null}
+        <ModalFooter>
+          <Button type="button" onClick={() => setBlacklistModal(false)} disabled={busy}>
+            Cancel
+          </Button>
+          <Button tone="danger" disabled={busy || !blacklistReason.trim()} onClick={blacklistCustomer}>
+            Confirm Blacklist
+          </Button>
+        </ModalFooter>
+      </Modal>
 
-      {transferOpen && detail ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-md p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">
-              <ArrowRightLeft size={16} className="inline mr-1.5 -mt-0.5" />
-              Transfer Loyalty Points
-            </h3>
-            <p className="mt-1 text-xs text-(--ui-text-muted)">
+      <Modal
+        open={transferOpen && !!detail}
+        onClose={busy ? undefined : () => setTransferOpen(false)}
+        title={<><ArrowRightLeft size={16} className="inline mr-1.5 -mt-0.5" />Transfer Loyalty Points</>}
+        size="md"
+      >
+        {detail ? (
+          <>
+            <p className="text-xs text-(--ui-text-muted)">
               From <strong>{detail.name}</strong> · {detail.loyalty_points || 0} points available
             </p>
 
@@ -1725,7 +1728,7 @@ export default function CustomersRedesign() {
                     <p className="text-sm font-medium text-(--ui-text)">{transferTarget.name}</p>
                     <p className="text-xs text-(--ui-text-muted)">{transferTarget.mobile || transferTarget.email || ""}</p>
                   </div>
-                  <Button size="sm" variant="secondary" onClick={() => { setTransferTarget(null); setTransferSearch(""); }}>Change</Button>
+                  <Button size="sm" onClick={() => { setTransferTarget(null); setTransferSearch(""); }}>Change</Button>
                 </div>
               ) : (
                 <div className="relative">
@@ -1739,6 +1742,7 @@ export default function CustomersRedesign() {
                   {transferResults.length > 0 && (
                     <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-40 overflow-auto rounded border border-(--ui-border) bg-(--ui-bg) shadow-lg">
                       {transferResults.slice(0, 8).map((c) => (
+                        /* Autocomplete dropdown item — <Button> would break the hover/text-left layout. */
                         <button
                           key={c.id}
                           type="button"
@@ -1778,21 +1782,20 @@ export default function CustomersRedesign() {
                 value={transferReason}
                 onChange={(e) => setTransferReason(e.target.value)}
               />
-
-              <div className="flex gap-2 pt-2">
-                <Button type="button" onClick={() => setTransferOpen(false)}>Cancel</Button>
-                <Button
-                  tone="primary"
-                  disabled={busy || !transferTarget || !transferPoints || Number(transferPoints) <= 0 || Number(transferPoints) > (detail.loyalty_points || 0)}
-                  onClick={submitTransfer}
-                >
-                  Transfer {transferPoints && Number(transferPoints) > 0 ? `${transferPoints} Points` : ""}
-                </Button>
-              </div>
             </div>
-          </SectionCard>
-        </div>
-      ) : null}
+            <ModalFooter>
+              <Button type="button" onClick={() => setTransferOpen(false)} disabled={busy}>Cancel</Button>
+              <Button
+                tone="primary"
+                disabled={busy || !transferTarget || !transferPoints || Number(transferPoints) <= 0 || Number(transferPoints) > (detail.loyalty_points || 0)}
+                onClick={submitTransfer}
+              >
+                Transfer {transferPoints && Number(transferPoints) > 0 ? `${transferPoints} Points` : ""}
+              </Button>
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
     </PageShell>
   );
 }
