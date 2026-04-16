@@ -8,6 +8,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   Select,
@@ -633,10 +635,14 @@ export default function HRManagementRedesign() {
       )}
 
       {/* ── Rejection note modal ──────────────────────────────────── */}
-      {rejectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-sm p-5">
-            <h3 className="mb-3 text-lg font-semibold text-(--ui-text)">Reject Leave Request</h3>
+      <Modal
+        open={!!rejectModal}
+        onClose={() => setRejectModal(null)}
+        title="Reject Leave Request"
+        size="sm"
+      >
+        {rejectModal ? (
+          <>
             <p className="mb-3 text-sm text-(--ui-text-muted)">Optionally provide a reason for rejection.</p>
             <textarea
               value={rejectModal.note}
@@ -645,13 +651,13 @@ export default function HRManagementRedesign() {
               placeholder="Rejection reason (optional)"
               className="w-full rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-sm text-(--ui-text) placeholder-(--ui-text-muted) focus:outline-none focus:ring-2 focus:ring-(--ui-accent)/20"
             />
-            <div className="mt-3 flex gap-2">
+            <ModalFooter>
               <Button onClick={() => setRejectModal(null)}>Cancel</Button>
               <Button tone="danger" onClick={handleReject}>Confirm Rejection</Button>
-            </div>
-          </SectionCard>
-        </div>
-      )}
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
     </PageShell>
   );
 }
