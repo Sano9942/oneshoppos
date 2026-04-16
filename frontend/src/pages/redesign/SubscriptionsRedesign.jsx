@@ -4,8 +4,8 @@ import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
-import { PageShell, SectionCard, Button, Badge, EmptyState } from "../../ui/primitives";
-import { Plus, Pencil, Pause, Play, XCircle, X, ArrowLeft, RefreshCw } from "lucide-react";
+import { PageShell, SectionCard, Button, Badge, EmptyState, Modal, ModalFooter } from "../../ui/primitives";
+import { Plus, Pencil, Pause, Play, XCircle, ArrowLeft, RefreshCw } from "lucide-react";
 import { fmtUtcDateTime, fmtUtcDate } from "../../utils/dates";
 import { api } from "../../api";
 
@@ -18,24 +18,23 @@ const INTERVALS = [
 
 /* ── Cancel Reason Modal ─────────────────────────────────────────── */
 
-function CancelReasonModal({ onConfirm, onClose }) {
+function CancelReasonModal({ open, onConfirm, onClose }) {
   const [reason, setReason] = useState("");
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-(--ui-surface) rounded-lg shadow-lg w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
-        <h3 className="text-lg font-bold text-(--ui-text) mb-3">Cancel Subscription</h3>
-        <p className="text-sm text-(--ui-text-muted) mb-3">Why is this subscription being cancelled?</p>
+    <Modal open={open} onClose={onClose} title="Cancel Subscription" size="sm">
+      <div className="space-y-3">
+        <p className="text-sm text-(--ui-text-muted)">Why is this subscription being cancelled?</p>
         <textarea
-          className="w-full border border-(--ui-border) rounded-lg px-3 py-2 bg-(--ui-surface) text-sm text-(--ui-text) mb-3"
+          className="w-full border border-(--ui-border) rounded-lg px-3 py-2 bg-(--ui-surface) text-sm text-(--ui-text)"
           rows={3} value={reason} onChange={e => setReason(e.target.value)}
           placeholder="Optional: reason for cancellation..."
         />
-        <div className="flex gap-2 justify-end">
-          <Button tone="default" onClick={onClose}>Back</Button>
-          <Button tone="danger" onClick={() => onConfirm(reason)}>Confirm Cancel</Button>
-        </div>
       </div>
-    </div>
+      <ModalFooter>
+        <Button onClick={onClose}>Back</Button>
+        <Button tone="danger" onClick={() => onConfirm(reason)}>Confirm Cancel</Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 
@@ -367,74 +366,64 @@ export default function SubscriptionsRedesign() {
         </>
       )}
 
-      {/* Plan Modal */}
-      {showPlanModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-(--ui-surface) rounded-lg shadow-lg w-full max-w-md p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold text-(--ui-text)">{editingPlan ? "Edit Plan" : "New Plan"}</h2>
-              <button onClick={() => setShowPlanModal(false)}><X className="w-5 h-5" /></button>
-            </div>
-            <div className="space-y-4">
-              <div><label className="block text-sm font-medium mb-1 text-(--ui-text)">Name</label>
-                <input className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-surface) text-(--ui-text)" value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} /></div>
-              <div><label className="block text-sm font-medium mb-1 text-(--ui-text)">Price</label>
-                <input type="number" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-surface) text-(--ui-text)" value={planForm.price} onChange={(e) => setPlanForm({ ...planForm, price: e.target.value })} /></div>
-              <div><label className="block text-sm font-medium mb-1 text-(--ui-text)">Billing Interval</label>
-                <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-surface) text-(--ui-text)" value={planForm.billing_interval} onChange={(e) => setPlanForm({ ...planForm, billing_interval: e.target.value })}>
-                  {INTERVALS.map((i) => <option key={i.value} value={i.value}>{i.label}</option>)}
-                </select></div>
-              <div><label className="block text-sm font-medium mb-1 text-(--ui-text)">Trial Days</label>
-                <input type="number" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-surface) text-(--ui-text)" value={planForm.trial_days} onChange={(e) => setPlanForm({ ...planForm, trial_days: e.target.value })} /></div>
-              <div><label className="block text-sm font-medium mb-1 text-(--ui-text)">Description</label>
-                <textarea className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-surface) text-(--ui-text)" value={planForm.description} onChange={(e) => setPlanForm({ ...planForm, description: e.target.value })} /></div>
-              <div className="flex gap-2 justify-end">
-                <Button tone="plain" onClick={() => setShowPlanModal(false)}>Cancel</Button>
-                <Button onClick={savePlan} disabled={!planForm.name || !planForm.price}>Save</Button>
-              </div>
-            </div>
-          </div>
+      <Modal
+        open={showPlanModal}
+        onClose={() => setShowPlanModal(false)}
+        title={editingPlan ? "Edit Plan" : "New Plan"}
+        size="sm"
+      >
+        <div className="space-y-3">
+          <div><label className="mb-1 block text-sm font-medium text-(--ui-text)">Name</label>
+            <input className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-surface) text-(--ui-text)" value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} /></div>
+          <div><label className="mb-1 block text-sm font-medium text-(--ui-text)">Price</label>
+            <input type="number" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-surface) text-(--ui-text)" value={planForm.price} onChange={(e) => setPlanForm({ ...planForm, price: e.target.value })} /></div>
+          <div><label className="mb-1 block text-sm font-medium text-(--ui-text)">Billing Interval</label>
+            <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-surface) text-(--ui-text)" value={planForm.billing_interval} onChange={(e) => setPlanForm({ ...planForm, billing_interval: e.target.value })}>
+              {INTERVALS.map((i) => <option key={i.value} value={i.value}>{i.label}</option>)}
+            </select></div>
+          <div><label className="mb-1 block text-sm font-medium text-(--ui-text)">Trial Days</label>
+            <input type="number" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-surface) text-(--ui-text)" value={planForm.trial_days} onChange={(e) => setPlanForm({ ...planForm, trial_days: e.target.value })} /></div>
+          <div><label className="mb-1 block text-sm font-medium text-(--ui-text)">Description</label>
+            <textarea className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-surface) text-(--ui-text)" value={planForm.description} onChange={(e) => setPlanForm({ ...planForm, description: e.target.value })} /></div>
         </div>
-      )}
+        <ModalFooter>
+          <Button tone="plain" onClick={() => setShowPlanModal(false)}>Cancel</Button>
+          <Button onClick={savePlan} disabled={!planForm.name || !planForm.price}>Save</Button>
+        </ModalFooter>
+      </Modal>
 
-      {/* Create Subscription Modal */}
-      {showSubModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-(--ui-surface) rounded-lg shadow-lg w-full max-w-md p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold text-(--ui-text)">New Subscription</h2>
-              <button onClick={() => setShowSubModal(false)}><X className="w-5 h-5" /></button>
-            </div>
-            <div className="space-y-4">
-              <div><label className="block text-sm font-medium mb-1 text-(--ui-text)">Customer</label>
-                <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-surface) text-(--ui-text)" value={subForm.customer_id} onChange={(e) => setSubForm({ ...subForm, customer_id: e.target.value })}>
-                  <option value="">Select customer...</option>
-                  {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select></div>
-              <div><label className="block text-sm font-medium mb-1 text-(--ui-text)">Plan</label>
-                <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-surface) text-(--ui-text)" value={subForm.plan_id} onChange={(e) => setSubForm({ ...subForm, plan_id: e.target.value })}>
-                  <option value="">Select plan...</option>
-                  {plans.map((p) => <option key={p.id} value={p.id}>{p.name} — {fmt(p.price)}/{p.billing_interval}</option>)}
-                </select></div>
-              {!flags.subscription_autocharge && (
-                <p className="text-sm text-(--ui-text-muted) bg-(--ui-muted-surface) rounded p-2">Auto-charge is not enabled. Renewals will generate invoices that customers pay manually.</p>
-              )}
-              <div className="flex gap-2 justify-end">
-                <Button tone="plain" onClick={() => setShowSubModal(false)}>Cancel</Button>
-                <Button onClick={createSubscription} disabled={!subForm.plan_id || !subForm.customer_id}>Create</Button>
-              </div>
-            </div>
-          </div>
+      <Modal
+        open={showSubModal}
+        onClose={() => setShowSubModal(false)}
+        title="New Subscription"
+        size="sm"
+      >
+        <div className="space-y-3">
+          <div><label className="mb-1 block text-sm font-medium text-(--ui-text)">Customer</label>
+            <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-surface) text-(--ui-text)" value={subForm.customer_id} onChange={(e) => setSubForm({ ...subForm, customer_id: e.target.value })}>
+              <option value="">Select customer...</option>
+              {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select></div>
+          <div><label className="mb-1 block text-sm font-medium text-(--ui-text)">Plan</label>
+            <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-surface) text-(--ui-text)" value={subForm.plan_id} onChange={(e) => setSubForm({ ...subForm, plan_id: e.target.value })}>
+              <option value="">Select plan...</option>
+              {plans.map((p) => <option key={p.id} value={p.id}>{p.name} — {fmt(p.price)}/{p.billing_interval}</option>)}
+            </select></div>
+          {!flags.subscription_autocharge && (
+            <p className="text-sm text-(--ui-text-muted) bg-(--ui-muted-surface) rounded p-2">Auto-charge is not enabled. Renewals will generate invoices that customers pay manually.</p>
+          )}
         </div>
-      )}
+        <ModalFooter>
+          <Button tone="plain" onClick={() => setShowSubModal(false)}>Cancel</Button>
+          <Button onClick={createSubscription} disabled={!subForm.plan_id || !subForm.customer_id}>Create</Button>
+        </ModalFooter>
+      </Modal>
 
-      {/* Cancel Reason Modal */}
-      {cancellingId && (
-        <CancelReasonModal
-          onConfirm={cancelSub}
-          onClose={() => setCancellingId(null)}
-        />
-      )}
+      <CancelReasonModal
+        open={!!cancellingId}
+        onConfirm={cancelSub}
+        onClose={() => setCancellingId(null)}
+      />
     </PageShell>
   );
 }
