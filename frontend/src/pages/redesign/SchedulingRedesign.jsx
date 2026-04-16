@@ -4,8 +4,8 @@ import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
-import { PageShell, SectionCard, Button, Badge, EmptyState } from "../../ui/primitives";
-import { Calendar, Plus, Send, AlertTriangle, Clock, X } from "lucide-react";
+import { PageShell, SectionCard, Button, Badge, EmptyState, Modal, ModalFooter } from "../../ui/primitives";
+import { Calendar, Plus, Send, AlertTriangle, Clock } from "lucide-react";
 import { api } from "../../api";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -266,71 +266,63 @@ function ShiftModal({ shift, employees, outlets, selectedOutlet, onSave, onCance
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-(--ui-bg) rounded-lg shadow-xl p-6 w-full max-w-md">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">{shift ? "Edit Shift" : "New Shift"}</h3>
-          <button onClick={onCancel}><X className="h-5 w-5" /></button>
-        </div>
-        <div className="space-y-3">
+    <Modal open onClose={onCancel} title={shift ? "Edit Shift" : "New Shift"} size="sm">
+      <div className="space-y-3">
+        <label className="block text-sm font-medium">
+          Employee
+          <select value={form.employee_id} onChange={e => set("employee_id", e.target.value)}
+            className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm">
+            <option value="">Select…</option>
+            {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+          </select>
+        </label>
+        <label className="block text-sm font-medium">
+          Outlet
+          <select value={form.outlet_id} onChange={e => set("outlet_id", e.target.value)}
+            className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm">
+            <option value="">Select…</option>
+            {outlets.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+        </label>
+        <label className="block text-sm font-medium">
+          Date
+          <input type="date" value={form.shift_date} onChange={e => set("shift_date", e.target.value)}
+            className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
           <label className="block text-sm font-medium">
-            Employee
-            <select value={form.employee_id} onChange={e => set("employee_id", e.target.value)}
-              className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm">
-              <option value="">Select…</option>
-              {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-            </select>
-          </label>
-          <label className="block text-sm font-medium">
-            Outlet
-            <select value={form.outlet_id} onChange={e => set("outlet_id", e.target.value)}
-              className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm">
-              <option value="">Select…</option>
-              {outlets.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-            </select>
-          </label>
-          <label className="block text-sm font-medium">
-            Date
-            <input type="date" value={form.shift_date} onChange={e => set("shift_date", e.target.value)}
-              className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block text-sm font-medium">
-              Start
-              <input type="time" value={form.start_time} onChange={e => set("start_time", e.target.value)}
-                className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
-            </label>
-            <label className="block text-sm font-medium">
-              End
-              <input type="time" value={form.end_time} onChange={e => set("end_time", e.target.value)}
-                className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
-            </label>
-          </div>
-          <label className="block text-sm font-medium">
-            Break (minutes)
-            <input type="number" value={form.break_minutes} onChange={e => set("break_minutes", Number(e.target.value))}
+            Start
+            <input type="time" value={form.start_time} onChange={e => set("start_time", e.target.value)}
               className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
           </label>
           <label className="block text-sm font-medium">
-            Notes
-            <textarea value={form.notes} onChange={e => set("notes", e.target.value)} rows={2}
+            End
+            <input type="time" value={form.end_time} onChange={e => set("end_time", e.target.value)}
               className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
           </label>
         </div>
-        <div className="flex justify-between mt-5">
-          <div>
-            {onDelete && (
-              <Button tone="danger" size="sm" onClick={onDelete}>Cancel Shift</Button>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={onCancel}>Close</Button>
-            <Button tone="primary" size="sm" onClick={() => onSave(form)}>
-              {shift ? "Update" : "Create"}
-            </Button>
-          </div>
-        </div>
+        <label className="block text-sm font-medium">
+          Break (minutes)
+          <input type="number" value={form.break_minutes} onChange={e => set("break_minutes", Number(e.target.value))}
+            className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
+        </label>
+        <label className="block text-sm font-medium">
+          Notes
+          <textarea value={form.notes} onChange={e => set("notes", e.target.value)} rows={2}
+            className="mt-1 block w-full rounded-md border border-(--ui-border) bg-(--ui-bg) px-3 py-2 text-sm" />
+        </label>
       </div>
-    </div>
+      <ModalFooter>
+        <div className="flex flex-1">
+          {onDelete && (
+            <Button tone="danger" size="sm" onClick={onDelete}>Cancel Shift</Button>
+          )}
+        </div>
+        <Button size="sm" onClick={onCancel}>Close</Button>
+        <Button tone="primary" size="sm" onClick={() => onSave(form)}>
+          {shift ? "Update" : "Create"}
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }

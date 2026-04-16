@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
-import { Search, Download, MessageSquarePlus, X, Loader2 } from "lucide-react";
-import { PageShell, SectionCard, Button, Input, Select } from "../../ui/primitives";
+import { Search, Download, MessageSquarePlus, Loader2 } from "lucide-react";
+import { PageShell, SectionCard, Button, Input, Select, Modal, ModalFooter } from "../../ui/primitives";
 import { useToast } from "../../contexts/ToastContext";
 import { api } from "../../api";
 
@@ -278,23 +278,15 @@ export default function TaxLookupRedesign() {
         </div>
       </SectionCard>
 
-      {/* Suggest Correction Modal */}
-      {suggestModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 w-full max-w-md rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) shadow-lg">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-(--ui-border) px-5 py-4">
-              <h2 className="text-lg font-semibold text-(--ui-text)">Suggest Correction</h2>
-              <button
-                onClick={closeSuggestModal}
-                className="rounded p-1 text-(--ui-text-muted) hover:bg-(--ui-muted-surface)"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="space-y-4 px-5 py-4">
+      <Modal
+        open={!!suggestModal}
+        onClose={submitting ? undefined : closeSuggestModal}
+        title="Suggest Correction"
+        size="sm"
+      >
+        {suggestModal ? (
+          <>
+            <div className="space-y-4">
               <p className="text-sm text-(--ui-text-muted)">
                 HS Code: <span className="font-mono font-medium text-(--ui-text)">{suggestModal.hs_code}</span>
                 {" — "}
@@ -363,8 +355,7 @@ export default function TaxLookupRedesign() {
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="flex justify-end gap-2 border-t border-(--ui-border) px-5 py-4">
+            <ModalFooter>
               <Button onClick={closeSuggestModal}>Cancel</Button>
               <Button tone="primary" onClick={handleSuggestSubmit} disabled={submitting}>
                 {submitting ? (
@@ -376,10 +367,10 @@ export default function TaxLookupRedesign() {
                   "Submit Suggestion"
                 )}
               </Button>
-            </div>
-          </div>
-        </div>
-      )}
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
     </PageShell>
   );
 }

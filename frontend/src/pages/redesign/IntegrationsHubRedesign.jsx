@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { PageShell } from "../../ui/primitives";
+import { PageShell, Modal, ModalFooter, Button, Input } from "../../ui/primitives";
 import { api } from "../../api";
 import { useToast } from "../../contexts/ToastContext";
 import {
@@ -168,7 +168,7 @@ function CourierCard({ courier }) {
   );
 }
 
-function ConnectModal({ provider, meta, onClose, onSave }) {
+function ConnectModal({ open, provider, meta, onClose, onSave }) {
   const [fields, setFields] = useState({});
   const [config, setConfig] = useState({});
   const [saving, setSaving] = useState(false);
@@ -188,60 +188,46 @@ function ConnectModal({ provider, meta, onClose, onSave }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-800" onClick={(e) => e.stopPropagation()}>
-        <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">
-          Connect {meta.name}
-        </h3>
-
-        <div className="space-y-3">
-          {(meta.fields || []).map((field) => (
-            <div key={field}>
-              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                {meta.labels?.[field] || field}
-              </label>
-              <input
-                type={field.includes("secret") || field.includes("token") ? "password" : "text"}
-                value={fields[field] || ""}
-                onChange={(e) => setFields((f) => ({ ...f, [field]: e.target.value }))}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white"
-                placeholder={`Enter ${meta.labels?.[field] || field}`}
-              />
-            </div>
-          ))}
-          {(meta.configFields || []).map((field) => (
-            <div key={field}>
-              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                {field.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-              </label>
-              <input
-                type="text"
-                value={config[field] || ""}
-                onChange={(e) => setConfig((c) => ({ ...c, [field]: e.target.value }))}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white"
-              />
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-6 flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving && <Loader2 size={14} className="animate-spin" />}
-            Connect
-          </button>
-        </div>
-      </div>
-    </div>
+    <Modal open={open} onClose={saving ? undefined : onClose} title={meta ? `Connect ${meta.name}` : ""} size="sm">
+      {meta ? (
+        <>
+          <div className="space-y-3">
+            {(meta.fields || []).map((field) => (
+              <div key={field}>
+                <label className="mb-1 block text-xs font-medium text-(--ui-text-muted)">
+                  {meta.labels?.[field] || field}
+                </label>
+                <Input
+                  type={field.includes("secret") || field.includes("token") ? "password" : "text"}
+                  value={fields[field] || ""}
+                  onChange={(e) => setFields((f) => ({ ...f, [field]: e.target.value }))}
+                  placeholder={`Enter ${meta.labels?.[field] || field}`}
+                />
+              </div>
+            ))}
+            {(meta.configFields || []).map((field) => (
+              <div key={field}>
+                <label className="mb-1 block text-xs font-medium text-(--ui-text-muted)">
+                  {field.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                </label>
+                <Input
+                  type="text"
+                  value={config[field] || ""}
+                  onChange={(e) => setConfig((c) => ({ ...c, [field]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+          <ModalFooter>
+            <Button onClick={onClose}>Cancel</Button>
+            <Button tone="primary" onClick={handleSave} disabled={saving}>
+              {saving && <Loader2 size={14} className="mr-1 animate-spin" />}
+              Connect
+            </Button>
+          </ModalFooter>
+        </>
+      ) : null}
+    </Modal>
   );
 }
 
@@ -453,15 +439,13 @@ export default function IntegrationsHubRedesign() {
         </div>
       )}
 
-      {/* Connect modal */}
-      {connectProvider && PROVIDER_META[connectProvider] && (
-        <ConnectModal
-          provider={connectProvider}
-          meta={PROVIDER_META[connectProvider]}
-          onClose={() => setConnectProvider(null)}
-          onSave={handleConnect}
-        />
-      )}
+      <ConnectModal
+        open={!!(connectProvider && PROVIDER_META[connectProvider])}
+        provider={connectProvider}
+        meta={connectProvider ? PROVIDER_META[connectProvider] : null}
+        onClose={() => setConnectProvider(null)}
+        onSave={handleConnect}
+      />
     </PageShell>
   );
 }

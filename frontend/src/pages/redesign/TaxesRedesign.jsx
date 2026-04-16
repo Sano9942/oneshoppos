@@ -6,6 +6,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   TableToolbar,
@@ -166,25 +168,25 @@ export default function TaxesRedesign() {
         </div>
       </SectionCard>
 
-      {modalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-md p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">{form.id ? "Edit Tax Rule" : "Create Tax Rule"}</h3>
-            <form className="mt-3 space-y-2" onSubmit={save}>
-              <Input required placeholder="Tax name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-              <Input required type="number" min="0" max="100" step="0.01" placeholder="Rate" value={form.rate} onChange={(e) => setForm((p) => ({ ...p, rate: e.target.value }))} />
-              <label className="flex items-center gap-2 rounded border border-(--ui-border) p-2 text-sm text-(--ui-text)">
-                <input type="checkbox" checked={form.is_default} onChange={(e) => setForm((p) => ({ ...p, is_default: e.target.checked }))} />
-                Set as default tax
-              </label>
-              <div className="flex gap-2 pt-2">
-                <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
-                <Button tone="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
-              </div>
-            </form>
-          </SectionCard>
-        </div>
-      ) : null}
+      <Modal
+        open={modalOpen}
+        onClose={saving ? undefined : () => setModalOpen(false)}
+        title={form.id ? "Edit Tax Rule" : "Create Tax Rule"}
+        size="sm"
+      >
+        <form className="space-y-2" onSubmit={save}>
+          <Input required placeholder="Tax name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+          <Input required type="number" min="0" max="100" step="0.01" placeholder="Rate" value={form.rate} onChange={(e) => setForm((p) => ({ ...p, rate: e.target.value }))} />
+          <label className="flex items-center gap-2 rounded border border-(--ui-border) p-2 text-sm text-(--ui-text)">
+            <input type="checkbox" checked={form.is_default} onChange={(e) => setForm((p) => ({ ...p, is_default: e.target.checked }))} />
+            Set as default tax
+          </label>
+          <ModalFooter>
+            <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button tone="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+          </ModalFooter>
+        </form>
+      </Modal>
     </PageShell>
   );
 }
