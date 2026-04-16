@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Percent, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { Download, Percent, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import {
@@ -7,6 +7,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   Select,
@@ -566,23 +568,18 @@ export default function PromotionsRedesign() {
         </div>
       </SectionCard>
 
-      {modalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-2xl p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-(--ui-text)">
-                {editing ? "Edit Promotion" : "New Promotion"}
-              </h3>
-              <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={closeModal}>
-                <X size={16} />
-              </button>
-            </div>
-            {formError ? (
-              <div className="mb-3 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">
-                {formError}
-              </div>
-            ) : null}
-            <form className="space-y-3" onSubmit={savePromotion}>
+      <Modal
+        open={modalOpen}
+        onClose={saving ? undefined : closeModal}
+        title={editing ? "Edit Promotion" : "New Promotion"}
+        size="xl"
+      >
+        {formError ? (
+          <div className="mb-3 rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">
+            {formError}
+          </div>
+        ) : null}
+        <form className="space-y-3" onSubmit={savePromotion}>
               <div>
                 <label className="mb-1 block text-xs text-(--ui-text-muted)">Promotion Name</label>
                 <Input
@@ -733,18 +730,16 @@ export default function PromotionsRedesign() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2">
-                <Button type="button" onClick={closeModal}>
+              <ModalFooter>
+                <Button type="button" onClick={closeModal} disabled={saving}>
                   Cancel
                 </Button>
                 <Button tone="primary" type="submit" disabled={saving}>
                   {saving ? "Saving..." : editing ? "Save Changes" : "Create Promotion"}
                 </Button>
-              </div>
+              </ModalFooter>
             </form>
-          </SectionCard>
-        </div>
-      ) : null}
+      </Modal>
     </PageShell>
   );
 }
