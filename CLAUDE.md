@@ -1,12 +1,15 @@
 # SanoPOS - Project Guide for Claude
 
+> **Last updated**: April 16, 2026, 02:30 UTC  
+> **Note**: This guide is accurate as of the date above, but code evolves fast. When in doubt, check actual source files (`backend/migrate-pg.js` for migrations, `package.json` for test tools, route files for API contracts). Always verify against code before making critical implementation decisions.
+
 ## What This Is
 
 A full-stack Point of Sale (POS) system with Shopify integration.
 
 - Backend: Node.js + Express v5 + PostgreSQL (via `pg` pool, `backend/db-pg.js`)
 - Frontend: React 19 + Vite 7 + Tailwind CSS v4
-- **Database: Postgres ONLY** — all SQLite legacy files were deleted in the Phase 5 audit cleanup. Schema source of truth: `backend/schema-pg.sql`.
+- **Database: Postgres ONLY (active)** — SQLite archives exist (`backend/archive/`, `backend/legacy/`) for historical purposes, but all active code uses Postgres only. Schema source of truth: `backend/schema-pg.sql`.
 - **Multi-tenant is LIVE** — `MULTI_TENANT=1` on Railway, `VITE_MULTI_TENANT=1` on Vercel
 - Schema source of truth: `backend/schema-pg.sql`
 
@@ -43,18 +46,18 @@ A full-stack Point of Sale (POS) system with Shopify integration.
 ```
 oneshoppos/
 ├── backend/
-│   ├── index.js                  # Main Express server (~230-line orchestrator — worker startup in boot/workers.js, auth/perms/flags in middleware/)
+│   ├── index.js                  # Main Express server (~292 lines — orchestrator; worker startup in boot/workers.js, auth/perms/flags in middleware/)
 │   ├── db-pg.js                  # Postgres connection pool (query, transaction, getClient)
 │   ├── schema-pg.sql             # Full DDL — single source of truth
-│   ├── migrate-pg.js             # Postgres migration runner
+│   ├── migrate-pg.js             # Postgres migration runner (v1-v49)
 │   ├── jwt-auth.js               # JWT sign/verify utilities
 │   ├── category-tree.js          # Category tree enrichment + resolveInheritedField (FBR)
 │   ├── routes/
-│   │   ├── registerAllRoutes.js  # Orchestrator only (~607 lines)
+│   │   ├── registerAllRoutes.js  # Orchestrator only (~626 lines)
 │   │   ├── admin/                # /api/admin/* — 10 files (auth, tenants, monitoring, billing, operations, compliance, messaging, system, helpers, index) — mounted BEFORE tenant middleware
 │   │   ├── auth.js               # /api/auth/*
 │   │   ├── sales.js              # /api/sales
-│   │   ├── products.js           # /api/products (~912 lines)
+│   │   ├── products.js           # /api/products (~1579 lines)
 │   │   ├── returns.js            # /api/returns
 │   │   ├── customers.js          # /api/customers
 │   │   ├── employees.js          # /api/employees
@@ -152,7 +155,7 @@ oneshoppos/
     │   ├── csvExport.js          # Shared CSV download utility (downloadCsv)
     │   └── theme.js              # Dark mode: getTheme, setTheme, toggleTheme, initTheme
     └── pages/
-        ├── redesign/             # ALL active pages live here (*Redesign.jsx)
+        ├── redesign/             # Most active tenant UI pages live here (*Redesign.jsx); also see admin/, portal/, and public pages in other dirs
         │   ├── POSRedesign.jsx
         │   ├── pos/POSContext.jsx # 130+ exports — all POS state + keyboard shortcuts
         │   ├── pos/POSShortcutsOverlay.jsx # F-key help modal
@@ -241,12 +244,13 @@ oneshoppos/
 
 ## Running Tests
 
-### Postgres Integration Tests (primary — 74 files) + Unit Tests (20 backend + 5 frontend)
-- `npx jest backend/tests/integration/pg-batch1-crud.test.js` (requires `DATABASE_URL`)
+### Postgres Integration Tests (primary — 74 files) + Unit Tests (20 backend + 6 frontend)
+- `npm test` or `npx vitest run backend/tests/integration/pg-batch1-crud.test.js` (requires `DATABASE_URL`)
 - 74 integration files: 19 pg-batch files (16 numbered + 3 phase batches), 39 full-audit domain tests, 15 pg-standalone, 1 legacy smoke-gate
-- Unit tests: `backend/tests/unit/` (20 files — Vitest) + `frontend/tests/unit/` (5 files — Vitest)
+- Unit tests: `backend/tests/unit/` (20 files — Vitest) + `frontend/tests/unit/` (6 files — Vitest)
+- **Note**: Backend uses **Vitest**, not Jest (see `backend/package.json:12`)
 
-### Production E2E Tests (28 specs, ~290 tests — full system audit against production)
+### Production E2E Tests (28 specs, ~324 tests — full system audit against production)
 - `cd frontend && npx playwright test tests/auth.spec.js`
 - 28 self-contained Playwright specs at `frontend/tests/*.spec.js`, targets `sanopos.com` (tenant `packagesmall`)
 - Single config: `playwright.config.js` (no separate live/onboarding configs)
@@ -279,11 +283,22 @@ oneshoppos/
 
 ## Migrations
 
-- **Current version**: 49 (v3: password_hash/email, v4: onboarding_dismissed/backup_log, v5: courier_integrations/order shipping columns, v6: setup_token_expires_at, v7: billing tables, v8: support_tickets/impersonation_sessions, v9: FBR digital invoicing — fbr_invoices queue, category tax/HS inheritance, tax_rate_reference, tax_rate_suggestions, v10: email_queue for unified email service, v11: payment_intents for gateway checkout tracking, v12: super admin enhancements — admin_activity_log, admin_security_log, tenant_notes, announcements, broadcast_log, support_tickets reply columns, v13: performance indexes — sales, sale_items, products, customers, cash_shifts, returns; return_items variant_id column, v14: pin_code column nullable — plaintext PIN storage removed, v15: pg-boss pgboss_job_id column on fbr_invoices, v16: competitive features — 13 new tables, customer/product enhancements, stock counts, fulfillment, reporting, loyalty, v17: integrations hub — extend integration_settings, marketplace mapping tables, new courier seeds, v18: omnichannel — sales_channels, inventory_reservations, storefront_carts, customer_addresses, v19: Phase 2 — scheduled_shifts, price_list_assignments, draft_orders, approval_policies, return_policies, smart_collections, outlet_product_visibility, outlet_tax_profiles, scheduled_catalog_changes, commission_plans, custom_report_definitions, pos_layouts, product_affinities, v20: marketing & messaging — marketing_campaigns, message_threads, customer_invoices family (5 tables), subscription_plans, customer_subscriptions, v21: Phase 4 restaurant — floor plans, tables, sessions, checks, coursing, tabs, preauth, KDS stations/tickets, v22: Phase 4 appointments/projects/contracts — booking_services, appointments, calendar_sync, service_projects, contracts, v23: Phase 4 feature flags seeded, v24: Phase 5 feature flags + payment_webhook_events + sms_provider_messages, v25: Phase 5 shipping — order_shipments, shipment_tracking_events, cod_settlement_batches, v26: backfill Phase 2 feature flags, v27: supplier_payments voided columns, v28: draft_orders partial UNIQUE index, v29: kds_ticket_items junction, v30: products.created_at column, v31: preset_engine — industry_presets table, tenant preset column, v32: customer_portal — portal_sessions, portal_refresh_tokens, portal_otps, v33: service_tickets — workflow_tickets, ticket_comments, ticket_attachments, v34: rentals — rental_items, rental_contracts, rental_contract_items, rental_payments, v35: room_management — rooms, room_bookings, room_folios, room_folio_items, v36: treatment_plans — treatment_plans, treatment_sessions, treatment_notes, treatment_lab_orders, treatment_templates, v37: deposits — booking_deposits, room_booking_deposits, treatment_plan_deposits, v38: country_packs — country_pack_applications log, v39: mode_feature_flags — per-mode flag defaults seeded, v40: clinical_customers — medical fields on customers (blood_group, allergies, medical_notes, emergency_contact, insurance_id), v41: rental_permissions — manage_rentals + manage_rooms + manage_tickets + manage_treatment_plans seeded, v42: treatment_plan_templates — reusable clinical plan templates table, v43: rental_assets — asset catalog for rentals, v44: room_booking_deposits index, v45: portal_appointments — customer_portal_appointments junction, v46: sales_decimal_quantity — sale_items.quantity NUMERIC(10,3), v47: rental_overdue_flags — overdue_notified_at columns, v48: treatment_folio — treatment_folio_items charges table, v49: preset_unit_vocabulary — unit_vocabulary JSONB column on company_profile)
+- **Current version**: 49 (check `backend/migrate-pg.js` for authoritative descriptions)
+- **v1-v30**: Core features (auth, billing, FBR, email, KDS, products, feature flags, etc.)
+- **v31-v39**: M1-M10 tenant preset engine waves (M1 preset engine, M2 service_tickets, M4 clinic extension, M5 decimal quantities, M6 SanoPay, M7 rentals, M8 portal auth, M9 rooms, M10 treatment_plans)
+- **v40-v43**: (Internal/skipped in current timeline)
+- **v44-v49**: April 2026 recent completions:
+  - v44: Mode-gate backfill — seed tenant_modes for existing tenants using phase4 flags before defaults flip false
+  - v45: Widen weighted-quantity columns to NUMERIC(10,3) — outlet_stock, return_items, stock_adjustments, product_variants
+  - v46: Treatment plan templates — reusable clinical plan templates for clone-to-create
+  - v47: Appointments + booking services deposit columns — mirror room_bookings for public booking deposit flow
+  - v48: Tax-inclusive room rates — room_types.tax_inclusive flag
+  - v49: Walk-in service staff assignment on POS — sale_items.staff_id
 - **migrate-pg.js CLI**: `node backend/migrate-pg.js` — migrates public schema AND all active tenant schemas
 - **Tenant migration gotcha**: existing tenants need `schema_version` table seeded with previous versions before first run
+- **Source of truth**: Always check `backend/migrate-pg.js` for exact descriptions — CLAUDE.md migrations section can drift
 
-## Live API Contracts (confirmed Mar 14 2026)
+## Live API Contracts (last verified Mar 14 2026 — check actual route files for current behavior)
 
 - **Sales POST**: body uses `cartItems` (not `items`), item `id` (not `product_id`), item `price` (not `unit_price`)
 - **Returns POST**: needs `original_sale_id`, `total_refund`, `refund_method`; items need `refund_price`
