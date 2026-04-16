@@ -4,8 +4,8 @@ import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
-import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
-import { Play, Save, Download, Trash2, FolderOpen, X } from "lucide-react";
+import { PageShell, SectionCard, Button, Badge, Modal, ModalFooter } from "../../ui/primitives";
+import { Play, Save, Download, Trash2, FolderOpen } from "lucide-react";
 import { downloadCsv } from "../../utils/csvExport";
 import { api } from "../../api";
 
@@ -266,29 +266,31 @@ export default function ReportBuilderRedesign() {
         </div>
       </div>
 
-      {/* Save Modal */}
-      {showSaveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-(--ui-bg) rounded-lg shadow-xl w-full max-w-sm p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-(--ui-text)">Save Report</h2>
-              <button onClick={() => setShowSaveModal(false)}><X size={18} /></button>
-            </div>
-            <label className="block text-sm text-(--ui-muted) mb-1">Name</label>
-            <input className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" value={saveName} onChange={e => setSaveName(e.target.value)} />
-            <label className="block text-sm text-(--ui-muted) mb-1">Description</label>
-            <textarea className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" rows={2} value={saveDesc} onChange={e => setSaveDesc(e.target.value)} />
-            <label className="flex items-center gap-2 text-sm text-(--ui-text) mb-4">
-              <input type="checkbox" checked={saveShared} onChange={e => setSaveShared(e.target.checked)} />
-              Share with all users
-            </label>
-            <div className="flex gap-2 justify-end">
-              <Button tone="plain" size="sm" onClick={() => setShowSaveModal(false)}>Cancel</Button>
-              <Button size="sm" onClick={handleSave}>Save</Button>
-            </div>
+      <Modal
+        open={showSaveModal}
+        onClose={() => setShowSaveModal(false)}
+        title="Save Report"
+        size="sm"
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-sm text-(--ui-text-muted)">Name</label>
+            <input className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)" value={saveName} onChange={e => setSaveName(e.target.value)} />
           </div>
+          <div>
+            <label className="mb-1 block text-sm text-(--ui-text-muted)">Description</label>
+            <textarea className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)" rows={2} value={saveDesc} onChange={e => setSaveDesc(e.target.value)} />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-(--ui-text)">
+            <input type="checkbox" checked={saveShared} onChange={e => setSaveShared(e.target.checked)} />
+            Share with all users
+          </label>
         </div>
-      )}
+        <ModalFooter>
+          <Button tone="plain" size="sm" onClick={() => setShowSaveModal(false)}>Cancel</Button>
+          <Button size="sm" onClick={handleSave}>Save</Button>
+        </ModalFooter>
+      </Modal>
     </PageShell>
   );
 }
