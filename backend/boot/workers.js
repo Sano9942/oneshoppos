@@ -259,6 +259,15 @@ function startAll(deps) {
           await registerCleanupWorker(boss);
         }
 
+        // Orphan-schema scan defaults ON whenever pg-boss is wired — moves
+        // a ~104s p100 introspection query off the admin request path
+        // (Phase 1.1 Tier 1, prod snapshot 2026-04-17). Set
+        // ORPHAN_SCHEMA_SCAN_WORKER_ENABLED=0 to opt out.
+        if (String(process.env.ORPHAN_SCHEMA_SCAN_WORKER_ENABLED || "1") !== "0") {
+          const { registerOrphanSchemaScanWorker } = require("../workers/orphan-schema-scan-worker-boss");
+          await registerOrphanSchemaScanWorker(boss, db);
+        }
+
         if (String(process.env.MARKETPLACE_SYNC_WORKER_ENABLED || "0") === "1") {
           const { registerMarketplaceSyncWorker } = require("../workers/marketplace-sync-worker-boss");
           await registerMarketplaceSyncWorker(boss, pool);
