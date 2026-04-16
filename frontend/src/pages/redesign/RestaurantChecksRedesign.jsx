@@ -5,8 +5,8 @@ import { readContext } from "../../auth/authStore";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
-import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
-import { Receipt, Split, Flame, X } from "lucide-react";
+import { PageShell, SectionCard, Button, Badge, Modal, ModalFooter } from "../../ui/primitives";
+import { Receipt, Split, Flame } from "lucide-react";
 import { api } from "../../api";
 
 const STATUS_TONES = { open: "warning", split: "warning", closed: "success", voided: "danger" };
@@ -110,16 +110,17 @@ export default function RestaurantChecksRedesign() {
         )}
       </SectionCard>
 
-      {showSplit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowSplit(null)}>
-          <div className="bg-(--ui-bg) rounded-lg shadow-lg w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold">Split Check #{showSplit.check_number || showSplit.id}</h2>
-              <button onClick={() => setShowSplit(null)}><X className="w-5 h-5" /></button>
-            </div>
+      <Modal
+        open={!!showSplit}
+        onClose={() => setShowSplit(null)}
+        title={showSplit ? `Split Check #${showSplit.check_number || showSplit.id}` : "Split Check"}
+        size="sm"
+      >
+        {showSplit ? (
+          <>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Split Mode</label>
+                <label className="mb-1 block text-sm font-medium">Split Mode</label>
                 <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={splitMode} onChange={e => setSplitMode(e.target.value)}>
                   <option value="equal">Equal Split</option>
                   <option value="by_seat">By Seat</option>
@@ -128,19 +129,19 @@ export default function RestaurantChecksRedesign() {
               </div>
               {splitMode === "equal" && (
                 <div>
-                  <label className="block text-sm font-medium mb-1">Number of Splits</label>
+                  <label className="mb-1 block text-sm font-medium">Number of Splits</label>
                   <input type="number" min="2" max="20" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={splitCount} onChange={e => setSplitCount(Number(e.target.value))} />
-                  <p className="text-xs text-(--ui-text-muted) mt-1">{fmt((showSplit.total || 0) / splitCount)} per split</p>
+                  <p className="mt-1 text-xs text-(--ui-text-muted)">{fmt((showSplit.total || 0) / splitCount)} per split</p>
                 </div>
               )}
-              <div className="flex gap-2 justify-end">
-                <Button tone="plain" onClick={() => setShowSplit(null)}>Cancel</Button>
-                <Button onClick={() => splitCheck(showSplit.id)}>Split</Button>
-              </div>
             </div>
-          </div>
-        </div>
-      )}
+            <ModalFooter>
+              <Button tone="plain" onClick={() => setShowSplit(null)}>Cancel</Button>
+              <Button onClick={() => splitCheck(showSplit.id)}>Split</Button>
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
     </PageShell>
   );
 }
