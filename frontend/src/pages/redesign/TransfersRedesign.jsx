@@ -6,6 +6,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   Select,
@@ -180,33 +182,33 @@ export default function TransfersRedesign() {
         </div>
       </SectionCard>
 
-      {modalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-md p-4">
-            <h3 className="text-lg font-semibold text-(--ui-text)">New Transfer</h3>
-            <form className="mt-3 space-y-2" onSubmit={save}>
-              <Select required value={form.product_id} onChange={(e) => setForm((p) => ({ ...p, product_id: e.target.value }))}>
-                <option value="">Select product</option>
-                {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.barcode || p.sku || "-"})</option>)}
-              </Select>
-              <Select required value={form.from_outlet_id} onChange={(e) => setForm((p) => ({ ...p, from_outlet_id: e.target.value, to_outlet_id: p.to_outlet_id === e.target.value ? "" : p.to_outlet_id }))}>
-                <option value="">From outlet</option>
-                {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-              </Select>
-              <Select required value={form.to_outlet_id} onChange={(e) => setForm((p) => ({ ...p, to_outlet_id: e.target.value }))}>
-                <option value="">To outlet</option>
-                {outlets.filter((o) => String(o.id) !== String(form.from_outlet_id)).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-              </Select>
-              <Input required type="number" min="1" placeholder="Quantity" value={form.quantity} onChange={(e) => setForm((p) => ({ ...p, quantity: e.target.value }))} />
-              <Input placeholder="Note" value={form.note} onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))} />
-              <div className="flex gap-2 pt-2">
-                <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
-                <Button tone="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Create"}</Button>
-              </div>
-            </form>
-          </SectionCard>
-        </div>
-      ) : null}
+      <Modal
+        open={modalOpen}
+        onClose={saving ? undefined : () => setModalOpen(false)}
+        title="New Transfer"
+        size="md"
+      >
+        <form className="space-y-2" onSubmit={save}>
+          <Select required value={form.product_id} onChange={(e) => setForm((p) => ({ ...p, product_id: e.target.value }))}>
+            <option value="">Select product</option>
+            {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.barcode || p.sku || "-"})</option>)}
+          </Select>
+          <Select required value={form.from_outlet_id} onChange={(e) => setForm((p) => ({ ...p, from_outlet_id: e.target.value, to_outlet_id: p.to_outlet_id === e.target.value ? "" : p.to_outlet_id }))}>
+            <option value="">From outlet</option>
+            {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </Select>
+          <Select required value={form.to_outlet_id} onChange={(e) => setForm((p) => ({ ...p, to_outlet_id: e.target.value }))}>
+            <option value="">To outlet</option>
+            {outlets.filter((o) => String(o.id) !== String(form.from_outlet_id)).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </Select>
+          <Input required type="number" min="1" placeholder="Quantity" value={form.quantity} onChange={(e) => setForm((p) => ({ ...p, quantity: e.target.value }))} />
+          <Input placeholder="Note" value={form.note} onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))} />
+          <ModalFooter>
+            <Button type="button" onClick={() => setModalOpen(false)} disabled={saving}>Cancel</Button>
+            <Button tone="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Create"}</Button>
+          </ModalFooter>
+        </form>
+      </Modal>
     </PageShell>
   );
 }
