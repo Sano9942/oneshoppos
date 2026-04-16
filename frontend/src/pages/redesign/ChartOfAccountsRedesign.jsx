@@ -8,6 +8,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   Select,
@@ -344,15 +346,18 @@ export default function ChartOfAccountsRedesign() {
       </SectionCard>
 
       {/* Add/Edit Modal */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-md p-6">
-            <h2 className="text-lg font-semibold mb-4">
-              {form.id ? "Edit Account" : "Add Account"}
-              {form.is_system && <span className="ml-2 text-sm text-gray-400">(system — limited editing)</span>}
-            </h2>
-
-            <div className="space-y-3">
+      <Modal
+        open={modalOpen}
+        onClose={saving ? undefined : () => setModalOpen(false)}
+        title={
+          <>
+            {form.id ? "Edit Account" : "Add Account"}
+            {form.is_system && <span className="ml-2 text-sm text-gray-400">(system — limited editing)</span>}
+          </>
+        }
+        size="md"
+      >
+        <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium mb-1">Code</label>
                 <Input
@@ -419,17 +424,15 @@ export default function ChartOfAccountsRedesign() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 mt-5">
-              <Button onClick={() => setModalOpen(false)} className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                Cancel
-              </Button>
-              <Button onClick={handleSave} disabled={saving || !form.code || !form.name}>
-                {saving ? "Saving..." : form.id ? "Update" : "Create"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+        <ModalFooter>
+          <Button onClick={() => setModalOpen(false)} disabled={saving}>
+            Cancel
+          </Button>
+          <Button tone="primary" onClick={handleSave} disabled={saving || !form.code || !form.name}>
+            {saving ? "Saving..." : form.id ? "Update" : "Create"}
+          </Button>
+        </ModalFooter>
+      </Modal>
     </PageShell>
   );
 }
