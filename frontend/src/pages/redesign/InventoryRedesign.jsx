@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BarChart2, CreditCard, Download, Hash, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { BarChart2, CreditCard, Download, Hash, Plus, Search, Trash2, Upload } from "lucide-react";
 import { api } from "../../api";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -11,6 +11,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   Select,
@@ -900,22 +902,19 @@ export default function InventoryRedesign() {
         </div>
       </SectionCard> : null}
     </PageShell>
-    {importResults !== null && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-(--ui-border)">
-            <div>
-              <p className="font-semibold text-(--ui-text)">Import Results</p>
-              <p className="text-xs text-(--ui-text-muted)">
-                {importResults.filter((r) => r.status === "inserted").length} inserted &nbsp;·&nbsp;
-                {importResults.filter((r) => r.status === "error").length} errors
-              </p>
-            </div>
-            <button onClick={() => setImportResults(null)} className="text-(--ui-text-muted) hover:text-(--ui-text)">
-              <X size={18} />
-            </button>
-          </div>
-          <div className="overflow-y-auto flex-1 px-5 py-3">
+    <Modal
+      open={importResults !== null}
+      onClose={() => setImportResults(null)}
+      title="Import Results"
+      size="xl"
+    >
+      {importResults !== null ? (
+        <>
+          <p className="mb-3 text-xs text-(--ui-text-muted)">
+            {importResults.filter((r) => r.status === "inserted").length} inserted &nbsp;·&nbsp;
+            {importResults.filter((r) => r.status === "error").length} errors
+          </p>
+          <div className="max-h-[60vh] overflow-y-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-(--ui-text-muted) border-b border-(--ui-border)">
@@ -943,82 +942,74 @@ export default function InventoryRedesign() {
               </tbody>
             </table>
           </div>
-          <div className="px-5 py-3 border-t border-(--ui-border) flex justify-end">
+          <ModalFooter>
             <Button onClick={() => setImportResults(null)}>Close</Button>
-          </div>
-        </div>
-      </div>
-    )}
+          </ModalFooter>
+        </>
+      ) : null}
+    </Modal>
 
     {/* Stock by outlet popup */}
-    {stockPopup ? (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-        <div className="w-full max-w-sm rounded-xl border border-(--ui-border) bg-white shadow-xl">
-          <div className="flex items-center justify-between border-b border-(--ui-border) px-4 py-3">
-            <div>
-              <p className="font-semibold text-(--ui-text)">Stock by Outlet</p>
-              <p className="text-xs text-(--ui-text-muted)">{stockPopup.productName}</p>
-            </div>
-            <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={() => setStockPopup(null)}>
-              <X size={16} />
-            </button>
-          </div>
-          <div className="overflow-auto p-4">
-            {stockPopup.loading ? (
-              <p className="py-4 text-center text-sm text-(--ui-text-muted)">Loading...</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-(--ui-border) text-left text-xs uppercase text-(--ui-text-muted)">
-                    <th className="pb-2 pr-4">Outlet</th>
-                    <th className="pb-2 text-right">Qty</th>
+    <Modal
+      open={!!stockPopup}
+      onClose={() => setStockPopup(null)}
+      title="Stock by Outlet"
+      size="sm"
+    >
+      {stockPopup ? (
+        <>
+          <p className="mb-3 text-xs text-(--ui-text-muted)">{stockPopup.productName}</p>
+          {stockPopup.loading ? (
+            <p className="py-4 text-center text-sm text-(--ui-text-muted)">Loading...</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-(--ui-border) text-left text-xs uppercase text-(--ui-text-muted)">
+                  <th className="pb-2 pr-4">Outlet</th>
+                  <th className="pb-2 text-right">Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(stockPopup.stock || []).map((s) => (
+                  <tr key={s.outlet_id} className="border-t border-(--ui-border)">
+                    <td className="py-1.5 pr-4 text-(--ui-text)">{s.outlet_name || `Outlet #${s.outlet_id}`}</td>
+                    <td className="py-1.5 text-right font-medium text-(--ui-text)">{s.quantity ?? 0}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {(stockPopup.stock || []).map((s) => (
-                    <tr key={s.outlet_id} className="border-t border-(--ui-border)">
-                      <td className="py-1.5 pr-4 text-(--ui-text)">{s.outlet_name || `Outlet #${s.outlet_id}`}</td>
-                      <td className="py-1.5 text-right font-medium text-(--ui-text)">{s.quantity ?? 0}</td>
-                    </tr>
-                  ))}
-                  {(stockPopup.stock || []).length > 1 ? (
-                    <tr className="border-t-2 border-(--ui-border) font-semibold">
-                      <td className="py-1.5 pr-4 text-(--ui-text)">Total</td>
-                      <td className="py-1.5 text-right text-(--ui-text)">
-                        {(stockPopup.stock || []).reduce((sum, s) => sum + (s.quantity ?? 0), 0)}
-                      </td>
-                    </tr>
-                  ) : null}
-                  {(stockPopup.stock || []).length === 0 ? (
-                    <tr>
-                      <td colSpan="2" className="py-4 text-center text-xs text-(--ui-text-muted)">No stock data</td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            )}
-          </div>
-          <div className="flex justify-end border-t border-(--ui-border) px-4 py-3">
+                ))}
+                {(stockPopup.stock || []).length > 1 ? (
+                  <tr className="border-t-2 border-(--ui-border) font-semibold">
+                    <td className="py-1.5 pr-4 text-(--ui-text)">Total</td>
+                    <td className="py-1.5 text-right text-(--ui-text)">
+                      {(stockPopup.stock || []).reduce((sum, s) => sum + (s.quantity ?? 0), 0)}
+                    </td>
+                  </tr>
+                ) : null}
+                {(stockPopup.stock || []).length === 0 ? (
+                  <tr>
+                    <td colSpan="2" className="py-4 text-center text-xs text-(--ui-text-muted)">No stock data</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          )}
+          <ModalFooter>
             <Button size="sm" onClick={() => setStockPopup(null)}>Close</Button>
-          </div>
-        </div>
-      </div>
-    ) : null}
+          </ModalFooter>
+        </>
+      ) : null}
+    </Modal>
 
     {/* Serial numbers modal */}
-    {serialsModal ? (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-        <div className="w-full max-w-md rounded-xl border border-(--ui-border) bg-white shadow-xl">
-          <div className="flex items-center justify-between border-b border-(--ui-border) px-4 py-3">
-            <div>
-              <p className="font-semibold text-(--ui-text)">Serial Numbers</p>
-              <p className="text-xs text-(--ui-text-muted)">{serialsModal.productName}</p>
-            </div>
-            <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={() => setSerialsModal(null)}>
-              <X size={16} />
-            </button>
-          </div>
-          <div className="max-h-[40vh] overflow-auto p-4">
+    <Modal
+      open={!!serialsModal}
+      onClose={serialsSaving ? undefined : () => setSerialsModal(null)}
+      title="Serial Numbers"
+      size="md"
+    >
+      {serialsModal ? (
+        <>
+          <p className="mb-3 text-xs text-(--ui-text-muted)">{serialsModal.productName}</p>
+          <div className="max-h-[40vh] overflow-auto">
             {serialsModal.loading ? (
               <p className="py-4 text-center text-sm text-(--ui-text-muted)">Loading...</p>
             ) : (
@@ -1040,7 +1031,7 @@ export default function InventoryRedesign() {
               </>
             )}
           </div>
-          <div className="border-t border-(--ui-border) p-4">
+          <div className="mt-3">
             <p className="mb-2 text-xs font-medium text-(--ui-text-muted)">Add Serial Numbers (one per line)</p>
             <textarea
               className="w-full rounded border border-(--ui-border) p-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-(--ui-primary)"
@@ -1049,17 +1040,17 @@ export default function InventoryRedesign() {
               value={serialsModal.newSerials}
               onChange={(e) => setSerialsModal((prev) => prev && ({ ...prev, newSerials: e.target.value }))}
             />
-            <div className="mt-2 flex justify-end gap-2">
-              <Button size="sm" onClick={() => setSerialsModal(null)}>Close</Button>
-              <Button size="sm" tone="primary" onClick={addSerials} disabled={serialsSaving}>
-                <Hash size={12} className="mr-1 inline" />
-                {serialsSaving ? "Adding..." : "Add Serials"}
-              </Button>
-            </div>
           </div>
-        </div>
-      </div>
-    ) : null}
+          <ModalFooter>
+            <Button size="sm" onClick={() => setSerialsModal(null)} disabled={serialsSaving}>Close</Button>
+            <Button size="sm" tone="primary" onClick={addSerials} disabled={serialsSaving}>
+              <Hash size={12} className="mr-1 inline" />
+              {serialsSaving ? "Adding..." : "Add Serials"}
+            </Button>
+          </ModalFooter>
+        </>
+      ) : null}
+    </Modal>
     </>
   );
 }
