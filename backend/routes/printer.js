@@ -1,11 +1,12 @@
 /**
  * Printer routes — hardware receipt printing via ESC/POS
  *
- * POST /api/print/receipt  — print a sale slip to thermal printer
- * POST /api/print/test     — send a sample test receipt to the configured printer
- * GET  /api/print/status   — check if configured printer is reachable
- * GET  /api/print/config   — load current printer_config settings
- * PUT  /api/print/config   — save printer_config settings
+ * POST /api/print/receipt       — print a sale slip to thermal printer
+ * POST /api/print/test          — send a sample test receipt to the configured printer
+ * POST /api/print/open-drawer   — kick the cash drawer without printing (no-sale / drop)
+ * GET  /api/print/status        — check if configured printer is reachable
+ * GET  /api/print/config        — load current printer_config settings
+ * PUT  /api/print/config        — save printer_config settings
  *
  * All endpoints require an authenticated employee (x-employee-id header).
  * POST /api/print/receipt always returns 200 — frontend checks result.fallback.
@@ -13,7 +14,7 @@
 
 module.exports = function printerRoutes(app, deps) {
   const { db, requirePerm } = deps;
-  const { printReceipt, printerStatus, printTest } = require("../services/printer")(db);
+  const { printReceipt, printerStatus, printTest, openDrawer } = require("../services/printer")(db);
 
   // POST /api/print/receipt
   // Body: { slip: object, template: object|null }
@@ -45,6 +46,16 @@ module.exports = function printerRoutes(app, deps) {
   // POST /api/print/test — send a sample test receipt to the configured printer
   app.post("/api/print/test", requirePerm("all_access"), async (req, res) => {
     const result = await printTest();
+    return res.json(result);
+  });
+
+  // POST /api/print/open-drawer — kick the cash drawer without printing
+  // (no-sale, cash drop, safe drop scenarios). Always returns 200 — caller
+  // checks result.ok. Requires authenticated employee but no specific perm.
+  app.post("/api/print/open-drawer", async (req, res) => {
+    const employeeId = Number(req.headers["x-employee-id"] || 0);
+    if (!employeeId) return res.status(401).json({ error: "Unauthorized" });
+    const result = await openDrawer();
     return res.json(result);
   });
 
