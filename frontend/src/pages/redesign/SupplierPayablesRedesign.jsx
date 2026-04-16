@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, Download, RefreshCw, X, BookOpen, Ban } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, RefreshCw, BookOpen, Ban } from "lucide-react";
 import { api } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -9,6 +9,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   TableToolbar,
@@ -630,15 +632,14 @@ export default function SupplierPayablesRedesign() {
         </div>
       ) : null}
 
-      {payModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-md p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-(--ui-text)">Record Payment</h3>
-              <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={closePayModal}>
-                <X size={16} />
-              </button>
-            </div>
+      <Modal
+        open={!!payModal}
+        onClose={paying ? undefined : closePayModal}
+        title="Record Payment"
+        size="md"
+      >
+        {payModal ? (
+          <>
             <div className="mb-3 rounded border border-(--ui-border) bg-(--ui-muted-surface) p-3 text-sm">
               <p className="text-(--ui-text-muted)">
                 Invoice: <span className="font-mono text-(--ui-text)">{payModal.invoice_number || `#${payModal.id}`}</span>
@@ -691,8 +692,8 @@ export default function SupplierPayablesRedesign() {
                 <Input value={payNotes} onChange={(e) => setPayNotes(e.target.value)} />
               </div>
             </div>
-            <div className="mt-3 flex justify-end gap-2">
-              <Button onClick={closePayModal}>Cancel</Button>
+            <ModalFooter>
+              <Button onClick={closePayModal} disabled={paying}>Cancel</Button>
               <Button
                 tone="primary"
                 onClick={handlePay}
@@ -700,17 +701,18 @@ export default function SupplierPayablesRedesign() {
               >
                 {paying ? "Recording..." : "Record Payment"}
               </Button>
-            </div>
-          </SectionCard>
-        </div>
-      ) : null}
-      {voidModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="w-full max-w-md p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-(--ui-text)">Void Payment</h3>
-              <button className="text-(--ui-text-muted) hover:text-(--ui-text)" onClick={() => setVoidModal(null)}><X size={16} /></button>
-            </div>
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
+      <Modal
+        open={!!voidModal}
+        onClose={voiding ? undefined : () => setVoidModal(null)}
+        title="Void Payment"
+        size="md"
+      >
+        {voidModal ? (
+          <>
             <div className="mb-3 rounded border border-(--ui-border) bg-(--ui-muted-surface) p-3 text-sm">
               <p className="text-(--ui-text-muted)">Amount: <span className="font-semibold text-rose-700">{money(voidModal.amount)}</span></p>
               <p className="text-(--ui-text-muted)">Method: <span className="text-(--ui-text)">{voidModal.payment_method}</span></p>
@@ -720,15 +722,15 @@ export default function SupplierPayablesRedesign() {
               <label className="mb-1 block text-xs text-(--ui-text-muted)">Void Reason (optional)</label>
               <Input value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Enter reason..." />
             </div>
-            <div className="mt-3 flex justify-end gap-2">
-              <Button onClick={() => setVoidModal(null)}>Cancel</Button>
+            <ModalFooter>
+              <Button onClick={() => setVoidModal(null)} disabled={voiding}>Cancel</Button>
               <Button tone="danger" onClick={handleVoid} disabled={voiding}>
                 {voiding ? "Voiding..." : "Confirm Void"}
               </Button>
-            </div>
-          </SectionCard>
-        </div>
-      ) : null}
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
     </PageShell>
   );
 }
