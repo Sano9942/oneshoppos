@@ -9,6 +9,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
 } from "../../ui/primitives";
@@ -214,7 +216,7 @@ export default function CreditDebitNotesRedesign() {
       subtitle="Manage purchase and sales adjustments"
       right={
         <div className="flex gap-2">
-          <Button size="sm" variant="ghost" onClick={handleExport}>
+          <Button size="sm" tone="plain" onClick={handleExport}>
             <Download className="w-4 h-4 mr-1" /> Export
           </Button>
           <Button size="sm" onClick={openCreate}>
@@ -343,14 +345,13 @@ export default function CreditDebitNotesRedesign() {
       </SectionCard>
 
       {/* Create / Edit Modal */}
-      {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-lg mx-4 p-6">
-            <h2 className="text-lg font-semibold mb-4">
-              {modal === "create" ? "New" : "Edit"} {activeTab.label.replace(/s$/, "")}
-            </h2>
-
-            <div className="space-y-3">
+      <Modal
+        open={!!modal}
+        onClose={saving ? undefined : closeModal}
+        title={modal ? `${modal === "create" ? "New" : "Edit"} ${activeTab.label.replace(/s$/, "")}` : ""}
+        size="lg"
+      >
+        <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium mb-1">Type</label>
                 <select
@@ -439,32 +440,33 @@ export default function CreditDebitNotesRedesign() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1">Notes (optional)</label>
-                <textarea
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  rows={2}
-                  className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm resize-none"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 mt-5">
-              <Button variant="ghost" onClick={closeModal}>Cancel</Button>
-              <Button onClick={handleSave} disabled={saving || !form.amount || !form.reason}>
-                {saving ? "Saving…" : modal === "create" ? "Create" : "Save"}
-              </Button>
-            </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Notes (optional)</label>
+            <textarea
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              rows={2}
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm resize-none"
+            />
           </div>
         </div>
-      )}
+        <ModalFooter>
+          <Button onClick={closeModal} disabled={saving}>Cancel</Button>
+          <Button tone="primary" onClick={handleSave} disabled={saving || !form.amount || !form.reason}>
+            {saving ? "Saving…" : modal === "create" ? "Create" : "Save"}
+          </Button>
+        </ModalFooter>
+      </Modal>
 
       {/* Confirm Modal (Approve / Cancel) */}
-      {confirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-sm mx-4 p-6 text-center">
-            <h3 className="text-lg font-semibold mb-2 capitalize">{confirm.action} Note</h3>
+      <Modal
+        open={!!confirm}
+        onClose={confirming ? undefined : () => setConfirm(null)}
+        title={confirm ? `${confirm.action[0].toUpperCase()}${confirm.action.slice(1)} Note` : ""}
+        size="sm"
+      >
+        {confirm ? (
+          <>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
               {confirm.note.note_number} — {money(confirm.note.amount)}
             </p>
@@ -478,19 +480,19 @@ export default function CreditDebitNotesRedesign() {
                 This will reverse the balance adjustment.
               </p>
             )}
-            <div className="flex justify-center gap-2 mt-4">
-              <Button variant="ghost" onClick={() => setConfirm(null)}>Back</Button>
+            <ModalFooter>
+              <Button onClick={() => setConfirm(null)} disabled={confirming}>Back</Button>
               <Button
+                tone={confirm.action === "cancel" ? "danger" : "primary"}
                 onClick={handleConfirmAction}
                 disabled={confirming}
-                className={confirm.action === "cancel" ? "bg-red-600 hover:bg-red-700 text-white" : ""}
               >
                 {confirming ? "Processing…" : confirm.action === "approve" ? "Approve" : "Cancel Note"}
               </Button>
-            </div>
-          </div>
-        </div>
-      )}
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
     </PageShell>
   );
 }
