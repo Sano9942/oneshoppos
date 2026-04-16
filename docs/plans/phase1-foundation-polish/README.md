@@ -10,6 +10,7 @@ Work branch: `phase1-foundation-polish` (off `main`)
 |-------|-----|--------|
 | 1.1 Performance & UX baseline | [01-baseline.md](01-baseline.md) | Captured |
 | 1.1 Production snapshot | [02-prod-snapshot.md](02-prod-snapshot.md) | Captured (DB, Sentry, uptime) — revised priority list |
+| 1.1 Tier 1 + Tier 2 results | [03-tier1-tier2-results.md](03-tier1-tier2-results.md) | Tier 1 done (3/3), Tier 2 partial (1/3, 2 deferred with reasons) |
 | 1.2 Design system convergence | _(pending)_ | Not started |
 | 1.3 Reliability hardening | _(pending)_ | Sentry top-10 = 0 unresolved; reframed in 02 |
 | 1.4 The 1% details | _(pending)_ | Not started |
