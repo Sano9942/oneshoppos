@@ -7,7 +7,6 @@ import {
   Search,
   Tag,
   Trash2,
-  X,
 } from "lucide-react";
 import { api } from "../../api";
 import { useCurrency } from "../../contexts/CurrencyContext";
@@ -15,6 +14,8 @@ import { useToast } from "../../contexts/ToastContext";
 import {
   Button,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
 } from "../../ui/primitives";
@@ -63,8 +64,6 @@ function PriceListModal({ open, editing, onClose, onSaved }) {
     }
   }, [open, editing]);
 
-  if (!open) return null;
-
   async function handleSubmit(e) {
     e.preventDefault();
     if (!form.name.trim()) return toastError("Name is required.");
@@ -87,68 +86,63 @@ function PriceListModal({ open, editing, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-(--bg-card) border border-(--border) rounded-xl shadow-2xl w-full max-w-md mx-4">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-(--border)">
-          <h2 className="text-base font-semibold text-(--text-primary)">
-            {editing ? "Edit Price List" : "New Price List"}
-          </h2>
-          <button onClick={onClose} className="text-(--text-muted) hover:text-(--text-primary) transition-colors">
-            <X size={18} />
-          </button>
+    <Modal
+      open={open}
+      onClose={busy ? undefined : onClose}
+      title={editing ? "Edit Price List" : "New Price List"}
+      size="md"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-(--text-secondary) mb-1">Name *</label>
+          <Input
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            placeholder="e.g. Wholesale Tier A"
+            required
+          />
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-(--text-secondary) mb-1">Name *</label>
-            <Input
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="e.g. Wholesale Tier A"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-(--text-secondary) mb-1">Description</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              placeholder="Optional notes about this price list"
-              rows={2}
-              className="w-full rounded-lg border border-(--border) bg-(--bg-input) text-(--text-primary) px-3 py-2 text-sm placeholder:text-(--text-muted) focus:outline-none focus:ring-2 focus:ring-(--accent) resize-none"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-(--text-secondary) mb-1">Type</label>
-            <select
-              value={form.type}
-              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
-              className="w-full rounded-lg border border-(--border) bg-(--bg-input) text-(--text-primary) px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--accent)"
-            >
-              <option value="customer_group">Customer Group</option>
-              <option value="volume">Volume</option>
-              <option value="promotional">Promotional</option>
-            </select>
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={form.is_active}
-              onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
-              className="w-4 h-4 rounded border-(--border) accent-(--accent)"
-            />
-            <span className="text-sm text-(--text-secondary)">Active</span>
-          </label>
-          <div className="flex gap-2 pt-1">
-            <Button type="button" variant="ghost" className="flex-1" onClick={onClose} disabled={busy}>
-              Cancel
-            </Button>
-            <Button type="submit" className="flex-1" disabled={busy}>
-              {busy ? "Saving…" : editing ? "Save Changes" : "Create"}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div>
+          <label className="block text-sm font-medium text-(--text-secondary) mb-1">Description</label>
+          <textarea
+            value={form.description}
+            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+            placeholder="Optional notes about this price list"
+            rows={2}
+            className="w-full rounded-lg border border-(--border) bg-(--bg-input) text-(--text-primary) px-3 py-2 text-sm placeholder:text-(--text-muted) focus:outline-none focus:ring-2 focus:ring-(--accent) resize-none"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-(--text-secondary) mb-1">Type</label>
+          <select
+            value={form.type}
+            onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
+            className="w-full rounded-lg border border-(--border) bg-(--bg-input) text-(--text-primary) px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--accent)"
+          >
+            <option value="customer_group">Customer Group</option>
+            <option value="volume">Volume</option>
+            <option value="promotional">Promotional</option>
+          </select>
+        </div>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={form.is_active}
+            onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
+            className="w-4 h-4 rounded border-(--border) accent-(--accent)"
+          />
+          <span className="text-sm text-(--text-secondary)">Active</span>
+        </label>
+        <ModalFooter>
+          <Button type="button" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button tone="primary" type="submit" disabled={busy}>
+            {busy ? "Saving…" : editing ? "Save Changes" : "Create"}
+          </Button>
+        </ModalFooter>
+      </form>
+    </Modal>
   );
 }
 
@@ -307,6 +301,7 @@ function ItemsPanel({ listId, products }) {
                         onKeyDown={(e) => { if (e.key === "Enter") commitEdit(item); if (e.key === "Escape") setEditingCell(null); }}
                       />
                     ) : (
+                      /* Inline editable cell — dashed-underline styling, a Button would add background. */
                       <button
                         onClick={() => startEdit(item.id, "price", item.price)}
                         className="font-medium text-(--text-primary) hover:text-(--accent) transition-colors cursor-pointer underline decoration-dashed underline-offset-2"
@@ -346,13 +341,9 @@ function ItemsPanel({ listId, products }) {
                     )}
                   </td>
                   <td className="px-4 py-2 text-right">
-                    <button
-                      onClick={() => removeItem(item.id)}
-                      className="text-(--text-muted) hover:text-red-500 transition-colors"
-                      title="Remove"
-                    >
+                    <Button tone="plain" size="sm" iconOnly onClick={() => removeItem(item.id)} title="Remove" aria-label="Remove" className="hover:text-red-500">
                       <Trash2 size={14} />
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               );
@@ -567,7 +558,7 @@ export default function PriceListsRedesign() {
                         {list.item_count ?? 0} item{list.item_count !== 1 ? "s" : ""}
                       </div>
 
-                      {/* Active toggle */}
+                      {/* Active toggle — custom switch control, needs a Toggle/Switch primitive to converge. */}
                       <div
                         className="shrink-0"
                         onClick={(e) => e.stopPropagation()}
@@ -589,20 +580,8 @@ export default function PriceListsRedesign() {
                         className="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <button
-                          onClick={() => openEdit(list)}
-                          className="p-1.5 rounded hover:bg-(--bg-subtle) text-(--text-muted) hover:text-(--accent) transition-colors"
-                          title="Edit"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          onClick={() => deleteList(list)}
-                          className="p-1.5 rounded hover:bg-(--bg-subtle) text-(--text-muted) hover:text-red-500 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        <Button tone="plain" size="sm" iconOnly onClick={() => openEdit(list)} title="Edit" aria-label="Edit"><Pencil size={14} /></Button>
+                        <Button tone="plain" size="sm" iconOnly onClick={() => deleteList(list)} title="Delete" aria-label="Delete" className="hover:text-red-500"><Trash2 size={14} /></Button>
                       </div>
                     </div>
 
