@@ -3,8 +3,8 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
-import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
-import { Plus, Send, Clock, Eye, Pencil, Trash2, X, Mail } from "lucide-react";
+import { PageShell, SectionCard, Button, Badge, Modal, ModalFooter } from "../../ui/primitives";
+import { Plus, Send, Clock, Eye, Pencil, Trash2, X } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { api } from "../../api";
 
@@ -199,10 +199,11 @@ export default function MarketingCampaignsRedesign() {
                       <td className="py-2 px-3 text-right">
                         <div className="flex gap-1 justify-end">
                           {c.status === "draft" && <>
-                            <button onClick={() => openComposer(c)} className="p-1 rounded hover:bg-(--ui-bg-hover)" title="Edit"><Pencil className="w-4 h-4" /></button>
-                            <button onClick={() => sendTestEmail(c.id)} className="p-1 rounded hover:bg-(--ui-bg-hover)" title="Send test"><Eye className="w-4 h-4" /></button>
-                            <button onClick={() => sendCampaign(c.id)} className="p-1 rounded hover:bg-(--ui-bg-hover) text-green-600" title="Send now"><Send className="w-4 h-4" /></button>
-                            <button onClick={() => { setScheduleCampaignId(c.id); setScheduleDate(""); setShowScheduleModal(true); }} className="p-1 rounded hover:bg-(--ui-bg-hover)" title="Schedule"><Clock className="w-4 h-4" /></button>
+                            <Button tone="plain" size="sm" iconOnly onClick={() => openComposer(c)} title="Edit" aria-label="Edit"><Pencil className="w-4 h-4" /></Button>
+                            <Button tone="plain" size="sm" iconOnly onClick={() => sendTestEmail(c.id)} title="Send test" aria-label="Send test"><Eye className="w-4 h-4" /></Button>
+                            {/* Intentional green tint — "Send now" is the primary CTA on a draft row. */}
+                            <Button tone="plain" size="sm" iconOnly onClick={() => sendCampaign(c.id)} title="Send now" aria-label="Send now" className="text-green-600"><Send className="w-4 h-4" /></Button>
+                            <Button tone="plain" size="sm" iconOnly onClick={() => { setScheduleCampaignId(c.id); setScheduleDate(""); setShowScheduleModal(true); }} title="Schedule" aria-label="Schedule"><Clock className="w-4 h-4" /></Button>
                           </>}
                         </div>
                       </td>
@@ -232,8 +233,8 @@ export default function MarketingCampaignsRedesign() {
                       <td className="py-2 px-3 text-(--ui-text-muted)">{t.subject || "—"}</td>
                       <td className="py-2 px-3 text-right">
                         <div className="flex gap-1 justify-end">
-                          <button onClick={() => { setEditingTemplate(t); setTemplateForm({ name: t.name, subject: t.subject || "", body_html: t.body_html || "" }); setShowTemplateModal(true); }} className="p-1 rounded hover:bg-(--ui-bg-hover)"><Pencil className="w-4 h-4" /></button>
-                          <button onClick={() => deleteTemplate(t.id)} className="p-1 rounded hover:bg-(--ui-bg-hover) text-red-500"><Trash2 className="w-4 h-4" /></button>
+                          <Button tone="plain" size="sm" iconOnly onClick={() => { setEditingTemplate(t); setTemplateForm({ name: t.name, subject: t.subject || "", body_html: t.body_html || "" }); setShowTemplateModal(true); }} title="Edit" aria-label="Edit"><Pencil className="w-4 h-4" /></Button>
+                          <Button tone="plain" size="sm" iconOnly onClick={() => deleteTemplate(t.id)} title="Delete" aria-label="Delete" className="text-red-500"><Trash2 className="w-4 h-4" /></Button>
                         </div>
                       </td>
                     </tr>
@@ -246,104 +247,100 @@ export default function MarketingCampaignsRedesign() {
       )}
 
       {/* Campaign Composer Modal */}
-      {showComposer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-(--ui-bg) rounded-lg shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold">{editingCampaign ? "Edit Campaign" : "New Campaign"}</h2>
-              <button onClick={() => setShowComposer(false)}><X className="w-5 h-5" /></button>
+      <Modal
+        open={showComposer}
+        onClose={saving ? undefined : () => setShowComposer(false)}
+        title={editingCampaign ? "Edit Campaign" : "New Campaign"}
+        size="xl"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Campaign Name</label>
+            <input className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Subject Line</label>
+            <input className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Template (optional)</label>
+            <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={form.template_id} onChange={(e) => setForm({ ...form, template_id: e.target.value })}>
+              <option value="">— None —</option>
+              {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Body HTML</label>
+            <textarea className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg) min-h-[120px] font-mono text-sm" value={form.body_html} onChange={(e) => setForm({ ...form, body_html: e.target.value })} />
+          </div>
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <label className="text-sm font-medium">Audience Filters</label>
+              <Button size="sm" tone="plain" onClick={addFilter}><Plus className="w-3 h-3 mr-1" />Add Filter</Button>
             </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Campaign Name</label>
-                <input className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Subject Line</label>
-                <input className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Template (optional)</label>
-                <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={form.template_id} onChange={(e) => setForm({ ...form, template_id: e.target.value })}>
-                  <option value="">— None —</option>
-                  {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            {form.audience_filters.map((f, i) => (
+              <div key={i} className="flex gap-2 mb-2 items-center">
+                <select className="border border-(--ui-border) rounded px-2 py-1 bg-(--ui-bg) text-sm" value={f.filter_type} onChange={(e) => updateFilter(i, "filter_type", e.target.value)}>
+                  {FILTER_TYPES.map((ft) => <option key={ft.value} value={ft.value}>{ft.label}</option>)}
                 </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Body HTML</label>
-                <textarea className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg) min-h-[120px] font-mono text-sm" value={form.body_html} onChange={(e) => setForm({ ...form, body_html: e.target.value })} />
-              </div>
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-sm font-medium">Audience Filters</label>
-                  <Button size="sm" tone="plain" onClick={addFilter}><Plus className="w-3 h-3 mr-1" />Add Filter</Button>
-                </div>
-                {form.audience_filters.map((f, i) => (
-                  <div key={i} className="flex gap-2 mb-2 items-center">
-                    <select className="border border-(--ui-border) rounded px-2 py-1 bg-(--ui-bg) text-sm" value={f.filter_type} onChange={(e) => updateFilter(i, "filter_type", e.target.value)}>
-                      {FILTER_TYPES.map((ft) => <option key={ft.value} value={ft.value}>{ft.label}</option>)}
-                    </select>
-                    {!["has_email", "has_mobile"].includes(f.filter_type) && (
-                      <input className="border border-(--ui-border) rounded px-2 py-1 bg-(--ui-bg) text-sm grow" value={f.filter_value} onChange={(e) => updateFilter(i, "filter_value", e.target.value)} placeholder="Value" />
-                    )}
-                    <button onClick={() => removeFilter(i)} className="text-red-500"><X className="w-4 h-4" /></button>
-                  </div>
-                ))}
-                {audiencePreview && (
-                  <p className="text-sm text-(--ui-text-muted) mt-1">
-                    <strong>{audiencePreview.count}</strong> customer{audiencePreview.count !== 1 ? "s" : ""} match
-                  </p>
+                {!["has_email", "has_mobile"].includes(f.filter_type) && (
+                  <input className="border border-(--ui-border) rounded px-2 py-1 bg-(--ui-bg) text-sm grow" value={f.filter_value} onChange={(e) => updateFilter(i, "filter_value", e.target.value)} placeholder="Value" />
                 )}
+                <Button tone="plain" size="sm" iconOnly onClick={() => removeFilter(i)} aria-label="Remove filter" className="text-red-500"><X className="w-4 h-4" /></Button>
               </div>
-              <div className="flex gap-2 justify-end pt-2">
-                <Button tone="plain" onClick={() => setShowComposer(false)}>Cancel</Button>
-                <Button onClick={saveCampaign} disabled={saving || !form.name}>{saving ? "Saving..." : "Save Campaign"}</Button>
-              </div>
-            </div>
+            ))}
+            {audiencePreview && (
+              <p className="text-sm text-(--ui-text-muted) mt-1">
+                <strong>{audiencePreview.count}</strong> customer{audiencePreview.count !== 1 ? "s" : ""} match
+              </p>
+            )}
           </div>
         </div>
-      )}
+        <ModalFooter>
+          <Button onClick={() => setShowComposer(false)} disabled={saving}>Cancel</Button>
+          <Button tone="primary" onClick={saveCampaign} disabled={saving || !form.name}>
+            {saving ? "Saving..." : "Save Campaign"}
+          </Button>
+        </ModalFooter>
+      </Modal>
 
       {/* Template Modal */}
-      {showTemplateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-(--ui-bg) rounded-lg shadow-lg w-full max-w-lg p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold">{editingTemplate ? "Edit Template" : "New Template"}</h2>
-              <button onClick={() => setShowTemplateModal(false)}><X className="w-5 h-5" /></button>
-            </div>
-            <div className="space-y-4">
-              <div><label className="block text-sm font-medium mb-1">Name</label>
-                <input className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} /></div>
-              <div><label className="block text-sm font-medium mb-1">Subject</label>
-                <input className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={templateForm.subject} onChange={(e) => setTemplateForm({ ...templateForm, subject: e.target.value })} /></div>
-              <div><label className="block text-sm font-medium mb-1">Body HTML</label>
-                <textarea className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg) min-h-[100px] font-mono text-sm" value={templateForm.body_html} onChange={(e) => setTemplateForm({ ...templateForm, body_html: e.target.value })} /></div>
-              <div className="flex gap-2 justify-end">
-                <Button tone="plain" onClick={() => setShowTemplateModal(false)}>Cancel</Button>
-                <Button onClick={saveTemplate} disabled={!templateForm.name}>Save</Button>
-              </div>
-            </div>
-          </div>
+      <Modal
+        open={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        title={editingTemplate ? "Edit Template" : "New Template"}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div><label className="block text-sm font-medium mb-1">Name</label>
+            <input className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} /></div>
+          <div><label className="block text-sm font-medium mb-1">Subject</label>
+            <input className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={templateForm.subject} onChange={(e) => setTemplateForm({ ...templateForm, subject: e.target.value })} /></div>
+          <div><label className="block text-sm font-medium mb-1">Body HTML</label>
+            <textarea className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg) min-h-[100px] font-mono text-sm" value={templateForm.body_html} onChange={(e) => setTemplateForm({ ...templateForm, body_html: e.target.value })} /></div>
         </div>
-      )}
+        <ModalFooter>
+          <Button onClick={() => setShowTemplateModal(false)}>Cancel</Button>
+          <Button tone="primary" onClick={saveTemplate} disabled={!templateForm.name}>Save</Button>
+        </ModalFooter>
+      </Modal>
 
       {/* Schedule Modal */}
-      {showScheduleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-(--ui-bg) rounded-lg shadow-lg w-full max-w-sm p-6">
-            <h2 className="text-lg font-bold mb-4">Schedule Campaign</h2>
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1">Send at</label>
-              <input type="datetime-local" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button tone="plain" onClick={() => setShowScheduleModal(false)}>Cancel</Button>
-              <Button onClick={scheduleCampaign} disabled={!scheduleDate}>Schedule</Button>
-            </div>
-          </div>
+      <Modal
+        open={showScheduleModal}
+        onClose={() => setShowScheduleModal(false)}
+        title="Schedule Campaign"
+        size="sm"
+      >
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-1">Send at</label>
+          <input type="datetime-local" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} />
         </div>
-      )}
+        <ModalFooter>
+          <Button onClick={() => setShowScheduleModal(false)}>Cancel</Button>
+          <Button tone="primary" onClick={scheduleCampaign} disabled={!scheduleDate}>Schedule</Button>
+        </ModalFooter>
+      </Modal>
     </PageShell>
   );
 }
