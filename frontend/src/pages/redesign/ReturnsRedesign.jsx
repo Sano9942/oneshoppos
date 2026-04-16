@@ -5,6 +5,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
   Select,
@@ -366,13 +368,14 @@ export default function ReturnsRedesign() {
         </SectionCard>
       </div>
 
-      {modalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <SectionCard className="h-[85vh] w-full max-w-6xl overflow-hidden p-0">
-            <div className="border-b border-(--ui-border) p-3">
-              <h3 className="text-lg font-semibold text-(--ui-text)">Process Return</h3>
-            </div>
-            <div className="grid h-[calc(85vh-58px)] grid-cols-1 xl:grid-cols-12">
+      <Modal
+        open={modalOpen}
+        onClose={busy ? undefined : () => setModalOpen(false)}
+        title="Process Return"
+        size="xl"
+      >
+        {modalOpen ? (
+          <div className="grid grid-cols-1 xl:grid-cols-12">
               <div className="xl:col-span-7 border-r border-(--ui-border) p-3">
                 <form onSubmit={scanToDraft} className="mb-3">
                   <div className="relative">
@@ -507,7 +510,7 @@ export default function ReturnsRedesign() {
                   </div>
                 </SectionCard>
 
-                <div className="mt-3 flex gap-2">
+                <ModalFooter>
                   <Button type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
                   <Button
                     tone="primary"
@@ -517,12 +520,11 @@ export default function ReturnsRedesign() {
                     <ArrowLeftRight size={14} className="mr-1 inline" />
                     {busy ? "Processing..." : "Complete Return"}
                   </Button>
-                </div>
+                </ModalFooter>
               </form>
             </div>
-          </SectionCard>
-        </div>
-      ) : null}
+        ) : null}
+      </Modal>
     </PageShell>
   );
 }

@@ -4,7 +4,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
-import { PageShell, SectionCard, Button, Badge, Input, Select, EmptyState } from "../../ui/primitives";
+import { PageShell, SectionCard, Button, Badge, Input, Select, EmptyState, Modal, ModalFooter } from "../../ui/primitives";
 import { Plus, X, Calendar as CalendarIcon, Package, FileSignature, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../../api";
 import { fmtUtcDateTime } from "../../utils/dates";
@@ -266,7 +266,7 @@ function RentalItemFormModal({ item, onClose, onSaved }) {
   };
 
   return (
-    <Modal title={item ? "Edit Rental Item" : "New Rental Item"} onClose={onClose}>
+    <Modal title={item ? "Edit Rental Item" : "New Rental Item"} onClose={onClose} size="md" open>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Name *"><Input value={form.name} onChange={e => set("name", e.target.value)} /></Field>
         <Field label="SKU"><Input value={form.sku} onChange={e => set("sku", e.target.value)} /></Field>
@@ -289,10 +289,10 @@ function RentalItemFormModal({ item, onClose, onSaved }) {
           Active (visible when creating contracts)
         </label>
       </div>
-      <div className="flex justify-end gap-2 mt-4">
+      <ModalFooter>
         <Button onClick={onClose}>Cancel</Button>
         <Button tone="primary" onClick={submit} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
-      </div>
+      </ModalFooter>
     </Modal>
   );
 }
@@ -498,7 +498,7 @@ function NewContractModal({ onClose, onSaved }) {
   };
 
   return (
-    <Modal title="New Rental Contract" onClose={onClose} wide>
+    <Modal title="New Rental Contract" onClose={onClose} size="lg" open>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Customer">
           <Select value={form.customer_id} onChange={e => set("customer_id", e.target.value)}>
@@ -585,10 +585,10 @@ function NewContractModal({ onClose, onSaved }) {
         )}
       </div>
 
-      <div className="flex justify-end gap-2 mt-4">
+      <ModalFooter>
         <Button onClick={onClose}>Cancel</Button>
         <Button tone="primary" onClick={submit} disabled={saving}>{saving ? "Creating..." : "Create Contract"}</Button>
-      </div>
+      </ModalFooter>
     </Modal>
   );
 }
@@ -632,7 +632,7 @@ function ContractDetailModal({ id, onClose, onChanged }) {
 
   if (loading || !contract) {
     return (
-      <Modal title="Contract" onClose={onClose}>
+      <Modal title="Contract" onClose={onClose} size="md" open>
         <p className="text-(--ui-text-muted) text-sm">Loading...</p>
       </Modal>
     );
@@ -641,7 +641,7 @@ function ContractDetailModal({ id, onClose, onChanged }) {
   const actions = STATUS_ACTIONS[contract.status] || [];
 
   return (
-    <Modal title={`Contract ${contract.contract_number}`} onClose={onClose} wide>
+    <Modal title={`Contract ${contract.contract_number}`} onClose={onClose} size="lg" open>
       <div className="grid grid-cols-3 gap-3 text-sm">
         <InfoRow label="Customer" value={contract.customer_name || "Walk-in"} />
         <InfoRow label="Status" value={<Badge tone={STATUS_TONES[contract.status]}>{STATUS_LABELS[contract.status] || contract.status}</Badge>} />
@@ -709,7 +709,7 @@ function ContractDetailModal({ id, onClose, onChanged }) {
         </ul>
       </div>
 
-      <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-(--ui-border) flex-wrap">
+      <ModalFooter>
         {actions.map(a => (
           <Button key={a.action} tone={a.tone} onClick={() => {
             if (a.action === "checkout" || a.action === "return") setActionOpen(a.action);
@@ -722,7 +722,7 @@ function ContractDetailModal({ id, onClose, onChanged }) {
           <Button tone="danger" onClick={() => setActionOpen("cancel")}>Cancel Contract</Button>
         )}
         <Button onClick={onClose}>Close</Button>
-      </div>
+      </ModalFooter>
 
       {actionOpen === "checkout" && (
         <CheckoutActionModal
@@ -749,14 +749,14 @@ function ContractDetailModal({ id, onClose, onChanged }) {
 function CheckoutActionModal({ onClose, onConfirm }) {
   const [depositMethod, setDepositMethod] = useState("cash");
   return (
-    <Modal title="Check Out" onClose={onClose}>
+    <Modal title="Check Out" onClose={onClose} size="md" open>
       <Field label="Deposit Method">
         <Input value={depositMethod} onChange={e => setDepositMethod(e.target.value)} />
       </Field>
-      <div className="flex justify-end gap-2 mt-4">
+      <ModalFooter>
         <Button onClick={onClose}>Cancel</Button>
         <Button tone="primary" onClick={() => onConfirm({ deposit_method: depositMethod })}>Confirm Checkout</Button>
-      </div>
+      </ModalFooter>
     </Modal>
   );
 }
@@ -765,20 +765,20 @@ function ReturnActionModal({ onClose, onConfirm }) {
   const [conditionNotes, setConditionNotes] = useState("");
   const [overrideLateFee, setOverrideLateFee] = useState("");
   return (
-    <Modal title="Return" onClose={onClose}>
+    <Modal title="Return" onClose={onClose} size="md" open>
       <Field label="Condition Notes">
         <Input value={conditionNotes} onChange={e => setConditionNotes(e.target.value)} />
       </Field>
       <Field label="Override Late Fee (leave blank for auto-calc)">
         <Input type="number" step="0.01" value={overrideLateFee} onChange={e => setOverrideLateFee(e.target.value)} />
       </Field>
-      <div className="flex justify-end gap-2 mt-4">
+      <ModalFooter>
         <Button onClick={onClose}>Cancel</Button>
         <Button tone="primary" onClick={() => onConfirm({
           condition_notes: conditionNotes || undefined,
           late_fee: overrideLateFee === "" ? undefined : Number(overrideLateFee),
         })}>Confirm Return</Button>
-      </div>
+      </ModalFooter>
     </Modal>
   );
 }
@@ -786,14 +786,14 @@ function ReturnActionModal({ onClose, onConfirm }) {
 function CancelActionModal({ onClose, onConfirm }) {
   const [reason, setReason] = useState("");
   return (
-    <Modal title="Cancel Contract" onClose={onClose}>
+    <Modal title="Cancel Contract" onClose={onClose} size="md" open>
       <Field label="Reason (optional)">
         <Input value={reason} onChange={e => setReason(e.target.value)} />
       </Field>
-      <div className="flex justify-end gap-2 mt-4">
+      <ModalFooter>
         <Button onClick={onClose}>Back</Button>
         <Button tone="danger" onClick={() => onConfirm({ cancellation_reason: reason || undefined })}>Cancel Contract</Button>
-      </div>
+      </ModalFooter>
     </Modal>
   );
 }
@@ -972,21 +972,6 @@ function TimelineTab() {
 
 // ── Small helpers ─────────────────────────────────────────────────
 
-function Modal({ title, children, onClose, wide }) {
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-4 overflow-y-auto">
-      <div className={`bg-(--ui-surface) rounded-lg shadow-xl w-full ${wide ? "max-w-4xl" : "max-w-lg"} my-8`}>
-        <div className="flex items-center justify-between p-4 border-b border-(--ui-border)">
-          <h3 className="font-semibold">{title}</h3>
-          <button onClick={onClose} className="text-(--ui-text-muted) hover:text-(--ui-text)">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="p-4">{children}</div>
-      </div>
-    </div>
-  );
-}
 
 function Field({ label, children, full }) {
   return (
