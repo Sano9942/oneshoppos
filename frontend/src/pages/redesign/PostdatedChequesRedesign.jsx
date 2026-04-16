@@ -9,6 +9,8 @@ import {
   Button,
   EmptyState,
   Input,
+  Modal,
+  ModalFooter,
   PageShell,
   SectionCard,
 } from "../../ui/primitives";
@@ -220,7 +222,7 @@ export default function PostdatedChequesRedesign() {
       subtitle="Track receivable and payable post-dated cheques"
       right={
         <div className="flex gap-2">
-          <Button size="sm" variant="ghost" onClick={handleExport}>
+          <Button size="sm" tone="plain" onClick={handleExport}>
             <Download className="w-4 h-4 mr-1" /> Export
           </Button>
           <Button size="sm" onClick={openCreate}>
@@ -392,14 +394,13 @@ export default function PostdatedChequesRedesign() {
       </SectionCard>
 
       {/* Create / Edit Modal */}
-      {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-lg mx-4 p-6">
-            <h2 className="text-lg font-semibold mb-4">
-              {modal === "create" ? "New" : "Edit"} Post-Dated Cheque
-            </h2>
-
-            <div className="space-y-3">
+      <Modal
+        open={!!modal}
+        onClose={saving ? undefined : closeModal}
+        title={`${modal === "create" ? "New" : "Edit"} Post-Dated Cheque`}
+        size="lg"
+      >
+        <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium mb-1">Cheque Number</label>
                 <Input
@@ -519,26 +520,28 @@ export default function PostdatedChequesRedesign() {
                   className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm resize-none"
                 />
               </div>
-            </div>
-
-            <div className="flex justify-end gap-2 mt-5">
-              <Button variant="ghost" onClick={closeModal}>Cancel</Button>
-              <Button
-                onClick={handleSave}
-                disabled={saving || !form.cheque_number || !form.party_id || !form.amount || !form.issue_date || !form.maturity_date}
-              >
-                {saving ? "Saving..." : modal === "create" ? "Create" : "Save"}
-              </Button>
-            </div>
-          </div>
         </div>
-      )}
+        <ModalFooter>
+          <Button onClick={closeModal} disabled={saving}>Cancel</Button>
+          <Button
+            tone="primary"
+            onClick={handleSave}
+            disabled={saving || !form.cheque_number || !form.party_id || !form.amount || !form.issue_date || !form.maturity_date}
+          >
+            {saving ? "Saving..." : modal === "create" ? "Create" : "Save"}
+          </Button>
+        </ModalFooter>
+      </Modal>
 
       {/* Confirm Modal (Deposit / Clear / Bounce / Cancel) */}
-      {confirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-sm mx-4 p-6 text-center">
-            <h3 className="text-lg font-semibold mb-2 capitalize">{actionLabel[confirm.action]} Cheque</h3>
+      <Modal
+        open={!!confirm}
+        onClose={confirming ? undefined : () => setConfirm(null)}
+        title={confirm ? `${actionLabel[confirm.action]} Cheque` : ""}
+        size="sm"
+      >
+        {confirm ? (
+          <>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
               {confirm.cheque.cheque_number} — {money(confirm.cheque.amount)}
             </p>
@@ -557,23 +560,19 @@ export default function PostdatedChequesRedesign() {
                 This cheque will be permanently cancelled.
               </p>
             )}
-            <div className="flex justify-center gap-2 mt-4">
-              <Button variant="ghost" onClick={() => setConfirm(null)}>Back</Button>
+            <ModalFooter>
+              <Button onClick={() => setConfirm(null)} disabled={confirming}>Back</Button>
               <Button
+                tone={confirm.action === "bounce" || confirm.action === "cancel" ? "danger" : "primary"}
                 onClick={handleConfirmAction}
                 disabled={confirming}
-                className={
-                  confirm.action === "bounce" || confirm.action === "cancel"
-                    ? "bg-red-600 hover:bg-red-700 text-white"
-                    : ""
-                }
               >
                 {confirming ? "Processing..." : actionLabel[confirm.action]}
               </Button>
-            </div>
-          </div>
-        </div>
-      )}
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
     </PageShell>
   );
 }
