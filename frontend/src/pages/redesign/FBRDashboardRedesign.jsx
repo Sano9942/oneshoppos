@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { RefreshCw, Eye, RotateCcw, AlertCircle } from "lucide-react";
 import { api } from "../../api";
-import { PageShell, SectionCard, Button, Input, Select } from "../../ui/primitives";
+import { PageShell, SectionCard, Button, Input, Select, Modal, ModalFooter } from "../../ui/primitives";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { fmtUtcDateTime } from "../../utils/dates";
@@ -318,28 +318,15 @@ export default function FBRDashboardRedesign() {
         )}
       </SectionCard>
 
-      {/* JSON Payload Modal */}
-      {payloadInvoice && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => setPayloadInvoice(null)}
-        >
-          <div
-            className="mx-4 w-full max-w-2xl rounded-(--ui-radius-md) border border-(--ui-border) bg-(--ui-surface) shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-(--ui-border) px-5 py-4">
-              <h3 className="text-base font-semibold text-(--ui-text)">
-                Payload — {payloadInvoice.invoice_number}
-              </h3>
-              <button
-                onClick={() => setPayloadInvoice(null)}
-                className="rounded p-1 text-(--ui-text-muted) hover:bg-(--ui-muted-surface) hover:text-(--ui-text) transition-colors"
-              >
-                &times;
-              </button>
-            </div>
-            <div className="max-h-[60vh] overflow-auto p-5">
+      <Modal
+        open={!!payloadInvoice}
+        onClose={() => setPayloadInvoice(null)}
+        title={payloadInvoice ? `Payload — ${payloadInvoice.invoice_number}` : "Payload"}
+        size="lg"
+      >
+        {payloadInvoice ? (
+          <>
+            <div className="max-h-[60vh] overflow-auto">
               {payloadInvoice.payload ? (
                 <pre className="whitespace-pre-wrap break-words rounded-(--ui-radius-sm) bg-(--ui-muted-surface) p-4 font-mono text-xs text-(--ui-text)">
                   {JSON.stringify(payloadInvoice.payload, null, 2)}
@@ -350,14 +337,12 @@ export default function FBRDashboardRedesign() {
                 </div>
               )}
             </div>
-            <div className="flex justify-end border-t border-(--ui-border) px-5 py-3">
-              <Button size="sm" onClick={() => setPayloadInvoice(null)}>
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+            <ModalFooter>
+              <Button size="sm" onClick={() => setPayloadInvoice(null)}>Close</Button>
+            </ModalFooter>
+          </>
+        ) : null}
+      </Modal>
     </PageShell>
   );
 }
