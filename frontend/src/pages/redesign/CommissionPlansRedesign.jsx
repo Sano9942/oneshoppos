@@ -4,7 +4,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
-import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
+import { PageShell, SectionCard, Button, Badge, Modal, ModalFooter, TabBar } from "../../ui/primitives";
 import { Plus, Trash2, Pencil, Users, X } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { downloadCsv } from "../../utils/csvExport";
@@ -144,9 +144,12 @@ export default function CommissionPlansRedesign() {
       subtitle="Commission plans, employee assignments, and earnings tracking"
       right={tab === "plans" && <Button size="sm" onClick={openCreate}><Plus size={14} className="mr-1" /> New Plan</Button>}
     >
-      <div className="flex gap-2 mb-4">
-        <button onClick={() => setTab("plans")} className={`px-3 py-1.5 text-sm rounded ${tab === "plans" ? "bg-(--ui-primary) text-white" : "bg-(--ui-bg) border border-(--ui-border) text-(--ui-text)"}`}>Plans</button>
-        <button onClick={() => setTab("earnings")} className={`px-3 py-1.5 text-sm rounded ${tab === "earnings" ? "bg-(--ui-primary) text-white" : "bg-(--ui-bg) border border-(--ui-border) text-(--ui-text)"}`}>Earnings</button>
+      <div className="mb-4">
+        <TabBar
+          value={tab}
+          onChange={setTab}
+          tabs={[{ value: "plans", label: "Plans" }, { value: "earnings", label: "Earnings" }]}
+        />
       </div>
 
       {tab === "plans" && (
@@ -174,9 +177,9 @@ export default function CommissionPlansRedesign() {
                     <td className="py-2">{p.assigned_employees || 0}</td>
                     <td className="py-2"><Badge tone={p.is_active ? "success" : "default"}>{p.is_active ? "Active" : "Inactive"}</Badge></td>
                     <td className="py-2 text-right flex gap-1 justify-end">
-                      <button onClick={() => openAssign(p)} className="p-1 hover:text-blue-500" title="Assign employees"><Users size={14} /></button>
-                      <button onClick={() => openEdit(p)} className="p-1 hover:text-blue-500"><Pencil size={14} /></button>
-                      <button onClick={() => handleDelete(p.id)} className="p-1 hover:text-red-500"><Trash2 size={14} /></button>
+                      <Button tone="plain" size="sm" iconOnly onClick={() => openAssign(p)} title="Assign employees" aria-label="Assign employees"><Users size={14} /></Button>
+                      <Button tone="plain" size="sm" iconOnly onClick={() => openEdit(p)} title="Edit" aria-label="Edit"><Pencil size={14} /></Button>
+                      <Button tone="plain" size="sm" iconOnly onClick={() => handleDelete(p.id)} title="Delete" aria-label="Delete" className="hover:text-red-500"><Trash2 size={14} /></Button>
                     </td>
                   </tr>
                 ))}
@@ -242,80 +245,74 @@ export default function CommissionPlansRedesign() {
       )}
 
       {/* Plan Create/Edit Modal */}
-      {showPlanModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-(--ui-bg) rounded-lg shadow-xl w-full max-w-lg p-6 max-h-[85vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-(--ui-text)">{editingPlan ? "Edit Plan" : "New Plan"}</h2>
-              <button onClick={() => setShowPlanModal(false)}><X size={18} /></button>
-            </div>
-            <label className="block text-sm text-(--ui-muted) mb-1">Name</label>
-            <input className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" value={planForm.name} onChange={e => setPlanForm(f => ({ ...f, name: e.target.value }))} />
-            <label className="block text-sm text-(--ui-muted) mb-1">Description</label>
-            <textarea className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" rows={2} value={planForm.description} onChange={e => setPlanForm(f => ({ ...f, description: e.target.value }))} />
-            <label className="block text-sm text-(--ui-muted) mb-1">Type</label>
-            <select className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" value={planForm.type} onChange={e => setPlanForm(f => ({ ...f, type: e.target.value }))}>
-              {PLAN_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label className="block text-sm text-(--ui-muted) mb-1">Starts at</label>
-                <input className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)" type="datetime-local" value={planForm.starts_at} onChange={e => setPlanForm(f => ({ ...f, starts_at: e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-sm text-(--ui-muted) mb-1">Ends at</label>
-                <input className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)" type="datetime-local" value={planForm.ends_at} onChange={e => setPlanForm(f => ({ ...f, ends_at: e.target.value }))} />
-              </div>
-            </div>
-            <label className="block text-sm font-medium text-(--ui-muted) mb-2">Rules</label>
-            {planForm.rules.map((rule, idx) => (
-              <div key={idx} className="flex gap-2 mb-2 items-center flex-wrap">
-                <select className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-28" value={rule.scope_type} onChange={e => updateRule(idx, "scope_type", e.target.value)}>
-                  {SCOPE_TYPES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                </select>
-                {rule.scope_type !== "all" && <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" placeholder="ID" value={rule.scope_id || ""} onChange={e => updateRule(idx, "scope_id", e.target.value ? Number(e.target.value) : null)} />}
-                <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" step="0.01" placeholder="Rate" value={rule.rate} onChange={e => updateRule(idx, "rate", Number(e.target.value))} />
-                <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" placeholder="Min" value={rule.min_threshold} onChange={e => updateRule(idx, "min_threshold", Number(e.target.value))} />
-                <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" placeholder="Cap" value={rule.max_cap || ""} onChange={e => updateRule(idx, "max_cap", e.target.value ? Number(e.target.value) : null)} />
-                {planForm.rules.length > 1 && <button onClick={() => removeRule(idx)} className="text-red-500 p-1"><X size={14} /></button>}
-              </div>
-            ))}
-            <button onClick={addRule} className="text-sm text-blue-500 mb-4 hover:underline">+ Add rule</button>
-            <div className="flex gap-2 justify-end">
-              <Button tone="plain" size="sm" onClick={() => setShowPlanModal(false)}>Cancel</Button>
-              <Button size="sm" onClick={handleSavePlan}>{editingPlan ? "Update" : "Create"}</Button>
-            </div>
+      <Modal
+        open={showPlanModal}
+        onClose={() => setShowPlanModal(false)}
+        title={editingPlan ? "Edit Plan" : "New Plan"}
+        size="lg"
+      >
+        <label className="block text-sm text-(--ui-muted) mb-1">Name</label>
+        <input className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" value={planForm.name} onChange={e => setPlanForm(f => ({ ...f, name: e.target.value }))} />
+        <label className="block text-sm text-(--ui-muted) mb-1">Description</label>
+        <textarea className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" rows={2} value={planForm.description} onChange={e => setPlanForm(f => ({ ...f, description: e.target.value }))} />
+        <label className="block text-sm text-(--ui-muted) mb-1">Type</label>
+        <select className="w-full border border-(--ui-border) rounded px-3 py-2 mb-3 text-sm bg-(--ui-bg) text-(--ui-text)" value={planForm.type} onChange={e => setPlanForm(f => ({ ...f, type: e.target.value }))}>
+          {PLAN_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </select>
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="block text-sm text-(--ui-muted) mb-1">Starts at</label>
+            <input className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)" type="datetime-local" value={planForm.starts_at} onChange={e => setPlanForm(f => ({ ...f, starts_at: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-sm text-(--ui-muted) mb-1">Ends at</label>
+            <input className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)" type="datetime-local" value={planForm.ends_at} onChange={e => setPlanForm(f => ({ ...f, ends_at: e.target.value }))} />
           </div>
         </div>
-      )}
+        <label className="block text-sm font-medium text-(--ui-muted) mb-2">Rules</label>
+        {planForm.rules.map((rule, idx) => (
+          <div key={idx} className="flex gap-2 mb-2 items-center flex-wrap">
+            <select className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-28" value={rule.scope_type} onChange={e => updateRule(idx, "scope_type", e.target.value)}>
+              {SCOPE_TYPES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+            {rule.scope_type !== "all" && <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" placeholder="ID" value={rule.scope_id || ""} onChange={e => updateRule(idx, "scope_id", e.target.value ? Number(e.target.value) : null)} />}
+            <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" step="0.01" placeholder="Rate" value={rule.rate} onChange={e => updateRule(idx, "rate", Number(e.target.value))} />
+            <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" placeholder="Min" value={rule.min_threshold} onChange={e => updateRule(idx, "min_threshold", Number(e.target.value))} />
+            <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" placeholder="Cap" value={rule.max_cap || ""} onChange={e => updateRule(idx, "max_cap", e.target.value ? Number(e.target.value) : null)} />
+            {planForm.rules.length > 1 && <Button tone="plain" size="sm" iconOnly onClick={() => removeRule(idx)} aria-label="Remove rule" className="text-red-500"><X size={14} /></Button>}
+          </div>
+        ))}
+        <Button tone="link" size="sm" onClick={addRule} className="mb-4">+ Add rule</Button>
+        <ModalFooter>
+          <Button size="sm" onClick={() => setShowPlanModal(false)}>Cancel</Button>
+          <Button tone="primary" size="sm" onClick={handleSavePlan}>{editingPlan ? "Update" : "Create"}</Button>
+        </ModalFooter>
+      </Modal>
 
       {/* Assign Employees Modal */}
-      {showAssignModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-(--ui-bg) rounded-lg shadow-xl w-full max-w-md p-6 max-h-[85vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-(--ui-text)">Assign to: {showAssignModal.name}</h2>
-              <button onClick={() => setShowAssignModal(null)}><X size={18} /></button>
-            </div>
-            <div className="space-y-1 mb-4">
-              {employees.map(emp => (
-                <label key={emp.id} className="flex items-center gap-2 text-sm py-1 cursor-pointer">
-                  <input type="checkbox" checked={selectedEmployees.includes(emp.id)} onChange={e => {
-                    if (e.target.checked) setSelectedEmployees(p => [...p, emp.id]);
-                    else setSelectedEmployees(p => p.filter(id => id !== emp.id));
-                  }} />
-                  <span className="text-(--ui-text)">{emp.name}</span>
-                  <span className="text-(--ui-muted) text-xs">{emp.role}</span>
-                </label>
-              ))}
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button tone="plain" size="sm" onClick={() => setShowAssignModal(null)}>Cancel</Button>
-              <Button size="sm" onClick={handleAssign}>Assign ({selectedEmployees.length})</Button>
-            </div>
-          </div>
+      <Modal
+        open={!!showAssignModal}
+        onClose={() => setShowAssignModal(null)}
+        title={showAssignModal ? `Assign to: ${showAssignModal.name}` : "Assign"}
+        size="md"
+      >
+        <div className="space-y-1 mb-4">
+          {employees.map(emp => (
+            <label key={emp.id} className="flex items-center gap-2 text-sm py-1 cursor-pointer">
+              <input type="checkbox" checked={selectedEmployees.includes(emp.id)} onChange={e => {
+                if (e.target.checked) setSelectedEmployees(p => [...p, emp.id]);
+                else setSelectedEmployees(p => p.filter(id => id !== emp.id));
+              }} />
+              <span className="text-(--ui-text)">{emp.name}</span>
+              <span className="text-(--ui-muted) text-xs">{emp.role}</span>
+            </label>
+          ))}
         </div>
-      )}
+        <ModalFooter>
+          <Button size="sm" onClick={() => setShowAssignModal(null)}>Cancel</Button>
+          <Button tone="primary" size="sm" onClick={handleAssign}>Assign ({selectedEmployees.length})</Button>
+        </ModalFooter>
+      </Modal>
     </PageShell>
   );
 }
