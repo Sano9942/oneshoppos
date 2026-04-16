@@ -3950,6 +3950,24 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 50,
+    description:
+      "Public-schema infra_cache table — keyed snapshots written by background workers (e.g. orphaned-schemas), served on demand without re-running expensive cross-schema introspection (Phase 1.1 Tier 1)",
+    up: async (client) => {
+      // Public schema only. Explicit schema qualifier means this is a no-op
+      // when the migration runs inside a tenant search_path — IF NOT EXISTS
+      // makes the second-onward call cheap.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.infra_cache (
+          cache_key TEXT PRIMARY KEY,
+          payload JSONB NOT NULL,
+          computed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          duration_ms INTEGER
+        )
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

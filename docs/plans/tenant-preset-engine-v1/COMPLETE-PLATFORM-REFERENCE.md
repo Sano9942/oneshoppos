@@ -1,6 +1,6 @@
 # SanoPOS Complete Platform Reference
 
-**Date:** 2026-04-16 (updated post-Wave 4 hardening)
+**Date:** 2026-04-17 (updated post-Wave 5 hardening)
 **Purpose:** Single unified source of truth consolidating all strategic architecture, gap analysis, competitive research, and implementation spec for the tenant preset engine, business modes, industry presets, country packs, and core platform direction.
 
 **This document supersedes and merges:**
@@ -8,6 +8,7 @@
 - `square-complete-platform-research.md` (competitive benchmarking, Square's 7 modes, gaps, strategic takeaways)
 - `tenant-preset-engine-v1/strategy.md` (implementation spec, M1-M10 delivery, architecture, code artifacts, SanoPay sandbox)
 - `core-platform-hardening-plan.md` (Wave 4 hardening — mode gates, branch context, POSContext split, IndexedDB queue)
+- `C:/Users/HP/.claude/plans/docs-plans-tenant-preset-engine-v1-comp-tranquil-spindle.md` (Wave 5 hardening — branch context UI pre-population, Zod validation expansion, payment observability, hardware improvements)
 
 **Rule of thumb:** This document is the canonical reference for all future work. When questions arise about architecture, business model strategy, industry coverage, competitive positioning, or platform direction — **refer here first.**
 
@@ -60,9 +61,10 @@ SanoPOS is architected as a **multi-vertical, composable commerce platform** des
 - **v1 Complete** (M1-M4, shipped 2026-04-14): core preset engine + 3 retail/food/service presets + workflow tickets
 - **v2 Shipped** (M5-M10, shipped 2026-04-14 to 2026-04-15): weight-based selling, online public booking, customer portal, rentals, room management, treatment plans
 - **Wave 4 Hardening Shipped** (B/A/C/D, 2026-04-16): mode-gate normalization on rentals + rooms, branch context fixes (4 hard-coded outlet_id=1 sites), POSContext split into 8 domain hooks, IndexedDB-backed offline queue with retry lifecycle
+- **Wave 5 Hardening Shipped** (Tracks 1-4, 2026-04-17, 15 commits + 1 bonus fix): branch context UI pre-population (4 screens), Zod validation expansion (shifts + attendance + PaymentLineSchema + xPay webhook logging), payment observability admin API + `/admin/stuck-payments` page, printer `withRetry` + cash-drawer endpoint/UI, 53 new tests + pre-existing sandbox-test fix
 - **M11 (Manufacturing) Deferred** until a factory/production customer commits
 
-**Next Phase:** Continue core hardening — payment lifecycle maturity (real provider saved-card tokenization), audit/reconciliation, typed API contracts, operational observability, and hardware layer depth. Wave 4 closed three of the top-priority hardening items (offline durability, POS state architecture, branch context); items 2 + 4–7 from §25 remain.
+**Next Phase:** Continue core hardening — remaining items from §25: xPay saved-card tokenization (provider-dependent), reconciliation screens + duplicate-payment/sale detectors (item 4 partial), OpenAPI generation + broader Zod coverage (item 5 partial), metrics + alerts dashboard (item 6), scanner maturation + card terminal fallback + print-job queueing (item 7 partial). Wave 5 closed payment observability (stuck intents + webhook dead-letters are now admin-visible), typed-contract gaps at the POS/shift/attendance boundary, and the cash-drawer/print-retry gaps; items 4 + 5 + 6 + 7 remain partially open.
 
 ---
 
@@ -1429,6 +1431,33 @@ After a full code audit on 2026-04-15, 25 items were identified as either shippe
 - ✅ Wave C (`a251467`): Split POSContext (1394 lines) into 8 domain hooks; `usePOS()` API unchanged
 - ✅ Wave D (`c5ffd63`): IndexedDB-backed offline queue via `idb` library; sync lifecycle (pending/syncing/synced/failed) with retry counts; idempotent localStorage→IDB migration; admin retry UI
 
+**Wave 5 — Core Hardening (2026-04-17, 15 commits + 1 bonus fix):**
+
+*Track 1 — Branch context UI pre-population (4 commits):*
+- ✅ `9567bbb`: `StockAdjustmentsRedesign.jsx` — outlet default reads `readContext().active_outlet_id` on load AND in `openCreate`
+- ✅ `939e64c`: `ReturnsRedesign.jsx` — outlet pre-populated from context, skipped when navigating from POS with `location.state.outlet_id`
+- ✅ `fc09758`: `InventoryRedesign.jsx` — `outletFilter` auto-set from context for non-all-access users
+- ✅ `352deee`: `Reports.jsx` — `filters.outletIds` seeded from context when `scope_mode !== "all_branches"`
+
+*Track 2 — Zod validation hardening (5 commits, 53 new tests):*
+- ✅ `516ad6c`: `backend/schemas/shifts.js` (OpenShift / CloseShift / VarianceApprove) + 11 unit tests
+- ✅ `d306008`: `validate()` wired into `shifts.js` open/close routes + new `PUT /api/shifts/:id/variance-approve` endpoint + 9 integration tests
+- ✅ `93b58cc`: `backend/schemas/attendance.js` (PinStatus / PinCheckin / PinCheckout) + validate() on all 3 PIN endpoints + enum for `break_reason` + 7 integration tests
+- ✅ `a4fa789`: `PaymentLineSchema` extracted in `schemas/sales.js`; `payments[]` field typed; 11 unit tests + 6 sandbox-backed integration tests via `PAYMENT_GATEWAY=sandbox`
+- ✅ `85c9677`: Structural `XPayPayloadSchema` logging on `POST /api/webhooks/xpay` (non-fatal — HMAC is still the real gate)
+
+*Track 3 — Payment observability (2 commits, 9 tests):*
+- ✅ `d69f346`: `GET /api/admin/payment-intents/stuck?hours=N` (billing.js) + `GET /api/admin/webhooks/payment-dead-letters?limit=N` (operations.js) + 9 integration tests covering auth, threshold filtering, tenant join, ordering, limit clamping
+- ✅ `7bd1017`: `AdminStuckPayments.jsx` new page at `/admin/stuck-payments` — 2 sections (stuck intents with age badges, recent webhook events with processed status), 30s auto-refresh, wired into AdminLayout nav + adminRoutes
+
+*Track 4 — Hardware improvements (3 commits, 14 tests):*
+- ✅ `b93b901`: `withRetry()` helper in `services/printer.js` (exponential backoff, wraps `printer.execute()` for network connections only); `openDrawer()` added to factory return — 11 unit tests
+- ✅ `12e97f8`: `POST /api/print/open-drawer` route (auth required, no specific perm) — 3 integration tests covering 401, missing config, cash_drawer-disabled
+- ✅ `aa4a232`: "Open Drawer" button in `CashManagementRedesign.jsx` (visible when shift is active, uses `useToast` for feedback)
+
+*Bonus fix (1 commit):*
+- ✅ `c17862c`: Declared `let saleId` inside describe block in `pg-sandbox-payment.test.js` — fixes pre-existing `ReferenceError: saleId is not defined` that was masking 1 of 10 tests
+
 ### Remaining Open/Deferred Items
 
 | # | Item | Status | Effort | Action |
@@ -1441,6 +1470,12 @@ After a full code audit on 2026-04-15, 25 items were identified as either shippe
 | 18 | Manufacturing mode (M11) | Deferred | 2 weeks | When factory customer commits |
 | 19-22 | Advanced hospitality features (12 items) | Deferred | Varies | Demand-driven |
 | 23-25 | Advanced clinical features (10+ items) | Deferred | Varies | Demand-driven |
+| 26 | Duplicate-payment / duplicate-sale detectors (item 4 partial) | Open | 2-3 days | Next session candidate |
+| 27 | Broader Zod coverage (products write, PO, GRN, transfers) + OpenAPI gen | Open | 3-5 days | Incremental |
+| 28 | Metrics + alerts dashboard (checkout latency p99, queue depth, worker lag) | Open | 2-3 days | Observability pass |
+| 29 | Scanner maturation + card terminal offline fallback + print-job queueing | Open | 3-5 days | Hardware pass |
+| 30 | Shift variance-approve UI surface in CashManagement (backend endpoint shipped in Wave 5) | Open | Half day | Quick win — wire button + modal |
+| 31 | Reconciliation screens (sale→invoice→payment→refund traceability) | Open | 3-5 days | Item 4 from §25 |
 
 ### Do Not Ship Without
 
@@ -1533,7 +1568,14 @@ Now that modes and presets are built, the competitive advantage is **not** more 
 - ✅ Branch context cleanliness (4 hard-coded `outlet_id=1` sites removed)
 - ✅ Mode-gate normalization on rentals + rooms (consistent with restaurant/bookings pattern)
 
-**Remaining hardening backlog:** payment lifecycle maturity (real provider tokenization), audit/reconciliation screens, typed API contracts (Zod expansion), operational observability (metrics + alerts), hardware layer depth (scanner/cash drawer/printer queueing).
+**Wave 5 hardening shipped 2026-04-17** closed the branch-context UI layer and made large dents in items 2, 5, 6, 7:
+- ✅ Branch context UI pre-population (StockAdjustments, Returns, Inventory, Reports now seed outlet from `readContext()` when single-branch scope)
+- ✅ Zod validation expansion — shifts (Open/Close/VarianceApprove), attendance PIN endpoints, typed `PaymentLineSchema` in sales, structural xPay webhook payload check
+- ✅ New `PUT /api/shifts/:id/variance-approve` endpoint (records approver + note on closed shifts with non-null variance)
+- ✅ Payment observability — admin API + UI: `GET /api/admin/payment-intents/stuck` + `GET /api/admin/webhooks/payment-dead-letters` + `/admin/stuck-payments` page (2 sections, 30s auto-refresh, age badges)
+- ✅ Hardware depth — `withRetry()` around network `printer.execute()` calls, `openDrawer()` service function, `POST /api/print/open-drawer` route, "Open Drawer" button in `CashManagementRedesign`
+
+**Remaining hardening backlog:** real provider saved-card tokenization (item 17 in §22 — provider-dependent), deeper reconciliation screens + duplicate-payment/sale detectors (item 4), OpenAPI generation + broader Zod coverage for products/PO/GRN/transfers (item 5 partial), metrics + alerts dashboard (item 6), scanner maturation + card terminal offline fallback + print-job queueing (item 7 partial).
 
 ---
 
@@ -1555,20 +1597,26 @@ After M10, the platform direction is clear: improve the core, not add more prese
 - Queue aging policy (currently MAX_QUEUED=50 throws; no auto-delete of old failed sales)
 - Conflict resolution UI for non-idempotent failures (currently retry-or-discard only)
 
-### 2. Payment Lifecycle Maturity (High Priority) — 🟡 PARTIAL post-Wave 4
+### 2. Payment Lifecycle Maturity (High Priority) — 🟡 PARTIAL post-Wave 5
 
-**Current:** SanoPay sandbox wired on both envs. Real provider saved-card integration pending. Wave 4 added sandbox-backed integration tests for rental deposits, room deposits, and offline sale sync (proves adapter dispatch + idempotency replay are correct).
+**Current:** SanoPay sandbox wired on both envs. Real provider saved-card integration still pending. Wave 5 added typed payment-line validation at the sales boundary + webhook payload drift detection.
 
 **Shipped in Wave 4-B and 4-D:**
 - ✅ `pg-rental-deposit-sandbox.test.js` — rental contract deposit through sandbox adapter
 - ✅ `pg-room-deposit-sandbox.test.js` — room booking deposit pre-auth/cancel/release through sandbox
 - ✅ `pg-offline-sale-sync.test.js` — offline Card sale syncs to backend with `gateway_ref` + duplicate replay returns same `gateway_ref` (no double charge)
 
+**Shipped in Wave 5 (2026-04-17):**
+- ✅ `PaymentLineSchema` (typed `method`, `amount`, `reference`, `change` with passthrough) required by `CreateSaleSchema` on `POST /api/sales`
+- ✅ `pg-sales-payment-validation.test.js` — 6 sandbox-backed integration tests prove malformed payment lines are rejected at the Zod gate before the gateway adapter is called
+- ✅ `XPayPayloadSchema` structural check (non-fatal) on `POST /api/webhooks/xpay` — anomalies logged to Pino with transaction_id for Sentry/drift detection
+- ✅ Pre-existing `saleId` scoping bug in `pg-sandbox-payment.test.js` fixed — 10/10 tests now pass, removing the mask over real regressions
+
 **Build:**
 - Finish provider-specific saved-instrument support (xPay tokenization API confirmation)
 - Strengthen state machines for: POS card, deposits, invoices, wallet top-up, refunds, subscriptions, reconciliation
 - Add retry logic for failed payment intents
-- Webhook delivery guarantees (exponential backoff, dead-letter queue)
+- Webhook delivery guarantees (exponential backoff, dead-letter queue — admin *visibility* for dead-letters shipped in Wave 5, automatic retry still pending)
 
 **Why:** Payment failures are rare but catastrophic. Strong state machines catch bugs early.
 
@@ -1589,51 +1637,74 @@ After M10, the platform direction is clear: improve the core, not add more prese
 
 **Why this matters going forward:** Each domain is now independently testable. Adding new POS behavior (e.g., split tender, advanced approvals) extends the relevant hook rather than bloating one giant context.
 
-### 4. Audit & Reconciliation (Medium Priority)
+### 4. Audit & Reconciliation (Medium Priority) — 🟡 PARTIAL post-Wave 5
 
-**Current:** Traceability from sale → invoice → payment → refund → shift → reports exists but is scattered.
+**Current:** Traceability from sale → invoice → payment → refund → shift → reports exists but is scattered. Wave 5 shipped *exception surfacing* (stuck intents + webhook events) and *shift variance approval*, but not yet duplicate detection or reconciliation screens.
 
-**Build:**
-- Strengthen traceability in all directions
-- Add duplicate-payment detection (same gateway_ref on multiple sales)
+**Shipped in Wave 5:**
+- ✅ `GET /api/admin/payment-intents/stuck?hours=N` — exception alert path for payment intents stuck > N hours
+- ✅ `GET /api/admin/webhooks/payment-dead-letters?limit=N` — recent (7-day) payment webhook events
+- ✅ `/admin/stuck-payments` UI — 30s auto-refresh, age-graded badges (amber at 2h, red at 6h)
+- ✅ `PUT /api/shifts/:id/variance-approve` — records approver identity + approval note, appends to `notes` column
+
+**Build (remaining):**
+- Strengthen traceability in all directions (sale → invoice → payment → refund linkages)
+- Add duplicate-payment detection (same `gateway_ref` on multiple sales)
 - Add duplicate-sale detection (same cart, same employee, seconds apart)
-- Expose reconciliation screens for admins
-- Exception alerts (e.g., payment intent stuck for 2+ hours)
+- Reconciliation screens for admins (expected vs actual by shift, by outlet, by gateway)
+- Wire variance-approve UI in `CashManagementRedesign` (backend ready; UI surface pending — half-day task)
 
 **Why:** At scale, reconciliation is the difference between confident operations and chaos.
 
-### 5. Typed API Contracts (Medium Priority)
+### 5. Typed API Contracts (Medium Priority) — 🟡 PARTIAL post-Wave 5
 
-**Current:** Most endpoints use loose JSON validation. Zod schemas exist for some high-risk flows.
+**Current:** 30 Zod schema files in `backend/schemas/`. Wave 5 closed the gaps at the POS boundary (shifts + attendance + payment lines + webhook drift). Broader coverage + OpenAPI generation still pending.
 
-**Build:**
-- Progressively add Zod/OpenAPI for high-risk flows: sales, payments, invoices, subscriptions, rooms, treatment plans, rentals, returns
-- Share client contracts (frontend can validate before sending)
-- Generate OpenAPI docs for third-party integrations
+**Shipped in Wave 5:**
+- ✅ `backend/schemas/shifts.js` (Open/Close/VarianceApprove) wired into all 3 shift-lifecycle endpoints
+- ✅ `backend/schemas/attendance.js` (PinStatus/PinCheckin/PinCheckout) wired into all 3 PIN endpoints
+- ✅ `PaymentLineSchema` + `CartItemSchema` exported from `schemas/sales.js`; `payments[]` now strictly typed
+- ✅ `XPayPayloadSchema` (inline in webhooks.js) for non-fatal drift detection after HMAC
+
+**Build (remaining):**
+- Apply `validate()` to products write paths, purchase orders, GRN, inventory transfers, stock adjustments
+- Generate OpenAPI docs via existing `swagger-jsdoc` setup — add `@openapi` annotations to validated routes
+- Share client contracts (frontend can validate before sending — Zod-to-TS generator via `zod-openapi`)
+- Extend sandbox-backed integration tests to cover every payment-adjacent schema change (§23 rule)
 
 **Why:** Type safety prevents entire classes of bugs. Especially important for payment flows.
 
-### 6. Operational Observability (Medium Priority)
+### 6. Operational Observability (Medium Priority) — 🟡 PARTIAL post-Wave 5
 
-**Current:** Structured logging via Pino. Error tracking via Sentry. No metrics/alerts for POS operations.
+**Current:** Structured logging via Pino + Sentry error tracking + existing `/admin/worker-status` endpoint. Wave 5 shipped the *payment-flow* observability surface. Latency/throughput metrics + alerting thresholds still pending.
 
-**Build:**
-- Add metrics for: checkout latency, failed payments, queue depth, sync lag, stuck payment intents, worker health, failed webhooks, shift variance, receipt/printer failures
-- Alerts for: error spikes, latency p99 thresholds, queue buildup, worker down
-- Dashboard for 24/7 monitoring
+**Shipped in Wave 5:**
+- ✅ Admin visibility of stuck payment intents + payment webhook events (`/admin/stuck-payments`)
+- ✅ Non-fatal Zod drift logging on xPay webhooks (surfaces schema drift in Sentry)
+
+**Build (remaining):**
+- Metrics for: checkout latency p50/p95/p99, failed payments, queue depth, sync lag, worker health, failed webhook retries, shift variance per outlet, receipt/printer failures
+- Alerts for: error spikes, latency p99 thresholds, queue buildup, worker down, stuck-intent count > threshold
+- Dashboard for 24/7 monitoring (can extend existing `/admin` — new tab per metric domain)
 
 **Why:** Operational visibility is what makes the difference between "system works" and "system is reliable."
 
-### 7. Device/Hardware Layer (Medium Priority)
+### 7. Device/Hardware Layer (Medium Priority) — 🟡 PARTIAL post-Wave 5
 
-**Current:** POS is browser-based. Printer integration exists via ESC/POS. Scanner/cash-drawer integration incomplete.
+**Current:** POS is browser-based. Printer integration exists via ESC/POS. Wave 5 added network-printer resilience + explicit cash-drawer control. Scanner integration + card terminal fallback still pending.
 
-**Build:**
-- Mature scanner integration: barcode validation, quick-add to cart, error feedback
-- Cash drawer integration: open on checkout, track draws/reconciliation
-- Card terminal fallback (if xPay fails, offline card reader?)
-- Print job queueing + retry on printer fail
-- Hardware health checks (is printer online? is scanner responding?)
+**Shipped in Wave 5:**
+- ✅ `withRetry()` wraps network `printer.execute()` calls in `printReceipt` + `printTest` (2 retries, exponential backoff 500ms → 1000ms)
+- ✅ `openDrawer()` factory function — kicks the drawer without printing; returns `{ ok: false, error }` on misconfiguration rather than throwing
+- ✅ `POST /api/print/open-drawer` (auth required, no specific perm) — always returns 200 with `result.ok` flag
+- ✅ "Open Drawer" button in `CashManagementRedesign` active-shift panel (`useToast` feedback)
+
+**Build (remaining):**
+- Mature scanner integration: barcode validation, quick-add to cart, error feedback, rapid-keystroke buffering refinements
+- Track cash-drawer draws/opens — persist to audit log for reconciliation
+- Card terminal offline fallback (when xPay fails, fall back to manual card-entry workflow)
+- Print job queueing — persist queued receipts to IDB so network failures don't drop jobs
+- Hardware health checks (is printer online? is scanner responding?) — surface on admin/POS status widget
 
 **Why:** Hardware reliability is what makes POS feel serious in-store. Browser is flexible but hardware matters.
 

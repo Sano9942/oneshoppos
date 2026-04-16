@@ -15,12 +15,17 @@ import { ArrowLeftRight, Download, Plus, Search } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { downloadCsv } from "../../utils/csvExport";
+import { readContext } from "../../auth/authStore";
 
 const fmtDate = fmtUtcDateTime;
 
 export default function ReturnsRedesign() {
   const { fmt: money } = useCurrency();
   const location = useLocation();
+  const _ctx = readContext();
+  const ctxOutletId = _ctx?.active_outlet_id && _ctx?.scope_mode !== "all_branches"
+    ? String(_ctx.active_outlet_id)
+    : null;
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -73,8 +78,18 @@ export default function ReturnsRedesign() {
         api.get("/api/outlets"),
         api.get("/api/employees"),
       ]);
-      setOutlets(outData.outlets || []);
+      const outList = outData.outlets || [];
+      setOutlets(outList);
       setEmployees(empData.employees || []);
+      // Pre-populate outlet_id from active branch context, unless navigating
+      // from POS with a specific sale pre-loaded (location.state.outlet_id).
+      if (outList.length && !location.state?.outlet_id) {
+        const preferred = ctxOutletId && outList.find((o) => String(o.id) === ctxOutletId);
+        setForm((p) => ({
+          ...p,
+          outlet_id: p.outlet_id || (preferred ? ctxOutletId : String(outList[0].id)),
+        }));
+      }
     } catch {
       // non-blocking
     }

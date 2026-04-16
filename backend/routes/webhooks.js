@@ -331,6 +331,18 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
 module.exports = function registerWebhookRoutes(app, deps) {
   const paymentGateway = require("../services/payment-gateway");
   const logger = _logger;
+  const { z } = require("zod");
+
+  // Structural schema for xPay payloads — non-fatal. HMAC is the real gate;
+  // this logs anomalies so unexpected payload shapes surface in Sentry/Pino
+  // before they corrupt downstream idempotency state. passthrough() preserves
+  // unknown fields since xPay evolves its payload over time.
+  const XPayPayloadSchema = z.object({
+    event_type: z.string().max(100).optional(),
+    transaction_id: z.string().min(1).optional(),
+    status: z.string().max(50).optional(),
+    amount: z.coerce.number().optional(),
+  }).passthrough();
 
   // Note: raw body is captured by express.json() verify callback in index.js
   // and available as req.rawBody for HMAC verification.
@@ -344,6 +356,15 @@ module.exports = function registerWebhookRoutes(app, deps) {
       if (!valid) {
         logger.warn({ error }, "xPay webhook signature invalid");
         return res.status(400).json({ error: "Invalid signature" });
+      }
+
+      const bodyParse = XPayPayloadSchema.safeParse(raw || {});
+      if (!bodyParse.success) {
+        logger.warn(
+          { issues: bodyParse.error.issues, provider: "xpay", transaction_id },
+          "xPay webhook payload failed structural schema check",
+        );
+        // Non-fatal — HMAC already verified. Continue processing.
       }
 
       const result = await processWebhookEvent({ provider: "xpay", event_type, transaction_id, status, amount, raw });

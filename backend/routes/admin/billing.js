@@ -248,4 +248,28 @@ module.exports = function registerBillingRoutes(app, deps) {
       return res.status(500).json({ error: err.message });
     }
   });
+
+  // ── Stuck Payment Intents ──────────────────────────────────────────────
+  // Returns payment_intents that have been in 'pending' state longer than
+  // the threshold (default 2 hours). Used by AdminStuckPayments.jsx.
+  app.get("/api/admin/payment-intents/stuck", requireAllowedIp, requireSuperAdmin, async (req, res) => {
+    try {
+      const hours = Math.max(0, Number(req.query.hours || 2));
+      const { rows } = await masterDb.query(
+        `SELECT pi.id, pi.tenant_id, pi.amount, pi.currency_code, pi.plan, pi.cycle,
+                pi.status, pi.gateway, pi.gateway_ref, pi.created_at,
+                t.name AS tenant_name, t.slug AS tenant_slug
+         FROM payment_intents pi
+         JOIN tenants t ON pi.tenant_id = t.id
+         WHERE pi.status = 'pending'
+           AND pi.created_at < NOW() - ($1 || ' hours')::INTERVAL
+         ORDER BY pi.created_at ASC
+         LIMIT 100`,
+        [hours]
+      );
+      return res.json({ intents: rows, threshold_hours: hours });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
 };

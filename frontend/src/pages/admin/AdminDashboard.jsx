@@ -53,9 +53,34 @@ function InfrastructurePanel() {
   };
 
   useEffect(() => {
+    // Polling cadence — backend now caches /api/admin/infra for 5 min, so 60s
+    // here is plenty (backend keeps serving the cached payload between refreshes).
+    // Pause polling when the tab is hidden so a forgotten admin tab doesn't
+    // burn DB time forever.
     fetchInfra();
-    timerRef.current = setInterval(fetchInfra, 30000);
-    return () => clearInterval(timerRef.current);
+    const start = () => {
+      if (timerRef.current) return;
+      timerRef.current = setInterval(fetchInfra, 60000);
+    };
+    const stop = () => {
+      if (!timerRef.current) return;
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    };
+    const onVisibility = () => {
+      if (document.hidden) {
+        stop();
+      } else {
+        fetchInfra();
+        start();
+      }
+    };
+    if (!document.hidden) start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 
   if (infraErr) {
@@ -84,7 +109,7 @@ function InfrastructurePanel() {
     <div className="mb-8 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-800">Infrastructure</h2>
-        <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Auto-refresh 30s</span>
+        <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Auto-refresh 60s · pauses when hidden</span>
       </div>
 
       {/* Top stats row */}

@@ -51,27 +51,39 @@ module.exports = function registerSystemRoutes(app, deps) {
   });
 
   // ── Orphaned Schemas ───────────────────────────────────────────────────
+  // Reads from public.infra_cache (key: 'orphaned_schemas') populated by the
+  // hourly orphan-schema-scan-worker. Live scan was the worst per-call query
+  // in prod (up to 104s p100). ?force=1 falls back to a live scan when the
+  // cache is missing or you really need fresh data; the route never blocks
+  // on the live scan unless explicitly asked.
   app.get("/api/admin/orphaned-schemas", requireAllowedIp, requireSuperAdmin, async (req, res) => {
     try {
-      const { rows: schemas } = await db.query(
-        `SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%' ORDER BY schema_name`
-      );
-      const { rows: tenants } = await db.query("SELECT slug FROM tenants");
-      const tenantSlugs = new Set(tenants.map(t => `tenant_${t.slug}`));
+      const force = req.query.force === "1" || req.query.force === "true";
 
-      const orphans = [];
-      for (const s of schemas) {
-        if (!tenantSlugs.has(s.schema_name)) {
-          const { rows: [size] } = await db.query(
-            `SELECT pg_size_pretty(COALESCE(SUM(pg_total_relation_size(quote_ident($1)||'.'||quote_ident(tablename)))::bigint, 0)) AS size
-             FROM pg_tables WHERE schemaname = $1`,
-            [s.schema_name]
-          );
-          orphans.push({ schema: s.schema_name, size: size.size });
+      if (!force) {
+        const { rows: [cached] } = await db.query(
+          `SELECT payload, computed_at, duration_ms
+           FROM public.infra_cache WHERE cache_key = 'orphaned_schemas'`
+        );
+        if (cached) {
+          res.set("X-Infra-Cache", "hit");
+          return res.json({
+            ...cached.payload,
+            computed_at: cached.computed_at,
+            scan_duration_ms: cached.duration_ms,
+          });
         }
       }
 
-      return res.json({ orphans, count: orphans.length });
+      const { runScan } = require("../../workers/orphan-schema-scan-worker-boss");
+      const result = await runScan(db);
+      res.set("X-Infra-Cache", "miss");
+      return res.json({
+        orphans: result.orphans,
+        count: result.count,
+        computed_at: new Date().toISOString(),
+        scan_duration_ms: result.durationMs,
+      });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }

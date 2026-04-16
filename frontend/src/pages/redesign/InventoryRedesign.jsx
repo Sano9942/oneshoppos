@@ -17,6 +17,7 @@ import {
   TableToolbar,
 } from "../../ui/primitives";
 import { useAuth } from "../../auth/AuthProvider";
+import { readContext } from "../../auth/authStore";
 import { indentLabel, leafCategories, sortCategories } from "../../utils/categoryTree";
 
 const PAGE_SIZE = 50;
@@ -159,6 +160,10 @@ export default function InventoryRedesign() {
   const { authHeaders, hasPerm } = useAuth();
   const navigate = useNavigate();
   const canViewAllLocations = hasPerm("all_access");
+  const _ctx = readContext();
+  const ctxOutletId = _ctx?.active_outlet_id && _ctx?.scope_mode !== "all_branches"
+    ? String(_ctx.active_outlet_id)
+    : null;
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
@@ -315,8 +320,9 @@ export default function InventoryRedesign() {
     if (canViewAllLocations) return;
     if (outletFilter) return;
     if (!outlets.length) return;
-    setOutletFilter(String(outlets[0].id));
-  }, [canViewAllLocations, outletFilter, outlets]);
+    const preferred = ctxOutletId && outlets.find((o) => String(o.id) === ctxOutletId);
+    setOutletFilter(preferred ? ctxOutletId : String(outlets[0].id));
+  }, [canViewAllLocations, outletFilter, outlets, ctxOutletId]);
 
   useEffect(() => {
     if (activeTab === "giftcards") fetchGiftCards();

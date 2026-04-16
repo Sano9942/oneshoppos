@@ -1,5 +1,11 @@
 module.exports = function (app, deps) {
   const { db, createNotification, requirePerm } = deps;
+  const { validate } = require("../middleware/validate");
+  const {
+    OpenShiftSchema,
+    CloseShiftSchema,
+    VarianceApproveSchema,
+  } = require("../schemas/shifts");
 
   async function storeShiftDenominations(client, shiftId, stage, denominations = []) {
     const rows = Array.isArray(denominations)
@@ -59,12 +65,8 @@ module.exports = function (app, deps) {
   });
 
   // POST open a new shift
-  app.post("/api/shifts/open", requirePerm("manage_orders"), async (req, res) => {
+  app.post("/api/shifts/open", requirePerm("manage_orders"), validate(OpenShiftSchema), async (req, res) => {
     const { outlet_id, employee_id, opening_float, denominations } = req.body;
-
-    if (!outlet_id || opening_float === undefined) {
-      return res.status(400).json({ error: "outlet_id and opening_float are required" });
-    }
 
     try {
       // Check if there's already an open shift for this outlet
@@ -101,13 +103,9 @@ module.exports = function (app, deps) {
   });
 
   // POST close a shift — auto-calculates expected cash from cash sales during shift period
-  app.post("/api/shifts/:id/close", requirePerm("manage_orders"), async (req, res) => {
+  app.post("/api/shifts/:id/close", requirePerm("manage_orders"), validate(CloseShiftSchema), async (req, res) => {
     const { id } = req.params;
     const { closing_cash, notes, variance_reason, variance_approved_by, denominations } = req.body;
-
-    if (closing_cash === undefined) {
-      return res.status(400).json({ error: "closing_cash is required" });
-    }
 
     try {
       // Get the shift first
@@ -198,6 +196,45 @@ module.exports = function (app, deps) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // PUT approve a closed shift's variance — records approver + optional note
+  app.put(
+    "/api/shifts/:id/variance-approve",
+    requirePerm("manage_orders"),
+    validate(VarianceApproveSchema),
+    async (req, res) => {
+      const { id } = req.params;
+      const { approved_by, approval_note } = req.body;
+      try {
+        const noteText = approval_note || "";
+        const { rows } = await db.query(
+          `UPDATE cash_shifts
+           SET variance_approved_by = $1,
+               notes = CASE
+                 WHEN notes IS NULL OR notes = '' THEN 'Approval: ' || $2
+                 ELSE notes || ' | Approval: ' || $2
+               END
+           WHERE id = $3 AND status = 'closed' AND variance IS NOT NULL
+           RETURNING id, variance, variance_approved_by, notes`,
+          [approved_by, noteText, id]
+        );
+        if (!rows.length) {
+          return res.status(404).json({ error: "Closed shift with variance not found" });
+        }
+        if (typeof createNotification === "function") {
+          createNotification(
+            "shift_variance_approved",
+            "Shift Variance Approved",
+            `Shift #${id} variance approved by ${approved_by}`,
+            "/cash-management"
+          );
+        }
+        res.json({ shift: rows[0] });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    }
+  );
 
   // GET variance reason codes (static list)
   app.get("/api/variance-reasons", (req, res) => {

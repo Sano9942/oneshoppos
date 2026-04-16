@@ -1,5 +1,11 @@
 module.exports = function registerAttendanceRoutes(app, deps) {
   const { db, requirePerm } = deps;
+  const { validate } = require("../middleware/validate");
+  const {
+    PinStatusSchema,
+    PinCheckinSchema,
+    PinCheckoutSchema,
+  } = require("../schemas/attendance");
 
   // Helper: format decimal hours to "Xh Ym" string
   const fmtDuration = (hours) => {
@@ -163,10 +169,9 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // POST /api/attendance/pin-status — kiosk: look up employee status by PIN
   // Intentionally unauthenticated — PIN is the authentication
   // ---------------------------------------------------------------------------
-  app.post("/api/attendance/pin-status", async (req, res) => {
+  app.post("/api/attendance/pin-status", validate(PinStatusSchema), async (req, res) => {
     try {
       const { pin_code, outlet_id = null } = req.body || {};
-      if (!pin_code) return res.status(400).json({ error: "pin_code is required" });
 
       const { rows: [emp] } = await db.query(
         "SELECT id, name FROM employees WHERE pin_code = $1",
@@ -274,11 +279,9 @@ module.exports = function registerAttendanceRoutes(app, deps) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  app.post("/api/attendance/pin-checkin", async (req, res) => {
+  app.post("/api/attendance/pin-checkin", validate(PinCheckinSchema), async (req, res) => {
     try {
       const { pin_code, outlet_id, latitude, longitude } = req.body || {};
-      if (!pin_code || !outlet_id)
-        return res.status(400).json({ error: "pin_code and outlet_id are required" });
 
       const { rows: [emp] } = await db.query(
         "SELECT id, name FROM employees WHERE pin_code = $1",
@@ -405,17 +408,9 @@ module.exports = function registerAttendanceRoutes(app, deps) {
   // Intentionally unauthenticated — PIN is the authentication
   // break_reason: 'lunch'|'prayer'|'bathroom'|'personal'|'other'|null (null = end of day)
   // ---------------------------------------------------------------------------
-  app.post("/api/attendance/pin-checkout", async (req, res) => {
+  app.post("/api/attendance/pin-checkout", validate(PinCheckoutSchema), async (req, res) => {
     try {
       const { pin_code, break_reason = null, outlet_id = null } = req.body || {};
-      if (!pin_code) return res.status(400).json({ error: "pin_code is required" });
-
-      const VALID_REASONS = ["lunch", "prayer", "bathroom", "personal", "other"];
-      if (break_reason && !VALID_REASONS.includes(break_reason)) {
-        return res.status(400).json({
-          error: `break_reason must be one of: ${VALID_REASONS.join(", ")} or null`,
-        });
-      }
 
       const { rows: [emp] } = await db.query(
         "SELECT id, name FROM employees WHERE pin_code = $1",
