@@ -100,7 +100,7 @@ export default function FBRSettingsRedesign() {
       ? "bg-emerald-500"
       : connectionStatus === "failed"
         ? "bg-red-500"
-        : "bg-gray-400";
+        : "bg-(--ui-border)";
 
   const statusLabel =
     connectionStatus === "connected"
@@ -136,7 +136,7 @@ export default function FBRSettingsRedesign() {
                 aria-checked={enabled}
                 onClick={() => setEnabled((v) => !v)}
                 className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
-                  enabled ? "bg-(--ui-primary)" : "bg-gray-300"
+                  enabled ? "bg-(--ui-primary)" : "bg-(--ui-border)"
                 }`}
               >
                 <span

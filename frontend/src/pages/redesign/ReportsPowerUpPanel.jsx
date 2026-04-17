@@ -37,20 +37,20 @@ function toCsv(filename, rows, columns, meta, currencyCode = "USD") {
 function Filters({ filters, setFilters, show, categories }) {
   if (!show) return null;
   return (
-    <div className="mb-3 grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-5">
+    <div className="mb-3 grid grid-cols-1 gap-2 rounded-xl border border-(--ui-border) bg-(--ui-surface) p-3 md:grid-cols-5">
       <input
         type="date"
         value={filters.date_from}
         onChange={(e) =>
           setFilters((p) => ({ ...p, date_from: e.target.value }))
         }
-        className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        className="rounded-lg border border-(--ui-border) px-3 py-2 text-sm"
       />
       <input
         type="date"
         value={filters.date_to}
         onChange={(e) => setFilters((p) => ({ ...p, date_to: e.target.value }))}
-        className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        className="rounded-lg border border-(--ui-border) px-3 py-2 text-sm"
       />
       <input
         placeholder="Outlet ID"
@@ -58,7 +58,7 @@ function Filters({ filters, setFilters, show, categories }) {
         onChange={(e) =>
           setFilters((p) => ({ ...p, outlet_id: e.target.value }))
         }
-        className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        className="rounded-lg border border-(--ui-border) px-3 py-2 text-sm"
       />
       <input
         placeholder="Employee ID"
@@ -66,14 +66,14 @@ function Filters({ filters, setFilters, show, categories }) {
         onChange={(e) =>
           setFilters((p) => ({ ...p, employee_id: e.target.value }))
         }
-        className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        className="rounded-lg border border-(--ui-border) px-3 py-2 text-sm"
       />
       <select
         value={filters.category_id}
         onChange={(e) =>
           setFilters((p) => ({ ...p, category_id: e.target.value }))
         }
-        className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        className="rounded-lg border border-(--ui-border) px-3 py-2 text-sm"
       >
         <option value="">All categories</option>
         {(categories || []).map((category) => (
@@ -179,15 +179,15 @@ export default function ReportsPowerUpPanel({ flags }) {
   }
 
   return (
-    <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+    <div className="mb-4 rounded-2xl border border-(--ui-border) bg-(--ui-muted-surface) p-3">
       <div
         className={`flex items-center justify-between gap-2 ${isExpanded ? "mb-2" : ""}`}
       >
         <div>
-          <h2 className="text-lg font-semibold text-slate-800">
+          <h2 className="text-lg font-semibold text-(--ui-text)">
             Reports Power-Up
           </h2>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-(--ui-text-muted)">
             Feature-gated profitability, inventory control, and exception analytics.
           </p>
         </div>
@@ -195,7 +195,7 @@ export default function ReportsPowerUpPanel({ flags }) {
           {isExpanded ? (
             <button
               onClick={load}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              className="inline-flex items-center gap-1 rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-xs font-medium text-(--ui-text) hover:bg-(--ui-muted-surface)"
             >
               <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
               Refresh
@@ -203,7 +203,7 @@ export default function ReportsPowerUpPanel({ flags }) {
           ) : null}
           <button
             onClick={() => setIsExpanded((p) => !p)}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center gap-1 rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-xs font-bold text-(--ui-text) hover:bg-(--ui-muted-surface)"
           >
             {isExpanded ? (
               <>
@@ -230,15 +230,15 @@ export default function ReportsPowerUpPanel({ flags }) {
           />
           {error ? <p className="mb-2 text-sm text-rose-600">{error}</p> : null}
           {loading ? (
-            <p className="mb-2 text-sm text-slate-500">
+            <p className="mb-2 text-sm text-(--ui-text-muted)">
               Loading enhanced reports...
             </p>
           ) : null}
 
           {flags.reports_profit_layer ? (
-            <div className="mb-3 rounded-xl border border-slate-200 bg-white p-3">
+            <div className="mb-3 rounded-xl border border-(--ui-border) bg-(--ui-surface) p-3">
               <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-800">Profit Layer</h3>
+                <h3 className="text-sm font-semibold text-(--ui-text)">Profit Layer</h3>
                 <button
                   onClick={() =>
                     toCsv(
@@ -255,31 +255,31 @@ export default function ReportsPowerUpPanel({ flags }) {
                       currencyCode,
                     )
                   }
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600"
+                  className="inline-flex items-center gap-1 rounded-lg border border-(--ui-border) px-2 py-1 text-xs text-(--ui-text-muted)"
                 >
                   <Download size={12} />
                   Export
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-5">
-                <div className="rounded-lg bg-slate-50 p-2">
+                <div className="rounded-lg bg-(--ui-muted-surface) p-2">
                   Gross Sales: <b>{money(profitSummary?.gross_sales)}</b>
                 </div>
-                <div className="rounded-lg bg-slate-50 p-2">
+                <div className="rounded-lg bg-(--ui-muted-surface) p-2">
                   COGS: <b>{money(profitSummary?.cogs)}</b>
                 </div>
-                <div className="rounded-lg bg-slate-50 p-2">
+                <div className="rounded-lg bg-(--ui-muted-surface) p-2">
                   Gross Profit: <b>{money(profitSummary?.gross_profit)}</b>
                 </div>
-                <div className="rounded-lg bg-slate-50 p-2">
+                <div className="rounded-lg bg-(--ui-muted-surface) p-2">
                   Net Profit: <b>{money(profitSummary?.net_profit)}</b>
                 </div>
-                <div className="rounded-lg bg-slate-50 p-2">
+                <div className="rounded-lg bg-(--ui-muted-surface) p-2">
                   Net Margin:{" "}
                   <b>{Number(profitSummary?.net_margin_pct || 0).toFixed(2)}%</b>
                 </div>
               </div>
-              <div className="mt-2 text-xs text-slate-600">
+              <div className="mt-2 text-xs text-(--ui-text-muted)">
                 Top margin products:{" "}
                 {(profitByProduct || [])
                   .slice(0, 5)
@@ -289,14 +289,14 @@ export default function ReportsPowerUpPanel({ flags }) {
                   )
                   .join(", ") || "-"}
               </div>
-              <div className="mt-1 text-xs text-slate-600">
+              <div className="mt-1 text-xs text-(--ui-text-muted)">
                 Outlet leaders:{" "}
                 {(profitByOutlet || [])
                   .slice(0, 3)
                   .map((row) => `${row.outlet_name} (${money(row.gross_profit)})`)
                   .join(", ") || "-"}
               </div>
-              <div className="mt-1 text-xs text-slate-600">
+              <div className="mt-1 text-xs text-(--ui-text-muted)">
                 Discount leakage records: {discountLeakage.length}
                 <Link
                   to={`/reports/sales-detail${query ? `?${query}` : ""}`}
@@ -309,14 +309,14 @@ export default function ReportsPowerUpPanel({ flags }) {
           ) : null}
 
           {flags.reports_inventory_health_plus ? (
-            <div className="mb-3 rounded-xl border border-slate-200 bg-white p-3">
-              <h3 className="mb-2 text-sm font-semibold text-slate-800">
+            <div className="mb-3 rounded-xl border border-(--ui-border) bg-(--ui-surface) p-3">
+              <h3 className="mb-2 text-sm font-semibold text-(--ui-text)">
                 Inventory Health+
               </h3>
               <div className="grid grid-cols-1 gap-2 text-xs md:grid-cols-3">
-                <div className="rounded-lg bg-slate-50 p-2">
+                <div className="rounded-lg bg-(--ui-muted-surface) p-2">
                   Dead stock rows: <b>{deadStock.length}</b>
-                  <div className="text-slate-500">
+                  <div className="text-(--ui-text-muted)">
                     Value tied:{" "}
                     {money(
                       deadStock.reduce(
@@ -326,9 +326,9 @@ export default function ReportsPowerUpPanel({ flags }) {
                     )}
                   </div>
                 </div>
-                <div className="rounded-lg bg-slate-50 p-2">
+                <div className="rounded-lg bg-(--ui-muted-surface) p-2">
                   Aging tracked: <b>{stockAging.length}</b>
-                  <div className="text-slate-500">
+                  <div className="text-(--ui-text-muted)">
                     Oldest:{" "}
                     {Math.max(
                       0,
@@ -337,10 +337,10 @@ export default function ReportsPowerUpPanel({ flags }) {
                     days
                   </div>
                 </div>
-                <div className="rounded-lg bg-slate-50 p-2">
+                <div className="rounded-lg bg-(--ui-muted-surface) p-2">
                   Stockout risk high:{" "}
                   <b>{stockoutRisk.filter((row) => row.risk_level === "high").length}</b>
-                  <div className="text-slate-500">
+                  <div className="text-(--ui-text-muted)">
                     <Link
                       to={`/reports/replenishment${query ? `?${query}` : ""}`}
                       className="text-blue-600 underline"
@@ -351,18 +351,18 @@ export default function ReportsPowerUpPanel({ flags }) {
                 </div>
               </div>
               <div className="mt-2 grid grid-cols-1 gap-2 text-xs md:grid-cols-2">
-                <div className="rounded-lg bg-slate-50 p-2">
+                <div className="rounded-lg bg-(--ui-muted-surface) p-2">
                   Forecast rows: <b>{forecastRows.length}</b>
-                  <div className="text-slate-500">
+                  <div className="text-(--ui-text-muted)">
                     Avg 7d demand (top):{" "}
                     {forecastRows[0]
                       ? Number(forecastRows[0].forecast_7d_units || 0).toFixed(2)
                       : "0.00"}
                   </div>
                 </div>
-                <div className="rounded-lg bg-slate-50 p-2">
+                <div className="rounded-lg bg-(--ui-muted-surface) p-2">
                   Smart replenishment rows: <b>{replenishmentSmart.length}</b>
-                  <div className="text-slate-500">
+                  <div className="text-(--ui-text-muted)">
                     Suggested reorder (top):{" "}
                     {replenishmentSmart[0]
                       ? Number(replenishmentSmart[0].suggested_reorder_qty || 0)
@@ -374,13 +374,13 @@ export default function ReportsPowerUpPanel({ flags }) {
           ) : null}
 
           {flags.reports_exceptions ? (
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <div className="rounded-xl border border-(--ui-border) bg-(--ui-surface) p-3">
               <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-800">Exceptions</h3>
+                <h3 className="text-sm font-semibold text-(--ui-text)">Exceptions</h3>
                 <select
                   value={exceptionType}
                   onChange={(e) => setExceptionType(e.target.value)}
-                  className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                  className="rounded-lg border border-(--ui-border) px-2 py-1 text-xs"
                 >
                   <option value="negative_margin_sales">Negative Margin Sales</option>
                   <option value="high_discount_orders">High Discount Orders</option>
@@ -392,7 +392,7 @@ export default function ReportsPowerUpPanel({ flags }) {
                   </option>
                 </select>
               </div>
-              <p className="text-xs text-slate-600">
+              <p className="text-xs text-(--ui-text-muted)">
                 Current exception rows: <b>{exceptions.length}</b>
                 <Link
                   to={`/reports/sales-detail${query ? `?${query}` : ""}`}

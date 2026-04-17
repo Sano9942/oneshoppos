@@ -31,16 +31,16 @@ export default function ReorderAlertsRedesign() {
   return (
     <PageShell title="Reorder Alerts" subtitle="Products sorted by urgency (most critical first)">
       <SectionCard>
-        {loading && <p className="p-4 text-sm text-gray-500">Loading...</p>}
+        {loading && <p className="p-4 text-sm text-(--ui-text-muted)">Loading...</p>}
         {error && <p className="p-4 text-sm text-red-500">{error}</p>}
         {!loading && !error && products.length === 0 && (
-          <p className="p-4 text-sm text-gray-500">No products require reordering.</p>
+          <p className="p-4 text-sm text-(--ui-text-muted)">No products require reordering.</p>
         )}
         {!loading && !error && products.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200 text-left text-xs font-semibold uppercase text-gray-500">
+                <tr className="border-b border-(--ui-border) text-left text-xs font-semibold uppercase text-(--ui-text-muted)">
                   <th className="px-4 py-3">Product</th>
                   <th className="px-4 py-3">SKU</th>
                   <th className="px-4 py-3 text-right">Current Stock</th>
@@ -53,10 +53,10 @@ export default function ReorderAlertsRedesign() {
                 {products.map((row) => (
                   <tr
                     key={row.product_id}
-                    className={`border-b border-gray-100 last:border-0 ${rowClass(row.days_of_stock_remaining)}`}
+                    className={`border-b border-(--ui-border) last:border-0 ${rowClass(row.days_of_stock_remaining)}`}
                   >
-                    <td className="px-4 py-3 font-medium text-gray-900">{row.name}</td>
-                    <td className="px-4 py-3 text-gray-500">{row.sku || "—"}</td>
+                    <td className="px-4 py-3 font-medium text-(--ui-text)">{row.name}</td>
+                    <td className="px-4 py-3 text-(--ui-text-muted)">{row.sku || "—"}</td>
                     <td className="px-4 py-3 text-right">{row.current_stock ?? 0}</td>
                     <td className="px-4 py-3 text-right">
                       {row.days_of_stock_remaining != null

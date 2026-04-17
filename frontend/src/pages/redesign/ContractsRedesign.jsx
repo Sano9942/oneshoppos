@@ -33,7 +33,7 @@ function HtmlPreview({ html }) {
       srcDoc={wrappedHtml}
       sandbox="allow-same-origin"
       title="Contract preview"
-      className="w-full min-h-[300px] border border-(--ui-border) rounded-lg bg-white"
+      className="w-full min-h-[300px] border border-(--ui-border) rounded-lg bg-(--ui-surface)"
       style={{ border: "none" }}
     />
   );
@@ -95,7 +95,7 @@ function SignaturePad({ onSave, onCancel }) {
         ref={canvasRef}
         width={400}
         height={150}
-        className="w-full border border-(--ui-border) rounded-lg bg-white cursor-crosshair touch-none"
+        className="w-full border border-(--ui-border) rounded-lg bg-(--ui-surface) cursor-crosshair touch-none"
         onMouseDown={startDraw}
         onMouseMove={draw}
         onMouseUp={endDraw}
@@ -180,7 +180,7 @@ function CreateContractModal({ customers, templates, onClose, onCreated }) {
           </div>
           <div>
             <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Body (HTML)</label>
-            <textarea className="w-full rounded-lg border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text) font-mono" rows={6} value={form.body} onChange={e => set("body", e.target.value)} placeholder="<p>Contract terms...</p>" />
+            <textarea className="w-full rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-sm text-(--ui-text) font-mono" rows={6} value={form.body} onChange={e => set("body", e.target.value)} placeholder="<p>Contract terms...</p>" />
           </div>
           <div>
             <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Signers (comma-separated emails or "Name &lt;email&gt;")</label>
@@ -228,7 +228,7 @@ function CreateTemplateModal({ onClose, onCreated }) {
           </div>
           <div>
             <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Body (HTML)</label>
-            <textarea className="w-full rounded-lg border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text) font-mono" rows={8} value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} placeholder="<p>Standard contract terms...</p>" />
+            <textarea className="w-full rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-sm text-(--ui-text) font-mono" rows={8} value={form.body} onChange={e => setForm(p => ({ ...p, body: e.target.value }))} placeholder="<p>Standard contract terms...</p>" />
           </div>
         </div>
         <div className="flex justify-end gap-2 mt-5">

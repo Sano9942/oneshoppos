@@ -127,7 +127,7 @@ function PlanListTab() {
       <SectionCard>
         <div className="flex flex-wrap gap-3 items-end">
           <div>
-            <label className="block text-xs text-slate-600 mb-1">Status</label>
+            <label className="block text-xs text-(--ui-text-muted) mb-1">Status</label>
             <Select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
               <option value="">All</option>
               {Object.entries(PLAN_STATUS_LABELS).map(([key, label]) => (
@@ -136,7 +136,7 @@ function PlanListTab() {
             </Select>
           </div>
           <div className="grow">
-            <label className="block text-xs text-slate-600 mb-1">Search</label>
+            <label className="block text-xs text-(--ui-text-muted) mb-1">Search</label>
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -151,7 +151,7 @@ function PlanListTab() {
 
       <SectionCard>
         {loading ? (
-          <div className="py-6 text-center text-slate-500">Loading…</div>
+          <div className="py-6 text-center text-(--ui-text-muted)">Loading…</div>
         ) : plans.length === 0 ? (
           <EmptyState
             title="No treatment plans yet"
@@ -160,7 +160,7 @@ function PlanListTab() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-slate-600 border-b">
+              <tr className="text-left text-(--ui-text-muted) border-b">
                 <th className="py-2">Plan #</th>
                 <th>Title</th>
                 <th>Patient</th>
@@ -174,7 +174,7 @@ function PlanListTab() {
             </thead>
             <tbody>
               {plans.map((p) => (
-                <tr key={p.id} className="border-b hover:bg-slate-50">
+                <tr key={p.id} className="border-b hover:bg-(--ui-muted-surface)">
                   <td className="py-2 font-mono text-xs">{p.plan_number}</td>
                   <td className="max-w-[260px] truncate">{p.title}</td>
                   <td>{p.customer_name || "—"}</td>
@@ -186,7 +186,7 @@ function PlanListTab() {
                       {PLAN_STATUS_LABELS[p.status] || p.status}
                     </Badge>
                   </td>
-                  <td className="text-xs text-slate-600">{p.start_date || "—"}</td>
+                  <td className="text-xs text-(--ui-text-muted)">{p.start_date || "—"}</td>
                   <td>
                     <Link to={`/treatment-plans/${p.id}`}>
                       <Button size="sm">Open</Button>
@@ -401,7 +401,7 @@ function PlanDetailView({ planId, initialInnerTab = "overview" }) {
     }
   };
 
-  if (loading) return <div className="py-10 text-center text-slate-500">Loading plan…</div>;
+  if (loading) return <div className="py-10 text-center text-(--ui-text-muted)">Loading plan…</div>;
   if (!plan) return <EmptyState title="Plan not found" />;
 
   const innerTabs = [
@@ -423,12 +423,12 @@ function PlanDetailView({ planId, initialInnerTab = "overview" }) {
               <h2 className="text-lg font-semibold">{plan.title}</h2>
               <Badge tone={PLAN_STATUS_TONES[plan.status]}>{PLAN_STATUS_LABELS[plan.status]}</Badge>
             </div>
-            <div className="text-sm text-slate-600 mt-1">
+            <div className="text-sm text-(--ui-text-muted) mt-1">
               <span className="font-mono">{plan.plan_number}</span> · {plan.customer_name}
               {plan.subject_name && <> · <em>{plan.subject_name}</em></>}
               {plan.provider_name && <> · Dr. {plan.provider_name}</>}
             </div>
-            <div className="text-xs text-slate-500 mt-1">
+            <div className="text-xs text-(--ui-text-muted) mt-1">
               Progress: {plan.sessions_completed || 0} / {plan.total_sessions_planned} sessions ({plan.progress_pct || 0}%)
             </div>
           </div>
@@ -510,10 +510,10 @@ function OverviewPanel({ plan, fmt }) {
       {(plan.activities || []).length > 0 && (
         <div className="mt-5 pt-4 border-t">
           <h4 className="text-sm font-semibold mb-2">Activity</h4>
-          <ul className="text-xs text-slate-600 space-y-1 max-h-60 overflow-auto">
+          <ul className="text-xs text-(--ui-text-muted) space-y-1 max-h-60 overflow-auto">
             {plan.activities.map((a) => (
               <li key={a.id}>
-                <span className="font-mono text-slate-400 mr-2">{fmtUtcDateTime(a.created_at)}</span>
+                <span className="font-mono text-(--ui-text-muted) mr-2">{fmtUtcDateTime(a.created_at)}</span>
                 [{a.activity_type}] {a.description}
               </li>
             ))}
@@ -527,7 +527,7 @@ function OverviewPanel({ plan, fmt }) {
 function Info({ label, value }) {
   return (
     <div>
-      <dt className="text-xs text-slate-500">{label}</dt>
+      <dt className="text-xs text-(--ui-text-muted)">{label}</dt>
       <dd className="text-sm">{value}</dd>
     </div>
   );
@@ -572,7 +572,7 @@ function SessionsPanel({ plan, onReload, onCompleteClick }) {
         </Button>
       </div>
       {adding && (
-        <div className="bg-slate-50 rounded p-3 mb-3 grid grid-cols-3 gap-2 items-end">
+        <div className="bg-(--ui-muted-surface) rounded p-3 mb-3 grid grid-cols-3 gap-2 items-end">
           <Field label="Scheduled at">
             <Input type="datetime-local" value={form.scheduled_at} onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })} />
           </Field>
@@ -586,11 +586,11 @@ function SessionsPanel({ plan, onReload, onCompleteClick }) {
         </div>
       )}
       {sessions.length === 0 ? (
-        <div className="text-sm text-slate-500 py-4 text-center">No sessions scheduled yet</div>
+        <div className="text-sm text-(--ui-text-muted) py-4 text-center">No sessions scheduled yet</div>
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-slate-600 border-b">
+            <tr className="text-left text-(--ui-text-muted) border-b">
               <th className="py-2">#</th>
               <th>When</th>
               <th>Provider</th>
@@ -601,7 +601,7 @@ function SessionsPanel({ plan, onReload, onCompleteClick }) {
           </thead>
           <tbody>
             {sessions.map((s) => (
-              <tr key={s.id} className="border-b hover:bg-slate-50">
+              <tr key={s.id} className="border-b hover:bg-(--ui-muted-surface)">
                 <td className="py-2 font-mono">{s.session_number}</td>
                 <td className="text-xs">{s.scheduled_at ? fmtUtcDateTime(s.scheduled_at) : "—"}</td>
                 <td className="text-xs">{s.provider_name || "—"}</td>
@@ -808,7 +808,7 @@ function ChartPanel({ plan, entries }) {
       ) : (
         <BodyChart preset={preset} areas={bodyAreas} entries={entries} />
       )}
-      <div className="text-xs text-slate-500 mt-3">
+      <div className="text-xs text-(--ui-text-muted) mt-3">
         Click a region to view details. Entries are added when completing a session.
       </div>
     </SectionCard>
@@ -851,7 +851,7 @@ function LabOrdersPanel({ planId, orders, onReload }) {
         <Button size="sm" onClick={() => setAdding(!adding)}><Plus className="w-3 h-3 inline" /> Add Order</Button>
       </div>
       {adding && (
-        <div className="bg-slate-50 rounded p-3 mb-3 grid grid-cols-4 gap-2 items-end">
+        <div className="bg-(--ui-muted-surface) rounded p-3 mb-3 grid grid-cols-4 gap-2 items-end">
           <Field label="Test name *"><Input value={form.test_name} onChange={(e) => setForm({ ...form, test_name: e.target.value })} /></Field>
           <Field label="Lab vendor"><Input value={form.lab_vendor} onChange={(e) => setForm({ ...form, lab_vendor: e.target.value })} /></Field>
           <Field label="Test code"><Input value={form.test_code} onChange={(e) => setForm({ ...form, test_code: e.target.value })} /></Field>
@@ -863,11 +863,11 @@ function LabOrdersPanel({ planId, orders, onReload }) {
         </div>
       )}
       {orders.length === 0 ? (
-        <div className="text-sm text-slate-500 py-4 text-center">No lab orders</div>
+        <div className="text-sm text-(--ui-text-muted) py-4 text-center">No lab orders</div>
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left border-b text-slate-600">
+            <tr className="text-left border-b text-(--ui-text-muted)">
               <th className="py-2">Order #</th>
               <th>Test</th>
               <th>Vendor</th>
@@ -970,7 +970,7 @@ const SignaturePad = forwardRef(function SignaturePad({ height = 150 }, ref) {
       onPointerUp={onUp}
       onPointerLeave={onUp}
       style={{ touchAction: "none", height, width: "100%" }}
-      className="rounded border border-slate-300 bg-white"
+      className="rounded border border-(--ui-border) bg-(--ui-surface)"
     />
   );
 });
@@ -1024,7 +1024,7 @@ function ConsentPanel({ planId, consents, onReload }) {
     <SectionCard>
       <h3 className="font-semibold mb-3">Consent Forms</h3>
       <div className="mb-4">
-        <div className="text-xs text-slate-600 mb-1">Available templates:</div>
+        <div className="text-xs text-(--ui-text-muted) mb-1">Available templates:</div>
         <div className="flex flex-wrap gap-1">
           {templates.map((t) => (
             <Button key={t.key} size="sm" tone="plain" onClick={() => setSigning(t)}>
@@ -1034,9 +1034,9 @@ function ConsentPanel({ planId, consents, onReload }) {
         </div>
       </div>
       {signing && (
-        <div className="bg-slate-50 rounded p-3 mb-4">
+        <div className="bg-(--ui-muted-surface) rounded p-3 mb-4">
           <h4 className="font-medium mb-2">{signing.title}</h4>
-          <div className="text-xs text-slate-700 whitespace-pre-wrap mb-3 max-h-32 overflow-auto border border-slate-200 bg-white p-2 rounded">
+          <div className="text-xs text-(--ui-text) whitespace-pre-wrap mb-3 max-h-32 overflow-auto border border-(--ui-border) bg-(--ui-surface) p-2 rounded">
             {signing.body}
           </div>
           <div className="grid grid-cols-2 gap-2 items-end">
@@ -1054,10 +1054,10 @@ function ConsentPanel({ planId, consents, onReload }) {
             </Field>
             <div className="col-span-2">
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-medium text-slate-600">Signature *</label>
+                <label className="text-xs font-medium text-(--ui-text-muted)">Signature *</label>
                 <button
                   type="button"
-                  className="text-xs text-slate-500 hover:text-slate-700"
+                  className="text-xs text-(--ui-text-muted) hover:text-(--ui-text)"
                   onClick={() => sigRef.current?.clear()}
                 >
                   Clear
@@ -1073,11 +1073,11 @@ function ConsentPanel({ planId, consents, onReload }) {
         </div>
       )}
       {consents.length === 0 ? (
-        <div className="text-sm text-slate-500 py-4 text-center">No signed consents</div>
+        <div className="text-sm text-(--ui-text-muted) py-4 text-center">No signed consents</div>
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left border-b text-slate-600">
+            <tr className="text-left border-b text-(--ui-text-muted)">
               <th className="py-2">Form</th>
               <th>Signed by</th>
               <th>Relation</th>
@@ -1129,7 +1129,7 @@ function DocumentsPanel({ planId, documents, onReload }) {
   return (
     <SectionCard>
       <h3 className="font-semibold mb-3">Clinical Documents</h3>
-      <div className="bg-slate-50 rounded p-3 mb-4 grid grid-cols-4 gap-2 items-end">
+      <div className="bg-(--ui-muted-surface) rounded p-3 mb-4 grid grid-cols-4 gap-2 items-end">
         <Field label="Title">
           <Input value={title} onChange={(e) => setTitle(e.target.value)} />
         </Field>
@@ -1150,14 +1150,14 @@ function DocumentsPanel({ planId, documents, onReload }) {
         </div>
       </div>
       {documents.length === 0 ? (
-        <div className="text-sm text-slate-500 py-4 text-center">No documents</div>
+        <div className="text-sm text-(--ui-text-muted) py-4 text-center">No documents</div>
       ) : (
         <ul className="divide-y">
           {documents.map((d) => (
             <li key={d.id} className="py-2 text-sm flex justify-between items-center">
               <div>
                 <a href={d.file_url} target="_blank" rel="noreferrer" className="font-medium text-blue-600 hover:underline">{d.title}</a>
-                <span className="text-xs text-slate-500 ml-2">[{d.document_type}] {(d.file_size_bytes || 0) > 0 ? `${(d.file_size_bytes / 1024).toFixed(0)} KB` : ""}</span>
+                <span className="text-xs text-(--ui-text-muted) ml-2">[{d.document_type}] {(d.file_size_bytes || 0) > 0 ? `${(d.file_size_bytes / 1024).toFixed(0)} KB` : ""}</span>
               </div>
               <Badge tone={d.shared_with_patient ? "success" : "default"}>
                 {d.shared_with_patient ? "Shared" : "Internal"}
@@ -1202,24 +1202,24 @@ function FolioPanel({ plan, onReload, fmt }) {
       <div className="flex justify-between items-start mb-3">
         <div>
           <h3 className="font-semibold">Folio</h3>
-          <div className="text-xs text-slate-600">Status: <Badge tone={folio.status === "open" ? "warning" : "success"}>{folio.status}</Badge></div>
+          <div className="text-xs text-(--ui-text-muted)">Status: <Badge tone={folio.status === "open" ? "warning" : "success"}>{folio.status}</Badge></div>
         </div>
         {folio.status === "open" && (
           <Button size="sm" onClick={settle}>Settle & Generate Invoice</Button>
         )}
       </div>
-      <dl className="grid grid-cols-4 gap-3 text-sm mb-4 p-3 bg-slate-50 rounded">
+      <dl className="grid grid-cols-4 gap-3 text-sm mb-4 p-3 bg-(--ui-muted-surface) rounded">
         <Info label="Session charges" value={fmt(folio.session_charge_total)} />
         <Info label="POS charges" value={fmt(folio.pos_charge_total)} />
         <Info label="Tax" value={fmt(folio.tax_total)} />
         <Info label="Grand total" value={fmt(folio.grand_total)} />
       </dl>
       {lines.length === 0 ? (
-        <div className="text-sm text-slate-500 py-4 text-center">No folio lines yet</div>
+        <div className="text-sm text-(--ui-text-muted) py-4 text-center">No folio lines yet</div>
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left border-b text-slate-600">
+            <tr className="text-left border-b text-(--ui-text-muted)">
               <th className="py-2">Type</th>
               <th>Description</th>
               <th>Qty</th>
@@ -1259,14 +1259,14 @@ function CalendarTab() {
   return (
     <SectionCard>
       <h3 className="font-semibold mb-3">Upcoming Sessions</h3>
-      <div className="text-sm text-slate-500">
+      <div className="text-sm text-(--ui-text-muted)">
         Upcoming sessions are scheduled through each plan's Sessions tab and flow into the main Appointments calendar at <Link to="/appointments/calendar" className="text-blue-600">/appointments/calendar</Link>.
       </div>
       <div className="mt-4 space-y-1 text-sm">
         {plans.map((p) => (
           <div key={p.id} className="flex justify-between border-b py-1">
             <span><Link to={`/treatment-plans/${p.id}`} className="text-blue-600">{p.plan_number}</Link> — {p.customer_name}</span>
-            <span className="text-slate-500">{p.sessions_completed}/{p.total_sessions_planned}</span>
+            <span className="text-(--ui-text-muted)">{p.sessions_completed}/{p.total_sessions_planned}</span>
           </div>
         ))}
       </div>
@@ -1305,13 +1305,13 @@ function LabsTab() {
     <SectionCard>
       <h3 className="font-semibold mb-3">All Lab Orders</h3>
       {loading ? (
-        <div className="text-sm text-slate-500 py-4 text-center">Loading…</div>
+        <div className="text-sm text-(--ui-text-muted) py-4 text-center">Loading…</div>
       ) : orders.length === 0 ? (
         <EmptyState title="No lab orders" body="Lab orders are created inside individual treatment plans." />
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left border-b text-slate-600">
+            <tr className="text-left border-b text-(--ui-text-muted)">
               <th className="py-2">Order #</th>
               <th>Plan</th>
               <th>Patient</th>
@@ -1376,7 +1376,7 @@ function TemplatesTab() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <div>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-(--ui-text-muted)">
             Save commonly-used plan structures as templates — create new plans for patients with one click.
           </p>
         </div>
@@ -1385,7 +1385,7 @@ function TemplatesTab() {
 
       <SectionCard>
         {loading ? (
-          <div className="p-6 text-center text-slate-500">Loading…</div>
+          <div className="p-6 text-center text-(--ui-text-muted)">Loading…</div>
         ) : templates.length === 0 ? (
           <EmptyState
             title="No templates yet"
@@ -1394,7 +1394,7 @@ function TemplatesTab() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left border-b text-slate-600">
+              <tr className="text-left border-b text-(--ui-text-muted)">
                 <th className="py-2 px-3">Name</th>
                 <th>Title</th>
                 <th>Sessions</th>
@@ -1404,7 +1404,7 @@ function TemplatesTab() {
             </thead>
             <tbody>
               {templates.map((t) => (
-                <tr key={t.id} className="border-b hover:bg-slate-50">
+                <tr key={t.id} className="border-b hover:bg-(--ui-muted-surface)">
                   <td className="py-2 px-3 font-medium">
                     {t.name}
                     {t.is_archived && <Badge tone="default">archived</Badge>}
@@ -1553,7 +1553,7 @@ function CloneTemplateModal({ template, onClose, onCreated }) {
         <Field label="Start date">
           <Input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
         </Field>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-(--ui-text-muted)">
           This will create a new plan in draft status, pre-filled from the template. You can edit sessions, charting, and pricing afterward.
         </p>
       </div>
@@ -1570,10 +1570,10 @@ function CloneTemplateModal({ template, onClose, onCreated }) {
 function ModalShell({ title, onClose, width = "max-w-xl", children }) {
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className={`bg-white rounded-lg shadow-lg w-full ${width} max-h-[90vh] overflow-auto`} onClick={(e) => e.stopPropagation()}>
+      <div className={`bg-(--ui-surface) rounded-lg shadow-lg w-full ${width} max-h-[90vh] overflow-auto`} onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center border-b p-4">
           <h2 className="text-lg font-semibold">{title}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-(--ui-text-muted) hover:text-(--ui-text)"><X className="w-5 h-5" /></button>
         </div>
         <div className="p-4">{children}</div>
       </div>
@@ -1584,7 +1584,7 @@ function ModalShell({ title, onClose, width = "max-w-xl", children }) {
 function Field({ label, children, full }) {
   return (
     <div className={full ? "col-span-2" : ""}>
-      <label className="block text-xs text-slate-600 mb-1">{label}</label>
+      <label className="block text-xs text-(--ui-text-muted) mb-1">{label}</label>
       {children}
     </div>
   );

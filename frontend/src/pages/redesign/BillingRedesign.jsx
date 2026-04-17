@@ -98,14 +98,14 @@ export default function BillingRedesign() {
     }
   };
 
-  if (loading) return <PageShell title="Billing"><div className="animate-pulse h-40 bg-slate-100 rounded-xl" /></PageShell>;
+  if (loading) return <PageShell title="Billing"><div className="animate-pulse h-40 bg-(--ui-muted-surface) rounded-xl" /></PageShell>;
 
   if (paymentProcessing) return (
     <PageShell title="Billing">
       <div className="flex flex-col items-center justify-center py-20">
         <div className="animate-spin h-8 w-8 border-4 border-emerald-500 border-t-transparent rounded-full mb-4" />
-        <p className="text-slate-600 font-medium">Verifying your payment...</p>
-        <p className="text-sm text-slate-400 mt-1">This usually takes a few seconds.</p>
+        <p className="text-(--ui-text-muted) font-medium">Verifying your payment...</p>
+        <p className="text-sm text-(--ui-text-muted) mt-1">This usually takes a few seconds.</p>
       </div>
     </PageShell>
   );
@@ -132,16 +132,16 @@ export default function BillingRedesign() {
             className={`relative rounded-xl border-2 p-4 text-left transition-all cursor-pointer ${
               isSelected
                 ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500/30"
-                : "border-slate-200 bg-white hover:border-slate-300"
+                : "border-(--ui-border) bg-(--ui-surface) hover:border-(--ui-border)"
             }`}>
             {isRecommended && (
               <span className="absolute -top-2.5 right-2 inline-flex items-center gap-0.5 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white uppercase tracking-wide">
                 Best Value
               </span>
             )}
-            <div className="text-xs font-medium text-slate-500 mb-1">{CYCLE_LABELS[p.cycle]}</div>
-            <div className="text-base font-bold text-slate-800">PKR {p.price.toLocaleString()}</div>
-            <div className="text-xs text-slate-500 mt-0.5">PKR {p.monthly_equivalent.toLocaleString()}/mo</div>
+            <div className="text-xs font-medium text-(--ui-text-muted) mb-1">{CYCLE_LABELS[p.cycle]}</div>
+            <div className="text-base font-bold text-(--ui-text)">PKR {p.price.toLocaleString()}</div>
+            <div className="text-xs text-(--ui-text-muted) mt-0.5">PKR {p.monthly_equivalent.toLocaleString()}/mo</div>
             {p.discount_percent > 0 && (
               <div className="mt-2 flex items-center gap-1.5">
                 <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
@@ -165,13 +165,13 @@ export default function BillingRedesign() {
     if (outlets <= 1) return null;
     const unitPrice = cycleInfo.price || 8000;
     return (
-      <p className="text-xs text-slate-500 mt-2">
+      <p className="text-xs text-(--ui-text-muted) mt-2">
         {outlets} outlets × PKR {unitPrice.toLocaleString()} = <strong>PKR {(unitPrice * outlets).toLocaleString()}</strong>
       </p>
     );
   };
 
-  const planColors = { free: "bg-slate-100 text-slate-700", pro: "bg-emerald-100 text-emerald-700" };
+  const planColors = { free: "bg-(--ui-muted-surface) text-(--ui-text)", pro: "bg-emerald-100 text-emerald-700" };
   const statusColors = { active: "text-emerald-600", trial: "text-blue-600", grace: "text-amber-600", expired: "text-red-600", due: "text-amber-600", overdue: "text-red-600" };
 
   const upgradePlans = {};
@@ -198,12 +198,12 @@ export default function BillingRedesign() {
     if (loadingPayments || !payments.length) return null;
 
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-800 mb-4">Payment History</h2>
+      <div className="rounded-xl border border-(--ui-border) bg-(--ui-surface) p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-(--ui-text) mb-4">Payment History</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-200 text-left text-slate-500">
+              <tr className="border-b border-(--ui-border) text-left text-(--ui-text-muted)">
                 <th className="pb-2 font-medium">Date</th>
                 <th className="pb-2 font-medium">Amount</th>
                 <th className="pb-2 font-medium">Plan</th>
@@ -212,11 +212,11 @@ export default function BillingRedesign() {
             </thead>
             <tbody>
               {payments.map(p => (
-                <tr key={p.id} className="border-b border-slate-100">
-                  <td className="py-2 text-slate-700">{new Date(p.recorded_at).toLocaleDateString()}</td>
-                  <td className="py-2 text-slate-700">PKR {Number(p.amount).toLocaleString()}</td>
-                  <td className="py-2 capitalize text-slate-700">{p.plan} ({p.cycle})</td>
-                  <td className="py-2 text-slate-500 text-xs">
+                <tr key={p.id} className="border-b border-(--ui-border)">
+                  <td className="py-2 text-(--ui-text)">{new Date(p.recorded_at).toLocaleDateString()}</td>
+                  <td className="py-2 text-(--ui-text)">PKR {Number(p.amount).toLocaleString()}</td>
+                  <td className="py-2 capitalize text-(--ui-text)">{p.plan} ({p.cycle})</td>
+                  <td className="py-2 text-(--ui-text-muted) text-xs">
                     {new Date(p.period_start).toLocaleDateString()} — {new Date(p.period_end).toLocaleDateString()}
                   </td>
                 </tr>
@@ -240,11 +240,11 @@ export default function BillingRedesign() {
                 Pro Trial — {billing.trial_days_left} {billing.trial_days_left === 1 ? "day" : "days"} remaining
               </h2>
             </div>
-            <div className="w-full bg-white/60 rounded-full h-2.5 mb-3">
+            <div className="w-full bg-(--ui-surface)/60 rounded-full h-2.5 mb-3">
               <div className={`h-2.5 rounded-full ${billing.trial_days_left <= 7 ? "bg-amber-500" : "bg-blue-500"}`}
                 style={{ width: `${Math.max(2, ((45 - billing.trial_days_left) / 45) * 100)}%` }} />
             </div>
-            <p className="text-sm text-slate-600 mb-3">
+            <p className="text-sm text-(--ui-text-muted) mb-3">
               {billing.trial_days_left <= 7
                 ? "Your trial is ending soon. Subscribe to continue using all features."
                 : "You have full access to all Pro features during your trial. Choose a billing cycle:"}
@@ -309,32 +309,32 @@ export default function BillingRedesign() {
         )}
 
         {/* Current Plan */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-xl border border-(--ui-border) bg-(--ui-surface) p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
-            <CreditCard size={20} className="text-slate-400" />
-            <h2 className="text-lg font-semibold text-slate-800">Current Plan</h2>
+            <CreditCard size={20} className="text-(--ui-text-muted)" />
+            <h2 className="text-lg font-semibold text-(--ui-text)">Current Plan</h2>
           </div>
           <div className="flex items-center gap-3 mb-4">
             <span className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold capitalize ${planColors[billing?.plan] || planColors.free}`}>
               {billing?.plan || "free"}
             </span>
             {billing?.billing_cycle && (
-              <span className="text-sm text-slate-500 capitalize">{billing.billing_cycle}</span>
+              <span className="text-sm text-(--ui-text-muted) capitalize">{billing.billing_cycle}</span>
             )}
             {paymentStatus !== "active" && billing?.plan !== "free" && (
-              <span className={`text-sm font-semibold capitalize ${statusColors[paymentStatus] || "text-slate-600"}`}>
+              <span className={`text-sm font-semibold capitalize ${statusColors[paymentStatus] || "text-(--ui-text-muted)"}`}>
                 {paymentStatus}
               </span>
             )}
           </div>
           {billing?.expires_at && (
-            <div className="flex items-center gap-2 text-sm text-slate-500">
+            <div className="flex items-center gap-2 text-sm text-(--ui-text-muted)">
               <Clock size={14} />
               <span>Expires: {new Date(billing.expires_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</span>
             </div>
           )}
           {billing?.plan === "free" && (
-            <p className="mt-3 text-sm text-slate-500">
+            <p className="mt-3 text-sm text-(--ui-text-muted)">
               You're on the Free plan (1 outlet, 3 employees, 100 products). Upgrade to Pro for unlimited access.
             </p>
           )}
@@ -365,9 +365,9 @@ export default function BillingRedesign() {
 
         {/* Upgrade Options */}
         {Object.keys(upgradePlans).length > 0 && !billing?.pending_request && (
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-800 mb-2">Upgrade to Pro</h2>
-            <p className="text-sm text-slate-500 mb-4">Unlimited employees, products, and all features included. Choose a billing cycle:</p>
+          <div className="rounded-xl border border-(--ui-border) bg-(--ui-surface) p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-(--ui-text) mb-2">Upgrade to Pro</h2>
+            <p className="text-sm text-(--ui-text-muted) mb-4">Unlimited employees, products, and all features included. Choose a billing cycle:</p>
             <div className="mb-4"><CycleCards /><OutletBreakdown /></div>
             <button
               onClick={() => { setSelectedPlan("pro"); setShowUpgradeModal(true); }}
@@ -403,7 +403,7 @@ export default function BillingRedesign() {
         title="Request Upgrade to Pro"
         size="sm"
       >
-        <p className="text-sm text-slate-500 mb-1">{priceLabel} per outlet</p>
+        <p className="text-sm text-(--ui-text-muted) mb-1">{priceLabel} per outlet</p>
         {cycleInfo.discount_percent > 0 && (
           <p className="text-xs text-emerald-600 font-medium mb-2">
             {cycleInfo.discount_percent}% OFF — Save PKR {cycleInfo.savings?.toLocaleString()}
@@ -411,9 +411,9 @@ export default function BillingRedesign() {
         )}
         <div className="mb-3"><CycleCards /><OutletBreakdown /></div>
         <div className="mb-4">
-          <label className="block text-sm font-medium text-slate-600 mb-1">Message (optional)</label>
+          <label className="block text-sm font-medium text-(--ui-text-muted) mb-1">Message (optional)</label>
           <textarea value={message} onChange={e => setMessage(e.target.value)}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            className="w-full border border-(--ui-border) rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
             rows={3} placeholder="Any questions or notes..." />
         </div>
         <ModalFooter>

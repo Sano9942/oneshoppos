@@ -234,7 +234,7 @@ export default function CreditDebitNotesRedesign() {
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               tab === t.key
                 ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
-                : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400"
+                : "border-transparent text-(--ui-text-muted) hover:text-gray-700 dark:text-gray-400"
             }`}
           >
             {t.label}
@@ -272,7 +272,7 @@ export default function CreditDebitNotesRedesign() {
 
       <SectionCard>
         {loading ? (
-          <p className="text-center py-8 text-gray-500">Loading…</p>
+          <p className="text-center py-8 text-(--ui-text-muted)">Loading…</p>
         ) : !filtered.length ? (
           <EmptyState
             title={`No ${activeTab.label.toLowerCase()}`}
@@ -282,7 +282,7 @@ export default function CreditDebitNotesRedesign() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700 text-left text-gray-500 dark:text-gray-400">
+                <tr className="border-b border-gray-200 dark:border-gray-700 text-left text-(--ui-text-muted) dark:text-gray-400">
                   <th className="pb-2 font-medium">Note #</th>
                   <th className="pb-2 font-medium">Type</th>
                   <th className="pb-2 font-medium">Customer / Supplier</th>
@@ -304,21 +304,21 @@ export default function CreditDebitNotesRedesign() {
                     <td className="py-2.5">
                       <Badge tone={STATUS_TONE[n.status] || "neutral"}>{n.status}</Badge>
                     </td>
-                    <td className="py-2.5 text-gray-500 text-xs">{fmtLocalDateTime(n.created_at)}</td>
+                    <td className="py-2.5 text-(--ui-text-muted) text-xs">{fmtLocalDateTime(n.created_at)}</td>
                     <td className="py-2.5 text-right">
                       <div className="flex gap-1 justify-end">
                         {n.status === "draft" && (
                           <>
                             <button
                               onClick={() => openEdit(n)}
-                              className="p-1 text-gray-500 hover:text-blue-600"
+                              className="p-1 text-(--ui-text-muted) hover:text-blue-600"
                               title="Edit"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => setConfirm({ action: "approve", note: n })}
-                              className="p-1 text-gray-500 hover:text-green-600"
+                              className="p-1 text-(--ui-text-muted) hover:text-green-600"
                               title="Approve"
                             >
                               <CheckCircle className="w-4 h-4" />
@@ -328,7 +328,7 @@ export default function CreditDebitNotesRedesign() {
                         {n.status !== "cancelled" && (
                           <button
                             onClick={() => setConfirm({ action: "cancel", note: n })}
-                            className="p-1 text-gray-500 hover:text-red-600"
+                            className="p-1 text-(--ui-text-muted) hover:text-red-600"
                             title="Cancel"
                           >
                             <XCircle className="w-4 h-4" />
@@ -471,7 +471,7 @@ export default function CreditDebitNotesRedesign() {
               {confirm.note.note_number} — {money(confirm.note.amount)}
             </p>
             {confirm.action === "approve" && (
-              <p className="text-xs text-gray-500 mb-4">
+              <p className="text-xs text-(--ui-text-muted) mb-4">
                 This will adjust the {confirm.note.type === "sales" ? "customer" : "supplier"} balance.
               </p>
             )}

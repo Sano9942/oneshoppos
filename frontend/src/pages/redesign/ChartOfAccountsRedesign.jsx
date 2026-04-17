@@ -218,7 +218,7 @@ export default function ChartOfAccountsRedesign() {
           <span className="font-medium text-sm grow">{node.name}</span>
           <Badge color={TYPE_COLORS[node.type]} className="text-xs shrink-0">{node.type}</Badge>
           {node.is_system && (
-            <span className="text-gray-400 shrink-0" title="System account — protected">
+            <span className="text-gray-400 dark:text-slate-500 shrink-0" title="System account — protected">
               <Lock size={14} />
             </span>
           )}
@@ -226,7 +226,7 @@ export default function ChartOfAccountsRedesign() {
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => openEdit(node)}
-              className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500"
+              className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-slate-400"
               title="Edit"
             >
               <Edit2 size={14} />
@@ -234,7 +234,7 @@ export default function ChartOfAccountsRedesign() {
             {!node.is_system && (
               <button
                 onClick={() => handleDelete(node.id)}
-                className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600"
+                className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 dark:text-slate-500 hover:text-red-600"
                 title="Deactivate"
               >
                 <Trash2 size={14} />
@@ -277,7 +277,7 @@ export default function ChartOfAccountsRedesign() {
       <SectionCard>
         <div className="flex items-center gap-3 mb-4">
           <div className="relative grow">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
             <Input
               placeholder="Search by name or code..."
               value={search}
@@ -288,7 +288,7 @@ export default function ChartOfAccountsRedesign() {
         </div>
 
         {loading ? (
-          <p className="text-gray-500 text-center py-8">Loading accounts...</p>
+          <p className="text-gray-500 dark:text-slate-400 text-center py-8">Loading accounts...</p>
         ) : !hasAccounts ? (
           <EmptyState
             title="No accounts yet"
@@ -313,11 +313,11 @@ export default function ChartOfAccountsRedesign() {
                       <span className="font-mono text-sm text-gray-500 dark:text-gray-400 w-14 shrink-0">{a.code}</span>
                       <span className="font-medium text-sm grow">{a.name}</span>
                       <Badge color={TYPE_COLORS[a.type]} className="text-xs shrink-0">{a.type}</Badge>
-                      {a.is_system && <Lock size={14} className="text-gray-400 shrink-0" />}
+                      {a.is_system && <Lock size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />}
                       <div className="flex items-center gap-1 shrink-0">
-                        <button onClick={() => openEdit(a)} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500"><Edit2 size={14} /></button>
+                        <button onClick={() => openEdit(a)} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-slate-400"><Edit2 size={14} /></button>
                         {!a.is_system && (
-                          <button onClick={() => handleDelete(a.id)} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600"><Trash2 size={14} /></button>
+                          <button onClick={() => handleDelete(a.id)} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 dark:text-slate-500 hover:text-red-600"><Trash2 size={14} /></button>
                         )}
                       </div>
                     </div>
@@ -352,7 +352,7 @@ export default function ChartOfAccountsRedesign() {
         title={
           <>
             {form.id ? "Edit Account" : "Add Account"}
-            {form.is_system && <span className="ml-2 text-sm text-gray-400">(system — limited editing)</span>}
+            {form.is_system && <span className="ml-2 text-sm text-gray-400 dark:text-slate-500">(system — limited editing)</span>}
           </>
         }
         size="md"

@@ -41,7 +41,7 @@ export default function WooCommerceIntegrationRedesign() {
     return (
       <PageShell title="WooCommerce Integration">
         <div className="flex min-h-[30vh] items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+          <Loader2 className="h-6 w-6 animate-spin text-(--ui-text-muted)" />
         </div>
       </PageShell>
     );
@@ -57,15 +57,15 @@ export default function WooCommerceIntegrationRedesign() {
       }
     >
       {/* Tabs */}
-      <div className="mb-6 flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+      <div className="mb-6 flex gap-1 rounded-lg border border-(--ui-border) bg-(--ui-muted-surface) p-1">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
               tab === t.id
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-(--ui-surface) text-(--ui-text) shadow-sm"
+                : "text-(--ui-text-muted) hover:text-(--ui-text)"
             }`}
           >
             {t.label}
@@ -145,14 +145,14 @@ function ConnectionTab({ status, onRefresh }) {
       )}
 
       {status?.connected ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-6">
+        <div className="rounded-xl border border-(--ui-border) bg-(--ui-surface) p-6">
           <div className="mb-4 flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
               <Link2 className="h-5 w-5 text-emerald-600" />
             </div>
             <div>
-              <p className="font-semibold text-slate-900">Connected</p>
-              <p className="text-sm text-slate-500">{status.store_url}</p>
+              <p className="font-semibold text-(--ui-text)">Connected</p>
+              <p className="text-sm text-(--ui-text-muted)">{status.store_url}</p>
             </div>
           </div>
           <button
@@ -166,19 +166,19 @@ function ConnectionTab({ status, onRefresh }) {
       ) : (
         <form
           onSubmit={connect}
-          className="space-y-4 rounded-xl border border-slate-200 bg-white p-6"
+          className="space-y-4 rounded-xl border border-(--ui-border) bg-(--ui-surface) p-6"
         >
-          <h3 className="text-base font-semibold text-slate-900">
+          <h3 className="text-base font-semibold text-(--ui-text)">
             Connect WooCommerce Store
           </h3>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-(--ui-text-muted)">
             Enter your WooCommerce store URL and REST API credentials. You can
             generate API keys in WooCommerce &rarr; Settings &rarr; Advanced
             &rarr; REST API.
           </p>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
+            <label className="mb-1 block text-sm font-medium text-(--ui-text)">
               Store URL
             </label>
             <input
@@ -187,12 +187,12 @@ function ConnectionTab({ status, onRefresh }) {
               placeholder="https://yourstore.com"
               value={storeUrl}
               onChange={(e) => setStoreUrl(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              className="w-full rounded-lg border border-(--ui-border) px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
+            <label className="mb-1 block text-sm font-medium text-(--ui-text)">
               Consumer Key
             </label>
             <input
@@ -201,12 +201,12 @@ function ConnectionTab({ status, onRefresh }) {
               placeholder="ck_..."
               value={consumerKey}
               onChange={(e) => setConsumerKey(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              className="w-full rounded-lg border border-(--ui-border) px-3 py-2 text-sm font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
+            <label className="mb-1 block text-sm font-medium text-(--ui-text)">
               Consumer Secret
             </label>
             <input
@@ -215,7 +215,7 @@ function ConnectionTab({ status, onRefresh }) {
               placeholder="cs_..."
               value={consumerSecret}
               onChange={(e) => setConsumerSecret(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              className="w-full rounded-lg border border-(--ui-border) px-3 py-2 text-sm font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
             />
           </div>
 
@@ -274,11 +274,11 @@ function ProductsTab({ connected }) {
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <div className="rounded-xl border border-slate-200 bg-white p-6">
-        <h3 className="mb-2 text-base font-semibold text-slate-900">
+      <div className="rounded-xl border border-(--ui-border) bg-(--ui-surface) p-6">
+        <h3 className="mb-2 text-base font-semibold text-(--ui-text)">
           Import Products
         </h3>
-        <p className="mb-4 text-sm text-slate-500">
+        <p className="mb-4 text-sm text-(--ui-text-muted)">
           Pull all products from your WooCommerce store. Existing products
           (matched by SKU) will be updated; new products will be created.
         </p>
@@ -356,11 +356,11 @@ function StockTab({ connected }) {
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <div className="rounded-xl border border-slate-200 bg-white p-6">
-        <h3 className="mb-2 text-base font-semibold text-slate-900">
+      <div className="rounded-xl border border-(--ui-border) bg-(--ui-surface) p-6">
+        <h3 className="mb-2 text-base font-semibold text-(--ui-text)">
           Sync Stock to WooCommerce
         </h3>
-        <p className="mb-4 text-sm text-slate-500">
+        <p className="mb-4 text-sm text-(--ui-text-muted)">
           Push your current stock levels to WooCommerce. Products are matched by
           SKU. Only products with a matching SKU in WooCommerce will be updated.
         </p>
