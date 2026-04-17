@@ -2662,6 +2662,30 @@ CREATE TABLE IF NOT EXISTS kds_station_routes (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Phase 2.1 B1 — routing precedence columns.
+-- Precedence (enforced by resolveStationForItem): product_id > modifier_group_id
+-- > category_id > match_all. Exactly one must be set per row (CHECK below).
+-- station_role_filter ('prep' | 'expo' | NULL) is orthogonal — it narrows which
+-- stations a rule fires against.
+ALTER TABLE kds_station_routes
+  ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES products(id),
+  ADD COLUMN IF NOT EXISTS modifier_group_id INTEGER REFERENCES modifier_groups(id),
+  ADD COLUMN IF NOT EXISTS station_role_filter TEXT,
+  ADD COLUMN IF NOT EXISTS outlet_id INTEGER REFERENCES outlets(id);
+
+-- Exactly-one match type. See migrate-pg.js v54.
+ALTER TABLE kds_station_routes DROP CONSTRAINT IF EXISTS kds_station_routes_exactly_one_match;
+ALTER TABLE kds_station_routes
+  ADD CONSTRAINT kds_station_routes_exactly_one_match CHECK (
+    (CASE WHEN product_id IS NOT NULL THEN 1 ELSE 0 END
+     + CASE WHEN modifier_group_id IS NOT NULL THEN 1 ELSE 0 END
+     + CASE WHEN category_id IS NOT NULL THEN 1 ELSE 0 END
+     + CASE WHEN match_all = true THEN 1 ELSE 0 END) = 1
+  );
+
+CREATE INDEX IF NOT EXISTS idx_ksr_lookup ON kds_station_routes(outlet_id, priority DESC);
+
 CREATE TABLE IF NOT EXISTS kds_tickets (
   id SERIAL PRIMARY KEY,
   station_id INTEGER NOT NULL REFERENCES kds_stations(id),
@@ -2699,14 +2723,19 @@ CREATE TABLE IF NOT EXISTS kds_ticket_items (
 CREATE INDEX IF NOT EXISTS idx_kds_ticket_items_item ON kds_ticket_items(draft_order_item_id);
 
 -- Extend draft_orders for restaurant context
+-- Phase 2.1 B2 widens order_context to include 'online' for externally-
+-- sourced checks converted from web_orders. The first-pass constraint is
+-- kept inline below; migrate-pg.js v55 drops + recreates it to add 'online'.
 ALTER TABLE draft_orders
-  ADD COLUMN IF NOT EXISTS order_context TEXT DEFAULT 'retail' CHECK (order_context IN ('retail','dine_in','takeout','delivery','bar')),
+  ADD COLUMN IF NOT EXISTS order_context TEXT DEFAULT 'retail' CHECK (order_context IN ('retail','dine_in','takeout','delivery','bar','online')),
   ADD COLUMN IF NOT EXISTS table_id INTEGER REFERENCES restaurant_tables(id),
   ADD COLUMN IF NOT EXISTS table_session_id INTEGER REFERENCES restaurant_table_sessions(id),
   ADD COLUMN IF NOT EXISTS tab_id INTEGER REFERENCES restaurant_tabs(id),
   ADD COLUMN IF NOT EXISTS seat_count INTEGER DEFAULT 0,
   ADD COLUMN IF NOT EXISTS dining_option TEXT CHECK (dining_option IN ('dine_in','takeout','delivery')),
-  ADD COLUMN IF NOT EXISTS source_token_id TEXT;
+  ADD COLUMN IF NOT EXISTS source_token_id TEXT,
+  -- Phase 2.1 B2 — channel stamp for online inbox conversions.
+  ADD COLUMN IF NOT EXISTS source_channel TEXT DEFAULT 'pos';
 
 -- Partial UNIQUE index for QR public menu lookup (routes/public-restaurant.js).
 -- Enforces one-token-to-one-check and speeds up the WHERE source_token_id = $1 query.
@@ -2714,6 +2743,20 @@ ALTER TABLE draft_orders
 CREATE UNIQUE INDEX IF NOT EXISTS idx_draft_orders_source_token
   ON draft_orders(source_token_id)
   WHERE source_token_id IS NOT NULL;
+
+-- Phase 2.1 B2 — online inbox acceptance fields on web_orders (declared here
+-- because the FK targets draft_orders, which is created above). A WhatsApp /
+-- Daraz / Shopify web_order gets accepted by a staff member, converted into
+-- a restaurant draft_order, and forever linked via converted_draft_order_id.
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS converted_draft_order_id INTEGER REFERENCES draft_orders(id);
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMPTZ;
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS accepted_by INTEGER REFERENCES employees(id);
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMPTZ;
+ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS reject_reason TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_web_orders_unconverted
+  ON web_orders(source, order_status)
+  WHERE converted_draft_order_id IS NULL;
 
 -- Extend draft_order_items for seat/course tracking
 ALTER TABLE draft_order_items

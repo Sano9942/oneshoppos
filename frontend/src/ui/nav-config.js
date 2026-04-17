@@ -53,6 +53,7 @@ import {
   FileSignature,
   Wallet,
   ListPlus,
+  Inbox,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -169,6 +170,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Floor Plan", path: "/restaurant/floor", icon: LayoutGrid, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant", requiredMode: "restaurant" },
       { name: "Checks", path: "/restaurant/checks", icon: Receipt, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant", requiredMode: "restaurant" },
       { name: "Modifiers", path: "/restaurant/modifiers", icon: ListPlus, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant", requiredMode: "restaurant" },
+      { name: "Online Inbox", path: "/restaurant/inbox", icon: Inbox, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant", requiredMode: "restaurant" },
       { name: "KDS", path: "/kds", icon: ChefHat, requiredPerm: "manage_kds", requiredFlag: "phase4_restaurant_kds", requiredMode: "restaurant" },
     ],
   },

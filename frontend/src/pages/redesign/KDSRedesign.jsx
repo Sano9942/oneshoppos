@@ -4,8 +4,8 @@ import { useAuth } from "../../auth/AuthProvider";
 import { readContext } from "../../auth/authStore";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
-import { PageShell, SectionCard, Button, Badge } from "../../ui/primitives";
-import { ChefHat, Check, Clock } from "lucide-react";
+import { PageShell, SectionCard, Button, Badge, Input, Select } from "../../ui/primitives";
+import { ChefHat, Check, Clock, Route as RouteIcon, Trash2, Eye } from "lucide-react";
 import { api } from "../../api";
 
 function elapsedMinutes(createdAt) {
@@ -34,6 +34,16 @@ export default function KDSRedesign() {
   const [activeStation, setActiveStation] = useState(null);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState("tickets"); // 'tickets' | 'routes'
+  const [routes, setRoutes] = useState([]);
+  const [routeForm, setRouteForm] = useState({
+    station_id: "",
+    rule_type: "match_all", // category | product | modifier_group | match_all
+    match_value: "",
+    priority: 0,
+  });
+  const [previewDraftId, setPreviewDraftId] = useState("");
+  const [preview, setPreview] = useState(null);
 
   if (!flagsLoading && !flags.phase4_restaurant_kds) return <Navigate to="/dashboard" replace />;
   if (!readContext()?.active_outlet_id) return <Navigate to="/" replace />;
@@ -91,12 +101,202 @@ export default function KDSRedesign() {
     } catch (err) { toast.error(err.message); }
   };
 
+  // Phase 2.1 B1 — routing rules CRUD + preview.
+  const loadRoutes = useCallback(async () => {
+    const ctx = readContext();
+    if (!ctx?.active_outlet_id) return;
+    try {
+      const data = await api.get(`/api/kds/routes?outlet_id=${ctx.active_outlet_id}`);
+      setRoutes(data.routes || []);
+    } catch (err) { toast.error(err.message); }
+  }, []);
+
+  useEffect(() => { if (tab === "routes") loadRoutes(); }, [tab, loadRoutes]);
+
+  const saveRoute = async () => {
+    const ctx = readContext();
+    if (!ctx?.active_outlet_id) return;
+    if (!routeForm.station_id) { toast.error("Pick a station"); return; }
+    const body = {
+      outlet_id: ctx.active_outlet_id,
+      station_id: Number(routeForm.station_id),
+      priority: Number(routeForm.priority) || 0,
+    };
+    if (routeForm.rule_type === "match_all") body.match_all = true;
+    else {
+      const v = Number(routeForm.match_value);
+      if (!v) { toast.error("Enter an ID for the match value"); return; }
+      if (routeForm.rule_type === "category") body.category_id = v;
+      else if (routeForm.rule_type === "product") body.product_id = v;
+      else if (routeForm.rule_type === "modifier_group") body.modifier_group_id = v;
+    }
+    try {
+      await api.post("/api/kds/routes", body);
+      toast.success("Rule added");
+      setRouteForm({ station_id: "", rule_type: "match_all", match_value: "", priority: 0 });
+      loadRoutes();
+    } catch (err) { toast.error(err.message); }
+  };
+
+  const deleteRoute = async (id) => {
+    try {
+      await api.del(`/api/kds/routes/${id}`);
+      toast.success("Rule deleted");
+      loadRoutes();
+    } catch (err) { toast.error(err.message); }
+  };
+
+  const runPreview = async () => {
+    if (!previewDraftId) { toast.error("Enter a draft order ID"); return; }
+    try {
+      const data = await api.get(`/api/kds/routes/preview?draft_order_id=${previewDraftId}`);
+      setPreview(data.preview || []);
+    } catch (err) { toast.error(err.message); }
+  };
+
+  function routeLabel(r) {
+    if (r.match_all) return "All items";
+    if (r.product_name) return `Product: ${r.product_name}`;
+    if (r.modifier_group_name) return `Modifier group: ${r.modifier_group_name}`;
+    if (r.category_name) return `Category: ${r.category_name}`;
+    return "—";
+  }
+
   return (
     <PageShell title="Kitchen Display" subtitle="KDS ticket queue" right={
-      <div className="flex items-center gap-2 text-sm text-(--ui-text-muted)">
-        <Clock className="w-4 h-4" /> Auto-refreshing every 5s
-      </div>
+      tab === "tickets" ? (
+        <div className="flex items-center gap-2 text-sm text-(--ui-text-muted)">
+          <Clock className="w-4 h-4" /> Auto-refreshing every 5s
+        </div>
+      ) : null
     }>
+      <div className="flex gap-2 mb-4 border-b border-(--ui-border)">
+        <Button
+          tone="plain"
+          size="sm"
+          onClick={() => setTab("tickets")}
+          className={tab === "tickets" ? "border-b-2 border-(--ui-primary) text-(--ui-primary)" : "text-(--ui-text-muted)"}>
+          <ChefHat className="w-4 h-4 mr-1" /> Tickets
+        </Button>
+        <Button
+          tone="plain"
+          size="sm"
+          onClick={() => setTab("routes")}
+          className={tab === "routes" ? "border-b-2 border-(--ui-primary) text-(--ui-primary)" : "text-(--ui-text-muted)"}>
+          <RouteIcon className="w-4 h-4 mr-1" /> Routing Rules
+        </Button>
+      </div>
+
+      {tab === "routes" ? (
+        <div className="space-y-4">
+          <SectionCard>
+            <h3 className="text-sm font-semibold mb-3">Add rule</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+              <Select
+                value={routeForm.station_id}
+                onChange={e => setRouteForm(f => ({ ...f, station_id: e.target.value }))}>
+                <option value="">Station…</option>
+                {stations.map(s => <option key={s.id} value={s.id}>{s.name} ({s.station_role})</option>)}
+              </Select>
+              <Select
+                value={routeForm.rule_type}
+                onChange={e => setRouteForm(f => ({ ...f, rule_type: e.target.value, match_value: "" }))}>
+                <option value="match_all">Catch-all</option>
+                <option value="category">Category ID</option>
+                <option value="product">Product ID</option>
+                <option value="modifier_group">Modifier Group ID</option>
+              </Select>
+              <Input
+                type="number"
+                placeholder="Match ID"
+                disabled={routeForm.rule_type === "match_all"}
+                value={routeForm.match_value}
+                onChange={e => setRouteForm(f => ({ ...f, match_value: e.target.value }))} />
+              <Input
+                type="number"
+                placeholder="Priority (0)"
+                value={routeForm.priority}
+                onChange={e => setRouteForm(f => ({ ...f, priority: e.target.value }))} />
+              <Button size="sm" onClick={saveRoute}>Add</Button>
+            </div>
+            <p className="text-xs text-(--ui-text-muted) mt-2">
+              Precedence: product &gt; modifier group &gt; category &gt; catch-all. Higher priority wins inside a tier.
+            </p>
+          </SectionCard>
+
+          <SectionCard>
+            <h3 className="text-sm font-semibold mb-3">Rules</h3>
+            {routes.length === 0 ? (
+              <p className="text-sm text-(--ui-text-muted)">No rules yet. Add one above.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-(--ui-text-muted) border-b border-(--ui-border)">
+                    <th className="py-2">Priority</th>
+                    <th>Station</th>
+                    <th>Match</th>
+                    <th>Role filter</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {routes.map(r => (
+                    <tr key={r.id} className="border-b border-(--ui-border)">
+                      <td className="py-2">{r.priority}</td>
+                      <td>{r.station_name}</td>
+                      <td>{routeLabel(r)}</td>
+                      <td>{r.station_role_filter || "—"}</td>
+                      <td className="text-right">
+                        <button onClick={() => deleteRoute(r.id)} aria-label="Delete rule" className="text-red-600 hover:opacity-80">
+                          <Trash2 className="w-4 h-4 inline" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </SectionCard>
+
+          <SectionCard>
+            <h3 className="text-sm font-semibold mb-3">Preview routing</h3>
+            <div className="flex gap-2 items-center mb-3">
+              <Input
+                type="number"
+                placeholder="Draft order ID"
+                value={previewDraftId}
+                onChange={e => setPreviewDraftId(e.target.value)} />
+              <Button size="sm" onClick={runPreview}>
+                <Eye className="w-4 h-4 mr-1" /> Preview
+              </Button>
+            </div>
+            {preview && (
+              preview.length === 0 ? (
+                <p className="text-sm text-(--ui-text-muted)">No pending items on this check.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-(--ui-text-muted) border-b border-(--ui-border)">
+                      <th className="py-2">Item</th>
+                      <th>Station</th>
+                      <th>Matched rule</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.map(p => (
+                      <tr key={p.item_id} className="border-b border-(--ui-border)">
+                        <td className="py-2">{p.product_name}</td>
+                        <td>{p.station_name || <Badge tone="warn">No station</Badge>}</td>
+                        <td className="text-(--ui-text-muted)">{p.matched_rule_id ? `#${p.matched_rule_id}` : "fallback"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )
+            )}
+          </SectionCard>
+        </div>
+      ) : (<>
       {stations.length > 1 && (
         <div className="flex gap-2 mb-4">
           {stations.map(s => (
@@ -187,6 +387,7 @@ export default function KDSRedesign() {
           })}
         </div>
       )}
+      </>)}
     </PageShell>
   );
 }

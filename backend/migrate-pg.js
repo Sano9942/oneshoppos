@@ -4086,6 +4086,90 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 54,
+    description:
+      "Phase 2.1 B1 — KDS routing rules: kds_station_routes gains priority, product_id, modifier_group_id, station_role_filter; CHECK exactly one match column non-null; idx_ksr_lookup",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE kds_station_routes
+          ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES products(id),
+          ADD COLUMN IF NOT EXISTS modifier_group_id INTEGER REFERENCES modifier_groups(id),
+          ADD COLUMN IF NOT EXISTS station_role_filter TEXT,
+          ADD COLUMN IF NOT EXISTS outlet_id INTEGER REFERENCES outlets(id)
+      `);
+      // Backfill outlet_id from the station so idx_ksr_lookup has something to
+      // scan by. New rows go through the route handler which stamps outlet_id
+      // explicitly, but legacy rows predate the column.
+      await client.query(`
+        UPDATE kds_station_routes sr
+           SET outlet_id = ks.outlet_id
+          FROM kds_stations ks
+         WHERE sr.station_id = ks.id AND sr.outlet_id IS NULL
+      `);
+      // Exactly-one CHECK: product_id > modifier_group_id > category_id > match_all.
+      // Drop-and-recreate because CHECK constraints don't support IF NOT EXISTS
+      // and re-running the migration should converge. station_role_filter is
+      // orthogonal — it refines a match but doesn't count as one.
+      await client.query(`
+        ALTER TABLE kds_station_routes
+          DROP CONSTRAINT IF EXISTS kds_station_routes_exactly_one_match
+      `);
+      await client.query(`
+        ALTER TABLE kds_station_routes
+          ADD CONSTRAINT kds_station_routes_exactly_one_match CHECK (
+            (CASE WHEN product_id IS NOT NULL THEN 1 ELSE 0 END
+             + CASE WHEN modifier_group_id IS NOT NULL THEN 1 ELSE 0 END
+             + CASE WHEN category_id IS NOT NULL THEN 1 ELSE 0 END
+             + CASE WHEN match_all = true THEN 1 ELSE 0 END) = 1
+          )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_ksr_lookup
+          ON kds_station_routes(outlet_id, priority DESC)
+      `);
+    },
+  },
+  {
+    version: 55,
+    description:
+      "Phase 2.1 B2 — online ordering inbox: web_orders acceptance columns + draft_orders.source_channel + 'online' order_context",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE web_orders
+          ADD COLUMN IF NOT EXISTS converted_draft_order_id INTEGER REFERENCES draft_orders(id),
+          ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS accepted_by INTEGER REFERENCES employees(id),
+          ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS reject_reason TEXT
+      `);
+      await client.query(`
+        ALTER TABLE draft_orders
+          ADD COLUMN IF NOT EXISTS source_channel TEXT DEFAULT 'pos'
+      `);
+      // Widen order_context CHECK to include 'online'. Drop-and-recreate
+      // because CHECK constraints don't support IF NOT EXISTS. The old
+      // constraint name is deterministic from the inline CHECK in
+      // schema-pg.sql (see ALTER TABLE draft_orders … ADD COLUMN IF NOT
+      // EXISTS order_context TEXT DEFAULT 'retail' CHECK (…)).
+      await client.query(`
+        ALTER TABLE draft_orders DROP CONSTRAINT IF EXISTS draft_orders_order_context_check
+      `);
+      await client.query(`
+        ALTER TABLE draft_orders
+          ADD CONSTRAINT draft_orders_order_context_check
+          CHECK (order_context IN ('retail','dine_in','takeout','delivery','bar','online'))
+      `);
+      // Partial index for the inbox query — only unconverted rows, and
+      // the two filters the service uses (source + order_status).
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_web_orders_unconverted
+          ON web_orders(source, order_status)
+          WHERE converted_draft_order_id IS NULL
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {
