@@ -7,6 +7,7 @@ module.exports = function registerRestaurantRoutes(app, deps) {
     createTableSchema, updateTableSchema,
     createSessionSchema, createCheckSchema,
     splitCheckSchema, mergeChecksSchema, fireCourseSchema,
+    holdCourseSchema, expediteCourseSchema,
     createTabSchema,
   } = require("../schemas/restaurant");
   const floor = require("../services/restaurant-floor");
@@ -189,6 +190,28 @@ module.exports = function registerRestaurantRoutes(app, deps) {
     try {
       const fire = await checks.fireCourse(deps.db, Number(req.params.id), req.body.course_name, req.employee.id);
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_course_fired", JSON.stringify({ draft_order_id: Number(req.params.id), course_name: req.body.course_name })]); } catch {}
+      res.json(fire);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/restaurant/checks/:id/courses/hold", ...gate, validate(holdCourseSchema), async (req, res) => {
+    try {
+      const fire = await checks.holdCourse(
+        deps.db, Number(req.params.id), req.body.course_name, req.body.hold_until, req.employee.id
+      );
+      res.json(fire);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/restaurant/checks/:id/courses/expedite", ...gate, validate(expediteCourseSchema), async (req, res) => {
+    try {
+      const fire = await checks.expediteCourse(
+        deps.db, Number(req.params.id), req.body.course_name, req.employee.id
+      );
       res.json(fire);
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });

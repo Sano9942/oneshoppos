@@ -48,12 +48,21 @@ async function sendToKitchen(db, draftOrderId) {
   // Without this wrapper, a mid-loop failure would leave some items
   // ticketed and others still 'pending'. Phase 4 C3's junction-table
   // fix added more writes to this already non-atomic flow.
+  // Phase 2.1 A3: skip items whose course_name has an open 'held' row.
+  // The course-release worker will pick them up when hold_until elapses
+  // and call sendToKitchen again for that draft_order.
   const { rows: items } = await db.query(
     `SELECT di.*, p.category_id, d.table_id
      FROM draft_order_items di
      JOIN draft_orders d ON d.id = di.draft_order_id
      LEFT JOIN products p ON p.id = di.product_id
-     WHERE di.draft_order_id = $1 AND di.kitchen_status = 'pending'`,
+     WHERE di.draft_order_id = $1 AND di.kitchen_status = 'pending'
+       AND NOT EXISTS (
+         SELECT 1 FROM restaurant_course_fires cf
+         WHERE cf.draft_order_id = di.draft_order_id
+           AND cf.course_name = COALESCE(di.course_name, 'main')
+           AND cf.status = 'held'
+       )`,
     [draftOrderId]
   );
   if (!items.length) return [];

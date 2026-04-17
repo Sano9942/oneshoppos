@@ -118,8 +118,16 @@ export default function KDSRedesign() {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {tickets.map(ticket => {
             const mins = elapsedMinutes(ticket.created_at);
+            // Priority >= 100 means expedited (Phase 2.1 A3). getTickets already
+            // orders by priority DESC, so expedited tickets render first.
+            const isExpedited = Number(ticket.priority || 0) >= 100;
             return (
-              <div key={ticket.id} className={`border-2 ${timeBorder(mins)} rounded-lg bg-(--ui-bg) overflow-hidden`}>
+              <div key={ticket.id} className={`border-2 ${isExpedited ? "border-red-500" : timeBorder(mins)} rounded-lg bg-(--ui-bg) overflow-hidden`}>
+                {isExpedited && (
+                  <div className="px-3 py-1 bg-red-500 text-white text-xs font-semibold uppercase tracking-wide">
+                    Expedite
+                  </div>
+                )}
                 {/* Header */}
                 <div className="flex justify-between items-center px-3 py-2 bg-(--ui-bg-hover)">
                   <div>

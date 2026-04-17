@@ -2610,10 +2610,14 @@ CREATE TABLE IF NOT EXISTS restaurant_course_fires (
   status TEXT NOT NULL DEFAULT 'held' CHECK (status IN ('held','fired','completed')),
   fired_at TIMESTAMPTZ,
   fired_by INTEGER REFERENCES employees(id),
+  hold_until TIMESTAMPTZ,
+  expedite BOOLEAN NOT NULL DEFAULT FALSE,
+  sequence INTEGER,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_course_fires_order ON restaurant_course_fires(draft_order_id);
+CREATE INDEX IF NOT EXISTS idx_course_fires_held_until ON restaurant_course_fires(hold_until) WHERE status = 'held' AND hold_until IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS restaurant_tabs (
   id SERIAL PRIMARY KEY,

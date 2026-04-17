@@ -6,7 +6,7 @@ import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge, Modal, ModalFooter } from "../../ui/primitives";
-import { Receipt, Split, Flame } from "lucide-react";
+import { Receipt, Split, Flame, Clock, Zap, X } from "lucide-react";
 import { api } from "../../api";
 
 const STATUS_TONES = { open: "warning", split: "warning", closed: "success", voided: "danger" };
@@ -41,6 +41,33 @@ export default function RestaurantChecksRedesign() {
     try {
       await api.post(`/api/restaurant/checks/${checkId}/fire-course`, { course_number: course });
       toast.success(`Course ${course} fired`);
+      load();
+    } catch (err) { toast.error(err.message); }
+  };
+
+  const holdCourse = async (checkId) => {
+    const courseName = window.prompt("Course name to hold? (e.g. dessert)");
+    if (!courseName) return;
+    const holdUntil = window.prompt("Hold until (ISO datetime, e.g. 2026-04-18T20:00:00Z):");
+    if (!holdUntil) return;
+    try {
+      await api.post(`/api/restaurant/checks/${checkId}/courses/hold`, {
+        course_name: courseName,
+        hold_until: holdUntil,
+      });
+      toast.success(`Course "${courseName}" held until ${holdUntil}`);
+      load();
+    } catch (err) { toast.error(err.message); }
+  };
+
+  const expediteCourse = async (checkId) => {
+    const courseName = window.prompt("Course name to expedite? (e.g. appetizer)");
+    if (!courseName) return;
+    try {
+      await api.post(`/api/restaurant/checks/${checkId}/courses/expedite`, {
+        course_name: courseName,
+      });
+      toast.success(`Course "${courseName}" expedited`);
       load();
     } catch (err) { toast.error(err.message); }
   };
@@ -102,6 +129,12 @@ export default function RestaurantChecksRedesign() {
                             <Flame className="w-4 h-4 text-orange-500" />
                           </button>
                         )}
+                        <button onClick={() => holdCourse(c.id)} title="Hold a course" className="p-1 rounded hover:bg-(--ui-bg-hover)">
+                          <Clock className="w-4 h-4 text-blue-500" />
+                        </button>
+                        <button onClick={() => expediteCourse(c.id)} title="Expedite a course" className="p-1 rounded hover:bg-(--ui-bg-hover)">
+                          <Zap className="w-4 h-4 text-red-500" />
+                        </button>
                         <button onClick={() => { setShowSplit(c); setSplitMode("equal"); setSplitCount(2); }} title="Split check" className="p-1 rounded hover:bg-(--ui-bg-hover)">
                           <Split className="w-4 h-4" />
                         </button>

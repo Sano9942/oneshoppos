@@ -80,6 +80,15 @@ const fireCourseSchema = z.object({
   course_name: z.string().min(1),
 });
 
+const holdCourseSchema = z.object({
+  course_name: z.string().min(1),
+  hold_until: z.string().datetime(),
+});
+
+const expediteCourseSchema = z.object({
+  course_name: z.string().min(1),
+});
+
 const createTabSchema = z.object({
   outlet_id: z.number().int().positive(),
   customer_id: z.number().int().positive().optional(),
@@ -103,6 +112,7 @@ module.exports = {
   createTableSchema, updateTableSchema,
   createSessionSchema, createCheckSchema,
   splitCheckSchema, mergeChecksSchema, fireCourseSchema,
+  holdCourseSchema, expediteCourseSchema,
   createTabSchema,
   createKdsStationSchema, updateKdsStationSchema,
 };

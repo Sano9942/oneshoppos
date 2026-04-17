@@ -20,6 +20,7 @@ module.exports = function registerSystemRoutes(app, deps) {
       const rentalOverdueStatus = global.__rentalOverdueWorkerStatus || null;
       const roomOverdueStatus = global.__roomOverdueWorkerStatus || null;
       const treatmentPlanStatus = global.__treatmentPlanWorkerStatus || null;
+      const courseReleaseStatus = global.__courseReleaseWorkerStatus || null;
 
       function workerInfo(status, pollIntervalMs) {
         if (!status) return { enabled: false, running: false };
@@ -44,6 +45,7 @@ module.exports = function registerSystemRoutes(app, deps) {
         rental_overdue: workerInfo(rentalOverdueStatus, 24 * 60 * 60 * 1000),
         room_overdue: workerInfo(roomOverdueStatus, 24 * 60 * 60 * 1000),
         treatment_plan: workerInfo(treatmentPlanStatus, 24 * 60 * 60 * 1000),
+        course_release: workerInfo(courseReleaseStatus, 60_000),
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });

@@ -4067,6 +4067,25 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 53,
+    description:
+      "Phase 2.1 A3 — course timing controls: restaurant_course_fires.hold_until + expedite + sequence",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE restaurant_course_fires
+          ADD COLUMN IF NOT EXISTS hold_until TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS expedite BOOLEAN NOT NULL DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS sequence INTEGER
+      `);
+      // Index for the worker sweep: status='held' + hold_until <= NOW().
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_course_fires_held_until
+          ON restaurant_course_fires(hold_until)
+          WHERE status = 'held' AND hold_until IS NOT NULL
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

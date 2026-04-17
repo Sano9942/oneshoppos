@@ -299,6 +299,126 @@ async function fireCourse(db, draftOrderId, courseName, employeeId) {
   return fire;
 }
 
+/**
+ * holdCourse — upsert a course fire row with status='held' + hold_until. No
+ * KDS tickets are created. The course-release worker sweeps `status='held'`
+ * rows where `hold_until <= NOW()` and transitions them to `fired` via
+ * releaseHeldCourses.
+ */
+async function holdCourse(db, draftOrderId, courseName, holdUntil, employeeId) {
+  const { rows: [existing] } = await db.query(
+    "SELECT id FROM restaurant_course_fires WHERE draft_order_id = $1 AND course_name = $2",
+    [draftOrderId, courseName]
+  );
+  if (existing) {
+    const { rows: [fire] } = await db.query(
+      `UPDATE restaurant_course_fires
+         SET status = 'held', hold_until = $1, fired_at = NULL, fired_by = $2, updated_at = NOW()
+       WHERE id = $3 RETURNING *`,
+      [holdUntil, employeeId, existing.id]
+    );
+    return fire;
+  }
+  const { rows: [fire] } = await db.query(
+    `INSERT INTO restaurant_course_fires (draft_order_id, course_name, status, hold_until, fired_by)
+     VALUES ($1, $2, 'held', $3, $4) RETURNING *`,
+    [draftOrderId, courseName, holdUntil, employeeId]
+  );
+  return fire;
+}
+
+/**
+ * expediteCourse — mark a course as urgent. Bumps priority on any open
+ * kds_tickets for matching items so expedited tickets jump to the top of
+ * the KDS (getTickets ORDER BY priority DESC). Upserts a course_fires row
+ * with expedite=true so reporting can surface expedite frequency.
+ */
+async function expediteCourse(db, draftOrderId, courseName, employeeId) {
+  return await db.transaction(async (client) => {
+    const { rows: [existing] } = await client.query(
+      "SELECT id FROM restaurant_course_fires WHERE draft_order_id = $1 AND course_name = $2",
+      [draftOrderId, courseName]
+    );
+    let fire;
+    if (existing) {
+      const { rows } = await client.query(
+        `UPDATE restaurant_course_fires
+           SET expedite = TRUE, fired_by = $1, updated_at = NOW()
+         WHERE id = $2 RETURNING *`,
+        [employeeId, existing.id]
+      );
+      fire = rows[0];
+    } else {
+      const { rows } = await client.query(
+        `INSERT INTO restaurant_course_fires (draft_order_id, course_name, status, expedite, fired_by)
+         VALUES ($1, $2, 'fired', TRUE, $3) RETURNING *`,
+        [draftOrderId, courseName, employeeId]
+      );
+      fire = rows[0];
+    }
+    // Raise priority on any open ticket for this draft_order + course.
+    await client.query(
+      `UPDATE kds_tickets
+         SET priority = 100, updated_at = NOW()
+       WHERE draft_order_id = $1 AND course_name = $2
+         AND status IN ('new','in_progress')`,
+      [draftOrderId, courseName]
+    );
+    return fire;
+  });
+}
+
+/**
+ * releaseHeldCourses — worker-facing sweep. For each outlet-scoped
+ * status='held' row where hold_until has elapsed, transition to 'fired'
+ * and fire the matching course items via sendToKitchen. Returns the
+ * number of courses released.
+ */
+async function releaseHeldCourses(db, outletId) {
+  const { sendToKitchen } = require("./restaurant-kds");
+
+  // Find due courses. Scope by outlet if provided; otherwise sweep all.
+  const params = [];
+  let where = `cf.status = 'held' AND cf.hold_until IS NOT NULL AND cf.hold_until <= NOW()`;
+  if (outletId) {
+    params.push(outletId);
+    where += ` AND d.outlet_id = $${params.length}`;
+  }
+  const { rows: due } = await db.query(
+    `SELECT cf.id, cf.draft_order_id, cf.course_name
+     FROM restaurant_course_fires cf
+     JOIN draft_orders d ON d.id = cf.draft_order_id
+     WHERE ${where}`,
+    params
+  );
+
+  let released = 0;
+  for (const row of due) {
+    // Flip status to 'fired' BEFORE sendToKitchen so the KDS filter
+    // (which skips items in held courses) doesn't skip this one.
+    await db.query(
+      `UPDATE restaurant_course_fires
+         SET status = 'fired', fired_at = NOW(), updated_at = NOW()
+       WHERE id = $1`,
+      [row.id]
+    );
+    try {
+      await sendToKitchen(db, row.draft_order_id);
+      released++;
+    } catch (err) {
+      // Non-fatal: log and continue. A stale held row can be retried next
+      // poll. We already stamped fired_at, so the worker won't re-attempt
+      // this specific row — acceptable because kitchen tickets may have
+      // already been created before the error, and a second attempt
+      // would create duplicates.
+      if (typeof console !== "undefined") {
+        console.error(`[releaseHeldCourses] sendToKitchen failed for draft_order ${row.draft_order_id}:`, err.message);
+      }
+    }
+  }
+  return released;
+}
+
 async function openTab(db, data, employeeId) {
   const { rows: [tab] } = await db.query(
     `INSERT INTO restaurant_tabs (outlet_id, customer_id, customer_name, opened_by)
@@ -373,6 +493,7 @@ module.exports = {
   createRestaurantCheck, getOpenChecks,
   assignSeat, splitCheckByItem, splitCheckBySeat,
   splitCheckByAmount, splitCheckEvenly, mergeChecks,
-  fireCourse, openTab, closeTab,
+  fireCourse, holdCourse, expediteCourse, releaseHeldCourses,
+  openTab, closeTab,
   recalcCheckTotals,
 };
