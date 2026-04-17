@@ -3,6 +3,7 @@ import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import { defineConfig, globalIgnores } from "eslint/config";
+import noRawInteractivePlugin from "./eslint-rules/index.js";
 
 export default defineConfig([
   globalIgnores([
@@ -33,6 +34,13 @@ export default defineConfig([
         "error",
         { varsIgnorePattern: "^[A-Z_]", argsIgnorePattern: "^[A-Z_]" },
       ],
+    },
+  },
+  {
+    files: ["src/pages/redesign/**/*.{js,jsx}"],
+    plugins: { sano: noRawInteractivePlugin },
+    rules: {
+      "sano/no-raw-interactive": "error",
     },
   },
 ]);
