@@ -4170,6 +4170,177 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 56,
+    description:
+      "Phase 2.1 C1 — tip capture: restaurant_check_adjustments gains tip_category + recipient_employee_id; new tip_captures table for per-sale server attribution",
+    up: async (client) => {
+      // Adjustments already model gratuity as a check-line item; the new
+      // columns let us classify *how* the tip is paid (cash in hand vs card
+      // on the bill vs pooled at end-of-shift) and attribute a direct tip to
+      // a specific server. Both nullable so legacy rows stay valid.
+      await client.query(`
+        ALTER TABLE restaurant_check_adjustments
+          ADD COLUMN IF NOT EXISTS tip_category TEXT,
+          ADD COLUMN IF NOT EXISTS recipient_employee_id INTEGER REFERENCES employees(id)
+      `);
+      await client.query(`
+        ALTER TABLE restaurant_check_adjustments
+          DROP CONSTRAINT IF EXISTS restaurant_check_adjustments_tip_category_check
+      `);
+      await client.query(`
+        ALTER TABLE restaurant_check_adjustments
+          ADD CONSTRAINT restaurant_check_adjustments_tip_category_check
+          CHECK (tip_category IS NULL OR tip_category IN ('cash','card','pooled','direct'))
+      `);
+
+      // tip_captures is the per-sale ledger. One row per checked-out sale
+      // that carried a tip — pulled from the gratuity adjustment at sale
+      // time, attributed to the table session's server. pool_id is NULL
+      // until the shift's tip pool closes and stamps it.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tip_captures (
+          id SERIAL PRIMARY KEY,
+          sale_id INTEGER NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+          draft_order_id INTEGER,
+          outlet_id INTEGER REFERENCES outlets(id),
+          server_id INTEGER REFERENCES employees(id),
+          tip_amount NUMERIC(12,2) NOT NULL,
+          tip_method TEXT NOT NULL CHECK (tip_method IN ('cash','card','split')),
+          pool_id INTEGER,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_tip_captures_pool ON tip_captures(pool_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_tip_captures_server ON tip_captures(server_id)`);
+    },
+  },
+  {
+    version: 57,
+    description:
+      "Phase 2.1 C2 — tip pooling: tip_pools + distribution_rules + payouts; commission_earnings.earning_type bridges tips into payroll",
+    up: async (client) => {
+      // Distribution rules first — pools FK into them. Each outlet can have
+      // multiple named strategies; one is_default per outlet (enforced by
+      // partial unique index).
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tip_pool_distribution_rules (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER REFERENCES outlets(id),
+          name TEXT NOT NULL,
+          strategy TEXT NOT NULL CHECK (strategy IN ('equal_share','hours_weighted','role_weighted','points')),
+          config_jsonb JSONB DEFAULT '{}'::jsonb,
+          is_default BOOLEAN DEFAULT FALSE,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_tpdr_default_per_outlet
+          ON tip_pool_distribution_rules(outlet_id)
+          WHERE is_default = TRUE AND is_active = TRUE
+      `);
+
+      // Pools — one per outlet/business_date open at a time. status flow:
+      // open → closed → distributed (or voided from either closed/distributed).
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tip_pools (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+          business_date DATE NOT NULL,
+          opened_at TIMESTAMPTZ DEFAULT NOW(),
+          closed_at TIMESTAMPTZ,
+          total_tips NUMERIC(12,2) NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed','distributed','voided')),
+          closed_by INTEGER REFERENCES employees(id),
+          distribution_rule_id INTEGER REFERENCES tip_pool_distribution_rules(id),
+          notes TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_tip_pools_outlet_date
+          ON tip_pools(outlet_id, business_date)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_tip_pools_open
+          ON tip_pools(outlet_id) WHERE status = 'open'
+      `);
+
+      // Backfill the FK from tip_captures → tip_pools now that the table
+      // exists. The v56 column was created without REFERENCES so v56 could
+      // run before v57; this hardens it.
+      await client.query(`
+        ALTER TABLE tip_captures
+          DROP CONSTRAINT IF EXISTS tip_captures_pool_id_fkey
+      `);
+      await client.query(`
+        ALTER TABLE tip_captures
+          ADD CONSTRAINT tip_captures_pool_id_fkey
+          FOREIGN KEY (pool_id) REFERENCES tip_pools(id) ON DELETE SET NULL
+      `);
+
+      // Payouts — one row per employee per pool. commission_earning_id is
+      // the bridge into payroll: payroll reads commission_earnings, which
+      // for tips has earning_type='tip' and sale_id NULL.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tip_pool_payouts (
+          id SERIAL PRIMARY KEY,
+          pool_id INTEGER NOT NULL REFERENCES tip_pools(id) ON DELETE CASCADE,
+          employee_id INTEGER NOT NULL REFERENCES employees(id),
+          hours_worked NUMERIC(8,2) NOT NULL DEFAULT 0,
+          weight NUMERIC(12,4) NOT NULL DEFAULT 0,
+          payout_amount NUMERIC(12,2) NOT NULL,
+          paid_at TIMESTAMPTZ,
+          commission_earning_id INTEGER REFERENCES commission_earnings(id),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_tip_pool_payouts_pool
+          ON tip_pool_payouts(pool_id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_tip_pool_payouts_employee
+          ON tip_pool_payouts(employee_id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_tip_pool_payouts_unpaid
+          ON tip_pool_payouts(employee_id) WHERE paid_at IS NULL
+      `);
+
+      // commission_earnings extension — earning_type discriminates tips from
+      // commissions; sale_id loosened so tip rows (not tied to a sale) can
+      // live here too. The CHECK keeps existing data valid (defaults to
+      // 'commission').
+      await client.query(`
+        ALTER TABLE commission_earnings
+          ADD COLUMN IF NOT EXISTS earning_type TEXT NOT NULL DEFAULT 'commission'
+      `);
+      await client.query(`
+        ALTER TABLE commission_earnings
+          DROP CONSTRAINT IF EXISTS commission_earnings_earning_type_check
+      `);
+      await client.query(`
+        ALTER TABLE commission_earnings
+          ADD CONSTRAINT commission_earnings_earning_type_check
+          CHECK (earning_type IN ('commission','tip'))
+      `);
+      await client.query(`
+        ALTER TABLE commission_earnings ALTER COLUMN sale_id DROP NOT NULL
+      `);
+      // plan_id is also NOT NULL in legacy schema, but tip rows have no plan.
+      // Drop the constraint so tip rows can pass NULL.
+      await client.query(`
+        ALTER TABLE commission_earnings ALTER COLUMN plan_id DROP NOT NULL
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_ce_type_status
+          ON commission_earnings(earning_type, status)
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

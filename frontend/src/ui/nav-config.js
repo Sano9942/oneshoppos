@@ -172,6 +172,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Modifiers", path: "/restaurant/modifiers", icon: ListPlus, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant", requiredMode: "restaurant" },
       { name: "Online Inbox", path: "/restaurant/inbox", icon: Inbox, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant", requiredMode: "restaurant" },
       { name: "KDS", path: "/kds", icon: ChefHat, requiredPerm: "manage_kds", requiredFlag: "phase4_restaurant_kds", requiredMode: "restaurant" },
+      { name: "Tip Pools", path: "/tips", icon: Banknote, requiredPerm: "manage_tips", requiredFlag: "phase4_restaurant", requiredMode: "restaurant" },
     ],
   },
   {

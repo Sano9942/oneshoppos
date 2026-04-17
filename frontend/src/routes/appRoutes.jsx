@@ -79,6 +79,7 @@ const CODSettlementsRoute = lazy(() => import("../pages/CODSettlementsRoute"));
 const LoyaltyTiersRoute = lazy(() => import("../pages/LoyaltyTiersRoute"));
 const SmartCollectionsRoute = lazy(() => import("../pages/SmartCollectionsRoute"));
 const CommissionPlansRoute = lazy(() => import("../pages/CommissionPlansRoute"));
+const TipPoolsRoute = lazy(() => import("../pages/TipPoolsRoute"));
 const ReportBuilderRoute = lazy(() => import("../pages/ReportBuilderRoute"));
 const POSLayoutsRoute = lazy(() => import("../pages/POSLayoutsRoute"));
 const OutletTaxProfilesRoute = lazy(() => import("../pages/OutletTaxProfilesRoute"));
@@ -219,6 +220,8 @@ export const appRoutes = [
     <Route path="/subscriptions" element={perm("all_access", <SubscriptionsRoute />)} />
     {/* Phase 4 — Restaurant */}
     <Route path="/restaurant/floor" element={perm("manage_restaurant", wrap(RestaurantFloorRoute))} />
+    {/* Phase 2.1 C — Tip pools */}
+    <Route path="/tips" element={perm("manage_tips", wrap(TipPoolsRoute))} />
     <Route path="/restaurant/checks" element={perm("manage_restaurant", wrap(RestaurantChecksRoute))} />
     <Route path="/restaurant/modifiers" element={perm("manage_restaurant", wrap(ModifierGroupsRoute))} />
     <Route path="/restaurant/inbox" element={perm("manage_restaurant", wrap(RestaurantInboxRoute))} />

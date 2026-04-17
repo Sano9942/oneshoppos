@@ -8,6 +8,7 @@ import { downloadCsv } from "../../utils/csvExport";
 import { api } from "../../api";
 
 const STATUS_TONES = { pending: "warning", approved: "success", paid: "default", reversed: "danger" };
+const TYPE_TONES = { commission: "default", tip: "success" };
 
 export default function CommissionSummaryTab({ filters }) {
   const { fmt } = useCurrency();
@@ -16,12 +17,16 @@ export default function CommissionSummaryTab({ filters }) {
   const [summary, setSummary] = useState({});
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
+  // Phase 2.1 C — type filter splits commissions from tips. "both" omits
+  // the param so the backend returns everything.
+  const [typeFilter, setTypeFilter] = useState("both");
 
   useEffect(() => {
     const params = new URLSearchParams();
     if (filters?.from) params.set("from", filters.from);
     if (filters?.to) params.set("to", filters.to);
     if (statusFilter) params.set("status", statusFilter);
+    if (typeFilter && typeFilter !== "both") params.set("earning_type", typeFilter);
     const qs = params.toString() ? `?${params}` : "";
 
     api.get(`/api/commissions/earnings${qs}`).then(r => {
@@ -29,15 +34,16 @@ export default function CommissionSummaryTab({ filters }) {
       setSummary(r.summary || {});
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, [filters?.from, filters?.to, statusFilter]);
+  }, [filters?.from, filters?.to, statusFilter, typeFilter]);
 
   const handleExport = () => {
-    const headers = ["Employee", "Plan", "Invoice", "Sale Amount", "Commission", "Status", "Date"];
+    const headers = ["Type", "Employee", "Plan", "Invoice", "Sale Amount", "Earning", "Status", "Date"];
     const rows = earnings.map(e => [
-      e.employee_name, e.plan_name, e.invoice_number || "", Number(e.sale_amount).toFixed(2),
+      e.earning_type || "commission",
+      e.employee_name, e.plan_name || "", e.invoice_number || "", Number(e.sale_amount).toFixed(2),
       Number(e.commission_amount).toFixed(2), e.status, e.created_at,
     ]);
-    downloadCsv(headers, rows, "commission-report.csv");
+    downloadCsv(headers, rows, "earnings-report.csv");
   };
 
   if (loading) return <p className="text-(--ui-muted) text-sm py-8 text-center">Loading...</p>;
@@ -57,7 +63,20 @@ export default function CommissionSummaryTab({ filters }) {
           <p className="text-xs text-(--ui-muted)">Paid</p>
           <p className="font-semibold text-(--ui-text)">{fmt(Number(summary.paid_total || 0))}</p>
         </div>
+        <div className="bg-(--ui-bg) border border-(--ui-border) rounded px-4 py-2 text-center">
+          <p className="text-xs text-(--ui-muted)">Commissions</p>
+          <p className="font-semibold text-(--ui-text)">{fmt(Number(summary.commission_total || 0))}</p>
+        </div>
+        <div className="bg-(--ui-bg) border border-(--ui-border) rounded px-4 py-2 text-center">
+          <p className="text-xs text-(--ui-muted)">Tips</p>
+          <p className="font-semibold text-emerald-600">{fmt(Number(summary.tip_total || 0))}</p>
+        </div>
         <div className="ml-auto flex gap-2 items-center">
+          <select className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text)" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+            <option value="both">All types</option>
+            <option value="commission">Commission</option>
+            <option value="tip">Tip</option>
+          </select>
           <select className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text)" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
             <option value="">All statuses</option>
             <option value="pending">Pending</option>
@@ -77,27 +96,32 @@ export default function CommissionSummaryTab({ filters }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-(--ui-border) text-left text-(--ui-muted)">
+              <th className="py-2 font-medium">Type</th>
               <th className="py-2 font-medium">Employee</th>
               <th className="py-2 font-medium">Plan</th>
               <th className="py-2 font-medium">Invoice</th>
               <th className="py-2 font-medium">Sale Amount</th>
-              <th className="py-2 font-medium">Commission</th>
+              <th className="py-2 font-medium">Earning</th>
               <th className="py-2 font-medium">Status</th>
               <th className="py-2 font-medium">Date</th>
             </tr>
           </thead>
           <tbody>
-            {earnings.map(e => (
-              <tr key={e.id} className="border-b border-(--ui-border)">
-                <td className="py-2 text-(--ui-text)">{e.employee_name}</td>
-                <td className="py-2">{e.plan_name}</td>
-                <td className="py-2">{e.invoice_number || "-"}</td>
-                <td className="py-2">{fmt(Number(e.sale_amount))}</td>
-                <td className="py-2 font-medium">{fmt(Number(e.commission_amount))}</td>
-                <td className="py-2"><Badge tone={STATUS_TONES[e.status]}>{e.status}</Badge></td>
-                <td className="py-2">{fmtUtcDateTime(e.created_at)}</td>
-              </tr>
-            ))}
+            {earnings.map(e => {
+              const type = e.earning_type || "commission";
+              return (
+                <tr key={e.id} className="border-b border-(--ui-border)">
+                  <td className="py-2"><Badge tone={TYPE_TONES[type]}>{type}</Badge></td>
+                  <td className="py-2 text-(--ui-text)">{e.employee_name}</td>
+                  <td className="py-2">{e.plan_name || "-"}</td>
+                  <td className="py-2">{e.invoice_number || "-"}</td>
+                  <td className="py-2">{fmt(Number(e.sale_amount))}</td>
+                  <td className="py-2 font-medium">{fmt(Number(e.commission_amount))}</td>
+                  <td className="py-2"><Badge tone={STATUS_TONES[e.status]}>{e.status}</Badge></td>
+                  <td className="py-2">{fmtUtcDateTime(e.created_at)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

@@ -132,8 +132,11 @@ module.exports = function registerCommissionRoutes(app, deps) {
   // ── Commission Earnings ────────────────────────────────────────────
 
   // GET /api/commissions/earnings
+  // earning_type filter: "commission" | "tip" | "both" (default — no filter).
+  // After Phase 2.1 C tip rows live in this table with sale_id+plan_id NULL,
+  // so the legacy JOINs are now LEFT to keep tips visible.
   app.get("/api/commissions/earnings", feat, requireAnyPerm(["all_access", "view_reports"]), async (req, res) => {
-    const { employee_id, status, from, to } = req.query;
+    const { employee_id, status, from, to, earning_type } = req.query;
     try {
       let where = "1=1";
       const params = [];
@@ -143,13 +146,18 @@ module.exports = function registerCommissionRoutes(app, deps) {
       if (status) { where += ` AND ce.status = $${idx}`; params.push(status); idx++; }
       if (from) { where += ` AND ce.created_at >= $${idx}`; params.push(from); idx++; }
       if (to) { where += ` AND ce.created_at < $${idx}`; params.push(to); idx++; }
+      if (earning_type && earning_type !== "both") {
+        where += ` AND ce.earning_type = $${idx}`;
+        params.push(earning_type);
+        idx++;
+      }
 
       const { rows } = await db.query(
         `SELECT ce.*, e.name AS employee_name, cp.name AS plan_name, s.invoice_number
          FROM commission_earnings ce
          JOIN employees e ON e.id = ce.employee_id
-         JOIN commission_plans cp ON cp.id = ce.plan_id
-         JOIN sales s ON s.id = ce.sale_id
+         LEFT JOIN commission_plans cp ON cp.id = ce.plan_id
+         LEFT JOIN sales s ON s.id = ce.sale_id
          WHERE ${where}
          ORDER BY ce.created_at DESC
          LIMIT 500`,
@@ -161,7 +169,9 @@ module.exports = function registerCommissionRoutes(app, deps) {
            COUNT(*) AS total_records,
            SUM(commission_amount) FILTER (WHERE status = 'pending') AS pending_total,
            SUM(commission_amount) FILTER (WHERE status = 'approved') AS approved_total,
-           SUM(commission_amount) FILTER (WHERE status = 'paid') AS paid_total
+           SUM(commission_amount) FILTER (WHERE status = 'paid') AS paid_total,
+           SUM(commission_amount) FILTER (WHERE earning_type = 'commission') AS commission_total,
+           SUM(commission_amount) FILTER (WHERE earning_type = 'tip') AS tip_total
          FROM commission_earnings ce
          WHERE ${where}`,
         params

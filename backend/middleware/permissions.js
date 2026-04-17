@@ -54,6 +54,9 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "manage_rentals",
     "manage_rooms",
     "manage_treatment_plans",
+    // Phase 2.1 C — granted alongside manage_restaurant so existing restaurant
+    // managers can administer tip pools without a separate role bump.
+    "manage_tips",
   ],
   Cashier: ["view_reports", "pos_discount", "pos_park"],
 };
@@ -277,6 +280,12 @@ const PERMISSION_RULES = [
     methods: ["GET", "POST", "PUT", "DELETE"],
     path: /^\/api\/(treatment-plans|treatment-sessions|treatment-folios|patient-subjects|chart-areas|session-chart-entries|lab-orders|consent-templates|clinical-documents)(\/|$)/,
     anyPerms: ["manage_treatment_plans"],
+  },
+  // Phase 2.1 C — tip pools and distribution rules.
+  {
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    path: /^\/api\/tips(\/|$)/,
+    anyPerms: ["manage_tips"],
   },
 ];
 

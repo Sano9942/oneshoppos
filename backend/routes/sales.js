@@ -442,6 +442,11 @@ module.exports = function registerSalesRoutes(app, deps) {
       idempotency_key = null,
       folio_id = null,
       treatment_folio_id = null,
+      // Phase 2.1 C1 — tip capture inputs (restaurant flow). draft_order_id
+      // links the sale back to the check; non-restaurant sales pass nothing.
+      draft_order_id = null,
+      tip_amount = 0,
+      tip_method = null,
     } = req.body;
 
     // Mutually-exclusive: a sale can be on a room folio OR a treatment folio, not both.
@@ -986,6 +991,23 @@ module.exports = function registerSalesRoutes(app, deps) {
           }
         } catch (fbrErr) {
           logger.error({ err: fbrErr, saleId }, "FBR enqueue failed (non-blocking)");
+        }
+
+        // Phase 2.1 C1 — capture tip on this sale (restaurant flow). Fire-
+        // and-forget; failure shouldn't block the sale response. Only runs
+        // when the caller actually passed a tip — non-restaurant sales skip.
+        if (Number(tip_amount) > 0 && tip_method) {
+          const tipsService = require("../services/tips");
+          tipsService
+            .captureTipOnSale(db, {
+              sale_id: saleId,
+              draft_order_id: draft_order_id || null,
+              tip_amount,
+              tip_method,
+            })
+            .catch((err) =>
+              logger.error({ err, saleId }, "[tips] captureTipOnSale failed (non-blocking)")
+            );
         }
 
         // Auto-calculate commissions (fire-and-forget, don't block sale response)

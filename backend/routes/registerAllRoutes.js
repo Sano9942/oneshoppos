@@ -524,6 +524,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: COMMISSIONS (Phase 2B) ---
   require("./commissions")(app, deps);
 
+  // --- ROUTES: TIPS (Phase 2.1 C — restaurant server compensation) ---
+  require("./tips")(app, deps);
+
   // --- ROUTES: REPORT BUILDER (Phase 2B) ---
   require("./report-builder")(app, deps);
 
