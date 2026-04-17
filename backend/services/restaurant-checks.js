@@ -92,9 +92,9 @@ async function splitCheckByItem(db, sourceDraftOrderId, itemAssignments, employe
       // public menu lookup). Non-restaurant contexts still get NULL.
       const newSourceToken = makeSourceToken(source.order_context);
       const { rows: [newOrder] } = await client.query(
-        `INSERT INTO draft_orders (outlet_id, created_by, order_context, table_id, table_session_id, tab_id, source_token_id, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'open') RETURNING *`,
-        [source.outlet_id, employeeId, source.order_context, source.table_id, source.table_session_id, source.tab_id, newSourceToken]
+        `INSERT INTO draft_orders (outlet_id, created_by, order_context, table_id, table_session_id, tab_id, source_token_id, status, split_parent_id, split_strategy)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', $8, 'by_item') RETURNING *`,
+        [source.outlet_id, employeeId, source.order_context, source.table_id, source.table_session_id, source.tab_id, newSourceToken, sourceDraftOrderId]
       );
 
       // Move items
@@ -150,7 +150,129 @@ async function splitCheckBySeat(db, sourceDraftOrderId, employeeId) {
     idx++;
   }
 
-  return splitCheckByItem(db, sourceDraftOrderId, assignments, employeeId);
+  const result = await splitCheckByItem(db, sourceDraftOrderId, assignments, employeeId);
+  // Overwrite the strategy stamp set by splitCheckByItem so audit reflects
+  // the real caller — UI and reports filter on split_strategy.
+  await db.query(
+    "UPDATE draft_orders SET split_strategy = 'by_seat' WHERE split_parent_id = $1",
+    [sourceDraftOrderId]
+  );
+  return result;
+}
+
+/**
+ * splitCheckByAmount — create N zero-item child checks and distribute the
+ * source total evenly. Pennies modulo go to the last check. Adjustments are
+ * copied proportionally. Items stay on the source (by design — this split
+ * models "everyone pays an equal share of one shared bill" rather than moving
+ * items around).
+ *
+ * recalcCheckTotals is intentionally skipped on the children — they have no
+ * items, so SUM(price * quantity) would zero out the carefully-distributed
+ * totals. Children carry their share purely as draft_orders.total.
+ */
+async function splitCheckByAmount(db, sourceDraftOrderId, parts, employeeId, strategyOverride) {
+  if (!parts || parts < 2) {
+    throw Object.assign(new Error("parts must be >= 2"), { statusCode: 400 });
+  }
+  return await db.transaction(async (client) => {
+    const { rows: [source] } = await client.query(
+      "SELECT * FROM draft_orders WHERE id = $1",
+      [sourceDraftOrderId]
+    );
+    if (!source) throw Object.assign(new Error("Check not found"), { statusCode: 404 });
+
+    const sourceTotal = Math.round(Number(source.total) * 100); // work in cents
+    const baseShare = Math.floor(sourceTotal / parts);
+    const remainder = sourceTotal - baseShare * parts;
+    const strategy = strategyOverride || "by_amount";
+
+    const newChecks = [];
+    for (let i = 0; i < parts; i++) {
+      const shareCents = i === parts - 1 ? baseShare + remainder : baseShare;
+      const shareAmount = shareCents / 100;
+      const newSourceToken = makeSourceToken(source.order_context);
+      const { rows: [newOrder] } = await client.query(
+        `INSERT INTO draft_orders (outlet_id, created_by, order_context, table_id, table_session_id, tab_id, source_token_id, status, split_parent_id, split_strategy, subtotal, tax_total, discount_total, total)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', $8, $9, 0, 0, 0, $10) RETURNING *`,
+        [source.outlet_id, employeeId, source.order_context, source.table_id,
+         source.table_session_id, source.tab_id, newSourceToken,
+         sourceDraftOrderId, strategy, shareAmount]
+      );
+      newChecks.push(newOrder);
+    }
+
+    // Proportionally copy adjustments (share amount / source total).
+    const { rows: adjustments } = await client.query(
+      "SELECT * FROM restaurant_check_adjustments WHERE draft_order_id = $1",
+      [sourceDraftOrderId]
+    );
+    if (adjustments.length && sourceTotal > 0) {
+      for (const adj of adjustments) {
+        for (const child of newChecks) {
+          const proportion = Math.round(Number(child.total) * 100) / sourceTotal;
+          const splitAmount = Math.round(Number(adj.amount) * proportion * 100) / 100;
+          await client.query(
+            `INSERT INTO restaurant_check_adjustments (draft_order_id, adjustment_type, label, amount, is_percentage, percentage_value)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [child.id, adj.adjustment_type, adj.label, splitAmount, adj.is_percentage, adj.percentage_value]
+          );
+        }
+      }
+    }
+
+    return newChecks;
+  });
+}
+
+// Even split is a by-amount split with parts = N; surfaces under a distinct
+// strategy label so the UI can render "Evenly" separately from "By amount".
+async function splitCheckEvenly(db, sourceDraftOrderId, parts, employeeId) {
+  return splitCheckByAmount(db, sourceDraftOrderId, parts, employeeId, "evenly");
+}
+
+/**
+ * mergeChecks — move items from N source checks onto a target, recalc target
+ * totals, and close sources with status='merged'. Used when a split was wrong
+ * or a table wants one unified bill after all.
+ */
+async function mergeChecks(db, targetId, sourceIds, employeeId) {
+  if (!Array.isArray(sourceIds) || !sourceIds.length) {
+    throw Object.assign(new Error("source_ids required"), { statusCode: 400 });
+  }
+  if (sourceIds.includes(targetId)) {
+    throw Object.assign(new Error("Target cannot be in source list"), { statusCode: 400 });
+  }
+  return await db.transaction(async (client) => {
+    const { rows: [target] } = await client.query(
+      "SELECT * FROM draft_orders WHERE id = $1",
+      [targetId]
+    );
+    if (!target) throw Object.assign(new Error("Target check not found"), { statusCode: 404 });
+
+    for (const sourceId of sourceIds) {
+      const { rows: [source] } = await client.query(
+        "SELECT id FROM draft_orders WHERE id = $1",
+        [sourceId]
+      );
+      if (!source) continue;
+      await client.query(
+        "UPDATE draft_order_items SET draft_order_id = $1 WHERE draft_order_id = $2",
+        [targetId, sourceId]
+      );
+      await client.query(
+        "UPDATE draft_orders SET status = 'merged', updated_at = NOW() WHERE id = $1",
+        [sourceId]
+      );
+    }
+
+    await recalcCheckTotals(client, targetId);
+    const { rows: [updated] } = await client.query(
+      "SELECT * FROM draft_orders WHERE id = $1",
+      [targetId]
+    );
+    return updated;
+  });
 }
 
 async function fireCourse(db, draftOrderId, courseName, employeeId) {
@@ -250,6 +372,7 @@ async function distributeAdjustments(client, sourceId, newCheckIds) {
 module.exports = {
   createRestaurantCheck, getOpenChecks,
   assignSeat, splitCheckByItem, splitCheckBySeat,
+  splitCheckByAmount, splitCheckEvenly, mergeChecks,
   fireCourse, openTab, closeTab,
   recalcCheckTotals,
 };

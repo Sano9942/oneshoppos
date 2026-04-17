@@ -47,7 +47,15 @@ export default function RestaurantChecksRedesign() {
 
   const splitCheck = async (checkId) => {
     try {
-      await api.post(`/api/restaurant/checks/${checkId}/split`, { mode: splitMode, split_count: splitCount });
+      // Map UI mode → backend split_type. "equal" → "evenly" so we get the
+      // Phase 2.1 by-amount path (parts-based distribution); "by_amount" is
+      // an alias that also requires parts.
+      const body = { split_type: splitMode };
+      if (splitMode === "equal" || splitMode === "evenly" || splitMode === "by_amount") {
+        body.split_type = splitMode === "equal" ? "evenly" : splitMode;
+        body.parts = splitCount;
+      }
+      await api.post(`/api/restaurant/checks/${checkId}/split`, body);
       toast.success("Check split");
       setShowSplit(null);
       load();
@@ -122,12 +130,13 @@ export default function RestaurantChecksRedesign() {
               <div>
                 <label className="mb-1 block text-sm font-medium">Split Mode</label>
                 <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={splitMode} onChange={e => setSplitMode(e.target.value)}>
-                  <option value="equal">Equal Split</option>
+                  <option value="equal">Even (N shares)</option>
+                  <option value="by_amount">By Amount</option>
                   <option value="by_seat">By Seat</option>
                   <option value="by_item">By Item</option>
                 </select>
               </div>
-              {splitMode === "equal" && (
+              {(splitMode === "equal" || splitMode === "by_amount" || splitMode === "evenly") && (
                 <div>
                   <label className="mb-1 block text-sm font-medium">Number of Splits</label>
                   <input type="number" min="2" max="20" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={splitCount} onChange={e => setSplitCount(Number(e.target.value))} />

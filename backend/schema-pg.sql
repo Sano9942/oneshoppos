@@ -2001,17 +2001,20 @@ CREATE TABLE IF NOT EXISTS draft_orders (
   created_by INTEGER NOT NULL REFERENCES employees(id),
   claimed_by INTEGER REFERENCES employees(id),
   claimed_at TIMESTAMPTZ,
-  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','claimed','completed','cancelled')),
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','claimed','completed','cancelled','merged')),
   notes TEXT,
   subtotal NUMERIC(12,2) DEFAULT 0,
   tax_total NUMERIC(12,2) DEFAULT 0,
   discount_total NUMERIC(12,2) DEFAULT 0,
   total NUMERIC(12,2) DEFAULT 0,
+  split_parent_id INTEGER REFERENCES draft_orders(id),
+  split_strategy TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_draft_orders_outlet_status ON draft_orders(outlet_id, status);
 CREATE INDEX IF NOT EXISTS idx_draft_orders_claimed ON draft_orders(claimed_by) WHERE status = 'claimed';
+CREATE INDEX IF NOT EXISTS idx_draft_orders_split_parent ON draft_orders(split_parent_id) WHERE split_parent_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS draft_order_items (
   id SERIAL PRIMARY KEY,

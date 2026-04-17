@@ -3968,6 +3968,35 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 51,
+    description:
+      "Phase 2.1 A1 — split-bill extensions: draft_orders.split_parent_id + split_strategy; 'merged' added to status CHECK",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE draft_orders
+          ADD COLUMN IF NOT EXISTS split_parent_id INTEGER REFERENCES draft_orders(id),
+          ADD COLUMN IF NOT EXISTS split_strategy TEXT
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_draft_orders_split_parent
+          ON draft_orders(split_parent_id)
+          WHERE split_parent_id IS NOT NULL
+      `);
+      // Widen existing status CHECK to include 'merged'. Drop-and-recreate
+      // because ADD CONSTRAINT IF NOT EXISTS isn't supported and the constraint
+      // name is deterministic (draft_orders_status_check) from the inline
+      // CHECK in schema-pg.sql.
+      await client.query(`
+        ALTER TABLE draft_orders DROP CONSTRAINT IF EXISTS draft_orders_status_check
+      `);
+      await client.query(`
+        ALTER TABLE draft_orders
+          ADD CONSTRAINT draft_orders_status_check
+          CHECK (status IN ('open','claimed','completed','cancelled','merged'))
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {
