@@ -4131,6 +4131,45 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 55,
+    description:
+      "Phase 2.1 B2 — online ordering inbox: web_orders acceptance columns + draft_orders.source_channel + 'online' order_context",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE web_orders
+          ADD COLUMN IF NOT EXISTS converted_draft_order_id INTEGER REFERENCES draft_orders(id),
+          ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS accepted_by INTEGER REFERENCES employees(id),
+          ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS reject_reason TEXT
+      `);
+      await client.query(`
+        ALTER TABLE draft_orders
+          ADD COLUMN IF NOT EXISTS source_channel TEXT DEFAULT 'pos'
+      `);
+      // Widen order_context CHECK to include 'online'. Drop-and-recreate
+      // because CHECK constraints don't support IF NOT EXISTS. The old
+      // constraint name is deterministic from the inline CHECK in
+      // schema-pg.sql (see ALTER TABLE draft_orders … ADD COLUMN IF NOT
+      // EXISTS order_context TEXT DEFAULT 'retail' CHECK (…)).
+      await client.query(`
+        ALTER TABLE draft_orders DROP CONSTRAINT IF EXISTS draft_orders_order_context_check
+      `);
+      await client.query(`
+        ALTER TABLE draft_orders
+          ADD CONSTRAINT draft_orders_order_context_check
+          CHECK (order_context IN ('retail','dine_in','takeout','delivery','bar','online'))
+      `);
+      // Partial index for the inbox query — only unconverted rows, and
+      // the two filters the service uses (source + order_status).
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_web_orders_unconverted
+          ON web_orders(source, order_status)
+          WHERE converted_draft_order_id IS NULL
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {
