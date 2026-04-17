@@ -68,7 +68,7 @@ function ProgressBar({ current, total, color = "bg-blue-500" }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-xs text-gray-500 tabular-nums">{pct}%</span>
+      <span className="text-xs text-gray-500 dark:text-slate-400 tabular-nums">{pct}%</span>
     </div>
   );
 }
@@ -133,7 +133,7 @@ export default function FulfillmentRedesign() {
                 className={`flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
                   tab === t.key
                     ? "bg-white shadow-sm dark:bg-gray-700 dark:text-white"
-                    : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                    : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-gray-300"
                 }`}
               >
                 <t.icon className="h-4 w-4" />
@@ -228,7 +228,7 @@ function PickupOrdersTab({ fmt }) {
       </div>
 
       {loading ? (
-        <p className="py-8 text-center text-gray-400">Loading pickup orders...</p>
+        <p className="py-8 text-center text-gray-400 dark:text-slate-500">Loading pickup orders...</p>
       ) : orders.length === 0 ? (
         <EmptyState icon={User} message="No pickup orders found" />
       ) : (
@@ -248,15 +248,15 @@ function PickupOrdersTab({ fmt }) {
                     </span>
                     <Badge tone={cfg.tone}>{cfg.label}</Badge>
                   </div>
-                  <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  <div className="mt-1 text-sm text-gray-500 dark:text-slate-400">
                     {o.customer_name && <span>{o.customer_name}</span>}
                     {o.customer_phone && <span className="ml-2">{o.customer_phone}</span>}
                   </div>
-                  <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  <div className="mt-1 text-sm text-gray-500 dark:text-slate-400">
                     {fmt(o.grand_total)}
                     {o.outlet_name && <span className="ml-2">@ {o.outlet_name}</span>}
                   </div>
-                  <div className="mt-1 flex flex-wrap gap-3 text-xs text-gray-400">
+                  <div className="mt-1 flex flex-wrap gap-3 text-xs text-gray-400 dark:text-slate-500">
                     <span>Ordered: {fmtUtcDateTime(o.ordered_at)}</span>
                     {o.pickup_ready_at && <span>Ready: {fmtUtcDateTime(o.pickup_ready_at)}</span>}
                     {o.curbside_arrived_at && <span>Arrived: {fmtUtcDateTime(o.curbside_arrived_at)}</span>}
@@ -348,7 +348,7 @@ function OrdersQueue({ onPicklistCreated, fmt }) {
   };
 
   if (loading) {
-    return <SectionCard><p className="py-8 text-center text-gray-400">Loading orders…</p></SectionCard>;
+    return <SectionCard><p className="py-8 text-center text-gray-400 dark:text-slate-500">Loading orders…</p></SectionCard>;
   }
 
   if (!orders.length) {
@@ -358,7 +358,7 @@ function OrdersQueue({ onPicklistCreated, fmt }) {
   return (
     <SectionCard>
       <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm text-gray-500">{orders.length} unfulfilled order(s)</p>
+        <p className="text-sm text-gray-500 dark:text-slate-400">{orders.length} unfulfilled order(s)</p>
         <Button
           onClick={createPicklist}
           disabled={!selected.size || creating}
@@ -370,7 +370,7 @@ function OrdersQueue({ onPicklistCreated, fmt }) {
 
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="border-b text-xs uppercase text-gray-500 dark:border-gray-700">
+          <thead className="border-b text-xs uppercase text-gray-500 dark:text-slate-400 dark:border-gray-700">
             <tr>
               <th className="px-3 py-2">
                 <input
@@ -409,7 +409,7 @@ function OrdersQueue({ onPicklistCreated, fmt }) {
                 <td className="px-3 py-2">{o.item_count}</td>
                 <td className="px-3 py-2">{fmt(o.grand_total)}</td>
                 <td className="px-3 py-2"><Badge tone={o.payment_status === "paid" ? "success" : "warning"}>{o.payment_status}</Badge></td>
-                <td className="px-3 py-2 text-gray-500">{o.ordered_at ? fmtUtcDateTime(o.ordered_at) : "—"}</td>
+                <td className="px-3 py-2 text-gray-500 dark:text-slate-400">{o.ordered_at ? fmtUtcDateTime(o.ordered_at) : "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -444,7 +444,7 @@ function PicklistsTab({ onOpen }) {
   useEffect(() => { load(); }, [load]);
 
   if (loading) {
-    return <SectionCard><p className="py-8 text-center text-gray-400">Loading picklists…</p></SectionCard>;
+    return <SectionCard><p className="py-8 text-center text-gray-400 dark:text-slate-500">Loading picklists…</p></SectionCard>;
   }
 
   return (
@@ -467,7 +467,7 @@ function PicklistsTab({ onOpen }) {
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b text-xs uppercase text-gray-500 dark:border-gray-700">
+            <thead className="border-b text-xs uppercase text-gray-500 dark:text-slate-400 dark:border-gray-700">
               <tr>
                 <th className="px-3 py-2">Picklist #</th>
                 <th className="px-3 py-2">Status</th>
@@ -494,7 +494,7 @@ function PicklistsTab({ onOpen }) {
                     <ProgressBar current={pl.items_picked} total={pl.item_count} />
                   </td>
                   <td className="px-3 py-2">{pl.outlet_name || "—"}</td>
-                  <td className="px-3 py-2 text-gray-500">{fmtUtcDateTime(pl.created_at)}</td>
+                  <td className="px-3 py-2 text-gray-500 dark:text-slate-400">{fmtUtcDateTime(pl.created_at)}</td>
                   <td className="px-3 py-2">
                     <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onOpen(pl.id); }}>
                       Open
@@ -611,7 +611,7 @@ function QuickDispatchTab() {
         </div>
 
         <form onSubmit={handleScan} className="flex items-center gap-3">
-          <ScanBarcode className="h-5 w-5 text-gray-400 shrink-0" />
+          <ScanBarcode className="h-5 w-5 text-gray-400 dark:text-slate-500 shrink-0" />
           <input
             ref={inputRef}
             type="text"
@@ -643,7 +643,7 @@ function QuickDispatchTab() {
                   <p className="font-semibold">
                     {lastResult.order.order_number}
                     {lastResult.order.customer_name && (
-                      <span className="ml-2 font-normal text-gray-500">— {lastResult.order.customer_name}</span>
+                      <span className="ml-2 font-normal text-gray-500 dark:text-slate-400">— {lastResult.order.customer_name}</span>
                     )}
                   </p>
                   <p className={`text-sm ${
@@ -667,7 +667,7 @@ function QuickDispatchTab() {
           <h3 className="mb-2 text-sm font-semibold">Recent Scans</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="border-b text-xs uppercase text-gray-500 dark:border-gray-700">
+              <thead className="border-b text-xs uppercase text-gray-500 dark:text-slate-400 dark:border-gray-700">
                 <tr>
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Scanned Value</th>
@@ -687,7 +687,7 @@ function QuickDispatchTab() {
                     <td className="px-3 py-2 font-mono text-xs">{h.scan}</td>
                     <td className="px-3 py-2">{h.order?.order_number || "—"}</td>
                     <td className="px-3 py-2">{h.order?.customer_name || "—"}</td>
-                    <td className="px-3 py-2 text-gray-500">{h.time.toLocaleTimeString()}</td>
+                    <td className="px-3 py-2 text-gray-500 dark:text-slate-400">{h.time.toLocaleTimeString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -811,7 +811,7 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
   };
 
   if (loading || !pl) {
-    return <SectionCard><p className="py-8 text-center text-gray-400">Loading…</p></SectionCard>;
+    return <SectionCard><p className="py-8 text-center text-gray-400 dark:text-slate-500">Loading…</p></SectionCard>;
   }
 
   const items = pl.items || [];
@@ -832,7 +832,7 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
         </button>
         <div className="grow">
           <h2 className="text-lg font-semibold">{pl.picklist_number}</h2>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-500 dark:text-slate-400">
             {pl.outlet_name} • Created by {pl.created_by_name || "—"} • {fmtUtcDateTime(pl.created_at)}
           </p>
         </div>
@@ -856,11 +856,11 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
                 <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium ${
                   done ? "bg-green-500 text-white"
                   : active ? "bg-blue-500 text-white"
-                  : "bg-gray-200 text-gray-500 dark:bg-gray-700"
+                  : "bg-gray-200 text-gray-500 dark:text-slate-400 dark:bg-gray-700"
                 }`}>
                   {done ? <CheckCircle className="h-4 w-4" /> : idx + 1}
                 </div>
-                <span className={`hidden text-xs sm:block ${active ? "font-semibold text-blue-600 dark:text-blue-400" : "text-gray-400"}`}>
+                <span className={`hidden text-xs sm:block ${active ? "font-semibold text-blue-600 dark:text-blue-400" : "text-gray-400 dark:text-slate-500"}`}>
                   {STATUS_CONFIG[s].label}
                 </span>
               </div>
@@ -877,7 +877,7 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
           : ""
         }`}>
           <form onSubmit={handleScan} className="flex items-center gap-3">
-            <ScanBarcode className="h-5 w-5 text-gray-400" />
+            <ScanBarcode className="h-5 w-5 text-gray-400 dark:text-slate-500" />
             <input
               ref={barcodeRef}
               type="text"
@@ -892,15 +892,15 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
 
           <div className="mt-3 flex gap-6">
             <div>
-              <p className="text-xs text-gray-500">Picked</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400">Picked</p>
               <ProgressBar current={pickedQty} total={totalQty} color="bg-blue-500" />
-              <p className="text-xs text-gray-400">{pickedQty} / {totalQty}</p>
+              <p className="text-xs text-gray-400 dark:text-slate-500">{pickedQty} / {totalQty}</p>
             </div>
             {(isPacking || pl.status === "packed" || pl.status === "dispatched") && (
               <div>
-                <p className="text-xs text-gray-500">Packed</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400">Packed</p>
                 <ProgressBar current={packedQty} total={totalQty} color="bg-green-500" />
-                <p className="text-xs text-gray-400">{packedQty} / {totalQty}</p>
+                <p className="text-xs text-gray-400 dark:text-slate-500">{packedQty} / {totalQty}</p>
               </div>
             )}
           </div>
@@ -940,7 +940,7 @@ function PicklistDetail({ picklistId, onBack, fmt }) {
         <h3 className="mb-2 text-sm font-semibold">Items ({items.length})</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b text-xs uppercase text-gray-500 dark:border-gray-700">
+            <thead className="border-b text-xs uppercase text-gray-500 dark:text-slate-400 dark:border-gray-700">
               <tr>
                 <th className="px-3 py-2">Product</th>
                 <th className="px-3 py-2">Variant</th>
@@ -1105,7 +1105,7 @@ function LoadsheetsTab({ onOpen, fmt }) {
   }
 
   if (loading) {
-    return <SectionCard><p className="py-8 text-center text-gray-400">Loading loadsheets…</p></SectionCard>;
+    return <SectionCard><p className="py-8 text-center text-gray-400 dark:text-slate-500">Loading loadsheets…</p></SectionCard>;
   }
 
   return (
@@ -1134,7 +1134,7 @@ function LoadsheetsTab({ onOpen, fmt }) {
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b text-xs uppercase text-gray-500 dark:border-gray-700">
+            <thead className="border-b text-xs uppercase text-gray-500 dark:text-slate-400 dark:border-gray-700">
               <tr>
                 <th className="px-3 py-2">Loadsheet #</th>
                 <th className="px-3 py-2">Status</th>
@@ -1161,7 +1161,7 @@ function LoadsheetsTab({ onOpen, fmt }) {
                     <td className="px-3 py-2">{ls.order_count}</td>
                     <td className="px-3 py-2">{fmt(ls.total_cod)}</td>
                     <td className="px-3 py-2">{ls.outlet_name || "—"}</td>
-                    <td className="px-3 py-2 text-gray-500">{fmtUtcDateTime(ls.created_at)}</td>
+                    <td className="px-3 py-2 text-gray-500 dark:text-slate-400">{fmtUtcDateTime(ls.created_at)}</td>
                     <td className="px-3 py-2">
                       <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onOpen(ls.id); }}>
                         Open
@@ -1236,7 +1236,7 @@ function CreateLoadsheet({ onBack, onCreated, fmt }) {
   }, {});
 
   if (loading) {
-    return <SectionCard><p className="py-8 text-center text-gray-400">Loading dispatched orders…</p></SectionCard>;
+    return <SectionCard><p className="py-8 text-center text-gray-400 dark:text-slate-500">Loading dispatched orders…</p></SectionCard>;
   }
 
   return (
@@ -1247,7 +1247,7 @@ function CreateLoadsheet({ onBack, onCreated, fmt }) {
         </button>
         <div className="grow">
           <h2 className="text-lg font-semibold">New Loadsheet</h2>
-          <p className="text-sm text-gray-500">Select dispatched orders to group into a loadsheet</p>
+          <p className="text-sm text-gray-500 dark:text-slate-400">Select dispatched orders to group into a loadsheet</p>
         </div>
         <Button onClick={create} disabled={!selected.size || creating}>
           <FileSpreadsheet className="mr-1.5 h-4 w-4" />
@@ -1261,13 +1261,13 @@ function CreateLoadsheet({ onBack, onCreated, fmt }) {
         Object.entries(courierGroups).map(([courier, groupOrders]) => (
           <SectionCard key={courier} className="mb-4">
             <div className="mb-2 flex items-center gap-2">
-              <Truck className="h-4 w-4 text-gray-400" />
+              <Truck className="h-4 w-4 text-gray-400 dark:text-slate-500" />
               <h3 className="text-sm font-semibold">{courier}</h3>
-              <span className="text-xs text-gray-400">({groupOrders.length} orders)</span>
+              <span className="text-xs text-gray-400 dark:text-slate-500">({groupOrders.length} orders)</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="border-b text-xs uppercase text-gray-500 dark:border-gray-700">
+                <thead className="border-b text-xs uppercase text-gray-500 dark:text-slate-400 dark:border-gray-700">
                   <tr>
                     <th className="px-3 py-2">
                       <input
@@ -1317,7 +1317,7 @@ function CreateLoadsheet({ onBack, onCreated, fmt }) {
                         </Badge>
                       </td>
                       <td className="px-3 py-2 font-mono text-xs">{o.tracking_number || "—"}</td>
-                      <td className="px-3 py-2 text-gray-500">{o.shipped_at ? fmtUtcDateTime(o.shipped_at) : "—"}</td>
+                      <td className="px-3 py-2 text-gray-500 dark:text-slate-400">{o.shipped_at ? fmtUtcDateTime(o.shipped_at) : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1399,7 +1399,7 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
   };
 
   if (loading || !ls) {
-    return <SectionCard><p className="py-8 text-center text-gray-400">Loading…</p></SectionCard>;
+    return <SectionCard><p className="py-8 text-center text-gray-400 dark:text-slate-500">Loading…</p></SectionCard>;
   }
 
   const orders = ls.orders || [];
@@ -1416,7 +1416,7 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
         </button>
         <div className="grow">
           <h2 className="text-lg font-semibold">{ls.loadsheet_number}</h2>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-500 dark:text-slate-400">
             {ls.courier_name || "No courier"} • {ls.outlet_name} • Created by {ls.created_by_name || "—"} • {fmtUtcDateTime(ls.created_at)}
           </p>
         </div>
@@ -1426,19 +1426,19 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
       {/* Summary cards */}
       <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <SectionCard>
-          <p className="text-xs text-gray-500">Total Orders</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400">Total Orders</p>
           <p className="text-2xl font-bold">{orders.length}</p>
         </SectionCard>
         <SectionCard>
-          <p className="text-xs text-gray-500">COD Orders</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400">COD Orders</p>
           <p className="text-2xl font-bold">{codOrders.length}</p>
         </SectionCard>
         <SectionCard>
-          <p className="text-xs text-gray-500">Total COD Amount</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400">Total COD Amount</p>
           <p className="text-2xl font-bold">{fmt(totalCod)}</p>
         </SectionCard>
         <SectionCard>
-          <p className="text-xs text-gray-500">Handed Over To</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400">Handed Over To</p>
           <p className="text-2xl font-bold">{ls.handed_over_to || "—"}</p>
         </SectionCard>
       </div>
@@ -1488,7 +1488,7 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
         <h3 className="mb-2 text-sm font-semibold">Orders ({orders.length})</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b text-xs uppercase text-gray-500 dark:border-gray-700">
+            <thead className="border-b text-xs uppercase text-gray-500 dark:text-slate-400 dark:border-gray-700">
               <tr>
                 <th className="px-3 py-2">Order #</th>
                 <th className="px-3 py-2">Customer</th>
@@ -1504,14 +1504,14 @@ function LoadsheetDetail({ loadsheetId, onBack, fmt }) {
                 <tr key={o.id}>
                   <td className="px-3 py-2 font-medium">{o.external_order_number || `#${o.web_order_id}`}</td>
                   <td className="px-3 py-2">{o.customer_name || "—"}</td>
-                  <td className="max-w-48 truncate px-3 py-2 text-gray-500">{o.customer_address || "—"}</td>
+                  <td className="max-w-48 truncate px-3 py-2 text-gray-500 dark:text-slate-400">{o.customer_address || "—"}</td>
                   <td className="px-3 py-2">{o.customer_phone || "—"}</td>
                   <td className="px-3 py-2">{fmt(o.grand_total)}</td>
                   <td className="px-3 py-2">
                     {o.is_cod ? (
                       <Badge tone="warning">{fmt(o.cod_amount)}</Badge>
                     ) : (
-                      <span className="text-gray-400">Prepaid</span>
+                      <span className="text-gray-400 dark:text-slate-500">Prepaid</span>
                     )}
                   </td>
                   <td className="px-3 py-2 font-mono text-xs">{o.tracking_number || "—"}</td>

@@ -70,7 +70,7 @@ function CountListView({ counts, loading, onSelect, onNew }) {
           </div>
 
           {loading ? (
-            <p className="text-gray-500 py-8 text-center">Loading...</p>
+            <p className="text-gray-500 dark:text-slate-400 py-8 text-center">Loading...</p>
           ) : filtered.length === 0 ? (
             <EmptyState
               icon={ClipboardCheck}
@@ -81,7 +81,7 @@ function CountListView({ counts, loading, onSelect, onNew }) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left text-gray-500">
+                  <tr className="border-b text-left text-gray-500 dark:text-slate-400">
                     <th className="pb-2 pr-4">Count #</th>
                     <th className="pb-2 pr-4">Outlet</th>
                     <th className="pb-2 pr-4">Status</th>
@@ -105,7 +105,7 @@ function CountListView({ counts, loading, onSelect, onNew }) {
                           {c.status === "in_progress" ? "In Progress" : c.status}
                         </Badge>
                       </td>
-                      <td className="py-2 pr-4 text-gray-600">
+                      <td className="py-2 pr-4 text-gray-600 dark:text-slate-300">
                         {c.items_counted}/{c.total_items} counted
                       </td>
                       <td className="py-2 pr-4">{c.started_by_name || "—"}</td>
@@ -326,7 +326,7 @@ function CountingView({ countId, onBack }) {
     return list;
   }, [items, filter, search]);
 
-  if (loading) return <p className="p-8 text-center text-gray-500">Loading count...</p>;
+  if (loading) return <p className="p-8 text-center text-gray-500 dark:text-slate-400">Loading count...</p>;
   if (!count) return <p className="p-8 text-center text-red-500">Count not found</p>;
 
   // Completion summary screen
@@ -342,28 +342,28 @@ function CountingView({ countId, onBack }) {
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="bg-gray-50 dark:bg-white/5 rounded-lg p-3 text-center">
-                <p className="text-gray-500">Total Items</p>
+                <p className="text-gray-500 dark:text-slate-400">Total Items</p>
                 <p className="text-xl font-bold">{completeSummary.total_items}</p>
               </div>
               <div className="bg-gray-50 dark:bg-white/5 rounded-lg p-3 text-center">
-                <p className="text-gray-500">With Variance</p>
+                <p className="text-gray-500 dark:text-slate-400">With Variance</p>
                 <p className="text-xl font-bold text-amber-600">{completeSummary.items_with_variance}</p>
               </div>
               <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 text-center">
-                <p className="text-gray-500">Over (+)</p>
+                <p className="text-gray-500 dark:text-slate-400">Over (+)</p>
                 <p className="text-xl font-bold text-green-600">
                   {completeSummary.items_over} items (+{completeSummary.total_over})
                 </p>
               </div>
               <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 text-center">
-                <p className="text-gray-500">Under (-)</p>
+                <p className="text-gray-500 dark:text-slate-400">Under (-)</p>
                 <p className="text-xl font-bold text-red-600">
                   {completeSummary.items_under} items (-{completeSummary.total_under})
                 </p>
               </div>
             </div>
             {count.status === "completed" && (
-              <p className="text-xs text-gray-400 mt-3 text-center">
+              <p className="text-xs text-gray-400 dark:text-slate-500 mt-3 text-center">
                 {autoAdjust ? "Stock adjustments were auto-created." : "No auto-adjustments were made."}
               </p>
             )}
@@ -409,7 +409,7 @@ function CountingView({ countId, onBack }) {
           <SectionCard>
             <div className="flex items-center gap-3">
               <div className="relative grow">
-                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-slate-500" />
                 <input
                   ref={scanRef}
                   type="text"
@@ -443,7 +443,7 @@ function CountingView({ countId, onBack }) {
         )}
 
         {/* Progress bar */}
-        <div className="flex items-center justify-between text-sm text-gray-600">
+        <div className="flex items-center justify-between text-sm text-gray-600 dark:text-slate-300">
           <span>{countedCount} of {items.length} products counted</span>
           <span className="font-mono">
             {items.length ? Math.round((countedCount / items.length) * 100) : 0}%
@@ -479,7 +479,7 @@ function CountingView({ countId, onBack }) {
             ))}
           </div>
           <div className="relative grow max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-slate-500" />
             <input
               type="text"
               value={search}
@@ -495,7 +495,7 @@ function CountingView({ countId, onBack }) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-gray-500">
+                <tr className="border-b text-left text-gray-500 dark:text-slate-400">
                   <th className="pb-2 pr-4">Product</th>
                   <th className="pb-2 pr-4 text-center">System Qty</th>
                   <th className="pb-2 pr-4 text-center">Counted</th>
@@ -506,7 +506,7 @@ function CountingView({ countId, onBack }) {
               <tbody>
                 {filteredItems.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-gray-400">
+                    <td colSpan={5} className="py-8 text-center text-gray-400 dark:text-slate-500">
                       No items match filter
                     </td>
                   </tr>
@@ -524,7 +524,7 @@ function CountingView({ countId, onBack }) {
                       >
                         <td className="py-2 pr-4">
                           <div className="font-medium">{item.product_name}</div>
-                          <div className="text-xs text-gray-400">
+                          <div className="text-xs text-gray-400 dark:text-slate-500">
                             {item.barcode || item.sku || "—"}
                           </div>
                         </td>
@@ -571,14 +571,14 @@ function CountingView({ countId, onBack }) {
                                 ? "text-green-600"
                                 : variance < 0
                                 ? "text-red-600"
-                                : "text-gray-400"
+                                : "text-gray-400 dark:text-slate-500"
                             }`}
                           >
                             {variance > 0 ? "+" : ""}
                             {variance}
                           </span>
                         </td>
-                        <td className="py-2 text-xs text-gray-400">
+                        <td className="py-2 text-xs text-gray-400 dark:text-slate-500">
                           {item.last_scanned_at ? fmtUtcDateTime(item.last_scanned_at) : "—"}
                         </td>
                       </tr>
@@ -598,7 +598,7 @@ function CountingView({ countId, onBack }) {
         title="Complete Stock Count"
         size="md"
       >
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
           {countedCount} of {items.length} products have been counted.
           {items.length - countedCount > 0 && (
             <span className="text-amber-600 font-medium">
