@@ -107,6 +107,44 @@ const updateKdsStationSchema = z.object({
   is_active: z.boolean().optional(),
 });
 
+// Phase 2.1 B1 — KDS routing rules. Exactly one of product_id / modifier_group_id
+// / category_id / match_all must be set (DB CHECK re-enforces). station_role_filter
+// narrows the rule to stations with a specific role when non-null.
+const createKdsRouteSchema = z.object({
+  outlet_id: z.number().int().positive(),
+  station_id: z.number().int().positive(),
+  priority: z.number().int().min(0).default(0),
+  product_id: z.number().int().positive().nullable().optional(),
+  modifier_group_id: z.number().int().positive().nullable().optional(),
+  category_id: z.number().int().positive().nullable().optional(),
+  match_all: z.boolean().optional(),
+  station_role_filter: z.enum(["prep", "expo"]).nullable().optional(),
+}).superRefine((data, ctx) => {
+  const set = [
+    data.product_id != null,
+    data.modifier_group_id != null,
+    data.category_id != null,
+    data.match_all === true,
+  ].filter(Boolean).length;
+  if (set !== 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Exactly one of product_id / modifier_group_id / category_id / match_all must be set",
+      path: ["match_all"],
+    });
+  }
+});
+
+const updateKdsRouteSchema = z.object({
+  priority: z.number().int().min(0).optional(),
+  product_id: z.number().int().positive().nullable().optional(),
+  modifier_group_id: z.number().int().positive().nullable().optional(),
+  category_id: z.number().int().positive().nullable().optional(),
+  match_all: z.boolean().optional(),
+  station_role_filter: z.enum(["prep", "expo"]).nullable().optional(),
+  station_id: z.number().int().positive().optional(),
+});
+
 module.exports = {
   createFloorPlanSchema, updateFloorPlanSchema,
   createTableSchema, updateTableSchema,
@@ -115,4 +153,5 @@ module.exports = {
   holdCourseSchema, expediteCourseSchema,
   createTabSchema,
   createKdsStationSchema, updateKdsStationSchema,
+  createKdsRouteSchema, updateKdsRouteSchema,
 };

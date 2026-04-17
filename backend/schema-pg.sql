@@ -2662,6 +2662,30 @@ CREATE TABLE IF NOT EXISTS kds_station_routes (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Phase 2.1 B1 — routing precedence columns.
+-- Precedence (enforced by resolveStationForItem): product_id > modifier_group_id
+-- > category_id > match_all. Exactly one must be set per row (CHECK below).
+-- station_role_filter ('prep' | 'expo' | NULL) is orthogonal — it narrows which
+-- stations a rule fires against.
+ALTER TABLE kds_station_routes
+  ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES products(id),
+  ADD COLUMN IF NOT EXISTS modifier_group_id INTEGER REFERENCES modifier_groups(id),
+  ADD COLUMN IF NOT EXISTS station_role_filter TEXT,
+  ADD COLUMN IF NOT EXISTS outlet_id INTEGER REFERENCES outlets(id);
+
+-- Exactly-one match type. See migrate-pg.js v54.
+ALTER TABLE kds_station_routes DROP CONSTRAINT IF EXISTS kds_station_routes_exactly_one_match;
+ALTER TABLE kds_station_routes
+  ADD CONSTRAINT kds_station_routes_exactly_one_match CHECK (
+    (CASE WHEN product_id IS NOT NULL THEN 1 ELSE 0 END
+     + CASE WHEN modifier_group_id IS NOT NULL THEN 1 ELSE 0 END
+     + CASE WHEN category_id IS NOT NULL THEN 1 ELSE 0 END
+     + CASE WHEN match_all = true THEN 1 ELSE 0 END) = 1
+  );
+
+CREATE INDEX IF NOT EXISTS idx_ksr_lookup ON kds_station_routes(outlet_id, priority DESC);
+
 CREATE TABLE IF NOT EXISTS kds_tickets (
   id SERIAL PRIMARY KEY,
   station_id INTEGER NOT NULL REFERENCES kds_stations(id),

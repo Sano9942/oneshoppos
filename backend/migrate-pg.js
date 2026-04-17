@@ -4086,6 +4086,51 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 54,
+    description:
+      "Phase 2.1 B1 — KDS routing rules: kds_station_routes gains priority, product_id, modifier_group_id, station_role_filter; CHECK exactly one match column non-null; idx_ksr_lookup",
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE kds_station_routes
+          ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES products(id),
+          ADD COLUMN IF NOT EXISTS modifier_group_id INTEGER REFERENCES modifier_groups(id),
+          ADD COLUMN IF NOT EXISTS station_role_filter TEXT,
+          ADD COLUMN IF NOT EXISTS outlet_id INTEGER REFERENCES outlets(id)
+      `);
+      // Backfill outlet_id from the station so idx_ksr_lookup has something to
+      // scan by. New rows go through the route handler which stamps outlet_id
+      // explicitly, but legacy rows predate the column.
+      await client.query(`
+        UPDATE kds_station_routes sr
+           SET outlet_id = ks.outlet_id
+          FROM kds_stations ks
+         WHERE sr.station_id = ks.id AND sr.outlet_id IS NULL
+      `);
+      // Exactly-one CHECK: product_id > modifier_group_id > category_id > match_all.
+      // Drop-and-recreate because CHECK constraints don't support IF NOT EXISTS
+      // and re-running the migration should converge. station_role_filter is
+      // orthogonal — it refines a match but doesn't count as one.
+      await client.query(`
+        ALTER TABLE kds_station_routes
+          DROP CONSTRAINT IF EXISTS kds_station_routes_exactly_one_match
+      `);
+      await client.query(`
+        ALTER TABLE kds_station_routes
+          ADD CONSTRAINT kds_station_routes_exactly_one_match CHECK (
+            (CASE WHEN product_id IS NOT NULL THEN 1 ELSE 0 END
+             + CASE WHEN modifier_group_id IS NOT NULL THEN 1 ELSE 0 END
+             + CASE WHEN category_id IS NOT NULL THEN 1 ELSE 0 END
+             + CASE WHEN match_all = true THEN 1 ELSE 0 END) = 1
+          )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_ksr_lookup
+          ON kds_station_routes(outlet_id, priority DESC)
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

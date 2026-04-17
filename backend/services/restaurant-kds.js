@@ -40,6 +40,97 @@ async function updateStation(db, id, data) {
   return station;
 }
 
+/**
+ * Phase 2.1 B1 — routing precedence helper.
+ *
+ * Walks routes (assumed sorted by priority DESC) and returns the first match
+ * by: product_id > modifier_group_id > category_id > match_all. station_role_filter
+ * is honored by requiring the target station's role to match when non-null.
+ *
+ * `item.modifier_group_ids` is an array of modifier_group IDs attached to this
+ * item (may be empty). Other fields: `item.product_id`, `item.category_id`.
+ */
+function resolveStationForItem(item, routes, stations) {
+  const stationById = new Map(stations.map((s) => [s.id, s]));
+  const stationMatchesFilter = (station, filter) => {
+    if (!filter) return true;
+    return station && station.station_role === filter;
+  };
+  const modifierGroupIds = Array.isArray(item.modifier_group_ids)
+    ? item.modifier_group_ids.map(Number)
+    : [];
+
+  // Single pass: routes are already ordered by priority DESC, and within a
+  // priority tier the precedence ladder picks the most specific match.
+  // We walk each specificity level top-to-bottom so a higher-priority less
+  // specific rule still beats a lower-priority more specific one. Callers
+  // expected to pass routes sorted by priority DESC.
+  for (const route of routes) {
+    const station = stationById.get(route.station_id);
+    if (!station) continue;
+    if (!stationMatchesFilter(station, route.station_role_filter)) continue;
+
+    if (route.product_id != null && item.product_id != null && route.product_id === item.product_id) {
+      return { station, matched_rule_id: route.id };
+    }
+    if (route.modifier_group_id != null && modifierGroupIds.includes(Number(route.modifier_group_id))) {
+      return { station, matched_rule_id: route.id };
+    }
+    if (route.category_id != null && item.category_id != null && route.category_id === item.category_id) {
+      return { station, matched_rule_id: route.id };
+    }
+    if (route.match_all === true) {
+      return { station, matched_rule_id: route.id };
+    }
+  }
+  // Fallback: first active station (legacy behavior).
+  if (stations.length) return { station: stations[0], matched_rule_id: null };
+  return { station: null, matched_rule_id: null };
+}
+
+async function fetchRoutingContext(db, outletId) {
+  const { rows: stations } = await db.query(
+    "SELECT * FROM kds_stations WHERE outlet_id = $1 AND is_active = true",
+    [outletId]
+  );
+  const { rows: routes } = await db.query(
+    `SELECT sr.* FROM kds_station_routes sr
+     JOIN kds_stations ks ON ks.id = sr.station_id
+     WHERE ks.outlet_id = $1
+     ORDER BY sr.priority DESC, sr.id ASC`,
+    [outletId]
+  );
+  return { stations, routes };
+}
+
+async function fetchItemsForRouting(db, draftOrderId, { skipHeld = true } = {}) {
+  const heldClause = skipHeld
+    ? `AND NOT EXISTS (
+         SELECT 1 FROM restaurant_course_fires cf
+         WHERE cf.draft_order_id = di.draft_order_id
+           AND cf.course_name = COALESCE(di.course_name, 'main')
+           AND cf.status = 'held'
+       )`
+    : "";
+  const { rows: items } = await db.query(
+    `SELECT di.*, p.category_id, d.table_id,
+       COALESCE(
+         (SELECT array_agg(DISTINCT mo.group_id)
+            FROM draft_order_item_modifiers doim
+            JOIN modifier_options mo ON mo.id = doim.option_id
+           WHERE doim.draft_order_item_id = di.id),
+         ARRAY[]::integer[]
+       ) AS modifier_group_ids
+     FROM draft_order_items di
+     JOIN draft_orders d ON d.id = di.draft_order_id
+     LEFT JOIN products p ON p.id = di.product_id
+     WHERE di.draft_order_id = $1 AND di.kitchen_status = 'pending'
+       ${heldClause}`,
+    [draftOrderId]
+  );
+  return items;
+}
+
 async function sendToKitchen(db, draftOrderId) {
   // Reads stay outside the transaction — they don't mutate state and
   // holding tx locks on them wastes DB resources. The writes (ticket
@@ -51,20 +142,9 @@ async function sendToKitchen(db, draftOrderId) {
   // Phase 2.1 A3: skip items whose course_name has an open 'held' row.
   // The course-release worker will pick them up when hold_until elapses
   // and call sendToKitchen again for that draft_order.
-  const { rows: items } = await db.query(
-    `SELECT di.*, p.category_id, d.table_id
-     FROM draft_order_items di
-     JOIN draft_orders d ON d.id = di.draft_order_id
-     LEFT JOIN products p ON p.id = di.product_id
-     WHERE di.draft_order_id = $1 AND di.kitchen_status = 'pending'
-       AND NOT EXISTS (
-         SELECT 1 FROM restaurant_course_fires cf
-         WHERE cf.draft_order_id = di.draft_order_id
-           AND cf.course_name = COALESCE(di.course_name, 'main')
-           AND cf.status = 'held'
-       )`,
-    [draftOrderId]
-  );
+  // Phase 2.1 B1: routing now walks precedence product > modifier_group >
+  // category > match_all via resolveStationForItem.
+  const items = await fetchItemsForRouting(db, draftOrderId);
   if (!items.length) return [];
 
   const { rows: [order] } = await db.query(
@@ -75,16 +155,7 @@ async function sendToKitchen(db, draftOrderId) {
     [draftOrderId]
   );
 
-  const { rows: stations } = await db.query(
-    "SELECT * FROM kds_stations WHERE outlet_id = $1 AND is_active = true",
-    [order.outlet_id]
-  );
-  const { rows: routes } = await db.query(
-    `SELECT sr.* FROM kds_station_routes sr
-     JOIN kds_stations ks ON ks.id = sr.station_id
-     WHERE ks.outlet_id = $1`,
-    [order.outlet_id]
-  );
+  const { stations, routes } = await fetchRoutingContext(db, order.outlet_id);
 
   // Group items by (station_id, course_name). Each group becomes one ticket.
   // Fixes Phase 4 C3: the pre-fix code inserted one kds_tickets row per item,
@@ -96,19 +167,7 @@ async function sendToKitchen(db, draftOrderId) {
   // button per ticket, one row per item under the ticket.
   const groups = new Map();
   for (const item of items) {
-    // Routing: category-matched station → match_all fallback → first station.
-    let targetStation = null;
-    for (const route of routes) {
-      if (route.category_id === item.category_id) {
-        targetStation = stations.find(s => s.id === route.station_id);
-        break;
-      }
-    }
-    if (!targetStation) {
-      const catchAll = routes.find(r => r.match_all);
-      if (catchAll) targetStation = stations.find(s => s.id === catchAll.station_id);
-    }
-    if (!targetStation && stations.length) targetStation = stations[0];
+    const { station: targetStation } = resolveStationForItem(item, routes, stations);
     if (!targetStation) continue;
 
     const course = item.course_name || "main";
@@ -291,4 +350,46 @@ async function recallTicket(db, ticketId, actorId) {
   return ticket;
 }
 
-module.exports = { getStations, createStation, updateStation, sendToKitchen, getTickets, bumpTicket, recallTicket };
+/**
+ * Phase 2.1 B1 — read-only routing preview. Returns which station each pending
+ * item on a draft order would route to, without writing tickets or events. The
+ * UI uses this to let a server verify rules before firing the check.
+ */
+async function previewRouting(db, draftOrderId) {
+  // skipHeld=false so a preview can show even held items; the kitchen just
+  // won't see them until release. Callers filtering by course should do it
+  // themselves.
+  const items = await fetchItemsForRouting(db, draftOrderId, { skipHeld: false });
+  if (!items.length) return [];
+
+  const { rows: [order] } = await db.query(
+    "SELECT outlet_id FROM draft_orders WHERE id = $1",
+    [draftOrderId]
+  );
+  if (!order) return [];
+
+  const { stations, routes } = await fetchRoutingContext(db, order.outlet_id);
+
+  return items.map((item) => {
+    const { station, matched_rule_id } = resolveStationForItem(item, routes, stations);
+    return {
+      item_id: item.id,
+      product_name: item.product_name,
+      station_id: station ? station.id : null,
+      station_name: station ? station.name : null,
+      matched_rule_id,
+    };
+  });
+}
+
+module.exports = {
+  getStations,
+  createStation,
+  updateStation,
+  sendToKitchen,
+  getTickets,
+  bumpTicket,
+  recallTicket,
+  resolveStationForItem,
+  previewRouting,
+};
