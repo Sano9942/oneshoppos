@@ -26,7 +26,7 @@
  *
  * Returns the inserted row, or null if no row was written.
  */
-async function captureTipOnSale(db, { sale_id, draft_order_id, tip_amount, tip_method }) {
+async function captureTipOnSale(db, { sale_id, draft_order_id, tip_amount, tip_method, server_id }) {
   const amount = Number(tip_amount);
   if (!Number.isFinite(amount) || amount <= 0) return null;
   if (!sale_id) throw new Error("sale_id required");
@@ -42,8 +42,9 @@ async function captureTipOnSale(db, { sale_id, draft_order_id, tip_amount, tip_m
   // Pull server_id + outlet_id from the sale's draft order → table session.
   // If the sale isn't tied to a restaurant check (retail/online/etc.), we
   // still capture the tip but server_id stays NULL. The pool can pick it
-  // up by outlet anyway.
-  let serverId = null;
+  // up by outlet anyway. An explicit server_id from the POS checkout modal
+  // (direct dine-in without a table session) overrides the table-session path.
+  let serverId = server_id ? Number(server_id) : null;
   let outletId = null;
   if (draft_order_id) {
     const { rows } = await db.query(
@@ -55,7 +56,8 @@ async function captureTipOnSale(db, { sale_id, draft_order_id, tip_amount, tip_m
     );
     if (rows[0]) {
       outletId = rows[0].outlet_id || null;
-      serverId = rows[0].server_id || null;
+      // Explicit server_id (from POS checkout) takes precedence.
+      if (!serverId) serverId = rows[0].server_id || null;
     }
   }
   if (!outletId) {

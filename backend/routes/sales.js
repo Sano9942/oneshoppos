@@ -447,6 +447,9 @@ module.exports = function registerSalesRoutes(app, deps) {
       draft_order_id = null,
       tip_amount = 0,
       tip_method = null,
+      // Phase 2.1 C1 wiring — server-of-record override from POS checkout
+      // when there's no table session (direct dine-in / walk-in tip flow).
+      server_id = null,
     } = req.body;
 
     // Mutually-exclusive: a sale can be on a room folio OR a treatment folio, not both.
@@ -1004,6 +1007,7 @@ module.exports = function registerSalesRoutes(app, deps) {
               draft_order_id: draft_order_id || null,
               tip_amount,
               tip_method,
+              server_id: server_id || null,
             })
             .catch((err) =>
               logger.error({ err, saleId }, "[tips] captureTipOnSale failed (non-blocking)")

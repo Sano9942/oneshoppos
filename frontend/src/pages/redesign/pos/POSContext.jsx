@@ -150,6 +150,56 @@ export const POSProvider = ({ children }) => {
     showNotice,
   });
 
+  // ── Modifier picker (Phase 2.1 A2 wiring) ──────────────────────────────────
+  // When a product with linked modifier groups is added, pause the add flow
+  // and show POSModifierModal. After selection, add with price delta applied.
+  const [modifierModalState, setModifierModalState] = useState(null);
+  const addToCartWithModifiers = useCallback(async (product) => {
+    if (!product || !product.id) return;
+    // Skip tree lookup for bundles, weighted, or non-restaurant tenants.
+    if (product.is_bundle) {
+      cartHook.addToCart(product);
+      return;
+    }
+    try {
+      const res = await api.get(`/api/products/${product.id}/modifier-tree`);
+      const groups = Array.isArray(res?.groups) ? res.groups : [];
+      if (!groups.length) {
+        cartHook.addToCart(product);
+        return;
+      }
+      setModifierModalState({ product, groups });
+    } catch {
+      // 404 / feature-flag off / network — fall back to plain add so POS never breaks.
+      cartHook.addToCart(product);
+    }
+  }, [cartHook]);
+
+  const confirmModifiers = useCallback((modifiers, priceDelta) => {
+    const state = modifierModalState;
+    if (!state) return;
+    const base = state.product;
+    const adjusted = {
+      ...base,
+      price: Number(base.price) + Number(priceDelta || 0),
+      originalPrice: Number(base.price),
+      modifiers,
+      modifier_price_delta: Number(priceDelta || 0),
+    };
+    cartHook.addToCart(adjusted);
+    setModifierModalState(null);
+  }, [modifierModalState, cartHook]);
+
+  const cancelModifiers = useCallback(() => setModifierModalState(null), []);
+
+  // ── Employees (server picker for restaurant tips, Phase 2.1 C1 wiring) ────
+  const [employeesList, setEmployeesList] = useState([]);
+  useEffect(() => {
+    api.get("/api/employees")
+      .then((d) => setEmployeesList(Array.isArray(d) ? d : (d?.employees || [])))
+      .catch(() => setEmployeesList([]));
+  }, []);
+
   const receipt = useReceipt({ selectedOutletId: shift.selectedOutletId });
 
   useCustomerDisplay({
@@ -391,11 +441,11 @@ export const POSProvider = ({ children }) => {
       if (!res.ok) return;
       const data = await res.json();
       const product = data.product;
-      if (product) cartHook.addToCart(product);
+      if (product) addToCartWithModifiers(product);
     } catch (err) {
       console.error("Barcode lookup failed:", err);
     }
-  }, [employee?.id, cartHook.addToCart]);
+  }, [employee?.id, addToCartWithModifiers]);
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -529,6 +579,13 @@ export const POSProvider = ({ children }) => {
     setNewCustSaving: checkout.setNewCustSaving,
     newCustError: checkout.newCustError,
     setNewCustError: checkout.setNewCustError,
+    // Phase 2.1 C1 — tip + server state for restaurant flow
+    tipAmount: checkout.tipAmount,
+    setTipAmount: checkout.setTipAmount,
+    tipMethod: checkout.tipMethod,
+    setTipMethod: checkout.setTipMethod,
+    serverId: checkout.serverId,
+    setServerId: checkout.setServerId,
     slip: receipt.slip,
     setSlip: receipt.setSlip,
     slipOpen: receipt.slipOpen,
@@ -548,7 +605,11 @@ export const POSProvider = ({ children }) => {
     loadParked,
     triggerSearch: cartHook.triggerSearch,
     handleSearchChange: cartHook.handleSearchChange,
-    addToCart: cartHook.addToCart,
+    addToCart: addToCartWithModifiers,
+    modifierModalState,
+    confirmModifiers,
+    cancelModifiers,
+    employeesList,
     updateQty: cartHook.updateQty,
     setQty: cartHook.setQty,
     removeFromCart: cartHook.removeFromCart,

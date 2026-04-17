@@ -73,8 +73,17 @@ export default function POSCheckoutModal() {
     openTreatmentPlans,
     setOpenTreatmentPlans,
     selectedOutletId,
+    // Phase 2.1 C1 — tip + server (restaurant flow)
+    tipAmount,
+    setTipAmount,
+    tipMethod,
+    setTipMethod,
+    serverId,
+    setServerId,
+    employeesList,
   } = usePOS();
   const { labels = {}, hasMode } = usePreset();
+  const restaurantOn = hasMode && hasMode("restaurant");
   const customerLabel = labels.customer || "Customer";
   const roomManagementOn = hasMode && hasMode("room_management");
   const treatmentPlansOn = hasMode && hasMode("treatment_plans");
@@ -560,6 +569,92 @@ export default function POSCheckoutModal() {
                   )}
                 </button>
               )}
+            </div>
+          )}
+
+          {/* Phase 2.1 C1 — Tip + Server (restaurant mode only) */}
+          {restaurantOn && (
+            <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/50 p-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+                  Tip
+                </label>
+                <div className="flex gap-2">
+                  {[10, 15, 20].map((pct) => {
+                    const amt = Number(((total || 0) * pct) / 100).toFixed(2);
+                    const active = Number(tipAmount) === Number(amt) && Number(amt) > 0;
+                    return (
+                      <button
+                        key={pct}
+                        type="button"
+                        onClick={() => setTipAmount(amt)}
+                        className={`flex-1 py-2 rounded-xl text-sm font-semibold border-2 transition ${
+                          active
+                            ? "border-[#8066FF] bg-[#8066FF]/5 text-[#8066FF]"
+                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                        }`}
+                      >
+                        {pct}%
+                      </button>
+                    );
+                  })}
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    inputMode="decimal"
+                    value={tipAmount}
+                    onChange={(e) => setTipAmount(e.target.value)}
+                    className="w-28 px-3 py-2 bg-white border-2 border-slate-200 rounded-xl focus:border-[#8066FF] focus:ring-0 outline-none text-sm font-semibold"
+                    placeholder="Custom"
+                  />
+                  {Number(tipAmount) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setTipAmount("")}
+                      className="px-2 text-xs text-slate-500 hover:text-rose-600"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                {Number(tipAmount) > 0 && (
+                  <div className="mt-2 flex gap-2">
+                    {["Cash", "Card", "Wallet"].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setTipMethod(m)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                          tipMethod === m
+                            ? "border-[#8066FF] bg-[#8066FF]/5 text-[#8066FF]"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                        }`}
+                      >
+                        Tip via {m}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+                  Server
+                </label>
+                <select
+                  value={serverId}
+                  onChange={(e) => setServerId(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border-2 border-slate-200 rounded-xl focus:border-[#8066FF] focus:ring-0 outline-none text-sm font-medium"
+                >
+                  <option value="">— Not assigned —</option>
+                  {(employeesList || []).map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name || e.username || `Employee #${e.id}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
 

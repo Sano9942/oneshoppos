@@ -65,9 +65,18 @@ export function useCheckout({
   const [sessionExpired, setSessionExpired] = useState(false);
   const pendingSaleRef = useRef(null);
 
+  // Phase 2.1 C1 — tip + server capture for restaurant sales. Stored here so
+  // any preset can use them; backend ignores tips when tip_amount = 0 and
+  // staff_id is nullable on sale_items.
+  const [tipAmount, setTipAmount] = useState("");
+  const [tipMethod, setTipMethod] = useState("Cash");
+  const [serverId, setServerId] = useState("");
+
   const totalPaid = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
-  const remaining = Math.max(0, total - totalPaid - pointsDiscount);
-  const change = Math.max(0, totalPaid - total + pointsDiscount);
+  // Tip is collected alongside the sale total — included in what the guest owes.
+  const tipNumeric = Math.max(0, Number(tipAmount || 0));
+  const remaining = Math.max(0, total + tipNumeric - totalPaid - pointsDiscount);
+  const change = Math.max(0, totalPaid - total - tipNumeric + pointsDiscount);
 
   const openCheckout = useCallback(() => {
     if (!cart.length) return;
@@ -89,6 +98,8 @@ export function useCheckout({
     }
     setPayments([]);
     setPaymentMethod("Cash");
+    setTipAmount("");
+    setServerId("");
     setPaymentAmount(total.toFixed(2));
     setCheckoutCustomerId(selectedCustomerId);
     setCheckoutCustSearch(
@@ -167,6 +178,8 @@ export function useCheckout({
     setSelectedCustomerId("");
     setCheckoutOpen(false);
     setPayments([]);
+    setTipAmount("");
+    setServerId("");
   }, [setCart, setDiscountInput, setOrderNote, setSelectedCustomerId, setCheckoutOpen]);
 
   const completeSale = useCallback(async () => {
@@ -186,8 +199,19 @@ export function useCheckout({
     }
     setSubmitting(true);
     setError?.("");
+    // Phase 2.1 wiring: stamp every cart line with the server (staff_id) so
+    // sale_items.staff_id captures server-of-record, and forward tip fields.
+    const tipNum = Number(tipAmount || 0);
+    const serverNum = serverId ? Number(serverId) : null;
+    const stampedCart = cart.map((i) => ({
+      ...i,
+      staff_id: i.staff_id || serverNum,
+      // Modifiers ride along as a snapshot — backend persists on sale_items
+      // when the column exists (Phase 2.2 will add modifier persistence).
+      modifiers: i.modifiers || null,
+    }));
     const salePayload = {
-      cartItems: cart,
+      cartItems: stampedCart,
       payments,
       outlet_id: Number(selectedOutletId),
       employee_id: employee?.id || null,
@@ -200,6 +224,10 @@ export function useCheckout({
       idempotency_key: crypto.randomUUID(),
       folio_id: chargeToRoomFolioId ? Number(chargeToRoomFolioId) : null,
       treatment_folio_id: chargeToTreatmentFolioId ? Number(chargeToTreatmentFolioId) : null,
+      // Phase 2.1 C1 tip capture — backend requires both fields or skips tips.
+      tip_amount: tipNum > 0 ? tipNum : 0,
+      tip_method: tipNum > 0 ? tipMethod : null,
+      server_id: serverNum,
     };
 
     const queueSaleOffline = async () => {
@@ -292,7 +320,7 @@ export function useCheckout({
     discountInput, promoDiscount, discountType, orderNote, pointsEarned, pointsRedeemed,
     customers, total, change, outlets, discountValue, taxInclusive, taxTotal, grossTotal,
     enqueueSale, setSlip, setSlipOpen, clearAfterSale, showNotice, setError,
-    buildSuccessSlip, loadParked,
+    buildSuccessSlip, loadParked, tipAmount, tipMethod, serverId,
   ]);
 
   const retryPendingSale = useCallback(async () => {
@@ -347,5 +375,9 @@ export function useCheckout({
     completeSale,
     sessionExpired, setSessionExpired,
     retryPendingSale,
+    // Phase 2.1 C1 wiring
+    tipAmount, setTipAmount,
+    tipMethod, setTipMethod,
+    serverId, setServerId,
   };
 }
