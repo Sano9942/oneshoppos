@@ -3997,6 +3997,76 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 52,
+    description:
+      "Phase 2.1 A2 — first-class modifiers: modifier_groups, modifier_options, product_modifier_group_links, draft_order_item_modifiers, sale_item_modifiers",
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS modifier_groups (
+          id SERIAL PRIMARY KEY,
+          outlet_id INTEGER REFERENCES outlets(id),
+          name TEXT NOT NULL,
+          selection_type TEXT NOT NULL CHECK (selection_type IN ('single','multi')),
+          min_select INTEGER NOT NULL DEFAULT 0,
+          max_select INTEGER,
+          is_required BOOLEAN NOT NULL DEFAULT FALSE,
+          display_order INTEGER DEFAULT 0,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS modifier_options (
+          id SERIAL PRIMARY KEY,
+          group_id INTEGER NOT NULL REFERENCES modifier_groups(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          price_delta NUMERIC(12,2) NOT NULL DEFAULT 0,
+          is_default BOOLEAN DEFAULT FALSE,
+          display_order INTEGER DEFAULT 0,
+          is_active BOOLEAN DEFAULT TRUE
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_modifier_options_group ON modifier_options(group_id)
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS product_modifier_group_links (
+          product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+          group_id INTEGER NOT NULL REFERENCES modifier_groups(id) ON DELETE CASCADE,
+          display_order INTEGER DEFAULT 0,
+          PRIMARY KEY (product_id, group_id)
+        )
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS draft_order_item_modifiers (
+          id SERIAL PRIMARY KEY,
+          draft_order_item_id INTEGER NOT NULL REFERENCES draft_order_items(id) ON DELETE CASCADE,
+          option_id INTEGER NOT NULL REFERENCES modifier_options(id),
+          option_name_snapshot TEXT NOT NULL,
+          price_delta_snapshot NUMERIC(12,2) NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_doim_item ON draft_order_item_modifiers(draft_order_item_id)
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS sale_item_modifiers (
+          id SERIAL PRIMARY KEY,
+          sale_id INTEGER NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+          sale_item_id INTEGER NOT NULL,
+          option_id INTEGER REFERENCES modifier_options(id),
+          option_name_snapshot TEXT NOT NULL,
+          price_delta_snapshot NUMERIC(12,2) NOT NULL
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sim_sale ON sale_item_modifiers(sale_id)
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

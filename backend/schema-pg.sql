@@ -2030,6 +2030,64 @@ CREATE TABLE IF NOT EXISTS draft_order_items (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Phase 2.1 A2: First-class modifiers. Relational so reports can aggregate
+-- "extra cheese sold". Snapshots (option_name_snapshot, price_delta_snapshot)
+-- survive rename/reprice of the parent modifier_options row without rewriting
+-- history. When attaching modifiers to a draft_order_item, the summed price
+-- delta is baked into draft_order_items.price so recalcCheckTotals needs no
+-- change.
+CREATE TABLE IF NOT EXISTS modifier_groups (
+  id SERIAL PRIMARY KEY,
+  outlet_id INTEGER REFERENCES outlets(id),
+  name TEXT NOT NULL,
+  selection_type TEXT NOT NULL CHECK (selection_type IN ('single','multi')),
+  min_select INTEGER NOT NULL DEFAULT 0,
+  max_select INTEGER,
+  is_required BOOLEAN NOT NULL DEFAULT FALSE,
+  display_order INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS modifier_options (
+  id SERIAL PRIMARY KEY,
+  group_id INTEGER NOT NULL REFERENCES modifier_groups(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  price_delta NUMERIC(12,2) NOT NULL DEFAULT 0,
+  is_default BOOLEAN DEFAULT FALSE,
+  display_order INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE
+);
+CREATE INDEX IF NOT EXISTS idx_modifier_options_group ON modifier_options(group_id);
+
+CREATE TABLE IF NOT EXISTS product_modifier_group_links (
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  group_id INTEGER NOT NULL REFERENCES modifier_groups(id) ON DELETE CASCADE,
+  display_order INTEGER DEFAULT 0,
+  PRIMARY KEY (product_id, group_id)
+);
+
+CREATE TABLE IF NOT EXISTS draft_order_item_modifiers (
+  id SERIAL PRIMARY KEY,
+  draft_order_item_id INTEGER NOT NULL REFERENCES draft_order_items(id) ON DELETE CASCADE,
+  option_id INTEGER NOT NULL REFERENCES modifier_options(id),
+  option_name_snapshot TEXT NOT NULL,
+  price_delta_snapshot NUMERIC(12,2) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_doim_item ON draft_order_item_modifiers(draft_order_item_id);
+
+CREATE TABLE IF NOT EXISTS sale_item_modifiers (
+  id SERIAL PRIMARY KEY,
+  sale_id INTEGER NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+  sale_item_id INTEGER NOT NULL,
+  option_id INTEGER REFERENCES modifier_options(id),
+  option_name_snapshot TEXT NOT NULL,
+  price_delta_snapshot NUMERIC(12,2) NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sim_sale ON sale_item_modifiers(sale_id);
+
 -- ── Phase 2A: Approval Policies (generic) ───────────────────────────
 CREATE TABLE IF NOT EXISTS approval_policies (
   id SERIAL PRIMARY KEY,

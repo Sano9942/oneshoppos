@@ -174,13 +174,22 @@ async function getTickets(db, stationId, statusFilter) {
   // [{id: null, ...}] one-element array instead of []. FILTER on kti.ticket_id
   // NOT NULL collapses that edge case, and COALESCE falls back to '[]'::json
   // so the route always returns items as an array.
+  // Phase 2.1 A2 — include modifier names aggregated per item. Kitchen lines
+  // now read e.g. "Ribeye — medium-rare, no onion". Modifier aggregation runs
+  // as a correlated subquery so items without modifiers still render as `[]`.
   const { rows } = await db.query(
     `SELECT kt.*,
        COALESCE(
          json_agg(
            json_build_object(
              'id', di.id, 'product_name', di.product_name, 'quantity', di.quantity,
-             'notes', di.notes, 'seat_number', di.seat_number, 'course_name', di.course_name
+             'notes', di.notes, 'seat_number', di.seat_number, 'course_name', di.course_name,
+             'modifiers', COALESCE(
+               (SELECT json_agg(doim.option_name_snapshot ORDER BY doim.id)
+                FROM draft_order_item_modifiers doim
+                WHERE doim.draft_order_item_id = di.id),
+               '[]'::json
+             )
            )
          ) FILTER (WHERE kti.ticket_id IS NOT NULL),
          '[]'::json

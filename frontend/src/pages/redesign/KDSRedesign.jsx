@@ -133,15 +133,26 @@ export default function KDSRedesign() {
 
                 {/* Items */}
                 <div className="px-3 py-2 space-y-1">
-                  {(ticket.items || []).map((item, i) => (
-                    <div key={i} className="flex justify-between text-sm">
-                      <span>
-                        <span className="font-medium">{item.quantity}x</span>{" "}
-                        {item.product_name}
-                      </span>
-                      {item.modifiers && <span className="text-xs text-(--ui-text-muted)">{item.modifiers}</span>}
-                    </div>
-                  ))}
+                  {(ticket.items || []).map((item, i) => {
+                    // modifiers arrives as an array of option_name_snapshot strings
+                    // from the new draft_order_item_modifiers JOIN (Phase 2.1 A2).
+                    // Legacy string values still render for backward compat.
+                    const modText = Array.isArray(item.modifiers)
+                      ? item.modifiers.join(", ")
+                      : item.modifiers;
+                    return (
+                      <div key={i} className="text-sm">
+                        <div className="flex justify-between">
+                          <span>
+                            <span className="font-medium">{item.quantity}x</span>{" "}
+                            {item.product_name}
+                          </span>
+                          {item.notes && <span className="text-xs text-(--ui-text-muted)">{item.notes}</span>}
+                        </div>
+                        {modText && <div className="text-xs text-(--ui-text-muted) pl-4">+ {modText}</div>}
+                      </div>
+                    );
+                  })}
                   {ticket.special_instructions && (
                     <p className="text-xs italic text-orange-600 mt-1">{ticket.special_instructions}</p>
                   )}
