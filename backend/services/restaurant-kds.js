@@ -48,12 +48,21 @@ async function sendToKitchen(db, draftOrderId) {
   // Without this wrapper, a mid-loop failure would leave some items
   // ticketed and others still 'pending'. Phase 4 C3's junction-table
   // fix added more writes to this already non-atomic flow.
+  // Phase 2.1 A3: skip items whose course_name has an open 'held' row.
+  // The course-release worker will pick them up when hold_until elapses
+  // and call sendToKitchen again for that draft_order.
   const { rows: items } = await db.query(
     `SELECT di.*, p.category_id, d.table_id
      FROM draft_order_items di
      JOIN draft_orders d ON d.id = di.draft_order_id
      LEFT JOIN products p ON p.id = di.product_id
-     WHERE di.draft_order_id = $1 AND di.kitchen_status = 'pending'`,
+     WHERE di.draft_order_id = $1 AND di.kitchen_status = 'pending'
+       AND NOT EXISTS (
+         SELECT 1 FROM restaurant_course_fires cf
+         WHERE cf.draft_order_id = di.draft_order_id
+           AND cf.course_name = COALESCE(di.course_name, 'main')
+           AND cf.status = 'held'
+       )`,
     [draftOrderId]
   );
   if (!items.length) return [];
@@ -174,13 +183,22 @@ async function getTickets(db, stationId, statusFilter) {
   // [{id: null, ...}] one-element array instead of []. FILTER on kti.ticket_id
   // NOT NULL collapses that edge case, and COALESCE falls back to '[]'::json
   // so the route always returns items as an array.
+  // Phase 2.1 A2 — include modifier names aggregated per item. Kitchen lines
+  // now read e.g. "Ribeye — medium-rare, no onion". Modifier aggregation runs
+  // as a correlated subquery so items without modifiers still render as `[]`.
   const { rows } = await db.query(
     `SELECT kt.*,
        COALESCE(
          json_agg(
            json_build_object(
              'id', di.id, 'product_name', di.product_name, 'quantity', di.quantity,
-             'notes', di.notes, 'seat_number', di.seat_number, 'course_name', di.course_name
+             'notes', di.notes, 'seat_number', di.seat_number, 'course_name', di.course_name,
+             'modifiers', COALESCE(
+               (SELECT json_agg(doim.option_name_snapshot ORDER BY doim.id)
+                FROM draft_order_item_modifiers doim
+                WHERE doim.draft_order_item_id = di.id),
+               '[]'::json
+             )
            )
          ) FILTER (WHERE kti.ticket_id IS NOT NULL),
          '[]'::json

@@ -6,7 +6,8 @@ module.exports = function registerRestaurantRoutes(app, deps) {
     createFloorPlanSchema, updateFloorPlanSchema,
     createTableSchema, updateTableSchema,
     createSessionSchema, createCheckSchema,
-    splitCheckSchema, fireCourseSchema,
+    splitCheckSchema, mergeChecksSchema, fireCourseSchema,
+    holdCourseSchema, expediteCourseSchema,
     createTabSchema,
   } = require("../schemas/restaurant");
   const floor = require("../services/restaurant-floor");
@@ -195,16 +196,60 @@ module.exports = function registerRestaurantRoutes(app, deps) {
     }
   });
 
+  app.post("/api/restaurant/checks/:id/courses/hold", ...gate, validate(holdCourseSchema), async (req, res) => {
+    try {
+      const fire = await checks.holdCourse(
+        deps.db, Number(req.params.id), req.body.course_name, req.body.hold_until, req.employee.id
+      );
+      res.json(fire);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/restaurant/checks/:id/courses/expedite", ...gate, validate(expediteCourseSchema), async (req, res) => {
+    try {
+      const fire = await checks.expediteCourse(
+        deps.db, Number(req.params.id), req.body.course_name, req.employee.id
+      );
+      res.json(fire);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/restaurant/checks/:id/split", ...gate, validate(splitCheckSchema), async (req, res) => {
     try {
       let result;
-      if (req.body.split_type === "by_seat") {
-        result = await checks.splitCheckBySeat(deps.db, Number(req.params.id), req.employee.id);
-      } else {
-        result = await checks.splitCheckByItem(deps.db, Number(req.params.id), req.body.item_assignments || [], req.employee.id);
+      const sourceId = Number(req.params.id);
+      const eid = req.employee.id;
+      switch (req.body.split_type) {
+        case "by_seat":
+          result = await checks.splitCheckBySeat(deps.db, sourceId, eid);
+          break;
+        case "by_amount":
+          result = await checks.splitCheckByAmount(deps.db, sourceId, req.body.parts, eid);
+          break;
+        case "evenly":
+        case "equal":
+          result = await checks.splitCheckEvenly(deps.db, sourceId, req.body.parts, eid);
+          break;
+        case "by_item":
+        default:
+          result = await checks.splitCheckByItem(deps.db, sourceId, req.body.item_assignments || [], eid);
       }
-      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_check_split", JSON.stringify({ source_id: Number(req.params.id), type: req.body.split_type })]); } catch {}
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_check_split", JSON.stringify({ source_id: sourceId, type: req.body.split_type })]); } catch {}
       res.json({ new_checks: result });
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/restaurant/checks/merge", ...gate, validate(mergeChecksSchema), async (req, res) => {
+    try {
+      const merged = await checks.mergeChecks(deps.db, req.body.target_id, req.body.source_ids, req.employee.id);
+      try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_checks_merged", JSON.stringify({ target_id: req.body.target_id, source_ids: req.body.source_ids })]); } catch {}
+      res.json(merged);
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }

@@ -2001,17 +2001,20 @@ CREATE TABLE IF NOT EXISTS draft_orders (
   created_by INTEGER NOT NULL REFERENCES employees(id),
   claimed_by INTEGER REFERENCES employees(id),
   claimed_at TIMESTAMPTZ,
-  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','claimed','completed','cancelled')),
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','claimed','completed','cancelled','merged')),
   notes TEXT,
   subtotal NUMERIC(12,2) DEFAULT 0,
   tax_total NUMERIC(12,2) DEFAULT 0,
   discount_total NUMERIC(12,2) DEFAULT 0,
   total NUMERIC(12,2) DEFAULT 0,
+  split_parent_id INTEGER REFERENCES draft_orders(id),
+  split_strategy TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_draft_orders_outlet_status ON draft_orders(outlet_id, status);
 CREATE INDEX IF NOT EXISTS idx_draft_orders_claimed ON draft_orders(claimed_by) WHERE status = 'claimed';
+CREATE INDEX IF NOT EXISTS idx_draft_orders_split_parent ON draft_orders(split_parent_id) WHERE split_parent_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS draft_order_items (
   id SERIAL PRIMARY KEY,
@@ -2026,6 +2029,64 @@ CREATE TABLE IF NOT EXISTS draft_order_items (
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Phase 2.1 A2: First-class modifiers. Relational so reports can aggregate
+-- "extra cheese sold". Snapshots (option_name_snapshot, price_delta_snapshot)
+-- survive rename/reprice of the parent modifier_options row without rewriting
+-- history. When attaching modifiers to a draft_order_item, the summed price
+-- delta is baked into draft_order_items.price so recalcCheckTotals needs no
+-- change.
+CREATE TABLE IF NOT EXISTS modifier_groups (
+  id SERIAL PRIMARY KEY,
+  outlet_id INTEGER REFERENCES outlets(id),
+  name TEXT NOT NULL,
+  selection_type TEXT NOT NULL CHECK (selection_type IN ('single','multi')),
+  min_select INTEGER NOT NULL DEFAULT 0,
+  max_select INTEGER,
+  is_required BOOLEAN NOT NULL DEFAULT FALSE,
+  display_order INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS modifier_options (
+  id SERIAL PRIMARY KEY,
+  group_id INTEGER NOT NULL REFERENCES modifier_groups(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  price_delta NUMERIC(12,2) NOT NULL DEFAULT 0,
+  is_default BOOLEAN DEFAULT FALSE,
+  display_order INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE
+);
+CREATE INDEX IF NOT EXISTS idx_modifier_options_group ON modifier_options(group_id);
+
+CREATE TABLE IF NOT EXISTS product_modifier_group_links (
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  group_id INTEGER NOT NULL REFERENCES modifier_groups(id) ON DELETE CASCADE,
+  display_order INTEGER DEFAULT 0,
+  PRIMARY KEY (product_id, group_id)
+);
+
+CREATE TABLE IF NOT EXISTS draft_order_item_modifiers (
+  id SERIAL PRIMARY KEY,
+  draft_order_item_id INTEGER NOT NULL REFERENCES draft_order_items(id) ON DELETE CASCADE,
+  option_id INTEGER NOT NULL REFERENCES modifier_options(id),
+  option_name_snapshot TEXT NOT NULL,
+  price_delta_snapshot NUMERIC(12,2) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_doim_item ON draft_order_item_modifiers(draft_order_item_id);
+
+CREATE TABLE IF NOT EXISTS sale_item_modifiers (
+  id SERIAL PRIMARY KEY,
+  sale_id INTEGER NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+  sale_item_id INTEGER NOT NULL,
+  option_id INTEGER REFERENCES modifier_options(id),
+  option_name_snapshot TEXT NOT NULL,
+  price_delta_snapshot NUMERIC(12,2) NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sim_sale ON sale_item_modifiers(sale_id);
 
 -- ── Phase 2A: Approval Policies (generic) ───────────────────────────
 CREATE TABLE IF NOT EXISTS approval_policies (
@@ -2549,10 +2610,14 @@ CREATE TABLE IF NOT EXISTS restaurant_course_fires (
   status TEXT NOT NULL DEFAULT 'held' CHECK (status IN ('held','fired','completed')),
   fired_at TIMESTAMPTZ,
   fired_by INTEGER REFERENCES employees(id),
+  hold_until TIMESTAMPTZ,
+  expedite BOOLEAN NOT NULL DEFAULT FALSE,
+  sequence INTEGER,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_course_fires_order ON restaurant_course_fires(draft_order_id);
+CREATE INDEX IF NOT EXISTS idx_course_fires_held_until ON restaurant_course_fires(hold_until) WHERE status = 'held' AND hold_until IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS restaurant_tabs (
   id SERIAL PRIMARY KEY,

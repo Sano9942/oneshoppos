@@ -48,15 +48,44 @@ const createCheckSchema = z.object({
 });
 
 const splitCheckSchema = z.object({
-  split_type: z.enum(["by_item", "by_seat", "equal"]),
+  split_type: z.enum(["by_item", "by_seat", "equal", "by_amount", "evenly"]),
   parts: z.number().int().min(2).optional(),
   item_assignments: z.array(z.object({
     item_id: z.number().int().positive(),
     target_check_index: z.number().int().min(0),
   })).optional(),
+}).superRefine((data, ctx) => {
+  if ((data.split_type === "by_amount" || data.split_type === "evenly" || data.split_type === "equal") && !data.parts) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "parts is required when split_type is by_amount/evenly/equal",
+      path: ["parts"],
+    });
+  }
+  if (data.split_type === "by_item" && (!data.item_assignments || data.item_assignments.length === 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "item_assignments required for by_item split",
+      path: ["item_assignments"],
+    });
+  }
+});
+
+const mergeChecksSchema = z.object({
+  target_id: z.number().int().positive(),
+  source_ids: z.array(z.number().int().positive()).min(1),
 });
 
 const fireCourseSchema = z.object({
+  course_name: z.string().min(1),
+});
+
+const holdCourseSchema = z.object({
+  course_name: z.string().min(1),
+  hold_until: z.string().datetime(),
+});
+
+const expediteCourseSchema = z.object({
   course_name: z.string().min(1),
 });
 
@@ -82,7 +111,8 @@ module.exports = {
   createFloorPlanSchema, updateFloorPlanSchema,
   createTableSchema, updateTableSchema,
   createSessionSchema, createCheckSchema,
-  splitCheckSchema, fireCourseSchema,
+  splitCheckSchema, mergeChecksSchema, fireCourseSchema,
+  holdCourseSchema, expediteCourseSchema,
   createTabSchema,
   createKdsStationSchema, updateKdsStationSchema,
 };

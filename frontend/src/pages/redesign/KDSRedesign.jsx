@@ -118,8 +118,16 @@ export default function KDSRedesign() {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {tickets.map(ticket => {
             const mins = elapsedMinutes(ticket.created_at);
+            // Priority >= 100 means expedited (Phase 2.1 A3). getTickets already
+            // orders by priority DESC, so expedited tickets render first.
+            const isExpedited = Number(ticket.priority || 0) >= 100;
             return (
-              <div key={ticket.id} className={`border-2 ${timeBorder(mins)} rounded-lg bg-(--ui-bg) overflow-hidden`}>
+              <div key={ticket.id} className={`border-2 ${isExpedited ? "border-red-500" : timeBorder(mins)} rounded-lg bg-(--ui-bg) overflow-hidden`}>
+                {isExpedited && (
+                  <div className="px-3 py-1 bg-red-500 text-white text-xs font-semibold uppercase tracking-wide">
+                    Expedite
+                  </div>
+                )}
                 {/* Header */}
                 <div className="flex justify-between items-center px-3 py-2 bg-(--ui-bg-hover)">
                   <div>
@@ -133,15 +141,26 @@ export default function KDSRedesign() {
 
                 {/* Items */}
                 <div className="px-3 py-2 space-y-1">
-                  {(ticket.items || []).map((item, i) => (
-                    <div key={i} className="flex justify-between text-sm">
-                      <span>
-                        <span className="font-medium">{item.quantity}x</span>{" "}
-                        {item.product_name}
-                      </span>
-                      {item.modifiers && <span className="text-xs text-(--ui-text-muted)">{item.modifiers}</span>}
-                    </div>
-                  ))}
+                  {(ticket.items || []).map((item, i) => {
+                    // modifiers arrives as an array of option_name_snapshot strings
+                    // from the new draft_order_item_modifiers JOIN (Phase 2.1 A2).
+                    // Legacy string values still render for backward compat.
+                    const modText = Array.isArray(item.modifiers)
+                      ? item.modifiers.join(", ")
+                      : item.modifiers;
+                    return (
+                      <div key={i} className="text-sm">
+                        <div className="flex justify-between">
+                          <span>
+                            <span className="font-medium">{item.quantity}x</span>{" "}
+                            {item.product_name}
+                          </span>
+                          {item.notes && <span className="text-xs text-(--ui-text-muted)">{item.notes}</span>}
+                        </div>
+                        {modText && <div className="text-xs text-(--ui-text-muted) pl-4">+ {modText}</div>}
+                      </div>
+                    );
+                  })}
                   {ticket.special_instructions && (
                     <p className="text-xs italic text-orange-600 mt-1">{ticket.special_instructions}</p>
                   )}

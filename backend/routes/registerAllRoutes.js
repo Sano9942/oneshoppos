@@ -604,6 +604,7 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- Phase 4 — New Verticals ---
   require("./restaurant")(app, deps);
   require("./kds")(app, deps);
+  require("./modifiers")(app, deps);
   require("./bookings")(app, deps);
   require("./projects")(app, deps);
   require("./contracts")(app, deps);

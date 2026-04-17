@@ -6,7 +6,7 @@ import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { PageShell, SectionCard, Button, Badge, Modal, ModalFooter } from "../../ui/primitives";
-import { Receipt, Split, Flame } from "lucide-react";
+import { Receipt, Split, Flame, Clock, Zap, X } from "lucide-react";
 import { api } from "../../api";
 
 const STATUS_TONES = { open: "warning", split: "warning", closed: "success", voided: "danger" };
@@ -45,9 +45,44 @@ export default function RestaurantChecksRedesign() {
     } catch (err) { toast.error(err.message); }
   };
 
+  const holdCourse = async (checkId) => {
+    const courseName = window.prompt("Course name to hold? (e.g. dessert)");
+    if (!courseName) return;
+    const holdUntil = window.prompt("Hold until (ISO datetime, e.g. 2026-04-18T20:00:00Z):");
+    if (!holdUntil) return;
+    try {
+      await api.post(`/api/restaurant/checks/${checkId}/courses/hold`, {
+        course_name: courseName,
+        hold_until: holdUntil,
+      });
+      toast.success(`Course "${courseName}" held until ${holdUntil}`);
+      load();
+    } catch (err) { toast.error(err.message); }
+  };
+
+  const expediteCourse = async (checkId) => {
+    const courseName = window.prompt("Course name to expedite? (e.g. appetizer)");
+    if (!courseName) return;
+    try {
+      await api.post(`/api/restaurant/checks/${checkId}/courses/expedite`, {
+        course_name: courseName,
+      });
+      toast.success(`Course "${courseName}" expedited`);
+      load();
+    } catch (err) { toast.error(err.message); }
+  };
+
   const splitCheck = async (checkId) => {
     try {
-      await api.post(`/api/restaurant/checks/${checkId}/split`, { mode: splitMode, split_count: splitCount });
+      // Map UI mode → backend split_type. "equal" → "evenly" so we get the
+      // Phase 2.1 by-amount path (parts-based distribution); "by_amount" is
+      // an alias that also requires parts.
+      const body = { split_type: splitMode };
+      if (splitMode === "equal" || splitMode === "evenly" || splitMode === "by_amount") {
+        body.split_type = splitMode === "equal" ? "evenly" : splitMode;
+        body.parts = splitCount;
+      }
+      await api.post(`/api/restaurant/checks/${checkId}/split`, body);
       toast.success("Check split");
       setShowSplit(null);
       load();
@@ -94,6 +129,12 @@ export default function RestaurantChecksRedesign() {
                             <Flame className="w-4 h-4 text-orange-500" />
                           </button>
                         )}
+                        <button onClick={() => holdCourse(c.id)} title="Hold a course" className="p-1 rounded hover:bg-(--ui-bg-hover)">
+                          <Clock className="w-4 h-4 text-blue-500" />
+                        </button>
+                        <button onClick={() => expediteCourse(c.id)} title="Expedite a course" className="p-1 rounded hover:bg-(--ui-bg-hover)">
+                          <Zap className="w-4 h-4 text-red-500" />
+                        </button>
                         <button onClick={() => { setShowSplit(c); setSplitMode("equal"); setSplitCount(2); }} title="Split check" className="p-1 rounded hover:bg-(--ui-bg-hover)">
                           <Split className="w-4 h-4" />
                         </button>
@@ -122,12 +163,13 @@ export default function RestaurantChecksRedesign() {
               <div>
                 <label className="mb-1 block text-sm font-medium">Split Mode</label>
                 <select className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={splitMode} onChange={e => setSplitMode(e.target.value)}>
-                  <option value="equal">Equal Split</option>
+                  <option value="equal">Even (N shares)</option>
+                  <option value="by_amount">By Amount</option>
                   <option value="by_seat">By Seat</option>
                   <option value="by_item">By Item</option>
                 </select>
               </div>
-              {splitMode === "equal" && (
+              {(splitMode === "equal" || splitMode === "by_amount" || splitMode === "evenly") && (
                 <div>
                   <label className="mb-1 block text-sm font-medium">Number of Splits</label>
                   <input type="number" min="2" max="20" className="w-full border border-(--ui-border) rounded px-3 py-2 bg-(--ui-bg)" value={splitCount} onChange={e => setSplitCount(Number(e.target.value))} />
