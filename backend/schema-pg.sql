@@ -2599,9 +2599,38 @@ CREATE TABLE IF NOT EXISTS restaurant_check_adjustments (
   amount NUMERIC(12,2) NOT NULL DEFAULT 0,
   is_percentage BOOLEAN DEFAULT FALSE,
   percentage_value NUMERIC(6,4),
+  -- Phase 2.1 C1 — tip classification + direct-server attribution.
+  -- tip_category: cash (handed to server), card (settled on the bill),
+  -- pooled (going to the shift pool), direct (server-attributed). See
+  -- migrate-pg.js v56.
+  tip_category TEXT,
+  recipient_employee_id INTEGER REFERENCES employees(id),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_check_adjustments_order ON restaurant_check_adjustments(draft_order_id);
+ALTER TABLE restaurant_check_adjustments
+  ADD COLUMN IF NOT EXISTS tip_category TEXT,
+  ADD COLUMN IF NOT EXISTS recipient_employee_id INTEGER REFERENCES employees(id);
+ALTER TABLE restaurant_check_adjustments DROP CONSTRAINT IF EXISTS restaurant_check_adjustments_tip_category_check;
+ALTER TABLE restaurant_check_adjustments
+  ADD CONSTRAINT restaurant_check_adjustments_tip_category_check
+  CHECK (tip_category IS NULL OR tip_category IN ('cash','card','pooled','direct'));
+
+-- Phase 2.1 C1 — tip_captures: per-sale tip ledger with server attribution.
+-- pool_id is stamped when the shift's tip pool closes (see tip_pools v57).
+CREATE TABLE IF NOT EXISTS tip_captures (
+  id SERIAL PRIMARY KEY,
+  sale_id INTEGER NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+  draft_order_id INTEGER,
+  outlet_id INTEGER REFERENCES outlets(id),
+  server_id INTEGER REFERENCES employees(id),
+  tip_amount NUMERIC(12,2) NOT NULL,
+  tip_method TEXT NOT NULL CHECK (tip_method IN ('cash','card','split')),
+  pool_id INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_tip_captures_pool ON tip_captures(pool_id);
+CREATE INDEX IF NOT EXISTS idx_tip_captures_server ON tip_captures(server_id);
 
 CREATE TABLE IF NOT EXISTS restaurant_course_fires (
   id SERIAL PRIMARY KEY,

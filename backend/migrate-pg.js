@@ -4170,6 +4170,51 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 56,
+    description:
+      "Phase 2.1 C1 — tip capture: restaurant_check_adjustments gains tip_category + recipient_employee_id; new tip_captures table for per-sale server attribution",
+    up: async (client) => {
+      // Adjustments already model gratuity as a check-line item; the new
+      // columns let us classify *how* the tip is paid (cash in hand vs card
+      // on the bill vs pooled at end-of-shift) and attribute a direct tip to
+      // a specific server. Both nullable so legacy rows stay valid.
+      await client.query(`
+        ALTER TABLE restaurant_check_adjustments
+          ADD COLUMN IF NOT EXISTS tip_category TEXT,
+          ADD COLUMN IF NOT EXISTS recipient_employee_id INTEGER REFERENCES employees(id)
+      `);
+      await client.query(`
+        ALTER TABLE restaurant_check_adjustments
+          DROP CONSTRAINT IF EXISTS restaurant_check_adjustments_tip_category_check
+      `);
+      await client.query(`
+        ALTER TABLE restaurant_check_adjustments
+          ADD CONSTRAINT restaurant_check_adjustments_tip_category_check
+          CHECK (tip_category IS NULL OR tip_category IN ('cash','card','pooled','direct'))
+      `);
+
+      // tip_captures is the per-sale ledger. One row per checked-out sale
+      // that carried a tip — pulled from the gratuity adjustment at sale
+      // time, attributed to the table session's server. pool_id is NULL
+      // until the shift's tip pool closes and stamps it.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tip_captures (
+          id SERIAL PRIMARY KEY,
+          sale_id INTEGER NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+          draft_order_id INTEGER,
+          outlet_id INTEGER REFERENCES outlets(id),
+          server_id INTEGER REFERENCES employees(id),
+          tip_amount NUMERIC(12,2) NOT NULL,
+          tip_method TEXT NOT NULL CHECK (tip_method IN ('cash','card','split')),
+          pool_id INTEGER,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_tip_captures_pool ON tip_captures(pool_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_tip_captures_server ON tip_captures(server_id)`);
+    },
+  },
 ];
 
 async function migrate(db) {
