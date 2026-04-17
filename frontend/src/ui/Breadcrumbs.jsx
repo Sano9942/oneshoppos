@@ -46,6 +46,7 @@ const LABELS = {
   "scheduled-changes": "Scheduled Changes",
   "outlet-tax-profiles": "Outlet Tax Profiles",
   commissions: "Commissions",
+  tips: "Tip Pools",
   "report-builder": "Report Builder",
   "pos-layouts": "POS Layouts",
   inventory: "Inventory",
