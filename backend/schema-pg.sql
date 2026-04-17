@@ -2264,6 +2264,19 @@ CREATE INDEX IF NOT EXISTS idx_ce_employee ON commission_earnings(employee_id);
 CREATE INDEX IF NOT EXISTS idx_ce_sale ON commission_earnings(sale_id);
 CREATE INDEX IF NOT EXISTS idx_ce_status ON commission_earnings(status);
 
+-- Phase 2.1 C2 — earning_type bridges tips into the commission table so
+-- payroll has one source of truth. Tip rows have sale_id NULL, plan_id NULL,
+-- earning_type='tip'; legacy commission rows keep the default 'commission'.
+ALTER TABLE commission_earnings
+  ADD COLUMN IF NOT EXISTS earning_type TEXT NOT NULL DEFAULT 'commission';
+ALTER TABLE commission_earnings DROP CONSTRAINT IF EXISTS commission_earnings_earning_type_check;
+ALTER TABLE commission_earnings
+  ADD CONSTRAINT commission_earnings_earning_type_check
+  CHECK (earning_type IN ('commission','tip'));
+ALTER TABLE commission_earnings ALTER COLUMN sale_id DROP NOT NULL;
+ALTER TABLE commission_earnings ALTER COLUMN plan_id DROP NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ce_type_status ON commission_earnings(earning_type, status);
+
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS commission_plan_id INTEGER REFERENCES commission_plans(id);
 
 -- ── Phase 2B: Custom Report Definitions ─────────────────────────────
@@ -2631,6 +2644,62 @@ CREATE TABLE IF NOT EXISTS tip_captures (
 );
 CREATE INDEX IF NOT EXISTS idx_tip_captures_pool ON tip_captures(pool_id);
 CREATE INDEX IF NOT EXISTS idx_tip_captures_server ON tip_captures(server_id);
+
+-- Phase 2.1 C2 — tip pooling. Distribution rules are per-outlet; one
+-- is_default per outlet (partial unique index). Pools open per business_date,
+-- close (sums + stamps captures), then distribute (creates payouts +
+-- commission_earnings rows with earning_type='tip').
+CREATE TABLE IF NOT EXISTS tip_pool_distribution_rules (
+  id SERIAL PRIMARY KEY,
+  outlet_id INTEGER REFERENCES outlets(id),
+  name TEXT NOT NULL,
+  strategy TEXT NOT NULL CHECK (strategy IN ('equal_share','hours_weighted','role_weighted','points')),
+  config_jsonb JSONB DEFAULT '{}'::jsonb,
+  is_default BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tpdr_default_per_outlet
+  ON tip_pool_distribution_rules(outlet_id)
+  WHERE is_default = TRUE AND is_active = TRUE;
+
+CREATE TABLE IF NOT EXISTS tip_pools (
+  id SERIAL PRIMARY KEY,
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+  business_date DATE NOT NULL,
+  opened_at TIMESTAMPTZ DEFAULT NOW(),
+  closed_at TIMESTAMPTZ,
+  total_tips NUMERIC(12,2) NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed','distributed','voided')),
+  closed_by INTEGER REFERENCES employees(id),
+  distribution_rule_id INTEGER REFERENCES tip_pool_distribution_rules(id),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_tip_pools_outlet_date ON tip_pools(outlet_id, business_date);
+CREATE INDEX IF NOT EXISTS idx_tip_pools_open ON tip_pools(outlet_id) WHERE status = 'open';
+
+-- Now that tip_pools exists, harden the FK from tip_captures.
+ALTER TABLE tip_captures DROP CONSTRAINT IF EXISTS tip_captures_pool_id_fkey;
+ALTER TABLE tip_captures
+  ADD CONSTRAINT tip_captures_pool_id_fkey
+  FOREIGN KEY (pool_id) REFERENCES tip_pools(id) ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS tip_pool_payouts (
+  id SERIAL PRIMARY KEY,
+  pool_id INTEGER NOT NULL REFERENCES tip_pools(id) ON DELETE CASCADE,
+  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  hours_worked NUMERIC(8,2) NOT NULL DEFAULT 0,
+  weight NUMERIC(12,4) NOT NULL DEFAULT 0,
+  payout_amount NUMERIC(12,2) NOT NULL,
+  paid_at TIMESTAMPTZ,
+  commission_earning_id INTEGER REFERENCES commission_earnings(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_tip_pool_payouts_pool ON tip_pool_payouts(pool_id);
+CREATE INDEX IF NOT EXISTS idx_tip_pool_payouts_employee ON tip_pool_payouts(employee_id);
+CREATE INDEX IF NOT EXISTS idx_tip_pool_payouts_unpaid ON tip_pool_payouts(employee_id) WHERE paid_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS restaurant_course_fires (
   id SERIAL PRIMARY KEY,

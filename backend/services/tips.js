@@ -129,8 +129,11 @@ async function closeTipPool(db, poolId, employeeId) {
   if (!poolId) throw new Error("poolId required");
 
   return db.transaction(async (client) => {
+    // Re-fetch with to_char so the date is a string immune to JS-side TZ
+    // round-tripping (pg DATE → JS Date is lossy in the test harness).
     const { rows: poolRows } = await client.query(
-      `SELECT * FROM tip_pools WHERE id = $1 FOR UPDATE`,
+      `SELECT *, to_char(business_date, 'YYYY-MM-DD') AS business_date_str
+         FROM tip_pools WHERE id = $1 FOR UPDATE`,
       [poolId]
     );
     const pool = poolRows[0];
@@ -153,8 +156,8 @@ async function closeTipPool(db, poolId, employeeId) {
         WHERE tc.sale_id = s.id
           AND tc.pool_id IS NULL
           AND tc.outlet_id = $2
-          AND s.timestamp::date = $3`,
-      [poolId, pool.outlet_id, pool.business_date]
+          AND s.timestamp::date = $3::date`,
+      [poolId, pool.outlet_id, pool.business_date_str]
     );
 
     const { rows: totalRows } = await client.query(
@@ -189,7 +192,8 @@ async function distributeTipPool(db, poolId, ruleId) {
 
   return db.transaction(async (client) => {
     const { rows: poolRows } = await client.query(
-      `SELECT * FROM tip_pools WHERE id = $1 FOR UPDATE`,
+      `SELECT *, to_char(business_date, 'YYYY-MM-DD') AS business_date_str
+         FROM tip_pools WHERE id = $1 FOR UPDATE`,
       [poolId]
     );
     const pool = poolRows[0];
@@ -239,8 +243,10 @@ async function distributeTipPool(db, poolId, ruleId) {
     // Find employees on the clock during the business_date for this outlet.
     // We measure hours via attendance_sessions overlap, not absolute spans —
     // so a sign-out at 02:00 the next morning still counts toward the day.
-    const dayStart = new Date(`${pool.business_date}T00:00:00Z`);
-    const dayEnd = new Date(`${pool.business_date}T23:59:59.999Z`);
+    // Use the to_char string so we don't fight TZ semantics on pg DATE.
+    const businessDateStr = pool.business_date_str;
+    const dayStart = new Date(`${businessDateStr}T00:00:00Z`);
+    const dayEnd = new Date(`${businessDateStr}T23:59:59.999Z`);
     const { rows: workers } = await client.query(
       `SELECT employee_id,
               COALESCE(SUM(EXTRACT(EPOCH FROM (
