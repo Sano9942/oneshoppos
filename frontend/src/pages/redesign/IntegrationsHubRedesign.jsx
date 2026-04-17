@@ -74,12 +74,12 @@ function IntegrationCard({ provider, meta, channel, onConnect, onDisconnect, onT
               )}
             </div>
             {channel?.last_sync_at && (
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-(--ui-text-muted)">
                 Last sync: {new Date(channel.last_sync_at).toLocaleString()}
               </p>
             )}
             {meta.note && (
-              <p className="mt-0.5 text-xs text-slate-400 italic">{meta.note}</p>
+              <p className="mt-0.5 text-xs text-(--ui-text-muted) italic">{meta.note}</p>
             )}
           </div>
         </div>
@@ -148,7 +148,7 @@ function CourierCard({ courier }) {
   return (
     <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
       <div className="flex items-center gap-3">
-        <Truck size={20} className="text-slate-400" />
+        <Truck size={20} className="text-(--ui-text-muted)" />
         <div>
           <span className="font-medium text-slate-900 dark:text-white">{courier.name}</span>
           {courier.enabled && (
@@ -316,7 +316,7 @@ export default function IntegrationsHubRedesign() {
   if (loading) {
     return (
       <PageShell title="Integrations">
-        <div className="flex min-h-[30vh] items-center justify-center text-sm text-slate-400">
+        <div className="flex min-h-[30vh] items-center justify-center text-sm text-(--ui-text-muted)">
           Loading...
         </div>
       </PageShell>
@@ -337,7 +337,7 @@ export default function IntegrationsHubRedesign() {
             className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
               activeTab === tab.key
                 ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white"
-                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                : "text-slate-600 hover:text-slate-900 dark:text-(--ui-text-muted) dark:hover:text-white"
             }`}
           >
             {tab.label}
@@ -362,7 +362,7 @@ export default function IntegrationsHubRedesign() {
             />
           ))}
           {filteredProviders.length === 0 && (
-            <p className="py-8 text-center text-sm text-slate-400">No integrations in this category</p>
+            <p className="py-8 text-center text-sm text-(--ui-text-muted)">No integrations in this category</p>
           )}
         </div>
       )}
@@ -371,7 +371,7 @@ export default function IntegrationsHubRedesign() {
       {(activeTab === "all" || activeTab === "payment") && (
         <div className={activeTab === "all" ? "mt-8" : ""}>
           {activeTab === "all" && (
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-(--ui-text-muted)">
               Payment Gateways
             </h2>
           )}
@@ -399,7 +399,7 @@ export default function IntegrationsHubRedesign() {
       {(activeTab === "all" || activeTab === "sms") && (
         <div className={activeTab === "all" ? "mt-8" : ""}>
           {activeTab === "all" && (
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-(--ui-text-muted)">
               SMS Providers
             </h2>
           )}
@@ -427,7 +427,7 @@ export default function IntegrationsHubRedesign() {
       {(activeTab === "all" || activeTab === "courier") && (
         <div className={activeTab === "all" ? "mt-8" : ""}>
           {activeTab === "all" && (
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-(--ui-text-muted)">
               Courier Services
             </h2>
           )}

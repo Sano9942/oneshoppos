@@ -795,7 +795,7 @@ export default function InventoryRedesign() {
                 <tr
                   key={p.id}
                   className={`border-t border-(--ui-border) cursor-pointer ${
-                    selectedIds.has(p.id) ? "bg-emerald-50" : "hover:bg-slate-50 bg-white"
+                    selectedIds.has(p.id) ? "bg-emerald-50" : "hover:bg-(--ui-muted-surface) bg-(--ui-surface)"
                   }`}
                   onClick={() => navigate(`/products/${p.id}`)}
                 >

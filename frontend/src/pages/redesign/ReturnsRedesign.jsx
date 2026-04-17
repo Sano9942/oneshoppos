@@ -389,7 +389,7 @@ export default function ReturnsRedesign() {
                       placeholder="Search by name, barcode or SKU"
                     />
                     {showSearchResults && searchResults.length > 0 ? (
-                      <div className="absolute left-0 right-0 top-9 z-20 max-h-52 overflow-auto rounded border border-(--ui-border) bg-white shadow-lg">
+                      <div className="absolute left-0 right-0 top-9 z-20 max-h-52 overflow-auto rounded border border-(--ui-border) bg-(--ui-surface) shadow-lg">
                         {searchResults.map((p) => (
                           <button
                             key={p.id}

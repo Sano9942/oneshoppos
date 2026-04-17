@@ -7,7 +7,7 @@ const STATUS_COLORS = {
   open: "bg-amber-100 text-amber-700",
   acknowledged: "bg-blue-100 text-blue-700",
   resolved: "bg-emerald-100 text-emerald-700",
-  closed: "bg-slate-100 text-slate-500",
+  closed: "bg-(--ui-muted-surface) text-(--ui-text-muted)",
 };
 
 export default function MyTicketsRedesign() {
@@ -26,23 +26,23 @@ export default function MyTicketsRedesign() {
     <PageShell title="My Tickets" subtitle="Support tickets you have submitted">
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <p className="text-sm text-slate-500">Loading tickets...</p>
+          <p className="text-sm text-(--ui-text-muted)">Loading tickets...</p>
         </div>
       ) : error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4">
           <p className="text-sm text-red-600">{error}</p>
         </div>
       ) : tickets.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+        <div className="flex flex-col items-center justify-center py-20 text-(--ui-text-muted)">
           <MessageSquare size={40} className="mb-3 opacity-40" />
           <p className="text-sm font-medium">No tickets submitted yet</p>
           <p className="mt-1 text-xs">Use the support widget to submit a ticket</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-xl border border-(--ui-border) bg-(--ui-surface) shadow-sm">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <tr className="border-b border-(--ui-border) text-left text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
                 <th className="px-4 py-3">Type</th>
                 <th className="px-4 py-3">Message</th>
                 <th className="px-4 py-3">Status</th>
@@ -52,29 +52,29 @@ export default function MyTicketsRedesign() {
             </thead>
             <tbody>
               {tickets.map((t) => (
-                <tr key={t.id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-4 py-3 font-medium text-slate-700">{t.type || "general"}</td>
-                  <td className="max-w-xs truncate px-4 py-3 text-slate-600">{t.message}</td>
+                <tr key={t.id} className="border-b border-(--ui-border) last:border-0">
+                  <td className="px-4 py-3 font-medium text-(--ui-text)">{t.type || "general"}</td>
+                  <td className="max-w-xs truncate px-4 py-3 text-(--ui-text-muted)">{t.message}</td>
                   <td className="px-4 py-3">
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[t.status] || STATUS_COLORS.open}`}>
                       {t.status}
                     </span>
                   </td>
-                  <td className="max-w-xs px-4 py-3 text-slate-600">
+                  <td className="max-w-xs px-4 py-3 text-(--ui-text-muted)">
                     {t.admin_reply ? (
                       <div>
                         <p className="truncate text-sm">{t.admin_reply}</p>
                         {t.replied_at && (
-                          <p className="mt-0.5 text-[10px] text-slate-400">
+                          <p className="mt-0.5 text-[10px] text-(--ui-text-muted)">
                             {new Date(t.replied_at).toLocaleString()}
                           </p>
                         )}
                       </div>
                     ) : (
-                      <span className="text-xs text-slate-400">—</span>
+                      <span className="text-xs text-(--ui-text-muted)">—</span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-400">
+                  <td className="whitespace-nowrap px-4 py-3 text-xs text-(--ui-text-muted)">
                     {new Date(t.created_at).toLocaleString()}
                   </td>
                 </tr>

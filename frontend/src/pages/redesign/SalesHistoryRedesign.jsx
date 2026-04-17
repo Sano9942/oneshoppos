@@ -300,7 +300,7 @@ export default function SalesHistoryRedesign() {
                         ) : r.fbr_status === "failed" ? (
                           <span className="inline-block h-2.5 w-2.5 rounded-full bg-rose-500" title="Failed" />
                         ) : (
-                          <span className="inline-block h-2.5 w-2.5 rounded-full bg-gray-300" title="N/A" />
+                          <span className="inline-block h-2.5 w-2.5 rounded-full bg-(--ui-border)" title="N/A" />
                         )}
                       </td>
                     </tr>

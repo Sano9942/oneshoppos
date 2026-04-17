@@ -286,7 +286,7 @@ export default function PrinterSettingsRedesign() {
           <button
             onClick={handleTest}
             disabled={testing}
-            className="border px-5 py-2 rounded hover:bg-gray-50 disabled:opacity-50"
+            className="border px-5 py-2 rounded hover:bg-(--ui-muted-surface) disabled:opacity-50"
           >
             {testing ? "Testing…" : "Test Print"}
           </button>
@@ -300,9 +300,9 @@ export default function PrinterSettingsRedesign() {
           </div>
         )}
 
-        <hr className="border-slate-200" />
+        <hr className="border-(--ui-border)" />
 
-        <h2 className="text-lg font-semibold text-slate-800">Email Settings</h2>
+        <h2 className="text-lg font-semibold text-(--ui-text)">Email Settings</h2>
 
         <div className="flex items-center gap-3">
           <label className="font-medium">Enable Email Receipts</label>
@@ -355,7 +355,7 @@ export default function PrinterSettingsRedesign() {
             onChange={(e) => handleEmailChange("smtp_pass", e.target.value)}
             placeholder={emailPassSet && !emailCfg.smtp_pass ? "Password saved — enter new value to change" : "Gmail App Password"}
           />
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-(--ui-text-muted) mt-1">
             For Gmail: Enable 2-Step Verification, then generate an App Password at{" "}
             <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="underline">
               myaccount.google.com/apppasswords
@@ -384,7 +384,7 @@ export default function PrinterSettingsRedesign() {
           <button
             onClick={handleEmailTest}
             disabled={emailTesting}
-            className="border px-5 py-2 rounded hover:bg-gray-50 disabled:opacity-50"
+            className="border px-5 py-2 rounded hover:bg-(--ui-muted-surface) disabled:opacity-50"
           >
             {emailTesting ? "Sending…" : "Send Test Email"}
           </button>

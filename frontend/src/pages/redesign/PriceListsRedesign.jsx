@@ -29,7 +29,7 @@ const TYPE_META = {
 };
 
 function TypeBadge({ type }) {
-  const meta = TYPE_META[type] ?? { label: type, color: "bg-gray-100 text-gray-600" };
+  const meta = TYPE_META[type] ?? { label: type, color: "bg-(--ui-muted-surface) text-(--ui-text-muted)" };
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${meta.color}`}>
       <Tag size={11} />

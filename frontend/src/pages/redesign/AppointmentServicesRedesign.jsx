@@ -139,7 +139,7 @@ export default function AppointmentServicesRedesign() {
                   alt="Public booking QR code"
                   width={120}
                   height={120}
-                  className="rounded border border-(--ui-border) bg-white"
+                  className="rounded border border-(--ui-border) bg-(--ui-surface)"
                 />
               ) : null}
             </div>

@@ -1338,7 +1338,7 @@ export default function CustomersRedesign() {
                 const ohTotalPages = Math.max(1, Math.ceil(ohTotal / OH_LIMIT));
                 const channelBadge = (ch) => {
                   const map = {
-                    pos: "bg-gray-100 text-gray-700",
+                    pos: "bg-(--ui-muted-surface) text-(--ui-text)",
                     storefront: "bg-blue-100 text-blue-700",
                     shopify: "bg-green-100 text-green-700",
                     daraz: "bg-orange-100 text-orange-700",
@@ -1346,7 +1346,7 @@ export default function CustomersRedesign() {
                     instagram: "bg-pink-100 text-pink-700",
                     whatsapp: "bg-green-100 text-green-600",
                   };
-                  return map[ch] || "bg-gray-100 text-gray-600";
+                  return map[ch] || "bg-(--ui-muted-surface) text-(--ui-text-muted)";
                 };
                 const statusColor = (s) => {
                   if (s === "completed" || s === "closed") return "text-emerald-700";

@@ -61,7 +61,7 @@ export default function CourierSettingsRedesign() {
   if (loading) {
     return (
       <PageShell title="Delivery Couriers">
-        <div className="flex min-h-[30vh] items-center justify-center text-sm text-slate-400">
+        <div className="flex min-h-[30vh] items-center justify-center text-sm text-(--ui-text-muted)">
           Loading...
         </div>
       </PageShell>
@@ -110,7 +110,7 @@ export default function CourierSettingsRedesign() {
               />
             </div>
           </div>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-(--ui-text-muted)">
             Use <code className="rounded bg-slate-200 px-1 dark:bg-slate-700">{"{tracking}"}</code> as
             a placeholder for the tracking number in the URL template.
           </p>
@@ -140,12 +140,12 @@ export default function CourierSettingsRedesign() {
           >
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <Truck size={20} className="text-slate-400" />
+                <Truck size={20} className="text-(--ui-text-muted)" />
                 <div>
                   <div className="text-sm font-semibold text-slate-800 dark:text-white">
                     {c.name}
                   </div>
-                  <div className="text-xs text-slate-500">
+                  <div className="text-xs text-(--ui-text-muted)">
                     Adapter: {c.adapter_key}
                     {c.tracking_url_template ? (
                       <span className="ml-2">
@@ -157,7 +157,7 @@ export default function CourierSettingsRedesign() {
                 </div>
               </div>
               <label className="flex cursor-pointer items-center gap-2">
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-(--ui-text-muted)">
                   {c.enabled ? "Enabled" : "Disabled"}
                 </span>
                 <button
@@ -181,7 +181,7 @@ export default function CourierSettingsRedesign() {
             {c.enabled && c.adapter_key !== "generic" && (
               <div className="mt-3 grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-3 dark:border-slate-700">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">
+                  <label className="mb-1 block text-xs font-medium text-(--ui-text-muted)">
                     API Base URL
                   </label>
                   <input
@@ -192,7 +192,7 @@ export default function CourierSettingsRedesign() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">
+                  <label className="mb-1 block text-xs font-medium text-(--ui-text-muted)">
                     API Key
                   </label>
                   <input
@@ -203,7 +203,7 @@ export default function CourierSettingsRedesign() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">
+                  <label className="mb-1 block text-xs font-medium text-(--ui-text-muted)">
                     API Secret
                   </label>
                   <input
@@ -232,7 +232,7 @@ export default function CourierSettingsRedesign() {
         ))}
 
         {couriers.length === 0 && (
-          <div className="py-12 text-center text-sm text-slate-400">
+          <div className="py-12 text-center text-sm text-(--ui-text-muted)">
             No couriers configured. Click "Add Custom Courier" to get started.
           </div>
         )}

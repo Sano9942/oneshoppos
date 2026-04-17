@@ -536,7 +536,7 @@ export default function SupplierPayablesRedesign() {
                 <select
                   value={ledgerSupplierId}
                   onChange={(e) => setLedgerSupplierId(e.target.value)}
-                  className="block border border-(--ui-border) rounded-(--ui-radius-sm) px-3 py-2 text-sm bg-white min-w-48"
+                  className="block border border-(--ui-border) rounded-(--ui-radius-sm) px-3 py-2 text-sm bg-(--ui-surface) min-w-48"
                 >
                   <option value="">Select supplier...</option>
                   {suppliers.map((s) => (

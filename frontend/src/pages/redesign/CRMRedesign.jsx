@@ -25,7 +25,7 @@ const ACTIVITY_TYPES = [
   { value: "follow_up", label: "Follow-up" },
 ];
 const ACTIVITY_TYPE_STYLE = {
-  note:      "bg-gray-100 text-gray-700",
+  note:      "bg-(--ui-muted-surface) text-(--ui-text)",
   call:      "bg-blue-100 text-blue-700",
   email:     "bg-purple-100 text-purple-700",
   meeting:   "bg-green-100 text-green-700",

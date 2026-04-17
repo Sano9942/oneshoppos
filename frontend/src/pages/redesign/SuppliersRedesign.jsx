@@ -486,7 +486,7 @@ export default function SuppliersRedesign() {
                 <label className="mb-1 block text-xs text-(--ui-text-muted)">Address</label>
                 <textarea
                   rows={2}
-                  className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text) placeholder:text-(--ui-text-muted)"
+                  className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-sm text-(--ui-text) placeholder:text-(--ui-text-muted)"
                   placeholder="Address"
                   value={form.address}
                   onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
@@ -521,7 +521,7 @@ export default function SuppliersRedesign() {
                       <select
                         value={form.credit_days}
                         onChange={(e) => setForm((p) => ({ ...p, credit_days: Number(e.target.value) }))}
-                        className="w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-white px-3 py-2 text-sm"
+                        className="w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-sm"
                       >
                         {CREDIT_DAY_OPTIONS.map((d) => (
                           <option key={d} value={d}>{d === 0 ? "Custom" : `${d} days`}</option>

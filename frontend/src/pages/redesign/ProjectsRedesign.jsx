@@ -28,7 +28,7 @@ function MilestoneProgress({ milestones }) {
   const pct = Math.round((completed / milestones.length) * 100);
   return (
     <div className="flex items-center gap-2">
-      <div className="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
+      <div className="w-24 h-2 bg-(--ui-border) rounded-full overflow-hidden">
         <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
       </div>
       <span className="text-xs text-(--ui-text-muted)">{completed}/{milestones.length}</span>
@@ -71,7 +71,7 @@ function CreateProjectModal({ customers, onClose, onCreated }) {
           </div>
           <div>
             <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Description</label>
-            <textarea className="w-full rounded-lg border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text)" rows={3} value={form.description} onChange={e => set("description", e.target.value)} />
+            <textarea className="w-full rounded-lg border border-(--ui-border) bg-(--ui-surface) px-3 py-2 text-sm text-(--ui-text)" rows={3} value={form.description} onChange={e => set("description", e.target.value)} />
           </div>
           <div>
             <label className="text-xs font-medium text-(--ui-text-muted) mb-1 block">Customer</label>
@@ -261,7 +261,7 @@ function ProjectDetail({ projectId, onBack }) {
               <div className="space-y-2">
                 {milestones.map(m => (
                   <div key={m.id} className="flex items-center gap-3 p-2 rounded-lg border border-(--ui-border) hover:bg-(--ui-bg-hover)">
-                    <button onClick={() => toggleMilestone(m.id, m.status)} className={`flex-shrink-0 ${m.status === "completed" ? "text-emerald-500" : "text-slate-300 hover:text-slate-400"}`}>
+                    <button onClick={() => toggleMilestone(m.id, m.status)} className={`flex-shrink-0 ${m.status === "completed" ? "text-emerald-500" : "text-(--ui-text-muted) hover:text-(--ui-text)"}`}>
                       <CheckCircle className="w-5 h-5" />
                     </button>
                     <div className="flex-1 min-w-0">
