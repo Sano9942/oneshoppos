@@ -150,6 +150,49 @@ export const POSProvider = ({ children }) => {
     showNotice,
   });
 
+  // ── Restaurant shell state (Phase 2-R.0) ──────────────────────────────────
+  // Additive — retail POS never sets these so all values stay at defaults.
+  // openCheck/closeCheck flip them as the restaurant shell transitions
+  // between floor and check views; ensureDraftOrder lazily creates the draft
+  // backing the current check on first kitchen action.
+  const [draftOrderId, setDraftOrderId] = useState(null);
+  const [orderContext, setOrderContext] = useState(null);
+  const [tableSessionId, setTableSessionId] = useState(null);
+  const [seatCount, setSeatCount] = useState(0);
+  const [activeSeat, setActiveSeat] = useState(1);
+  const [activeCourse, setActiveCourse] = useState(1);
+
+  const openCheck = useCallback(({ context, tableSessionId: tsid = null, draftOrderId: doid = null, seatCount: sc = 0 } = {}) => {
+    setOrderContext(context || null);
+    setTableSessionId(tsid);
+    setDraftOrderId(doid);
+    setSeatCount(sc);
+    setActiveSeat(1);
+    setActiveCourse(1);
+    cartHook.setCart([]);
+  }, [cartHook]);
+
+  const closeCheck = useCallback(() => {
+    setDraftOrderId(null);
+    setOrderContext(null);
+    setTableSessionId(null);
+    setSeatCount(0);
+    setActiveSeat(1);
+    setActiveCourse(1);
+  }, []);
+
+  const ensureDraftOrder = useCallback(async () => {
+    if (draftOrderId) return draftOrderId;
+    const data = await api.post("/api/draft-orders", {
+      order_context: orderContext,
+      table_session_id: tableSessionId,
+      seat_count: seatCount,
+    });
+    const newId = data?.draftOrder?.id ?? data?.id ?? null;
+    setDraftOrderId(newId);
+    return newId;
+  }, [draftOrderId, orderContext, tableSessionId, seatCount]);
+
   // ── Modifier picker (Phase 2.1 A2 wiring) ──────────────────────────────────
   // When a product with linked modifier groups is added, pause the add flow
   // and show POSModifierModal. After selection, add with price delta applied.
@@ -691,6 +734,18 @@ export const POSProvider = ({ children }) => {
     // Auto-apply promotions (Phase 2)
     appliedPromotions: cartHook.appliedPromotions,
     promoDiscount: cartHook.promoDiscount,
+    // Restaurant shell state (Phase 2-R.0) — additive; null/0/1 defaults for retail
+    draftOrderId,
+    orderContext,
+    tableSessionId,
+    seatCount,
+    activeSeat,
+    setActiveSeat,
+    activeCourse,
+    setActiveCourse,
+    openCheck,
+    closeCheck,
+    ensureDraftOrder,
   };
 
   return <POSContext.Provider value={value}>{children}</POSContext.Provider>;
