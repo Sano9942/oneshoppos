@@ -322,6 +322,12 @@ export const POSProvider = ({ children }) => {
     setSlip: receipt.setSlip, setSlipOpen: receipt.setSlipOpen,
     enqueueSale: offlineQueue.enqueueSale,
     loadParked,
+    // Phase 2-R.0 — restaurant shell context wired into completeSale payload
+    draftOrderId,
+    orderContext,
+    tableSessionId,
+    seatCount,
+    closeCheck,
     setError,
     showNotice,
   });

@@ -40,6 +40,12 @@ export function useCheckout({
   enqueueSale,
   // parked sales reload
   loadParked,
+  // Phase 2-R.0 — restaurant shell context (all nullable; retail leaves at defaults)
+  draftOrderId,
+  orderContext,
+  tableSessionId,
+  seatCount,
+  closeCheck,
   // notices
   setError,
   showNotice,
@@ -180,7 +186,11 @@ export function useCheckout({
     setPayments([]);
     setTipAmount("");
     setServerId("");
-  }, [setCart, setDiscountInput, setOrderNote, setSelectedCustomerId, setCheckoutOpen]);
+    // Phase 2-R.0 — drop the restaurant shell back to its default state
+    // (cart already cleared above). No-op for retail because closeCheck
+    // is undefined when the restaurant shell isn't mounted.
+    closeCheck?.();
+  }, [setCart, setDiscountInput, setOrderNote, setSelectedCustomerId, setCheckoutOpen, closeCheck]);
 
   const completeSale = useCallback(async () => {
     if (!selectedOutletId || !cart.length) return;
@@ -228,6 +238,13 @@ export function useCheckout({
       tip_amount: tipNum > 0 ? tipNum : 0,
       tip_method: tipNum > 0 ? tipMethod : null,
       server_id: serverNum,
+      // Phase 2-R.0 — restaurant shell context. All nullable; backend at
+      // routes/sales.js:445,1007 already accepts draft_order_id. The other
+      // three fields are forward-compat for the shell's check workflow.
+      draft_order_id: draftOrderId ?? null,
+      order_context: orderContext ?? null,
+      table_session_id: tableSessionId ?? null,
+      seat_count: seatCount || null,
     };
 
     const queueSaleOffline = async () => {
@@ -321,6 +338,7 @@ export function useCheckout({
     customers, total, change, outlets, discountValue, taxInclusive, taxTotal, grossTotal,
     enqueueSale, setSlip, setSlipOpen, clearAfterSale, showNotice, setError,
     buildSuccessSlip, loadParked, tipAmount, tipMethod, serverId,
+    draftOrderId, orderContext, tableSessionId, seatCount,
   ]);
 
   const retryPendingSale = useCallback(async () => {
