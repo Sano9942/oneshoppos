@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { Navigate } from "react-router-dom";
 import { POSProvider, usePOS } from "./pos/POSContext";
+import { usePreset } from "../../contexts/PresetContext";
 import { ErrorBoundary } from "../../ui/ErrorBoundary";
 import POSLockScreen from "./pos/POSLockScreen";
 import POSDiscountModal from "./pos/POSDiscountModal";
@@ -99,6 +101,14 @@ function RestaurantContent() {
 }
 
 export default function POSRestaurantRedesign() {
+  // Phase 2-R.0 Day 9 — defensive redirect. If a retail tenant somehow
+  // navigates here directly (deep link, manual URL, stale tab) bounce
+  // back to /pos. Wait for preset to load to avoid a redirect loop.
+  const { presetLoaded, hasMode } = usePreset();
+  if (presetLoaded && !hasMode("restaurant")) {
+    return <Navigate to="/pos" replace />;
+  }
+
   return (
     <POSProvider>
       <ErrorBoundary level="page">
