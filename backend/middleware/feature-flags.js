@@ -57,6 +57,19 @@ const DEFAULT_FEATURE_FLAGS = {
   // Mode-gated (restaurant mode).
   phase4_restaurant_kds: false,
   phase4_restaurant_preauth: false,
+  // Phase 2-R Wave A-D restaurant maturation flags (mode-gated: restaurant).
+  // Default false; enabled via migration v58 backfill for tenants already
+  // in restaurant mode, and via MODE_REGISTRY auto-enable for new presets.
+  phase4_restaurant_86: false,
+  phase4_restaurant_void_comp: false,
+  phase4_restaurant_pay_at_table: false,
+  phase4_restaurant_reservations: false,
+  phase4_restaurant_kds_analytics: false,
+  phase4_restaurant_day_parting: false,
+  phase4_restaurant_fire_chits: false,
+  phase4_restaurant_seats: false,
+  phase4_restaurant_drive_thru: false,
+  phase4_restaurant_menu_engineering: false,
   // Mode-gated (appointments mode).
   phase4_appointments: false,
   phase4_appointments_waitlists: false,
