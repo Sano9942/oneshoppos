@@ -2,17 +2,18 @@ import { useState } from "react";
 import { Send, Flame, CreditCard, MoreVertical } from "lucide-react";
 import { api } from "../../../../api";
 import { usePOS } from "../POSContext";
+import RestaurantOverflowMenu from "./RestaurantOverflowMenu";
 
-// Phase 2-R.0 Day 5 — Sticky bottom action bar.
+// Phase 2-R.0 Day 5 + 6 — Sticky bottom action bar.
 // Three primary actions: Send to Kitchen / Fire Course N / Pay.
-// "More" button is a stub for Track 3 (split, transfer, comp, etc.) —
-// rendered today but the menu is intentionally empty.
+// "More" button opens RestaurantOverflowMenu (Day 6): Split, Comp,
+// Discount, Transfer Table, Add Seat, Note.
 //
 // Send to Kitchen lazily creates the backing draft order via
 // ensureDraftOrder() so the user can build a check first and the draft
 // row only appears when they actually fire it.
 
-export default function RestaurantActionBar() {
+export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer }) {
   const {
     cart,
     money,
@@ -104,17 +105,12 @@ export default function RestaurantActionBar() {
           >
             <MoreVertical size={18} />
           </button>
-          {showMore && (
-            <div
-              className="absolute right-0 bottom-14 w-56 rounded-xl bg-white border border-slate-200 shadow-2xl z-50 p-2 text-sm"
-              onMouseLeave={() => setShowMore(false)}
-            >
-              {/* TODO Track 3: Split, Comp, Discount, Transfer Table, Add Seat, Note */}
-              <div className="px-3 py-2 text-xs text-slate-400 italic">
-                Split / Transfer / Comp — coming in Track 3
-              </div>
-            </div>
-          )}
+          <RestaurantOverflowMenu
+            open={showMore}
+            onClose={() => setShowMore(false)}
+            onOpenSplit={onOpenSplit}
+            onOpenTransfer={onOpenTransfer}
+          />
         </div>
       </div>
     </div>
