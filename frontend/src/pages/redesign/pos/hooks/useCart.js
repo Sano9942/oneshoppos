@@ -176,9 +176,15 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
     triggerSearch(v, field);
   }, [triggerSearch]);
 
-  const addToCart = useCallback((product) => {
+  const addToCart = useCallback((product, overlay = {}) => {
     const stock = Number(product.local_stock ?? product.stock ?? 0);
     const isBundle = Boolean(product.is_bundle);
+    // Phase 2-R.0: optional restaurant overlay stamps each line with the
+    // active seat + course. When no overlay is passed (retail flow) we
+    // default to seat_number=null / course_name="main" — the same defaults
+    // the schema applies on draft_order_items / sale_items.
+    const seatStamp = overlay.seat_number ?? null;
+    const courseStamp = overlay.course_name ?? "main";
     setCart((prev) => {
       const found = prev.find((x) => x.id === product.id);
       if (found) {
@@ -197,7 +203,7 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
       const basePrice = Number(product.price);
       const plMatch = resolvePriceListPrice(product.id, product.variant_id, 1);
       const resolvedPrice = plMatch ? Number(plMatch.price) : basePrice;
-      return [{ ...product, quantity: 1, availableStock: isBundle ? 99999 : stock, originalPrice: basePrice, price: resolvedPrice }, ...prev];
+      return [{ ...product, quantity: 1, availableStock: isBundle ? 99999 : stock, originalPrice: basePrice, price: resolvedPrice, seat_number: seatStamp, course_name: courseStamp }, ...prev];
     });
     setSearch("");
     setBarcodeSearch("");

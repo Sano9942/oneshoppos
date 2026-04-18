@@ -197,26 +197,39 @@ export const POSProvider = ({ children }) => {
   // When a product with linked modifier groups is added, pause the add flow
   // and show POSModifierModal. After selection, add with price delta applied.
   const [modifierModalState, setModifierModalState] = useState(null);
+  // Phase 2-R.0: when a restaurant check is open (orderContext set), stamp
+  // every cart line with the picker's active seat + course. Retail flow
+  // leaves orderContext null so no overlay is built and the cart line gets
+  // the schema defaults (seat_number=null, course_name="main").
+  const buildSeatCourseOverlay = useCallback(() => {
+    if (!orderContext) return undefined;
+    return {
+      seat_number: activeSeat ?? null,
+      course_name: `course_${activeCourse || 1}`,
+    };
+  }, [orderContext, activeSeat, activeCourse]);
+
   const addToCartWithModifiers = useCallback(async (product) => {
     if (!product || !product.id) return;
+    const overlay = buildSeatCourseOverlay();
     // Skip tree lookup for bundles, weighted, or non-restaurant tenants.
     if (product.is_bundle) {
-      cartHook.addToCart(product);
+      cartHook.addToCart(product, overlay);
       return;
     }
     try {
       const res = await api.get(`/api/products/${product.id}/modifier-tree`);
       const groups = Array.isArray(res?.groups) ? res.groups : [];
       if (!groups.length) {
-        cartHook.addToCart(product);
+        cartHook.addToCart(product, overlay);
         return;
       }
       setModifierModalState({ product, groups });
     } catch {
       // 404 / feature-flag off / network — fall back to plain add so POS never breaks.
-      cartHook.addToCart(product);
+      cartHook.addToCart(product, overlay);
     }
-  }, [cartHook]);
+  }, [cartHook, buildSeatCourseOverlay]);
 
   const confirmModifiers = useCallback((modifiers, priceDelta) => {
     const state = modifierModalState;
@@ -229,9 +242,9 @@ export const POSProvider = ({ children }) => {
       modifiers,
       modifier_price_delta: Number(priceDelta || 0),
     };
-    cartHook.addToCart(adjusted);
+    cartHook.addToCart(adjusted, buildSeatCourseOverlay());
     setModifierModalState(null);
-  }, [modifierModalState, cartHook]);
+  }, [modifierModalState, cartHook, buildSeatCourseOverlay]);
 
   const cancelModifiers = useCallback(() => setModifierModalState(null), []);
 
