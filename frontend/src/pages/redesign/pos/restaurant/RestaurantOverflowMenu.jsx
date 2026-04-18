@@ -9,7 +9,7 @@ import { usePOS } from "../POSContext";
 // for 2-R.0 (manager PIN workflow lands in 2-R.2). Add Seat just bumps
 // seatCount on POSContext so SeatCoursePicker exposes the new seat.
 
-export default function RestaurantOverflowMenu({ open, onClose, onOpenSplit, onOpenTransfer, onOpen86 }) {
+export default function RestaurantOverflowMenu({ open, onClose, onOpenSplit, onOpenTransfer, onOpen86, onOpenVoidComp }) {
   const {
     cart,
     setShowDiscountModal,
@@ -34,14 +34,33 @@ export default function RestaurantOverflowMenu({ open, onClose, onOpenSplit, onO
       disabled: cartEmpty,
       disabledTooltip: "Add items before splitting",
     },
-    {
-      key: "comp",
-      icon: Gift,
-      label: "Comp",
-      onClick: () => {},
-      disabled: true,
-      disabledTooltip: "Available in 2-R.2 (manager PIN workflow)",
-    },
+    // 2-R.2 — Void/Comp opens a manager PIN modal. Flag-gated so pre-v59
+    // tenants don't see dead entries.
+    ...(posFlags?.phase4_restaurant_void_comp
+      ? [
+          {
+            key: "void",
+            icon: Ban,
+            label: "Void",
+            onClick: () => { onClose?.(); onOpenVoidComp?.("void"); },
+          },
+          {
+            key: "comp",
+            icon: Gift,
+            label: "Comp",
+            onClick: () => { onClose?.(); onOpenVoidComp?.("comp"); },
+          },
+        ]
+      : [
+          {
+            key: "comp",
+            icon: Gift,
+            label: "Comp",
+            onClick: () => {},
+            disabled: true,
+            disabledTooltip: "Enable phase4_restaurant_void_comp",
+          },
+        ]),
     // 2-R.1 — "86 an item" launches the availability modal. Hidden when
     // the per-tenant flag is off so pre-v58 tenants don't see a dead entry.
     ...(posFlags?.phase4_restaurant_86

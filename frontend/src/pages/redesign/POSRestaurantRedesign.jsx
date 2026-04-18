@@ -23,6 +23,7 @@ import SplitCheckModal from "./pos/restaurant/SplitCheckModal";
 import TransferTableModal from "./pos/restaurant/TransferTableModal";
 import RestaurantGuestModeModal from "./pos/restaurant/RestaurantGuestModeModal";
 import RestaurantAvailabilityModal from "./pos/restaurant/RestaurantAvailabilityModal";
+import VoidCompModal from "./pos/restaurant/VoidCompModal";
 
 // Phase 2-R.0 — Restaurant POS shell at /pos/restaurant.
 // Composition only: wraps POSContent with POSProvider + ErrorBoundary,
@@ -35,6 +36,7 @@ function RestaurantContent() {
   const [splitOpen, setSplitOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
+  const [voidCompState, setVoidCompState] = useState({ open: false, tab: "void" });
 
   if (isLocked) return <POSLockScreen />;
 
@@ -65,6 +67,7 @@ function RestaurantContent() {
             onOpenSplit={() => setSplitOpen(true)}
             onOpenTransfer={() => setTransferOpen(true)}
             onOpen86={() => setAvailabilityOpen(true)}
+            onOpenVoidComp={(tab) => setVoidCompState({ open: true, tab: tab || "void" })}
           />
         )}
       </div>
@@ -104,6 +107,16 @@ function RestaurantContent() {
       <RestaurantAvailabilityModal
         open={availabilityOpen}
         onClose={() => setAvailabilityOpen(false)}
+      />
+
+      {/* 2-R.2 — Void/Comp modal; opens with no saleItemId from the POS
+         overflow so the modal itself explains that committed sales are
+         needed. Check-detail page wires saleItemId directly. */}
+      <VoidCompModal
+        open={voidCompState.open}
+        initialTab={voidCompState.tab}
+        onClose={() => setVoidCompState({ open: false, tab: "void" })}
+        onSuccess={() => setVoidCompState({ open: false, tab: "void" })}
       />
     </div>
   );

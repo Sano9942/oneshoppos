@@ -17,7 +17,7 @@ import SeatCoursePicker, { useIsPortrait } from "./SeatCoursePicker";
 // product has modifier groups and (b) stamps each line with the
 // active seat / course. No duplicate add logic here.
 
-export default function RestaurantCheckView({ onExit, onOpenSplit, onOpenTransfer, onOpen86 }) {
+export default function RestaurantCheckView({ onExit, onOpenSplit, onOpenTransfer, onOpen86, onOpenVoidComp }) {
   const { posLayout, addToCart, suggestions, money, total } = usePOS();
   const scrollRef = useRef(null);
   const isPortrait = useIsPortrait(900);
@@ -97,7 +97,7 @@ export default function RestaurantCheckView({ onExit, onOpenSplit, onOpenTransfe
       {isPortrait && <SeatCoursePicker asSheet />}
 
       {/* Sticky action bar — pinned to viewport */}
-      <RestaurantActionBar onOpenSplit={onOpenSplit} onOpenTransfer={onOpenTransfer} onOpen86={onOpen86} />
+      <RestaurantActionBar onOpenSplit={onOpenSplit} onOpenTransfer={onOpenTransfer} onOpen86={onOpen86} onOpenVoidComp={onOpenVoidComp} />
     </div>
   );
 }
