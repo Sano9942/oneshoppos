@@ -104,6 +104,15 @@ async function updateTableSession(db, id, data) {
   }
   if (data.server_id !== undefined) { idx++; sets.push(`server_id = $${idx}`); params.push(data.server_id); }
   if (data.guest_count !== undefined) { idx++; sets.push(`guest_count = $${idx}`); params.push(data.guest_count); }
+  if (data.table_id !== undefined) {
+    const { rows: [destTable] } = await db.query(
+      "SELECT rt.*, fp.outlet_id FROM restaurant_tables rt JOIN restaurant_floor_plans fp ON fp.id = rt.floor_plan_id WHERE rt.id = $1",
+      [data.table_id]
+    );
+    if (!destTable) throw Object.assign(new Error("Destination table not found"), { statusCode: 404 });
+    idx++; sets.push(`table_id = $${idx}`); params.push(data.table_id);
+    idx++; sets.push(`outlet_id = $${idx}`); params.push(destTable.outlet_id);
+  }
 
   if (!sets.length) return null;
   idx++; params.push(id);
