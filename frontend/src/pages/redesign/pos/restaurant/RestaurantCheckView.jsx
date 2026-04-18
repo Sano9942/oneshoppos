@@ -39,7 +39,7 @@ export default function RestaurantCheckView({ onExit, onOpenSplit, onOpenTransfe
             <POSSearchArea />
 
             {/* Existing POS layout tiles — identical to POSRedesign */}
-            {posLayout?.layout_json?.length > 0 && (
+            {posLayout?.layout_json?.length > 0 ? (
               <div className="grid grid-cols-4 gap-2">
                 {posLayout.layout_json.map((tile, i) => (
                   <button
@@ -58,7 +58,13 @@ export default function RestaurantCheckView({ onExit, onOpenSplit, onOpenTransfe
                   </button>
                 ))}
               </div>
-            )}
+            ) : posLayout === null ? (
+              <div className="grid grid-cols-4 gap-2" aria-label="Loading menu">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="h-14 rounded-lg bg-slate-200/60 animate-pulse" />
+                ))}
+              </div>
+            ) : null}
 
             {suggestions?.length > 0 && (
               <div className="flex gap-2 overflow-x-auto pb-1">
