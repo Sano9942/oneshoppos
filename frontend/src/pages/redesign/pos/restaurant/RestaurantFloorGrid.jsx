@@ -21,7 +21,7 @@ const STATUS_TONE = {
 };
 
 export default function RestaurantFloorGrid({ onOpenCheck }) {
-  const { openCheck, cart, setCart, parkSale, tableSessionId, orderContext } = usePOS();
+  const { openCheck, cart, setCart, parkSale, tableSessionId, orderContext, posFlags } = usePOS();
 
   const [plans, setPlans] = useState([]);
   const [activePlan, setActivePlan] = useState(null);
@@ -172,9 +172,15 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
           <EntryButton
             icon={Package}
             label="New Drive-Thru"
-            // DB enum doesn't include "drive_thru" in 2-R.0 (see plan 2-R.9).
-            // Map to "takeout" for persistence; UI label is the only difference.
-            onClick={() => enterTakeoutContext("takeout")}
+            // 2-R.9: when phase4_restaurant_drive_thru is ON the button
+            // writes drive_thru order_context (distinct from takeout in
+            // reports/analytics). Flag OFF keeps legacy takeout mapping
+            // so stale UI on tenants without the migration still works.
+            onClick={() =>
+              enterTakeoutContext(
+                posFlags?.phase4_restaurant_drive_thru ? "drive_thru" : "takeout",
+              )
+            }
           />
         </div>
       </div>
