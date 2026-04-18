@@ -46,6 +46,11 @@ export function useCheckout({
   tableSessionId,
   seatCount,
   closeCheck,
+  // Phase 2-R.0 Day 8 — guest handoff: when a signature was captured,
+  // stash it in notes JSON so the column holds { text, signature_svg }.
+  signatureSvg,
+  setSignatureSvg,
+  setShowGuestMode,
   // notices
   setError,
   showNotice,
@@ -186,11 +191,14 @@ export function useCheckout({
     setPayments([]);
     setTipAmount("");
     setServerId("");
+    // Phase 2-R.0 Day 8 — drop any captured guest signature + overlay state
+    setSignatureSvg?.(null);
+    setShowGuestMode?.(false);
     // Phase 2-R.0 — drop the restaurant shell back to its default state
     // (cart already cleared above). No-op for retail because closeCheck
     // is undefined when the restaurant shell isn't mounted.
     closeCheck?.();
-  }, [setCart, setDiscountInput, setOrderNote, setSelectedCustomerId, setCheckoutOpen, closeCheck]);
+  }, [setCart, setDiscountInput, setOrderNote, setSelectedCustomerId, setCheckoutOpen, closeCheck, setSignatureSvg, setShowGuestMode]);
 
   const completeSale = useCallback(async () => {
     if (!selectedOutletId || !cart.length) return;
@@ -220,6 +228,12 @@ export function useCheckout({
       // when the column exists (Phase 2.2 will add modifier persistence).
       modifiers: i.modifiers || null,
     }));
+    // Phase 2-R.0 Day 8 — signature_svg rides along in notes JSON when the
+    // guest signed on the handoff screen. DB column is still plain TEXT in
+    // 2-R.0; a dedicated sales.signature_svg column lands in 2-R.x.
+    const notesForSale = signatureSvg
+      ? JSON.stringify({ text: orderNote || null, signature_svg: signatureSvg })
+      : (orderNote || null);
     const salePayload = {
       cartItems: stampedCart,
       payments,
@@ -228,7 +242,7 @@ export function useCheckout({
       customer_id: checkoutCustomerId ? Number(checkoutCustomerId) : null,
       discount_amount: Number(discountInput || 0) + promoDiscount,
       discount_type: promoDiscount > 0 && !Number(discountInput || 0) ? "fixed" : discountType,
-      notes: orderNote || null,
+      notes: notesForSale,
       points_earned: checkoutCustomerId ? pointsEarned : 0,
       points_redeemed: checkoutCustomerId ? pointsRedeemed : 0,
       idempotency_key: crypto.randomUUID(),
@@ -338,7 +352,7 @@ export function useCheckout({
     customers, total, change, outlets, discountValue, taxInclusive, taxTotal, grossTotal,
     enqueueSale, setSlip, setSlipOpen, clearAfterSale, showNotice, setError,
     buildSuccessSlip, loadParked, tipAmount, tipMethod, serverId,
-    draftOrderId, orderContext, tableSessionId, seatCount,
+    draftOrderId, orderContext, tableSessionId, seatCount, signatureSvg,
   ]);
 
   const retryPendingSale = useCallback(async () => {

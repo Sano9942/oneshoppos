@@ -162,6 +162,10 @@ export const POSProvider = ({ children }) => {
   const [activeSeat, setActiveSeat] = useState(1);
   const [activeCourse, setActiveCourse] = useState(1);
 
+  // Phase 2-R.0 Day 8 — Guest handoff overlay state (tip + signature + receipt).
+  const [showGuestMode, setShowGuestMode] = useState(false);
+  const [signatureSvg, setSignatureSvg] = useState(null);
+
   const openCheck = useCallback(({ context, tableSessionId: tsid = null, draftOrderId: doid = null, seatCount: sc = 0 } = {}) => {
     setOrderContext(context || null);
     setTableSessionId(tsid);
@@ -328,6 +332,9 @@ export const POSProvider = ({ children }) => {
     tableSessionId,
     seatCount,
     closeCheck,
+    signatureSvg,
+    setSignatureSvg,
+    setShowGuestMode,
     setError,
     showNotice,
   });
@@ -757,7 +764,9 @@ export const POSProvider = ({ children }) => {
     draftOrderId,
     orderContext,
     tableSessionId,
+    setTableSessionId,
     seatCount,
+    setSeatCount,
     activeSeat,
     setActiveSeat,
     activeCourse,
@@ -765,6 +774,11 @@ export const POSProvider = ({ children }) => {
     openCheck,
     closeCheck,
     ensureDraftOrder,
+    // Phase 2-R.0 Day 8 — guest handoff
+    showGuestMode,
+    setShowGuestMode,
+    signatureSvg,
+    setSignatureSvg,
   };
 
   return <POSContext.Provider value={value}>{children}</POSContext.Provider>;
