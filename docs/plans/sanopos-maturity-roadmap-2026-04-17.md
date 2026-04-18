@@ -175,7 +175,23 @@ A restaurant server on a tablet logs in → `/pos/restaurant` loads floor plan �
 - Modified: [frontend/src/routes/appRoutes.jsx](../../frontend/src/routes/appRoutes.jsx) — `HomeRedirect` + `/pos` redirect logic to auto-route restaurant tenants
 - No backend changes required — existing endpoints cover every action in the shell.
 
-**Estimate:** ~2 weeks (10 working days) — most of the logic already lives in POSContext and the 6 sidebar pages. The new work is composition, floor-plan grid UI, seat/course grouping, and the route redirect.
+**Implementation notes — layout constraints (locked 2026-04-18 from Petpooja + Toast Go research):**
+
+Source: 2026-04-18 competitive research pass on Petpooja (55,000+ restaurants across India + Middle East + Canada + South Africa — closest analogue to Pakistan/SA market) and Toast Go 3 handheld POS UX. Insight: regional buyers operate **tablet-first, speed-first** — not desktop-first, floor-plan-first like Square. Building 2-R.0 as a pure Square clone would force a retrofit later. These five constraints lock that in upfront:
+
+1. **Two entry paths, not one.** The shell opens with both a floor plan tile grid AND a prominent "Start new check" button row (Takeaway / Delivery / Drive-Thru). Counter-heavy tenants (cafés, sweet shops with restaurant mode on) tap "Start new check" and skip the floor plan entirely. Full-service restaurants tap a table tile. Both paths should reach the check view in ≤2 taps. Why: Petpooja's headline promise is "take orders, generate bills... within seconds" — floor-plan-first defeats that for ~half your restaurant tenants.
+
+2. **Portrait-first responsive layout.** When viewport width < 900px (typical tablet portrait), the cart stacks ON TOP of the menu grid (not side-by-side). Header auto-collapses as items are added to give menu more room. Why: Toast Go 3 ships this exact pattern because servers carry tablets in portrait orientation. Pakistan/SA market is tablet-heavy.
+
+3. **Sticky bottom action bar.** Fire to Kitchen / Pay / Hold buttons are pinned to the bottom of the viewport on every check view — always reachable with thumb regardless of cart length. Why: Toast locks Hold/Stay/Send at the bottom; servers don't scroll to find primary actions during service rush.
+
+4. **Overflow menu for secondary actions.** Split / Comp / Discount / Transfer Table / Add Seat / Note live behind a single "More" button (3-dot icon) in the top-right of the check view, not in the right-rail action stack. Right rail keeps only Send to Kitchen, Fire Next Course, Pay. Why: Toast Go consolidates Service Charge / Split / Discount into overflow on small screens to keep the order grid dominant. Reduces top-row clutter without losing functionality.
+
+5. **Guest-signature handoff mode.** A "Hand to guest" button in the checkout flow flips the tablet into guest mode: shows tip selector + signature canvas + email/SMS receipt choice in large-tap-target portrait layout. Server taps "Done" to return to operator mode. Reuses existing `POSCheckoutModal` (tip section already wired) + `POSEmailReceiptModal`. Why: Toast Go ships this; it's how guests tip and sign without the server typing for them.
+
+**What these constraints do NOT change:** the build scope, file list, backend endpoints, or estimate. They are layout decisions that get baked into `POSRestaurantRedesign.jsx` and its sub-components from day 1, not features added later.
+
+**Estimate:** ~2 weeks (10 working days) — most of the logic already lives in POSContext and the 6 sidebar pages. The new work is composition, floor-plan grid UI, seat/course grouping, and the route redirect. Layout constraints above are baked into the design from day 1; they don't change the estimate.
 
 ### 2-R.1 — 86'd items / menu availability (out-of-stock toggle)
 **Why this first:** highest daily-use operational gap. Guest ordering a sold-out item is the #1 friction point competitors cite. Also blocks 2-R.3 (pay-at-table can't ship without this).
