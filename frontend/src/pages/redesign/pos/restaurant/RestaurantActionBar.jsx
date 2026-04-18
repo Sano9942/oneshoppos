@@ -1,8 +1,25 @@
-import { useState } from "react";
-import { Send, Flame, CreditCard, MoreVertical } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Send, Flame, CreditCard, MoreVertical, WifiOff } from "lucide-react";
 import { api } from "../../../../api";
 import { usePOS } from "../POSContext";
 import RestaurantOverflowMenu from "./RestaurantOverflowMenu";
+
+function useOnlineStatus() {
+  const [online, setOnline] = useState(
+    typeof navigator !== "undefined" ? navigator.onLine !== false : true,
+  );
+  useEffect(() => {
+    const onUp = () => setOnline(true);
+    const onDown = () => setOnline(false);
+    window.addEventListener("online", onUp);
+    window.addEventListener("offline", onDown);
+    return () => {
+      window.removeEventListener("online", onUp);
+      window.removeEventListener("offline", onDown);
+    };
+  }, []);
+  return online;
+}
 
 // Phase 2-R.0 Day 5 + 6 — Sticky bottom action bar.
 // Three primary actions: Send to Kitchen / Fire Course N / Pay.
@@ -29,11 +46,12 @@ export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer }) {
   const [sending, setSending] = useState(false);
   const [firing, setFiring] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  const online = useOnlineStatus();
 
   const cartEmpty = cart.length === 0;
 
   const sendToKitchen = async () => {
-    if (cartEmpty) return;
+    if (cartEmpty || !online) return;
     setSending(true);
     try {
       const draftId = await ensureDraftOrder();
@@ -48,6 +66,7 @@ export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer }) {
   };
 
   const fireNextCourse = async () => {
+    if (!online) return;
     setFiring(true);
     try {
       const draftId = await ensureDraftOrder();
@@ -72,19 +91,25 @@ export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer }) {
 
   return (
     <div className="sticky bottom-0 z-40 bg-white border-t border-slate-200 px-4 py-3 shadow-[0_-10px_24px_-12px_rgba(0,0,0,0.12)]">
+      {!online && (
+        <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold">
+          <WifiOff size={14} />
+          <span>Kitchen firing requires connection. Pay still works offline.</span>
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <ActionButton
           icon={Send}
           label={sending ? "Sending…" : "Send to Kitchen"}
           onClick={sendToKitchen}
-          disabled={cartEmpty || sending}
+          disabled={cartEmpty || sending || !online}
           tone="ghost"
         />
         <ActionButton
           icon={Flame}
           label={firing ? "Firing…" : `Fire C${activeCourse || 1}`}
           onClick={fireNextCourse}
-          disabled={firing}
+          disabled={firing || !online}
           tone="ghost"
         />
         <button
