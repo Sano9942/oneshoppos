@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Users, Package, Truck, ShoppingBag, X } from "lucide-react";
+import { Users, Package, Truck, ShoppingBag, X, Save, Trash2 } from "lucide-react";
 import { api } from "../../../../api";
 import { usePOS } from "../POSContext";
 
@@ -21,7 +21,7 @@ const STATUS_TONE = {
 };
 
 export default function RestaurantFloorGrid({ onOpenCheck }) {
-  const { openCheck } = usePOS();
+  const { openCheck, cart, setCart, parkSale, tableSessionId, orderContext } = usePOS();
 
   const [plans, setPlans] = useState([]);
   const [activePlan, setActivePlan] = useState(null);
@@ -30,6 +30,10 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
   const [seatModalTableId, setSeatModalTableId] = useState(null);
   const [seatForm, setSeatForm] = useState({ guest_count: 2 });
   const [seatBusy, setSeatBusy] = useState(false);
+  // Cart-collision prompt: when the cart has items from a prior check
+  // and the user opens a different table / takeout context, ask before
+  // wiping the cart. `pendingOpen` is the deferred openCheck() args.
+  const [pendingOpen, setPendingOpen] = useState(null);
 
   const loadPlans = useCallback(async () => {
     setLoading(true);
@@ -63,19 +67,68 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
     return () => clearInterval(t);
   }, [activePlan, loadFloorDetail]);
 
-  const enterTakeoutContext = (context) => {
-    openCheck({ context });
+  // Decide whether opening `next` would discard a cart that belongs to a
+  // different in-progress check. Same destination (tapping the currently
+  // open table) returns false — that's just resuming, not a collision.
+  // A non-empty cart with no current context still collides — the user
+  // backed out without saving and is now opening a fresh check.
+  const wouldCollide = useCallback((next) => {
+    if (!cart || cart.length === 0) return false;
+    const sameTable = next.tableSessionId != null
+      && next.tableSessionId === tableSessionId;
+    const sameContext = next.context && next.context === orderContext;
+    if (sameTable) return false;
+    if (!next.tableSessionId && sameContext) return false;
+    return true;
+  }, [cart, orderContext, tableSessionId]);
+
+  const performOpen = useCallback((next) => {
+    openCheck(next);
     onOpenCheck?.();
+  }, [openCheck, onOpenCheck]);
+
+  const requestOpen = useCallback((next) => {
+    if (wouldCollide(next)) {
+      setPendingOpen(next);
+      return;
+    }
+    performOpen(next);
+  }, [wouldCollide, performOpen]);
+
+  const enterTakeoutContext = (context) => {
+    requestOpen({ context });
   };
 
   const openTableCheck = (table) => {
-    openCheck({
+    requestOpen({
       context: "dine_in",
       tableSessionId: table.session_id,
       seatCount: Number(table.guest_count) || 1,
     });
-    onOpenCheck?.();
   };
+
+  // Save / Discard / Cancel handlers for the collision prompt.
+  const handleSavePending = useCallback(async () => {
+    const next = pendingOpen;
+    setPendingOpen(null);
+    if (!next) return;
+    // parkSale clears the cart on success; if it fails (no shift, etc.)
+    // we still proceed because the user explicitly opted to switch.
+    try { await parkSale(); } catch { /* notice surfaced by POSContext */ }
+    performOpen(next);
+  }, [pendingOpen, parkSale, performOpen]);
+
+  const handleDiscardPending = useCallback(() => {
+    const next = pendingOpen;
+    setPendingOpen(null);
+    if (!next) return;
+    setCart([]);
+    performOpen(next);
+  }, [pendingOpen, setCart, performOpen]);
+
+  const handleCancelPending = useCallback(() => {
+    setPendingOpen(null);
+  }, []);
 
   const seatTable = async () => {
     if (!seatModalTableId) return;
@@ -88,12 +141,11 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
       setSeatModalTableId(null);
       // Skip the next poll round — go straight into the check.
       const sessionId = data?.session?.id ?? data?.id ?? null;
-      openCheck({
+      requestOpen({
         context: "dine_in",
         tableSessionId: sessionId,
         seatCount: Number(seatForm.guest_count) || 1,
       });
-      onOpenCheck?.();
     } catch (e) {
       // best-effort; the parent shell shows the global notice/error banners.
       console.error("Failed to seat table:", e);
@@ -168,6 +220,51 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
           </div>
         )}
       </div>
+
+      {/* Cart-collision prompt (Phase 2-R.0 Day 10).
+          Triggered when the user opens a different check while the
+          current cart still has items. */}
+      {pendingOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4"
+          onClick={handleCancelPending}
+        >
+          <div
+            className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-slate-900">Save current check?</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              {orderContext === "dine_in" && tableSessionId
+                ? `Save the cart for Table ${tableSessionId} before switching?`
+                : "Save the current cart as a draft before switching?"}
+            </p>
+            <div className="mt-5 grid grid-cols-3 gap-2">
+              <button
+                onClick={handleSavePending}
+                className="py-3 rounded-xl bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold text-sm flex flex-col items-center gap-1"
+              >
+                <Save size={16} />
+                Save
+              </button>
+              <button
+                onClick={handleDiscardPending}
+                className="py-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-sm flex flex-col items-center gap-1"
+              >
+                <Trash2 size={16} />
+                Discard
+              </button>
+              <button
+                onClick={handleCancelPending}
+                className="py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm flex flex-col items-center gap-1"
+              >
+                <X size={16} />
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Seat modal */}
       {seatModalTableId != null && (
