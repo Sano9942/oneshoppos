@@ -88,6 +88,7 @@ const RestaurantFloorRoute = lazy(() => import("../pages/RestaurantFloorRoute"))
 const RestaurantChecksRoute = lazy(() => import("../pages/RestaurantChecksRoute"));
 const Restaurant86Route = lazy(() => import("../pages/Restaurant86Route"));
 const VoidReasonsAdminRoute = lazy(() => import("../pages/VoidReasonsAdminRoute"));
+const MenuSchedulesRoute = lazy(() => import("../pages/MenuSchedulesRoute"));
 const ModifierGroupsRoute = lazy(() => import("../pages/ModifierGroupsRoute"));
 const RestaurantInboxRoute = lazy(() => import("../pages/RestaurantInboxRoute"));
 const KDSRoute = lazy(() => import("../pages/KDSRoute"));
@@ -227,6 +228,7 @@ export const appRoutes = [
     <Route path="/restaurant/checks" element={perm("manage_restaurant", wrap(RestaurantChecksRoute))} />
     <Route path="/restaurant/availability" element={perm("manage_restaurant", wrap(Restaurant86Route))} />
     <Route path="/restaurant/void-reasons" element={perm("all_access", wrap(VoidReasonsAdminRoute))} />
+    <Route path="/restaurant/menu-schedules" element={perm("manage_restaurant", wrap(MenuSchedulesRoute))} />
     <Route path="/restaurant/modifiers" element={perm("manage_restaurant", wrap(ModifierGroupsRoute))} />
     <Route path="/restaurant/inbox" element={perm("manage_restaurant", wrap(RestaurantInboxRoute))} />
     <Route path="/kds" element={perm("manage_kds", wrap(KDSRoute))} />
