@@ -26,13 +26,16 @@ module.exports = function registerPublicRestaurantRoutes(app, deps) {
         return res.status(404).json({ error: "No active session found for this QR code" });
       }
 
-      // Fetch published menu items for outlet
+      // Fetch published menu items for outlet. 2-R.1: hide products that
+      // have been 86'd (sold-out). Retail tenants unaffected because
+      // is_sold_out defaults to false.
       const { rows: items } = await db.query(
         `SELECT p.id, p.name, p.description_html AS description, p.price, p.image_url,
                 c.name AS category_name, c.id AS category_id
          FROM products p
          LEFT JOIN categories c ON c.id = p.category_id
          WHERE p.status = 'active' AND p.deleted_at IS NULL
+           AND p.is_sold_out = false
          ORDER BY c.sort_order, c.name, p.name`
       );
 
@@ -72,12 +75,16 @@ module.exports = function registerPublicRestaurantRoutes(app, deps) {
       );
       if (!order) return res.status(404).json({ error: "No active check for this token" });
 
-      // Get product
+      // Get product. 2-R.1: refuse 86'd items with 422 so the guest UI can
+      // show a friendly "unavailable" toast instead of a generic error.
       const { rows: [product] } = await db.query(
-        "SELECT id, name, price FROM products WHERE id = $1 AND status = 'active' AND deleted_at IS NULL",
+        "SELECT id, name, price, is_sold_out FROM products WHERE id = $1 AND status = 'active' AND deleted_at IS NULL",
         [product_id]
       );
       if (!product) return res.status(404).json({ error: "Product not found" });
+      if (product.is_sold_out) {
+        return res.status(422).json({ error: "Item is currently unavailable" });
+      }
 
       // Add item
       const { rows: [item] } = await db.query(
