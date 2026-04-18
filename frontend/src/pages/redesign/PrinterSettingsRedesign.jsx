@@ -266,6 +266,26 @@ export default function PrinterSettingsRedesign() {
           )}
         </div>
 
+        {/* 2-R.7 — printer purpose routing. Restaurant tenants split
+           receipts / fire chits / guest bills across multiple printers;
+           retail tenants leave this on "receipt". */}
+        <div>
+          <label className="block font-medium mb-1">Purpose</label>
+          <select
+            className="border rounded px-3 py-2 w-full"
+            value={cfg.purpose || "receipt"}
+            onChange={(e) => handleChange("purpose", e.target.value)}
+          >
+            <option value="receipt">Receipt (default)</option>
+            <option value="fire_chit">Fire chit (kitchen)</option>
+            <option value="guest_bill">Guest bill (restaurant)</option>
+            <option value="expo">Expo</option>
+          </select>
+          <p className="text-xs text-slate-500 mt-1">
+            Kitchen stations map to fire-chit printers via KDS station config.
+          </p>
+        </div>
+
         <div className="flex items-center gap-3">
           <label className="font-medium">Kick Cash Drawer on Sale</label>
           <input

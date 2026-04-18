@@ -34,7 +34,8 @@ export default function KDSRedesign() {
   const [activeStation, setActiveStation] = useState(null);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState("tickets"); // 'tickets' | 'routes'
+  const [tab, setTab] = useState("tickets"); // 'tickets' | 'routes' | 'stations'
+  const [printers, setPrinters] = useState([]); // 2-R.7 — list of printer_config rows
   const [routes, setRoutes] = useState([]);
   const [routeForm, setRouteForm] = useState({
     station_id: "",
@@ -113,6 +114,25 @@ export default function KDSRedesign() {
 
   useEffect(() => { if (tab === "routes") loadRoutes(); }, [tab, loadRoutes]);
 
+  // 2-R.7 — load printers for the Stations tab; restaurant-only but the
+  // call is cheap enough to do unconditionally.
+  useEffect(() => {
+    if (tab !== "stations") return;
+    api.get("/api/print/config")
+      .then((cfg) => { if (cfg) setPrinters([cfg]); })
+      .catch(() => setPrinters([]));
+  }, [tab]);
+
+  const saveStationPrinter = async (stationId, printerId) => {
+    try {
+      await api.put(`/api/kds/stations/${stationId}`, {
+        printer_id: printerId ? Number(printerId) : null,
+      });
+      toast.success("Station printer updated");
+      await loadStations();
+    } catch (err) { toast.error(err.message); }
+  };
+
   const saveRoute = async () => {
     const ctx = readContext();
     if (!ctx?.active_outlet_id) return;
@@ -185,7 +205,57 @@ export default function KDSRedesign() {
           className={tab === "routes" ? "border-b-2 border-(--ui-primary) text-(--ui-primary)" : "text-(--ui-text-muted)"}>
           <RouteIcon className="w-4 h-4 mr-1" /> Routing Rules
         </Button>
+        <Button
+          tone="plain"
+          size="sm"
+          onClick={() => setTab("stations")}
+          className={tab === "stations" ? "border-b-2 border-(--ui-primary) text-(--ui-primary)" : "text-(--ui-text-muted)"}>
+          <ChefHat className="w-4 h-4 mr-1" /> Stations
+        </Button>
       </div>
+
+      {tab === "stations" ? (
+        <SectionCard>
+          <h3 className="text-sm font-semibold mb-3">Station → printer mapping</h3>
+          <p className="text-xs text-(--ui-text-muted) mb-3">
+            Fire chits route to each station's printer. If a station's printer is offline, the chit falls back to the default receipt printer with an alert.
+          </p>
+          {stations.length === 0 ? (
+            <p className="text-sm text-(--ui-text-muted)">No stations configured yet.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-(--ui-text-muted) border-b border-(--ui-border)">
+                  <th className="py-2">Station</th>
+                  <th>Role</th>
+                  <th>Printer</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stations.map((s) => (
+                  <tr key={s.id} className="border-b border-(--ui-border)">
+                    <td className="py-2 font-semibold">{s.name}</td>
+                    <td>{s.station_role}</td>
+                    <td>
+                      <Select
+                        value={s.printer_id || ""}
+                        onChange={(e) => saveStationPrinter(s.id, e.target.value)}
+                      >
+                        <option value="">— none —</option>
+                        {printers.map((p) => (
+                          <option key={p.id || 1} value={p.id || 1}>
+                            {(p.purpose || "receipt")} @ {p.host}:{p.port}
+                          </option>
+                        ))}
+                      </Select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </SectionCard>
+      ) : null}
 
       {tab === "routes" ? (
         <div className="space-y-4">

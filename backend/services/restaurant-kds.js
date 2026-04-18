@@ -16,9 +16,9 @@ async function getStations(db, outletId) {
 
 async function createStation(db, data) {
   const { rows: [station] } = await db.query(
-    `INSERT INTO kds_stations (outlet_id, name, station_role)
-     VALUES ($1, $2, $3) RETURNING *`,
-    [data.outlet_id, data.name, data.station_role || "prep"]
+    `INSERT INTO kds_stations (outlet_id, name, station_role, printer_id)
+     VALUES ($1, $2, $3, $4) RETURNING *`,
+    [data.outlet_id, data.name, data.station_role || "prep", data.printer_id || null]
   );
   return station;
 }
@@ -30,6 +30,8 @@ async function updateStation(db, id, data) {
   if (data.name !== undefined) { idx++; sets.push(`name = $${idx}`); params.push(data.name); }
   if (data.station_role !== undefined) { idx++; sets.push(`station_role = $${idx}`); params.push(data.station_role); }
   if (data.is_active !== undefined) { idx++; sets.push(`is_active = $${idx}`); params.push(data.is_active); }
+  // 2-R.7 — allow (re)binding a station to a printer_config row, or clearing it.
+  if (data.printer_id !== undefined) { idx++; sets.push(`printer_id = $${idx}`); params.push(data.printer_id || null); }
   if (!sets.length) return null;
   idx++; params.push(id);
   sets.push("updated_at = NOW()");

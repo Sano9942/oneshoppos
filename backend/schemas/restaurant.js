@@ -99,12 +99,14 @@ const createKdsStationSchema = z.object({
   outlet_id: z.number().int().positive(),
   name: z.string().min(1),
   station_role: z.enum(["prep", "expo"]).default("prep"),
+  printer_id: z.number().int().positive().nullable().optional(),
 });
 
 const updateKdsStationSchema = z.object({
   name: z.string().min(1).optional(),
   station_role: z.enum(["prep", "expo"]).optional(),
   is_active: z.boolean().optional(),
+  printer_id: z.number().int().positive().nullable().optional(),
 });
 
 // Phase 2.1 B1 — KDS routing rules. Exactly one of product_id / modifier_group_id

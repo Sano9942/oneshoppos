@@ -77,14 +77,16 @@ module.exports = function printerRoutes(app, deps) {
     if (!employeeId) return res.status(401).json({ error: "Unauthorized" });
     const {
       connection_type, host, port, usb_vendor_id, usb_product_id,
-      paper_width, cash_drawer, is_active,
+      paper_width, cash_drawer, is_active, purpose,
     } = req.body || {};
+    const allowedPurposes = ["receipt", "fire_chit", "guest_bill", "expo"];
+    const safePurpose = allowedPurposes.includes(purpose) ? purpose : "receipt";
     try {
       await db.query(
         `UPDATE printer_config SET
           connection_type = $1, host = $2, port = $3,
           usb_vendor_id = $4, usb_product_id = $5,
-          paper_width = $6, cash_drawer = $7, is_active = $8
+          paper_width = $6, cash_drawer = $7, is_active = $8, purpose = $9
          WHERE id = 1`,
         [
           connection_type || "network",
@@ -95,6 +97,7 @@ module.exports = function printerRoutes(app, deps) {
           Number(paper_width) || 48,
           cash_drawer ? true : false,
           is_active ? true : false,
+          safePurpose,
         ]
       );
       res.json({ ok: true });
