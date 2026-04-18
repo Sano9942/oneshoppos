@@ -17,6 +17,9 @@ import POSShortcutsOverlay from "./pos/POSShortcutsOverlay";
 import EndlessAisleModal from "./pos/EndlessAisleModal";
 import RestaurantFloorGrid from "./pos/restaurant/RestaurantFloorGrid";
 import RestaurantCheckView from "./pos/restaurant/RestaurantCheckView";
+import SplitCheckModal from "./pos/restaurant/SplitCheckModal";
+import TransferTableModal from "./pos/restaurant/TransferTableModal";
+import RestaurantGuestModeModal from "./pos/restaurant/RestaurantGuestModeModal";
 
 // Phase 2-R.0 — Restaurant POS shell at /pos/restaurant.
 // Composition only: wraps POSContent with POSProvider + ErrorBoundary,
@@ -26,6 +29,8 @@ import RestaurantCheckView from "./pos/restaurant/RestaurantCheckView";
 function RestaurantContent() {
   const { isLocked, notice, error, closeCheck } = usePOS();
   const [view, setView] = useState("floor");
+  const [splitOpen, setSplitOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
 
   if (isLocked) return <POSLockScreen />;
 
@@ -53,6 +58,8 @@ function RestaurantContent() {
               closeCheck();
               setView("floor");
             }}
+            onOpenSplit={() => setSplitOpen(true)}
+            onOpenTransfer={() => setTransferOpen(true)}
           />
         )}
       </div>
@@ -71,6 +78,22 @@ function RestaurantContent() {
       <POSSessionExpiredModal />
       <EndlessAisleModal />
       <POSShortcutsOverlay />
+
+      {/* Phase 2-R.0 Day 6 + 8 — restaurant-only modals */}
+      <SplitCheckModal
+        open={splitOpen}
+        onClose={() => setSplitOpen(false)}
+        onSplitComplete={() => {
+          closeCheck();
+          setView("floor");
+        }}
+      />
+      <TransferTableModal
+        open={transferOpen}
+        onClose={() => setTransferOpen(false)}
+        onTransferred={() => { /* poll loop picks up the new table_id */ }}
+      />
+      <RestaurantGuestModeModal />
     </div>
   );
 }

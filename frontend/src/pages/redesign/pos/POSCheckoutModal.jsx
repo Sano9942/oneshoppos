@@ -13,6 +13,7 @@ import {
   Star,
   ToggleLeft,
   ToggleRight,
+  PenLine,
 } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { usePreset } from "../../../contexts/PresetContext";
@@ -81,6 +82,8 @@ export default function POSCheckoutModal() {
     serverId,
     setServerId,
     employeesList,
+    setShowGuestMode,
+    signatureSvg,
   } = usePOS();
   const { labels = {}, hasMode } = usePreset();
   const restaurantOn = hasMode && hasMode("restaurant");
@@ -655,6 +658,22 @@ export default function POSCheckoutModal() {
                   ))}
                 </select>
               </div>
+
+              {/* Phase 2-R.0 Day 8 — Hand to guest opens RestaurantGuestModeModal,
+                  which writes tip + signature back through POSContext and then
+                  closes itself so the operator completes the sale. */}
+              <button
+                type="button"
+                onClick={() => setShowGuestMode?.(true)}
+                className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm border-2 transition ${
+                  signatureSvg
+                    ? "border-emerald-400 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    : "border-[#8066FF] bg-white text-[#8066FF] hover:bg-[#8066FF]/5"
+                }`}
+              >
+                <PenLine size={15} />
+                {signatureSvg ? "Signature captured — tap to re-sign" : "Hand to guest"}
+              </button>
             </div>
           )}
 
