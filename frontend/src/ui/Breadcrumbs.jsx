@@ -63,6 +63,7 @@ const LABELS = {
   restaurant: "Restaurant",
   floor: "Floor Plan",
   checks: "Checks",
+  availability: "86'd Items",
   modifiers: "Modifiers",
   kds: "KDS",
   kiosk: "Kiosk",

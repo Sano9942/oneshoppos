@@ -1,4 +1,4 @@
-import { Split as SplitIcon, Gift, Percent, ArrowRightLeft, UserPlus, StickyNote } from "lucide-react";
+import { Split as SplitIcon, Gift, Percent, ArrowRightLeft, UserPlus, StickyNote, Ban } from "lucide-react";
 import { usePOS } from "../POSContext";
 
 // Phase 2-R.0 Day 6 — Overflow popover for secondary restaurant actions.
@@ -9,7 +9,7 @@ import { usePOS } from "../POSContext";
 // for 2-R.0 (manager PIN workflow lands in 2-R.2). Add Seat just bumps
 // seatCount on POSContext so SeatCoursePicker exposes the new seat.
 
-export default function RestaurantOverflowMenu({ open, onClose, onOpenSplit, onOpenTransfer }) {
+export default function RestaurantOverflowMenu({ open, onClose, onOpenSplit, onOpenTransfer, onOpen86 }) {
   const {
     cart,
     setShowDiscountModal,
@@ -18,6 +18,7 @@ export default function RestaurantOverflowMenu({ open, onClose, onOpenSplit, onO
     setSeatCount,
     tableSessionId,
     showNotice,
+    posFlags,
   } = usePOS();
 
   if (!open) return null;
@@ -41,6 +42,16 @@ export default function RestaurantOverflowMenu({ open, onClose, onOpenSplit, onO
       disabled: true,
       disabledTooltip: "Available in 2-R.2 (manager PIN workflow)",
     },
+    // 2-R.1 — "86 an item" launches the availability modal. Hidden when
+    // the per-tenant flag is off so pre-v58 tenants don't see a dead entry.
+    ...(posFlags?.phase4_restaurant_86
+      ? [{
+          key: "eighty_six",
+          icon: Ban,
+          label: "86 an item",
+          onClick: () => { onClose?.(); onOpen86?.(); },
+        }]
+      : []),
     {
       key: "discount",
       icon: Percent,

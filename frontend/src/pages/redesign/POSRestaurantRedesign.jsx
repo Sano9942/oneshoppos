@@ -22,6 +22,7 @@ import RestaurantCheckView from "./pos/restaurant/RestaurantCheckView";
 import SplitCheckModal from "./pos/restaurant/SplitCheckModal";
 import TransferTableModal from "./pos/restaurant/TransferTableModal";
 import RestaurantGuestModeModal from "./pos/restaurant/RestaurantGuestModeModal";
+import RestaurantAvailabilityModal from "./pos/restaurant/RestaurantAvailabilityModal";
 
 // Phase 2-R.0 — Restaurant POS shell at /pos/restaurant.
 // Composition only: wraps POSContent with POSProvider + ErrorBoundary,
@@ -33,6 +34,7 @@ function RestaurantContent() {
   const [view, setView] = useState("floor");
   const [splitOpen, setSplitOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [availabilityOpen, setAvailabilityOpen] = useState(false);
 
   if (isLocked) return <POSLockScreen />;
 
@@ -62,6 +64,7 @@ function RestaurantContent() {
             }}
             onOpenSplit={() => setSplitOpen(true)}
             onOpenTransfer={() => setTransferOpen(true)}
+            onOpen86={() => setAvailabilityOpen(true)}
           />
         )}
       </div>
@@ -96,6 +99,12 @@ function RestaurantContent() {
         onTransferred={() => { /* poll loop picks up the new table_id */ }}
       />
       <RestaurantGuestModeModal />
+
+      {/* 2-R.1 — 86'd items modal */}
+      <RestaurantAvailabilityModal
+        open={availabilityOpen}
+        onClose={() => setAvailabilityOpen(false)}
+      />
     </div>
   );
 }

@@ -90,10 +90,20 @@ export default function POSSearchArea() {
             {viewMode === "list" ? (
               results.map((p) => {
                 const stock = Number(p.local_stock ?? p.stock ?? 0);
+                // 2-R.1: grey out + block click for 86'd items; un-86 from
+                // the overflow modal or admin page to clear.
+                const soldOut = Boolean(p.is_sold_out);
                 return (
-                  <div key={p.id} onClick={() => addToCart(p)}
-                    className="flex items-center gap-3 px-3 py-1.5 hover:bg-[#8066FF]/5 cursor-pointer border-b border-slate-50 last:border-0 transition text-xs">
-                    <span className="flex-1 font-medium text-slate-800 truncate">{p.name}</span>
+                  <div
+                    key={p.id}
+                    onClick={() => { if (!soldOut) addToCart(p); }}
+                    className={`flex items-center gap-3 px-3 py-1.5 border-b border-slate-50 last:border-0 transition text-xs ${
+                      soldOut ? "opacity-50 cursor-not-allowed" : "hover:bg-[#8066FF]/5 cursor-pointer"
+                    }`}>
+                    <span className="flex-1 font-medium text-slate-800 truncate">
+                      {p.name}
+                      {soldOut && <span className="ml-2 px-1.5 py-0.5 rounded bg-rose-100 text-rose-600 text-[10px] font-bold uppercase">86'd</span>}
+                    </span>
                     <span className="text-slate-400 shrink-0">{p.barcode || p.sku || ""}</span>
                     <span className="font-bold text-[#8066FF] shrink-0 w-16 text-right">{money(p.price)}</span>
                     <span className={`shrink-0 w-12 text-right font-bold uppercase ${stock > 0 ? "text-emerald-500" : "text-red-400"}`}>
@@ -105,11 +115,19 @@ export default function POSSearchArea() {
             ) : (
               results.map((p) => {
                 const stock = Number(p.local_stock ?? p.stock ?? 0);
+                const soldOut = Boolean(p.is_sold_out);
                 return (
-                  <div key={p.id} onClick={() => addToCart(p)}
-                    className="flex justify-between items-center px-4 py-2.5 hover:bg-[#8066FF]/5 cursor-pointer border-b border-slate-50 last:border-0 transition">
+                  <div
+                    key={p.id}
+                    onClick={() => { if (!soldOut) addToCart(p); }}
+                    className={`flex justify-between items-center px-4 py-2.5 border-b border-slate-50 last:border-0 transition ${
+                      soldOut ? "opacity-50 cursor-not-allowed" : "hover:bg-[#8066FF]/5 cursor-pointer"
+                    }`}>
                     <div>
-                      <div className="font-bold text-slate-800 text-sm">{p.name}</div>
+                      <div className="font-bold text-slate-800 text-sm">
+                        {p.name}
+                        {soldOut && <span className="ml-2 px-1.5 py-0.5 rounded bg-rose-100 text-rose-600 text-[10px] font-bold uppercase">86'd</span>}
+                      </div>
                       <div className="text-[10px] text-slate-400">{p.barcode || p.sku || "—"}</div>
                     </div>
                     <div className="text-right">

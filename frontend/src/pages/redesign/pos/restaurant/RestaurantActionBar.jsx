@@ -30,7 +30,7 @@ function useOnlineStatus() {
 // ensureDraftOrder() so the user can build a check first and the draft
 // row only appears when they actually fire it.
 
-export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer }) {
+export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer, onOpen86 }) {
   const {
     cart,
     money,
@@ -135,6 +135,7 @@ export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer }) {
             onClose={() => setShowMore(false)}
             onOpenSplit={onOpenSplit}
             onOpenTransfer={onOpenTransfer}
+            onOpen86={onOpen86}
           />
         </div>
       </div>
