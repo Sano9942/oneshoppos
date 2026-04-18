@@ -91,11 +91,12 @@ module.exports = function registerDraftOrderRoutes(app, deps) {
 
         for (const item of items) {
           await client.query(
-            `INSERT INTO draft_order_items (draft_order_id, product_id, variant_id, product_name, quantity, price, discount, effective_tax_rate, notes)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            `INSERT INTO draft_order_items (draft_order_id, product_id, variant_id, product_name, quantity, price, discount, effective_tax_rate, notes, seat_number, course_name, kitchen_status)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
             [order.id, item.product_id || null, item.variant_id || null,
              item.product_name || item.name || "", item.quantity, item.price,
-             item.discount || 0, item.effective_tax_rate || 0, item.notes || null]
+             item.discount || 0, item.effective_tax_rate || 0, item.notes || null,
+             item.seat_number ?? null, item.course_name || "main", item.kitchen_status || "pending"]
           );
         }
         return order;
@@ -133,11 +134,12 @@ module.exports = function registerDraftOrderRoutes(app, deps) {
             taxTotal += lineTax;
             discountTotal += Number(item.discount || 0);
             await client.query(
-              `INSERT INTO draft_order_items (draft_order_id, product_id, variant_id, product_name, quantity, price, discount, effective_tax_rate, notes)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+              `INSERT INTO draft_order_items (draft_order_id, product_id, variant_id, product_name, quantity, price, discount, effective_tax_rate, notes, seat_number, course_name, kitchen_status)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
               [id, item.product_id || null, item.variant_id || null,
                item.product_name || item.name || "", item.quantity, item.price,
-               item.discount || 0, item.effective_tax_rate || 0, item.notes || null]
+               item.discount || 0, item.effective_tax_rate || 0, item.notes || null,
+               item.seat_number ?? null, item.course_name || "main", item.kitchen_status || "pending"]
             );
           }
           const total = subtotal + taxTotal - discountTotal;
