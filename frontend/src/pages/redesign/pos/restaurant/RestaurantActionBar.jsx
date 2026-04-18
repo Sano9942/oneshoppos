@@ -1,0 +1,139 @@
+import { useState } from "react";
+import { Send, Flame, CreditCard, MoreVertical } from "lucide-react";
+import { api } from "../../../../api";
+import { usePOS } from "../POSContext";
+
+// Phase 2-R.0 Day 5 — Sticky bottom action bar.
+// Three primary actions: Send to Kitchen / Fire Course N / Pay.
+// "More" button is a stub for Track 3 (split, transfer, comp, etc.) —
+// rendered today but the menu is intentionally empty.
+//
+// Send to Kitchen lazily creates the backing draft order via
+// ensureDraftOrder() so the user can build a check first and the draft
+// row only appears when they actually fire it.
+
+export default function RestaurantActionBar() {
+  const {
+    cart,
+    money,
+    total,
+    openCheckout,
+    ensureDraftOrder,
+    showNotice,
+    setError,
+    activeCourse,
+    setActiveCourse,
+  } = usePOS();
+
+  const [sending, setSending] = useState(false);
+  const [firing, setFiring] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+
+  const cartEmpty = cart.length === 0;
+
+  const sendToKitchen = async () => {
+    if (cartEmpty) return;
+    setSending(true);
+    try {
+      const draftId = await ensureDraftOrder();
+      if (!draftId) throw new Error("Could not create draft order");
+      await api.post(`/api/restaurant/checks/${draftId}/send-to-kitchen`, {});
+      showNotice?.("Sent to kitchen.");
+    } catch (e) {
+      setError?.(e.message || "Failed to send to kitchen");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const fireNextCourse = async () => {
+    setFiring(true);
+    try {
+      const draftId = await ensureDraftOrder();
+      if (!draftId) throw new Error("Could not create draft order");
+      const courseName = `course_${activeCourse || 1}`;
+      await api.post(`/api/restaurant/checks/${draftId}/fire-course`, {
+        course_name: courseName,
+      });
+      showNotice?.(`Fired ${courseName}.`);
+      setActiveCourse(Math.min(5, (Number(activeCourse) || 1) + 1));
+    } catch (e) {
+      setError?.(e.message || "Failed to fire course");
+    } finally {
+      setFiring(false);
+    }
+  };
+
+  const onPay = () => {
+    if (cartEmpty) return;
+    openCheckout();
+  };
+
+  return (
+    <div className="sticky bottom-0 z-40 bg-white border-t border-slate-200 px-4 py-3 shadow-[0_-10px_24px_-12px_rgba(0,0,0,0.12)]">
+      <div className="flex items-center gap-2">
+        <ActionButton
+          icon={Send}
+          label={sending ? "Sending…" : "Send to Kitchen"}
+          onClick={sendToKitchen}
+          disabled={cartEmpty || sending}
+          tone="ghost"
+        />
+        <ActionButton
+          icon={Flame}
+          label={firing ? "Firing…" : `Fire C${activeCourse || 1}`}
+          onClick={fireNextCourse}
+          disabled={firing}
+          tone="ghost"
+        />
+        <button
+          onClick={onPay}
+          disabled={cartEmpty}
+          className="flex-1 h-12 rounded-xl flex items-center justify-between px-4 bg-[#8066FF] hover:bg-[#7055E6] text-white font-black text-base shadow-[0_10px_20px_-10px_rgba(128,102,255,0.6)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        >
+          <span className="flex items-center gap-2">
+            <CreditCard size={18} />
+            Pay
+          </span>
+          <span className="tracking-tight">{money(total)}</span>
+        </button>
+        <div className="relative">
+          <button
+            onClick={() => setShowMore((v) => !v)}
+            className="h-12 w-12 rounded-xl flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+          >
+            <MoreVertical size={18} />
+          </button>
+          {showMore && (
+            <div
+              className="absolute right-0 bottom-14 w-56 rounded-xl bg-white border border-slate-200 shadow-2xl z-50 p-2 text-sm"
+              onMouseLeave={() => setShowMore(false)}
+            >
+              {/* TODO Track 3: Split, Comp, Discount, Transfer Table, Add Seat, Note */}
+              <div className="px-3 py-2 text-xs text-slate-400 italic">
+                Split / Transfer / Comp — coming in Track 3
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActionButton({ icon: Icon, label, onClick, disabled, tone = "ghost" }) {
+  const base =
+    tone === "ghost"
+      ? "bg-slate-100 hover:bg-slate-200 text-slate-800"
+      : "bg-[#8066FF] hover:bg-[#7055E6] text-white";
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`h-12 px-4 rounded-xl flex items-center gap-2 font-bold text-sm transition disabled:opacity-50 disabled:cursor-not-allowed ${base}`}
+    >
+      <Icon size={16} />
+      <span>{label}</span>
+    </button>
+  );
+}
