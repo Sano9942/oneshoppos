@@ -3,7 +3,7 @@
 > **Date:** 2026-04-17
 > **Last updated:** 2026-04-18
 > **Source:** Brainstorming session, plan file at `~/.claude/plans/we-have-made-allof-smooth-jellyfish.md`
-> **Status:** Phase 1 COMPLETE — ready to start Phase 2
+> **Status:** Phase 1 COMPLETE, Phase 2.1 COMPLETE, Phase 2-R.0 COMPLETE — ready to start 2-R.1
 
 ## Context
 
@@ -147,7 +147,62 @@ Today you're bottom-left: wide but shallow, capable but rough. Square is top-rig
 
 **Source:** Competitive research + code audit on 2026-04-18. References: Square for Restaurants release notes, Toast 2026 drive-thru launch, TouchBistro/Lightspeed comparisons, restaurant365/Lavu on void-comp controls, TechRyde KDS guide 2026.
 
-### 2-R.0 — Restaurant-Native POS Shell (foundational — build first) ⭐
+### 2-R.0 — Restaurant-Native POS Shell ✅ COMPLETE (shipped 2026-04-18)
+
+**Status:** All 10 working-day milestones shipped across four sequentially-merged feature branches. New route `/pos/restaurant` is live, auto-redirects restaurant-mode tenants from `/pos`, and wraps the existing `POSContext` in a table-first workflow. Retail tenants see zero change. Two route-file corrections (route lives in `publicRoutes.jsx`, not `appRoutes.jsx`) and one backend patch (draft-orders INSERTs didn't persist `seat_number`/`course_name`/`kitchen_status` columns that already existed in schema) were identified during Track 1 exploration and fixed on Day 1.
+
+**Track 1 — Foundation** (merged to main as `feature/2r0-foundation`, 5 commits)
+- ✅ **Backend draft-orders seat/course persistence** (commit ad9201a) — patched INSERTs in [backend/routes/draft-orders.js](../../backend/routes/draft-orders.js) at lines 94, 136 to include `seat_number`, `course_name`, `kitchen_status` columns. No migration needed; columns already existed from v52-v57.
+- ✅ **POSContext restaurant state** (commit fb41461) — additively extended [POSContext.jsx](../../frontend/src/pages/redesign/pos/POSContext.jsx) with `draftOrderId`, `orderContext`, `tableSessionId`, `seatCount`, `activeSeat`, `activeCourse`, plus methods `openCheck`, `closeCheck`, `ensureDraftOrder`. No existing exports touched.
+- ✅ **useCart seat/course overlay** (commit 1a8937f) — `addToCart` in [useCart.js](../../frontend/src/pages/redesign/pos/hooks/useCart.js) now accepts optional `{ seat_number, course_name }` overlay; defaults to context's `activeSeat`/`activeCourse`. Retail call sites unchanged.
+- ✅ **useCheckout forwards restaurant context** (commit 5e678bd) — `completeSale` in [useCheckout.js](../../frontend/src/pages/redesign/pos/hooks/useCheckout.js) now passes `draft_order_id`, `order_context`, `table_session_id`, `seat_count` to `POST /api/sales` when set. Backend already accepted `draft_order_id` at [routes/sales.js:445, 1007](../../backend/routes/sales.js).
+- ✅ **Route scaffolding** (commit ee95558) — new route `/pos/restaurant` in [publicRoutes.jsx](../../frontend/src/routes/publicRoutes.jsx) (NOT `appRoutes.jsx` as originally documented — `/pos` lives in `publicRoutes.jsx`). Mirrors `/pos` guard stack (auth only). New [POSRestaurantRoute.jsx](../../frontend/src/pages/POSRestaurantRoute.jsx) thin wrapper + [POSRestaurantRedesign.jsx](../../frontend/src/pages/redesign/POSRestaurantRedesign.jsx) shell. Breadcrumb label added.
+
+**Track 2 — Floor + Check View** (merged as `feature/2r0-floor-check-view`, 4 commits)
+- ✅ **RestaurantFloorGrid** (commit 665bd0e) — floor plan entry view. Ports plan loader + 10s polling + seat modal from [RestaurantFloorRedesign.jsx](../../frontend/src/pages/redesign/RestaurantFloorRedesign.jsx), restyled with POS hardcoded colors (#8066FF, slate-*). Sticky top row with 3 buttons: New Takeaway / Delivery / Drive-Thru — all 4 entry points call `openCheck(...)`.
+- ✅ **RestaurantHeader + RestaurantCheckView shell** (commit caa55b0) — check view with auto-collapsing header (36px strip on scroll > 40px), menu grid reusing `POSSearchArea` + `posLayout` tiles, state machine in POSRestaurantRedesign (view: "floor" | "check").
+- ✅ **RestaurantCartGrouped + SeatCoursePicker** (commit c16c3cc) — cart grouped by seat → course via `useMemo` in extracted pure function [cartGrouping.js](../../frontend/src/pages/redesign/pos/restaurant/cartGrouping.js) (TDD: Vitest unit tests written first). Seat (1..N) + Course (1..5 with labels Appetizer / Salad / Entrée / Dessert / Drinks) picker — dropdown on desktop, bottom sheet on portrait.
+- ✅ **RestaurantActionBar + modal mounting** (commit 5ce5433) — sticky bottom bar pinned to viewport with Send to Kitchen, Fire Next Course, Pay + 3-dot More stub. All existing POS modals (POSOpeningGateModal, POSModifierModal, POSCheckoutModal, POSReceiptModal, POSParkedModal, POSSessionExpiredModal, POSLockScreen, POSDiscountModal, POSNoteModal, POSCloseShiftModal, POSRecentSalesPanel, POSShortcutsOverlay, POSReturnExchangeModal, EndlessAisleModal) mounted on the new shell — zero state duplication.
+
+**Track 3 — Overflow + Guest Mode + Responsive** (merged as `feature/2r0-overflow-guest-mode`, 7 commits)
+- ✅ **Backend table transfer support** (commit 3ddd9a7) — added `table_id` handling to `updateTableSession` in [backend/services/restaurant-floor.js](../../backend/services/restaurant-floor.js); validates destination table exists and moves `outlet_id` accordingly.
+- ✅ **POSContext guest-mode state** (commit d031aae) — additive `showGuestMode` + `setShowGuestMode` + `setSeatCount` setters.
+- ✅ **RestaurantOverflowMenu** (commit e4d532d) — popover from 3-dot: Split / Comp (disabled — "Available in 2-R.2") / Discount / Transfer Table / Add Seat / Note. Discount and Note reuse existing POSContext modal flags.
+- ✅ **SplitCheckModal** (commit c4a02d5) — 3 modes (equal / by seat / by item). Calls existing `POST /api/restaurant/checks/:id/split`. Closes modal + returns to floor on success.
+- ✅ **TransferTableModal** (commit d398650) — table-tile grid. Calls `PUT /api/restaurant/table-sessions/:id` with `{ table_id }`.
+- ✅ **Portrait stack responsive** (commit 027adea) — viewport < 900px: cart stacks ON TOP of menu grid. Uses `window.matchMedia`; no new deps.
+- ✅ **RestaurantGuestModeModal + Hand-to-guest handoff** (commit 162801d) — full-viewport overlay with tip preset (10/15/18/20% + custom), HTML5 signature canvas (pointer events → SVG path), receipt choice (print/email/SMS). Triggered from a "Hand to guest" button added to [POSCheckoutModal.jsx](../../frontend/src/pages/redesign/pos/POSCheckoutModal.jsx) — button only renders when `hasMode('restaurant')` is true. Signature persisted in sale notes JSON.
+
+**Track 4 — Redirect + QA + Tests** (merged as `feature/2r0-redirect-qa`, 7 commits)
+- ✅ **POSRoute redirect** (commit 1266e70) — [POSRoute.jsx](../../frontend/src/pages/POSRoute.jsx) detects `hasMode('restaurant')` + `flags.phase4_restaurant` and redirects to `/pos/restaurant`. Shows `<RouteLoading />` while preset/flags bootstrap.
+- ✅ **Defensive redirect** (commit c9721ba) — [POSRestaurantRedesign.jsx](../../frontend/src/pages/redesign/POSRestaurantRedesign.jsx) redirects retail tenants back to `/pos` if they land on `/pos/restaurant` without restaurant mode.
+- ✅ **Kitchen-firing offline banner** (commit e57f4df) — Send to Kitchen / Fire Next Course disabled + banner "Kitchen firing requires connection" when offline in dine-in mode. Pay still works; takeaway/delivery queue to localStorage without `draft_order_id` as designed.
+- ✅ **Cart-collision prompt** (commit 654f289) — switching tables or pressing Back with non-empty cart shows Save / Discard / Cancel confirm; Save uses existing `parkSale()` (feature-flagged `phase2_draft_orders` routes to `/api/draft-orders`).
+- ✅ **Loading skeletons** (commit e725e7e) — inline pulsing placeholders on floor grid initial load and check view menu load.
+- ✅ **Vitest unit coverage** (commit 089995b) — new [pos-context-open-check.test.jsx](../../frontend/tests/unit/pos-context-open-check.test.jsx) (216 LOC) covers openCheck/closeCheck/ensureDraftOrder state transitions.
+- ✅ **Playwright smoke spec** (commit 590a466) — new [restaurant-shell.smoke.spec.js](../../frontend/tests/smoke/restaurant-shell.smoke.spec.js) (284 LOC) covering demo steps 1, 4, 6, 8, 10, 11, 13, 15.
+
+**Data-model clarifications learned during build**
+- ✅ `draft_order_items.seat_number`, `course_name`, `kitchen_status` already exist in schema ([schema-pg.sql:2859-2863](../../backend/schema-pg.sql)). The plan's initial assumption that a migration was needed turned out to be wrong — only the INSERT statements needed updating.
+- ⚠ `draft_orders.order_context` enum at [schema-pg.sql:2828](../../backend/schema-pg.sql) does NOT include `'drive_thru'` (only `retail / dine_in / takeout / delivery / bar / online`). 2-R.0 maps the Drive-Thru UI button to `'takeout'` in the DB and surfaces "Drive-Thru" as a display label. Proper enum extension is deferred to **2-R.9**.
+- ⚠ `restaurant_table_sessions.status` enum ([schema-pg.sql:2588](../../backend/schema-pg.sql)) is `('seated','ordering','served','check_requested','closed')` — no "dirty" housekeeping status exists today. Roadmap text was aspirational; 2-R.0 ships with `closed` only. "Dirty" housekeeping flow is a candidate for a later 2-R.x item.
+
+**Final file tally:** 23 commits total, +2785 / -16 LOC, 25 files touched (14 new, 11 modified). Matching [plan file](../../../Users/HP/.claude/plans/docs-plans-sanopos-maturity-roadmap-202-clever-panda.md).
+
+**Verification (demo script — all 15 steps passed):** A restaurant server at a terminal logs in → `/pos` auto-redirects to `/pos/restaurant` → floor plan grid loads with 10s polling → opens a fresh shift via `POSOpeningGateModal` → taps Table 5, seats 2 guests → adds 3 items across seat 1 course 1, seat 2 course 1, seat 1 course 2 — each goes through the modifier modal, lands in the correct seat+course group → taps "Fire Course 1" → KDS ticket created → adds more to course 2, fires → 3-dot → Split by seat → 2 checks → taps Pay on active check → POSCheckoutModal with tip + server dropdown (from 2.1 C1) → "Hand to guest" → full-viewport overlay, 18% tip preset, signature, email receipt → Done → sale completes with `draft_order_id` + signature in notes JSON → receipt prints → repeats for second split check → floor grid shows Table 5 session auto-closes.
+
+**What it does NOT do** (explicit — these land in later 2-R.x items):
+- No "86 this" on items (2-R.1). No Comp workflow with manager PIN (2-R.2). No pay-at-table QR (2-R.3). No reservations or waitlist (2-R.4). No KDS prep-time analytics (2-R.5). No day-parting (2-R.6). No fire-chit vs receipt printer split (2-R.7). No `sale_items.seat_number` persistence post-checkout (2-R.8). No `order_context = 'drive_thru'` enum (2-R.9). No menu engineering report (2-R.10).
+- The "Comp" button in the overflow menu is intentionally rendered disabled with tooltip "Available in 2-R.2".
+
+**What's next:** **Phase 2-R.1 — 86'd items / menu availability.** Highest daily-use operational gap and a blocker for 2-R.3 (pay-at-table requires availability gating so the guest QR menu doesn't show sold-out items).
+
+---
+
+### 2-R.0 — Original build spec (reference, for history)
+
+The original scope notes from 2026-04-17 are preserved below. Any discrepancies between this original spec and the shipped work are resolved by the ✅ Track 1–4 sections above (which reflect what actually shipped).
+
 **Why this first:** Today's POS (`/pos`) is a single retail-shaped screen — cart + search + sidebar. Restaurant tenants get the same screen plus 6 disconnected sidebar pages (Floor Plan, Checks, Modifiers, Inbox, KDS, Tip Pools). Square for Restaurants and Toast replace the retail POS with a **table-first workflow**: floor plan → table session → check with seats/courses → fire → pay, all on one screen. Without this shell, every Phase 2.2 feature lands in a disconnected page and the restaurant experience keeps feeling bolted-on.
 
 **Build:**
@@ -405,9 +460,9 @@ A test restaurant tenant can, in one session: reserve a 4-top for 7pm via online
 ```
 Month 1-2:   Phase 1 (Foundation Polish)         ──── ✅ DONE 2026-04-18
 Month 2:     Phase 2.1 (Restaurant depth — splits/modifiers/courses/KDS/inbox/tips) ──── ✅ DONE 2026-04-18
-Month 3-4:   Phase 2-R (Restaurant Tier-1 Parity) ──── ← START HERE
-             └─ 2-R.0 Restaurant-Native POS Shell first (~2 weeks)
-             └─ Then 2-R.1 through 2-R.10 land inside the new shell
+Month 3-4:   Phase 2-R (Restaurant Tier-1 Parity)
+             └─ 2-R.0 Restaurant-Native POS Shell ──── ✅ DONE 2026-04-18
+             └─ 2-R.1 through 2-R.10 land inside the new shell ──── ← START HERE (next: 2-R.1 86'd items)
 Month 4-5:   Phase 2.2/2.3 (Clinical + Repair to DEEP)
 Month 5-7:   Phase 3.1 (Hotel + Channel Manager) ──── unlocks hospitality segment
 Month 5-9:   Phase 4.1 (Native Mobile Shell — parallel track)  ──── App Store presence
@@ -419,8 +474,9 @@ Month 13+:   Phase 5 (Regional + International)  ──── growth engine
 
 ~~If you can only pick **one thing** to start: **Phase 1**.~~ Phase 1 done.
 ~~**Next:** **Phase 2.1 (Restaurant)**~~ Phase 2.1 done 2026-04-18.
+~~**Next:** **Phase 2-R.0 — Restaurant-Native POS Shell**~~ 2-R.0 done 2026-04-18. The table-first `/pos/restaurant` shell is live; every 2-R.x feature now lands inside it.
 
-**Next:** **Phase 2-R.0 — Restaurant-Native POS Shell**. The 10 feature gaps in 2-R.1 through 2-R.10 are real, but none of them feel coherent until the POS itself is restaurant-native. 2-R.0 turns `/pos` from a retail screen with six disconnected sidebar pages into a Square-style table-first workflow. Every subsequent Phase 2-R feature lands inside that shell.
+**Next:** **Phase 2-R.1 — 86'd items / menu availability.** Highest daily-use operational gap — today a cashier can sell a sold-out dish because inventory doesn't block restaurant items. Also blocks 2-R.3 (pay-at-table can't ship without availability gating on the public guest QR menu). One-tap "86 this" from POS + KDS, auto-exclude from public menu, auto-restore when inventory returns.
 
 ---
 
