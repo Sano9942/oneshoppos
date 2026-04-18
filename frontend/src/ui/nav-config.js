@@ -54,6 +54,7 @@ import {
   Wallet,
   ListPlus,
   Inbox,
+  Ban,
 } from "lucide-react";
 
 export const SHOPIFY_NAV_GROUPS = [
@@ -169,6 +170,7 @@ export const SHOPIFY_NAV_GROUPS = [
     items: [
       { name: "Floor Plan", path: "/restaurant/floor", icon: LayoutGrid, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant", requiredMode: "restaurant" },
       { name: "Checks", path: "/restaurant/checks", icon: Receipt, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant", requiredMode: "restaurant" },
+      { name: "86'd Items", path: "/restaurant/availability", icon: Ban, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant_86", requiredMode: "restaurant" },
       { name: "Modifiers", path: "/restaurant/modifiers", icon: ListPlus, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant", requiredMode: "restaurant" },
       { name: "Online Inbox", path: "/restaurant/inbox", icon: Inbox, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant", requiredMode: "restaurant" },
       { name: "KDS", path: "/kds", icon: ChefHat, requiredPerm: "manage_kds", requiredFlag: "phase4_restaurant_kds", requiredMode: "restaurant" },

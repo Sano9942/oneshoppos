@@ -4341,6 +4341,90 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 58,
+    description:
+      "Phase 2-R Wave A — 86'd items + seat_number on sales + drive-thru order_context + 10 restaurant feature flags",
+    up: async (client) => {
+      // 2-R.1: sold-out columns on products + variants
+      await client.query(`
+        ALTER TABLE products
+          ADD COLUMN IF NOT EXISTS is_sold_out BOOLEAN NOT NULL DEFAULT false,
+          ADD COLUMN IF NOT EXISTS sold_out_since TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS sold_out_until TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS sold_out_reason TEXT
+      `);
+      await client.query(`
+        ALTER TABLE product_variants
+          ADD COLUMN IF NOT EXISTS is_sold_out BOOLEAN NOT NULL DEFAULT false,
+          ADD COLUMN IF NOT EXISTS sold_out_since TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS sold_out_until TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS sold_out_reason TEXT
+      `);
+
+      // 2-R.8: seat_number on sale_items
+      await client.query(`
+        ALTER TABLE sale_items
+          ADD COLUMN IF NOT EXISTS seat_number INTEGER
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sale_items_sale_seat
+          ON sale_items(sale_id, seat_number)
+      `);
+
+      // 2-R.9: extend draft_orders.order_context CHECK to include 'drive_thru'
+      await client.query(`
+        ALTER TABLE draft_orders DROP CONSTRAINT IF EXISTS draft_orders_order_context_check
+      `);
+      await client.query(`
+        ALTER TABLE draft_orders ADD CONSTRAINT draft_orders_order_context_check
+          CHECK (order_context IN ('retail','dine_in','takeout','delivery','bar','online','drive_thru'))
+      `);
+
+      // Seed 10 new feature flags. Default false; later statement flips on
+      // for restaurant-mode tenants (mirrors v44 pattern).
+      const FLAGS = [
+        'phase4_restaurant_86',
+        'phase4_restaurant_void_comp',
+        'phase4_restaurant_pay_at_table',
+        'phase4_restaurant_reservations',
+        'phase4_restaurant_kds_analytics',
+        'phase4_restaurant_day_parting',
+        'phase4_restaurant_fire_chits',
+        'phase4_restaurant_seats',
+        'phase4_restaurant_drive_thru',
+        'phase4_restaurant_menu_engineering',
+      ];
+      for (const key of FLAGS) {
+        await client.query(
+          `INSERT INTO feature_flags (key, enabled, description, updated_at)
+           VALUES ($1, false, $2, NOW())
+           ON CONFLICT (key) DO NOTHING`,
+          [key, `Phase 2-R restaurant flag: ${key}`]
+        );
+      }
+
+      // Auto-enable these flags for tenants already in restaurant mode.
+      const { rows } = await client.query(
+        `SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'tenant_modes'`
+      );
+      if (rows.length) {
+        const { rows: modeRows } = await client.query(
+          `SELECT 1 FROM tenant_modes WHERE mode = 'restaurant' AND enabled = true`
+        );
+        if (modeRows.length) {
+          for (const key of FLAGS) {
+            await client.query(
+              `INSERT INTO feature_flags (key, enabled, description, updated_at)
+               VALUES ($1, true, $2, NOW())
+               ON CONFLICT (key) DO UPDATE SET enabled = true, updated_at = NOW()`,
+              [key, `Phase 2-R restaurant flag: ${key}`]
+            );
+          }
+        }
+      }
+    },
+  },
 ];
 
 async function migrate(db) {

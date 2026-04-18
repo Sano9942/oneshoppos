@@ -132,7 +132,10 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
     ? `${Number(item.quantity).toFixed(3)} ${item.unit}`
     : `x${item.quantity}`;
   const appendItemRow = (item, prefix = "") => {
-    const label = `${item.name} ${qtyLabel(item)}`;
+    // 2-R.8: prefix seat chip "[S#]" when line belongs to a dine-in seat.
+    // Retail items pass seat_number=null and render as before.
+    const seatChip = item.seat_number != null ? `[S${item.seat_number}] ` : "";
+    const label = `${seatChip}${item.name} ${qtyLabel(item)}`;
     b.appendChild(row(label, `${prefix}${fmt(item.price * item.quantity)}`, prefix ? "ret" : ""));
     // Breakdown line for weighted items with tare
     if (isWeighted(item) && Number(item.tare_weight || 0) > 0) {

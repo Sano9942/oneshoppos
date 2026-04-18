@@ -41,7 +41,7 @@ const createSessionSchema = z.object({
 const createCheckSchema = z.object({
   table_session_id: z.number().int().positive().optional(),
   tab_id: z.number().int().positive().optional(),
-  order_context: z.enum(["dine_in", "takeout", "delivery", "bar"]).default("dine_in"),
+  order_context: z.enum(["dine_in", "takeout", "delivery", "bar", "drive_thru"]).default("dine_in"),
   dining_option: z.enum(["dine_in", "takeout", "delivery"]).optional(),
   outlet_id: z.number().int().positive(),
   seat_count: z.number().int().min(0).default(0),
