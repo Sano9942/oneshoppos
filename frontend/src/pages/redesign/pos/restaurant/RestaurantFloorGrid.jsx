@@ -1,0 +1,272 @@
+import { useState, useEffect, useCallback } from "react";
+import { Users, Package, Truck, ShoppingBag, X } from "lucide-react";
+import { api } from "../../../../api";
+import { usePOS } from "../POSContext";
+
+// Phase 2-R.0 Day 2 — Floor grid for /pos/restaurant.
+// Ports the plan loader, 10s polling, and seat modal from
+// RestaurantFloorRedesign. Restyled for the POS shell (#8066FF + slate-*).
+//
+// Adds the takeaway/delivery/drive-thru sticky entry row. All four entry
+// points (3 takeout buttons + tapping a seated table) flow into the same
+// openCheck() context method on POSContext, then notify the parent shell
+// to transition view -> "check".
+
+const STATUS_TONE = {
+  seated:          "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  ordering:        "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  served:          "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  check_requested: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+  closed:          "bg-slate-500/15 text-slate-300 border-slate-500/30",
+};
+
+export default function RestaurantFloorGrid({ onOpenCheck }) {
+  const { openCheck } = usePOS();
+
+  const [plans, setPlans] = useState([]);
+  const [activePlan, setActivePlan] = useState(null);
+  const [tables, setTables] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [seatModalTableId, setSeatModalTableId] = useState(null);
+  const [seatForm, setSeatForm] = useState({ guest_count: 2 });
+  const [seatBusy, setSeatBusy] = useState(false);
+
+  const loadPlans = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.get("/api/restaurant/floor-plans");
+      const list = data.floor_plans || [];
+      setPlans(list);
+      setActivePlan((prev) => prev || list[0]?.id || null);
+    } catch {
+      setPlans([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadFloorDetail = useCallback(async () => {
+    if (!activePlan) return;
+    try {
+      const data = await api.get(`/api/restaurant/floor-plans/${activePlan}`);
+      setTables(data.tables || []);
+    } catch {
+      setTables([]);
+    }
+  }, [activePlan]);
+
+  useEffect(() => { loadPlans(); }, [loadPlans]);
+  useEffect(() => { loadFloorDetail(); }, [loadFloorDetail]);
+  useEffect(() => {
+    if (!activePlan) return;
+    const t = setInterval(loadFloorDetail, 10000);
+    return () => clearInterval(t);
+  }, [activePlan, loadFloorDetail]);
+
+  const enterTakeoutContext = (context) => {
+    openCheck({ context });
+    onOpenCheck?.();
+  };
+
+  const openTableCheck = (table) => {
+    openCheck({
+      context: "dine_in",
+      tableSessionId: table.session_id,
+      seatCount: Number(table.guest_count) || 1,
+    });
+    onOpenCheck?.();
+  };
+
+  const seatTable = async () => {
+    if (!seatModalTableId) return;
+    setSeatBusy(true);
+    try {
+      const data = await api.post("/api/restaurant/table-sessions", {
+        table_id: seatModalTableId,
+        guest_count: Number(seatForm.guest_count) || 1,
+      });
+      setSeatModalTableId(null);
+      // Skip the next poll round — go straight into the check.
+      const sessionId = data?.session?.id ?? data?.id ?? null;
+      openCheck({
+        context: "dine_in",
+        tableSessionId: sessionId,
+        seatCount: Number(seatForm.guest_count) || 1,
+      });
+      onOpenCheck?.();
+    } catch (e) {
+      // best-effort; the parent shell shows the global notice/error banners.
+      console.error("Failed to seat table:", e);
+    } finally {
+      setSeatBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full overflow-y-auto bg-[#F8FAFC]">
+      {/* Sticky takeout entry strip */}
+      <div className="sticky top-0 z-30 bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
+        <div className="grid grid-cols-3 gap-3">
+          <EntryButton
+            icon={ShoppingBag}
+            label="New Takeaway"
+            onClick={() => enterTakeoutContext("takeout")}
+          />
+          <EntryButton
+            icon={Truck}
+            label="New Delivery"
+            onClick={() => enterTakeoutContext("delivery")}
+          />
+          <EntryButton
+            icon={Package}
+            label="New Drive-Thru"
+            // DB enum doesn't include "drive_thru" in 2-R.0 (see plan 2-R.9).
+            // Map to "takeout" for persistence; UI label is the only difference.
+            onClick={() => enterTakeoutContext("takeout")}
+          />
+        </div>
+      </div>
+
+      {/* Plan tabs */}
+      {plans.length > 1 && (
+        <div className="flex gap-2 px-6 pt-4">
+          {plans.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setActivePlan(p.id)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${
+                activePlan === p.id
+                  ? "bg-[#8066FF] text-white shadow"
+                  : "bg-white text-slate-600 border border-slate-200 hover:border-slate-300"
+              }`}
+            >
+              {p.name}
+              <span className="ml-2 text-xs opacity-70">{p.table_count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Tables */}
+      <div className="flex-1 px-6 py-4">
+        {loading && tables.length === 0 ? (
+          <div className="text-center py-12 text-slate-400 text-sm">Loading floor plan…</div>
+        ) : tables.length === 0 ? (
+          <div className="text-center py-12 text-slate-400 text-sm">
+            No tables in this floor plan yet. Add tables in <span className="font-semibold">Settings → Restaurant Floor</span>.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {tables.map((t) => (
+              <TableTile
+                key={t.id}
+                table={t}
+                onSeat={() => { setSeatForm({ guest_count: Math.max(1, Math.min(t.capacity || 4, 2)) }); setSeatModalTableId(t.id); }}
+                onOpen={() => openTableCheck(t)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Seat modal */}
+      {seatModalTableId != null && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4"
+          onClick={() => setSeatModalTableId(null)}
+        >
+          <div
+            className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Seat Table</h3>
+              <button
+                onClick={() => setSeatModalTableId(null)}
+                className="p-1 text-slate-400 hover:text-slate-700"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
+              Guests
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={seatForm.guest_count}
+              onChange={(e) => setSeatForm({ guest_count: Number(e.target.value) || 1 })}
+              className="w-full text-2xl font-bold text-center px-3 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#8066FF] focus:border-[#8066FF]"
+              autoFocus
+            />
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => setSeatModalTableId(null)}
+                className="flex-1 py-3 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={seatTable}
+                disabled={seatBusy}
+                className="flex-1 py-3 rounded-xl bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold disabled:opacity-50"
+              >
+                {seatBusy ? "Seating…" : "Seat"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EntryButton({ icon: Icon, label, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center justify-center gap-3 py-5 rounded-2xl bg-[#8066FF] hover:bg-[#7055E6] text-white font-bold text-base shadow-[0_10px_24px_-12px_rgba(128,102,255,0.6)] transition-all active:scale-[0.99]"
+    >
+      <Icon size={22} />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function TableTile({ table, onSeat, onOpen }) {
+  const seated = Boolean(table.session_id);
+  const tone = STATUS_TONE[table.session_status] || STATUS_TONE.closed;
+  return (
+    <button
+      onClick={seated ? onOpen : onSeat}
+      className={`text-left rounded-2xl border p-4 transition shadow-sm hover:shadow-md ${
+        seated
+          ? "bg-[#0F172A] text-white border-[#1E293B] hover:border-[#8066FF]"
+          : "bg-white text-slate-900 border-slate-200 hover:border-[#8066FF]"
+      }`}
+    >
+      <div className="flex items-baseline justify-between">
+        <span className="text-2xl font-black tracking-tight">{table.label}</span>
+        <span className={`text-[10px] uppercase tracking-wider opacity-70 ${seated ? "text-slate-300" : "text-slate-400"}`}>
+          Cap {table.capacity}
+        </span>
+      </div>
+      {seated ? (
+        <div className="mt-3 space-y-1.5">
+          <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${tone}`}>
+            {table.session_status}
+          </span>
+          <div className="flex items-center gap-1.5 text-xs text-slate-300">
+            <Users size={12} />
+            <span>{table.guest_count} guests</span>
+          </div>
+          {table.server_name && (
+            <div className="text-xs text-slate-400 truncate">{table.server_name}</div>
+          )}
+        </div>
+      ) : (
+        <div className="mt-3 text-xs text-slate-400">Tap to seat</div>
+      )}
+    </button>
+  );
+}
