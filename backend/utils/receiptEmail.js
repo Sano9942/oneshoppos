@@ -31,13 +31,20 @@ function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol =
 
   const itemRows = items
     .map(
-      (i) => `
+      (i) => {
+        // 2-R.8: inline seat chip when the sale_items row has a seat_number
+        // (dine-in). Retail sales render unchanged.
+        const seatChip = i.seat_number != null
+          ? `<span style="display:inline-block;background:#eef2ff;color:#4f46e5;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:6px;">S${i.seat_number}</span>`
+          : "";
+        return `
       <tr>
-        <td style="padding:4px 0;border-bottom:1px solid #eee;">${i.product_name || "Item"}</td>
+        <td style="padding:4px 0;border-bottom:1px solid #eee;">${seatChip}${i.product_name || "Item"}</td>
         <td style="padding:4px 0;border-bottom:1px solid #eee;text-align:center;">${i.quantity}</td>
         <td style="padding:4px 0;border-bottom:1px solid #eee;text-align:right;">${fmt(i.price_at_sale)}</td>
         <td style="padding:4px 0;border-bottom:1px solid #eee;text-align:right;">${fmt(Number(i.price_at_sale) * Number(i.quantity))}</td>
-      </tr>`
+      </tr>`;
+      }
     )
     .join("");
 

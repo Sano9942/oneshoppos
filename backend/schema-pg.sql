@@ -146,7 +146,12 @@ CREATE TABLE IF NOT EXISTS products (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   is_bundle BOOLEAN DEFAULT false,
   avg_rating NUMERIC(3,2) DEFAULT 0,
-  review_count INTEGER DEFAULT 0
+  review_count INTEGER DEFAULT 0,
+  -- 2-R.1: 86'd items (sold-out) tracking for restaurant mode
+  is_sold_out BOOLEAN NOT NULL DEFAULT false,
+  sold_out_since TIMESTAMPTZ,
+  sold_out_until TIMESTAMPTZ,
+  sold_out_reason TEXT
 );
 
 CREATE TABLE IF NOT EXISTS product_variants (
@@ -160,7 +165,12 @@ CREATE TABLE IF NOT EXISTS product_variants (
   weight NUMERIC(10,3) DEFAULT 0,
   weight_unit TEXT DEFAULT 'kg',
   compare_at_price NUMERIC(12,2) DEFAULT 0,
-  barcode TEXT
+  barcode TEXT,
+  -- 2-R.1: 86'd items (sold-out) tracking for restaurant mode
+  is_sold_out BOOLEAN NOT NULL DEFAULT false,
+  sold_out_since TIMESTAMPTZ,
+  sold_out_until TIMESTAMPTZ,
+  sold_out_reason TEXT
 );
 
 CREATE TABLE IF NOT EXISTS variant_option_values (
@@ -384,8 +394,13 @@ CREATE TABLE IF NOT EXISTS sale_items (
   variant_id INTEGER REFERENCES product_variants(id),
   gross_weight NUMERIC(10,3),
   tare_weight NUMERIC(10,3) DEFAULT 0,
-  staff_id INTEGER REFERENCES employees(id)
+  staff_id INTEGER REFERENCES employees(id),
+  -- 2-R.8: seat_number carried from draft_order_items for dine-in checks.
+  -- Retail sales leave this null. Indexed by (sale_id, seat_number) for
+  -- per-seat aggregation in reports and receipts.
+  seat_number INTEGER
 );
+CREATE INDEX IF NOT EXISTS idx_sale_items_sale_seat ON sale_items(sale_id, seat_number);
 
 CREATE TABLE IF NOT EXISTS sale_payments (
   id SERIAL PRIMARY KEY,
@@ -2825,7 +2840,7 @@ CREATE INDEX IF NOT EXISTS idx_kds_ticket_items_item ON kds_ticket_items(draft_o
 -- sourced checks converted from web_orders. The first-pass constraint is
 -- kept inline below; migrate-pg.js v55 drops + recreates it to add 'online'.
 ALTER TABLE draft_orders
-  ADD COLUMN IF NOT EXISTS order_context TEXT DEFAULT 'retail' CHECK (order_context IN ('retail','dine_in','takeout','delivery','bar','online')),
+  ADD COLUMN IF NOT EXISTS order_context TEXT DEFAULT 'retail' CHECK (order_context IN ('retail','dine_in','takeout','delivery','bar','online','drive_thru')),
   ADD COLUMN IF NOT EXISTS table_id INTEGER REFERENCES restaurant_tables(id),
   ADD COLUMN IF NOT EXISTS table_session_id INTEGER REFERENCES restaurant_table_sessions(id),
   ADD COLUMN IF NOT EXISTS tab_id INTEGER REFERENCES restaurant_tabs(id),

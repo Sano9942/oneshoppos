@@ -353,6 +353,11 @@ export default function KDSRedesign() {
                         <div className="flex justify-between">
                           <span>
                             <span className="font-medium">{item.quantity}x</span>{" "}
+                            {item.seat_number != null && (
+                              <span className="inline-block bg-indigo-100 text-indigo-700 rounded px-1.5 py-0.5 text-xs font-semibold mr-1">
+                                S{item.seat_number}
+                              </span>
+                            )}
                             {item.product_name}
                           </span>
                           {item.notes && <span className="text-xs text-(--ui-text-muted)">{item.notes}</span>}
