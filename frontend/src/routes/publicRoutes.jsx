@@ -10,6 +10,7 @@ import ContextSelect from "../pages/ContextSelect";
 import RouteLoading from "./RouteLoading";
 
 const POSRoute = lazy(() => import("../pages/POSRoute"));
+const POSRestaurantRoute = lazy(() => import("../pages/POSRestaurantRoute"));
 const LandingPagePreview = lazy(() => import("../pages/LandingPagePreview"));
 const LoginPage = lazy(() => import("../pages/LoginPage"));
 const KioskRedesign = lazy(() => import("../pages/redesign/KioskRedesign"));
@@ -89,6 +90,17 @@ export const publicRoutes = [
       <ErrorBoundary level="page">
         <Suspense fallback={<RouteLoading />}>
           <RequireAuth><POSRoute /></RequireAuth>
+        </Suspense>
+      </ErrorBoundary>
+    }
+  />,
+  <Route
+    key="pos-restaurant"
+    path="/pos/restaurant"
+    element={
+      <ErrorBoundary level="page">
+        <Suspense fallback={<RouteLoading />}>
+          <RequireAuth><POSRestaurantRoute /></RequireAuth>
         </Suspense>
       </ErrorBoundary>
     }

@@ -58,6 +58,8 @@ const LABELS = {
   inbox: "Inbox",
   "customer-invoices": "Customer Invoices",
   subscriptions: "Subscriptions",
+  pos: "POS",
+  "pos/restaurant": "Restaurant POS",
   restaurant: "Restaurant",
   floor: "Floor Plan",
   checks: "Checks",
