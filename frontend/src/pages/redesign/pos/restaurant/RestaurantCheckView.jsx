@@ -28,8 +28,10 @@ export default function RestaurantCheckView({ onExit, onOpenSplit, onOpenTransfe
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <RestaurantHeader onBack={onExit} scrollRef={scrollRef} />
 
-        {/* Body — 2-col on desktop, stacked on portrait */}
-        <div className={`flex ${isPortrait ? "flex-col" : "flex-row"} gap-4 p-4`}>
+        {/* Body — 2-col on desktop, cart-above-menu stack on portrait (<900px).
+            Uses flex-col-reverse so the cart column (rendered second in the
+            source) visually lands on top, matching the Day-7 spec. */}
+        <div className={`flex ${isPortrait ? "flex-col-reverse" : "flex-row"} gap-4 p-4`}>
           {/* Menu column */}
           <div className={`${isPortrait ? "w-full" : "flex-1"} min-w-0 flex flex-col gap-3`}>
             {!isPortrait && <SeatCoursePicker />}
@@ -74,8 +76,8 @@ export default function RestaurantCheckView({ onExit, onOpenSplit, onOpenTransfe
             )}
           </div>
 
-          {/* Cart column — fixed width on desktop, full width below */}
-          <div className={`${isPortrait ? "w-full" : "w-[420px] shrink-0"} flex flex-col rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden`}>
+          {/* Cart column — fixed width on desktop, full-width capped height on portrait */}
+          <div className={`${isPortrait ? "w-full max-h-[45vh]" : "w-[420px] shrink-0"} flex flex-col rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden`}>
             <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
               <span className="text-sm font-black text-slate-900 uppercase tracking-wider">Check</span>
               <span className="text-xs text-slate-500">Total: <span className="font-bold text-slate-900">{money(total)}</span></span>
