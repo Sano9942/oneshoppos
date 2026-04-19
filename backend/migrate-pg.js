@@ -4540,6 +4540,60 @@ const MIGRATIONS = [
       );
     },
   },
+  {
+    version: 60,
+    description:
+      "Phase 2-R Wave C — kds_tickets timing columns + kds_station_load_snapshots",
+    up: async (client) => {
+      // 2-R.5: timing columns on kds_tickets. prep_seconds is a plain INTEGER
+      // populated by the service layer when a ticket transitions to 'bumped'
+      // (bumped_at - fired_at); a generated column would complicate idempotent
+      // re-runs and a recall flow that must preserve history.
+      await client.query(`
+        ALTER TABLE kds_tickets
+          ADD COLUMN IF NOT EXISTS fired_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS bumped_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS recalled_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS prep_seconds INTEGER
+      `);
+
+      // Backfill fired_at = created_at for rows already past 'new' so historical
+      // rows show up in prep-time analytics rather than being silently skipped.
+      await client.query(`
+        UPDATE kds_tickets
+        SET fired_at = created_at
+        WHERE fired_at IS NULL
+          AND status IN ('in_progress','ready','bumped')
+      `);
+
+      // Indexes tuned for analytics SELECTs (p50/p95 + date range).
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_kds_tickets_station_bumped
+          ON kds_tickets(station_id, bumped_at)
+          WHERE bumped_at IS NOT NULL
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_kds_tickets_fired_at
+          ON kds_tickets(fired_at)
+          WHERE fired_at IS NOT NULL
+      `);
+
+      // 2-R.5: 15-min load snapshots for trend lines on the analytics tab.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS kds_station_load_snapshots (
+          id SERIAL PRIMARY KEY,
+          station_id INTEGER NOT NULL REFERENCES kds_stations(id) ON DELETE CASCADE,
+          recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          open_tickets INTEGER NOT NULL,
+          avg_prep_seconds INTEGER
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_kds_load_snapshots_station_time
+          ON kds_station_load_snapshots(station_id, recorded_at DESC)
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {
