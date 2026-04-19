@@ -182,6 +182,41 @@ describe("Phase 2-R.4 — Reservations + waitlist", () => {
     expect(positions).toEqual([1, 2]);
   });
 
+  it("Reminder worker sends SMS for reservations in [1h50m, 2h10m] window", async () => {
+    await db.query(`UPDATE reservations SET sms_reminder_sent_at = NOW() WHERE sms_reminder_sent_at IS NULL`);
+    await db.query(`DELETE FROM reservations WHERE customer_name LIKE 'Worker%'`);
+
+    const now = Date.now();
+    const inWindow = new Date(now + 2 * 60 * 60 * 1000).toISOString(); // exactly 2h
+    const outOfWindow = new Date(now + 4 * 60 * 60 * 1000).toISOString(); // 4h out
+    const noPhone = new Date(now + 2 * 60 * 60 * 1000).toISOString();
+
+    await db.query(
+      `INSERT INTO reservations (customer_name, phone, party_size, reservation_start, status)
+       VALUES
+        ('Worker1', '03001111', 2, $1, 'confirmed'),
+        ('Worker2', '03002222', 2, $2, 'confirmed'),
+        ('Worker3', NULL,       2, $3, 'confirmed')`,
+      [inWindow, outOfWindow, noPhone]
+    );
+
+    const { runOnce } = require("../../workers/reservation-reminder-worker-boss");
+    smsCalls.length = 0;
+    const result = await runOnce(db);
+
+    expect(result.sent).toBe(1);
+
+    const { rows: [worker1] } = await db.query(
+      `SELECT sms_reminder_sent_at FROM reservations WHERE customer_name = 'Worker1'`
+    );
+    expect(worker1.sms_reminder_sent_at).toBeTruthy();
+
+    const { rows: [worker2] } = await db.query(
+      `SELECT sms_reminder_sent_at FROM reservations WHERE customer_name = 'Worker2'`
+    );
+    expect(worker2.sms_reminder_sent_at).toBeFalsy();
+  });
+
   it("Feature flag off returns 503", async () => {
     const featureFlags = require("../../middleware/feature-flags");
     await db.query(
