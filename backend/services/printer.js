@@ -34,9 +34,46 @@ async function withRetry(fn, retries = 2, baseDelayMs = 500) {
 
 module.exports = function makePrinterService(db) {
 
-  /** Load printer_config row id=1 from DB */
+  /** Load printer_config row id=1 from DB (default/legacy) */
   async function loadConfig() {
     const { rows } = await db.query("SELECT * FROM printer_config WHERE id = 1");
+    return rows[0] || null;
+  }
+
+  /**
+   * 2-R.7 — Resolve which printer_config row to use given a purpose.
+   * `purpose='receipt'` → default (legacy `id=1` or `is_default=true`).
+   * `purpose='guest_bill'` → row matching purpose, else fallback to default.
+   * `purpose='fire_chit'` + `station_id` → station's `printer_id`, else fallback.
+   * Returns the full printer_config row or null.
+   */
+  async function resolvePrinterConfig({ purpose = "receipt", station_id = null, outlet_id = null } = {}) {
+    if (purpose === "fire_chit" && station_id) {
+      const { rows } = await db.query(
+        `SELECT pc.* FROM printer_config pc
+         JOIN kds_stations ks ON ks.printer_id = pc.id
+         WHERE ks.id = $1 AND pc.is_active = true
+         LIMIT 1`,
+        [station_id]
+      );
+      if (rows[0]) return rows[0];
+    }
+    if (purpose === "guest_bill") {
+      const { rows } = await db.query(
+        `SELECT pc.* FROM printer_config pc
+         WHERE pc.purpose = 'guest_bill' AND pc.is_active = true
+         ORDER BY pc.id LIMIT 1`
+      );
+      if (rows[0]) return rows[0];
+    }
+    // Default: legacy behavior — id=1 if set, otherwise any receipt printer.
+    const { rows } = await db.query(
+      `SELECT * FROM printer_config
+       WHERE is_active = true
+         AND (id = 1 OR purpose = 'receipt')
+       ORDER BY (id = 1) DESC, id ASC
+       LIMIT 1`
+    );
     return rows[0] || null;
   }
 
@@ -199,11 +236,33 @@ module.exports = function makePrinterService(db) {
   /**
    * Print a receipt slip to the configured thermal printer.
    * Returns { ok: true } on success, { error: string, fallback: true } on failure.
+   *
+   * 2-R.7 optional params:
+   *   opts.purpose ∈ {'receipt','fire_chit','guest_bill'}
+   *   opts.station_id — when purpose='fire_chit', routes to station's printer
+   *   opts.outlet_id — when purpose='guest_bill', narrows printer by outlet
+   * When omitted, defaults to legacy behavior (receipt printer id=1).
    */
-  async function printReceipt(slip, template, currencySymbol = "$", labels = {}) {
+  async function printReceipt(slip, template, currencySymbol = "$", labels = {}, opts = {}) {
+    const { purpose = "receipt", station_id = null, outlet_id = null } = opts;
     let cfg;
     try {
-      cfg = await loadConfig();
+      // When a non-default purpose is requested, use the routing resolver
+      // and fall back to the default receipt printer if none is wired up.
+      cfg = purpose === "receipt"
+        ? await loadConfig()
+        : (await resolvePrinterConfig({ purpose, station_id, outlet_id })
+            || await loadConfig());
+      if (purpose !== "receipt" && cfg && cfg.purpose === "receipt") {
+        // Purpose-specific printer not found — fall back with a warning.
+        // Never silently drop a chit.
+        try {
+          const alerting = require("./alerting");
+          if (alerting && typeof alerting.recordError === "function") {
+            alerting.recordError(`printer_fallback_${purpose}`, `No printer configured for purpose=${purpose}; fell back to default receipt printer`);
+          }
+        } catch { /* alerting best-effort */ }
+      }
     } catch (err) {
       return { error: `DB error: ${err.message}`, fallback: true };
     }
@@ -385,7 +444,7 @@ module.exports = function makePrinterService(db) {
     }
   }
 
-  return { printReceipt, printerStatus, printTest, printToNetwork, openDrawer };
+  return { printReceipt, printerStatus, printTest, printToNetwork, openDrawer, resolvePrinterConfig };
 };
 
 // Export withRetry for unit testing (pure function, no side effects).

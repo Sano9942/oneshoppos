@@ -190,11 +190,117 @@ module.exports = function registerRestaurantRoutes(app, deps) {
     try {
       const fire = await checks.fireCourse(deps.db, Number(req.params.id), req.body.course_name, req.employee.id);
       try { await deps.db.query("INSERT INTO action_history (employee_id, action, details) VALUES ($1, $2, $3)", [req.employee.id, "restaurant_course_fired", JSON.stringify({ draft_order_id: Number(req.params.id), course_name: req.body.course_name })]); } catch {}
+
+      // 2-R.7 — route fire chit to each involved station's printer.
+      // Flag-gated so tenants without the flag keep the prior no-print path.
+      try {
+        const flagsMap = await require("../middleware/feature-flags").getFeatureFlagsMap(req.tenantId);
+        if (flagsMap.phase4_restaurant_fire_chits) {
+          const printerService = require("../services/printer")(deps.db);
+          // Collect involved stations via kds_tickets for this draft_order +
+          // course. If none routed (flag newly enabled, no tickets yet), skip.
+          const { rows: stations } = await deps.db.query(
+            `SELECT DISTINCT kt.station_id
+             FROM kds_tickets kt
+             WHERE kt.draft_order_id = $1
+               AND kt.course_name = $2
+               AND kt.station_id IS NOT NULL`,
+            [Number(req.params.id), req.body.course_name]
+          );
+          const { rows: [order] } = await deps.db.query(
+            `SELECT id, outlet_id, subtotal FROM draft_orders WHERE id = $1`,
+            [Number(req.params.id)]
+          );
+          const { rows: items } = await deps.db.query(
+            `SELECT product_name, quantity, price, seat_number
+             FROM draft_order_items
+             WHERE draft_order_id = $1 AND course_name = $2
+             ORDER BY seat_number NULLS LAST, id`,
+            [Number(req.params.id), req.body.course_name]
+          );
+          // Fire one chit per station; items are the course's items grouped by seat.
+          for (const { station_id } of stations) {
+            const slip = {
+              invoiceNumber: `FIRE-${req.params.id}-${req.body.course_name}`,
+              timestamp: new Date().toISOString(),
+              cart: items.map((it) => ({
+                name: it.seat_number ? `Seat ${it.seat_number}: ${it.product_name}` : it.product_name,
+                quantity: Number(it.quantity),
+                price: Number(it.price),
+              })),
+              payments: [],
+              total: 0,
+              outlet: { id: order?.outlet_id },
+            };
+            // Fire-and-forget per station; alerting fires if a station printer
+            // is offline via printReceipt's internal fallback path.
+            printerService
+              .printReceipt(slip, { header_text: `FIRE · Course ${req.body.course_name}`, footer_text: "— Kitchen —" }, "", {}, {
+                purpose: "fire_chit",
+                station_id,
+                outlet_id: order?.outlet_id,
+              })
+              .catch(() => { /* swallow — alerting has already recorded */ });
+          }
+        }
+      } catch { /* printer routing best-effort */ }
+
       res.json(fire);
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
+
+  // 2-R.7 — Print guest bill. Routes to the outlet's guest_bill printer;
+  // falls back to the default receipt printer if none configured.
+  app.post(
+    "/api/restaurant/checks/:id/print-bill",
+    requireMode("restaurant"),
+    requireFeature("phase4_restaurant_fire_chits"),
+    requirePerm("manage_restaurant"),
+    async (req, res) => {
+      try {
+        const checkId = Number(req.params.id);
+        const { rows: [order] } = await deps.db.query(
+          `SELECT id, outlet_id, subtotal, tax_total, discount_total, total
+           FROM draft_orders WHERE id = $1`,
+          [checkId]
+        );
+        if (!order) return res.status(404).json({ error: "Check not found" });
+        const { rows: items } = await deps.db.query(
+          `SELECT product_name, quantity, price, seat_number
+           FROM draft_order_items WHERE draft_order_id = $1 ORDER BY seat_number NULLS LAST, id`,
+          [checkId]
+        );
+        const printerService = require("../services/printer")(deps.db);
+        const slip = {
+          invoiceNumber: `CHECK-${checkId}`,
+          timestamp: new Date().toISOString(),
+          cart: items.map((it) => ({
+            name: it.seat_number ? `Seat ${it.seat_number}: ${it.product_name}` : it.product_name,
+            quantity: Number(it.quantity),
+            price: Number(it.price),
+          })),
+          payments: [],
+          taxAmount: Number(order.tax_total || 0),
+          discountAmount: Number(order.discount_total || 0),
+          total: Number(order.total || 0),
+          outlet: { id: order.outlet_id },
+        };
+        const result = await printerService.printReceipt(
+          slip,
+          { header_text: "GUEST CHECK", footer_text: "Not a receipt — for review only" },
+          "",
+          {},
+          { purpose: "guest_bill", outlet_id: order.outlet_id }
+        );
+        if (result?.ok) res.json({ ok: true });
+        else res.status(500).json({ error: result?.error || "Print failed" });
+      } catch (err) {
+        res.status(err.statusCode || 500).json({ error: err.message });
+      }
+    }
+  );
 
   app.post("/api/restaurant/checks/:id/courses/hold", ...gate, validate(holdCourseSchema), async (req, res) => {
     try {

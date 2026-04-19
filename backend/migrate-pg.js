@@ -4425,6 +4425,121 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 59,
+    description:
+      "Phase 2-R Wave B — sale_item_adjustments + void_reason_codes + menu_schedules + kds_stations.printer_id + balance_strategy + printer_config.purpose",
+    up: async (client) => {
+      // 2-R.2: Adjustments table (void / comp / discount with audit trail)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS sale_item_adjustments (
+          id SERIAL PRIMARY KEY,
+          sale_id INTEGER NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+          sale_item_id INTEGER NOT NULL REFERENCES sale_items(id) ON DELETE CASCADE,
+          adjustment_type TEXT NOT NULL CHECK (adjustment_type IN ('void','comp','discount')),
+          reason_code TEXT NOT NULL,
+          reason_note TEXT,
+          amount NUMERIC(12,2) NOT NULL,
+          manager_employee_id INTEGER REFERENCES employees(id),
+          manager_pin_verified_at TIMESTAMPTZ,
+          created_by_employee_id INTEGER REFERENCES employees(id),
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_sale_item_adjustments_sale ON sale_item_adjustments(sale_id)`
+      );
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_sale_item_adjustments_type ON sale_item_adjustments(adjustment_type, created_at)`
+      );
+
+      // 2-R.2: Reason codes (seeded defaults, tenant-customizable)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS void_reason_codes (
+          id SERIAL PRIMARY KEY,
+          code TEXT UNIQUE NOT NULL,
+          label TEXT NOT NULL,
+          adjustment_type TEXT NOT NULL CHECK (adjustment_type IN ('void','comp','both')),
+          is_active BOOLEAN NOT NULL DEFAULT true,
+          sort_order INTEGER NOT NULL DEFAULT 0
+        )
+      `);
+      const SEED_REASONS = [
+        ["spilled", "Spilled / dropped", "void", 10],
+        ["wrong_order", "Wrong order", "both", 20],
+        ["customer_change", "Customer changed mind", "void", 30],
+        ["kitchen_error", "Kitchen error", "both", 40],
+        ["vip_comp", "VIP / manager comp", "comp", 50],
+        ["manager_comp", "Manager discretion", "comp", 60],
+        ["training", "Training / test order", "both", 70],
+        ["allergy", "Allergy / dietary issue", "both", 80],
+        ["quality", "Quality complaint", "comp", 90],
+        ["other", "Other", "both", 100],
+      ];
+      for (const [code, label, type, sort] of SEED_REASONS) {
+        await client.query(
+          `INSERT INTO void_reason_codes (code, label, adjustment_type, sort_order)
+           VALUES ($1,$2,$3,$4) ON CONFLICT (code) DO NOTHING`,
+          [code, label, type, sort]
+        );
+      }
+
+      // 2-R.6: Menu schedules (day-parting)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS menu_schedules (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          outlet_id INTEGER REFERENCES outlets(id) ON DELETE CASCADE,
+          day_of_week INTEGER CHECK (day_of_week >= 0 AND day_of_week <= 6),
+          start_time TIME NOT NULL,
+          end_time TIME NOT NULL,
+          timezone TEXT,
+          is_active BOOLEAN NOT NULL DEFAULT true,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS menu_schedule_products (
+          schedule_id INTEGER NOT NULL REFERENCES menu_schedules(id) ON DELETE CASCADE,
+          product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+          PRIMARY KEY (schedule_id, product_id)
+        )
+      `);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS idx_menu_schedule_products_product ON menu_schedule_products(product_id)`
+      );
+
+      // 2-R.6: outlets.timezone for day-parting (falls back to company_profile.timezone when NULL)
+      await client.query(`ALTER TABLE outlets ADD COLUMN IF NOT EXISTS timezone TEXT`);
+
+      // 2-R.7: kds_stations printer_id + balance_strategy + target_prep_seconds + last_assigned_at
+      await client.query(`
+        ALTER TABLE kds_stations
+          ADD COLUMN IF NOT EXISTS printer_id INTEGER REFERENCES printer_config(id) ON DELETE SET NULL,
+          ADD COLUMN IF NOT EXISTS balance_strategy TEXT NOT NULL DEFAULT 'priority',
+          ADD COLUMN IF NOT EXISTS target_prep_seconds INTEGER,
+          ADD COLUMN IF NOT EXISTS last_assigned_at TIMESTAMPTZ
+      `);
+      await client.query(
+        `ALTER TABLE kds_stations DROP CONSTRAINT IF EXISTS kds_stations_balance_strategy_check`
+      );
+      await client.query(
+        `ALTER TABLE kds_stations ADD CONSTRAINT kds_stations_balance_strategy_check CHECK (balance_strategy IN ('priority','round_robin','least_loaded'))`
+      );
+
+      // 2-R.7: printer_config.purpose for fire-chit vs guest-bill vs receipt routing
+      await client.query(
+        `ALTER TABLE printer_config ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'receipt'`
+      );
+      await client.query(
+        `ALTER TABLE printer_config DROP CONSTRAINT IF EXISTS printer_config_purpose_check`
+      );
+      await client.query(
+        `ALTER TABLE printer_config ADD CONSTRAINT printer_config_purpose_check CHECK (purpose IN ('receipt','fire_chit','guest_bill','expo'))`
+      );
+    },
+  },
 ];
 
 async function migrate(db) {

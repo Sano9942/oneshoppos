@@ -57,6 +57,8 @@ const DEFAULT_ROLE_PERMISSIONS = {
     // Phase 2.1 C — granted alongside manage_restaurant so existing restaurant
     // managers can administer tip pools without a separate role bump.
     "manage_tips",
+    // Phase 2-R Wave B (2-R.2) — manager PIN authorization for void/comp.
+    "override_void_comp",
   ],
   Cashier: ["view_reports", "pos_discount", "pos_park"],
 };
