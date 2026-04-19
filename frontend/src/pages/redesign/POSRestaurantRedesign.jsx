@@ -24,6 +24,7 @@ import TransferTableModal from "./pos/restaurant/TransferTableModal";
 import RestaurantGuestModeModal from "./pos/restaurant/RestaurantGuestModeModal";
 import RestaurantAvailabilityModal from "./pos/restaurant/RestaurantAvailabilityModal";
 import VoidCompModal from "./pos/restaurant/VoidCompModal";
+import PayAtTableQRModal from "./pos/restaurant/PayAtTableQRModal";
 
 // Phase 2-R.0 — Restaurant POS shell at /pos/restaurant.
 // Composition only: wraps POSContent with POSProvider + ErrorBoundary,
@@ -31,12 +32,13 @@ import VoidCompModal from "./pos/restaurant/VoidCompModal";
 // mounts every existing POS modal so the restaurant flow inherits the
 // retail POS opening gate / lock / checkout / receipt / session-expired UX.
 function RestaurantContent() {
-  const { isLocked, notice, error, closeCheck } = usePOS();
+  const { isLocked, notice, error, closeCheck, money } = usePOS();
   const [view, setView] = useState("floor");
   const [splitOpen, setSplitOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
   const [voidCompState, setVoidCompState] = useState({ open: false, tab: "void" });
+  const [payAtTable, setPayAtTable] = useState({ open: false, draftOrderId: null });
 
   if (isLocked) return <POSLockScreen />;
 
@@ -68,6 +70,7 @@ function RestaurantContent() {
             onOpenTransfer={() => setTransferOpen(true)}
             onOpen86={() => setAvailabilityOpen(true)}
             onOpenVoidComp={(tab) => setVoidCompState({ open: true, tab: tab || "void" })}
+            onOpenPayAtTable={(draftOrderId) => setPayAtTable({ open: true, draftOrderId })}
           />
         )}
       </div>
@@ -117,6 +120,20 @@ function RestaurantContent() {
         initialTab={voidCompState.tab}
         onClose={() => setVoidCompState({ open: false, tab: "void" })}
         onSuccess={() => setVoidCompState({ open: false, tab: "void" })}
+      />
+
+      {/* 2-R.3 — QR pay-at-table. Auto-closes on payment success so the
+         cashier can hand off the table to busser without clicking through. */}
+      <PayAtTableQRModal
+        open={payAtTable.open}
+        onClose={() => setPayAtTable({ open: false, draftOrderId: null })}
+        draftOrderId={payAtTable.draftOrderId}
+        moneyFormat={money}
+        onSuccess={() => {
+          setPayAtTable({ open: false, draftOrderId: null });
+          closeCheck();
+          setView("floor");
+        }}
       />
     </div>
   );
