@@ -5,8 +5,9 @@ import { readContext } from "../../auth/authStore";
 import useFeatureFlags from "../../hooks/useFeatureFlags";
 import { useToast } from "../../contexts/ToastContext";
 import { PageShell, SectionCard, Button, Badge, Input, Select } from "../../ui/primitives";
-import { ChefHat, Check, Clock, Route as RouteIcon, Trash2, Eye } from "lucide-react";
+import { ChefHat, Check, Clock, Route as RouteIcon, Trash2, Eye, Settings } from "lucide-react";
 import { api } from "../../api";
+import KdsStationSettingsModal from "./kds/KdsStationSettingsModal";
 
 function elapsedMinutes(createdAt) {
   if (!createdAt) return 0;
@@ -45,6 +46,8 @@ export default function KDSRedesign() {
   });
   const [previewDraftId, setPreviewDraftId] = useState("");
   const [preview, setPreview] = useState(null);
+  // 2-R.5: per-station settings modal (balance strategy + target prep + printer).
+  const [settingsStation, setSettingsStation] = useState(null);
 
   if (!flagsLoading && !flags.phase4_restaurant_kds) return <Navigate to="/dashboard" replace />;
   if (!readContext()?.active_outlet_id) return <Navigate to="/" replace />;
@@ -223,12 +226,16 @@ export default function KDSRedesign() {
           {stations.length === 0 ? (
             <p className="text-sm text-(--ui-text-muted)">No stations configured yet.</p>
           ) : (
+            <>
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-(--ui-text-muted) border-b border-(--ui-border)">
                   <th className="py-2">Station</th>
                   <th>Role</th>
+                  <th>Strategy</th>
+                  <th>Target (s)</th>
                   <th>Printer</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -236,6 +243,8 @@ export default function KDSRedesign() {
                   <tr key={s.id} className="border-b border-(--ui-border)">
                     <td className="py-2 font-semibold">{s.name}</td>
                     <td>{s.station_role}</td>
+                    <td>{s.balance_strategy || "priority"}</td>
+                    <td>{s.target_prep_seconds ?? "—"}</td>
                     <td>
                       <Select
                         value={s.printer_id || ""}
@@ -249,10 +258,27 @@ export default function KDSRedesign() {
                         ))}
                       </Select>
                     </td>
+                    <td>
+                      <Button
+                        tone="plain"
+                        size="sm"
+                        onClick={() => setSettingsStation(s)}
+                        aria-label={`Settings for ${s.name}`}
+                      >
+                        <Settings size={14} />
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            <KdsStationSettingsModal
+              open={!!settingsStation}
+              onClose={() => setSettingsStation(null)}
+              station={settingsStation}
+              onSaved={(updated) => setStations((prev) => prev.map((s) => s.id === updated.id ? updated : s))}
+            />
+            </>
           )}
         </SectionCard>
       ) : null}

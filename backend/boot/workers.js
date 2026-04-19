@@ -303,6 +303,11 @@ function startAll(deps) {
           await registerCourseReleaseWorker(boss, pool);
         }
 
+        if (String(process.env.KDS_SNAPSHOT_WORKER_ENABLED || "0") === "1") {
+          const { registerKdsSnapshotWorker } = require("../workers/kds-load-snapshot-worker-boss");
+          await registerKdsSnapshotWorker(boss, pool);
+        }
+
         // Booking reminders — tenant-aware setInterval poll. Uses
         // forEachActiveTenant to iterate active tenants (since it's a
         // scheduled poll, not a per-event job — there's no tenantSlug

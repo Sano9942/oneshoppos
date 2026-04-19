@@ -107,6 +107,9 @@ const updateKdsStationSchema = z.object({
   station_role: z.enum(["prep", "expo"]).optional(),
   is_active: z.boolean().optional(),
   printer_id: z.number().int().positive().nullable().optional(),
+  // Phase 2-R Wave C (2-R.5): load-balancing strategy + per-station target.
+  balance_strategy: z.enum(["priority", "round_robin", "least_loaded"]).optional(),
+  target_prep_seconds: z.number().int().positive().nullable().optional(),
 });
 
 // Phase 2.1 B1 — KDS routing rules. Exactly one of product_id / modifier_group_id

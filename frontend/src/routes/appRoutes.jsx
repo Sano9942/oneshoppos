@@ -192,6 +192,9 @@ export const appRoutes = [
     <Route path="/reports/product-movement" element={wrap(() => <ReportTabStandaloneRoute tabId="product-movement" />)} />
     <Route path="/reports/parent-report" element={<PlaceholderPage />} />
     <Route path="/reports/product-performance" element={wrap(() => <ReportTabStandaloneRoute tabId="product-performance" />)} />
+    {/* Phase 2-R Wave C — restaurant analytics deep-links */}
+    <Route path="/reports/kds-analytics" element={wrap(() => <ReportTabStandaloneRoute tabId="kds-analytics" />)} />
+    <Route path="/reports/menu-engineering" element={wrap(() => <ReportTabStandaloneRoute tabId="menu-engineering" />)} />
     {/* Wave 2 — Accounting */}
     <Route path="/chart-of-accounts" element={perm("all_access", <ChartOfAccountsRedesign />)} />
     <Route path="/journal-entries" element={perm("all_access", <JournalEntriesRedesign />)} />

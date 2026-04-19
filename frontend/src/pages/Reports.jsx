@@ -151,6 +151,8 @@ import {
 import FBRExportTab from "./reports/FBRExportTab";
 import MultichannelTab from "./reports/ReportsMultichannel";
 import CommissionSummaryTab from "./reports/ReportsCommissions";
+import KdsAnalyticsTab from "./reports/KdsAnalyticsTab";
+import MenuEngineeringTab from "./reports/MenuEngineeringTab";
 
 function GlobalFilterBar({ filters, setFilters, meta }) {
   const {
@@ -544,6 +546,13 @@ const GROUPS = [
       { id: "multichannel", label: "Multi-Channel", icon: Globe },
     ],
   },
+  {
+    label: "Restaurant",
+    tabs: [
+      { id: "kds-analytics", label: "KDS Analytics", icon: Activity },
+      { id: "menu-engineering", label: "Menu Engineering", icon: LayoutGrid },
+    ],
+  },
 ];
 
 function TabBreadcrumb({ activeTab }) {
@@ -723,6 +732,10 @@ function TabContent({ activeTab, filters, setFilters, setActiveTab }) {
       return <FBRExportTab />;
     case "multichannel":
       return <MultichannelTab filters={filters} />;
+    case "kds-analytics":
+      return <KdsAnalyticsTab />;
+    case "menu-engineering":
+      return <MenuEngineeringTab />;
     default:
       return null;
   }
