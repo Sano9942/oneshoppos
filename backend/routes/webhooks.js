@@ -219,6 +219,32 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
     return { ok: true };
   }
 
+  // ── Context 3b: Restaurant pay-at-table sessions (tenant schema, 2-R.3) ──
+  // Checked before storefront so a restaurant-prefixed gateway_ref never
+  // misses its handler if the storefront table happens to have a stale
+  // row with the same id (shouldn't happen in practice — gateway_ref is
+  // unique per mint — but keeps the dispatch order explicit).
+  try {
+    const { handleRestaurantPayWebhook } = require("./restaurant/pay-at-table");
+    const { rows: [rps] } = await db.query(
+      "SELECT id FROM restaurant_payment_sessions WHERE gateway_ref = $1",
+      [transaction_id]
+    );
+    if (rps) {
+      const result = await handleRestaurantPayWebhook(db, {
+        gatewayRef: transaction_id,
+        status,
+        eventType: event_type,
+        raw,
+      });
+      if (result.matched) return { ok: true, message: result.message };
+    }
+  } catch (rpsErr) {
+    if (!String(rpsErr.message || "").includes("does not exist")) {
+      _logger.error({ err: rpsErr, transaction_id }, "Restaurant pay-at-table webhook failed");
+    }
+  }
+
   // ── Context 4: Storefront payment sessions (tenant schema) ──
   const { rows: [session] } = await db.query(
     "SELECT * FROM storefront_payment_sessions WHERE provider_ref = $1",
