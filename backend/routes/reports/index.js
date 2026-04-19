@@ -41,6 +41,9 @@ module.exports = function registerReportsRoutes(app, deps) {
   // KDS analytics (2-R.5) — restaurant mode
   require("./kds-analytics")(app, deps, helpers);
 
+  // Menu engineering (2-R.10) — restaurant mode
+  require("./menu-engineering")(app, deps, helpers);
+
   // Return the processPendingReportSchedules function required by registerAllRoutes.js
   return {
     processPendingReportSchedules:
