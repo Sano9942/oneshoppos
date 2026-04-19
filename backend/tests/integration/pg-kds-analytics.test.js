@@ -8,9 +8,10 @@
  *   4. `balance_strategy='round_robin'` alternates across equal-priority peers
  *   5. Timing: fire → bump writes bumped_at + prep_seconds; recall sets
  *      recalled_at without erasing bumped_at/prep_seconds
- *
- * The `GET /api/reports/kds/prep-times` tests live alongside these once the
- * route is in place (added in the same wave's Commit 3).
+ *   6. `/api/reports/kds/prep-times` returns p50/p95/mean per station
+ *   7. Endpoint includes recent load snapshots
+ *   8. Tickets outside the date range are excluded
+ *   9. Worker snapshotForTenant inserts one row per active station
  */
 
 // Force single-tenant mode BEFORE requires so public-tenant-context
@@ -44,8 +45,12 @@ describe("Phase 2-R.5 — KDS analytics + balance strategies", () => {
     app.use((req, _res, next) => {
       const eid = req.headers["x-employee-id"];
       if (eid) req.employee = { id: Number(eid) };
+      // Analytics endpoint requires view_reports perm — grant all_access in tests.
+      req.employeePerms = ["all_access"];
       next();
     });
+
+    require("../../routes/reports/kds-analytics")(app, deps);
 
     await db.query(
       `INSERT INTO tenant_modes (mode, enabled) VALUES ('restaurant', true)
@@ -259,5 +264,130 @@ describe("Phase 2-R.5 — KDS analytics + balance strategies", () => {
     expect(recalled.bumped_at).toBeTruthy(); // preserved
     expect(recalled.prep_seconds).toBeGreaterThanOrEqual(119); // preserved
     expect(recalled.status).toBe("new");
+  });
+
+  it("GET /api/reports/kds/prep-times — returns p50/p95/mean per station", async () => {
+    await wipeKds();
+    const { rows: [grill] } = await db.query(
+      `INSERT INTO kds_stations (outlet_id, name, station_role, target_prep_seconds)
+       VALUES (1, 'Grill', 'prep', 300) RETURNING *`
+    );
+    // Seed 5 bumped tickets with known prep_seconds: 60, 120, 180, 240, 480.
+    // Expected: mean = 216, p50 = 180.
+    const orderId = await seedDraftOrderWithItem();
+    const seconds = [60, 120, 180, 240, 480];
+    for (const sec of seconds) {
+      await db.query(
+        `INSERT INTO kds_tickets (station_id, draft_order_id, status, fired_at, bumped_at, prep_seconds)
+         VALUES ($1, $2, 'bumped', NOW() - INTERVAL '1 hour', NOW(), $3)`,
+        [grill.id, orderId, sec]
+      );
+    }
+
+    const res = await request(app)
+      .get("/api/reports/kds/prep-times")
+      .set("x-employee-id", "1")
+      .query({ from: "2020-01-01", to: "2099-01-01" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.stations).toBeTruthy();
+    const row = res.body.stations.find((r) => r.station_id === grill.id);
+    expect(row).toBeTruthy();
+    expect(row.count).toBe(5);
+    expect(row.p50).toBe(180);
+    expect(row.target_prep_seconds).toBe(300);
+    expect(Math.round(row.mean)).toBe(216);
+  });
+
+  it("GET /api/reports/kds/prep-times — includes snapshots", async () => {
+    await wipeKds();
+    const { rows: [s] } = await db.query(
+      `INSERT INTO kds_stations (outlet_id, name, station_role)
+       VALUES (1, 'S', 'prep') RETURNING *`
+    );
+    await db.query(
+      `INSERT INTO kds_station_load_snapshots (station_id, recorded_at, open_tickets, avg_prep_seconds)
+       VALUES
+         ($1, NOW() - INTERVAL '30 min', 3, 200),
+         ($1, NOW() - INTERVAL '15 min', 5, 220),
+         ($1, NOW(), 2, 180)`,
+      [s.id]
+    );
+
+    const res = await request(app)
+      .get("/api/reports/kds/prep-times")
+      .set("x-employee-id", "1")
+      .query({ from: "2020-01-01", to: "2099-01-01" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.snapshots).toBeTruthy();
+    expect(res.body.snapshots.length).toBe(3);
+    expect(res.body.snapshots[0]).toHaveProperty("station_id", s.id);
+  });
+
+  it("GET /api/reports/kds/prep-times — tickets outside date range excluded", async () => {
+    await wipeKds();
+    const { rows: [s] } = await db.query(
+      `INSERT INTO kds_stations (outlet_id, name, station_role)
+       VALUES (1, 'S', 'prep') RETURNING *`
+    );
+    const orderId = await seedDraftOrderWithItem();
+    await db.query(
+      `INSERT INTO kds_tickets (station_id, draft_order_id, status, fired_at, bumped_at, prep_seconds)
+       VALUES ($1, $2, 'bumped', '2025-06-01', '2025-06-01', 120)`,
+      [s.id, orderId]
+    );
+    await db.query(
+      `INSERT INTO kds_tickets (station_id, draft_order_id, status, fired_at, bumped_at, prep_seconds)
+       VALUES ($1, $2, 'bumped', '2019-01-01', '2019-01-01', 999)`,
+      [s.id, orderId]
+    );
+
+    const res = await request(app)
+      .get("/api/reports/kds/prep-times")
+      .set("x-employee-id", "1")
+      .query({ from: "2025-01-01", to: "2025-12-31" });
+
+    expect(res.status).toBe(200);
+    const row = res.body.stations.find((r) => r.station_id === s.id);
+    expect(row.count).toBe(1); // the 999-second ticket is filtered out
+  });
+
+  it("snapshotForTenant inserts one row per active station and trims old rows", async () => {
+    await wipeKds();
+    const { snapshotForTenant } = require("../../workers/kds-load-snapshot-worker-boss");
+    const { rows: [s1] } = await db.query(
+      `INSERT INTO kds_stations (outlet_id, name, station_role) VALUES (1, 'W1', 'prep') RETURNING id`
+    );
+    const { rows: [s2] } = await db.query(
+      `INSERT INTO kds_stations (outlet_id, name, station_role, is_active) VALUES (1, 'W2-off', 'prep', false) RETURNING id`
+    );
+    // Pre-existing snapshot older than 30 days should be trimmed.
+    await db.query(
+      `INSERT INTO kds_station_load_snapshots (station_id, recorded_at, open_tickets) VALUES ($1, NOW() - INTERVAL '45 days', 1)`,
+      [s1.id]
+    );
+
+    const fakeLogger = { error: () => {}, warn: () => {}, info: () => {}, child: () => fakeLogger };
+    const inserted = await snapshotForTenant(db, fakeLogger, "test");
+    expect(inserted).toBe(1); // only the active station
+
+    const { rows: fresh } = await db.query(
+      `SELECT station_id FROM kds_station_load_snapshots WHERE recorded_at > NOW() - INTERVAL '1 minute'`
+    );
+    expect(fresh.map((r) => r.station_id)).toEqual([s1.id]);
+
+    // Old row trimmed
+    const { rows: old } = await db.query(
+      `SELECT id FROM kds_station_load_snapshots WHERE recorded_at < NOW() - INTERVAL '30 days'`
+    );
+    expect(old.length).toBe(0);
+
+    // Inactive station wasn't snapshotted
+    const { rows: inactive } = await db.query(
+      `SELECT id FROM kds_station_load_snapshots WHERE station_id = $1`,
+      [s2.id]
+    );
+    expect(inactive.length).toBe(0);
   });
 });

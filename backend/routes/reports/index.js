@@ -38,6 +38,9 @@ module.exports = function registerReportsRoutes(app, deps) {
   // Clinical reports (M10) — treatment_plans mode
   require("./clinical")(app, deps, helpers);
 
+  // KDS analytics (2-R.5) — restaurant mode
+  require("./kds-analytics")(app, deps, helpers);
+
   // Return the processPendingReportSchedules function required by registerAllRoutes.js
   return {
     processPendingReportSchedules:
