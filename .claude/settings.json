@@ -165,7 +165,8 @@
       "WebFetch(domain:fourweekmba.com)",
       "WebFetch(domain:fitsmallbusiness.com)",
       "WebFetch(domain:litcommerce.com)",
-      "WebFetch(domain:sanopos.com)"
+      "WebFetch(domain:sanopos.com)",
+      "mcp__claude_ai_Supabase__get_logs"
     ],
     "additionalDirectories": [
       "\\tmp",

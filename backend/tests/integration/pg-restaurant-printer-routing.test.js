@@ -13,7 +13,7 @@ const { createTestApp } = require("../helpers/createTestApp-pg");
 const { MIGRATIONS } = require("../../migrate-pg");
 const makePrinterService = require("../../services/printer");
 
-vi.setConfig({ testTimeout: 30000, hookTimeout: 120000 });
+vi.setConfig({ testTimeout: 30000, hookTimeout: 300000 });
 
 describe("Phase 2-R.7 — Printer purpose resolution", () => {
   let db, cleanup;

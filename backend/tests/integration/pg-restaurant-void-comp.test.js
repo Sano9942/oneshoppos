@@ -17,7 +17,7 @@ const bcrypt = require("bcryptjs");
 const { createTestApp } = require("../helpers/createTestApp-pg");
 const { MIGRATIONS } = require("../../migrate-pg");
 
-vi.setConfig({ testTimeout: 30000, hookTimeout: 120000 });
+vi.setConfig({ testTimeout: 30000, hookTimeout: 300000 });
 
 describe("Phase 2-R.2 — Void + comp with manager PIN", () => {
   let app, db, deps, cleanup, schemaName;

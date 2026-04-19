@@ -444,6 +444,24 @@ async function createTestApp(options = {}) {
   const cleanup = async () => {
     try {
       await client.query(`SET search_path = 'public'`);
+      // Drop tables in batches to avoid "out of shared memory" when a schema
+      // has ~244 tables (each DROP takes an AccessExclusiveLock, and Postgres'
+      // max_locks_per_transaction defaults to 64). One DROP SCHEMA CASCADE
+      // would blow past that.
+      const { rows: tables } = await client.query(
+        `SELECT tablename FROM pg_tables WHERE schemaname = $1`,
+        [schemaName]
+      );
+      const BATCH = 40;
+      for (let i = 0; i < tables.length; i += BATCH) {
+        const chunk = tables
+          .slice(i, i + BATCH)
+          .map((t) => `"${schemaName}"."${t.tablename}"`)
+          .join(", ");
+        if (chunk) {
+          await client.query(`DROP TABLE IF EXISTS ${chunk} CASCADE`);
+        }
+      }
       await client.query(`DROP SCHEMA IF EXISTS ${schemaName} CASCADE`);
     } finally {
       client.release();

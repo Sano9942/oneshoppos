@@ -8,14 +8,18 @@
  *   4. Flag off → schedule ignored (backward compat).
  */
 
-delete process.env.MULTI_TENANT;
-
 const request = require("supertest");
 const { createTestApp } = require("../helpers/createTestApp-pg");
 const { MIGRATIONS } = require("../../migrate-pg");
 const resolver = require("../../services/menu-schedule-resolver");
 
-vi.setConfig({ testTimeout: 30000, hookTimeout: 120000 });
+// migrate-pg.js calls dotenv.config() at require time which re-injects
+// MULTI_TENANT=1 from .env. Unset AFTER all the above requires but BEFORE
+// routes/public-restaurant.js loads (inside beforeAll), so that
+// services/public-tenant-context.js captures the single-tenant branch.
+delete process.env.MULTI_TENANT;
+
+vi.setConfig({ testTimeout: 30000, hookTimeout: 300000 });
 
 // Build a Date whose local wall-clock in UTC matches the desired hour.
 // All tests assume tenant timezone = "UTC" (default from company_profile
@@ -145,18 +149,21 @@ describe("Phase 2-R.6 — Day-parting / menu schedules", () => {
     );
     featureFlags.invalidateFeatureFlagCache();
 
-    const res = await request(app)
-      .get("/api/public/restaurant/menu/test-token-schedule")
-      .set("x-tenant-schema", schemaName);
-    expect(res.status).toBe(200);
-    const ids = (res.body.items || []).map((i) => i.id);
-    expect(ids).toContain(1); // flag off → product 1 always visible
-
-    // Restore flag for follow-up tests.
-    await db.query(
-      `UPDATE feature_flags SET enabled = true WHERE key = 'phase4_restaurant_day_parting'`
-    );
-    featureFlags.invalidateFeatureFlagCache();
+    try {
+      const res = await request(app)
+        .get("/api/public/restaurant/menu/test-token-schedule")
+        .set("x-tenant-schema", schemaName);
+      expect(res.status).toBe(200);
+      const ids = (res.body.items || []).map((i) => i.id);
+      expect(ids).toContain(1); // flag off → product 1 always visible
+    } finally {
+      // Always restore the flag — otherwise a failure here cascades into the
+      // next test (CRUD) with 503 Feature disabled.
+      await db.query(
+        `UPDATE feature_flags SET enabled = true WHERE key = 'phase4_restaurant_day_parting'`
+      );
+      featureFlags.invalidateFeatureFlagCache();
+    }
   });
 
   it("CRUD: POST/PUT/DELETE /api/restaurant/menu-schedules", async () => {
