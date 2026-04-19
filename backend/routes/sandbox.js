@@ -87,6 +87,29 @@ module.exports = function registerSandboxRoutes(app, deps) {
         } catch (e) { /* tenant DB may not be available */ }
       }
 
+      // Check restaurant payment sessions (tenant schema, 2-R.3)
+      if (!context) {
+        try {
+          const db = require("../db-pg");
+          const { rows: [rps] } = await db.query(
+            "SELECT id, amount, tip_amount, status, draft_order_id FROM restaurant_payment_sessions WHERE gateway_ref = $1",
+            [gatewayRef]
+          );
+          if (rps) {
+            const total = Number(rps.amount) + Number(rps.tip_amount || 0);
+            context = {
+              type: "restaurant",
+              label: "Restaurant Table Payment",
+              description: `Table check #${rps.draft_order_id}`,
+              amount: total,
+              currency: "PKR",
+              status: rps.status,
+              reference: gatewayRef,
+            };
+          }
+        } catch (e) { /* tenant DB may not be available */ }
+      }
+
       if (!context) {
         context = {
           type: "unknown",
@@ -147,7 +170,17 @@ module.exports = function registerSandboxRoutes(app, deps) {
               "SELECT amount FROM storefront_payment_sessions WHERE provider_ref = $1",
               [gatewayRef]
             );
-            if (session) amount = Number(session.amount);
+            if (session) {
+              amount = Number(session.amount);
+            } else {
+              try {
+                const { rows: [rps] } = await db.query(
+                  "SELECT amount, tip_amount FROM restaurant_payment_sessions WHERE gateway_ref = $1",
+                  [gatewayRef]
+                );
+                if (rps) amount = Number(rps.amount) + Number(rps.tip_amount || 0);
+              } catch { /* pre-v61 tenant */ }
+            }
           }
         } catch (e) { /* tenant DB may not be available */ }
       }

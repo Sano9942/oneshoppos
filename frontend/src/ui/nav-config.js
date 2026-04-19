@@ -173,6 +173,8 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "86'd Items", path: "/restaurant/availability", icon: Ban, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant_86", requiredMode: "restaurant" },
       { name: "Void/Comp Reasons", path: "/restaurant/void-reasons", icon: Ban, requiredPerm: "all_access", requiredFlag: "phase4_restaurant_void_comp", requiredMode: "restaurant" },
       { name: "Menu Schedules", path: "/restaurant/menu-schedules", icon: LayoutGrid, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant_day_parting", requiredMode: "restaurant" },
+      { name: "Reservations", path: "/restaurant/reservations", icon: CalendarDays, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant_reservations", requiredMode: "restaurant" },
+      { name: "Waitlist", path: "/restaurant/waitlist", icon: Users, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant_reservations", requiredMode: "restaurant" },
       { name: "Modifiers", path: "/restaurant/modifiers", icon: ListPlus, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant", requiredMode: "restaurant" },
       { name: "Online Inbox", path: "/restaurant/inbox", icon: Inbox, requiredPerm: "manage_restaurant", requiredFlag: "phase4_restaurant", requiredMode: "restaurant" },
       { name: "KDS", path: "/kds", icon: ChefHat, requiredPerm: "manage_kds", requiredFlag: "phase4_restaurant_kds", requiredMode: "restaurant" },

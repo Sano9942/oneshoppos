@@ -164,6 +164,12 @@ module.exports = function registerAllRoutes(app, deps) {
   // Public restaurant QR ordering — no auth required, manually resolves tenant DB
   require("./public-restaurant")(app, deps);
 
+  // Public pay-at-table (2-R.3) — bill view + confirm, no auth
+  require("./restaurant/pay-at-table").registerPublicPayAtTableRoutes(app, deps);
+
+  // Public reservations booking (2-R.4) — availability + POST, no auth
+  require("./public-reservations")(app, deps);
+
   // Public booking page — no auth required, manually resolves tenant DB
   require("./public-bookings")(app, deps);
 
@@ -609,6 +615,9 @@ module.exports = function registerAllRoutes(app, deps) {
   require("./restaurant/availability")(app, deps);
   require("./restaurant/void-comp")(app, deps);
   require("./restaurant/menu-schedules")(app, deps);
+  require("./restaurant/pay-at-table")(app, deps);
+  require("./restaurant/reservations")(app, deps);
+  require("./restaurant/waitlist")(app, deps);
   require("./kds")(app, deps);
   require("./modifiers")(app, deps);
   require("./restaurant-inbox")(app, deps);

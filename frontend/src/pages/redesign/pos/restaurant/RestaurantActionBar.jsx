@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Send, Flame, CreditCard, MoreVertical, WifiOff } from "lucide-react";
+import { Send, Flame, CreditCard, MoreVertical, WifiOff, QrCode } from "lucide-react";
 import { api } from "../../../../api";
 import { usePOS } from "../POSContext";
 import RestaurantOverflowMenu from "./RestaurantOverflowMenu";
@@ -30,7 +30,7 @@ function useOnlineStatus() {
 // ensureDraftOrder() so the user can build a check first and the draft
 // row only appears when they actually fire it.
 
-export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer, onOpen86, onOpenVoidComp }) {
+export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer, onOpen86, onOpenVoidComp, onOpenPayAtTable }) {
   const {
     cart,
     money,
@@ -41,6 +41,8 @@ export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer, onOpe
     setError,
     activeCourse,
     setActiveCourse,
+    orderContext,
+    posFlags,
   } = usePOS();
 
   const [sending, setSending] = useState(false);
@@ -89,6 +91,25 @@ export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer, onOpe
     openCheckout();
   };
 
+  // 2-R.3 — "Request QR" is only meaningful on dine-in checks and when the
+  // tenant has the pay-at-table flag on. Retail and non-restaurant tenants
+  // never see it; takeout/delivery/drive-thru go through the existing
+  // checkout flow because those guests aren't at a table to scan.
+  const showPayAtTable =
+    !!posFlags?.phase4_restaurant_pay_at_table &&
+    orderContext === "dine_in";
+
+  const onRequestQR = async () => {
+    if (cartEmpty || !online) return;
+    try {
+      const draftId = await ensureDraftOrder();
+      if (!draftId) throw new Error("Could not create draft order");
+      onOpenPayAtTable?.(draftId);
+    } catch (e) {
+      setError?.(e.message || "Failed to open QR payment");
+    }
+  };
+
   return (
     <div className="sticky bottom-0 z-40 bg-white border-t border-slate-200 px-4 py-3 shadow-[0_-10px_24px_-12px_rgba(0,0,0,0.12)]">
       {!online && (
@@ -112,6 +133,15 @@ export default function RestaurantActionBar({ onOpenSplit, onOpenTransfer, onOpe
           disabled={firing || !online}
           tone="ghost"
         />
+        {showPayAtTable && (
+          <ActionButton
+            icon={QrCode}
+            label="Request QR"
+            onClick={onRequestQR}
+            disabled={cartEmpty || !online}
+            tone="ghost"
+          />
+        )}
         <button
           onClick={onPay}
           disabled={cartEmpty}

@@ -22,6 +22,7 @@ module.exports = function registerSystemRoutes(app, deps) {
       const treatmentPlanStatus = global.__treatmentPlanWorkerStatus || null;
       const courseReleaseStatus = global.__courseReleaseWorkerStatus || null;
       const kdsSnapshotStatus = global.__kdsSnapshotWorkerStatus || null;
+      const reservationReminderStatus = global.__reservationReminderWorkerStatus || null;
 
       function workerInfo(status, pollIntervalMs) {
         if (!status) return { enabled: false, running: false };
@@ -48,6 +49,7 @@ module.exports = function registerSystemRoutes(app, deps) {
         treatment_plan: workerInfo(treatmentPlanStatus, 24 * 60 * 60 * 1000),
         course_release: workerInfo(courseReleaseStatus, 60_000),
         kds_snapshot: workerInfo(kdsSnapshotStatus, 15 * 60_000),
+        reservation_reminder: workerInfo(reservationReminderStatus, 15 * 60_000),
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });

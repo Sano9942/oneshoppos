@@ -4594,6 +4594,133 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 61,
+    description:
+      "Phase 2-R Wave D — restaurant_payment_sessions + reservations + waitlist_entries + dirty status",
+    up: async (client) => {
+      // Extend restaurant_table_sessions status to include 'dirty' — the
+      // transient state between check-paid and bussed. Wave A's plan called
+      // this out but v58 missed it; adding it here keeps the table session
+      // CHECK aligned with the pay-at-table flow that hands tables to busser.
+      // IF EXISTS guards a legacy tenant whose session table was never created.
+      const { rows: hasTable } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = current_schema() AND table_name = 'restaurant_table_sessions'`
+      );
+      if (hasTable.length) {
+        await client.query(`
+          ALTER TABLE restaurant_table_sessions
+            DROP CONSTRAINT IF EXISTS restaurant_table_sessions_status_check
+        `);
+        await client.query(`
+          ALTER TABLE restaurant_table_sessions
+            ADD CONSTRAINT restaurant_table_sessions_status_check
+            CHECK (status IN ('seated','ordering','served','check_requested','closed','dirty'))
+        `);
+      }
+
+      // 2-R.3: Pay-at-table session — mirrors storefront_payment_sessions pattern.
+      // draft_order_id + table_session_id both nullable because legacy/cancelled
+      // sessions can outlive their source rows, and the sale_id links back once
+      // the sandbox webhook flips status to 'paid'.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS restaurant_payment_sessions (
+          id SERIAL PRIMARY KEY,
+          draft_order_id INTEGER REFERENCES draft_orders(id) ON DELETE SET NULL,
+          table_session_id INTEGER REFERENCES restaurant_table_sessions(id) ON DELETE SET NULL,
+          token TEXT UNIQUE NOT NULL,
+          gateway TEXT NOT NULL DEFAULT 'sandbox',
+          gateway_ref TEXT,
+          amount NUMERIC(12,2) NOT NULL,
+          tip_amount NUMERIC(12,2) DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'pending'
+            CHECK (status IN ('pending','processing','paid','failed','expired')),
+          webhook_payload JSONB,
+          paid_at TIMESTAMPTZ,
+          expires_at TIMESTAMPTZ NOT NULL,
+          created_by_employee_id INTEGER REFERENCES employees(id),
+          sale_id INTEGER REFERENCES sales(id) ON DELETE SET NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_rps_status_expires
+          ON restaurant_payment_sessions(status, expires_at)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_rps_table_session
+          ON restaurant_payment_sessions(table_session_id)
+          WHERE status = 'pending'
+      `);
+
+      // 2-R.4: Reservations.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS reservations (
+          id SERIAL PRIMARY KEY,
+          customer_name TEXT NOT NULL,
+          phone TEXT,
+          email TEXT,
+          party_size INTEGER NOT NULL CHECK (party_size > 0),
+          reservation_start TIMESTAMPTZ NOT NULL,
+          reservation_end TIMESTAMPTZ,
+          outlet_id INTEGER REFERENCES outlets(id) ON DELETE CASCADE,
+          table_id INTEGER REFERENCES restaurant_tables(id) ON DELETE SET NULL,
+          status TEXT NOT NULL DEFAULT 'pending'
+            CHECK (status IN ('pending','confirmed','seated','completed','no_show','cancelled','waitlisted')),
+          notes TEXT,
+          source TEXT DEFAULT 'staff',
+          sms_confirmed_at TIMESTAMPTZ,
+          sms_reminder_sent_at TIMESTAMPTZ,
+          token TEXT UNIQUE,
+          created_by_employee_id INTEGER REFERENCES employees(id),
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_reservations_start
+          ON reservations(reservation_start)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_reservations_status
+          ON reservations(status, reservation_start)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_reservations_table
+          ON reservations(table_id, reservation_start)
+          WHERE table_id IS NOT NULL
+      `);
+
+      // 2-R.4: Waitlist.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS waitlist_entries (
+          id SERIAL PRIMARY KEY,
+          customer_name TEXT NOT NULL,
+          phone TEXT,
+          party_size INTEGER NOT NULL CHECK (party_size > 0),
+          outlet_id INTEGER REFERENCES outlets(id) ON DELETE CASCADE,
+          quoted_wait_minutes INTEGER,
+          status TEXT NOT NULL DEFAULT 'waiting'
+            CHECK (status IN ('waiting','notified','seated','removed')),
+          position INTEGER,
+          notified_at TIMESTAMPTZ,
+          seated_at TIMESTAMPTZ,
+          removed_at TIMESTAMPTZ,
+          notes TEXT,
+          created_by_employee_id INTEGER REFERENCES employees(id),
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_waitlist_status_position
+          ON waitlist_entries(status, position)
+          WHERE status IN ('waiting','notified')
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {
