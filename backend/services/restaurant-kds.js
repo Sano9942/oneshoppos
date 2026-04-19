@@ -32,6 +32,10 @@ async function updateStation(db, id, data) {
   if (data.is_active !== undefined) { idx++; sets.push(`is_active = $${idx}`); params.push(data.is_active); }
   // 2-R.7 — allow (re)binding a station to a printer_config row, or clearing it.
   if (data.printer_id !== undefined) { idx++; sets.push(`printer_id = $${idx}`); params.push(data.printer_id || null); }
+  // 2-R.5 — balance_strategy + target_prep_seconds drive load-balancing and
+  // the analytics "delta vs target" column.
+  if (data.balance_strategy !== undefined) { idx++; sets.push(`balance_strategy = $${idx}`); params.push(data.balance_strategy); }
+  if (data.target_prep_seconds !== undefined) { idx++; sets.push(`target_prep_seconds = $${idx}`); params.push(data.target_prep_seconds === null || data.target_prep_seconds === "" ? null : Number(data.target_prep_seconds)); }
   if (!sets.length) return null;
   idx++; params.push(id);
   sets.push("updated_at = NOW()");
@@ -88,6 +92,108 @@ function resolveStationForItem(item, routes, stations) {
   // Fallback: first active station (legacy behavior).
   if (stations.length) return { station: stations[0], matched_rule_id: null };
   return { station: null, matched_rule_id: null };
+}
+
+/**
+ * Phase 2-R Wave C (2-R.5) — candidate collection for load balancing.
+ *
+ * Returns every route that matches the item (keeping priority order + rule id).
+ * The caller uses the first element for the legacy 'priority' path; when the
+ * leading candidate's station has a non-priority balance_strategy, the tied
+ * candidates (same priority, same specificity tier) feed the strategy picker.
+ */
+function findMatchingRoutes(item, routes, stations) {
+  const stationById = new Map(stations.map((s) => [s.id, s]));
+  const stationMatchesFilter = (station, filter) => {
+    if (!filter) return true;
+    return station && station.station_role === filter;
+  };
+  const modifierGroupIds = Array.isArray(item.modifier_group_ids)
+    ? item.modifier_group_ids.map(Number)
+    : [];
+
+  const matches = [];
+  for (const route of routes) {
+    const station = stationById.get(route.station_id);
+    if (!station) continue;
+    if (!stationMatchesFilter(station, route.station_role_filter)) continue;
+
+    let tier = null;
+    if (route.product_id != null && item.product_id != null && route.product_id === item.product_id) {
+      tier = "product";
+    } else if (route.modifier_group_id != null && modifierGroupIds.includes(Number(route.modifier_group_id))) {
+      tier = "modifier";
+    } else if (route.category_id != null && item.category_id != null && route.category_id === item.category_id) {
+      tier = "category";
+    } else if (route.match_all === true) {
+      tier = "match_all";
+    }
+    if (tier) matches.push({ route, station, tier });
+  }
+  return matches;
+}
+
+/**
+ * Phase 2-R Wave C (2-R.5) — pick among equal-priority/specificity candidates
+ * using the leading candidate's balance_strategy.
+ *
+ * `openCountByStation` is a Map<station_id, number>; caller builds it once per
+ * dispatch to keep the strategy loop cheap.
+ *
+ * Strategies:
+ *  - priority      → existing behavior (first candidate wins)
+ *  - round_robin   → pick station with oldest last_assigned_at, NULLS FIRST
+ *  - least_loaded  → pick station with fewest open tickets; 30s cooldown skip
+ *
+ * Returns `{ station, matched_rule_id }` matching `resolveStationForItem`.
+ */
+const LEAST_LOADED_COOLDOWN_MS = 30_000;
+
+function pickByStrategy(candidates, openCountByStation, now = Date.now()) {
+  if (!candidates.length) return { station: null, matched_rule_id: null };
+
+  const leader = candidates[0];
+  // Only candidates tied with the leader at the same priority + tier are peers.
+  const peers = candidates.filter(
+    (c) => c.route.priority === leader.route.priority && c.tier === leader.tier
+  );
+  if (peers.length === 1) {
+    return { station: leader.station, matched_rule_id: leader.route.id };
+  }
+
+  const strategy = leader.station.balance_strategy || "priority";
+
+  if (strategy === "round_robin") {
+    // NULLS FIRST — stations that never received an assignment lead.
+    const sorted = peers.slice().sort((a, b) => {
+      const ta = a.station.last_assigned_at ? new Date(a.station.last_assigned_at).getTime() : -Infinity;
+      const tb = b.station.last_assigned_at ? new Date(b.station.last_assigned_at).getTime() : -Infinity;
+      if (ta !== tb) return ta - tb;
+      return a.station.id - b.station.id; // deterministic tiebreak
+    });
+    return { station: sorted[0].station, matched_rule_id: sorted[0].route.id };
+  }
+
+  if (strategy === "least_loaded") {
+    // Filter stations inside cooldown window; if ALL are inside, fall through
+    // to unfiltered set (better to thrash once than route nowhere).
+    const cooledPeers = peers.filter((c) => {
+      if (!c.station.last_assigned_at) return true;
+      const last = new Date(c.station.last_assigned_at).getTime();
+      return now - last >= LEAST_LOADED_COOLDOWN_MS;
+    });
+    const pool = cooledPeers.length ? cooledPeers : peers;
+    const sorted = pool.slice().sort((a, b) => {
+      const la = openCountByStation.get(a.station.id) || 0;
+      const lb = openCountByStation.get(b.station.id) || 0;
+      if (la !== lb) return la - lb;
+      return a.station.id - b.station.id; // deterministic tiebreak
+    });
+    return { station: sorted[0].station, matched_rule_id: sorted[0].route.id };
+  }
+
+  // 'priority' (default) — leading candidate wins, unchanged behavior.
+  return { station: leader.station, matched_rule_id: leader.route.id };
 }
 
 async function fetchRoutingContext(db, outletId) {
@@ -159,28 +265,62 @@ async function sendToKitchen(db, draftOrderId) {
 
   const { stations, routes } = await fetchRoutingContext(db, order.outlet_id);
 
-  // Group items by (station_id, course_name). Each group becomes one ticket.
-  // Fixes Phase 4 C3: the pre-fix code inserted one kds_tickets row per item,
-  // but getTickets joins draft_order_items on (draft_order_id, course_name)
-  // — so each item-ticket's items aggregation included EVERY item in that
-  // course, producing N² fan-out on the kitchen screen (3 items → 3 tickets
-  // each showing all 3). The grouping here collapses to one ticket per
-  // (station, course), which is how the UI already treats them — one bump
-  // button per ticket, one row per item under the ticket.
-  const groups = new Map();
-  for (const item of items) {
-    const { station: targetStation } = resolveStationForItem(item, routes, stations);
-    if (!targetStation) continue;
-
-    const course = item.course_name || "main";
-    const key = `${targetStation.id}|${course}`;
-    if (!groups.has(key)) {
-      groups.set(key, { station: targetStation, course, items: [] });
-    }
-    groups.get(key).items.push(item);
-  }
-
+  // Phase 2-R Wave C: run assignment + writes inside one transaction so
+  // the station-load snapshot used by least_loaded stays consistent with the
+  // insert that bumps a station's count.
   return await db.transaction(async (client) => {
+    // Open-ticket counts per station, computed inside the tx (post-SELECT) so
+    // least_loaded reads a consistent view. Only stations in-scope for this
+    // outlet; others stay at 0.
+    const { rows: loadRows } = await client.query(
+      `SELECT station_id, COUNT(*)::int AS open_count
+         FROM kds_tickets
+         WHERE status IN ('new','in_progress')
+           AND station_id = ANY($1::int[])
+         GROUP BY station_id`,
+      [stations.map((s) => s.id)]
+    );
+    const openCountByStation = new Map(loadRows.map((r) => [r.station_id, r.open_count]));
+    const now = Date.now();
+    const stationsAssigned = new Set();
+
+    // Group items by (station_id, course_name). Each group becomes one ticket.
+    // Fixes Phase 4 C3: the pre-fix code inserted one kds_tickets row per item,
+    // but getTickets joins draft_order_items on (draft_order_id, course_name)
+    // — so each item-ticket's items aggregation included EVERY item in that
+    // course, producing N² fan-out on the kitchen screen (3 items → 3 tickets
+    // each showing all 3). The grouping here collapses to one ticket per
+    // (station, course), which is how the UI already treats them — one bump
+    // button per ticket, one row per item under the ticket.
+    const groups = new Map();
+    for (const item of items) {
+      const candidates = findMatchingRoutes(item, routes, stations);
+      let targetStation = null;
+      if (candidates.length) {
+        const picked = pickByStrategy(candidates, openCountByStation, now);
+        targetStation = picked.station;
+      } else if (stations.length) {
+        targetStation = stations[0]; // legacy fallback
+      }
+      if (!targetStation) continue;
+
+      // Increment the provisional open-count so subsequent items in the same
+      // fire see an up-to-date picture (least_loaded would otherwise keep
+      // picking the same station for the whole batch).
+      openCountByStation.set(
+        targetStation.id,
+        (openCountByStation.get(targetStation.id) || 0) + 1
+      );
+      stationsAssigned.add(targetStation.id);
+
+      const course = item.course_name || "main";
+      const key = `${targetStation.id}|${course}`;
+      if (!groups.has(key)) {
+        groups.set(key, { station: targetStation, course, items: [] });
+      }
+      groups.get(key).items.push(item);
+    }
+
     const tickets = [];
     for (const { station, course, items: grpItems } of groups.values()) {
       // Seat label: comma-concatenate distinct seats in the group so a ticket
@@ -188,9 +328,12 @@ async function sendToKitchen(db, draftOrderId) {
       const seatNums = [...new Set(grpItems.map(i => i.seat_number).filter(Boolean))];
       const seatLabel = seatNums.length ? seatNums.map(n => `S${n}`).join(", ") : null;
 
+      // Phase 2-R Wave C: fired_at = NOW() at ticket creation. sendToKitchen
+      // IS the send-to-line event in this codebase (there's no separate
+      // 'in_progress' transition). Makes bumped - fired the effective prep_seconds.
       const { rows: [ticket] } = await client.query(
-        `INSERT INTO kds_tickets (station_id, draft_order_id, table_label, seat_label, course_name)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        `INSERT INTO kds_tickets (station_id, draft_order_id, table_label, seat_label, course_name, fired_at)
+         VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING *`,
         [station.id, draftOrderId, order.table_label || null, seatLabel, course]
       );
 
@@ -220,6 +363,16 @@ async function sendToKitchen(db, draftOrderId) {
       "UPDATE draft_order_items SET kitchen_status = 'sent' WHERE draft_order_id = $1 AND kitchen_status = 'pending'",
       [draftOrderId]
     );
+
+    // Stamp last_assigned_at so round_robin / least_loaded cooldowns work on
+    // the next fire. Done once at the end of the tx — the in-batch open-count
+    // bookkeeping above already handles intra-batch distribution.
+    if (stationsAssigned.size) {
+      await client.query(
+        `UPDATE kds_stations SET last_assigned_at = NOW() WHERE id = ANY($1::int[])`,
+        [Array.from(stationsAssigned)]
+      );
+    }
 
     return tickets;
   });
@@ -280,8 +433,24 @@ async function bumpTicket(db, ticketId, actorId) {
   // If the expo-routing writes below roll back, the ticket's status='bumped'
   // stays committed (same semantic as Phase 4 H2 Decision LL). Retries can
   // safely re-enter without double-bumping.
+  //
+  // Phase 2-R Wave C: stamp bumped_at + compute prep_seconds from fired_at.
+  // COALESCE(bumped_at, NOW()) makes the UPDATE idempotent — a second bump
+  // does not overwrite the original timestamp. EXTRACT EPOCH on a NULL
+  // fired_at yields NULL which is the right signal for "unknown prep time".
   const { rows: [ticket] } = await db.query(
-    "UPDATE kds_tickets SET status = 'bumped', updated_at = NOW() WHERE id = $1 RETURNING *",
+    `UPDATE kds_tickets
+       SET status = 'bumped',
+           bumped_at = COALESCE(bumped_at, NOW()),
+           prep_seconds = COALESCE(
+             prep_seconds,
+             CASE WHEN fired_at IS NOT NULL
+                  THEN EXTRACT(EPOCH FROM (NOW() - fired_at))::INTEGER
+             END
+           ),
+           updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
     [ticketId]
   );
   if (!ticket) throw Object.assign(new Error("Ticket not found"), { statusCode: 404 });
@@ -321,8 +490,8 @@ async function bumpTicket(db, ticketId, actorId) {
         );
         if (expo) {
           const { rows: [expoTicket] } = await client.query(
-            `INSERT INTO kds_tickets (station_id, draft_order_id, table_label, course_name, status)
-             VALUES ($1, $2, $3, $4, 'new') RETURNING *`,
+            `INSERT INTO kds_tickets (station_id, draft_order_id, table_label, course_name, status, fired_at)
+             VALUES ($1, $2, $3, $4, 'new', NOW()) RETURNING *`,
             [expo.id, ticket.draft_order_id, ticket.table_label, ticket.course_name]
           );
           await client.query(
@@ -338,8 +507,16 @@ async function bumpTicket(db, ticketId, actorId) {
 }
 
 async function recallTicket(db, ticketId, actorId) {
+  // Phase 2-R Wave C: recalled_at = NOW(). Preserve bumped_at + prep_seconds
+  // so the first prep cycle is still visible in analytics — a recall just
+  // reopens the ticket, it doesn't undo history.
   const { rows: [ticket] } = await db.query(
-    "UPDATE kds_tickets SET status = 'new', updated_at = NOW() WHERE id = $1 AND status = 'bumped' RETURNING *",
+    `UPDATE kds_tickets
+        SET status = 'new',
+            recalled_at = NOW(),
+            updated_at = NOW()
+      WHERE id = $1 AND status = 'bumped'
+     RETURNING *`,
     [ticketId]
   );
   if (!ticket) throw Object.assign(new Error("Ticket not found or not bumped"), { statusCode: 404 });
@@ -393,5 +570,8 @@ module.exports = {
   bumpTicket,
   recallTicket,
   resolveStationForItem,
+  findMatchingRoutes,
+  pickByStrategy,
+  LEAST_LOADED_COOLDOWN_MS,
   previewRouting,
 };
