@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Users, Package, Truck, ShoppingBag, X, Save, Trash2 } from "lucide-react";
 import { api } from "../../../../api";
 import { usePOS } from "../POSContext";
+import ReservationBadge from "./ReservationBadge";
 
 // Phase 2-R.0 Day 2 — Floor grid for /pos/restaurant.
 // Ports the plan loader, 10s polling, and seat modal from
@@ -66,6 +67,37 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
     const t = setInterval(loadFloorDetail, 10000);
     return () => clearInterval(t);
   }, [activePlan, loadFloorDetail]);
+
+  // Phase 2-R.4 — reservations in the next 30 minutes, flag-gated.
+  const [upcomingReservations, setUpcomingReservations] = useState([]);
+  useEffect(() => {
+    if (!posFlags?.phase4_restaurant_reservations) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const from = new Date().toISOString();
+        const to = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        const data = await api.get(
+          `/api/restaurant/reservations?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&status=confirmed`
+        );
+        if (!cancelled) setUpcomingReservations(data.reservations || []);
+      } catch { if (!cancelled) setUpcomingReservations([]); }
+    };
+    load();
+    const t = setInterval(load, 30_000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [posFlags?.phase4_restaurant_reservations]);
+
+  const reservationByTable = useMemo(() => {
+    const map = new Map();
+    const cutoff = Date.now() + 30 * 60 * 1000;
+    for (const r of upcomingReservations) {
+      if (!r.table_id) continue;
+      if (new Date(r.reservation_start).getTime() > cutoff) continue;
+      if (!map.has(r.table_id)) map.set(r.table_id, r);
+    }
+    return map;
+  }, [upcomingReservations]);
 
   // Decide whether opening `next` would discard a cart that belongs to a
   // different in-progress check. Same destination (tapping the currently
@@ -226,6 +258,7 @@ export default function RestaurantFloorGrid({ onOpenCheck }) {
               <TableTile
                 key={t.id}
                 table={t}
+                reservation={reservationByTable.get(t.id)}
                 onSeat={() => { setSeatForm({ guest_count: Math.max(1, Math.min(t.capacity || 4, 2)) }); setSeatModalTableId(t.id); }}
                 onOpen={() => openTableCheck(t)}
               />
@@ -343,18 +376,19 @@ function EntryButton({ icon: Icon, label, onClick }) {
   );
 }
 
-function TableTile({ table, onSeat, onOpen }) {
+function TableTile({ table, onSeat, onOpen, reservation }) {
   const seated = Boolean(table.session_id);
   const tone = STATUS_TONE[table.session_status] || STATUS_TONE.closed;
   return (
     <button
       onClick={seated ? onOpen : onSeat}
-      className={`text-left rounded-2xl border p-4 transition shadow-sm hover:shadow-md ${
+      className={`relative text-left rounded-2xl border p-4 transition shadow-sm hover:shadow-md ${
         seated
           ? "bg-[#0F172A] text-white border-[#1E293B] hover:border-[#8066FF]"
           : "bg-white text-slate-900 border-slate-200 hover:border-[#8066FF]"
       }`}
     >
+      {!seated && reservation && <ReservationBadge reservation={reservation} />}
       <div className="flex items-baseline justify-between">
         <span className="text-2xl font-black tracking-tight">{table.label}</span>
         <span className={`text-[10px] uppercase tracking-wider opacity-70 ${seated ? "text-slate-300" : "text-slate-400"}`}>
