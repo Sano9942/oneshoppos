@@ -53,6 +53,12 @@ supabase/.temp
 START-ADMIN.bat
 .playwright-mcp/
 
+# Env files (contain secrets)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
 # One-off debug / audit output files
 frontend/eslint_json.txt
 frontend/eslint_output.txt

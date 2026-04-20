@@ -107,6 +107,7 @@
 - Factory: `tests/helpers/createTestApp-pg.js` (isolated schema per test)
 - Schema: `tests/helpers/seedSchema-pg.js`
 - Run: `npx vitest run tests/integration/pg-batch1-crud.test.js` (requires `DATABASE_URL`) — NOT `npx jest`
+- **Local vs production DB**: `tests/helpers/vitest-setup.js` prefers `backend/.env.test` when present (local Postgres), falls back to `backend/.env` (production Supabase). `.env.test` keeps tests off prod and ~20× faster. Both files gitignored.
 
 ### Production E2E Tests (28 specs, ~329 tests — full system audit)
 - Location: `frontend/tests/*.spec.js` (28 self-contained Playwright specs)

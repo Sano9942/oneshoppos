@@ -95,6 +95,21 @@ const DEFAULT_FEATURE_FLAGS = {
   phase5_cod_reconciliation: false,
   phase5_payment_gateways: false,
   phase5_sms_providers: false,
+  // Phase 2-G — General Retail Tier-1 Parity (all default false; each feature
+  // is opt-in per tenant via the admin feature-flags UI). DEFAULT entries
+  // ensure requireFeature() is deterministic on fresh tenants before the
+  // seeded row has propagated through the 60s flag cache.
+  phase2g_omni_input: false,
+  phase2g_variant_picker: false,
+  phase2g_gift_cards: false,
+  phase2g_loyalty: false,
+  phase2g_price_books: false,
+  phase2g_price_override: false,
+  phase2g_serialized_inventory: false,
+  phase2g_per_line_restock: false,
+  phase2g_inventory_intelligence: false,
+  phase2g_receipt_barcode_lookup: false,
+  phase2g_label_designer: false,
 };
 
 // Per-tenant feature flag cache
