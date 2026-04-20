@@ -80,6 +80,18 @@ const DEFAULT_FEATURE_FLAGS = {
   phase4_rentals: true,
   phase4_room_management: true,
   phase4_treatment_plans: true,
+  // Phase 2-G Wave 1 — all default false; tests flip individually as needed.
+  phase2g_omni_input: false,
+  phase2g_variant_picker: false,
+  phase2g_gift_cards: false,
+  phase2g_loyalty: false,
+  phase2g_price_books: false,
+  phase2g_price_override: false,
+  phase2g_serialized_inventory: false,
+  phase2g_per_line_restock: false,
+  phase2g_inventory_intelligence: false,
+  phase2g_receipt_barcode_lookup: false,
+  phase2g_label_designer: false,
 };
 
 const PERMISSION_RULES = [
@@ -319,10 +331,13 @@ async function seedData(db) {
      VALUES (1, 'Test Customer', '555-5555', 'test@example.com', 100, 500.00)`
   );
 
-  // Feature flags
+  // Feature flags — ON CONFLICT UPDATE because schema-pg.sql now seeds some
+  // flags (fbr_integration + phase2g_*); helper values win so tests remain
+  // deterministic regardless of schema-pg.sql seed drift.
   for (const [key, enabled] of Object.entries(DEFAULT_FEATURE_FLAGS)) {
     await db.query(
-      `INSERT INTO feature_flags (key, enabled) VALUES ($1, $2)`,
+      `INSERT INTO feature_flags (key, enabled) VALUES ($1, $2)
+       ON CONFLICT (key) DO UPDATE SET enabled = EXCLUDED.enabled`,
       [key, enabled]
     );
   }

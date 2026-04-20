@@ -12,6 +12,13 @@
 // requires. This setup file runs BEFORE any beforeAll, so it does not
 // compete with test-level env manipulation.
 
+// Prefer backend/.env.test when present so local dev can point tests at a
+// local Postgres while backend/.env keeps pointing at production Supabase.
+// Falls back to backend/.env when .env.test doesn't exist.
+const path = require("path");
+const fs = require("fs");
+const envTest = path.resolve(__dirname, "..", "..", ".env.test");
+const envMain = path.resolve(__dirname, "..", "..", ".env");
 require("dotenv").config({
-  path: require("path").resolve(__dirname, "..", "..", ".env"),
+  path: fs.existsSync(envTest) ? envTest : envMain,
 });

@@ -332,6 +332,21 @@ CREATE TABLE IF NOT EXISTS customer_wallet_ledger (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Phase 2-G Wave 1: loyalty ledger (mirrors customer_wallet_ledger shape,
+-- widened enum for loyalty lifecycle — earn/redeem/adjust/expire).
+CREATE TABLE IF NOT EXISTS loyalty_transactions (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('earn','redeem','adjust','expire')),
+  points INTEGER NOT NULL,
+  reference_type TEXT,
+  reference_id INTEGER,
+  note TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_loyalty_transactions_customer
+  ON loyalty_transactions(customer_id, created_at DESC);
+
 -- ── Cash Shifts (must come before sales — FK dependency) ──────────────
 
 CREATE TABLE IF NOT EXISTS cash_shifts (
@@ -738,6 +753,20 @@ CREATE TABLE IF NOT EXISTS gift_cards (
   redeemed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Phase 2-G Wave 1: gift card ledger (mirrors customer_wallet_ledger shape).
+CREATE TABLE IF NOT EXISTS gift_card_transactions (
+  id SERIAL PRIMARY KEY,
+  gift_card_id INTEGER NOT NULL REFERENCES gift_cards(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('credit','debit')),
+  amount NUMERIC(12,2) NOT NULL,
+  reference_type TEXT,
+  reference_id INTEGER,
+  note TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_gift_card_transactions_gift_card
+  ON gift_card_transactions(gift_card_id, created_at DESC);
 
 -- ── Feature Flags ─────────────────────────────────────────────────────
 
@@ -1937,6 +1966,22 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO feature_flags (key, enabled, description)
 VALUES ('fbr_integration', false, 'FBR Digital Invoicing - real-time invoice posting to FBR API')
+ON CONFLICT (key) DO NOTHING;
+
+-- Phase 2-G Wave 1: seed all phase2g_* flags (default off; each wave flips
+-- one on — no new migrations needed for flag registration).
+INSERT INTO feature_flags (key, enabled, description) VALUES
+  ('phase2g_omni_input', false, '2-G.0 scan-first omni-input on /pos'),
+  ('phase2g_variant_picker', false, '2-G.1 matrix variant grid modal'),
+  ('phase2g_gift_cards', false, '2-G.2 gift cards as first-class tender'),
+  ('phase2g_loyalty', false, '2-G.3 loyalty earn/redeem + tier auto-apply'),
+  ('phase2g_price_books', false, '2-G.4 customer-group price books'),
+  ('phase2g_price_override', false, '2-G.5 manager price override with PIN'),
+  ('phase2g_serialized_inventory', false, '2-G.6 serialized inventory end-to-end'),
+  ('phase2g_per_line_restock', false, '2-G.7 per-line restock toggle + reasons'),
+  ('phase2g_inventory_intelligence', false, '2-G.8 inventory-intelligence hub'),
+  ('phase2g_receipt_barcode_lookup', false, '2-G.11 receipt barcode + return lookup'),
+  ('phase2g_label_designer', false, 'Parallel track — ZPL/TSPL/EPL label designer')
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed default loyalty tiers

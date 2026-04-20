@@ -4721,6 +4721,71 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 62,
+    description:
+      "Phase 2-G Wave 1 — gift_card_transactions + loyalty_transactions ledgers (shaped like customer_wallet_ledger) + phase2g_* feature flag seeds",
+    up: async (client) => {
+      // Gift card ledger — mirrors customer_wallet_ledger shape.
+      // The 'credit'/'debit' enum matches wallet ledger so future reporting
+      // can UNION across both without schema wrangling.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS gift_card_transactions (
+          id SERIAL PRIMARY KEY,
+          gift_card_id INTEGER NOT NULL REFERENCES gift_cards(id) ON DELETE CASCADE,
+          type TEXT NOT NULL CHECK (type IN ('credit','debit')),
+          amount NUMERIC(12,2) NOT NULL,
+          reference_type TEXT,
+          reference_id INTEGER,
+          note TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_gift_card_transactions_gift_card
+          ON gift_card_transactions(gift_card_id, created_at DESC)
+      `);
+
+      // Loyalty ledger — points-based (INTEGER) rather than money-based.
+      // Enum widens to earn/redeem/adjust/expire because loyalty has more
+      // lifecycle states than a pure wallet (expire is critical for tier logic).
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS loyalty_transactions (
+          id SERIAL PRIMARY KEY,
+          customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+          type TEXT NOT NULL CHECK (type IN ('earn','redeem','adjust','expire')),
+          points INTEGER NOT NULL,
+          reference_type TEXT,
+          reference_id INTEGER,
+          note TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_loyalty_transactions_customer
+          ON loyalty_transactions(customer_id, created_at DESC)
+      `);
+
+      // Seed all phase2g_* feature flags (default false). Each subsequent
+      // wave just flips a flag on — no new migrations needed for flag
+      // registration.
+      await client.query(`
+        INSERT INTO feature_flags (key, enabled, description) VALUES
+          ('phase2g_omni_input', false, '2-G.0 scan-first omni-input on /pos'),
+          ('phase2g_variant_picker', false, '2-G.1 matrix variant grid modal'),
+          ('phase2g_gift_cards', false, '2-G.2 gift cards as first-class tender'),
+          ('phase2g_loyalty', false, '2-G.3 loyalty earn/redeem + tier auto-apply'),
+          ('phase2g_price_books', false, '2-G.4 customer-group price books'),
+          ('phase2g_price_override', false, '2-G.5 manager price override with PIN'),
+          ('phase2g_serialized_inventory', false, '2-G.6 serialized inventory end-to-end'),
+          ('phase2g_per_line_restock', false, '2-G.7 per-line restock toggle + reasons'),
+          ('phase2g_inventory_intelligence', false, '2-G.8 inventory-intelligence hub'),
+          ('phase2g_receipt_barcode_lookup', false, '2-G.11 receipt barcode + return lookup'),
+          ('phase2g_label_designer', false, 'Parallel track — ZPL/TSPL/EPL label designer')
+        ON CONFLICT (key) DO NOTHING
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {
