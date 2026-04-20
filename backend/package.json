@@ -4,6 +4,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "dev": "node index.js",
+    "dev:prod": "node scripts/dev-prod.js",
     "preflight": "node preflight.js",
     "parity:audit": "node ../tools/api-parity-audit.js --format both",
     "parity:check:frontend-only": "node ../tools/api-parity-audit.js --format both --fail-on frontend-only",

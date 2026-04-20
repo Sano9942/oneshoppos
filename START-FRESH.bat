@@ -3,13 +3,14 @@ title SanoPOS - Local Dev (Multi-Tenant)
 echo ================================================
 echo   SanoPOS - Local Dev Server
 echo   Mode: MULTI-TENANT (Store Code login)
+echo   DB:   LOCAL sanopos_dev (safe to break things)
 echo ================================================
 echo.
-echo   *** WARNING ***
-echo   Your backend/.env points to SUPABASE PRODUCTION.
-echo   Any data you create locally GOES INTO THE LIVE DB.
-echo   To use an isolated local DB instead, run Docker
-echo   Postgres and swap DATABASE_URL in backend/.env.
+echo   Look for the GREEN banner in the Backend window:
+echo     LOCAL DB (sanopos_dev) - safe to break things
+echo.
+echo   If you see a RED banner instead, stop immediately
+echo   - something is pointing at production.
 echo ================================================
 echo.
 pause
@@ -41,6 +42,10 @@ echo.
 echo   App:    http://localhost:5173
 echo   Login:  Store Code + Username + Password
 echo   API:    http://localhost:5000/api/health
+echo.
+echo   First time on this DB? Run START-ADMIN.bat once
+echo   to seed a super-admin, then sign up a tenant at
+echo   http://localhost:5173/signup
 echo.
 echo   Frontend source changes = instant HMR reload
 echo   Backend source changes  = restart Backend window

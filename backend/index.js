@@ -1,4 +1,18 @@
-require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
+// Pick which env file to load: DB_TARGET=production → .env.production, else → .env
+(() => {
+  const path = require("path");
+  const target = process.env.DB_TARGET === "production" ? ".env.production" : ".env";
+  require("dotenv").config({ path: path.resolve(__dirname, target) });
+  const url = process.env.DATABASE_URL || "";
+  const isLocal = url.includes("localhost") || url.includes("127.0.0.1");
+  const dbName = (url.match(/\/([^/?]+)(\?|$)/) || [])[1] || "unknown";
+  if (isLocal) {
+    console.log(`\n\x1b[32m🟢 LOCAL DB (${dbName}) — safe to break things\x1b[0m\n`);
+  } else {
+    console.log(`\n\x1b[41m\x1b[37m 🔴 PRODUCTION DB (${dbName}) — BE CAREFUL \x1b[0m\n`);
+  }
+})();
+
 const Sentry = require("@sentry/node");
 if (process.env.SENTRY_DSN) {
   Sentry.init({
