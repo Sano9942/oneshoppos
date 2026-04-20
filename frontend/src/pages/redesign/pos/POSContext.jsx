@@ -130,6 +130,11 @@ export const POSProvider = ({ children }) => {
   const handleEndlessAisle = useCallback((product) => setEndlessAisleProduct(product), []);
   const closeEndlessAisle = useCallback(() => setEndlessAisleProduct(null), []);
 
+  // ── 2-G.0 omni-input pending interlocks (consumed by 2-G.1 variant modal
+  //    and 2-G.6 serial modal in later waves; no reader exists today). ──────
+  const [pendingVariantProductId, setPendingVariantProductId] = useState(null);
+  const [pendingSerialProductId, setPendingSerialProductId] = useState(null);
+
   // ── Return / Exchange Modal ──────────────────────────────────────────────
   const [returnModalOpen, setReturnModalOpen] = useState(false);
   const [returnSourceSale, setReturnSourceSale] = useState(null);
@@ -752,6 +757,11 @@ export const POSProvider = ({ children }) => {
     endlessAisleProduct,
     handleEndlessAisle,
     closeEndlessAisle,
+    // 2-G.0 pending interlocks (consumed by 2-G.1 / 2-G.6 in later waves)
+    pendingVariantProductId,
+    setPendingVariantProductId,
+    pendingSerialProductId,
+    setPendingSerialProductId,
     // Price lists
     priceListItems: cartHook.priceListItems,
     // POS layout + suggestions (Phase 2B)
