@@ -348,6 +348,520 @@ A test restaurant tenant can, in one session: reserve a 4-top for 7pm via online
 
 ---
 
+## Phase 2-G — General Retail Tier-1 Parity (14-16 weeks)
+
+> Numbering note: After Phase 2-R (restaurant) we discovered the same over-claim pattern in retail — thought DEEP, audited at ~62%. This phase is labeled **Phase 2-G** (general retail) to parallel 2-R. Internal items are numbered 2-G.0 through 2-G.17 (Waves 1-5 = competitor parity, Wave 6 = merchant success + trust that competitors also miss), plus a parallel track B2.
+
+**Why:** Like restaurant before 2-R, the `general_retail` preset covers the happy-path (scan → pay → print receipt) but falls apart on the depth features a mature retailer expects from Square for Retail, Shopify POS Pro, Lightspeed X-Series, or Loyverse. Three honest audits (Track 1 competitive research, Track 2 code audit, Track 3 tenant reality check — all 2026-04-20, saved under `docs/plans/phase-2g-*.md`) surfaced **one foundational UX gap** (no scan-first omni-input primitive — 2-G.0) plus **13 feature gaps** (2-G.1–2-G.13) that keep SanoPOS retail from feeling Tier-1. Phase 2-G closes all of them so general retail becomes a lead-with product, not the "other" mode that isn't restaurant.
+
+**What we deliberately scoped OUT of Phase 2-G:** vertical-specific presets (pharmacy, jewelry, eyewear, auto parts, furniture with serial tracking). Those are distinct products with their own SaaS competitors and get their own presets in Phase 3 — like we did for dental/vet/physio. Phase 2-G makes `general_retail` mature enough that those verticals can be built on top without reworking foundations.
+
+**Build order matters:** 2-G.0 (omni-input primitive) ships first — it's a component, not a new route, but it unblocks 2-G.1 (variant modal trigger) and 2-G.2 (serial-entry trigger) which both depend on pattern-matched product lookup.
+
+**Source:** Competitive research + code audit + tenant reality check on 2026-04-20. References: Square for Retail Free/Plus/Premium (unified plans Oct 2025), Shopify POS Pro with Stocky sunsetting Aug 31 2026, Lightspeed X-Series matrix variant grid, Clover Retail (counter-positioning only), Loyverse (budget baseline). Full research at [phase-2g-research-synthesis.md](phase-2g-research-synthesis.md).
+
+**Scope reclamation from Track 2 audit** — three items we thought were gaps are already fully shipped:
+- **Store credit end-to-end** — complete via `customer_wallet_ledger` + topup routes + POS tender. No work needed.
+- **Exchange flow** — complete as composite return+sale in [POSReturnExchangeModal.jsx](../../frontend/src/pages/redesign/pos/POSReturnExchangeModal.jsx). No work needed.
+- **Bulk-scan increment-on-duplicate** — default behavior of [useCart.js:179-215](../../frontend/src/pages/redesign/pos/hooks/useCart.js). Only gap is an *opposite* toggle (new line per scan) which is a 0.5d option; descoped.
+
+### 2-G.0 — Scan-first omni-input primitive on /pos
+**Why this first:** All three Tier-1 competitors (Square, Shopify, Lightspeed) open retail POS with cursor auto-focused in a single unified field that pattern-routes: scanner-framed UPC/EAN → barcode lookup, numeric PLU → direct add, text → product search, hashtag or custom prefix → customer lookup. SanoPOS has a scan field today but it lacks **primacy** (auto-focus on mount + after every ticket close + after every barcode commit) and **pattern routing** (everything runs through substring search). Without fixing this first, every downstream POS UX item (2-G.1 variant modal, 2-G.4 manager override, 2-G.6 serial entry) has nowhere clean to hang off of.
+
+**Build:**
+- New component: `frontend/src/pages/redesign/pos/POSOmniInput.jsx` — single input with pattern detector (UPC/EAN 8/12/13/14 digit + checksum, PLU 4-5 digit, text ≥ 2 chars, `#` prefix for customer).
+- Auto-focus on mount, after barcode commit, after ticket close, after Esc. Idle-focus timer re-claims focus after 10s of inactivity.
+- Pattern router dispatches to: `lookupByBarcode()` → `lookupByPLU()` → `searchProducts()` → `searchCustomers()`.
+- Barcode match with variants → triggers **2-G.1 matrix modal** via `pendingVariantProductId` in POSContext.
+- Barcode match with serialized product → triggers **2-G.6 serial entry modal** via `pendingSerialProductId`.
+- Replaces the hero position of the current product search sidebar; search is still reachable from a secondary quick-action button.
+- Keyboard shortcut: `/` focuses the field (Shopify pattern). Esc clears.
+
+**What it does NOT do:**
+- No new route — enhances `/pos` in place. (Retail doesn't need a shell swap like restaurant did.)
+- No new backend endpoints — reuses existing `/api/products/search` and barcode lookup.
+- No POS layout refactor beyond the top-bar field.
+
+**Critical files:**
+- New: `frontend/src/pages/redesign/pos/POSOmniInput.jsx`, `frontend/src/pages/redesign/pos/omniInputRouter.js` (pure function; TDD-first)
+- Modified: [POSContext.jsx](../../frontend/src/pages/redesign/pos/POSContext.jsx) (additive `pendingVariantProductId`, `pendingSerialProductId`), [POSRedesign.jsx](../../frontend/src/pages/redesign/POSRedesign.jsx) (top-bar slot)
+- No backend changes, no migration.
+
+**Estimate:** 3 days.
+
+### 2-G.1 — Matrix variant grid modal (size × color)
+**Why:** Lightspeed's defensible moat for apparel/footwear retailers. Current SanoPOS variant picker is a flat pill list; unusable at >10 variants. Tenant reality check (2026-04-20) confirms live retail tenants use variants — Wave 3 priority, not defer-to-Phase-3.
+
+**Build:**
+- New modal: `frontend/src/pages/redesign/pos/POSVariantMatrixModal.jsx` — dynamic grid rendering the product's variant axes (size × color by default, extensible to 3 axes via a 2×N matrix + dropdown for the 3rd).
+- Cell state: in-stock green / low amber / zero greyed. Click a cell → add variant to cart.
+- Keyboard nav: arrow keys move focus, Enter commits.
+- Triggered from 2-G.0 when `pendingVariantProductId` is set.
+- Serial-entry interlock (for 2-G.6): if the variant is serialized, chain into serial entry after selection.
+- Stock display reads per-variant outlet stock (audit flagged `variant_stock` shape to confirm during build — if per-product stock only, show product-level number per cell).
+
+**What it does NOT do:**
+- No matrix editing at the admin level (that's already in `VariantEditor.jsx`).
+- No 3-axis grid UI beyond 2D + dropdown fallback.
+
+**Critical files:**
+- New: `POSVariantMatrixModal.jsx`
+- Modified: POSContext to expose `pendingVariantProductId` + `openVariantModal(productId)`; `POSOmniInput` to chain from barcode scan.
+
+**Estimate:** 5 days.
+
+### 2-G.2 — Gift cards as first-class tender (digital + physical)
+**Why:** Table-stakes at every Tier-1 competitor. Endpoints exist orphaned in `barcode-expenses.js` — no POS checkout wiring. Tenant reality confirms demand for **both** digital (SMS/email code to recipient) **and** physical (pre-printed cards scanned at activation).
+
+**Build:**
+- **Schema:** new `gift_card_transactions` ledger table shaped like `customer_wallet_ledger` (schema-pg.sql:324-333) — the shared ledger primitive also used by 2-G.5 loyalty. Add `gift_cards.card_type` (`digital` / `physical`) + `activation_status` (`pre-printed` / `issued` / `active` / `depleted`).
+- **Physical card-range management:** new admin page to register pre-printed card ranges (serial numbers) before activation; scan-to-activate at POS attaches balance.
+- **POS tender:** `POSCheckoutModal` gets gift-card row in tender grid. Enter code or scan physical card → balance check → apply (partial or full) → split-tender updates `remaining`.
+- **Issue flow:** sell a gift card SKU; on sale completion, generate code (digital) or assign pre-printed serial (physical); send code via SMS/email template.
+- **Balance check UI:** small lookup in customer panel; public `/gift-card/:code` page for customer self-check (no auth).
+- **Enum extension:** verify `sale_payments.method` check constraint includes `gift_card` before wiring.
+
+**What it does NOT do:**
+- No gift-card marketplace (selling on Daraz/Meta).
+- No reloadable gift cards (one-time load only; reload can be a Phase 3 extension).
+- No multi-currency gift cards.
+
+**Critical files:**
+- New migration: adds `gift_card_transactions` table, `gift_cards` columns.
+- New: `backend/routes/gift-cards.js` (wired-up version; deprecates orphaned `barcode-expenses.js` gift-card endpoints), `frontend/src/pages/redesign/GiftCardsAdminRedesign.jsx`, public `frontend/src/pages/GiftCardBalancePage.jsx`.
+- Modified: [POSCheckoutModal.jsx](../../frontend/src/pages/redesign/pos/POSCheckoutModal.jsx) (tender row), [sales.js](../../backend/routes/sales.js) (method enum validation).
+
+**Estimate:** 6-7 days (digital 3d + physical activation 3-4d).
+
+### 2-G.3 — Loyalty earn + redeem at POS with tier auto-apply
+**Why:** Tier `discount_percent` column has existed in schema but is **never applied** to sale totals (drift flagged in code audit). Current loyalty is earn-only; no redeem at checkout, no tier auto-discount. Square charges $45/mo for this — SanoPOS includes in base.
+
+**Build:**
+- **Schema:** new `loyalty_transactions` ledger (same shape as wallet ledger — shared primitive). Columns: customer_id, type (earn/redeem/adjust), points, sale_id, reason.
+- **Auto-earn on sale completion:** rule engine reads `loyalty_tiers.earn_rate` (points per rupee) — already in schema; wire into sales.js post-commit.
+- **Auto-discount by tier:** at checkout, if customer attached has a tier with `discount_percent > 0`, apply as a line-level pre-tax discount; show in totals as "Member discount (Silver 5%)".
+- **Redeem at POS:** tender type in `POSCheckoutModal` — "Redeem X points → Y rupees" with configurable conversion rate per tenant.
+- **Feature flag:** `phase2g_loyalty` — lets the tier-discount auto-application be toggled per tenant to avoid surprising existing tenants where the tier was decorative.
+
+**What it does NOT do:**
+- No referral program, birthday bonuses, or campaign engine (Phase 3+).
+- No tier progression calculator (manual tier assignment stays).
+
+**Critical files:**
+- New migration: `loyalty_transactions` table, `phase2g_loyalty` flag seed.
+- Modified: [sales.js](../../backend/routes/sales.js) (earn + redeem paths), [POSCheckoutModal.jsx](../../frontend/src/pages/redesign/pos/POSCheckoutModal.jsx) (redeem tender + discount line), [loyalty.js](../../backend/routes/loyalty.js) (if exists; else creates).
+
+**Estimate:** 3 days.
+
+### 2-G.4 — Customer-group price books (auto-apply at checkout)
+**Why:** `customer_groups.discount_percent` exists but is NOT applied in `sales.js` (code audit confirmed). Tier-1 at every competitor, and B2B price books are behind Shopify Plus ($2,300/mo) — huge wedge.
+
+**Build:**
+- **Auto-apply:** when customer with group attached to cart, apply `discount_percent` at sale creation (same discount line as 2-G.3 tier discount; shown as "B2B group: Wholesale 10%").
+- **Per-product price-book override** (Lightspeed-style): optional new `price_books` table (group_id, product_id, price) overrides the product's default price when that group's customer is at checkout. Resolution order: product price → group discount% → price-book override → promotion.
+- Admin page: `/customers/groups/:id/price-book` — upload CSV or bulk-edit prices for a group.
+- Feature flag: `phase2g_price_books` (gates per-product overrides; group discount% auto-apply ships ungated with a one-time tenant opt-in per existing behavior preservation).
+
+**What it does NOT do:**
+- No NET terms / purchase-on-account — that's Lightspeed Advanced territory, candidate for Phase 3.
+- No tax-exempt toggle per group (Phase 3).
+
+**Critical files:**
+- New migration: `price_books` table + flag seed.
+- New: `backend/routes/price-books.js`, admin page `CustomerGroupPriceBookRedesign.jsx`.
+- Modified: [sales.js](../../backend/routes/sales.js) price resolution, customer attach path.
+
+**Estimate:** 2 days (group discount auto-apply 1d + per-product price books 1d).
+
+### 2-G.5 — Manager price override with PIN at POS
+**Why:** Column may or may not exist on `sale_items` — audit said FULLY MISSING; verify before migration. Blocks any retailer doing price-match or customer negotiation. Reuses existing `verifyManagerPin()` service from `approval-policies.js:114`.
+
+**Build:**
+- **Schema:** add `sale_items.price_override_amount`, `sale_items.price_override_reason_code`, `sale_items.price_override_approved_by` (manager id). New lookup table `override_reasons` seeded with defaults (Price match / Damaged item / Loyalty gesture / Manager discretion).
+- **PERMISSION_RULES:** new `override_price` permission — Cashier defaults OFF, Manager/Admin ON.
+- **POS UI:** on cart line, long-press / right-click / "..." menu reveals "Override price" → opens `POSPriceOverrideModal`. If current user lacks `override_price` → PIN prompt reusing `verifyManagerPin`. Reason code required.
+- **Audit trail:** every override is logged to `action_history` with before/after price + approving manager + reason code + sale_id.
+- **Report:** "Price overrides by employee" — flags abnormal patterns.
+
+**What it does NOT do:**
+- No threshold-configurable auto-approval (every override needs PIN for Cashier; Manager can override without PIN).
+- No customer-facing "discount sticker" — override is silent on the receipt beyond the line price.
+
+**Critical files:**
+- New migration: `sale_items` override columns, `override_reasons` table, `override_price` permission.
+- New: `POSPriceOverrideModal.jsx`.
+- Modified: [POSCartTable.jsx](../../frontend/src/pages/redesign/pos/POSCartTable.jsx) (line menu), [permissions.js](../../backend/middleware/permissions.js), [sales.js](../../backend/routes/sales.js) (persist + audit), [approval-policies.js](../../backend/routes/approval-policies.js) (reuse verifyManagerPin).
+
+**Estimate:** 5 days.
+
+### 2-G.6 — Serialized inventory end-to-end
+**Why:** `product_serial_numbers` table and admin CRUD exist (schema ships v?? — confirm during build). GRN receive never creates serials, POS sale never assigns, returns never reverse, no warranty tracking. Electronics/appliance/watch/firearm tenants make POS decisions on this single feature.
+
+**Build:**
+- **Schema:**
+  - Add `product_serial_numbers.variant_id` (nullable) so serials can attach to variants (apparel with serialized high-value variants, or electronics where only certain variants have serials).
+  - Add `product_serial_numbers.warranty_months`, `warranty_start_date`, `warranty_end_date`.
+  - New `sale_item_serials` bridge (sale_item_id, serial_id) — many-to-one since a sale_item quantity could be 1 serialized unit (or N if bundled).
+  - Add `products.serial_required` flag (force serial entry at POS when scanning/adding this product).
+- **GRN flow:** receiving screen for serialized products prompts serial-number entry (scan or manual). Each serial row inserts into `product_serial_numbers` with status `in_stock`.
+- **POS flow:** scanning a `serial_required` product triggers `POSSerialEntryModal` (chained from 2-G.0). Serials marked `sold` on sale completion; warranty dates computed.
+- **Returns flow:** returning a serialized item reverses serial status to `in_stock` (or `warranty_claim` if toggled). Serial history visible on the customer profile.
+- **Receipt:** serial numbers printed under each line on receipts when present.
+
+**What it does NOT do:**
+- No RMA workflow (separate Phase 3 feature for repair/electronics verticals).
+- No stolen-serial blacklist check (Phase 3+).
+- No bulk serial import from CSV (admin one-at-a-time; OK for launch).
+
+**Critical files:**
+- New migration: serial columns + `sale_item_serials` + `products.serial_required`.
+- New: `POSSerialEntryModal.jsx`, GRN-side serial entry panel.
+- Modified: [sales.js](../../backend/routes/sales.js) (stamp serials on line items), [returns.js](../../backend/routes/returns.js) (reverse serial status), [grn.js](../../backend/routes/grn.js) (receive serials), receipt HTML builder.
+
+**Estimate:** 5 days.
+
+### 2-G.7 — Per-line restock toggle + per-line reason codes on returns
+**Why:** Today, `return_reasons` table exists and one reason is selected per entire return. Square ships per-line restock flag + per-line reason; feeds defective-rate analytics by vendor.
+
+**Build:**
+- **Schema:** add `return_items.restock_flag` (boolean, default true) + `return_items.reason_code_id` (optional override of return-level reason).
+- **UI:** on returns modal, each line gets a "Restock" toggle and a per-line reason dropdown (defaults to return-level reason). Bulk "Set all" button at top.
+- **Inventory impact:** when restock_flag=true, inventory increments on return completion; when false, item is scrapped (logged for shrinkage report).
+- **Report extension:** "Returns by reason by product by vendor" — identifies defective vendors.
+
+**What it does NOT do:**
+- No per-line condition grading (good/damaged/defective — Phase 3+).
+- No automatic vendor claim generation.
+
+**Critical files:**
+- New migration: `return_items` columns.
+- Modified: [POSReturnExchangeModal.jsx](../../frontend/src/pages/redesign/pos/POSReturnExchangeModal.jsx), [returns.js](../../backend/routes/returns.js).
+
+**Estimate:** 2 days.
+
+### 2-G.8 — Inventory Intelligence Hub at /retail/inventory-intelligence
+**Why:** Shopify's biggest value-add in POS Pro is the Stocky bundle — grouped at one route, not scattered pages. Track 2 audit confirmed ABC columns don't exist, cycle-count scheduling doesn't exist, hub route doesn't exist. This phase absorbs the former 2-G.9 (cycle counts) and 2-G.10 (reports) per audit recommendation. Track 3 confirmed no Stocky-migration urgency — ship at normal Wave 4 priority, no marketing rush.
+
+**Build (phase absorbs 3 former scope items):**
+
+**8a. ABC classification + sell-through + GMROI:**
+- Materialized view or nightly worker computes `product_abc_class` (A/B/C by contribution to revenue — 80/20 Pareto).
+- New reports: sell-through rate (units sold / units received over window), GMROI ((margin × sell-through) / avg inventory value).
+- Inventory aging extends existing `stock_aging` report with $ values by age bucket (already has age; add value).
+
+**8b. Demand forecast + reorder suggestions:**
+- Simple velocity-based (not ML): trailing 30-day units sold ÷ days → daily velocity. Suggest reorder when `current_stock < velocity × (lead_time_days + safety_stock_days)`.
+- Suggestions surface as a hub card with "Create PO" button chain-linked to existing purchase-orders flow.
+
+**8c. Scheduled cycle counts:**
+- New `cycle_count_schedules` table: zone (optional filter by category/location), recurrence (weekly/monthly), next_due_date.
+- New `cycle_count_sessions` table: schedule_id, started_at, completed_at, variance_value.
+- UI: calendar view of upcoming counts + "Start count" button; counting screen reuses existing `inventory_reconciliation` flow.
+- Report: "Shrinkage variance" — expected vs counted, rupee value of variance, broken down by zone/employee.
+
+**8d. Hub composition:**
+- New route `/retail/inventory-intelligence` (permission `manage_inventory`; feature flag `phase2g_inventory_intelligence`).
+- Tabs: ABC Analysis / Reorder Suggestions / Cycle Counts / Aging & Shrinkage.
+- Dashboard cards on top: items needing reorder, next cycle count, dead-stock count (no sales >90d), ABC split.
+
+**What it does NOT do:**
+- No ML/seasonal forecasting (velocity-based only; ML is a Phase 3 candidate if tenant demand surfaces).
+- No automatic PO generation (suggestions are click-to-create only — keeps buyer in the loop).
+- No vendor-scorecard report (Phase 3+).
+
+**Critical files:**
+- New migrations: `cycle_count_schedules`, `cycle_count_sessions`, `product_abc_class` view or column, `phase2g_inventory_intelligence` flag.
+- New: `backend/routes/inventory-intelligence.js`, `frontend/src/pages/redesign/InventoryIntelligenceRedesign.jsx` and sub-tabs.
+- Modified: [stock-aging report](../../backend/routes/reports/) to add value dimensions.
+
+**Estimate:** 12-16 days (ABC + metrics 3-4d + demand/reorder 2-3d + cycle schedules 4-5d + hub composition 3-4d).
+
+### 2-G.9 — Layaway / hold / special-order with deposit schedule
+**Why:** Tenant reality check confirmed real demand. Distinct from `parked_sales` (cart-pause only, no deposits). Pakistan "qist" culturally common; layaway with Easypaisa/JazzCash deposit acceptance is a differentiator vs Lightspeed's cash-only layaway.
+
+**Build:**
+- **Schema:** new `holds` table (id, customer_id, outlet_id, status `active`/`paid`/`forfeit`/`completed`, deposit_paid, balance_due, hold_until, created_by, notes). New `hold_items` (hold_id, product_id, variant_id, quantity, price_at_hold). New `hold_payments` ledger (hold_id, amount, method, paid_at).
+- **POS flow:** "Hold for customer" button on checkout — prompts deposit amount (optional but strongly suggested), hold-until date (default 14 days), customer attach required. Deposit persists via existing payment method flow (cash/card/wallet/Easypaisa).
+- **Pickup flow:** customer returns → scan receipt barcode (uses 2-G.11) OR look up hold by customer/phone → settles balance via tender grid → hold marked `completed`, inventory converts from held to sold.
+- **Forfeit policy:** after `hold_until` passes, config toggle decides: auto-return-to-stock (deposit kept) vs notify staff to call customer.
+- **Dashboard widget:** "Holds expiring this week" on retail home screen.
+
+**What it does NOT do:**
+- No layaway "payment plan" per se (merchant + customer agree informally; system only tracks deposit + balance). Full scheduled payment plan is Phase 3.
+- No consignment (merchant holds someone else's goods — different workflow, Phase 3 if demand).
+
+**Critical files:**
+- New migration: `holds`, `hold_items`, `hold_payments`.
+- New: `backend/routes/holds.js`, `frontend/src/pages/redesign/HoldsRedesign.jsx`, `POSHoldCreateModal.jsx`, `POSHoldPickupModal.jsx`.
+- Modified: POSCheckoutModal (Hold button + mode), home dashboard widget.
+
+**Estimate:** 8-10 days.
+
+### 2-G.10 — Staff commissions finish (tiered + fixed_per_item + per-item attribution)
+**Why:** v20 shipped commission schema + routes + UI. Only missing: `fixed_per_item` calc, `tiered` calc, and wiring `sale_items.staff_id` (v49) as the per-item attribution source instead of sale-level `authenticatedEmployeeId`. Tenant reality check confirmed all three calc patterns in use. Cheap finish on sunk infrastructure.
+
+**Build:**
+- **Calc types:**
+  - `fixed_per_item`: `commission = units_sold × fixed_amount` per eligible item.
+  - `tiered`: thresholds in `commission_plan_tiers` (existing schema? verify; else add). E.g., ≥100 units → 5%, ≥200 → 8%. Applies rolling per period.
+- **Per-item attribution:** commission matcher in `commission_service.js` reads `sale_items.staff_id` when set (individual-item selling staff in restaurant mode for walk-ins), falls back to sale-level employee.
+- **Collision preservation:** `commission_earnings.earning_type` is shared with Phase 2-R tips; all changes route tips unchanged through existing `earning_type='tip'` paths.
+- **Commission statement PDF:** already exists? verify; else add employee-by-period commission report with breakdown by sale + calc type.
+
+**What it does NOT do:**
+- No commission splits across multiple employees per sale (Phase 3).
+- No clawback on returns (simple reverse at v20; no sophistication added).
+
+**Critical files:**
+- New migration: `commission_plan_tiers` (if not exists).
+- Modified: [backend/services/commission-service.js](../../backend/services/commission-service.js) (calc types + attribution), commission statement report.
+
+**Estimate:** 4-5 days.
+
+### 2-G.11 — Receipt-barcode → one-scan return lookup
+**Why:** Shopify + Square both ship. `show_barcode` receipt flag exists in SanoPOS but renders plain text. Small UX win, low effort, differentiates from manual invoice lookup. Also unlocks hold-pickup speed for 2-G.9.
+
+**Build:**
+- **Receipt rendering:** add JsBarcode (CODE128) to `frontend/src/utils/receipt.js` — renders invoice number as scannable barcode on HTML receipts + thermal (ESC/POS GS k command).
+- **Lookup endpoint:** `GET /api/sales/by-barcode/:code` — resolves to invoice lookup.
+- **POS return screen:** scan field auto-loads invoice items when barcode pattern matches an invoice number prefix.
+
+**What it does NOT do:**
+- No signed/tamper-proof receipts (Phase 3+).
+- No QR instead of barcode (barcode works on all thermal printers; QR on some).
+
+**Critical files:**
+- Modified: [receipt.js](../../frontend/src/utils/receipt.js), [POSReturnExchangeModal.jsx](../../frontend/src/pages/redesign/pos/POSReturnExchangeModal.jsx), [sales.js](../../backend/routes/sales.js) (barcode lookup endpoint).
+
+**Estimate:** 3 days.
+
+### 2-G.12 — Bulk-scan toggle (opposite default)
+**Why:** `useCart.js` already defaults to increment-on-duplicate (confirmed by audit). This item only adds the *opposite* mode — each scan creates a new cart line — for tenants who want per-scan line granularity (e.g., serial-tracked items where each unit must be a distinct line).
+
+**Build:**
+- Per-terminal toggle in POS settings: "Each scan = new line" vs "Increment quantity on duplicate scan" (default).
+- When ON: scanning the same barcode twice creates two cart lines.
+- Auto-enables when 2-G.6 serial entry is active (serialized products always get their own line).
+
+**What it does NOT do:**
+- No bulk-receive mode (that's separate in GRN UI).
+
+**Estimate:** 0.5 days.
+
+### 2-G.13 — Per-device Quick Grid
+**Why:** Shopify Smart Grid pattern — per-device (or per-terminal) favorite tiles. Cashier lanes differ (Returns desk vs Floor terminal). Current POS tile grid is uniform.
+
+**Build:**
+- New `pos_quick_keys` table (terminal_id, tile_index, product_id OR action_type, color, label override).
+- POS admin page `/settings/pos-quick-keys` — drag-drop product tiles into a grid per terminal.
+- POS `POSSearchArea` reads terminal-scoped quick-key grid when `?terminal=X` query param present; falls back to outlet-wide config otherwise.
+
+**What it does NOT do:**
+- No per-role filtering (Shopify has same gap; flag for later).
+- No chain-wide push-from-admin grid templates (Phase 3+).
+
+**Critical files:**
+- New migration: `pos_quick_keys`.
+- New: admin page, POSContext integration.
+- Modified: [POSSearchArea.jsx](../../frontend/src/pages/redesign/pos/POSSearchArea.jsx).
+
+**Estimate:** 3 days.
+
+### 2-G.14 — Data migration from Shopify / Square / Lightspeed
+**Why:** Highest-leverage gap Phase 2-G as drafted missed. A Shopify merchant churning off POS Pro has 2,000 SKUs + 800 customers + purchase history. Without a one-click import, SanoPOS loses the conversion. This is the single cheapest thing we can ship that moves competitor-refugee conversion materially. Sourced from longtail Bucket A.
+
+**Build:**
+- **Shopify export format:** Products CSV (handle, title, variants, images, tags, SKU, barcode, price, compare-at-price, inventory-qty-per-location), Customers CSV (email, phone, addresses, tags, accepts-marketing, total-spent, orders-count), Orders CSV (optional — for historical reference only, not re-posted as sales).
+- **Square export format:** Catalog CSV (item, variation, category, SKU, GTIN, price, cost, tax, track inventory), Customer Directory CSV (name, email, phone, card on file reference).
+- **Lightspeed export format:** Items CSV, Customers CSV — X-Series format via API export.
+- **Admin UI:** `/settings/import-from-competitor` page with source dropdown (Shopify / Square / Lightspeed / Generic) + file upload + preview (first 100 rows, column-mapping override) + dry-run → confirm → commit.
+- **Field mapping:** each source format has a fixed mapping file (`services/import/mappers/{shopify,square,lightspeed}.js`) that translates source columns → SanoPOS schema.
+- **Conflict handling:** duplicate SKU / email → merge (default) / skip / rename. Report on completion: X imported, Y skipped, Z errors with downloadable error CSV.
+- **Reuses existing `import.js` pipeline** for the actual insert path.
+
+**What it does NOT do:**
+- No image bulk download from URLs (source CSVs typically reference Shopify CDN URLs — out of scope; tenant re-uploads or uses existing bulk media tool).
+- No order-history migration (shops keep historical records on the old system; SanoPOS imports current state, not past sales).
+- No real-time sync (this is one-shot migration, not bidirectional).
+
+**Critical files:**
+- New: `backend/services/import/mappers/{shopify,square,lightspeed,generic}.js`, `frontend/src/pages/redesign/ImportFromCompetitorRedesign.jsx`
+- Modified: [backend/routes/import.js](../../backend/routes/import.js) (extend to accept `?source=shopify` etc.)
+
+**Estimate:** 3 days (1d per mapper + 0.5d conflict/preview UI).
+
+### 2-G.15 — Error-state pass across retail screens
+**Why:** "Professional vs beta" differentiator. Phase 2-R demonstrated that tight error-state handling (kitchen-firing offline banner, cart-collision prompt, loading skeletons) is what made restaurant feel Tier-1. Retail screens have the same gaps: scan fails, PIN wrong, insufficient stock, print fails post-payment, shift left open overnight, two cashiers racing on the same sale. Sourced from longtail Bucket A.
+
+**Build:**
+- **Error-state inventory per retail screen** — audit every retail-facing page and POS modal for:
+  - Empty states (no data) — friendly message + primary action button
+  - Loading states — skeleton placeholder or spinner
+  - Error states — specific message + recovery action
+  - Network-down states — offline banner + "action queued" where applicable
+  - Permission-denied states — clear "you need X permission" message with link to request
+- **Specific critical flows to harden:**
+  - **Receipt fails to print AFTER payment succeeds** → retry modal with "Print again / Email / SMS / Skip" options. Sale already committed; this is receipt-only recovery.
+  - **Shift left open overnight** → next morning login prompts "Yesterday's shift is still open — close now?" with auto-fill expected cash if last count is known.
+  - **Two cashiers refunding same sale simultaneously** → second one gets "Already refunded at HH:MM by X" with refund reference.
+  - **POS crash with non-empty cart** → on reconnect, offer "Resume cart from Xh ago?" using `parkSale()` checkpoint.
+  - **Barcode scan fails to match** → "Not found — add as new product?" option (permission-gated).
+  - **Insufficient stock at checkout** → "Only 3 in stock; sell 3 now and create backorder for the rest?" option.
+- **Logging:** every error state that fires logs to `action_history` for post-hoc analysis.
+
+**What it does NOT do:**
+- No retry/resilience infrastructure changes (offline queue stays as-is; this is UX polish, not engineering reliability).
+
+**Critical files:**
+- Audit output: `docs/plans/phase-2g-error-state-inventory.md` (produced in Wave 6 kickoff by an Explore agent)
+- Modified: ~20 retail-screen `*Redesign.jsx` files + POS modals
+- New: `POSReceiptRetryModal.jsx`, `POSShiftRecoveryModal.jsx`, `POSCartCollisionModal.jsx` (may already exist from 2-R; verify and reuse)
+
+**Estimate:** 4 days (1d audit + 3d fix pass).
+
+### 2-G.16 — Merchant home dashboard (retail owner view)
+**Why:** Square's home screen is beautiful and "sticky." Every merchant opens it first. SanoPOS has a generic dashboard; a retail-specific home that shows an owner the KPIs they care about (today's sales vs yesterday, top products, low stock, staff performance, cash position) is a retention feature, not a new sale. Sourced from longtail Bucket A + #16.
+
+**Build:**
+- New route `/retail/home` for users with `role=Administrator` OR `role=Manager` + general_retail preset — optional per-user setting to land here on login instead of `/dashboard`.
+- **Cards on the page** (pulled from existing endpoints where possible):
+  - Today's sales (count + total) vs yesterday + same-day-last-week % comparison
+  - Top 5 products today
+  - Low-stock alerts (products under reorder point)
+  - Cash-position: expected cash in all drawers + any open shift warnings
+  - Staff-of-the-day: highest sales among active staff
+  - Pending action items: PO receive, returns awaiting refund, overdue holds (ties to 2-G.9)
+  - Month-to-date margin vs last month
+- **Per-outlet filter:** multi-outlet owners can toggle between "All outlets" and a specific outlet.
+- **End-of-month summary email:** weekly cron sends a "How's your store doing" digest email with the same cards rendered — opt-in per tenant.
+
+**What it does NOT do:**
+- No benchmarking against industry (would require cohort data — defer per longtail Bucket D).
+- No AI-generated narrative ("you're down 30% because X") — AI deferred.
+- No real-time push-style updates (cards refresh on page load + 60s polling).
+
+**Critical files:**
+- New: `backend/routes/retail-home.js`, `frontend/src/pages/redesign/RetailHomeRedesign.jsx`
+- Modified: `frontend/src/ui/nav-config.js` (add home link), `frontend/src/routes/appRoutes.jsx` (register route)
+- Worker extension: weekly digest email job
+
+**Estimate:** 3 days.
+
+### 2-G.17 — Anti-theft & shrinkage controls
+**Why:** Per Lavu/Restaurant365/retail ops research, comp/void/no-sale abuse is the #1 revenue leakage source in retail — more than actual theft. Phase 2-R.2 introduced manager-PIN void+comp for restaurant. Retail needs the same treatment for: no-sale cash drawer opens, high-value voids, employee refund anomalies, end-of-shift discrepancies. Sourced from longtail Bucket A + #18.
+
+**Build:**
+- **No-sale tracking:** existing cash-drawer-kick endpoint logs every "open drawer without transaction" to new `no_sale_events` table with employee_id, reason_code (from a seedable reason table: "Give change", "Count cash", "Training", "Other"), timestamp. Dashboard card: "No-sale opens this week by employee."
+- **Threshold-based manager approval on refunds:** any refund > configurable amount (default: Rs 5,000) requires manager PIN — reuses `verifyManagerPin()` from 2-G.5.
+- **Employee anomaly detection:** nightly worker computes per-employee metrics (voids, refunds, discounts as % of their sales). Flags outliers (2 SD above peer average) in admin dashboard. No automatic punishment — surfaces for manager review.
+- **End-of-shift variance flagging:** existing shift-close flow already computes expected vs counted cash; add threshold (default Rs 500) that requires manager acknowledgment + reason note before accepting the close.
+- **Audit report:** "Retail risk events" — combined view of no-sales, high voids, discount anomalies, shift variances per employee per period.
+
+**What it does NOT do:**
+- No CCTV integration (that's a platform-level item, Bucket D — deferred).
+- No automatic blacklisting / termination workflow (always a human decision).
+
+**Critical files:**
+- New migration: `no_sale_events`, `no_sale_reasons`, `retail_anomaly_flags`.
+- New: `backend/routes/retail-risk.js`, `frontend/src/pages/redesign/RetailRiskRedesign.jsx`, `POSNoSaleReasonModal.jsx`, `POSShiftVarianceModal.jsx`
+- Modified: cash-drawer-kick endpoint, shift-close flow, refunds flow.
+
+**Estimate:** 3 days.
+
+### Parallel track — B2. Label Template Designer (ZPL + TSPL + Dymo + dual template type)
+
+**Why parallel:** Heaviest single item (~12-14 days). Has almost no shared dependencies with other Phase 2-G items. Runs on its own feature branch without blocking Wave 1-5. Pick up whenever capacity permits — before or during Phase 2-G main track.
+
+**Scope:**
+- Visual template designer: drag-drop fields (product name / SKU / price / barcode / variant / category), size presets per printer model, preview with real product data.
+- **Two template types** (per tenant reality Q4):
+  - **Item labels:** barcode + SKU + price + variant code. Sizes: 1×2in, 2×1in, 2.5×1in common.
+  - **Shelf labels:** product name + price + unit price + category. Larger format (3×2in, 4×3in).
+- **Printer language support** (all three required per tenant feedback):
+  - ZPL (Zebra ZD410/ZD420/ZD421 etc.)
+  - TSPL (TSC TE244/TDP-244)
+  - Dymo Label (USB via SDK/CUPS)
+- Template storage: extend `barcode_templates` with `template_body_zpl`, `template_body_tspl`, `template_body_dymo`, `template_type` (item/shelf).
+- Print path: `services/printer.js` extends with `printLabel(template_id, product_id, copies, printer_id)`; emits the right language per printer config.
+- Bulk print from catalog: select N products → print M labels each → queue to label printer.
+
+**Critical files:**
+- New migration: `barcode_templates` column extensions.
+- New: `backend/routes/label-templates.js`, `frontend/src/pages/redesign/LabelDesignerRedesign.jsx`, `services/printer-languages/{zpl,tspl,dymo}.js`.
+
+**Estimate:** 12-14 days (ZPL base 4d + TSPL 2d + Dymo 3d + shelf template type 2d + designer UI 3d).
+
+---
+
+### Waves — final sequencing
+
+**Wave 1 — Foundations** (~3d — unblocks everything else):
+- Ledger primitive migration (shared by 2-G.2 + 2-G.3)
+- Feature flag seeds for all 2-G items
+- 2-G.0 Omni-input primitive + pattern router
+
+**Wave 2 — Tender completion** (~11-13d):
+- 2-G.2 gift cards digital+physical
+- 2-G.3 loyalty earn/redeem + tier auto-apply
+- 2-G.4 customer-group price books
+
+**Wave 3 — POS UX depth** (~17d):
+- 2-G.5 manager price override
+- 2-G.1 matrix variant grid
+- 2-G.6 serialized inventory E2E
+- 2-G.7 per-line restock + reasons
+
+**Wave 4 — Inventory Intelligence Hub** (~12-16d):
+- 2-G.8 hub + ABC + reorder + cycle counts + GMROI/sell-through
+
+**Wave 5 — Finishing + flow-shape** (~15-18d):
+- 2-G.10 commission calc finish
+- 2-G.11 receipt barcode + return lookup
+- 2-G.9 layaway with deposits
+- 2-G.13 per-device quick grid
+- 2-G.12 bulk-scan opposite toggle
+
+**Wave 6 — Merchant success + trust** (~13d):
+- 2-G.14 data migration from Shopify/Square/Lightspeed — **highest-leverage conversion unlock**
+- 2-G.15 error-state pass across retail screens — "professional vs beta"
+- 2-G.16 merchant home dashboard — retention feature for owners
+- 2-G.17 anti-theft / shrinkage controls — no-sale, manager-PIN thresholds, anomaly detection
+
+**Parallel track (separate branch):**
+- B2 label designer — 12-14d, run whenever
+
+**Deferred to Phase 3:**
+- Training role (low parity pressure)
+- ML demand forecasting
+- NET terms / purchase-on-account
+- RMA workflow
+- Endless aisle / BOPIS / ship-from-store
+- Native scale hardware integration
+- Customer-facing display
+- Vertical-specific presets (pharmacy, jewelry, eyewear, auto parts, furniture)
+
+### Deliverables
+
+- `general_retail` preset matures from ~62% to ~95% vs Square/Shopify/Lightspeed Tier-1.
+- All 23 presets inherit the improvements (tenders, loyalty, price books, serials, inventory intelligence, commissions, holds, quick grid — all cross-preset).
+- Landing-page-worthy bullets: "Gift cards in base plan (Square charges separately)", "B2B price books in base plan (Shopify requires Plus $2,300/mo)", "Serialized inventory built-in (Square doesn't ship it at all)".
+- All 7 CLAUDE.md drift items from Track 2 audit corrected.
+
+### Verification (demo script)
+
+A test retail tenant can, in one session: scan a sale through the omni-input → pick size/color from matrix grid → item shows serial-entry modal → enters IMEI → attaches a customer tagged "Wholesale" → group discount auto-applies + loyalty tier discount stacks → manager PIN-approves a 15% price match on one line with reason "Price match" → tenders 3 ways (gift card + wallet + cash) → receipt prints with scannable Code128 of invoice number → next customer returns the serialized item by scanning the receipt barcode → return modal auto-loads with serial → per-line "Restock" toggle OFF (item marked for vendor claim) → store credit refund auto-applies to customer wallet → owner opens `/retail/inventory-intelligence` hub → sees the product now has a reorder suggestion (velocity spiked), ABC class B, cycle count due next week → clicks "Create PO" → partial receive against the PO converts to serials on receipt → another customer puts a high-value item on hold with 30% deposit → pickup 5 days later via receipt-barcode scan. End of day, owner pulls commission report showing tiered breakdown for two salespeople who each sold the serialized items.
+
+### Critical files referenced across 2-G
+
+- New backend routes: `backend/routes/{gift-cards,loyalty,price-books,inventory-intelligence,holds,label-templates}.js` (some may extend existing)
+- New frontend pages: `InventoryIntelligenceRedesign.jsx`, `HoldsRedesign.jsx`, `LabelDesignerRedesign.jsx`, `GiftCardsAdminRedesign.jsx`
+- New POS components: `POSOmniInput.jsx`, `POSVariantMatrixModal.jsx`, `POSSerialEntryModal.jsx`, `POSPriceOverrideModal.jsx`, `POSHoldCreateModal.jsx`, `POSHoldPickupModal.jsx`
+- Shared ledger primitive: extend pattern at `customer_wallet_ledger` (schema-pg.sql:324-333) for gift_card_transactions + loyalty_transactions
+- Shared PIN-verify pattern: reuse `verifyManagerPin()` (approval-policies.js:114)
+- Feature flags: `phase2g_*` family
+
+---
+
 ## Phase 3 — Vertical Depth Wave 2: The Shallow Four (10-14 weeks)
 
 **Why next:** Hotel, Rental, Gym, and Fresh-goods (butcher/sweet/ice) are scaffolding. Picking them up means real product work, not just polish. Sequence by market size in your region.
@@ -462,8 +976,11 @@ Month 1-2:   Phase 1 (Foundation Polish)         ──── ✅ DONE 2026-04-1
 Month 2:     Phase 2.1 (Restaurant depth — splits/modifiers/courses/KDS/inbox/tips) ──── ✅ DONE 2026-04-18
 Month 3-4:   Phase 2-R (Restaurant Tier-1 Parity)
              └─ 2-R.0 Restaurant-Native POS Shell ──── ✅ DONE 2026-04-18
-             └─ 2-R.1 through 2-R.10 land inside the new shell ──── ← START HERE (next: 2-R.1 86'd items)
-Month 4-5:   Phase 2.2/2.3 (Clinical + Repair to DEEP)
+             └─ 2-R.1 through 2-R.10 land inside the new shell
+Month 4-7:   Phase 2-G (General Retail Tier-1 Parity)  ──── ← START HERE (next: 2-G.0 omni-input)
+             └─ 2-G.0 → 2-G.17 (18 items in 6 waves) + parallel track B2 label designer
+             └─ Wave 6 adds merchant-success layer (migration + error states + owner dashboard + anti-theft)
+Month 7-8:   Phase 2.2/2.3 (Clinical + Repair to DEEP)
 Month 5-7:   Phase 3.1 (Hotel + Channel Manager) ──── unlocks hospitality segment
 Month 5-9:   Phase 4.1 (Native Mobile Shell — parallel track)  ──── App Store presence
 Month 7-10:  Phase 3.2-3.3 (Rental + Gym)        ──── service economy locked
@@ -476,7 +993,16 @@ Month 13+:   Phase 5 (Regional + International)  ──── growth engine
 ~~**Next:** **Phase 2.1 (Restaurant)**~~ Phase 2.1 done 2026-04-18.
 ~~**Next:** **Phase 2-R.0 — Restaurant-Native POS Shell**~~ 2-R.0 done 2026-04-18. The table-first `/pos/restaurant` shell is live; every 2-R.x feature now lands inside it.
 
-**Next:** **Phase 2-R.1 — 86'd items / menu availability.** Highest daily-use operational gap — today a cashier can sell a sold-out dish because inventory doesn't block restaurant items. Also blocks 2-R.3 (pay-at-table can't ship without availability gating on the public guest QR menu). One-tap "86 this" from POS + KDS, auto-exclude from public menu, auto-restore when inventory returns.
+~~**Next:** **Phase 2-R.1 — 86'd items / menu availability.**~~ Phase 2-R work continues in parallel or pauses; retail is the wider preset base.
+
+**Next:** **Phase 2-G.0 — Scan-first omni-input primitive.** Retail's equivalent of the 2-R.0 shell insight — smaller scope but same category of "foundation you didn't realize was missing." All three Tier-1 competitors (Square, Shopify, Lightspeed) open POS with a single auto-focused pattern-routed field; SanoPOS has a scan field without primacy. Unblocks 2-G.1 matrix variant modal and 2-G.6 serial entry modal (both chain off pattern-matched product lookup). 3-day component build on `/pos`, no route swap.
+
+**Phase 2-G in a nutshell:**
+- Tracks: 3 research docs (competitive audit + 3 deep-dives) + 1 synthesis + 1 code audit + 1 tenant-reality check + 1 longtail inventory = 8 planning docs in `docs/plans/phase-2g-*.md`.
+- Scope: 18 items (2-G.0 through 2-G.17) across 6 waves + parallel track B2 label designer. Waves 1-5 close competitor parity; Wave 6 addresses merchant success + trust features competitors also miss (data migration, error states, owner dashboard, anti-theft). Scope reclaimed: store credit, exchange flow, bulk-scan increment were ALREADY SHIPPED (caught by Track 2 audit).
+- Effort: ~70-80 working days after shared-primitive dedup (~14-16 weeks), including Wave 6.
+- Shared primitives: ledger pattern (from `customer_wallet_ledger`), `verifyManagerPin()` (from approval-policies), reason-codes (from return_reasons), feature-flag middleware.
+- Longtail inventory: every other retail improvement idea discussed but not in 2-G scope is catalogued in [phase-2g-longtail-inventory.md](phase-2g-longtail-inventory.md) — this is the menu for Phase 3 retail depth and Phase 4.x platform pillars.
 
 ---
 
@@ -486,6 +1012,7 @@ For each phase, "done" is verifiable end-to-end against a real scenario:
 
 - **Phase 1:** Lighthouse score >90 on 10 key pages, Sentry weekly errors <50, top 5 user journeys pass Playwright in CI, design audit shows zero off-system buttons/modals across `*Redesign.jsx`.
 - **Phase 2.1 Restaurant:** A test restaurant tenant can: split a 4-person check 4 ways with custom tip pool, route appetizers to grill station and entrees to hot station, fire courses, accept a WhatsApp order into the same KDS — all from one demo.
+- **Phase 2-G General Retail:** A test retail tenant can: scan a sale through the omni-input, pick size/color from matrix grid, enter a serial/IMEI, attach a Wholesale customer with auto-applied group discount + loyalty tier discount, manager-PIN override one line with reason code, tender in 3 parts (gift card + wallet + cash), print a receipt with scannable invoice barcode, then process a return by scanning that barcode with per-line restock toggle — all from one demo.
 - **Phase 2.2 Clinical:** A dental test tenant can: chart a cavity on tooth #14 mesial surface, generate a 6-visit treatment plan from template, capture e-signed consent, print Rx, schedule 6mo recall — end to end.
 - **Phase 2.3 Repair:** Repair test tenant can: intake bike with photos, start tech timer, send WhatsApp status updates, generate estimate → approve → invoice with parts + labor + warranty.
 - **Phase 3.1 Hotel:** Hotel test tenant can: receive a Booking.com reservation via channel manager, auto-block rooms, create folio, accept on-arrival deposit via SanoPay, complete night audit.
@@ -518,7 +1045,9 @@ Each verification is a demo a prospect can watch live. That's the standard.
 ## What This Plan Deliberately Does NOT Recommend
 
 - **No new verticals.** 23 is enough. Don't add manufacturing, laundry, library, etc. until the existing 23 are DEEP.
-- **No AI features.** Per existing memory: AI BYOK was deferred Mar 27 due to no customer demand. Don't revisit until 100+ tenants asking.
+- **No new retail verticals inside Phase 2-G.** Phase 2-G deepens `general_retail` only. Pharmacy, jewelry, eyewear, auto parts, furniture (with serial tracking / VIN / prescription data / fitment / hallmark / etc.) are distinct **presets** to be built in Phase 3 — like dental/vet/physio were built. Do not try to solve them inside `general_retail` by adding fields — that path was tried and produced scaffolding, not product. *(Reaffirmed 2026-04-20 during Phase 2-G planning.)*
+- **No AI features.** Per existing memory: AI BYOK was deferred Mar 27 due to no customer demand. Don't revisit until 100+ tenants asking. *Re-committed 2026-04-20:* temptations surfaced during Phase 2-G research (purchase prediction, photo-to-product, voice ordering, anomaly explanation, auto-categorization). All remain deferred under the same rule.
+- **Don't confuse parity with differentiation.** Phase 2-G delivers parity with Square / Shopify / Lightspeed on Tier-1 retail features. It does NOT make SanoPOS automatically better at things competitors don't do. Differentiation comes from **vertical presets** (Phase 3), **country packs + local payment methods + local language** (Phase 5), and **local hardware support** (Phase 2-G polish + parallel track B2). Parity is the floor. Don't celebrate the floor as the lead.
 - **No microservices rewrite.** The monolith on Express + Postgres scales fine to 100+ tenants with PgBouncer enabled. Don't introduce complexity without need.
 - **No new payment gateway integrations** until xPay tokenization is real and SanoPay is production-grade. Adding Stripe before fixing xPay is moving sideways.
 - **No own online store** in the next 12 months. Shopify took 15 years to build that moat. WooCommerce/Shopify sync is enough.
