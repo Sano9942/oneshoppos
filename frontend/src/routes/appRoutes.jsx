@@ -73,6 +73,7 @@ const PostdatedChequesRedesign = lazy(() => import("../pages/redesign/PostdatedC
 const StockCountRedesign = lazy(() => import("../pages/redesign/StockCountRedesign"));
 const PriceListsRedesign = lazy(() => import("../pages/redesign/PriceListsRedesign"));
 const CustomerGroupsRedesign = lazy(() => import("../pages/redesign/CustomerGroupsRedesign"));
+const CustomerGroupPriceBookRedesign = lazy(() => import("../pages/redesign/CustomerGroupPriceBookRedesign"));
 const ReviewModerationRedesign = lazy(() => import("../pages/redesign/ReviewModerationRedesign"));
 const FulfillmentRedesign = lazy(() => import("../pages/redesign/FulfillmentRedesign"));
 const CODSettlementsRoute = lazy(() => import("../pages/CODSettlementsRoute"));
@@ -208,6 +209,7 @@ export const appRoutes = [
     {/* Wave 4 — Customer & Loyalty */}
     <Route path="/loyalty-tiers" element={perm("all_access", <LoyaltyTiersRoute />)} />
     <Route path="/customer-groups" element={perm("manage_customers", <CustomerGroupsRedesign />)} />
+    <Route path="/customer-groups/:groupId/price-book" element={perm("manage_customers", <CustomerGroupPriceBookRedesign />)} />
     <Route path="/review-moderation" element={perm("manage_inventory", <ReviewModerationRedesign />)} />
     {/* Wave 5 — Fulfillment */}
     <Route path="/fulfillment" element={perm("manage_orders", <FulfillmentRedesign />)} />

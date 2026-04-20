@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { Pencil, Plus, Trash2, Users } from "lucide-react";
+import { BookOpen, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { api } from "../../api";
 import { useToast } from "../../contexts/ToastContext";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../auth/AuthProvider";
+import useFeatureFlags from "../../hooks/useFeatureFlags";
 import {
   Button,
   EmptyState,
@@ -14,6 +16,9 @@ import {
 } from "../../ui/primitives";
 
 export default function CustomerGroupsRedesign() {
+  const { authHeaders } = useAuth();
+  const { flags } = useFeatureFlags(authHeaders);
+  const priceBooksOn = !!flags.phase2g_price_books;
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -137,6 +142,14 @@ export default function CustomerGroupsRedesign() {
                   </td>
                   <td className="px-4 py-2.5 text-center">
                     <div className="flex justify-center gap-1">
+                      {priceBooksOn && (
+                        <Button
+                          size="sm"
+                          onClick={() => navigate(`/customer-groups/${g.id}/price-book`)}
+                        >
+                          <BookOpen size={12} className="mr-1 inline" />Price Book
+                        </Button>
+                      )}
                       <Button size="sm" onClick={() => openEdit(g)}>
                         <Pencil size={12} className="mr-1 inline" />Edit
                       </Button>

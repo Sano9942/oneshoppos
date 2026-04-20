@@ -512,6 +512,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: PRICE LIST ASSIGNMENTS (Phase 2) ---
   require("./price-list-assignments")(app, deps);
 
+  // --- ROUTES: PRICE BOOKS (Phase 2-G Wave 2 — 2-G.4) ---
+  require("./price-books")(app, deps);
+
   // --- ROUTES: DRAFT ORDERS (Phase 2) ---
   require("./draft-orders")(app, deps);
 
