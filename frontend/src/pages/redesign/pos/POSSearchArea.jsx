@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Search, LayoutGrid, List } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { usePreset } from "../../../contexts/PresetContext";
+import POSOmniInput from "./POSOmniInput";
 
 export default function POSSearchArea() {
   const { pos_layout_mode, pos_search_config, labels = {} } = usePreset();
@@ -26,10 +27,15 @@ export default function POSSearchArea() {
     setShowResults,
     addToCart,
     money,
+    posFlags,
   } = usePOS();
 
   return (
     <div className="mb-3 space-y-2">
+      {/* 2-G.0 scan-first omni-input — flag-gated; existing inputs below
+          remain as fallback so flag-off behavior matches main exactly. */}
+      {posFlags?.phase2g_omni_input && <POSOmniInput />}
+
       {/* Specific field search row — conditionally shown per preset */}
       {(() => {
         const fields = [
