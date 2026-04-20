@@ -166,14 +166,17 @@
       "WebFetch(domain:fitsmallbusiness.com)",
       "WebFetch(domain:litcommerce.com)",
       "WebFetch(domain:sanopos.com)",
-      "mcp__claude_ai_Supabase__get_logs"
+      "mcp__claude_ai_Supabase__get_logs",
+      "mcp__claude_ai_Supabase__get_organization",
+      "WebFetch(domain:supabase.com)"
     ],
     "additionalDirectories": [
       "\\tmp",
       "d:\\newprojects\\oneshoppos\\.claude",
       "C:\\Users\\HP\\.claude",
       "C:\\Users\\HP\\.railway",
-      "d:\\newprojects\\oneshoppos\\.claude\\reviews"
+      "d:\\newprojects\\oneshoppos\\.claude\\reviews",
+      "D:\\newprojects\\oneshoppos\\.claude"
     ]
   },
   "hooks": {
