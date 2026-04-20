@@ -576,7 +576,59 @@ module.exports = function registerSalesRoutes(app, deps) {
       return res.status(500).json({ error: validationErr.message });
     }
 
-    // 1. Calculate Expected Total (subtotal minus discount)
+    // Phase 2-G Wave 2 — customer-group + loyalty-tier auto-pricing.
+    // Flag-gated. Off by default: behavior is identical to pre-wave-2. On:
+    //   - phase2g_price_books: apply group.discount_percent pre-tax AND
+    //     per-product price_list_items overrides scoped to the group.
+    //   - phase2g_loyalty: apply tier.discount_percent pre-tax (Track B
+    //     also writes loyalty_transactions ledger; this block only handles
+    //     the discount side).
+    // Discounts stack ADDITIVELY (10% group + 5% tier = 15%). Results are
+    // returned in the response so the client can render the breakdown.
+    let autoPricingBreakdown = { priceBookApplied: [], discountLines: [] };
+    let autoDiscountValue = 0;
+    try {
+      const { getFeatureFlagsMap } = require("../middleware/feature-flags");
+      const flags = await getFeatureFlagsMap(req.tenantId);
+      const pbOn = !!flags.phase2g_price_books;
+      const loyaltyOn = !!flags.phase2g_loyalty;
+      if ((pbOn || loyaltyOn) && customer_id) {
+        const pricing = require("../services/pricing");
+        const { group, tier } = await pricing.resolveCustomerPricing({
+          db,
+          customerId: customer_id,
+        });
+        if (pbOn && group) {
+          const overrides = await pricing.resolveGroupPriceBookOverrides({
+            db,
+            groupId: group.id,
+            cartItems,
+          });
+          autoPricingBreakdown.priceBookApplied =
+            pricing.applyPriceBookOverrides(cartItems, overrides);
+        }
+        // Subtotal AFTER per-product overrides so group+tier % compose
+        // against the post-override base (matches customer expectation).
+        const preSubtotal = cartItems.reduce(
+          (acc, item) => acc + Number(item.price) * Number(item.quantity),
+          0,
+        );
+        const composed = pricing.composeAutoDiscountPercent({
+          group,
+          tier,
+          applyGroup: pbOn,
+          applyTier: loyaltyOn,
+        });
+        autoDiscountValue = (preSubtotal * composed.pct) / 100;
+        autoPricingBreakdown.discountLines = composed.breakdown;
+      }
+    } catch (pricingErr) {
+      // Never block a sale on pricing-service failure; fall back to the
+      // pre-wave-2 path. Log for visibility.
+      try { logger.warn?.({ err: pricingErr }, "auto-pricing skipped"); } catch {}
+    }
+
+    // 1. Calculate Expected Total (subtotal minus manual discount)
     const subtotal = cartItems.reduce(
       (acc, item) => acc + item.price * item.quantity,
       0,
@@ -586,7 +638,7 @@ module.exports = function registerSalesRoutes(app, deps) {
         ? (subtotal * parseFloat(discount_amount || 0)) / 100
         : parseFloat(discount_amount || 0);
     const totalAmount =
-      subtotal - discountValue - parseFloat(points_redeemed || 0);
+      subtotal - discountValue - autoDiscountValue - parseFloat(points_redeemed || 0);
 
     // Determine the actual payments to record
     let finalPayments = payments;
@@ -1046,6 +1098,13 @@ module.exports = function registerSalesRoutes(app, deps) {
           totalAmount,
           invoiceNumber: invoiceNumber || null,
           payments: finalPayments,
+          // Phase 2-G Wave 2: expose auto-pricing breakdown so the receipt
+          // can surface group + tier discount lines and price-book swaps.
+          autoPricing: {
+            autoDiscountValue,
+            priceBookApplied: autoPricingBreakdown.priceBookApplied,
+            discountLines: autoPricingBreakdown.discountLines,
+          },
         });
       } catch (invErr) {
         res.status(500).json({
