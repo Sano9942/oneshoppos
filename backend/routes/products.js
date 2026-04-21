@@ -582,6 +582,8 @@ module.exports = function registerProductRoutes(app, deps) {
       media,
       image_urls,
       supplier_id,
+      lead_time_days_override, // 2-G.8
+      safety_stock_days,       // 2-G.8
     } = req.body;
     const outlet_id = req.body.outlet_id || req.headers["x-outlet-id"];
     try {
@@ -600,8 +602,8 @@ module.exports = function registerProductRoutes(app, deps) {
 
       const result = await db.transaction(async (client) => {
         const { rows: [inserted] } = await client.query(
-          `INSERT INTO products (barcode, sku, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit, description_html, compare_at_price, product_type, vendor, tags, status, supplier_id, is_bundle)
-           VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+          `INSERT INTO products (barcode, sku, name, price, cost_price, gst, stock, category_id, tax_id, brand_id, has_variants, attribute_set_id, min_qty, max_qty, unit, description_html, compare_at_price, product_type, vendor, tags, status, supplier_id, is_bundle, lead_time_days_override, safety_stock_days)
+           VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
            RETURNING id`,
           [
             barcode || null,
@@ -626,6 +628,12 @@ module.exports = function registerProductRoutes(app, deps) {
             status || "active",
             supplier_id || null,
             is_bundle ? true : false,
+            lead_time_days_override != null && lead_time_days_override !== ""
+              ? Number(lead_time_days_override)
+              : null,
+            safety_stock_days != null && safety_stock_days !== ""
+              ? Number(safety_stock_days)
+              : null,
           ]
         );
         const newProductId = inserted.id;
@@ -856,6 +864,8 @@ module.exports = function registerProductRoutes(app, deps) {
       variants, // Optional array of variants to update
       supplier_id,
       bundle_components, // Optional array of { product_id, variant_id?, quantity } for bundles
+      lead_time_days_override, // 2-G.8: product-level lead time override
+      safety_stock_days,       // 2-G.8: per-product safety stock
     } = req.body;
     try {
       if (Object.prototype.hasOwnProperty.call(req.body || {}, "category_id")) {
@@ -928,6 +938,26 @@ module.exports = function registerProductRoutes(app, deps) {
         if (imageUrlProvided) {
           updateFields.push(`image_url = $${nextParam}`);
           updateParams.push(req.body.image_url || null);
+          nextParam++;
+        }
+        // 2-G.8: lead-time / safety-stock overrides — patch only if caller
+        // provided the key so omitted updates don't clobber existing values.
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, "lead_time_days_override")) {
+          updateFields.push(`lead_time_days_override = $${nextParam}`);
+          updateParams.push(
+            lead_time_days_override === "" || lead_time_days_override == null
+              ? null
+              : Number(lead_time_days_override)
+          );
+          nextParam++;
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, "safety_stock_days")) {
+          updateFields.push(`safety_stock_days = $${nextParam}`);
+          updateParams.push(
+            safety_stock_days === "" || safety_stock_days == null
+              ? null
+              : Number(safety_stock_days)
+          );
           nextParam++;
         }
         updateParams.push(id);
