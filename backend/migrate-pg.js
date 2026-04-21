@@ -4942,6 +4942,50 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 65,
+    description:
+      "Phase 2-G Wave 3 — 2-G.1 variant_outlet_stock table + backfill from product_variants.stock into the primary outlet",
+    up: async (client) => {
+      // 2-G.1: per-variant per-outlet stock. product_variants.stock stays as
+      // a cross-outlet rollup (kept in sync by sales/returns) for backwards
+      // compat; new code prefers variant_outlet_stock for per-outlet reads
+      // and deducts. Both are updated in the same transaction on sale lines
+      // that carry a variant_id.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS variant_outlet_stock (
+          id SERIAL PRIMARY KEY,
+          variant_id INTEGER NOT NULL REFERENCES product_variants(id) ON DELETE CASCADE,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+          quantity NUMERIC(10,3) NOT NULL DEFAULT 0,
+          UNIQUE(variant_id, outlet_id)
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_variant_outlet_stock_variant
+          ON variant_outlet_stock(variant_id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_variant_outlet_stock_outlet
+          ON variant_outlet_stock(outlet_id)
+      `);
+
+      // Backfill: seed one variant_outlet_stock row per existing variant at
+      // the tenant's primary outlet (lowest id). Uses ON CONFLICT DO NOTHING
+      // so re-runs are idempotent and don't clobber already-seeded rows.
+      // When no outlet exists, the backfill is a no-op (the tenant has
+      // nothing to migrate yet).
+      await client.query(`
+        INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+        SELECT pv.id,
+               (SELECT id FROM outlets ORDER BY id LIMIT 1) AS outlet_id,
+               COALESCE(pv.stock, 0)
+          FROM product_variants pv
+         WHERE (SELECT id FROM outlets ORDER BY id LIMIT 1) IS NOT NULL
+        ON CONFLICT (variant_id, outlet_id) DO NOTHING
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

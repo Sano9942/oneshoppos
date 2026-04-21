@@ -201,6 +201,19 @@ CREATE TABLE IF NOT EXISTS outlet_stock (
   UNIQUE(product_id, outlet_id)
 );
 
+-- 2-G.1 (migration v65): per-variant per-outlet stock. product_variants.stock
+-- stays as a cross-outlet rollup (kept in sync by sales/returns) for backwards
+-- compat; new code prefers variant_outlet_stock for per-outlet reads + deducts.
+CREATE TABLE IF NOT EXISTS variant_outlet_stock (
+  id SERIAL PRIMARY KEY,
+  variant_id INTEGER NOT NULL REFERENCES product_variants(id) ON DELETE CASCADE,
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+  quantity NUMERIC(10,3) NOT NULL DEFAULT 0,
+  UNIQUE(variant_id, outlet_id)
+);
+CREATE INDEX IF NOT EXISTS idx_variant_outlet_stock_variant ON variant_outlet_stock(variant_id);
+CREATE INDEX IF NOT EXISTS idx_variant_outlet_stock_outlet ON variant_outlet_stock(outlet_id);
+
 CREATE TABLE IF NOT EXISTS stock_adjustments (
   id SERIAL PRIMARY KEY,
   product_id INTEGER NOT NULL REFERENCES products(id),

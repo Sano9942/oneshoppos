@@ -306,11 +306,21 @@ module.exports = function registerReturnsRoutes(app, deps) {
              ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
             [item.product_id, outlet_id, item.quantity, item.quantity],
           );
-          // Restock variant stock if applicable
+          // Restock variant stock if applicable.
+          // 2-G.1: also restock per-variant outlet stock. Keeping the legacy
+          // product_variants.stock column in sync preserves reads that aren't
+          // outlet-aware (reports, barcode scans with no outlet context).
           if (item.variant_id) {
             await client.query(
               "UPDATE product_variants SET stock = stock + $1 WHERE id = $2",
               [item.quantity, item.variant_id],
+            );
+            await client.query(
+              `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+                 VALUES ($1, $2, $3)
+                 ON CONFLICT (variant_id, outlet_id)
+                 DO UPDATE SET quantity = variant_outlet_stock.quantity + $3`,
+              [item.variant_id, outlet_id, item.quantity],
             );
           }
         }

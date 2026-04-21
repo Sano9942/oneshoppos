@@ -327,11 +327,20 @@ module.exports = function registerSalesRoutes(app, deps) {
                 [item.product_id, sale.outlet_id, restoreQtyInt, restoreQtyInt]
               );
 
-              // Restore variant global stock if item has a variant
+              // Restore variant global stock if item has a variant.
+              // 2-G.1: also restore per-outlet variant stock so matrix view
+              // matches the authoritative cross-outlet rollup.
               if (item.variant_id) {
                 await client.query(
                   `UPDATE product_variants SET stock = stock + $1 WHERE id = $2`,
                   [restoreQtyInt, item.variant_id]
+                );
+                await client.query(
+                  `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+                     VALUES ($1, $2, $3)
+                     ON CONFLICT (variant_id, outlet_id)
+                     DO UPDATE SET quantity = variant_outlet_stock.quantity + $3`,
+                  [item.variant_id, sale.outlet_id, restoreQtyInt]
                 );
               }
             }
@@ -867,16 +876,36 @@ module.exports = function registerSalesRoutes(app, deps) {
           } else {
             const variantId = item.variant_id || null;
             if (variantId) {
-              const { rows: [row] } = await client.query(
-                `SELECT COALESCE(stock, 0) AS available
-                 FROM product_variants WHERE id = $1 FOR UPDATE`,
-                [variantId]
+              // 2-G.1: per-outlet stock is the authoritative gate when a
+              // variant_outlet_stock row exists; fall back to the rollup
+              // (product_variants.stock) for variants that haven't been
+              // backfilled for this outlet yet (pre-v65 tenants).
+              const { rows: [vos] } = await client.query(
+                `SELECT COALESCE(quantity, 0) AS available
+                   FROM variant_outlet_stock
+                  WHERE variant_id = $1 AND outlet_id = $2
+                  FOR UPDATE`,
+                [variantId, outlet_id]
               );
-              if (!row || row.available < item.quantity) {
-                throw Object.assign(
-                  new Error(`Insufficient stock for variant ${variantId}`),
-                  { statusCode: 400, code: "insufficient_stock" }
+              if (vos) {
+                if (vos.available < item.quantity) {
+                  throw Object.assign(
+                    new Error(`Insufficient stock for variant ${variantId} at this outlet`),
+                    { statusCode: 400, code: "insufficient_stock" }
+                  );
+                }
+              } else {
+                const { rows: [row] } = await client.query(
+                  `SELECT COALESCE(stock, 0) AS available
+                     FROM product_variants WHERE id = $1 FOR UPDATE`,
+                  [variantId]
                 );
+                if (!row || row.available < item.quantity) {
+                  throw Object.assign(
+                    new Error(`Insufficient stock for variant ${variantId}`),
+                    { statusCode: 400, code: "insufficient_stock" }
+                  );
+                }
               }
             } else {
               const productId = item.original_product_id || item.id;
@@ -977,6 +1006,17 @@ module.exports = function registerSalesRoutes(app, deps) {
               );
             }
           } else if (item.variant_id) {
+            // 2-G.1: deduct per-variant outlet stock (upsert creates the row
+            // if this variant hasn't been stocked at this outlet yet).
+            // product_variants.stock stays in sync as a cross-outlet rollup
+            // so legacy reads (and outlet-unaware callers) still work.
+            await client.query(
+              `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+                 VALUES ($1, $2, 0 - $3::numeric)
+                 ON CONFLICT (variant_id, outlet_id)
+                 DO UPDATE SET quantity = variant_outlet_stock.quantity - $3::numeric`,
+              [item.variant_id, outlet_id, stockDeductQty]
+            );
             await client.query(
               "UPDATE product_variants SET stock = stock - $1 WHERE id = $2",
               [stockDeductQty, item.variant_id]

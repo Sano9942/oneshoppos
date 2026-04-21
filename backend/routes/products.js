@@ -419,19 +419,38 @@ module.exports = function registerProductRoutes(app, deps) {
   app.get("/api/products/:id/variants", requireAnyPerm(["view_reports", "manage_inventory", "all_access"]), async (req, res) => {
     try {
       const { id } = req.params;
+      const outletId = req.query.outlet_id ? Number(req.query.outlet_id) : null;
+
+      // 2-G.1: when ?outlet_id= is supplied, return per-outlet stock from
+      // variant_outlet_stock. Falls back to product_variants.stock for rows
+      // that don't yet have a variant_outlet_stock entry (pre-backfill, or
+      // outlets never stocked). Legacy callers (no outlet_id) get the
+      // cross-outlet rollup untouched.
+      const params = [id];
+      let stockSelect = "pv.stock AS stock_at_outlet";
+      if (outletId) {
+        params.push(outletId);
+        stockSelect = `COALESCE(
+          (SELECT vos.quantity
+             FROM variant_outlet_stock vos
+            WHERE vos.variant_id = pv.id AND vos.outlet_id = $2),
+          pv.stock
+        ) AS stock_at_outlet`;
+      }
 
       const { rows } = await db.query(
         `SELECT pv.*,
-              json_agg(
-                 json_build_object('attribute_name', a.name, 'option_value', ao.value)
-              ) FILTER (WHERE a.name IS NOT NULL) as options_json
-       FROM product_variants pv
-       LEFT JOIN variant_option_values vov ON pv.id = vov.variant_id
-       LEFT JOIN attributes a ON vov.attribute_id = a.id
-       LEFT JOIN attribute_options ao ON vov.attribute_option_id = ao.id
-       WHERE pv.product_id = $1
-       GROUP BY pv.id`,
-        [id]
+                ${stockSelect},
+                json_agg(
+                   json_build_object('attribute_name', a.name, 'option_value', ao.value)
+                ) FILTER (WHERE a.name IS NOT NULL) as options_json
+           FROM product_variants pv
+           LEFT JOIN variant_option_values vov ON pv.id = vov.variant_id
+           LEFT JOIN attributes a ON vov.attribute_id = a.id
+           LEFT JOIN attribute_options ao ON vov.attribute_option_id = ao.id
+          WHERE pv.product_id = $1
+          GROUP BY pv.id`,
+        params
       );
 
       const variants = rows.map((r) => ({

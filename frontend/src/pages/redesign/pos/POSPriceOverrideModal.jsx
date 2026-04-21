@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { X, ShieldAlert } from "lucide-react";
-import api from "../../../api";
+import { api } from "../../../api";
 import { usePOS } from "./POSContext";
 
 // Phase 2-G Wave 3 — 2-G.5 manager price override modal.
