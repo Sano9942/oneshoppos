@@ -85,6 +85,7 @@ const LABELS = {
   chart: "Chart",
   "customer-groups": "Customer Groups",
   "price-book": "Price Book",
+  "gift-cards": "Gift Cards",
 };
 
 const SKIP = ["/dashboard", "/pos", "/kiosk", "/customer-display"];
