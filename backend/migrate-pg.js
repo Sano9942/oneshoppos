@@ -4870,6 +4870,283 @@ const MIGRATIONS = [
       );
     },
   },
+  {
+    version: 64,
+    description:
+      "Phase 2-G Wave 3 — 2-G.5 manager price override: override_reasons lookup + sale_items override columns + override_price permission seed",
+    up: async (client) => {
+      // 2-G.5: lookup table for cashier-facing override reason codes. Keeps
+      // reason labels editable per tenant without changing the backend enum.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS override_reasons (
+          id SERIAL PRIMARY KEY,
+          code TEXT NOT NULL UNIQUE,
+          label TEXT NOT NULL,
+          is_active BOOLEAN NOT NULL DEFAULT true,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        INSERT INTO override_reasons (code, label, sort_order) VALUES
+          ('price_match', 'Price match', 10),
+          ('damaged_item', 'Damaged item', 20),
+          ('loyalty_gesture', 'Loyalty gesture', 30),
+          ('manager_discretion', 'Manager discretion', 40)
+        ON CONFLICT (code) DO NOTHING
+      `);
+
+      // 2-G.5: per-line override audit columns on sale_items. price_at_sale
+      // remains authoritative (the final charged price); price_override_amount
+      // captures the ORIGINAL list price so reporting can compute the delta.
+      // The approval_event_id links back to the manager PIN approval so the
+      // cashier-wise override report can trace each override to its approver.
+      await client.query(
+        `ALTER TABLE sale_items
+           ADD COLUMN IF NOT EXISTS price_override_amount NUMERIC(12,2)`
+      );
+      await client.query(
+        `ALTER TABLE sale_items
+           ADD COLUMN IF NOT EXISTS price_override_reason_id INTEGER REFERENCES override_reasons(id)`
+      );
+      await client.query(
+        `ALTER TABLE sale_items
+           ADD COLUMN IF NOT EXISTS price_override_approved_by INTEGER REFERENCES employees(id)`
+      );
+      await client.query(
+        `ALTER TABLE sale_items
+           ADD COLUMN IF NOT EXISTS price_override_approved_at TIMESTAMPTZ`
+      );
+      await client.query(
+        `ALTER TABLE sale_items
+           ADD COLUMN IF NOT EXISTS price_override_approval_event_id INTEGER REFERENCES approval_events(id)`
+      );
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sale_items_price_override
+          ON sale_items(price_override_approved_by, price_override_approved_at)
+          WHERE price_override_amount IS NOT NULL
+      `);
+
+      // 2-G.5: seed override_price permission onto the Manager role. The
+      // back-seed also runs at boot via ensureDefaultRolePermissions, but
+      // doing it here means the permission is usable the instant the
+      // migration finishes (no restart required for existing tenants).
+      const { rows: mgrRoles } = await client.query(
+        "SELECT id FROM roles WHERE name = 'Manager'"
+      );
+      for (const r of mgrRoles) {
+        await client.query(
+          "INSERT INTO role_permissions (role_id, permission) VALUES ($1, 'override_price') ON CONFLICT DO NOTHING",
+          [r.id]
+        );
+      }
+    },
+  },
+  {
+    version: 65,
+    description:
+      "Phase 2-G Wave 3 — 2-G.1 variant_outlet_stock table + backfill from product_variants.stock into the primary outlet",
+    up: async (client) => {
+      // 2-G.1: per-variant per-outlet stock. product_variants.stock stays as
+      // a cross-outlet rollup (kept in sync by sales/returns) for backwards
+      // compat; new code prefers variant_outlet_stock for per-outlet reads
+      // and deducts. Both are updated in the same transaction on sale lines
+      // that carry a variant_id.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS variant_outlet_stock (
+          id SERIAL PRIMARY KEY,
+          variant_id INTEGER NOT NULL REFERENCES product_variants(id) ON DELETE CASCADE,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+          quantity NUMERIC(10,3) NOT NULL DEFAULT 0,
+          UNIQUE(variant_id, outlet_id)
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_variant_outlet_stock_variant
+          ON variant_outlet_stock(variant_id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_variant_outlet_stock_outlet
+          ON variant_outlet_stock(outlet_id)
+      `);
+
+      // Backfill: seed one variant_outlet_stock row per existing variant at
+      // the tenant's primary outlet (lowest id). Uses ON CONFLICT DO NOTHING
+      // so re-runs are idempotent and don't clobber already-seeded rows.
+      // When no outlet exists, the backfill is a no-op (the tenant has
+      // nothing to migrate yet).
+      await client.query(`
+        INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+        SELECT pv.id,
+               (SELECT id FROM outlets ORDER BY id LIMIT 1) AS outlet_id,
+               COALESCE(pv.stock, 0)
+          FROM product_variants pv
+         WHERE (SELECT id FROM outlets ORDER BY id LIMIT 1) IS NOT NULL
+        ON CONFLICT (variant_id, outlet_id) DO NOTHING
+      `);
+    },
+  },
+  {
+    version: 66,
+    description:
+      "Phase 2-G Wave 3 — 2-G.1 follow-up: variant_id on inventory_transfers + stock_adjustments so variant-aware moves/corrections stay in sync with variant_outlet_stock",
+    up: async (client) => {
+      // 2-G.1 follow-up: let tenants move + adjust stock at the variant
+      // granularity. Without this, the matrix view drifts whenever an admin
+      // does a stock correction (damage, recount, transfer between stores).
+      // variant_id is nullable — pre-existing product-level rows stay as is.
+      await client.query(
+        `ALTER TABLE inventory_transfers
+           ADD COLUMN IF NOT EXISTS variant_id INTEGER REFERENCES product_variants(id)`
+      );
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_inventory_transfers_variant
+          ON inventory_transfers(variant_id)
+          WHERE variant_id IS NOT NULL
+      `);
+      await client.query(
+        `ALTER TABLE stock_adjustments
+           ADD COLUMN IF NOT EXISTS variant_id INTEGER REFERENCES product_variants(id)`
+      );
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_stock_adjustments_variant
+          ON stock_adjustments(variant_id)
+          WHERE variant_id IS NOT NULL
+      `);
+    },
+  },
+  {
+    version: 67,
+    description:
+      "Phase 2-G Wave 3 — 2-G.6 serialized inventory: extend product_serial_numbers (variant + warranty + grn), products.serial_required + default_warranty_months, sale_item_serials bridge, backfill bridge from legacy sale_id",
+    up: async (client) => {
+      // 2-G.6: serialized items end-to-end. Extend the existing serials table
+      // with variant_id (serialized items can be variant-specific, e.g. the
+      // blue 128GB iPhone vs the black 256GB), warranty dates (computed on
+      // sale), and grn_id (traceability from the receive point).
+      await client.query(
+        `ALTER TABLE product_serial_numbers
+           ADD COLUMN IF NOT EXISTS variant_id INTEGER REFERENCES product_variants(id)`
+      );
+      await client.query(
+        `ALTER TABLE product_serial_numbers
+           ADD COLUMN IF NOT EXISTS warranty_months INTEGER`
+      );
+      await client.query(
+        `ALTER TABLE product_serial_numbers
+           ADD COLUMN IF NOT EXISTS warranty_start_date DATE`
+      );
+      await client.query(
+        `ALTER TABLE product_serial_numbers
+           ADD COLUMN IF NOT EXISTS warranty_end_date DATE`
+      );
+      await client.query(
+        `ALTER TABLE product_serial_numbers
+           ADD COLUMN IF NOT EXISTS grn_id INTEGER REFERENCES goods_received_notes(id)`
+      );
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_product_serial_numbers_status_product
+          ON product_serial_numbers(status, product_id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_product_serial_numbers_variant
+          ON product_serial_numbers(variant_id)
+          WHERE variant_id IS NOT NULL
+      `);
+
+      // 2-G.6: per-product opt-in flag + default warranty length so GRN
+      // receive can pre-populate warranty_months without the cashier
+      // having to enter it manually. Existing products default false/NULL
+      // so no behavior change until a tenant explicitly enables serials.
+      await client.query(
+        `ALTER TABLE products
+           ADD COLUMN IF NOT EXISTS serial_required BOOLEAN NOT NULL DEFAULT false`
+      );
+      await client.query(
+        `ALTER TABLE products
+           ADD COLUMN IF NOT EXISTS default_warranty_months INTEGER`
+      );
+
+      // 2-G.6: bridge table for qty-aware serialization. Scanning 3 serials
+      // on a line of quantity=3 creates 3 bridge rows; the legacy sale_id
+      // column on product_serial_numbers cannot express that because it's
+      // a single FK per serial. We keep sale_id populated in parallel as a
+      // deprecation cushion — drop in Phase 3.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS sale_item_serials (
+          id SERIAL PRIMARY KEY,
+          sale_item_id INTEGER NOT NULL REFERENCES sale_items(id) ON DELETE CASCADE,
+          serial_id INTEGER NOT NULL REFERENCES product_serial_numbers(id),
+          UNIQUE(sale_item_id, serial_id)
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sale_item_serials_sale_item
+          ON sale_item_serials(sale_item_id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sale_item_serials_serial
+          ON sale_item_serials(serial_id)
+      `);
+
+      // 2-G.6: backfill the bridge from existing sold serials. For every
+      // serial that already has sale_id set, find a sale_items row with the
+      // same sale_id + product_id and insert a bridge row. Uses NOT EXISTS
+      // guard so re-runs stay idempotent.
+      await client.query(`
+        INSERT INTO sale_item_serials (sale_item_id, serial_id)
+        SELECT si.id, psn.id
+          FROM product_serial_numbers psn
+          JOIN sale_items si
+            ON si.sale_id = psn.sale_id
+           AND si.product_id = psn.product_id
+         WHERE psn.sale_id IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM sale_item_serials sis WHERE sis.serial_id = psn.id
+           )
+      `);
+    },
+  },
+  {
+    version: 68,
+    description:
+      "Phase 2-G Wave 3 — 2-G.7 per-line restock toggle + reason codes: return_items.restock_flag/reason_code_id, seed default return_reasons",
+    up: async (client) => {
+      // 2-G.7: per-line restock control. Default true keeps existing behavior
+      // (all returned items go back to stock) — tenant flips the flag off
+      // per-line to log damaged/scrapped units. reason_code_id defaults to
+      // the return-level reason in the application layer; the column stays
+      // nullable so seed data + old code paths still insert cleanly.
+      await client.query(
+        `ALTER TABLE return_items
+           ADD COLUMN IF NOT EXISTS restock_flag BOOLEAN NOT NULL DEFAULT true`
+      );
+      await client.query(
+        `ALTER TABLE return_items
+           ADD COLUMN IF NOT EXISTS reason_code_id INTEGER REFERENCES return_reasons(id)`
+      );
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_return_items_restock_flag
+          ON return_items(restock_flag)
+          WHERE restock_flag = false
+      `);
+
+      // 2-G.7: seed default reason codes. The return_reasons table ships
+      // empty in public schema; without seed data the per-line dropdown has
+      // nothing to populate. ON CONFLICT DO NOTHING makes this idempotent +
+      // safe for tenants that already curated their own reasons.
+      await client.query(`
+        INSERT INTO return_reasons (code, label, sort_order) VALUES
+          ('damaged', 'Damaged', 10),
+          ('defective', 'Defective', 20),
+          ('wrong_item', 'Wrong item', 30),
+          ('customer_changed_mind', 'Customer changed mind', 40),
+          ('sizing_issue', 'Sizing issue', 50),
+          ('other', 'Other', 60)
+        ON CONFLICT (code) DO NOTHING
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

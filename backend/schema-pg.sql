@@ -154,7 +154,13 @@ CREATE TABLE IF NOT EXISTS products (
   sold_out_reason TEXT,
   -- 2-G.2 Wave 2: mark this SKU as a gift card. On sale completion a
   -- gift_cards row is generated (digital code or physical range serial).
-  is_gift_card_sku BOOLEAN NOT NULL DEFAULT false
+  is_gift_card_sku BOOLEAN NOT NULL DEFAULT false,
+  -- 2-G.6 (migration v67): serialized-inventory opt-in. When true, GRN
+  -- receive requires serial_numbers[] and POS requires the cashier to scan
+  -- one serial per unit sold. default_warranty_months pre-fills the warranty
+  -- length on newly received serials.
+  serial_required BOOLEAN NOT NULL DEFAULT false,
+  default_warranty_months INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS product_variants (
@@ -201,6 +207,19 @@ CREATE TABLE IF NOT EXISTS outlet_stock (
   UNIQUE(product_id, outlet_id)
 );
 
+-- 2-G.1 (migration v65): per-variant per-outlet stock. product_variants.stock
+-- stays as a cross-outlet rollup (kept in sync by sales/returns) for backwards
+-- compat; new code prefers variant_outlet_stock for per-outlet reads + deducts.
+CREATE TABLE IF NOT EXISTS variant_outlet_stock (
+  id SERIAL PRIMARY KEY,
+  variant_id INTEGER NOT NULL REFERENCES product_variants(id) ON DELETE CASCADE,
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+  quantity NUMERIC(10,3) NOT NULL DEFAULT 0,
+  UNIQUE(variant_id, outlet_id)
+);
+CREATE INDEX IF NOT EXISTS idx_variant_outlet_stock_variant ON variant_outlet_stock(variant_id);
+CREATE INDEX IF NOT EXISTS idx_variant_outlet_stock_outlet ON variant_outlet_stock(outlet_id);
+
 CREATE TABLE IF NOT EXISTS stock_adjustments (
   id SERIAL PRIMARY KEY,
   product_id INTEGER NOT NULL REFERENCES products(id),
@@ -209,8 +228,13 @@ CREATE TABLE IF NOT EXISTS stock_adjustments (
   quantity_change NUMERIC(10,3) NOT NULL,
   reason TEXT NOT NULL,
   notes TEXT,
-  timestamp TIMESTAMPTZ DEFAULT NOW()
+  timestamp TIMESTAMPTZ DEFAULT NOW(),
+  -- 2-G.1 follow-up (migration v66): nullable variant_id lets admins correct
+  -- variant-level stock. When set, the route also updates variant_outlet_stock.
+  variant_id INTEGER REFERENCES product_variants(id)
 );
+CREATE INDEX IF NOT EXISTS idx_stock_adjustments_variant
+  ON stock_adjustments(variant_id) WHERE variant_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS inventory_transfers (
   id SERIAL PRIMARY KEY,
@@ -222,8 +246,14 @@ CREATE TABLE IF NOT EXISTS inventory_transfers (
   note TEXT,
   reversed BOOLEAN DEFAULT false,
   timestamp TIMESTAMPTZ DEFAULT NOW(),
-  status TEXT DEFAULT 'completed'
+  status TEXT DEFAULT 'completed',
+  -- 2-G.1 follow-up (migration v66): nullable variant_id lets admins move
+  -- variant stock between outlets. When set, the route also updates
+  -- variant_outlet_stock at both source + destination.
+  variant_id INTEGER REFERENCES product_variants(id)
 );
+CREATE INDEX IF NOT EXISTS idx_inventory_transfers_variant
+  ON inventory_transfers(variant_id) WHERE variant_id IS NOT NULL;
 
 -- ── Price Lists ──────────────────────────────────────────────────────
 
@@ -437,6 +467,9 @@ CREATE TABLE IF NOT EXISTS sale_items (
   -- Retail sales leave this null. Indexed by (sale_id, seat_number) for
   -- per-seat aggregation in reports and receipts.
   seat_number INTEGER
+  -- 2-G.5 (migration v64): price_override_* columns added via ALTER TABLE
+  -- at the end of this file (after override_reasons + approval_events are
+  -- defined, since they're forward-referenced FKs).
 );
 CREATE INDEX IF NOT EXISTS idx_sale_items_sale_seat ON sale_items(sale_id, seat_number);
 
@@ -488,13 +521,29 @@ CREATE TABLE IF NOT EXISTS returns (
   gateway_refund_ref TEXT
 );
 
+-- return_reasons must precede return_items because return_items.reason_code_id
+-- FKs to it. The richer lookup table is re-defined further down (Phase 2A
+-- block) — this early CREATE IF NOT EXISTS is a forward-declaration sized to
+-- satisfy the FK. The later definition is a no-op via IF NOT EXISTS.
+CREATE TABLE IF NOT EXISTS return_reasons (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  label TEXT NOT NULL,
+  requires_note BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT TRUE,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS return_items (
   id SERIAL PRIMARY KEY,
   return_id INTEGER NOT NULL REFERENCES returns(id),
   product_id INTEGER NOT NULL REFERENCES products(id),
   variant_id INTEGER REFERENCES product_variants(id),
   quantity NUMERIC(10,3) NOT NULL,
-  refund_price NUMERIC(12,2) NOT NULL
+  refund_price NUMERIC(12,2) NOT NULL,
+  restock_flag BOOLEAN NOT NULL DEFAULT true,
+  reason_code_id INTEGER REFERENCES return_reasons(id)
 );
 
 -- ── Purchase Orders & GRN ─────────────────────────────────────────────
@@ -762,8 +811,33 @@ CREATE TABLE IF NOT EXISTS product_serial_numbers (
   status TEXT NOT NULL DEFAULT 'available',
   sale_id INTEGER,
   created_at TIMESTAMPTZ DEFAULT NOW(),
+  -- 2-G.6 (migration v67): variant + warranty + origin-GRN audit columns.
+  -- variant_id is nullable because product-level serialization (no variants)
+  -- stays valid. warranty_start_date is NULL until the serial is sold.
+  variant_id INTEGER REFERENCES product_variants(id),
+  warranty_months INTEGER,
+  warranty_start_date DATE,
+  warranty_end_date DATE,
+  grn_id INTEGER REFERENCES goods_received_notes(id),
   UNIQUE(product_id, serial_number)
 );
+CREATE INDEX IF NOT EXISTS idx_product_serial_numbers_status_product
+  ON product_serial_numbers(status, product_id);
+CREATE INDEX IF NOT EXISTS idx_product_serial_numbers_variant
+  ON product_serial_numbers(variant_id) WHERE variant_id IS NOT NULL;
+
+-- 2-G.6 (migration v67): bridge between sale_items and product_serial_numbers
+-- so a single line of quantity=N can carry N distinct serial numbers. The
+-- legacy sale_id column on product_serial_numbers is kept populated in
+-- parallel as a deprecation cushion.
+CREATE TABLE IF NOT EXISTS sale_item_serials (
+  id SERIAL PRIMARY KEY,
+  sale_item_id INTEGER NOT NULL REFERENCES sale_items(id) ON DELETE CASCADE,
+  serial_id INTEGER NOT NULL REFERENCES product_serial_numbers(id),
+  UNIQUE(sale_item_id, serial_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sale_item_serials_sale_item ON sale_item_serials(sale_item_id);
+CREATE INDEX IF NOT EXISTS idx_sale_item_serials_serial ON sale_item_serials(serial_id);
 
 -- ── Gift Cards ──────────────────────────────────────────────────────
 
@@ -4094,6 +4168,30 @@ CREATE INDEX IF NOT EXISTS idx_appointments_treatment_plan
 ALTER TABLE sales ADD COLUMN IF NOT EXISTS treatment_folio_id INTEGER REFERENCES treatment_folios(id);
 CREATE INDEX IF NOT EXISTS idx_sales_treatment_folio_id
   ON sales(treatment_folio_id) WHERE treatment_folio_id IS NOT NULL;
+
+-- ── Phase 2-G Wave 3 — 2-G.5 manager price override (migration v64) ──
+-- Lookup table for cashier-facing override reasons. Editable per tenant so
+-- reason labels stay out of the enum.
+CREATE TABLE IF NOT EXISTS override_reasons (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  label TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- sale_items override audit columns — added here (not inline) because
+-- override_reasons + approval_events are defined later in the file and the
+-- FK references can't be forward-declared in a single-pass schema load.
+ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS price_override_amount NUMERIC(12,2);
+ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS price_override_reason_id INTEGER REFERENCES override_reasons(id);
+ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS price_override_approved_by INTEGER REFERENCES employees(id);
+ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS price_override_approved_at TIMESTAMPTZ;
+ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS price_override_approval_event_id INTEGER REFERENCES approval_events(id);
+CREATE INDEX IF NOT EXISTS idx_sale_items_price_override
+  ON sale_items(price_override_approved_by, price_override_approved_at)
+  WHERE price_override_amount IS NOT NULL;
 
 -- ── Schema versioning ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schema_version (

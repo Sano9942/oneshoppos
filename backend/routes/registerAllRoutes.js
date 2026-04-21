@@ -510,6 +510,12 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: APPROVAL POLICIES (Phase 2) ---
   require("./approval-policies")(app, deps);
 
+  // --- ROUTES: OVERRIDE REASONS (Phase 2-G Wave 3 — 2-G.5) ---
+  require("./override-reasons")(app, deps);
+
+  // --- ROUTES: PRODUCT SERIALS (Phase 2-G Wave 3 — 2-G.6) ---
+  require("./product-serials")(app, deps);
+
   // --- ROUTES: PRICE LISTS (Phase 2 detail + assignments) ---
   require("./price-lists")(app, deps);
 

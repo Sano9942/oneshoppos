@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
 const { evaluatePolicy, recordApprovalEvent } = require("../services/approval-policy");
+const { verifyManagerPin } = require("../services/manager-pin");
 
 module.exports = function registerApprovalPolicyRoutes(app, deps) {
   const { db, requirePerm, requireFeature } = deps;
@@ -167,4 +168,57 @@ module.exports = function registerApprovalPolicyRoutes(app, deps) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // Phase 2-G Wave 3 (2-G.5) — manager PIN authorization for a POS price
+  // override. Returns an approval_event_id that the POS attaches to the cart
+  // line and submits as part of the sale payload. Pre-sale reference_id is
+  // null; the approval_event stays pinned by its id alone.
+  app.post(
+    "/api/approvals/price-override",
+    requireFeature("phase2g_price_override"),
+    async (req, res) => {
+      const { pin, product_id, variant_id, original_price, new_price, reason_id, outlet_id } = req.body;
+      if (!pin || original_price == null || new_price == null) {
+        return res.status(400).json({ error: "pin, original_price and new_price are required" });
+      }
+
+      const requestedBy = Number(req.employee?.id || req.headers["x-employee-id"] || 0);
+      if (!requestedBy) return res.status(401).json({ error: "Unauthorized" });
+
+      try {
+        const manager = await verifyManagerPin(db, String(pin), {
+          requiredPerm: "override_price",
+          isImpersonating: req.isImpersonating === true,
+        });
+
+        const event = await recordApprovalEvent(db, {
+          policyId: null,
+          actionType: "price_override",
+          referenceType: "sale_item_pending",
+          referenceId: null,
+          requestedBy,
+          approvedBy: manager.employee_id,
+          status: "approved",
+          reason: `Price override approved by ${manager.employee_name}`,
+          metadata: {
+            product_id: product_id ?? null,
+            variant_id: variant_id ?? null,
+            original_price: Number(original_price),
+            new_price: Number(new_price),
+            reason_id: reason_id ?? null,
+          },
+          outletId: outlet_id ?? null,
+        });
+
+        res.json({
+          authorized: true,
+          approval_event_id: event.id,
+          approved_by: { id: manager.employee_id, name: manager.employee_name },
+        });
+      } catch (err) {
+        const status = err.statusCode || 500;
+        res.status(status).json({ error: err.message });
+      }
+    }
+  );
 };

@@ -1510,6 +1510,7 @@ module.exports = function (app, deps, helpers) {
           os.quantity AS actual_qty,
           COALESCE(sales_sub.qty, 0) AS sales_qty,
           COALESCE(returns_sub.qty, 0) AS returns_qty,
+          COALESCE(scrapped_sub.qty, 0) AS scrapped_qty,
           COALESCE(grn_sub.qty, 0) AS purchases_qty,
           COALESCE(adj_sub.qty, 0) AS adjustments_qty,
           COALESCE(tin_sub.qty, 0) AS transfers_in,
@@ -1524,11 +1525,23 @@ module.exports = function (app, deps, helpers) {
           GROUP BY si.product_id, s.outlet_id
         ) sales_sub ON sales_sub.product_id = p.id AND sales_sub.outlet_id = os.outlet_id
         LEFT JOIN (
+          -- 2-G.7: restocked returns only. IS NOT FALSE catches legacy NULL
+          -- rows (pre-v68), treating them as restocked by default.
           SELECT ri.product_id, r.outlet_id, SUM(ri.quantity) AS qty
           FROM return_items ri JOIN returns r ON r.id = ri.return_id
           WHERE r.timestamp >= $3 AND r.timestamp < $4
+            AND ri.restock_flag IS NOT FALSE
           GROUP BY ri.product_id, r.outlet_id
         ) returns_sub ON returns_sub.product_id = p.id AND returns_sub.outlet_id = os.outlet_id
+        LEFT JOIN (
+          -- 2-G.7: scrapped units logged on return_items but never pushed
+          -- back into outlet_stock. Separate shrink vector in variance summary.
+          SELECT ri.product_id, r.outlet_id, SUM(ri.quantity) AS qty
+          FROM return_items ri JOIN returns r ON r.id = ri.return_id
+          WHERE r.timestamp >= $3 AND r.timestamp < $4
+            AND ri.restock_flag = FALSE
+          GROUP BY ri.product_id, r.outlet_id
+        ) scrapped_sub ON scrapped_sub.product_id = p.id AND scrapped_sub.outlet_id = os.outlet_id
         LEFT JOIN (
           SELECT gi.product_id, g.outlet_id, SUM(gi.qty_received) AS qty
           FROM grn_items gi JOIN goods_received_notes g ON g.id = gi.grn_id
@@ -1563,7 +1576,12 @@ module.exports = function (app, deps, helpers) {
       const enriched = rows.map((r) => {
         const actual = Number(r.actual_qty || 0);
         const sales = Number(r.sales_qty || 0);
+        // 2-G.7: `returns` now means restocked returns only. Scrapped units
+        // are a separate shrink vector — they were returned by the customer
+        // but the tenant chose NOT to re-shelf, so they never touched
+        // outlet_stock and must not participate in the balance equation.
         const returns = Number(r.returns_qty || 0);
+        const scrapped = Number(r.scrapped_qty || 0);
         const purchases = Number(r.purchases_qty || 0);
         const adjustments = Number(r.adjustments_qty || 0);
         const tIn = Number(r.transfers_in || 0);
@@ -1577,6 +1595,9 @@ module.exports = function (app, deps, helpers) {
         const variance = actual - expected;
         const cost = Number(r.cost_price || 0);
         const variance_value = variance * cost;
+        // scrapped units are an independent shrink signal. Valued at cost for
+        // the dashboard rollup.
+        const scrapped_value = scrapped * cost;
 
         return {
           product_id: r.id,
@@ -1590,6 +1611,7 @@ module.exports = function (app, deps, helpers) {
           purchases,
           sales,
           returns,
+          scrapped,
           transfers_in: tIn,
           transfers_out: tOut,
           adjustments,
@@ -1597,6 +1619,7 @@ module.exports = function (app, deps, helpers) {
           actual,
           variance,
           variance_value,
+          scrapped_value,
         };
       });
 
@@ -1604,6 +1627,8 @@ module.exports = function (app, deps, helpers) {
         total_products: enriched.length,
         total_variance_value: enriched.reduce((sum, r) => sum + r.variance_value, 0),
         total_shrinkage_units: enriched.reduce((sum, r) => sum + (r.variance < 0 ? Math.abs(r.variance) : 0), 0),
+        total_scrapped_units: enriched.reduce((sum, r) => sum + r.scrapped, 0),
+        total_scrapped_value: enriched.reduce((sum, r) => sum + r.scrapped_value, 0),
         rows_with_variance: enriched.filter((r) => r.variance !== 0).length,
       };
 

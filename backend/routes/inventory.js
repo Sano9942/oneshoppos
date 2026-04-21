@@ -32,11 +32,13 @@ module.exports = function registerInventoryRoutes(app, deps) {
       const { rows } = await db.query(`
         SELECT it.*,
                p.name as product_name, p.barcode,
+               pv.sku as variant_sku,
                fo.name as from_outlet_name,
                to_o.name as to_outlet_name,
                e.name as employee_name
         FROM inventory_transfers it
         JOIN products p ON it.product_id = p.id
+        LEFT JOIN product_variants pv ON it.variant_id = pv.id
         JOIN outlets fo ON it.from_outlet_id = fo.id
         JOIN outlets to_o ON it.to_outlet_id = to_o.id
         LEFT JOIN employees e ON it.employee_id = e.id
@@ -49,9 +51,14 @@ module.exports = function registerInventoryRoutes(app, deps) {
   });
 
   // Create a new inventory transfer (atomically moves stock between outlets)
+  // 2-G.1 follow-up: when variant_id is supplied, the transfer gates on
+  // variant_outlet_stock at the source outlet and updates all three tables
+  // (variant_outlet_stock, product_variants.stock rollup, outlet_stock) in
+  // sync. When variant_id is null, legacy product-level behavior is unchanged.
   app.post("/api/transfers", requirePerm("manage_inventory"), validate(CreateTransferSchema), async (req, res) => {
     const {
       product_id,
+      variant_id,
       from_outlet_id,
       to_outlet_id,
       quantity,
@@ -77,45 +84,94 @@ module.exports = function registerInventoryRoutes(app, deps) {
     }
 
     try {
-      // Validate sufficient stock in source outlet
-      const { rows: stockRows } = await db.query(
-        "SELECT quantity FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2",
-        [product_id, from_outlet_id],
-      );
-      const currentStock = stockRows.length ? stockRows[0].quantity : 0;
-      if (currentStock < quantity) {
-        return res.status(400).json({
-          error: `Insufficient stock. Only ${currentStock} available at source outlet.`,
-        });
+      if (variant_id) {
+        // Variant-aware stock check (prefer per-outlet, fall back to rollup)
+        const { rows: vosRows } = await db.query(
+          "SELECT quantity FROM variant_outlet_stock WHERE variant_id = $1 AND outlet_id = $2",
+          [variant_id, from_outlet_id],
+        );
+        const currentStock = vosRows.length
+          ? Number(vosRows[0].quantity)
+          : null;
+        if (currentStock === null) {
+          const { rows: rollupRows } = await db.query(
+            "SELECT stock FROM product_variants WHERE id = $1",
+            [variant_id],
+          );
+          const rollup = rollupRows.length ? Number(rollupRows[0].stock) : 0;
+          if (rollup < quantity) {
+            return res.status(400).json({
+              error: `Insufficient stock. Only ${rollup} available for this variant.`,
+            });
+          }
+        } else if (currentStock < quantity) {
+          return res.status(400).json({
+            error: `Insufficient stock. Only ${currentStock} available at source outlet.`,
+          });
+        }
+      } else {
+        // Product-level stock check (unchanged)
+        const { rows: stockRows } = await db.query(
+          "SELECT quantity FROM outlet_stock WHERE product_id = $1 AND outlet_id = $2",
+          [product_id, from_outlet_id],
+        );
+        const currentStock = stockRows.length ? stockRows[0].quantity : 0;
+        if (currentStock < quantity) {
+          return res.status(400).json({
+            error: `Insufficient stock. Only ${currentStock} available at source outlet.`,
+          });
+        }
       }
 
       await db.transaction(async (client) => {
-        // 1. Record the transfer
+        // 1. Record the transfer (with optional variant_id)
         await client.query(
-          `INSERT INTO inventory_transfers (product_id, from_outlet_id, to_outlet_id, quantity, employee_id, note)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [product_id, from_outlet_id, to_outlet_id, quantity, employee_id || null, note || null],
+          `INSERT INTO inventory_transfers (product_id, variant_id, from_outlet_id, to_outlet_id, quantity, employee_id, note)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [product_id, variant_id || null, from_outlet_id, to_outlet_id, quantity, employee_id || null, note || null],
         );
 
-        // 2. Deduct from source outlet
+        // 2. Always adjust product-level outlet_stock (keeps legacy rollup honest)
         await client.query(
           "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
           [quantity, product_id, from_outlet_id],
         );
-
-        // 3. Add to destination outlet (upsert)
         await client.query(
           `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
            VALUES ($1, $2, $3)
-           ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
-          [product_id, to_outlet_id, quantity, quantity],
+           ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $3`,
+          [product_id, to_outlet_id, quantity],
         );
+
+        // 3. Variant-aware moves: also update variant_outlet_stock at both
+        // outlets + keep product_variants.stock rollup balanced (transfer is
+        // a zero-sum move across outlets, but we update both outlets'
+        // variant_outlet_stock rows regardless).
+        if (variant_id) {
+          await client.query(
+            `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+               VALUES ($1, $2, 0 - $3::numeric)
+               ON CONFLICT (variant_id, outlet_id)
+               DO UPDATE SET quantity = variant_outlet_stock.quantity - $3::numeric`,
+            [variant_id, from_outlet_id, quantity],
+          );
+          await client.query(
+            `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+               VALUES ($1, $2, $3::numeric)
+               ON CONFLICT (variant_id, outlet_id)
+               DO UPDATE SET quantity = variant_outlet_stock.quantity + $3::numeric`,
+            [variant_id, to_outlet_id, quantity],
+          );
+          // product_variants.stock is the cross-outlet rollup — a transfer
+          // doesn't change it, so no update here.
+        }
       });
 
       enqueueInventorySyncEvents(
         [
           {
             product_id,
+            variant_id: variant_id || null,
             outlet_id: from_outlet_id,
             delta: -1 * Number(quantity || 0),
             reason: "transfer_out",
@@ -124,6 +180,7 @@ module.exports = function registerInventoryRoutes(app, deps) {
           },
           {
             product_id,
+            variant_id: variant_id || null,
             outlet_id: to_outlet_id,
             delta: Number(quantity || 0),
             reason: "transfer_in",
@@ -141,6 +198,8 @@ module.exports = function registerInventoryRoutes(app, deps) {
   });
 
   // Reverse a completed inventory transfer
+  // 2-G.1 follow-up: if the original transfer carried a variant_id, the
+  // reversal mirrors the variant_outlet_stock adjustments at both outlets.
   app.post("/api/transfers/:id/reverse", requirePerm("all_access"), async (req, res) => {
     const { id } = req.params;
     try {
@@ -152,7 +211,7 @@ module.exports = function registerInventoryRoutes(app, deps) {
       const transfer = transferRows[0];
       if (transfer.reversed) return res.status(400).json({ error: "Transfer has already been reversed" });
 
-      const { product_id, from_outlet_id, to_outlet_id, quantity } = transfer;
+      const { product_id, variant_id, from_outlet_id, to_outlet_id, quantity } = transfer;
 
       await db.transaction(async (client) => {
         // Mark original as reversed
@@ -161,25 +220,41 @@ module.exports = function registerInventoryRoutes(app, deps) {
           [id],
         );
 
-        // Deduct from to_outlet (reversal)
+        // Product-level reversal
         await client.query(
           "UPDATE outlet_stock SET quantity = quantity - $1 WHERE product_id = $2 AND outlet_id = $3",
           [quantity, product_id, to_outlet_id],
         );
-
-        // Add back to from_outlet
         await client.query(
           `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
            VALUES ($1, $2, $3)
-           ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
-          [product_id, from_outlet_id, quantity, quantity],
+           ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $3`,
+          [product_id, from_outlet_id, quantity],
         );
 
-        // Insert reversal transfer record
+        // Variant-level reversal (mirrors the original direction)
+        if (variant_id) {
+          await client.query(
+            `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+               VALUES ($1, $2, 0 - $3::numeric)
+               ON CONFLICT (variant_id, outlet_id)
+               DO UPDATE SET quantity = variant_outlet_stock.quantity - $3::numeric`,
+            [variant_id, to_outlet_id, quantity],
+          );
+          await client.query(
+            `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+               VALUES ($1, $2, $3::numeric)
+               ON CONFLICT (variant_id, outlet_id)
+               DO UPDATE SET quantity = variant_outlet_stock.quantity + $3::numeric`,
+            [variant_id, from_outlet_id, quantity],
+          );
+        }
+
+        // Insert reversal transfer record (preserves variant_id for audit)
         await client.query(
-          `INSERT INTO inventory_transfers (product_id, from_outlet_id, to_outlet_id, quantity, employee_id, note, reversed)
-           VALUES ($1, $2, $3, $4, $5, $6, false)`,
-          [product_id, to_outlet_id, from_outlet_id, quantity, transfer.employee_id || null, `Reversal of transfer #${id}`],
+          `INSERT INTO inventory_transfers (product_id, variant_id, from_outlet_id, to_outlet_id, quantity, employee_id, note, reversed)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, false)`,
+          [product_id, variant_id || null, to_outlet_id, from_outlet_id, quantity, transfer.employee_id || null, `Reversal of transfer #${id}`],
         );
       });
 
@@ -194,9 +269,12 @@ module.exports = function registerInventoryRoutes(app, deps) {
   app.get("/api/adjustments", requireAnyPerm(["manage_inventory", "view_reports", "all_access"]), async (req, res) => {
     try {
       const { rows } = await db.query(`
-        SELECT sa.*, p.name as product_name, p.barcode, o.name as outlet_name, e.name as employee_name
+        SELECT sa.*, p.name as product_name, p.barcode,
+               pv.sku as variant_sku,
+               o.name as outlet_name, e.name as employee_name
         FROM stock_adjustments sa
         JOIN products p ON sa.product_id = p.id
+        LEFT JOIN product_variants pv ON sa.variant_id = pv.id
         JOIN outlets o ON sa.outlet_id = o.id
         LEFT JOIN employees e ON sa.employee_id = e.id
         ORDER BY sa.timestamp DESC
@@ -208,7 +286,7 @@ module.exports = function registerInventoryRoutes(app, deps) {
   });
 
   app.post("/api/adjustments", requirePerm("manage_inventory"), validate(CreateAdjustmentSchema), async (req, res) => {
-    const { product_id, outlet_id, employee_id, quantity_change, reason } =
+    const { product_id, variant_id, outlet_id, employee_id, quantity_change, reason } =
       req.body;
 
     if (!product_id || !outlet_id || quantity_change === undefined || !reason) {
@@ -220,28 +298,45 @@ module.exports = function registerInventoryRoutes(app, deps) {
     try {
       let adjustmentId;
       await db.transaction(async (client) => {
-        // Insert adjustment record
+        // Insert adjustment record (with optional variant_id)
         const { rows } = await client.query(
-          `INSERT INTO stock_adjustments (product_id, outlet_id, employee_id, quantity_change, reason)
-           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-          [product_id, outlet_id, employee_id || null, quantity_change, reason],
+          `INSERT INTO stock_adjustments (product_id, variant_id, outlet_id, employee_id, quantity_change, reason)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+          [product_id, variant_id || null, outlet_id, employee_id || null, quantity_change, reason],
         );
         adjustmentId = rows[0].id;
 
-        // Upsert outlet_stock
+        // Upsert product-level outlet_stock (always)
         await client.query(
           `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
            VALUES ($1, $2, $3)
            ON CONFLICT(product_id, outlet_id)
-           DO UPDATE SET quantity = outlet_stock.quantity + $4`,
-          [product_id, outlet_id, quantity_change, quantity_change],
+           DO UPDATE SET quantity = outlet_stock.quantity + $3`,
+          [product_id, outlet_id, quantity_change],
         );
+
+        // 2-G.1 follow-up: variant-scoped adjustment also updates
+        // variant_outlet_stock (upsert) + product_variants.stock rollup.
+        if (variant_id) {
+          await client.query(
+            `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+               VALUES ($1, $2, $3::numeric)
+               ON CONFLICT (variant_id, outlet_id)
+               DO UPDATE SET quantity = variant_outlet_stock.quantity + $3::numeric`,
+            [variant_id, outlet_id, quantity_change],
+          );
+          await client.query(
+            "UPDATE product_variants SET stock = stock + $1 WHERE id = $2",
+            [quantity_change, variant_id],
+          );
+        }
       });
 
       enqueueInventorySyncEvents(
         [
           {
             product_id,
+            variant_id: variant_id || null,
             outlet_id,
             delta: Number(quantity_change || 0),
             reason: "adjustment",
@@ -538,6 +633,21 @@ module.exports = function registerInventoryRoutes(app, deps) {
           "UPDATE outlet_stock SET quantity = quantity + $1 WHERE product_id = $2 AND outlet_id = $3",
           [reversal, adj.product_id, adj.outlet_id],
         );
+        // 2-G.1 follow-up: if the original adjustment targeted a variant,
+        // reverse the variant_outlet_stock + rollup change too.
+        if (adj.variant_id) {
+          await client.query(
+            `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+               VALUES ($1, $2, $3::numeric)
+               ON CONFLICT (variant_id, outlet_id)
+               DO UPDATE SET quantity = variant_outlet_stock.quantity + $3::numeric`,
+            [adj.variant_id, adj.outlet_id, reversal],
+          );
+          await client.query(
+            "UPDATE product_variants SET stock = stock + $1 WHERE id = $2",
+            [reversal, adj.variant_id],
+          );
+        }
         await client.query("DELETE FROM stock_adjustments WHERE id = $1", [id]);
       });
 

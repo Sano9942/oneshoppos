@@ -2,6 +2,7 @@ const { toUtcStart, toUtcEnd } = require("../utils/tz");
 const logger = require("../services/logger");
 const { validate } = require("../middleware/validate");
 const { CreateReturnSchema } = require("../schemas/returns");
+const { getFeatureFlagsMap } = require("../middleware/feature-flags");
 
 module.exports = function registerReturnsRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale } = deps;
@@ -262,6 +263,28 @@ module.exports = function registerReturnsRoutes(app, deps) {
       }
     }
 
+    // 2-G.7: resolve per-line restock feature flag once (gate before tx to
+    // keep the transaction tight). When off, per-line restock_flag /
+    // reason_code_id inputs are ignored — every line restocks as before.
+    let perLineRestockEnabled = false;
+    try {
+      const flags = await getFeatureFlagsMap(req.tenantId);
+      perLineRestockEnabled = !!flags.phase2g_per_line_restock;
+    } catch { /* flag fetch failure → fall back to legacy behavior */ }
+
+    // 2-G.7: if the feature is on, validate that any scrapped line carries a
+    // reason code. We reject up-front (before any DB work) so the caller gets
+    // a clean 400 instead of a mid-transaction abort.
+    if (perLineRestockEnabled) {
+      for (const item of items) {
+        if (item.restock_flag === false && !item.reason_code_id) {
+          return res.status(400).json({
+            error: "reason_code_id is required when restock_flag=false (shrinkage requires a reason)",
+          });
+        }
+      }
+    }
+
     try {
       // Look up the open shift for this outlet
       const { rows: shiftRows } = await db.query(
@@ -295,23 +318,79 @@ module.exports = function registerReturnsRoutes(app, deps) {
         const retId = rows[0].id;
 
         for (const item of items) {
+          // 2-G.7: resolve per-line restock + reason code. Flag-off paths
+          // always restock (legacy behavior) and don't persist reason_code_id.
+          // Flag-on paths honor incoming values; reason_code_id falls back to
+          // the return-level return_reason_id so the line always has a reason
+          // when scrapped (checked earlier before this transaction).
+          const effectiveRestock = perLineRestockEnabled
+            ? item.restock_flag !== false
+            : true;
+          const effectiveReasonCodeId = perLineRestockEnabled
+            ? (item.reason_code_id || return_reason_id || null)
+            : null;
+
           await client.query(
-            "INSERT INTO return_items (return_id, product_id, variant_id, quantity, refund_price) VALUES ($1, $2, $3, $4, $5)",
-            [retId, item.product_id, item.variant_id || null, item.quantity, item.refund_price],
+            `INSERT INTO return_items (return_id, product_id, variant_id, quantity, refund_price, restock_flag, reason_code_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [
+              retId,
+              item.product_id,
+              item.variant_id || null,
+              item.quantity,
+              item.refund_price,
+              effectiveRestock,
+              effectiveReasonCodeId,
+            ],
           );
-          // Restock outlet_stock
-          await client.query(
-            `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
-             VALUES ($1, $2, $3)
-             ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
-            [item.product_id, outlet_id, item.quantity, item.quantity],
-          );
-          // Restock variant stock if applicable
-          if (item.variant_id) {
+
+          // 2-G.7: only increment stock counters when restock=true. Scrapped
+          // units fall through to shrinkage (captured separately in the
+          // returns-by-reason report + inventory/shrinkage variance).
+          if (effectiveRestock) {
+            // Restock outlet_stock
             await client.query(
-              "UPDATE product_variants SET stock = stock + $1 WHERE id = $2",
-              [item.quantity, item.variant_id],
+              `INSERT INTO outlet_stock (product_id, outlet_id, quantity)
+               VALUES ($1, $2, $3)
+               ON CONFLICT(product_id, outlet_id) DO UPDATE SET quantity = outlet_stock.quantity + $4`,
+              [item.product_id, outlet_id, item.quantity, item.quantity],
             );
+            // Restock variant stock if applicable.
+            // 2-G.1: also restock per-variant outlet stock. Keeping the legacy
+            // product_variants.stock column in sync preserves reads that aren't
+            // outlet-aware (reports, barcode scans with no outlet context).
+            if (item.variant_id) {
+              await client.query(
+                "UPDATE product_variants SET stock = stock + $1 WHERE id = $2",
+                [item.quantity, item.variant_id],
+              );
+              await client.query(
+                `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+                   VALUES ($1, $2, $3)
+                   ON CONFLICT (variant_id, outlet_id)
+                   DO UPDATE SET quantity = variant_outlet_stock.quantity + $3`,
+                [item.variant_id, outlet_id, item.quantity],
+              );
+            }
+          }
+
+          // 2-G.6: flip serial status. Warranty-claim items go to
+          // 'warranty_claim' so they're not re-sold through POS; standard
+          // returns go to 'returned' (admin can manually flip to 'available'
+          // after inspection). sale_item_serials bridge rows stay intact for
+          // audit — this unit's full history is traceable through the
+          // original sale even after the serial status changes.
+          if (Array.isArray(item.serials) && item.serials.length > 0) {
+            const serialIds = item.serials.map(Number).filter(Boolean);
+            const newStatus = item.warranty_claim === true ? "warranty_claim" : "returned";
+            if (serialIds.length) {
+              await client.query(
+                `UPDATE product_serial_numbers
+                    SET status = $1
+                  WHERE id = ANY($2::int[])`,
+                [newStatus, serialIds],
+              );
+            }
           }
         }
 

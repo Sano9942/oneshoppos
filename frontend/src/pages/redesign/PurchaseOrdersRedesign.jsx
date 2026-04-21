@@ -103,6 +103,12 @@ export default function PurchaseOrdersRedesign() {
   const [scanError, setScanError] = useState("");
   const [scanLog, setScanLog] = useState([]); // recent scan results
   const scanInputRef = useRef(null);
+  // 2-G.6: when the scanned barcode resolves to a serialized product, we
+  // pause the scan flow and prompt for the serial number before firing the
+  // receive POST. serialPrompt shape: { barcode, productName } | null
+  const [serialPrompt, setSerialPrompt] = useState(null);
+  const [serialInput, setSerialInput] = useState("");
+  const serialInputRef = useRef(null);
 
   // Template state
   const [templates, setTemplates] = useState([]);
@@ -541,56 +547,123 @@ export default function PurchaseOrdersRedesign() {
     }
   }, []);
 
-  const handleScanSubmit = useCallback(async (barcode) => {
-    if (!barcode.trim() || !scanGrnId) return;
-    setScanError("");
+  // 2-G.6: shared success/failure hooks so the serial-prompt path reuses
+  // the same flash + scan-log + audio feedback as a plain scan.
+  const applyScanResult = useCallback((updated) => {
+    setScanItems((prev) =>
+      prev.map((it) =>
+        it.product_id === updated.product_id
+          ? { ...it, qty_received: updated.qty_received }
+          : it
+      )
+    );
+    setScanFlash(updated.product_id);
+    setTimeout(() => setScanFlash(null), 800);
+    setScanLog((prev) => [
+      {
+        product_name: updated.product_name,
+        qty_received: updated.qty_received,
+        qty_ordered: updated.qty_ordered,
+        over_received: updated.over_received,
+        serialized: updated.serialized,
+        time: new Date(),
+      },
+      ...prev.slice(0, 19),
+    ]);
     try {
-      const data = await api.post(`/api/grn/${scanGrnId}/scan-receive`, { barcode: barcode.trim() });
-      const updated = data.item;
-      // Update the item in scanItems
-      setScanItems((prev) =>
-        prev.map((it) =>
-          it.product_id === updated.product_id
-            ? { ...it, qty_received: updated.qty_received }
-            : it
-        )
-      );
-      // Flash the row green
-      setScanFlash(updated.product_id);
-      setTimeout(() => setScanFlash(null), 800);
-      // Add to scan log
-      setScanLog((prev) => [
-        { product_name: updated.product_name, qty_received: updated.qty_received, qty_ordered: updated.qty_ordered, over_received: updated.over_received, time: new Date() },
-        ...prev.slice(0, 19),
-      ]);
-      // Audio beep
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.frequency.value = updated.over_received ? 300 : 880;
-        gain.gain.value = 0.12;
-        osc.start();
-        osc.stop(ctx.currentTime + (updated.over_received ? 0.3 : 0.1));
-      } catch {} // eslint-disable-line no-empty
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = updated.over_received ? 300 : 880;
+      gain.gain.value = 0.12;
+      osc.start();
+      osc.stop(ctx.currentTime + (updated.over_received ? 0.3 : 0.1));
+    } catch {} // eslint-disable-line no-empty
+  }, []);
+
+  const errorBeep = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 200;
+      gain.gain.value = 0.15;
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+    } catch {} // eslint-disable-line no-empty
+  }, []);
+
+  const handleScanSubmit = useCallback(async (barcode) => {
+    const trimmed = barcode.trim();
+    if (!trimmed || !scanGrnId) return;
+    setScanError("");
+
+    // 2-G.6: does this barcode resolve to a serialized item on this GRN?
+    // Match against scanItems which carries serial_required from the GET
+    // /api/grn/:id response. Match against product.barcode or product.sku
+    // (name check is too loose).
+    const matchedItem = scanItems.find(
+      (it) => it.barcode === trimmed || it.sku === trimmed,
+    );
+    if (matchedItem && matchedItem.serial_required) {
+      setSerialPrompt({
+        barcode: trimmed,
+        productName: matchedItem.product_name,
+      });
+      setSerialInput("");
+      setTimeout(() => serialInputRef.current?.focus(), 50);
+      return;
+    }
+
+    try {
+      const data = await api.post(`/api/grn/${scanGrnId}/scan-receive`, {
+        barcode: trimmed,
+      });
+      applyScanResult(data.item);
     } catch (e) {
       setScanError(e.message || "Scan failed");
-      // Error beep
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.frequency.value = 200;
-        gain.gain.value = 0.15;
-        osc.start();
-        osc.stop(ctx.currentTime + 0.4);
-      } catch {} // eslint-disable-line no-empty
+      errorBeep();
     }
-  }, [scanGrnId]);
+  }, [scanGrnId, scanItems, applyScanResult, errorBeep]);
+
+  // 2-G.6: commit a single serial for the currently-open serial prompt.
+  // We receive ONE unit per submission (same model as the rest of the scan
+  // UI — each barcode scan is one unit). For multi-unit bulk receive, the
+  // user scans again.
+  const submitSerialReceive = useCallback(async () => {
+    if (!serialPrompt || !scanGrnId) return;
+    const sn = serialInput.trim();
+    if (!sn) {
+      setScanError("Serial number is required");
+      return;
+    }
+    setScanError("");
+    try {
+      const data = await api.post(`/api/grn/${scanGrnId}/scan-receive`, {
+        barcode: serialPrompt.barcode,
+        quantity: 1,
+        serial_numbers: [sn],
+      });
+      applyScanResult(data.item);
+      setSerialPrompt(null);
+      setSerialInput("");
+      setTimeout(() => scanInputRef.current?.focus(), 50);
+    } catch (e) {
+      setScanError(e.message || "Serial receive failed");
+      errorBeep();
+    }
+  }, [serialPrompt, serialInput, scanGrnId, applyScanResult, errorBeep]);
+
+  const cancelSerialPrompt = useCallback(() => {
+    setSerialPrompt(null);
+    setSerialInput("");
+    setScanError("");
+    setTimeout(() => scanInputRef.current?.focus(), 50);
+  }, []);
 
   if (view === "create") {
     return (
@@ -1001,7 +1074,11 @@ export default function PurchaseOrdersRedesign() {
 
         <Modal
           open={!!scanMode}
-          onClose={() => setScanMode(false)}
+          onClose={() => {
+            setScanMode(false);
+            setSerialPrompt(null);
+            setSerialInput("");
+          }}
           title={<><ScanBarcode size={18} className="mr-2 inline" />Scan &amp; Receive</>}
           size="xl"
         >
@@ -1026,12 +1103,54 @@ export default function PurchaseOrdersRedesign() {
                 );
               })()}
 
+              {/* 2-G.6: serial prompt — shown when a scanned barcode
+                  resolves to a serial_required product. Captures one
+                  serial per scan. */}
+              {serialPrompt ? (
+                <div className="mb-3 rounded border border-violet-200 bg-violet-50 p-3 dark:border-violet-800 dark:bg-violet-950">
+                  <div className="mb-1 text-xs font-semibold text-violet-700 dark:text-violet-300">
+                    Serial required — {serialPrompt.productName}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      ref={serialInputRef}
+                      className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text) placeholder:text-(--ui-text-muted) dark:bg-(--ui-surface)"
+                      placeholder="Scan or type the serial / IMEI"
+                      value={serialInput}
+                      onChange={(e) => setSerialInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          submitSerialReceive();
+                        } else if (e.key === "Escape") {
+                          e.preventDefault();
+                          cancelSerialPrompt();
+                        }
+                      }}
+                      autoFocus
+                    />
+                    <Button tone="primary" onClick={submitSerialReceive}>
+                      Receive
+                    </Button>
+                    <Button onClick={cancelSerialPrompt}>Cancel</Button>
+                  </div>
+                  <p className="mt-1 text-[11px] text-(--ui-text-muted)">
+                    One serial per scan. Scan again for additional units.
+                  </p>
+                </div>
+              ) : null}
+
               {/* Barcode input — plain <input> for ref forwarding */}
               <div className="mb-3">
                 <input
                   ref={scanInputRef}
-                  className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text) placeholder:text-(--ui-text-muted) dark:bg-(--ui-surface)"
-                  placeholder="Scan barcode or type and press Enter..."
+                  className="ui-focus-ring w-full rounded-(--ui-radius-sm) border border-(--ui-border) bg-white px-3 py-2 text-sm text-(--ui-text) placeholder:text-(--ui-text-muted) disabled:cursor-not-allowed disabled:opacity-50 dark:bg-(--ui-surface)"
+                  placeholder={
+                    serialPrompt
+                      ? "Finish serial entry above first…"
+                      : "Scan barcode or type and press Enter..."
+                  }
+                  disabled={!!serialPrompt}
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -1087,7 +1206,14 @@ export default function PurchaseOrdersRedesign() {
                             isFlashing ? "bg-emerald-100 dark:bg-emerald-900" : ""
                           }`}
                         >
-                          <td className="px-3 py-2 text-(--ui-text)">{item.product_name}</td>
+                          <td className="px-3 py-2 text-(--ui-text)">
+                            {item.product_name}
+                            {item.serial_required ? (
+                              <span className="ml-2 inline-flex items-center rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700 dark:bg-violet-900 dark:text-violet-300">
+                                SN
+                              </span>
+                            ) : null}
+                          </td>
                           <td className="px-3 py-2 font-mono text-xs text-(--ui-text-muted)">{item.barcode || "-"}</td>
                           <td className="px-3 py-2 text-center text-(--ui-text)">{ordered}</td>
                           <td className={`px-3 py-2 text-center font-semibold ${isOver ? "text-amber-600" : received > 0 ? "text-emerald-600" : "text-(--ui-text)"}`}>
@@ -1112,7 +1238,13 @@ export default function PurchaseOrdersRedesign() {
               </div>
 
           <ModalFooter>
-            <Button onClick={() => setScanMode(false)}>
+            <Button
+              onClick={() => {
+                setScanMode(false);
+                setSerialPrompt(null);
+                setSerialInput("");
+              }}
+            >
               <CheckCircle2 size={13} className="mr-1 inline" />
               Done
             </Button>

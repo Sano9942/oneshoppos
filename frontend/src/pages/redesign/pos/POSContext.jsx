@@ -102,6 +102,12 @@ export const POSProvider = ({ children }) => {
     }).catch(() => {});
   }, []);
 
+  // ── Price override (Phase 2-G Wave 3 — 2-G.5) ────────────────────────────
+  // Holds the cart line id that the cashier opened the override modal for.
+  // null = modal closed. Actual override metadata is stamped onto the cart
+  // item via applyPriceOverride (defined further down, once cartHook exists).
+  const [priceOverrideLineId, setPriceOverrideLineId] = useState(null);
+
   // ── Loyalty config (Phase 2-G Wave 2 — 2-G.3) ──────────────────────────
   // Replaces the hardcoded 1pt/PKR-100 earn and PKR-10/100pts redeem
   // rates with tenant-configured values. Falls back to the defaults if
@@ -147,7 +153,12 @@ export const POSProvider = ({ children }) => {
   // ── 2-G.0 omni-input pending interlocks (consumed by 2-G.1 variant modal
   //    and 2-G.6 serial modal in later waves; no reader exists today). ──────
   const [pendingVariantProductId, setPendingVariantProductId] = useState(null);
+  // pendingSerial carries either a plain product id (legacy shape) or an
+  // object { product_id, variant_id?, quantity?, cartLine? } so the serial
+  // modal can render N slots and know what cart line to commit on success.
+  // Keep pendingSerialProductId exported for the existing 2-G.0 contract.
   const [pendingSerialProductId, setPendingSerialProductId] = useState(null);
+  const [pendingSerialContext, setPendingSerialContext] = useState(null);
 
   // ── Return / Exchange Modal ──────────────────────────────────────────────
   const [returnModalOpen, setReturnModalOpen] = useState(false);
@@ -168,6 +179,33 @@ export const POSProvider = ({ children }) => {
     posFlags,
     showNotice,
   });
+
+  // ── Price override apply (Phase 2-G Wave 3 — 2-G.5) ─────────────────────
+  // Stamps the override metadata onto a cart line and swaps in the new price.
+  // The backend validates approval_event_id on sale submission.
+  const applyPriceOverride = useCallback(
+    (lineId, { amount, reason_id, approval_event_id, original_price }) => {
+      const newPrice = Number(amount);
+      if (!Number.isFinite(newPrice) || newPrice < 0) return;
+      cartHook.setCart((prev) =>
+        prev.map((x) =>
+          x.id === lineId
+            ? {
+                ...x,
+                originalPrice: x.originalPrice ?? Number(original_price ?? x.price),
+                price: newPrice,
+                price_override: {
+                  original_price: Number(original_price ?? x.originalPrice ?? x.price),
+                  reason_id: reason_id ?? null,
+                  approval_event_id: approval_event_id ?? null,
+                },
+              }
+            : x,
+        ),
+      );
+    },
+    [cartHook],
+  );
 
   // ── Restaurant shell state (Phase 2-R.0) ──────────────────────────────────
   // Additive — retail POS never sets these so all values stay at defaults.
@@ -530,7 +568,20 @@ export const POSProvider = ({ children }) => {
       if (!res.ok) return;
       const data = await res.json();
       const product = data.product;
-      if (product) addToCartWithModifiers(product);
+      if (!product) return;
+      // 2-G.6: serialized products intercept the add-to-cart flow. The
+      // serial modal collects one serial per unit and commits the line
+      // itself (with `serials: [ids]` attached).
+      if (product.serial_required) {
+        setPendingSerialContext({
+          product_id: product.id,
+          variant_id: null,
+          quantity: 1,
+        });
+        setPendingSerialProductId(product.id);
+        return;
+      }
+      addToCartWithModifiers(product);
     } catch (err) {
       console.error("Barcode lookup failed:", err);
     }
@@ -777,6 +828,10 @@ export const POSProvider = ({ children }) => {
     setPendingVariantProductId,
     pendingSerialProductId,
     setPendingSerialProductId,
+    // 2-G.6 — richer pending-serial payload (object form) so the serial
+    // modal can present N slots and know what cart line to commit on success.
+    pendingSerialContext,
+    setPendingSerialContext,
     // Price lists
     priceListItems: cartHook.priceListItems,
     // POS layout + suggestions (Phase 2B)
@@ -804,6 +859,10 @@ export const POSProvider = ({ children }) => {
     setShowGuestMode,
     signatureSvg,
     setSignatureSvg,
+    // Phase 2-G Wave 3 — 2-G.5 price override
+    priceOverrideLineId,
+    setPriceOverrideLineId,
+    applyPriceOverride,
   };
 
   return <POSContext.Provider value={value}>{children}</POSContext.Provider>;

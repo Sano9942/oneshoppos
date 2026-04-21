@@ -1,5 +1,7 @@
 const { toUtcStart, toUtcEnd } = require("../utils/tz");
 const logger = require("../services/logger");
+const { getFeatureFlagsMap } = require("../middleware/feature-flags");
+const { recordApprovalEvent } = require("../services/approval-policy");
 
 module.exports = function registerSalesRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale, path, fs, UPLOADS_DIR } = deps;
@@ -325,14 +327,39 @@ module.exports = function registerSalesRoutes(app, deps) {
                 [item.product_id, sale.outlet_id, restoreQtyInt, restoreQtyInt]
               );
 
-              // Restore variant global stock if item has a variant
+              // Restore variant global stock if item has a variant.
+              // 2-G.1: also restore per-outlet variant stock so matrix view
+              // matches the authoritative cross-outlet rollup.
               if (item.variant_id) {
                 await client.query(
                   `UPDATE product_variants SET stock = stock + $1 WHERE id = $2`,
                   [restoreQtyInt, item.variant_id]
                 );
+                await client.query(
+                  `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+                     VALUES ($1, $2, $3)
+                     ON CONFLICT (variant_id, outlet_id)
+                     DO UPDATE SET quantity = variant_outlet_stock.quantity + $3`,
+                  [item.variant_id, sale.outlet_id, restoreQtyInt]
+                );
               }
             }
+
+            // 2-G.6: release any serials bridged to this sale_item back to
+            // 'available' and clear the warranty dates. The bridge rows stay
+            // intact for history (sale_item_serials is append-only outside
+            // of sale_items cascading delete).
+            await client.query(
+              `UPDATE product_serial_numbers
+                  SET status = 'available',
+                      sale_id = NULL,
+                      warranty_start_date = NULL,
+                      warranty_end_date = NULL
+                WHERE id IN (
+                  SELECT serial_id FROM sale_item_serials WHERE sale_item_id = $1
+                )`,
+              [item.id],
+            );
           }
         });
 
@@ -529,6 +556,174 @@ module.exports = function registerSalesRoutes(app, deps) {
     }
     if (!authenticatedEmployeeId) {
       return res.status(401).json({ error: "Login is required for checkout" });
+    }
+
+    // Phase 2-G Wave 3 (2-G.5) — validate per-line price_override metadata
+    // before the transaction opens. Collects one entry per cart line (same
+    // index) so the INSERT pass can stamp the audit columns without another
+    // round-trip.
+    const overridesByIndex = new Array(cartItems.length).fill(null);
+    const anyOverride = cartItems.some((it) => it && it.price_override);
+    if (anyOverride) {
+      const flags = await getFeatureFlagsMap(req.tenantId);
+      if (!flags.phase2g_price_override) {
+        return res.status(503).json({
+          error: "Feature disabled: phase2g_price_override",
+          flag: "phase2g_price_override",
+        });
+      }
+      const hasPerm =
+        Array.isArray(req.employeePerms) &&
+        (req.employeePerms.includes("all_access") ||
+          req.employeePerms.includes("override_price"));
+      for (let i = 0; i < cartItems.length; i++) {
+        const ov = cartItems[i]?.price_override;
+        if (!ov) continue;
+        const originalPrice = Number(ov.original_price);
+        if (!isFinite(originalPrice) || originalPrice < 0) {
+          return res.status(400).json({ error: "price_override.original_price must be a non-negative number" });
+        }
+        const reasonId = ov.reason_id != null ? Number(ov.reason_id) : null;
+        const approvalEventId =
+          ov.approval_event_id != null ? Number(ov.approval_event_id) : null;
+
+        if (!approvalEventId && !hasPerm) {
+          return res.status(403).json({
+            error: "Manager approval required for price override",
+          });
+        }
+
+        let approvedBy = null;
+        if (approvalEventId) {
+          const { rows } = await db.query(
+            `SELECT id, action_type, status, approved_by
+               FROM approval_events
+              WHERE id = $1`,
+            [approvalEventId]
+          );
+          const ev = rows[0];
+          if (!ev || ev.action_type !== "price_override" || ev.status !== "approved") {
+            return res.status(400).json({ error: "Invalid approval_event_id for price override" });
+          }
+          approvedBy = ev.approved_by;
+        } else {
+          // Manager self-approving via their own session — record an event now
+          // so the audit trail stays consistent.
+          const ev = await recordApprovalEvent(db, {
+            policyId: null,
+            actionType: "price_override",
+            referenceType: "sale_item_pending",
+            referenceId: null,
+            requestedBy: authenticatedEmployeeId,
+            approvedBy: authenticatedEmployeeId,
+            status: "approved",
+            reason: "Self-approved by manager with override_price",
+            metadata: {
+              product_id: cartItems[i].original_product_id || cartItems[i].id || null,
+              variant_id: cartItems[i].variant_id || null,
+              original_price: originalPrice,
+              new_price: Number(cartItems[i].price),
+              reason_id: reasonId,
+            },
+            outletId: outlet_id ?? null,
+          });
+          overridesByIndex[i] = {
+            originalPrice,
+            reasonId,
+            approvedBy: authenticatedEmployeeId,
+            approvalEventId: ev.id,
+          };
+          continue;
+        }
+
+        overridesByIndex[i] = {
+          originalPrice,
+          reasonId,
+          approvedBy,
+          approvalEventId,
+        };
+      }
+    }
+
+    // Phase 2-G Wave 3 (2-G.6) — validate per-line serials before opening
+    // the transaction. For every cart line whose product has
+    // serial_required=true, the POST body must include `serials: number[]`
+    // whose length === quantity. Each serial id must currently be
+    // status='available' and match the line's product (+ variant when
+    // applicable). A serial cannot be reused across two lines in the same
+    // payload.
+    const serialsByIndex = new Array(cartItems.length).fill(null);
+    const productIds = Array.from(
+      new Set(
+        cartItems.map((x) => x.original_product_id || x.id).filter(Boolean),
+      ),
+    );
+    let serialRequiredMap = new Map();
+    if (productIds.length) {
+      const { rows: pr } = await db.query(
+        `SELECT id, serial_required FROM products WHERE id = ANY($1::int[])`,
+        [productIds],
+      );
+      for (const row of pr) {
+        serialRequiredMap.set(Number(row.id), row.serial_required === true);
+      }
+    }
+    const seenSerialIds = new Set();
+    for (let i = 0; i < cartItems.length; i++) {
+      const item = cartItems[i];
+      const productId = Number(item.original_product_id || item.id);
+      const lineQty = Math.floor(Number(item.quantity || 0));
+      const required = serialRequiredMap.get(productId) === true;
+      const provided = Array.isArray(item.serials) ? item.serials.map(Number) : [];
+
+      if (!required) {
+        if (provided.length > 0) {
+          return res.status(400).json({
+            error: `Product ${productId} is not serialized; remove serials from this line`,
+          });
+        }
+        continue;
+      }
+      if (provided.length !== lineQty) {
+        return res.status(400).json({
+          error: `Product ${productId} is serialized — provide exactly ${lineQty} serial id(s) on this line`,
+        });
+      }
+      for (const sid of provided) {
+        if (seenSerialIds.has(sid)) {
+          return res.status(400).json({ error: `Serial id ${sid} used on multiple lines` });
+        }
+        seenSerialIds.add(sid);
+      }
+      const { rows: serialRows } = await db.query(
+        `SELECT id, product_id, variant_id, status, warranty_months
+           FROM product_serial_numbers WHERE id = ANY($1::int[])`,
+        [provided],
+      );
+      if (serialRows.length !== provided.length) {
+        return res.status(400).json({ error: "One or more serial ids not found" });
+      }
+      for (const sr of serialRows) {
+        if (sr.status !== "available") {
+          return res.status(409).json({
+            error: `Serial ${sr.id} is not available (status=${sr.status})`,
+          });
+        }
+        if (Number(sr.product_id) !== productId) {
+          return res.status(400).json({
+            error: `Serial ${sr.id} does not belong to product ${productId}`,
+          });
+        }
+        if (item.variant_id && sr.variant_id && Number(sr.variant_id) !== Number(item.variant_id)) {
+          return res.status(400).json({
+            error: `Serial ${sr.id} does not belong to variant ${item.variant_id}`,
+          });
+        }
+      }
+      serialsByIndex[i] = serialRows.map((r) => ({
+        id: Number(r.id),
+        warranty_months: r.warranty_months != null ? Number(r.warranty_months) : null,
+      }));
     }
 
     let activeShift;
@@ -778,16 +973,36 @@ module.exports = function registerSalesRoutes(app, deps) {
           } else {
             const variantId = item.variant_id || null;
             if (variantId) {
-              const { rows: [row] } = await client.query(
-                `SELECT COALESCE(stock, 0) AS available
-                 FROM product_variants WHERE id = $1 FOR UPDATE`,
-                [variantId]
+              // 2-G.1: per-outlet stock is the authoritative gate when a
+              // variant_outlet_stock row exists; fall back to the rollup
+              // (product_variants.stock) for variants that haven't been
+              // backfilled for this outlet yet (pre-v65 tenants).
+              const { rows: [vos] } = await client.query(
+                `SELECT COALESCE(quantity, 0) AS available
+                   FROM variant_outlet_stock
+                  WHERE variant_id = $1 AND outlet_id = $2
+                  FOR UPDATE`,
+                [variantId, outlet_id]
               );
-              if (!row || row.available < item.quantity) {
-                throw Object.assign(
-                  new Error(`Insufficient stock for variant ${variantId}`),
-                  { statusCode: 400, code: "insufficient_stock" }
+              if (vos) {
+                if (vos.available < item.quantity) {
+                  throw Object.assign(
+                    new Error(`Insufficient stock for variant ${variantId} at this outlet`),
+                    { statusCode: 400, code: "insufficient_stock" }
+                  );
+                }
+              } else {
+                const { rows: [row] } = await client.query(
+                  `SELECT COALESCE(stock, 0) AS available
+                     FROM product_variants WHERE id = $1 FOR UPDATE`,
+                  [variantId]
                 );
+                if (!row || row.available < item.quantity) {
+                  throw Object.assign(
+                    new Error(`Insufficient stock for variant ${variantId}`),
+                    { statusCode: 400, code: "insufficient_stock" }
+                  );
+                }
               }
             } else {
               const productId = item.original_product_id || item.id;
@@ -829,11 +1044,22 @@ module.exports = function registerSalesRoutes(app, deps) {
         const newSaleId = saleRow.id;
 
         // 3. Loop through cart to insert Line Items AND deduct stock
-        for (const item of cartItems) {
+        for (let cartIdx = 0; cartIdx < cartItems.length; cartIdx++) {
+          const item = cartItems[cartIdx];
           // M5: gross_weight/tare_weight persist audit trail for weighted items.
           // Non-weighted items pass null/0 and behave identically to pre-M5.
-          await client.query(
-            "INSERT INTO sale_items (sale_id, product_id, variant_id, quantity, price_at_sale, cost_price_at_sale, gross_weight, tare_weight, staff_id, seat_number) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+          // 2-G.5: price_override_* columns are NULL unless an override was
+          // validated in the pre-transaction pass (overridesByIndex).
+          const ov = overridesByIndex[cartIdx];
+          const { rows: [insertedLine] } = await client.query(
+            `INSERT INTO sale_items
+               (sale_id, product_id, variant_id, quantity, price_at_sale,
+                cost_price_at_sale, gross_weight, tare_weight, staff_id, seat_number,
+                price_override_amount, price_override_reason_id,
+                price_override_approved_by, price_override_approved_at,
+                price_override_approval_event_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+             RETURNING id`,
             [
               newSaleId,
               item.original_product_id || item.id,
@@ -848,8 +1074,43 @@ module.exports = function registerSalesRoutes(app, deps) {
               // 2-R.8: seat_number carried from the draft_order item (dine-in
               // checks stamp this via SeatCoursePicker); retail carts pass null.
               item.seat_number != null ? Number(item.seat_number) : null,
+              ov ? ov.originalPrice : null,
+              ov ? ov.reasonId : null,
+              ov ? ov.approvedBy : null,
+              ov ? new Date() : null,
+              ov ? ov.approvalEventId : null,
             ]
           );
+          const saleItemId = insertedLine.id;
+
+          // 2-G.6: stamp each scanned serial — insert bridge row, flip status
+          // to 'sold', populate warranty_start_date (today) + compute
+          // warranty_end_date from the warranty_months snapshot. sale_id is
+          // kept populated on product_serial_numbers as a deprecation cushion
+          // until Phase 3 drops it.
+          const serialList = serialsByIndex[cartIdx];
+          if (serialList && serialList.length) {
+            for (const sr of serialList) {
+              await client.query(
+                `INSERT INTO sale_item_serials (sale_item_id, serial_id)
+                   VALUES ($1, $2)`,
+                [saleItemId, sr.id],
+              );
+              const months = sr.warranty_months;
+              await client.query(
+                `UPDATE product_serial_numbers
+                    SET status = 'sold',
+                        sale_id = $1,
+                        warranty_start_date = CURRENT_DATE,
+                        warranty_end_date = CASE
+                          WHEN $2::int IS NULL THEN NULL
+                          ELSE CURRENT_DATE + ($2::int * INTERVAL '1 month')
+                        END
+                  WHERE id = $3`,
+                [newSaleId, months, sr.id],
+              );
+            }
+          }
 
           // v45: stock columns are NUMERIC(10,3) — deduct the exact sold quantity,
           // no rounding. Weighted sales (e.g. 1.25 kg) deduct 1.25 from stock.
@@ -873,6 +1134,17 @@ module.exports = function registerSalesRoutes(app, deps) {
               );
             }
           } else if (item.variant_id) {
+            // 2-G.1: deduct per-variant outlet stock (upsert creates the row
+            // if this variant hasn't been stocked at this outlet yet).
+            // product_variants.stock stays in sync as a cross-outlet rollup
+            // so legacy reads (and outlet-unaware callers) still work.
+            await client.query(
+              `INSERT INTO variant_outlet_stock (variant_id, outlet_id, quantity)
+                 VALUES ($1, $2, 0 - $3::numeric)
+                 ON CONFLICT (variant_id, outlet_id)
+                 DO UPDATE SET quantity = variant_outlet_stock.quantity - $3::numeric`,
+              [item.variant_id, outlet_id, stockDeductQty]
+            );
             await client.query(
               "UPDATE product_variants SET stock = stock - $1 WHERE id = $2",
               [stockDeductQty, item.variant_id]

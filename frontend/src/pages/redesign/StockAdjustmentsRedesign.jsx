@@ -41,11 +41,25 @@ export default function StockAdjustmentsRedesign() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({
     product_id: "",
+    variant_id: "",
     outlet_id: "",
     quantity_change: "",
     reason: "Damaged",
   });
   const [saving, setSaving] = useState(false);
+  // 2-G.1 follow-up: pull variants when a product with variants is picked.
+  const [productVariants, setProductVariants] = useState([]);
+
+  useEffect(() => {
+    if (!form.product_id) {
+      setProductVariants([]);
+      return;
+    }
+    api
+      .get(`/api/products/${form.product_id}/variants`)
+      .then((d) => setProductVariants(Array.isArray(d?.variants) ? d.variants : []))
+      .catch(() => setProductVariants([]));
+  }, [form.product_id]);
 
   const load = async () => {
     setLoading(true);
@@ -91,10 +105,12 @@ export default function StockAdjustmentsRedesign() {
     const preferred = ctxOutletId && outlets.find((o) => String(o.id) === ctxOutletId);
     setForm({
       product_id: "",
+      variant_id: "",
       outlet_id: preferred ? ctxOutletId : outlets[0] ? String(outlets[0].id) : "",
       quantity_change: "",
       reason: "Damaged",
     });
+    setProductVariants([]);
     setModalOpen(true);
   };
 
@@ -105,6 +121,7 @@ export default function StockAdjustmentsRedesign() {
     try {
       await api.post("/api/adjustments", {
         product_id: Number(form.product_id),
+        variant_id: form.variant_id ? Number(form.variant_id) : null,
         outlet_id: Number(form.outlet_id),
         employee_id: employee?.id || null,
         quantity_change: Number(form.quantity_change),
@@ -182,7 +199,9 @@ export default function StockAdjustmentsRedesign() {
                   <td className="px-3 py-2 text-(--ui-text-muted)">{fmtDate(r.timestamp)}</td>
                   <td className="px-3 py-2">
                     <p className="font-medium text-(--ui-text)">{r.product_name}</p>
-                    <p className="text-xs text-(--ui-text-muted)">{r.barcode || "-"}</p>
+                    <p className="text-xs text-(--ui-text-muted)">
+                      {r.variant_sku ? r.variant_sku : (r.barcode || "-")}
+                    </p>
                   </td>
                   <td className="px-3 py-2 text-(--ui-text-muted)">{r.outlet_name}</td>
                   <td className="px-3 py-2"><Badge>{r.reason}</Badge></td>
@@ -213,12 +232,25 @@ export default function StockAdjustmentsRedesign() {
         size="md"
       >
         <form className="space-y-2" onSubmit={save}>
-          <Select required value={form.product_id} onChange={(e) => setForm((p) => ({ ...p, product_id: e.target.value }))}>
+          <Select required value={form.product_id} onChange={(e) => setForm((p) => ({ ...p, product_id: e.target.value, variant_id: "" }))}>
             <option value="">Select product</option>
             {products.map((p) => (
               <option key={p.id} value={p.id}>{p.name} ({p.barcode || p.sku || "-"})</option>
             ))}
           </Select>
+          {productVariants.length > 0 && (
+            <Select value={form.variant_id} onChange={(e) => setForm((p) => ({ ...p, variant_id: e.target.value }))}>
+              <option value="">Product-level (all variants)</option>
+              {productVariants.map((v) => {
+                const label = (v.options || []).map((o) => o.option_value).filter(Boolean).join(" / ");
+                return (
+                  <option key={v.id} value={v.id}>
+                    {v.sku}{label ? ` — ${label}` : ""}
+                  </option>
+                );
+              })}
+            </Select>
+          )}
           <Select required value={form.outlet_id} onChange={(e) => setForm((p) => ({ ...p, outlet_id: e.target.value }))}>
             <option value="">Select outlet</option>
             {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
