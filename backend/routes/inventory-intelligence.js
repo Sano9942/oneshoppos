@@ -106,6 +106,115 @@ module.exports = function registerInventoryIntelligenceRoutes(app, deps) {
     }
   );
 
+  // GET /api/inventory-intelligence/abc
+  // Paginated list from the nightly rollup. Supports rank filter, search by
+  // product name, and a dead_stock_only toggle. Sorted by revenue
+  // contribution desc so the highest-value rows come first; NULL ranks
+  // (zero-revenue products) sort to the bottom.
+  app.get(
+    "/api/inventory-intelligence/abc",
+    feat,
+    requirePerm("manage_inventory"),
+    async (req, res) => {
+      try {
+        const { rank, dead_stock_only, search } = req.query;
+        const limit = Math.min(parseInt(req.query.limit || "50", 10), 500);
+        const offset = Math.max(parseInt(req.query.offset || "0", 10), 0);
+
+        const where = ["1=1"];
+        const params = [];
+        if (rank && ["A", "B", "C"].includes(rank)) {
+          params.push(rank);
+          where.push(`abc.rank = $${params.length}`);
+        }
+        if (dead_stock_only === "true") {
+          where.push(`abc.days_since_last_sale >= 90`);
+        } else {
+          // When not filtering dead-stock-only, require an abc row at all so
+          // products never touched by the worker don't leak into the list.
+          where.push(`abc.product_id IS NOT NULL`);
+        }
+        if (search) {
+          params.push(`%${search}%`);
+          where.push(`p.name ILIKE $${params.length}`);
+        }
+        params.push(limit, offset);
+
+        const sql = `
+          SELECT p.id AS product_id, p.name, p.sku,
+                 abc.rank, abc.revenue_contribution_pct, abc.units_sold,
+                 abc.sell_through_rate, abc.gmroi, abc.daily_velocity,
+                 abc.days_since_last_sale, abc.computed_at
+            FROM product_abc_class abc
+            JOIN products p ON p.id = abc.product_id
+           WHERE ${where.join(" AND ")}
+             AND COALESCE(p.status, 'active') = 'active'
+             AND p.deleted_at IS NULL
+           ORDER BY abc.revenue_contribution_pct DESC NULLS LAST, p.name ASC
+           LIMIT $${params.length - 1} OFFSET $${params.length}
+        `;
+        const { rows } = await db.query(sql, params);
+        res.json({ items: rows });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    }
+  );
+
+  // GET /api/inventory-intelligence/dashboard-cards
+  // Four card payloads for the hub header. Each is an indexed query; total
+  // budget <500ms per design. Safe to call on every hub load.
+  app.get(
+    "/api/inventory-intelligence/dashboard-cards",
+    feat,
+    requirePerm("manage_inventory"),
+    async (req, res) => {
+      try {
+        const [reorder, nextCount, deadStock, valueAtRisk] = await Promise.all([
+          // Reorder count — any product whose current stock falls below its
+          // velocity-based threshold. Uses same lead-time + safety fallback
+          // as the reorder endpoint (product override → default 7/3).
+          db.query(
+            `SELECT COUNT(DISTINCT p.id)::int AS c
+               FROM products p
+               JOIN product_abc_class abc ON abc.product_id = p.id AND abc.variant_id IS NULL
+               JOIN outlet_stock os ON os.product_id = p.id
+              WHERE abc.daily_velocity IS NOT NULL
+                AND abc.daily_velocity > 0
+                AND os.quantity < abc.daily_velocity
+                  * (COALESCE(p.lead_time_days_override, 7) + COALESCE(p.safety_stock_days, 3))
+                AND COALESCE(p.status, 'active') = 'active'
+                AND p.deleted_at IS NULL`
+          ),
+          db.query(
+            `SELECT MIN(next_due_date) AS next
+               FROM cycle_count_schedules WHERE is_active = TRUE`
+          ),
+          db.query(
+            `SELECT COUNT(*)::int AS c
+               FROM product_abc_class WHERE days_since_last_sale >= 90`
+          ),
+          db.query(
+            `SELECT COALESCE(SUM(os.quantity * p.cost_price), 0) AS v
+               FROM product_abc_class abc
+               JOIN products p ON p.id = abc.product_id
+               JOIN outlet_stock os ON os.product_id = p.id
+              WHERE abc.days_since_last_sale >= 90`
+          ),
+        ]);
+
+        res.json({
+          reorder_count: reorder.rows[0].c,
+          next_cycle_count: nextCount.rows[0].next,
+          dead_stock_count: deadStock.rows[0].c,
+          stock_value_at_risk: Number(valueAtRisk.rows[0].v) || 0,
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    }
+  );
+
   // POST /api/inventory-intelligence/reorder/create-po
   // Creates a Draft PO from a list of reorder line items for ONE supplier.
   // The frontend groups selections by supplier and calls this per supplier
