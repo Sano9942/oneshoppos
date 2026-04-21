@@ -521,13 +521,29 @@ CREATE TABLE IF NOT EXISTS returns (
   gateway_refund_ref TEXT
 );
 
+-- return_reasons must precede return_items because return_items.reason_code_id
+-- FKs to it. The richer lookup table is re-defined further down (Phase 2A
+-- block) — this early CREATE IF NOT EXISTS is a forward-declaration sized to
+-- satisfy the FK. The later definition is a no-op via IF NOT EXISTS.
+CREATE TABLE IF NOT EXISTS return_reasons (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  label TEXT NOT NULL,
+  requires_note BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT TRUE,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS return_items (
   id SERIAL PRIMARY KEY,
   return_id INTEGER NOT NULL REFERENCES returns(id),
   product_id INTEGER NOT NULL REFERENCES products(id),
   variant_id INTEGER REFERENCES product_variants(id),
   quantity NUMERIC(10,3) NOT NULL,
-  refund_price NUMERIC(12,2) NOT NULL
+  refund_price NUMERIC(12,2) NOT NULL,
+  restock_flag BOOLEAN NOT NULL DEFAULT true,
+  reason_code_id INTEGER REFERENCES return_reasons(id)
 );
 
 -- ── Purchase Orders & GRN ─────────────────────────────────────────────

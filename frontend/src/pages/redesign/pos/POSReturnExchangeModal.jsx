@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { X, Search, Plus, Minus, RotateCcw, ShoppingCart } from "lucide-react";
+import { X, Search, Plus, Minus, RotateCcw, ShoppingCart, AlertTriangle } from "lucide-react";
 import { api } from "../../../api";
 import { usePOS } from "./POSContext";
 import { useCurrency } from "../../../contexts/CurrencyContext";
@@ -17,7 +17,13 @@ export default function POSReturnExchangeModal() {
     outlets,
     showNotice,
     setError,
+    posFlags,
   } = usePOS();
+
+  // 2-G.7: gate per-line restock controls on the tenant flag. When off, the
+  // modal renders its legacy UI and backend ignores any restock_flag /
+  // reason_code_id values we might send.
+  const perLineRestockOn = !!posFlags?.phase2g_per_line_restock;
 
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [saleLoading, setSaleLoading] = useState(false);
@@ -33,6 +39,18 @@ export default function POSReturnExchangeModal() {
   const [policyQuote, setPolicyQuote] = useState(null);
   const [showApproval, setShowApproval] = useState(false);
   const [approvalEventId, setApprovalEventId] = useState(null);
+
+  // 2-G.7: per-line restock + per-line reason override, keyed by product_id.
+  // Defaults populated when items load. When the flag is off these states
+  // remain empty and are ignored at submit time.
+  const [lineRestock, setLineRestock] = useState({});
+  const [lineReasonId, setLineReasonId] = useState({});
+
+  // 2-G.7 fold-in: serial picker state. `saleSerials` is the full list of
+  // serials tied to the original sale (fetched once on load). `lineSerialIds`
+  // stores the chosen serial ids per product_id.
+  const [saleSerials, setSaleSerials] = useState([]);
+  const [lineSerialIds, setLineSerialIds] = useState({});
 
   useEffect(() => {
     api.get("/api/return-reasons").then(r => setReturnReasons(r.reasons || [])).catch(() => {});
@@ -64,6 +82,10 @@ export default function POSReturnExchangeModal() {
       setExResults([]);
       setExchangeItems([]);
       setSettleMethod("Cash");
+      setLineRestock({});
+      setLineReasonId({});
+      setSaleSerials([]);
+      setLineSerialIds({});
     } else if (returnSourceSale) {
       loadSaleDetail(returnSourceSale.id);
     }
@@ -83,8 +105,26 @@ export default function POSReturnExchangeModal() {
       }));
       setReturnItems(items);
       const defaultQtys = {};
-      items.forEach((i) => { defaultQtys[i.product_id] = i.maxQty; });
+      const defaultRestock = {};
+      items.forEach((i) => {
+        defaultQtys[i.product_id] = i.maxQty;
+        defaultRestock[i.product_id] = true; // 2-G.7: default ON
+      });
       setReturnQtys(defaultQtys);
+      setLineRestock(defaultRestock);
+      setLineReasonId({});
+      setLineSerialIds({});
+
+      // 2-G.7 fold-in: fetch serials sold on this invoice so the cashier can
+      // pick the specific unit(s) being returned. Silent-fail on 404/500
+      // (older sales may not have any serials, or the serials endpoint may
+      // return empty on tenants without serialized inventory enabled).
+      try {
+        const serialData = await api.get(`/api/sales/${saleId}/serials`);
+        setSaleSerials(serialData.serials || []);
+      } catch {
+        setSaleSerials([]);
+      }
     } catch (e) {
       setError(e.message || "Failed to load sale");
     } finally {
@@ -181,12 +221,42 @@ export default function POSReturnExchangeModal() {
   const handleComplete = async () => {
     const selectedItems = returnItems
       .filter((i) => Number(returnQtys[i.product_id] || 0) > 0)
-      .map((i) => ({
-        product_id: i.product_id,
-        variant_id: i.variant_id || null,
-        quantity: Number(returnQtys[i.product_id]),
-        refund_price: i.price,
-      }));
+      .map((i) => {
+        const base = {
+          product_id: i.product_id,
+          variant_id: i.variant_id || null,
+          quantity: Number(returnQtys[i.product_id]),
+          refund_price: i.price,
+        };
+        // 2-G.7: only attach per-line restock + reason when the feature is on.
+        // Backend ignores these fields when the flag is off, but not sending
+        // them avoids misleading payloads in request logs.
+        if (perLineRestockOn) {
+          const restock = lineRestock[i.product_id] !== false;
+          base.restock_flag = restock;
+          const reasonId = lineReasonId[i.product_id]
+            || (selectedReasonId ? Number(selectedReasonId) : null);
+          if (reasonId) base.reason_code_id = Number(reasonId);
+        }
+        // 2-G.7 fold-in: attach chosen serial ids so backend flips their
+        // status from sold → returned.
+        const serials = lineSerialIds[i.product_id];
+        if (Array.isArray(serials) && serials.length > 0) {
+          base.serials = serials;
+        }
+        return base;
+      });
+
+    // 2-G.7: client-side guard matching the backend — scrapped lines require
+    // a reason. Surface the error before we hit the API round-trip.
+    if (perLineRestockOn) {
+      for (const it of selectedItems) {
+        if (it.restock_flag === false && !it.reason_code_id) {
+          setError("Every scrapped item needs a reason code. Pick one per line (or set the header reason).");
+          return;
+        }
+      }
+    }
 
     if (selectedItems.length === 0 && mode === "refund") {
       setError("Select at least one item to return.");
@@ -344,34 +414,127 @@ export default function POSReturnExchangeModal() {
 
           {resolvedSale && returnItems.length > 0 && (
             <div>
-              <p className="text-xs font-semibold uppercase text-slate-400 mb-2">
-                Return Items from {resolvedSale.invoice_number}
-              </p>
-              <div className="space-y-2">
-                {returnItems.map((item) => (
-                  <div key={item.product_id} className="flex items-center justify-between gap-3 p-2 border border-slate-100 rounded-lg">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-800 truncate">{item.name}</p>
-                      <p className="text-xs text-slate-400">{money(item.price)} each</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setReturnQtys((q) => ({ ...q, [item.product_id]: Math.max(0, (q[item.product_id] || 0) - 1) }))}
-                        className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100"
-                      >
-                        <Minus size={12} />
-                      </button>
-                      <span className="w-6 text-center text-sm font-medium">{returnQtys[item.product_id] || 0}</span>
-                      <button
-                        onClick={() => setReturnQtys((q) => ({ ...q, [item.product_id]: Math.min(item.maxQty, (q[item.product_id] || 0) + 1) }))}
-                        className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100"
-                      >
-                        <Plus size={12} />
-                      </button>
-                      <span className="text-xs text-slate-400 w-12 text-right">of {item.maxQty}</span>
-                    </div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold uppercase text-slate-400">
+                  Return Items from {resolvedSale.invoice_number}
+                </p>
+                {perLineRestockOn && (
+                  <div className="flex gap-1 text-xs">
+                    <button
+                      onClick={() => setLineRestock(Object.fromEntries(returnItems.map((i) => [i.product_id, true])))}
+                      className="px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-50"
+                    >
+                      All Restock ON
+                    </button>
+                    <button
+                      onClick={() => setLineRestock(Object.fromEntries(returnItems.map((i) => [i.product_id, false])))}
+                      className="px-2 py-1 rounded border border-amber-200 text-amber-700 hover:bg-amber-50"
+                    >
+                      All Restock OFF
+                    </button>
                   </div>
-                ))}
+                )}
+              </div>
+              <div className="space-y-2">
+                {returnItems.map((item) => {
+                  const restock = lineRestock[item.product_id] !== false;
+                  const itemSerials = saleSerials.filter((s) => s.product_id === item.product_id);
+                  const chosenSerials = lineSerialIds[item.product_id] || [];
+                  return (
+                    <div
+                      key={item.product_id}
+                      className={`p-2 border rounded-lg ${perLineRestockOn && !restock ? "border-amber-200 bg-amber-50/40" : "border-slate-100"}`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-800 truncate">{item.name}</p>
+                          <p className="text-xs text-slate-400">{money(item.price)} each</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setReturnQtys((q) => ({ ...q, [item.product_id]: Math.max(0, (q[item.product_id] || 0) - 1) }))}
+                            className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100"
+                          >
+                            <Minus size={12} />
+                          </button>
+                          <span className="w-6 text-center text-sm font-medium">{returnQtys[item.product_id] || 0}</span>
+                          <button
+                            onClick={() => setReturnQtys((q) => ({ ...q, [item.product_id]: Math.min(item.maxQty, (q[item.product_id] || 0) + 1) }))}
+                            className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100"
+                          >
+                            <Plus size={12} />
+                          </button>
+                          <span className="text-xs text-slate-400 w-12 text-right">of {item.maxQty}</span>
+                        </div>
+                      </div>
+
+                      {perLineRestockOn && (
+                        <div className="mt-2 flex items-center gap-3 flex-wrap">
+                          <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={restock}
+                              onChange={(e) => setLineRestock((m) => ({ ...m, [item.product_id]: e.target.checked }))}
+                              className="accent-violet-600"
+                            />
+                            Restock
+                          </label>
+                          <select
+                            value={lineReasonId[item.product_id] || ""}
+                            onChange={(e) => setLineReasonId((m) => ({ ...m, [item.product_id]: e.target.value ? Number(e.target.value) : null }))}
+                            className="flex-1 min-w-35 text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-violet-300"
+                          >
+                            <option value="">Reason (defaults to header)</option>
+                            {returnReasons.map((r) => (
+                              <option key={r.id} value={r.id}>{r.label}</option>
+                            ))}
+                          </select>
+                          {!restock && (
+                            <span
+                              title="This item will be scrapped (logged for shrinkage)"
+                              className="flex items-center gap-1 text-xs text-amber-700"
+                            >
+                              <AlertTriangle size={12} /> Scrap
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {itemSerials.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-xs text-slate-400 mb-1">Serial numbers on this invoice:</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {itemSerials.map((s) => {
+                              const active = chosenSerials.includes(s.id);
+                              return (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  onClick={() => setLineSerialIds((m) => {
+                                    const current = m[item.product_id] || [];
+                                    return {
+                                      ...m,
+                                      [item.product_id]: active
+                                        ? current.filter((id) => id !== s.id)
+                                        : [...current, s.id],
+                                    };
+                                  })}
+                                  className={`px-2 py-0.5 rounded text-xs border transition ${
+                                    active
+                                      ? "border-violet-500 bg-violet-50 text-violet-700"
+                                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                                  }`}
+                                >
+                                  {s.serial_number}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

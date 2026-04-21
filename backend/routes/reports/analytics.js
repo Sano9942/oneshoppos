@@ -841,4 +841,71 @@ module.exports = function (app, deps, helpers) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // 2-G.7: Returns by reason — aggregates return_items by reason code +
+  // product + supplier so ops can spot patterns (e.g. "defective blender
+  // returns spiked this month — flag supplier X"). Splits restocked vs
+  // scrapped so the shrinkage vector is visible alongside the refund
+  // impact. UTC timestamp range matches the canonical returns filter.
+  app.get("/api/reports/returns-by-reason", async (req, res) => {
+    try {
+      const tz = req.company?.timezone || "UTC";
+      const { date_from, date_to, outlet_id, supplier_id } = req.query;
+
+      const utcStart = toUtcStart(date_from, tz);
+      const utcEnd = toUtcEnd(date_to, tz);
+
+      const where = ["r.timestamp >= $1", "r.timestamp < $2"];
+      const params = [utcStart, utcEnd];
+
+      if (outlet_id) {
+        const ids = String(outlet_id).split(",").map(Number).filter(Boolean);
+        if (ids.length === 1) {
+          where.push(`r.outlet_id = $${params.length + 1}`);
+          params.push(ids[0]);
+        } else if (ids.length > 1) {
+          const placeholders = ids
+            .map((_, i) => `$${params.length + 1 + i}`)
+            .join(",");
+          where.push(`r.outlet_id IN (${placeholders})`);
+          params.push(...ids);
+        }
+      }
+      if (supplier_id) {
+        where.push(`p.supplier_id = $${params.length + 1}`);
+        params.push(Number(supplier_id));
+      }
+
+      const sql = `
+        SELECT
+          COALESCE(rr.id, 0) AS reason_id,
+          COALESCE(rr.code, 'unspecified') AS reason_code,
+          COALESCE(rr.label, 'Unspecified') AS reason_label,
+          p.id AS product_id,
+          p.name AS product_name,
+          p.sku,
+          p.barcode,
+          sup.id AS supplier_id,
+          sup.name AS supplier_name,
+          SUM(CASE WHEN ri.restock_flag IS NOT FALSE THEN ri.quantity ELSE 0 END) AS qty_restocked,
+          SUM(CASE WHEN ri.restock_flag = FALSE THEN ri.quantity ELSE 0 END) AS qty_scrapped,
+          SUM(ri.quantity) AS qty_total,
+          SUM(ri.quantity * ri.refund_price) AS refund_total,
+          COUNT(DISTINCT r.id) AS return_count
+        FROM return_items ri
+        JOIN returns r ON r.id = ri.return_id
+        JOIN products p ON p.id = ri.product_id
+        LEFT JOIN suppliers sup ON sup.id = p.supplier_id
+        LEFT JOIN return_reasons rr ON rr.id = ri.reason_code_id
+        WHERE ${where.join(" AND ")}
+        GROUP BY rr.id, rr.code, rr.label, p.id, p.name, p.sku, p.barcode, sup.id, sup.name
+        ORDER BY qty_scrapped DESC NULLS LAST, qty_total DESC
+      `;
+
+      const { rows } = await db.query(sql, params);
+      res.json({ rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 };

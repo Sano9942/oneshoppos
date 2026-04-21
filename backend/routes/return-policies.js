@@ -66,7 +66,11 @@ module.exports = function registerReturnPolicyRoutes(app, deps) {
 
   // ── Return Reasons CRUD ───────────────────────────────────────────────────
 
-  app.get("/api/return-reasons", feat, async (req, res) => {
+  // 2-G.7: reason list is a plain lookup — ungated so the POS returns modal
+  // can populate its per-line reason dropdown under phase2g_per_line_restock
+  // even when phase2_returns_policy is off. CRUD below stays gated since
+  // those are tenant-admin workflows.
+  app.get("/api/return-reasons", requirePerm("manage_orders"), async (req, res) => {
     try {
       const { rows } = await db.query(
         "SELECT * FROM return_reasons WHERE is_active = TRUE ORDER BY sort_order ASC, label ASC"

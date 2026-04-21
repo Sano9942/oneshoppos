@@ -9,6 +9,11 @@ const ReturnItemSchema = z.object({
   // instead of the default 'returned'.
   serials: z.array(z.coerce.number().int().positive()).optional(),
   warranty_claim: z.coerce.boolean().optional(),
+  // 2-G.7: per-line restock toggle + reason code. Only honored when
+  // phase2g_per_line_restock is enabled; otherwise the route ignores both
+  // and defaults to the legacy restock-everything behavior.
+  restock_flag: z.coerce.boolean().optional(),
+  reason_code_id: z.coerce.number().int().positive().optional().nullable(),
 }).passthrough(); // preserve variant_id, name, etc.
 
 // POST /api/returns

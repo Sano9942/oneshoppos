@@ -5107,6 +5107,46 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 68,
+    description:
+      "Phase 2-G Wave 3 — 2-G.7 per-line restock toggle + reason codes: return_items.restock_flag/reason_code_id, seed default return_reasons",
+    up: async (client) => {
+      // 2-G.7: per-line restock control. Default true keeps existing behavior
+      // (all returned items go back to stock) — tenant flips the flag off
+      // per-line to log damaged/scrapped units. reason_code_id defaults to
+      // the return-level reason in the application layer; the column stays
+      // nullable so seed data + old code paths still insert cleanly.
+      await client.query(
+        `ALTER TABLE return_items
+           ADD COLUMN IF NOT EXISTS restock_flag BOOLEAN NOT NULL DEFAULT true`
+      );
+      await client.query(
+        `ALTER TABLE return_items
+           ADD COLUMN IF NOT EXISTS reason_code_id INTEGER REFERENCES return_reasons(id)`
+      );
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_return_items_restock_flag
+          ON return_items(restock_flag)
+          WHERE restock_flag = false
+      `);
+
+      // 2-G.7: seed default reason codes. The return_reasons table ships
+      // empty in public schema; without seed data the per-line dropdown has
+      // nothing to populate. ON CONFLICT DO NOTHING makes this idempotent +
+      // safe for tenants that already curated their own reasons.
+      await client.query(`
+        INSERT INTO return_reasons (code, label, sort_order) VALUES
+          ('damaged', 'Damaged', 10),
+          ('defective', 'Defective', 20),
+          ('wrong_item', 'Wrong item', 30),
+          ('customer_changed_mind', 'Customer changed mind', 40),
+          ('sizing_issue', 'Sizing issue', 50),
+          ('other', 'Other', 60)
+        ON CONFLICT (code) DO NOTHING
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {
