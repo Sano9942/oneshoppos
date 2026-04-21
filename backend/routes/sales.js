@@ -590,12 +590,19 @@ module.exports = function registerSalesRoutes(app, deps) {
     // Hoisted so the post-commit loyalty ledger writer at the end of the
     // transaction block can see whether phase2g_loyalty was on for this sale.
     let loyaltyFlagOn = false;
+    // Phase 2-G Wave 2 (2-G.2) — populated inside the transaction when
+    // cart lines with products.is_gift_card_sku=true are sold; used
+    // AFTER commit to enqueue the recipient email so a rolled-back sale
+    // doesn't send a phantom code.
+    let issuedCards = [];
+    let giftCardsFlagOn = false;
     try {
       const { getFeatureFlagsMap } = require("../middleware/feature-flags");
       const flags = await getFeatureFlagsMap(req.tenantId);
       const pbOn = !!flags.phase2g_price_books;
       const loyaltyOn = !!flags.phase2g_loyalty;
       loyaltyFlagOn = loyaltyOn;
+      giftCardsFlagOn = !!flags.phase2g_gift_cards;
       if ((pbOn || loyaltyOn) && customer_id) {
         const pricing = require("../services/pricing");
         const { group, tier } = await pricing.resolveCustomerPricing({
@@ -898,6 +905,64 @@ module.exports = function registerSalesRoutes(app, deps) {
               throw Object.assign(new Error("Card payment processing failed: " + gwErr.message), { statusCode: 402 });
             }
           }
+
+          // Phase 2-G Wave 2 (2-G.2) — gift-card tender. Redeem the
+          // card row inside this transaction; any failure (bad code,
+          // insufficient balance, card depleted) throws with statusCode
+          // and rolls the whole sale back.
+          if (payment.method === "gift_card") {
+            const code = String(payment.code || payment.reference || "").trim();
+            const amt = Number(payment.amount);
+            if (!code) {
+              throw Object.assign(
+                new Error("gift_card tender requires a code"),
+                { statusCode: 400 },
+              );
+            }
+            const { rows: [card] } = await client.query(
+              `SELECT id, activation_status,
+                      remaining_value::numeric AS remaining_value
+                 FROM gift_cards WHERE code = $1 FOR UPDATE`,
+              [code],
+            );
+            if (!card) {
+              throw Object.assign(new Error("Gift card not found"), {
+                statusCode: 404,
+              });
+            }
+            if (card.activation_status !== "active") {
+              throw Object.assign(
+                new Error(`Gift card is ${card.activation_status}`),
+                { statusCode: 400 },
+              );
+            }
+            if (amt > Number(card.remaining_value)) {
+              throw Object.assign(
+                new Error(
+                  `Gift card balance (${Number(card.remaining_value)}) < amount (${amt})`,
+                ),
+                { statusCode: 400 },
+              );
+            }
+            const newRemaining = Number(card.remaining_value) - amt;
+            const newStatus = newRemaining <= 0 ? "depleted" : "active";
+            await client.query(
+              `UPDATE gift_cards
+                  SET remaining_value = $1,
+                      activation_status = $2,
+                      redeemed_at = COALESCE(redeemed_at, CASE WHEN $2 = 'depleted' THEN NOW() END)
+                WHERE id = $3`,
+              [newRemaining, newStatus, card.id],
+            );
+            await client.query(
+              `INSERT INTO gift_card_transactions
+                 (gift_card_id, type, amount, reference_type, reference_id, note)
+               VALUES ($1, 'debit', $2, 'sale', $3, $4)`,
+              [card.id, amt, newSaleId, `Redeemed on sale #${newSaleId}`],
+            );
+            gatewayRef = `giftcard:${code}`;
+          }
+
           await client.query(
             "INSERT INTO sale_payments (sale_id, payment_method, amount, gateway_ref) VALUES ($1, $2, $3, $4)",
             [newSaleId, payment.method, payment.amount, gatewayRef]
@@ -1020,6 +1085,66 @@ module.exports = function registerSalesRoutes(app, deps) {
           }
         }
 
+        // Phase 2-G Wave 2 (2-G.2) — gift-card issue. For each cart
+        // line whose product.is_gift_card_sku=true, generate one
+        // gift_cards row per unit at face value = item.price. Written
+        // inside the sale transaction so a rollback un-issues them.
+        // Emails are enqueued AFTER commit (see post-commit block).
+        if (giftCardsFlagOn && cartItems.length > 0) {
+          const productIds = Array.from(
+            new Set(
+              cartItems
+                .map((i) => Number(i.original_product_id || i.id))
+                .filter((n) => Number.isInteger(n) && n > 0),
+            ),
+          );
+          if (productIds.length > 0) {
+            const { rows: gcProducts } = await client.query(
+              `SELECT id, name FROM products
+                WHERE id = ANY($1::int[]) AND is_gift_card_sku = true`,
+              [productIds],
+            );
+            const gcSet = new Set(gcProducts.map((r) => r.id));
+            if (gcSet.size > 0) {
+              const crypto = require("crypto");
+              for (const item of cartItems) {
+                const productId = Number(item.original_product_id || item.id);
+                if (!gcSet.has(productId)) continue;
+                const unitPrice = Number(item.price);
+                const qty = Math.max(1, Math.floor(Number(item.quantity) || 1));
+                for (let i = 0; i < qty; i += 1) {
+                  // 12-char uppercase hex — same entropy as the admin
+                  // create route. The UNIQUE constraint on `code` will
+                  // throw if we collide; at 2^60 entropy this is safe.
+                  const code = crypto.randomBytes(6).toString("hex").toUpperCase();
+                  const { rows: [cardRow] } = await client.query(
+                    `INSERT INTO gift_cards
+                       (code, initial_value, remaining_value, card_type,
+                        activation_status, issued_to_customer_id,
+                        issued_from_sale_id)
+                     VALUES ($1, $2, $2, 'digital', 'active', $3, $4)
+                     RETURNING id, code,
+                               initial_value::numeric AS initial_value`,
+                    [code, unitPrice, customer_id || null, newSaleId],
+                  );
+                  await client.query(
+                    `INSERT INTO gift_card_transactions
+                       (gift_card_id, type, amount, reference_type, reference_id, note)
+                     VALUES ($1, 'credit', $2, 'sale', $3, 'Issued on sale')`,
+                    [cardRow.id, unitPrice, newSaleId],
+                  );
+                  issuedCards.push({
+                    id: cardRow.id,
+                    code: cardRow.code,
+                    initial_value: Number(cardRow.initial_value),
+                    product_id: productId,
+                  });
+                }
+              }
+            }
+          }
+        }
+
         // Debit wallet for any Wallet payments
         const walletPayments = finalPayments.filter(
           (p) => p.method === "Wallet",
@@ -1041,6 +1166,54 @@ module.exports = function registerSalesRoutes(app, deps) {
 
         return newSaleId;
       });
+
+      // Phase 2-G Wave 2 (2-G.2) — post-commit gift-card email. Only
+      // fires when the sale persisted + there's a recipient email
+      // (either on the customer record or passed explicitly). Fire-and-
+      // forget: email failures never re-open a committed sale.
+      if (issuedCards.length > 0) {
+        (async () => {
+          try {
+            const { enqueueEmail } = require("../services/email");
+            let recipientEmail = null;
+            let recipientName = "there";
+            if (customer_id) {
+              const { rows: [c] } = await db.query(
+                `SELECT name, email FROM customers WHERE id = $1`,
+                [customer_id],
+              );
+              if (c) {
+                recipientEmail = c.email || null;
+                recipientName = c.name || recipientName;
+              }
+            }
+            if (!recipientEmail) return; // No email on file; nothing to send.
+            const { rows: [cp] } = await db.query(
+              `SELECT company_name, currency_symbol FROM company_profile WHERE id = 1`,
+            );
+            for (const card of issuedCards) {
+              await enqueueEmail(db, {
+                to: recipientEmail,
+                template: "gift_card_issued",
+                data: {
+                  storeName: cp?.company_name || "our store",
+                  recipientName,
+                  code: card.code,
+                  initialValue: card.initial_value,
+                  currencySymbol: cp?.currency_symbol || "PKR",
+                  balanceUrl: req.tenantSlug
+                    ? `${process.env.FRONTEND_URL || ""}/gift-card/${card.code}?tenant=${req.tenantSlug}`
+                    : `${process.env.FRONTEND_URL || ""}/gift-card/${card.code}`,
+                },
+              });
+            }
+          } catch (emailErr) {
+            try {
+              logger.warn?.({ err: emailErr }, "gift-card email enqueue failed");
+            } catch { /* ignore */ }
+          }
+        })();
+      }
 
       // Post-commit: sync events, low stock notification, invoice assignment
       const syncChanges = cartItems.map((item) => ({
@@ -1141,6 +1314,10 @@ module.exports = function registerSalesRoutes(app, deps) {
             priceBookApplied: autoPricingBreakdown.priceBookApplied,
             discountLines: autoPricingBreakdown.discountLines,
           },
+          // Phase 2-G Wave 2 (2-G.2): codes issued on this sale so the
+          // POS can print them on the receipt + show them in the
+          // confirmation modal.
+          issuedGiftCards: issuedCards,
         });
       } catch (invErr) {
         res.status(500).json({

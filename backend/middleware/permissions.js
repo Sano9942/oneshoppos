@@ -59,6 +59,8 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "manage_tips",
     // Phase 2-R Wave B (2-R.2) — manager PIN authorization for void/comp.
     "override_void_comp",
+    // Phase 2-G Wave 2 (2-G.2) — gift-card admin + POS tender.
+    "manage_gift_cards",
   ],
   Cashier: ["view_reports", "pos_discount", "pos_park"],
 };

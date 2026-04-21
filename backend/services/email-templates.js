@@ -797,6 +797,45 @@ function treatmentLabResultReceived({ storeName, customerName, planNumber, testN
   };
 }
 
+// -- Phase 2-G Wave 2 (2-G.2) Gift Card Issued ---------------------------
+function giftCardIssued(data) {
+  const {
+    storeName,
+    recipientName,
+    code,
+    initialValue,
+    currencySymbol,
+    balanceUrl,
+    note,
+  } = data || {};
+  const pretty = (n) => {
+    if (!Number.isFinite(Number(n))) return String(n);
+    return Number(n).toLocaleString();
+  };
+  const symbol = currencySymbol || "PKR";
+  return {
+    subject: `You received a gift card from ${storeName || "us"}`,
+    html: wrapEmailHtml(
+      "Gift Card",
+      `<p>Hi ${recipientName || "there"},</p>
+       <p>You've received a gift card from <strong>${storeName || "our store"}</strong>.</p>
+       ${note ? `<p style="color:#475569;font-style:italic">&ldquo;${note}&rdquo;</p>` : ""}
+       <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f0fdf4;border-radius:8px">
+         <tr>
+           <td style="padding:14px 16px;color:#64748b">Balance</td>
+           <td style="padding:14px 16px;font-weight:700;font-size:22px;color:#065f46">${symbol} ${pretty(initialValue)}</td>
+         </tr>
+         <tr>
+           <td style="padding:14px 16px;color:#64748b">Code</td>
+           <td style="padding:14px 16px;font-family:monospace;font-size:18px;letter-spacing:2px;font-weight:700;color:#0f172a">${code || ""}</td>
+         </tr>
+       </table>
+       ${balanceUrl ? `<p style="margin:16px 0"><a href="${balanceUrl}" style="display:inline-block;padding:10px 20px;background:#059669;color:#fff;border-radius:6px;text-decoration:none;font-weight:600">Check balance anytime</a></p>` : ""}
+       <p style="color:#64748b;font-size:13px;margin-top:24px">Show this code at checkout to redeem. The balance is good until depleted — no expiry.</p>`,
+    ),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
   campaign_test: campaignTest,
@@ -843,6 +882,8 @@ const TEMPLATES = {
   customer_portal_appointment_rescheduled: customerPortalAppointmentRescheduled,
   customer_portal_appointment_cancelled: customerPortalAppointmentCancelled,
   customer_portal_payment_receipt: customerPortalPaymentReceipt,
+  // Phase 2-G Wave 2 (2-G.2)
+  gift_card_issued: giftCardIssued,
 };
 
 module.exports = { TEMPLATES, wrapEmailHtml };
