@@ -5147,6 +5147,46 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 69,
+    description:
+      "Schema hygiene sweep — idempotent backfill of returns columns (doc-sync for existing tenants, applies cleanly for fresh) + product_serial_numbers.status CHECK",
+    up: async (client) => {
+      // Post-Wave-3 cleanup item 1 of 2: the `returns` table picked up 7
+      // columns across earlier migrations (v8 web_order_id, v15 phase 2
+      // policy fields) that never made it back into schema-pg.sql. Existing
+      // tenants already have these columns — the IF NOT EXISTS guards make
+      // this migration a no-op for them. The real value is for fresh test
+      // schemas + new tenant provisioning where schema-pg.sql alone was
+      // missing the columns, causing POST /api/returns to 500 on isolated
+      // integration test schemas.
+      await client.query(`
+        ALTER TABLE returns
+          ADD COLUMN IF NOT EXISTS web_order_id INTEGER,
+          ADD COLUMN IF NOT EXISTS policy_id INTEGER,
+          ADD COLUMN IF NOT EXISTS policy_result TEXT,
+          ADD COLUMN IF NOT EXISTS approval_event_id INTEGER,
+          ADD COLUMN IF NOT EXISTS processed_by_employee_id INTEGER REFERENCES employees(id),
+          ADD COLUMN IF NOT EXISTS approved_by_employee_id INTEGER REFERENCES employees(id),
+          ADD COLUMN IF NOT EXISTS return_reason_id INTEGER REFERENCES return_reasons(id)
+      `);
+
+      // Post-Wave-3 cleanup item 2 of 2: enforce the status domain on
+      // product_serial_numbers. Audit (April 2026, all tenant schemas) found
+      // zero rows → constraint applies cleanly as VALIDATED. If the
+      // constraint already exists (reruns, or if we ship v69 twice by
+      // accident), skip — catch the 42710 duplicate_object code.
+      try {
+        await client.query(`
+          ALTER TABLE product_serial_numbers
+            ADD CONSTRAINT product_serial_numbers_status_check
+            CHECK (status IN ('available','sold','returned','warranty_claim','damaged'))
+        `);
+      } catch (err) {
+        if (err.code !== "42710") throw err;
+      }
+    },
+  },
 ];
 
 async function migrate(db) {

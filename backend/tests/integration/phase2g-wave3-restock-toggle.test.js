@@ -67,24 +67,6 @@ beforeAll(async () => {
     .post("/api/attendance/pin-checkin")
     .send({ pin_code: "2580", outlet_id: 1 });
 
-  // Schema drift workaround: schema-pg.sql is missing the Phase 2 migration
-  // columns on `returns` (policy_id, return_reason_id, approval_event_id,
-  // approved_by_employee_id, processed_by_employee_id). The canonical
-  // returns.js POST handler references them, so the test schema needs them
-  // patched in before any POST /api/returns call. Tracked as a post-Wave-3
-  // cleanup item in the wave plan's Follow-ups section — fixing it there
-  // widens scope beyond 2-G.7, so we patch the test schema only.
-  await db.query(`
-    ALTER TABLE returns
-      ADD COLUMN IF NOT EXISTS policy_id INTEGER,
-      ADD COLUMN IF NOT EXISTS return_reason_id INTEGER,
-      ADD COLUMN IF NOT EXISTS approval_event_id INTEGER,
-      ADD COLUMN IF NOT EXISTS approved_by_employee_id INTEGER,
-      ADD COLUMN IF NOT EXISTS processed_by_employee_id INTEGER,
-      ADD COLUMN IF NOT EXISTS policy_result TEXT,
-      ADD COLUMN IF NOT EXISTS web_order_id INTEGER
-  `);
-
   // Seed return_reasons so the per-line dropdown + reason_code_id FK works.
   // Migration v68 seeds these in prod; tests may run DDL-then-migrations, so
   // this is belt-and-braces (ON CONFLICT keeps it idempotent).

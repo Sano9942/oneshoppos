@@ -505,6 +505,21 @@ CREATE TABLE IF NOT EXISTS product_reviews (
 
 -- ── Returns ───────────────────────────────────────────────────────────
 
+-- return_reasons must precede `returns` and `return_items` because both FK
+-- to it (returns.return_reason_id via v69, return_items.reason_code_id via
+-- v68). This early CREATE IF NOT EXISTS is a forward-declaration; the
+-- richer definition further down (Phase 2A block) is a no-op via IF NOT
+-- EXISTS and preserves readability of that section.
+CREATE TABLE IF NOT EXISTS return_reasons (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  label TEXT NOT NULL,
+  requires_note BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT TRUE,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS returns (
   id SERIAL PRIMARY KEY,
   original_sale_id INTEGER,
@@ -518,21 +533,17 @@ CREATE TABLE IF NOT EXISTS returns (
   shift_id INTEGER REFERENCES cash_shifts(id),
   fbr_status TEXT DEFAULT 'not_applicable',
   fbr_irn TEXT,
-  gateway_refund_ref TEXT
-);
-
--- return_reasons must precede return_items because return_items.reason_code_id
--- FKs to it. The richer lookup table is re-defined further down (Phase 2A
--- block) — this early CREATE IF NOT EXISTS is a forward-declaration sized to
--- satisfy the FK. The later definition is a no-op via IF NOT EXISTS.
-CREATE TABLE IF NOT EXISTS return_reasons (
-  id SERIAL PRIMARY KEY,
-  code TEXT NOT NULL UNIQUE,
-  label TEXT NOT NULL,
-  requires_note BOOLEAN DEFAULT FALSE,
-  is_active BOOLEAN DEFAULT TRUE,
-  sort_order INTEGER DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  gateway_refund_ref TEXT,
+  -- Phase 2 / Wave 3 additions — previously migration-only, folded back in
+  -- here by v69 so fresh test schemas + public-schema bootstraps match what
+  -- existing tenants already have via ALTERs.
+  web_order_id INTEGER,
+  policy_id INTEGER,
+  policy_result TEXT,
+  approval_event_id INTEGER,
+  processed_by_employee_id INTEGER REFERENCES employees(id),
+  approved_by_employee_id INTEGER REFERENCES employees(id),
+  return_reason_id INTEGER REFERENCES return_reasons(id)
 );
 
 CREATE TABLE IF NOT EXISTS return_items (
@@ -808,7 +819,10 @@ CREATE TABLE IF NOT EXISTS product_serial_numbers (
   id SERIAL PRIMARY KEY,
   product_id INTEGER NOT NULL REFERENCES products(id),
   serial_number TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'available',
+  -- v69 added the CHECK constraint. The in-line CHECK keeps fresh schemas
+  -- aligned with the migration — existing tenants get the constraint via v69.
+  status TEXT NOT NULL DEFAULT 'available'
+    CHECK (status IN ('available','sold','returned','warranty_claim','damaged')),
   sale_id INTEGER,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   -- 2-G.6 (migration v67): variant + warranty + origin-GRN audit columns.
