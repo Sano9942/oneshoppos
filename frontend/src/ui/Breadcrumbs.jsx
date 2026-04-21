@@ -23,6 +23,7 @@ const LABELS = {
   "returned-stock": "Returned Stock",
   "supplier-payables": "Supplier Payables",
   "reorder-alerts": "Reorder Alerts",
+  "inventory-intelligence": "Inventory Intelligence",
   suppliers: "Suppliers",
   expenses: "Expenses",
   approvals: "Approvals",

@@ -106,6 +106,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Returned Stock", path: "/returned-stock", icon: Package, requiredPerm: "manage_orders" },
       { name: "Supplier Payables", path: "/supplier-payables", icon: CreditCard, requiredPerm: "manage_orders", requiredFlag: "supplier_payables" },
       { name: "Reorder Alerts", path: "/reorder-alerts", icon: AlertTriangle, requiredPerm: "manage_inventory" },
+      { name: "Intelligence", path: "/inventory-intelligence", icon: BarChart2, requiredPerm: "manage_inventory", requiredFlag: "phase2g_inventory_intelligence" },
     ],
   },
   {
