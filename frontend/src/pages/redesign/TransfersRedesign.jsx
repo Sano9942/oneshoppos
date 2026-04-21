@@ -32,12 +32,27 @@ export default function TransfersRedesign() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({
     product_id: "",
+    variant_id: "",
     from_outlet_id: "",
     to_outlet_id: "",
     quantity: "",
     note: "",
   });
   const [saving, setSaving] = useState(false);
+  // 2-G.1 follow-up: load variants on product change so admin can target a
+  // specific SKU instead of moving the product-level rollup blindly.
+  const [productVariants, setProductVariants] = useState([]);
+
+  useEffect(() => {
+    if (!form.product_id) {
+      setProductVariants([]);
+      return;
+    }
+    api
+      .get(`/api/products/${form.product_id}/variants`)
+      .then((d) => setProductVariants(Array.isArray(d?.variants) ? d.variants : []))
+      .catch(() => setProductVariants([]));
+  }, [form.product_id]);
 
   const load = async () => {
     setLoading(true);
@@ -76,11 +91,13 @@ export default function TransfersRedesign() {
   const openCreate = () => {
     setForm({
       product_id: "",
+      variant_id: "",
       from_outlet_id: "",
       to_outlet_id: "",
       quantity: "",
       note: "",
     });
+    setProductVariants([]);
     setModalOpen(true);
   };
 
@@ -95,6 +112,7 @@ export default function TransfersRedesign() {
     try {
       await api.post("/api/transfers", {
         product_id: Number(form.product_id),
+        variant_id: form.variant_id ? Number(form.variant_id) : null,
         from_outlet_id: Number(form.from_outlet_id),
         to_outlet_id: Number(form.to_outlet_id),
         quantity: Number(form.quantity),
@@ -158,7 +176,12 @@ export default function TransfersRedesign() {
               {!loading && visibleRows.map((r) => (
                 <tr key={r.id} className="border-t border-(--ui-border)">
                   <td className="px-3 py-2 text-(--ui-text-muted)">{fmtDate(r.timestamp)}</td>
-                  <td className="px-3 py-2"><p className="font-medium text-(--ui-text)">{r.product_name}</p><p className="text-xs text-(--ui-text-muted)">{r.barcode || "-"}</p></td>
+                  <td className="px-3 py-2">
+                    <p className="font-medium text-(--ui-text)">{r.product_name}</p>
+                    <p className="text-xs text-(--ui-text-muted)">
+                      {r.variant_sku ? r.variant_sku : (r.barcode || "-")}
+                    </p>
+                  </td>
                   <td className="px-3 py-2 text-(--ui-text-muted)">{r.from_outlet_name}</td>
                   <td className="px-3 py-2 text-(--ui-text-muted)">{r.to_outlet_name}</td>
                   <td className="px-3 py-2 text-right"><Badge>{r.quantity}</Badge></td>
@@ -189,10 +212,23 @@ export default function TransfersRedesign() {
         size="md"
       >
         <form className="space-y-2" onSubmit={save}>
-          <Select required value={form.product_id} onChange={(e) => setForm((p) => ({ ...p, product_id: e.target.value }))}>
+          <Select required value={form.product_id} onChange={(e) => setForm((p) => ({ ...p, product_id: e.target.value, variant_id: "" }))}>
             <option value="">Select product</option>
             {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.barcode || p.sku || "-"})</option>)}
           </Select>
+          {productVariants.length > 0 && (
+            <Select value={form.variant_id} onChange={(e) => setForm((p) => ({ ...p, variant_id: e.target.value }))}>
+              <option value="">Product-level (all variants)</option>
+              {productVariants.map((v) => {
+                const label = (v.options || []).map((o) => o.option_value).filter(Boolean).join(" / ");
+                return (
+                  <option key={v.id} value={v.id}>
+                    {v.sku}{label ? ` — ${label}` : ""}
+                  </option>
+                );
+              })}
+            </Select>
+          )}
           <Select required value={form.from_outlet_id} onChange={(e) => setForm((p) => ({ ...p, from_outlet_id: e.target.value, to_outlet_id: p.to_outlet_id === e.target.value ? "" : p.to_outlet_id }))}>
             <option value="">From outlet</option>
             {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}

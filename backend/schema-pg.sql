@@ -222,8 +222,13 @@ CREATE TABLE IF NOT EXISTS stock_adjustments (
   quantity_change NUMERIC(10,3) NOT NULL,
   reason TEXT NOT NULL,
   notes TEXT,
-  timestamp TIMESTAMPTZ DEFAULT NOW()
+  timestamp TIMESTAMPTZ DEFAULT NOW(),
+  -- 2-G.1 follow-up (migration v66): nullable variant_id lets admins correct
+  -- variant-level stock. When set, the route also updates variant_outlet_stock.
+  variant_id INTEGER REFERENCES product_variants(id)
 );
+CREATE INDEX IF NOT EXISTS idx_stock_adjustments_variant
+  ON stock_adjustments(variant_id) WHERE variant_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS inventory_transfers (
   id SERIAL PRIMARY KEY,
@@ -235,8 +240,14 @@ CREATE TABLE IF NOT EXISTS inventory_transfers (
   note TEXT,
   reversed BOOLEAN DEFAULT false,
   timestamp TIMESTAMPTZ DEFAULT NOW(),
-  status TEXT DEFAULT 'completed'
+  status TEXT DEFAULT 'completed',
+  -- 2-G.1 follow-up (migration v66): nullable variant_id lets admins move
+  -- variant stock between outlets. When set, the route also updates
+  -- variant_outlet_stock at both source + destination.
+  variant_id INTEGER REFERENCES product_variants(id)
 );
+CREATE INDEX IF NOT EXISTS idx_inventory_transfers_variant
+  ON inventory_transfers(variant_id) WHERE variant_id IS NOT NULL;
 
 -- ── Price Lists ──────────────────────────────────────────────────────
 

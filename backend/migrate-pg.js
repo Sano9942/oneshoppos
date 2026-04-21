@@ -4986,6 +4986,35 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 66,
+    description:
+      "Phase 2-G Wave 3 — 2-G.1 follow-up: variant_id on inventory_transfers + stock_adjustments so variant-aware moves/corrections stay in sync with variant_outlet_stock",
+    up: async (client) => {
+      // 2-G.1 follow-up: let tenants move + adjust stock at the variant
+      // granularity. Without this, the matrix view drifts whenever an admin
+      // does a stock correction (damage, recount, transfer between stores).
+      // variant_id is nullable — pre-existing product-level rows stay as is.
+      await client.query(
+        `ALTER TABLE inventory_transfers
+           ADD COLUMN IF NOT EXISTS variant_id INTEGER REFERENCES product_variants(id)`
+      );
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_inventory_transfers_variant
+          ON inventory_transfers(variant_id)
+          WHERE variant_id IS NOT NULL
+      `);
+      await client.query(
+        `ALTER TABLE stock_adjustments
+           ADD COLUMN IF NOT EXISTS variant_id INTEGER REFERENCES product_variants(id)`
+      );
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_stock_adjustments_variant
+          ON stock_adjustments(variant_id)
+          WHERE variant_id IS NOT NULL
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {
