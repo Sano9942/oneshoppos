@@ -84,7 +84,7 @@ module.exports = function registerGRNRoutes(app, deps) {
   app.post("/api/grn/:id/scan-receive", requirePerm("manage_orders"), async (req, res) => {
     try {
       const { id } = req.params;
-      const { barcode, quantity } = req.body;
+      const { barcode, quantity, serial_numbers } = req.body;
       const qty = Math.max(1, parseInt(quantity, 10) || 1);
 
       if (!barcode || !barcode.trim()) {
@@ -97,30 +97,42 @@ module.exports = function registerGRNRoutes(app, deps) {
       );
       if (!grn) return res.status(404).json({ error: "GRN not found" });
 
-      // 2. Find product by barcode (products table OR product_variants table)
+      // 2. Find product by barcode (products table OR product_variants table).
+      // 2-G.6: also capture variant_id when the scanned barcode resolves to a
+      // specific variant, so any serials we create get tagged with it.
       const trimmed = barcode.trim();
       let productId = null;
       let productName = null;
+      let variantId = null;
 
-      // Try products.barcode or products.sku first
       const { rows: [prod] } = await db.query(
-        "SELECT id, name FROM products WHERE deleted_at IS NULL AND (barcode = $1 OR sku = $1)",
+        `SELECT id, name, serial_required, default_warranty_months
+           FROM products
+          WHERE deleted_at IS NULL AND (barcode = $1 OR sku = $1)`,
         [trimmed]
       );
+      let serialRequired = false;
+      let defaultWarrantyMonths = null;
       if (prod) {
         productId = prod.id;
         productName = prod.name;
+        serialRequired = prod.serial_required === true;
+        defaultWarrantyMonths = prod.default_warranty_months;
       } else {
-        // Try product_variants.barcode
         const { rows: [variant] } = await db.query(
-          `SELECT pv.product_id, p.name FROM product_variants pv
-           JOIN products p ON p.id = pv.product_id
-           WHERE p.deleted_at IS NULL AND pv.barcode = $1`,
+          `SELECT pv.id AS variant_id, pv.product_id, p.name,
+                  p.serial_required, p.default_warranty_months
+             FROM product_variants pv
+             JOIN products p ON p.id = pv.product_id
+            WHERE p.deleted_at IS NULL AND pv.barcode = $1`,
           [trimmed]
         );
         if (variant) {
           productId = variant.product_id;
           productName = variant.name;
+          variantId = variant.variant_id;
+          serialRequired = variant.serial_required === true;
+          defaultWarrantyMonths = variant.default_warranty_months;
         }
       }
 
@@ -137,14 +149,62 @@ module.exports = function registerGRNRoutes(app, deps) {
         return res.status(404).json({ error: `Product "${productName}" is not on this GRN` });
       }
 
-      // 4. Increment qty_received
-      const newReceived = Number(grnItem.qty_received || 0) + qty;
-      await db.query(
-        "UPDATE grn_items SET qty_received = $1 WHERE id = $2",
-        [newReceived, grnItem.id]
-      );
+      // 2-G.6: serialized products require one serial per unit at receive time.
+      // Validate before mutating anything so the whole operation is atomic.
+      if (serialRequired) {
+        if (!Array.isArray(serial_numbers) || serial_numbers.length !== qty) {
+          return res.status(400).json({
+            error: `Product "${productName}" is serialized — provide exactly ${qty} serial number(s).`,
+          });
+        }
+        const trimmedSerials = serial_numbers.map((s) => String(s || "").trim()).filter(Boolean);
+        if (trimmedSerials.length !== qty) {
+          return res.status(400).json({ error: "Serial numbers cannot be blank." });
+        }
+        // Check for duplicates within this batch.
+        if (new Set(trimmedSerials).size !== trimmedSerials.length) {
+          return res.status(400).json({ error: "Duplicate serial numbers in this batch." });
+        }
+        // Check for collisions with existing serials for this product.
+        const { rows: existing } = await db.query(
+          `SELECT serial_number FROM product_serial_numbers
+             WHERE product_id = $1 AND serial_number = ANY($2::text[])`,
+          [productId, trimmedSerials]
+        );
+        if (existing.length > 0) {
+          return res.status(409).json({
+            error: `Serial(s) already exist for this product: ${existing.map((r) => r.serial_number).join(", ")}`,
+          });
+        }
+      }
 
-      const overReceived = newReceived > Number(grnItem.qty_ordered);
+      await db.transaction(async (client) => {
+        // 4. Increment qty_received
+        const newReceived = Number(grnItem.qty_received || 0) + qty;
+        await client.query(
+          "UPDATE grn_items SET qty_received = $1 WHERE id = $2",
+          [newReceived, grnItem.id]
+        );
+
+        // 2-G.6: insert one product_serial_numbers row per serial. Status
+        // starts 'available' — warranty_start_date is NULL until the serial
+        // is sold. warranty_months pre-fills from the product default so the
+        // computed warranty_end_date is a simple start + warranty_months at
+        // sale time with no extra lookup.
+        if (serialRequired) {
+          for (const sn of serial_numbers) {
+            await client.query(
+              `INSERT INTO product_serial_numbers
+                 (product_id, variant_id, serial_number, status, grn_id, warranty_months)
+               VALUES ($1, $2, $3, 'available', $4, $5)`,
+              [productId, variantId || null, String(sn).trim(), id, defaultWarrantyMonths]
+            );
+          }
+        }
+      });
+
+      const newReceivedOut = Number(grnItem.qty_received || 0) + qty;
+      const overReceived = newReceivedOut > Number(grnItem.qty_ordered);
 
       res.json({
         item: {
@@ -152,8 +212,10 @@ module.exports = function registerGRNRoutes(app, deps) {
           product_id: productId,
           product_name: productName,
           qty_ordered: Number(grnItem.qty_ordered),
-          qty_received: newReceived,
+          qty_received: newReceivedOut,
           over_received: overReceived,
+          serialized: serialRequired,
+          serials_recorded: serialRequired ? serial_numbers.length : 0,
         },
       });
     } catch (err) {

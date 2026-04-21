@@ -4,6 +4,11 @@ const ReturnItemSchema = z.object({
   product_id: z.coerce.number().int().positive(),
   quantity: z.coerce.number().int().positive(),
   refund_price: z.coerce.number(),
+  // 2-G.6: optional serial ids returned with this line + per-line
+  // warranty_claim flag that routes the serial into warranty_claim status
+  // instead of the default 'returned'.
+  serials: z.array(z.coerce.number().int().positive()).optional(),
+  warranty_claim: z.coerce.boolean().optional(),
 }).passthrough(); // preserve variant_id, name, etc.
 
 // POST /api/returns

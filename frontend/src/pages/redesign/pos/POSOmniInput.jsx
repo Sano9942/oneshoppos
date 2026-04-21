@@ -15,6 +15,7 @@ export default function POSOmniInput() {
     setShowCustomerDD,
     setPendingVariantProductId,
     setPendingSerialProductId,
+    setPendingSerialContext,
     showNotice,
   } = usePOS();
 
@@ -76,6 +77,14 @@ export default function POSOmniInput() {
           return;
         }
         if (product.serial_required) {
+          // 2-G.6: seed the pending-serial context so the modal knows the
+          // product, variant (none when scanned directly), and quantity (1
+          // per scan — duplicate scans re-open the modal).
+          setPendingSerialContext({
+            product_id: product.id,
+            variant_id: null,
+            quantity: 1,
+          });
           setPendingSerialProductId(product.id);
           return;
         }

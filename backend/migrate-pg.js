@@ -5015,6 +5015,98 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 67,
+    description:
+      "Phase 2-G Wave 3 — 2-G.6 serialized inventory: extend product_serial_numbers (variant + warranty + grn), products.serial_required + default_warranty_months, sale_item_serials bridge, backfill bridge from legacy sale_id",
+    up: async (client) => {
+      // 2-G.6: serialized items end-to-end. Extend the existing serials table
+      // with variant_id (serialized items can be variant-specific, e.g. the
+      // blue 128GB iPhone vs the black 256GB), warranty dates (computed on
+      // sale), and grn_id (traceability from the receive point).
+      await client.query(
+        `ALTER TABLE product_serial_numbers
+           ADD COLUMN IF NOT EXISTS variant_id INTEGER REFERENCES product_variants(id)`
+      );
+      await client.query(
+        `ALTER TABLE product_serial_numbers
+           ADD COLUMN IF NOT EXISTS warranty_months INTEGER`
+      );
+      await client.query(
+        `ALTER TABLE product_serial_numbers
+           ADD COLUMN IF NOT EXISTS warranty_start_date DATE`
+      );
+      await client.query(
+        `ALTER TABLE product_serial_numbers
+           ADD COLUMN IF NOT EXISTS warranty_end_date DATE`
+      );
+      await client.query(
+        `ALTER TABLE product_serial_numbers
+           ADD COLUMN IF NOT EXISTS grn_id INTEGER REFERENCES goods_received_notes(id)`
+      );
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_product_serial_numbers_status_product
+          ON product_serial_numbers(status, product_id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_product_serial_numbers_variant
+          ON product_serial_numbers(variant_id)
+          WHERE variant_id IS NOT NULL
+      `);
+
+      // 2-G.6: per-product opt-in flag + default warranty length so GRN
+      // receive can pre-populate warranty_months without the cashier
+      // having to enter it manually. Existing products default false/NULL
+      // so no behavior change until a tenant explicitly enables serials.
+      await client.query(
+        `ALTER TABLE products
+           ADD COLUMN IF NOT EXISTS serial_required BOOLEAN NOT NULL DEFAULT false`
+      );
+      await client.query(
+        `ALTER TABLE products
+           ADD COLUMN IF NOT EXISTS default_warranty_months INTEGER`
+      );
+
+      // 2-G.6: bridge table for qty-aware serialization. Scanning 3 serials
+      // on a line of quantity=3 creates 3 bridge rows; the legacy sale_id
+      // column on product_serial_numbers cannot express that because it's
+      // a single FK per serial. We keep sale_id populated in parallel as a
+      // deprecation cushion — drop in Phase 3.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS sale_item_serials (
+          id SERIAL PRIMARY KEY,
+          sale_item_id INTEGER NOT NULL REFERENCES sale_items(id) ON DELETE CASCADE,
+          serial_id INTEGER NOT NULL REFERENCES product_serial_numbers(id),
+          UNIQUE(sale_item_id, serial_id)
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sale_item_serials_sale_item
+          ON sale_item_serials(sale_item_id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sale_item_serials_serial
+          ON sale_item_serials(serial_id)
+      `);
+
+      // 2-G.6: backfill the bridge from existing sold serials. For every
+      // serial that already has sale_id set, find a sale_items row with the
+      // same sale_id + product_id and insert a bridge row. Uses NOT EXISTS
+      // guard so re-runs stay idempotent.
+      await client.query(`
+        INSERT INTO sale_item_serials (sale_item_id, serial_id)
+        SELECT si.id, psn.id
+          FROM product_serial_numbers psn
+          JOIN sale_items si
+            ON si.sale_id = psn.sale_id
+           AND si.product_id = psn.product_id
+         WHERE psn.sale_id IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM sale_item_serials sis WHERE sis.serial_id = psn.id
+           )
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

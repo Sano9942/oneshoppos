@@ -763,21 +763,20 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
   });
 
   // --- SERIAL NUMBERS ---
-
-  app.get("/api/products/:id/serials", requirePerm("manage_inventory"), async (req, res) => {
-    const { id } = req.params;
-    try {
-      const { rows } = await db.query(
-        "SELECT * FROM product_serial_numbers WHERE product_id=$1 ORDER BY created_at DESC",
-        [id]
-      );
-      res.json({ serials: rows });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
+  // NOTE: the endpoints that used to live here moved to routes/product-serials.js
+  // in Phase 2-G Wave 3 (2-G.6). See there for: GET /api/products/:id/serials
+  // (with ?status=, ?variant_id= filters), POST-equivalents via
+  // /api/grn/:id/scan-receive (which now accepts serial_numbers[] when the
+  // product is serial_required), and PUT /api/products/:id/serial-required.
+  // The older /api/serials/:id/assign was not used by any caller — sales.js
+  // now assigns serials via the sale_item_serials bridge inside the sale
+  // transaction.
 
   app.post("/api/products/:id/serials", requirePerm("manage_inventory"), async (req, res) => {
+    // Lightweight bulk-create endpoint kept here as a compatibility shim for
+    // admin tooling that seeds serials outside of the GRN flow (e.g. importing
+    // pre-existing inventory). Doesn't touch warranty/grn_id — pure
+    // serial_number insert.
     const { id } = req.params;
     const { serial_numbers } = req.body;
     if (!Array.isArray(serial_numbers) || serial_numbers.length === 0)
@@ -797,22 +796,6 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
         }
       }
       res.json({ inserted, failed });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post("/api/serials/:id/assign", requirePerm("manage_inventory"), async (req, res) => {
-    const { id } = req.params;
-    const { sale_id } = req.body;
-    if (!sale_id) return res.status(400).json({ error: "sale_id required" });
-    try {
-      const { rowCount } = await db.query(
-        "UPDATE product_serial_numbers SET status='sold', sale_id=$1 WHERE id=$2",
-        [sale_id, id]
-      );
-      if (rowCount === 0) return res.status(404).json({ error: "Serial not found" });
-      res.json({ updated: true });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

@@ -147,6 +147,27 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
       note.textContent = `  gross ${g} − tare ${t} = net ${n} ${item.unit}`;
       b.appendChild(note);
     }
+    // 2-G.6: print one sub-line per serial stamped on this cart line, with
+    // the warranty end date when available. Graceful when `serials` is
+    // absent (non-serialized sales) or is a raw id array (no warranty info).
+    const serials = Array.isArray(item.serials) ? item.serials : null;
+    const serialDetails = Array.isArray(item.serialDetails) ? item.serialDetails : null;
+    if (serialDetails && serialDetails.length) {
+      for (const s of serialDetails) {
+        const wty = s.warranty_end_date ? ` wty: ${s.warranty_end_date}` : "";
+        const ln = d.createElement("div");
+        ln.className = "small";
+        ln.textContent = `  SN: ${s.serial_number}${wty}`;
+        b.appendChild(ln);
+      }
+    } else if (serials && serials.length) {
+      for (const id of serials) {
+        const ln = d.createElement("div");
+        ln.className = "small";
+        ln.textContent = `  SN: #${id}`;
+        b.appendChild(ln);
+      }
+    }
   };
 
   // Returned items (exchange receipts only)

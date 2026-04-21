@@ -154,7 +154,13 @@ CREATE TABLE IF NOT EXISTS products (
   sold_out_reason TEXT,
   -- 2-G.2 Wave 2: mark this SKU as a gift card. On sale completion a
   -- gift_cards row is generated (digital code or physical range serial).
-  is_gift_card_sku BOOLEAN NOT NULL DEFAULT false
+  is_gift_card_sku BOOLEAN NOT NULL DEFAULT false,
+  -- 2-G.6 (migration v67): serialized-inventory opt-in. When true, GRN
+  -- receive requires serial_numbers[] and POS requires the cashier to scan
+  -- one serial per unit sold. default_warranty_months pre-fills the warranty
+  -- length on newly received serials.
+  serial_required BOOLEAN NOT NULL DEFAULT false,
+  default_warranty_months INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS product_variants (
@@ -789,8 +795,33 @@ CREATE TABLE IF NOT EXISTS product_serial_numbers (
   status TEXT NOT NULL DEFAULT 'available',
   sale_id INTEGER,
   created_at TIMESTAMPTZ DEFAULT NOW(),
+  -- 2-G.6 (migration v67): variant + warranty + origin-GRN audit columns.
+  -- variant_id is nullable because product-level serialization (no variants)
+  -- stays valid. warranty_start_date is NULL until the serial is sold.
+  variant_id INTEGER REFERENCES product_variants(id),
+  warranty_months INTEGER,
+  warranty_start_date DATE,
+  warranty_end_date DATE,
+  grn_id INTEGER REFERENCES goods_received_notes(id),
   UNIQUE(product_id, serial_number)
 );
+CREATE INDEX IF NOT EXISTS idx_product_serial_numbers_status_product
+  ON product_serial_numbers(status, product_id);
+CREATE INDEX IF NOT EXISTS idx_product_serial_numbers_variant
+  ON product_serial_numbers(variant_id) WHERE variant_id IS NOT NULL;
+
+-- 2-G.6 (migration v67): bridge between sale_items and product_serial_numbers
+-- so a single line of quantity=N can carry N distinct serial numbers. The
+-- legacy sale_id column on product_serial_numbers is kept populated in
+-- parallel as a deprecation cushion.
+CREATE TABLE IF NOT EXISTS sale_item_serials (
+  id SERIAL PRIMARY KEY,
+  sale_item_id INTEGER NOT NULL REFERENCES sale_items(id) ON DELETE CASCADE,
+  serial_id INTEGER NOT NULL REFERENCES product_serial_numbers(id),
+  UNIQUE(sale_item_id, serial_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sale_item_serials_sale_item ON sale_item_serials(sale_item_id);
+CREATE INDEX IF NOT EXISTS idx_sale_item_serials_serial ON sale_item_serials(serial_id);
 
 -- ── Gift Cards ──────────────────────────────────────────────────────
 

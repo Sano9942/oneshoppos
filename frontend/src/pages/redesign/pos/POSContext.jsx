@@ -153,7 +153,12 @@ export const POSProvider = ({ children }) => {
   // ── 2-G.0 omni-input pending interlocks (consumed by 2-G.1 variant modal
   //    and 2-G.6 serial modal in later waves; no reader exists today). ──────
   const [pendingVariantProductId, setPendingVariantProductId] = useState(null);
+  // pendingSerial carries either a plain product id (legacy shape) or an
+  // object { product_id, variant_id?, quantity?, cartLine? } so the serial
+  // modal can render N slots and know what cart line to commit on success.
+  // Keep pendingSerialProductId exported for the existing 2-G.0 contract.
   const [pendingSerialProductId, setPendingSerialProductId] = useState(null);
+  const [pendingSerialContext, setPendingSerialContext] = useState(null);
 
   // ── Return / Exchange Modal ──────────────────────────────────────────────
   const [returnModalOpen, setReturnModalOpen] = useState(false);
@@ -563,7 +568,20 @@ export const POSProvider = ({ children }) => {
       if (!res.ok) return;
       const data = await res.json();
       const product = data.product;
-      if (product) addToCartWithModifiers(product);
+      if (!product) return;
+      // 2-G.6: serialized products intercept the add-to-cart flow. The
+      // serial modal collects one serial per unit and commits the line
+      // itself (with `serials: [ids]` attached).
+      if (product.serial_required) {
+        setPendingSerialContext({
+          product_id: product.id,
+          variant_id: null,
+          quantity: 1,
+        });
+        setPendingSerialProductId(product.id);
+        return;
+      }
+      addToCartWithModifiers(product);
     } catch (err) {
       console.error("Barcode lookup failed:", err);
     }
@@ -810,6 +828,10 @@ export const POSProvider = ({ children }) => {
     setPendingVariantProductId,
     pendingSerialProductId,
     setPendingSerialProductId,
+    // 2-G.6 — richer pending-serial payload (object form) so the serial
+    // modal can present N slots and know what cart line to commit on success.
+    pendingSerialContext,
+    setPendingSerialContext,
     // Price lists
     priceListItems: cartHook.priceListItems,
     // POS layout + suggestions (Phase 2B)

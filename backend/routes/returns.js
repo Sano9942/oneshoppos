@@ -323,6 +323,25 @@ module.exports = function registerReturnsRoutes(app, deps) {
               [item.variant_id, outlet_id, item.quantity],
             );
           }
+
+          // 2-G.6: flip serial status. Warranty-claim items go to
+          // 'warranty_claim' so they're not re-sold through POS; standard
+          // returns go to 'returned' (admin can manually flip to 'available'
+          // after inspection). sale_item_serials bridge rows stay intact for
+          // audit — this unit's full history is traceable through the
+          // original sale even after the serial status changes.
+          if (Array.isArray(item.serials) && item.serials.length > 0) {
+            const serialIds = item.serials.map(Number).filter(Boolean);
+            const newStatus = item.warranty_claim === true ? "warranty_claim" : "returned";
+            if (serialIds.length) {
+              await client.query(
+                `UPDATE product_serial_numbers
+                    SET status = $1
+                  WHERE id = ANY($2::int[])`,
+                [newStatus, serialIds],
+              );
+            }
+          }
         }
 
         return retId;

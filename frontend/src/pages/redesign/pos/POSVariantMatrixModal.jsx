@@ -15,6 +15,8 @@ export default function POSVariantMatrixModal() {
     selectedOutletId,
     addToCart,
     posFlags,
+    setPendingSerialProductId,
+    setPendingSerialContext,
   } = usePOS();
 
   const [product, setProduct] = useState(null);
@@ -124,6 +126,21 @@ export default function POSVariantMatrixModal() {
       gst: product?.gst ?? null,
     };
     addToCart(cartLine);
+
+    // 2-G.6: if this variant's parent product is serialized, chain into the
+    // serial-entry modal with the freshly added cart line so the cashier can
+    // stamp it with the specific serial (the modal mutates the cart line
+    // rather than adding a new one).
+    if (product?.serial_required) {
+      setPendingSerialContext({
+        product_id: product.id,
+        variant_id: variant.id,
+        quantity: 1,
+        cartLine: { id: variant.id },
+      });
+      setPendingSerialProductId(product.id);
+    }
+
     close();
   };
 
