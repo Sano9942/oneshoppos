@@ -69,9 +69,10 @@ module.exports = function registerGRNRoutes(app, deps) {
       );
       if (!grn) return res.status(404).json({ error: "GRN not found" });
       const { rows: items } = await db.query(
-        `SELECT gi.*, p.name as product_name, p.barcode
-       FROM grn_items gi JOIN products p ON gi.product_id = p.id
-       WHERE gi.grn_id = $1`,
+        `SELECT gi.*, p.name as product_name, p.barcode,
+                p.serial_required, p.default_warranty_months
+           FROM grn_items gi JOIN products p ON gi.product_id = p.id
+          WHERE gi.grn_id = $1`,
         [id],
       );
       res.json({ grn, items });
