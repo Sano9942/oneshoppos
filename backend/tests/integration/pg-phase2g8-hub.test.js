@@ -137,6 +137,31 @@ describe("2-G.8 ABC listing + dashboard-cards", () => {
     });
   });
 
+  describe("GET /api/reports/stock-aging (extended columns)", () => {
+    beforeAll(() => {
+      require("../../routes/reports/stock-aging")(app, deps);
+    });
+
+    it("returns total_cost_value, avg_cost_per_unit, and value_at_risk", async () => {
+      const res = await request(app).get("/api/reports/stock-aging").set(auth);
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty("total_cost_value");
+      expect(res.body).toHaveProperty("avg_cost_per_unit");
+      expect(res.body).toHaveProperty("value_at_risk");
+
+      // Seed stock:
+      //   outlet 1: (1,50×60) + (2,30×120) + (3,20×300) + (4,100×30) + (5,80×45) = 3000+3600+6000+3000+3600 = 19200
+      //   outlet 2: (1,10×60) + (2,5×120) = 600+600 = 1200
+      //   → total_cost_value = 20400, total units = 295, avg = 69.15...
+      expect(Number(res.body.total_cost_value)).toBeCloseTo(20400, 0);
+      const totalUnits = 50 + 30 + 20 + 100 + 80 + 10 + 5;
+      expect(Number(res.body.avg_cost_per_unit)).toBeCloseTo(20400 / totalUnits, 2);
+      // No GRN seeded in the test harness → last_received is NULL and
+      // age_days falls back to 0 → nothing in "critical" bucket yet.
+      expect(Number(res.body.value_at_risk)).toBe(0);
+    });
+  });
+
   it("503 when feature flag off for ABC endpoint", async () => {
     await db.query(
       `UPDATE feature_flags SET enabled = false WHERE key = 'phase2g_inventory_intelligence'`
