@@ -4854,6 +4854,20 @@ const MIGRATIONS = [
           ON price_lists(customer_group_id)
           WHERE customer_group_id IS NOT NULL
       `);
+
+      // 2-G.3: loyalty earn/redeem rates per tenant. Replaces the
+      // hardcoded LOYALTY_EARN_RATE=1 (1pt per PKR 100) and
+      // LOYALTY_REDEEM_RATE=10 (100pts = PKR 10) constants in the POS
+      // hook. Stored on company_profile because loyalty is a
+      // tenant-wide setting, not per-tier.
+      await client.query(
+        `ALTER TABLE company_profile
+           ADD COLUMN IF NOT EXISTS loyalty_earn_rate NUMERIC(8,4) NOT NULL DEFAULT 1`
+      );
+      await client.query(
+        `ALTER TABLE company_profile
+           ADD COLUMN IF NOT EXISTS loyalty_redeem_rate NUMERIC(8,4) NOT NULL DEFAULT 10`
+      );
     },
   },
 ];

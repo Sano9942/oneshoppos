@@ -587,11 +587,15 @@ module.exports = function registerSalesRoutes(app, deps) {
     // returned in the response so the client can render the breakdown.
     let autoPricingBreakdown = { priceBookApplied: [], discountLines: [] };
     let autoDiscountValue = 0;
+    // Hoisted so the post-commit loyalty ledger writer at the end of the
+    // transaction block can see whether phase2g_loyalty was on for this sale.
+    let loyaltyFlagOn = false;
     try {
       const { getFeatureFlagsMap } = require("../middleware/feature-flags");
       const flags = await getFeatureFlagsMap(req.tenantId);
       const pbOn = !!flags.phase2g_price_books;
       const loyaltyOn = !!flags.phase2g_loyalty;
+      loyaltyFlagOn = loyaltyOn;
       if ((pbOn || loyaltyOn) && customer_id) {
         const pricing = require("../services/pricing");
         const { group, tier } = await pricing.resolveCustomerPricing({
@@ -958,6 +962,38 @@ module.exports = function registerSalesRoutes(app, deps) {
                 "UPDATE sales SET points_earned = $1 WHERE id = $2",
                 [effectivePointsEarned, newSaleId]
               );
+            }
+
+            // Phase 2-G Wave 2 (2-G.3) — loyalty ledger writes. Only when
+            // phase2g_loyalty is on, so pre-wave-2 tenants continue seeing
+            // balance-only loyalty without an audit trail.
+            if (loyaltyFlagOn) {
+              if (effectivePointsEarned > 0) {
+                await client.query(
+                  `INSERT INTO loyalty_transactions
+                     (customer_id, type, points, reference_type, reference_id, note)
+                   VALUES ($1, 'earn', $2, 'sale', $3, $4)`,
+                  [
+                    customer_id,
+                    effectivePointsEarned,
+                    newSaleId,
+                    `Earned on sale #${newSaleId}`,
+                  ]
+                );
+              }
+              if (Number(points_redeemed) > 0) {
+                await client.query(
+                  `INSERT INTO loyalty_transactions
+                     (customer_id, type, points, reference_type, reference_id, note)
+                   VALUES ($1, 'redeem', $2, 'sale', $3, $4)`,
+                  [
+                    customer_id,
+                    Number(points_redeemed),
+                    newSaleId,
+                    `Redeemed on sale #${newSaleId}`,
+                  ]
+                );
+              }
             }
           }
 

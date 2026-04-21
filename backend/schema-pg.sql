@@ -862,6 +862,11 @@ CREATE TABLE IF NOT EXISTS company_profile (
   void_threshold_pct NUMERIC(6,2) DEFAULT 3,
   cash_denominations TEXT DEFAULT '[5000,1000,500,100,50,20,10]',
   onboarding_dismissed BOOLEAN DEFAULT false,
+  -- 2-G.3 Wave 2: tenant-wide loyalty conversion rates.
+  --   earn_rate = points per PKR 100 of spend (default 1 = 1pt/100 PKR).
+  --   redeem_rate = PKR off per 100 points redeemed (default 10 = PKR 10/100pts).
+  loyalty_earn_rate NUMERIC(8,4) NOT NULL DEFAULT 1,
+  loyalty_redeem_rate NUMERIC(8,4) NOT NULL DEFAULT 10,
   fbr_api_token TEXT,
   fbr_environment TEXT DEFAULT 'sandbox',
   fbr_default_hs_code TEXT,

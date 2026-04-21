@@ -1,14 +1,25 @@
 import { useState, useEffect, useMemo } from "react";
 import { api } from "../../../../api";
 
-const LOYALTY_EARN_RATE = 1;
-const LOYALTY_REDEEM_RATE = 10;
+// Historical fallback constants. Kept so that pre-v63 tenants (no
+// /api/loyalty/config columns) and any transient config-fetch failures
+// don't break checkout math.
+const DEFAULT_EARN_RATE = 1; // 1pt per PKR 100 of spend
+const DEFAULT_REDEEM_RATE = 10; // PKR 10 off per 100 points
 
-export function useLoyaltyWallet({ customers, checkoutCustomerId, total }) {
+export function useLoyaltyWallet({ customers, checkoutCustomerId, total, loyaltyConfig }) {
   const [checkoutWalletBalance, setCheckoutWalletBalance] = useState(0);
   const [checkoutWalletLoading, setCheckoutWalletLoading] = useState(false);
   const [redeemPointsOn, setRedeemPointsOn] = useState(false);
   const [payWithWalletOn, setPayWithWalletOn] = useState(false);
+
+  // Use the tenant-configured rates when available; fall back to the
+  // historical defaults when POSContext hasn't yet fetched config (or
+  // the endpoint errored — the route itself falls back to the same
+  // defaults, so this belt-and-braces path keeps the hook pure even if
+  // the caller forgets to pass loyaltyConfig).
+  const earnRate = Number(loyaltyConfig?.earn_rate ?? DEFAULT_EARN_RATE);
+  const redeemRate = Number(loyaltyConfig?.redeem_rate ?? DEFAULT_REDEEM_RATE);
 
   useEffect(() => {
     if (!checkoutCustomerId) {
@@ -38,9 +49,9 @@ export function useLoyaltyWallet({ customers, checkoutCustomerId, total }) {
       }
     : null;
   const tierMultiplier = checkoutCustomerTier?.multiplier || 1;
-  const pointsEarned = Math.floor((total / 100) * LOYALTY_EARN_RATE * tierMultiplier);
+  const pointsEarned = Math.floor((total / 100) * earnRate * tierMultiplier);
   const pointsDiscount = redeemPointsOn
-    ? Math.floor(checkoutCustomerPoints / 100) * LOYALTY_REDEEM_RATE
+    ? Math.floor(checkoutCustomerPoints / 100) * redeemRate
     : 0;
   const pointsRedeemed = redeemPointsOn
     ? Math.floor(checkoutCustomerPoints / 100) * 100
@@ -56,7 +67,10 @@ export function useLoyaltyWallet({ customers, checkoutCustomerId, total }) {
     pointsEarned,
     pointsDiscount,
     pointsRedeemed,
-    LOYALTY_EARN_RATE,
-    LOYALTY_REDEEM_RATE,
+    // Exposed so POSCheckoutModal etc. can still display the "earn X pts"
+    // line and the "redeem N pts → PKR Y off" toggle using the same
+    // numbers the server will actually write.
+    LOYALTY_EARN_RATE: earnRate,
+    LOYALTY_REDEEM_RATE: redeemRate,
   };
 }
