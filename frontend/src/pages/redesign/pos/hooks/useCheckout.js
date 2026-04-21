@@ -184,6 +184,9 @@ export function useCheckout({
     taxInclusive,
     orderNote: opts.orderNote ?? (orderNote || null),
     timestamp: new Date().toLocaleString(),
+    // Phase 2-G Wave 2 (2-G.2) — codes issued on this sale (empty
+    // array for any sale that didn't include a gift-card SKU).
+    issuedGiftCards: Array.isArray(data?.issuedGiftCards) ? data.issuedGiftCards : [],
   }), [cart, payments, total, change, outlets, selectedOutletId, employee, discountValue, discountInput, discountType, taxInclusive, taxTotal, orderNote]);
 
   const clearAfterSale = useCallback(() => {

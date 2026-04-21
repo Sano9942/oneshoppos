@@ -104,7 +104,38 @@ export default function POSCheckoutModal() {
     if (!code) return;
     setGiftCardLookupBusy(true);
     try {
-      const data = await api.get(`/api/gift-cards/${encodeURIComponent(code)}/balance`);
+      let data;
+      try {
+        data = await api.get(`/api/gift-cards/${encodeURIComponent(code)}/balance`);
+      } catch (err) {
+        // Phase 2-G Wave 2 (2-G.2) — pre-printed flow: if the card
+        // isn't in gift_cards yet, /balance returns 404. Attempt to
+        // auto-activate from a registered range and then re-read the
+        // balance. If no range matches, surface the original 404.
+        if (err.status === 404) {
+          try {
+            await api.post(`/api/gift-cards/${encodeURIComponent(code)}/activate`, {});
+            data = await api.get(`/api/gift-cards/${encodeURIComponent(code)}/balance`);
+          } catch {
+            throw err;
+          }
+        } else {
+          throw err;
+        }
+      }
+
+      // If the card exists but is still flagged pre_printed (e.g. an
+      // admin manually seeded it), activate it now so the cashier can
+      // tender immediately.
+      if (data.activation_status === "pre_printed") {
+        try {
+          await api.post(`/api/gift-cards/${encodeURIComponent(code)}/activate`, {});
+          data = await api.get(`/api/gift-cards/${encodeURIComponent(code)}/balance`);
+        } catch {
+          // Leave status as-is; the cashier will see pre_printed in the UI.
+        }
+      }
+
       setGiftCardBalance({
         remaining: Number(data.remaining_value),
         status: data.activation_status,

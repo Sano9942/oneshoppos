@@ -186,6 +186,26 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
   if (s.change > 0)
     b.appendChild(row("Change", fmt(s.change)));
 
+  // Phase 2-G Wave 2 (2-G.2) — gift-card codes issued on this sale.
+  if (Array.isArray(slip.issuedGiftCards) && slip.issuedGiftCards.length > 0) {
+    b.appendChild(hr());
+    b.appendChild(txt("div", "Gift Cards Issued", "label"));
+    slip.issuedGiftCards.forEach((gc) => {
+      const line = d.createElement("div");
+      line.className = "row";
+      line.appendChild(txt("span", gc.code));
+      line.appendChild(txt("span", fmt(gc.initial_value)));
+      b.appendChild(line);
+    });
+    const note = txt(
+      "div",
+      "Keep the code safe — required at checkout.",
+      "c",
+    );
+    note.style.cssText = "font-size:10px;color:#666;margin-top:2px";
+    b.appendChild(note);
+  }
+
   // Order note
   if (s.orderNote) {
     b.appendChild(hr());
