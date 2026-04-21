@@ -5187,6 +5187,116 @@ const MIGRATIONS = [
       }
     },
   },
+  {
+    version: 70,
+    description:
+      "Phase 2-G.8 Inventory Intelligence Hub — product_abc_class + cycle_count_schedules + cycle_count_sessions + lead-time / safety-stock columns + tenant defaults on company_profile",
+    up: async (client) => {
+      // 2-G.8: per-product ABC rollup, refreshed nightly by abc-worker-boss.
+      // variant_id is reserved for the post-per-variant-GRN follow-up wave;
+      // day-one rows always have variant_id = NULL. COALESCE(variant_id, 0)
+      // in the unique index keeps the NULL rows distinct from future per-
+      // variant rows.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS product_abc_class (
+          id SERIAL PRIMARY KEY,
+          product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+          variant_id INTEGER REFERENCES product_variants(id) ON DELETE CASCADE,
+          rank CHAR(1) CHECK (rank IN ('A','B','C')),
+          revenue_contribution_pct NUMERIC(6,4),
+          units_sold NUMERIC(12,3) DEFAULT 0,
+          units_received NUMERIC(12,3) DEFAULT 0,
+          sell_through_rate NUMERIC(6,4),
+          gross_margin NUMERIC(12,2) DEFAULT 0,
+          avg_inventory_value NUMERIC(12,2) DEFAULT 0,
+          gmroi NUMERIC(8,4),
+          daily_velocity NUMERIC(10,4) DEFAULT 0,
+          days_since_last_sale INTEGER,
+          window_days INTEGER NOT NULL,
+          computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_product_abc_class_unique
+          ON product_abc_class(product_id, COALESCE(variant_id, 0))
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_product_abc_class_rank
+          ON product_abc_class(rank)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_product_abc_class_dead
+          ON product_abc_class(days_since_last_sale)
+          WHERE days_since_last_sale >= 90
+      `);
+
+      // 2-G.8: cycle count scheduling primitives. cycle_count_schedules
+      // defines recurring counts filtered by JSONB criteria (outlet,
+      // category, brand, supplier, abc_rank). cycle_count_sessions wraps the
+      // existing stock_counts primitive so the UI reuses the stock-count
+      // screen for entry while variance rollup is tracked per session.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS cycle_count_schedules (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          filter_criteria JSONB NOT NULL DEFAULT '{}',
+          recurrence TEXT NOT NULL CHECK (recurrence IN ('weekly','monthly','quarterly')),
+          next_due_date DATE NOT NULL,
+          last_run_at TIMESTAMPTZ,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_by INTEGER REFERENCES employees(id),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS cycle_count_sessions (
+          id SERIAL PRIMARY KEY,
+          schedule_id INTEGER REFERENCES cycle_count_schedules(id) ON DELETE SET NULL,
+          stock_count_id INTEGER NOT NULL REFERENCES stock_counts(id) ON DELETE CASCADE,
+          started_at TIMESTAMPTZ DEFAULT NOW(),
+          completed_at TIMESTAMPTZ,
+          variance_units INTEGER DEFAULT 0,
+          variance_value NUMERIC(12,2) DEFAULT 0,
+          assigned_to INTEGER REFERENCES employees(id)
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_cycle_count_sessions_schedule
+          ON cycle_count_sessions(schedule_id)
+      `);
+      // Partial unique index — only one OPEN session per schedule at a time.
+      // Closed sessions (completed_at IS NOT NULL) never conflict.
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_cycle_count_sessions_one_open
+          ON cycle_count_sessions(schedule_id)
+          WHERE completed_at IS NULL
+      `);
+
+      // 2-G.8: lead-time resolution chain (product override → supplier
+      // default → tenant default → hardcoded 7d). safety_stock_days lives on
+      // the product row only (never inherited from supplier per design).
+      await client.query(`
+        ALTER TABLE suppliers
+          ADD COLUMN IF NOT EXISTS default_lead_time_days INTEGER DEFAULT 7
+      `);
+      await client.query(`
+        ALTER TABLE products
+          ADD COLUMN IF NOT EXISTS lead_time_days_override INTEGER,
+          ADD COLUMN IF NOT EXISTS safety_stock_days INTEGER DEFAULT 3
+      `);
+
+      // 2-G.8: tenant-wide defaults on company_profile (single-row). Matches
+      // the existing pattern (loyalty_earn_rate, margin_threshold_pct, etc.)
+      // rather than introducing a new generic KV settings store.
+      await client.query(`
+        ALTER TABLE company_profile
+          ADD COLUMN IF NOT EXISTS abc_window_days INTEGER NOT NULL DEFAULT 90,
+          ADD COLUMN IF NOT EXISTS tenant_default_lead_time_days INTEGER NOT NULL DEFAULT 7,
+          ADD COLUMN IF NOT EXISTS tenant_default_safety_stock_days INTEGER NOT NULL DEFAULT 3
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {
