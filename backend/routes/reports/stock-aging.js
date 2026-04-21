@@ -119,7 +119,30 @@ module.exports = function registerStockAgingReport(app, deps, helpers) {
         // Filter by bucket if requested
         const items = bucket && buckets[bucket] ? buckets[bucket] : rows;
 
-        res.json({ items, summary });
+        // Phase 2-G.8 extensions — surface cost-value aggregates at the top
+        // level so the Inventory Intelligence Aging tab can render them
+        // without re-summing rows on the client. Aggregates are always
+        // computed over the full result set (not the filtered bucket).
+        let totalCostValue = 0;
+        let totalUnits = 0;
+        let valueAtRisk = 0;
+        for (const row of rows) {
+          const value = Number(row.stock_value) || 0;
+          const qty = Number(row.current_stock) || 0;
+          totalCostValue += value;
+          totalUnits += qty;
+          if ((Number(row.age_days) || 0) >= 90) valueAtRisk += value;
+        }
+        const avgCostPerUnit =
+          totalUnits > 0 ? Number((totalCostValue / totalUnits).toFixed(4)) : 0;
+
+        res.json({
+          items,
+          summary,
+          total_cost_value: Number(totalCostValue.toFixed(2)),
+          avg_cost_per_unit: avgCostPerUnit,
+          value_at_risk: Number(valueAtRisk.toFixed(2)),
+        });
       } catch (err) {
         console.error("stock-aging report error:", err);
         res.status(500).json({ error: "Failed to generate stock aging report" });

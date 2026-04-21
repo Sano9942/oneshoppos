@@ -298,6 +298,11 @@ function startAll(deps) {
           await registerTreatmentPlanWorker(boss, pool);
         }
 
+        if (String(process.env.ABC_WORKER_ENABLED || "0") === "1") {
+          const { registerAbcWorker } = require("../workers/abc-worker-boss");
+          await registerAbcWorker(boss, pool);
+        }
+
         if (String(process.env.COURSE_RELEASE_WORKER_ENABLED || "0") === "1") {
           const { registerCourseReleaseWorker } = require("../workers/course-release-worker-boss");
           await registerCourseReleaseWorker(boss, pool);

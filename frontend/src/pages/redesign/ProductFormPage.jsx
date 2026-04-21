@@ -50,6 +50,10 @@ const BLANK_FORM = {
   is_bundle: false,
   attribute_set_id: "",
   supplier_id: "",
+  // 2-G.8 Inventory Intelligence — per-product overrides (blank = fall back
+  // to supplier default → tenant default → hardcoded 7/3).
+  lead_time_days_override: "",
+  safety_stock_days: "",
 };
 
 export default function ProductFormPage() {
@@ -163,6 +167,10 @@ export default function ProductFormPage() {
         has_variants: form.has_variants ? 1 : 0,
         attribute_set_id: form.has_variants ? (form.attribute_set_id || null) : null,
         is_bundle: form.is_bundle ? true : false,
+        lead_time_days_override:
+          form.lead_time_days_override !== "" ? Number(form.lead_time_days_override) : null,
+        safety_stock_days:
+          form.safety_stock_days !== "" ? Number(form.safety_stock_days) : null,
       };
 
       if (form.is_bundle && bundleComponents.length > 0) {
@@ -280,6 +288,8 @@ export default function ProductFormPage() {
             supplier_id: p.supplier_id || "",
             avg_rating: p.avg_rating || 0,
             review_count: p.review_count || 0,
+            lead_time_days_override: p.lead_time_days_override ?? "",
+            safety_stock_days: p.safety_stock_days ?? "",
           });
           if (p.is_bundle && Array.isArray(p.bundle_components)) {
             setBundleComponents(p.bundle_components.map((c) => ({
@@ -799,6 +809,45 @@ export default function ProductFormPage() {
                   />
                 )}
               </div>
+            </div>
+          </SectionCard>
+
+          {/* 2-G.8 Inventory Intelligence — per-product lead time & safety stock */}
+          <SectionCard>
+            <div className="p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-(--ui-text-muted)">
+                Inventory Intelligence
+              </p>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-(--ui-text-muted)">
+                  Lead time override (days)
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.lead_time_days_override}
+                  onChange={(e) => upd("lead_time_days_override", e.target.value)}
+                  placeholder="Blank uses supplier or tenant default"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-(--ui-text-muted)">
+                  Safety stock (days)
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.safety_stock_days}
+                  onChange={(e) => upd("safety_stock_days", e.target.value)}
+                  placeholder="Blank uses tenant default"
+                />
+              </div>
+              <p className="text-[11px] text-(--ui-text-muted)">
+                Drives reorder suggestions. Leave blank to inherit the supplier default
+                (if set) or the tenant-wide default from Company Settings.
+              </p>
             </div>
           </SectionCard>
 

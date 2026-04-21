@@ -81,6 +81,9 @@ module.exports = function createCompanyProfileRouter({
           void_threshold_pct,
           cash_denominations,
           industry_type,
+          abc_window_days,
+          tenant_default_lead_time_days,
+          tenant_default_safety_stock_days,
         } = req.body || {};
 
         await db.query(
@@ -104,6 +107,9 @@ module.exports = function createCompanyProfileRouter({
              refund_threshold_pct = COALESCE($17, refund_threshold_pct),
              void_threshold_pct = COALESCE($18, void_threshold_pct),
              cash_denominations = COALESCE($19, cash_denominations),
+             abc_window_days = COALESCE($20, abc_window_days),
+             tenant_default_lead_time_days = COALESCE($21, tenant_default_lead_time_days),
+             tenant_default_safety_stock_days = COALESCE($22, tenant_default_safety_stock_days),
              updated_at = NOW()
          WHERE id = 1`,
           [
@@ -126,6 +132,9 @@ module.exports = function createCompanyProfileRouter({
             refund_threshold_pct != null ? Number(refund_threshold_pct) : null,
             void_threshold_pct != null ? Number(void_threshold_pct) : null,
             cash_denominations || null,
+            abc_window_days != null ? Number(abc_window_days) : null,
+            tenant_default_lead_time_days != null ? Number(tenant_default_lead_time_days) : null,
+            tenant_default_safety_stock_days != null ? Number(tenant_default_safety_stock_days) : null,
           ]
         );
         // If industry_type changed, re-derive modes and flags

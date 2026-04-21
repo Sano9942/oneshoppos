@@ -23,6 +23,8 @@ module.exports = function registerSystemRoutes(app, deps) {
       const courseReleaseStatus = global.__courseReleaseWorkerStatus || null;
       const kdsSnapshotStatus = global.__kdsSnapshotWorkerStatus || null;
       const reservationReminderStatus = global.__reservationReminderWorkerStatus || null;
+      // 2-G.8 Inventory Intelligence — nightly ABC rollup at 02:00 UTC.
+      const abcStatus = global.__abcWorkerStatus || null;
 
       function workerInfo(status, pollIntervalMs) {
         if (!status) return { enabled: false, running: false };
@@ -50,6 +52,7 @@ module.exports = function registerSystemRoutes(app, deps) {
         course_release: workerInfo(courseReleaseStatus, 60_000),
         kds_snapshot: workerInfo(kdsSnapshotStatus, 15 * 60_000),
         reservation_reminder: workerInfo(reservationReminderStatus, 15 * 60_000),
+        abc: workerInfo(abcStatus, 24 * 60 * 60 * 1000),
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });

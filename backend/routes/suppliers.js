@@ -32,14 +32,23 @@ module.exports = function registerSupplierRoutes(app, deps) {
     const {
       name, contact_person, phone, email, address,
       payment_terms = "cash", credit_days = 0, credit_limit = 0,
+      default_lead_time_days,
     } = req.body;
     try {
       const { rows } = await db.query(
-        `INSERT INTO suppliers (name, contact_person, phone, email, address, payment_terms, credit_days, credit_limit)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-        [name, contact_person, phone, email, address, payment_terms, Number(credit_days), Number(credit_limit)]
+        `INSERT INTO suppliers (name, contact_person, phone, email, address, payment_terms, credit_days, credit_limit, default_lead_time_days)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+        [
+          name, contact_person, phone, email, address,
+          payment_terms, Number(credit_days), Number(credit_limit),
+          default_lead_time_days != null ? Number(default_lead_time_days) : null,
+        ]
       );
-      res.json({ id: rows[0].id, name, contact_person, phone, email, address, payment_terms, credit_days, credit_limit });
+      res.json({
+        id: rows[0].id, name, contact_person, phone, email, address,
+        payment_terms, credit_days, credit_limit,
+        default_lead_time_days,
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -51,24 +60,30 @@ module.exports = function registerSupplierRoutes(app, deps) {
     const {
       name, contact_person, phone, email, address,
       payment_terms, credit_days, credit_limit,
+      default_lead_time_days,
     } = req.body;
     try {
       const { rowCount } = await db.query(
         `UPDATE suppliers SET
-           name            = COALESCE($1, name),
-           contact_person  = COALESCE($2, contact_person),
-           phone           = COALESCE($3, phone),
-           email           = COALESCE($4, email),
-           address         = COALESCE($5, address),
-           payment_terms   = COALESCE($6, payment_terms),
-           credit_days     = COALESCE($7, credit_days),
-           credit_limit    = COALESCE($8, credit_limit)
-         WHERE id = $9`,
-        [name, contact_person, phone, email, address,
-         payment_terms,
-         credit_days !== undefined ? Number(credit_days) : undefined,
-         credit_limit !== undefined ? Number(credit_limit) : undefined,
-         id]
+           name                    = COALESCE($1, name),
+           contact_person          = COALESCE($2, contact_person),
+           phone                   = COALESCE($3, phone),
+           email                   = COALESCE($4, email),
+           address                 = COALESCE($5, address),
+           payment_terms           = COALESCE($6, payment_terms),
+           credit_days             = COALESCE($7, credit_days),
+           credit_limit            = COALESCE($8, credit_limit),
+           default_lead_time_days  = COALESCE($9, default_lead_time_days)
+         WHERE id = $10`,
+        [
+          name, contact_person, phone, email, address,
+          payment_terms,
+          credit_days !== undefined ? Number(credit_days) : undefined,
+          credit_limit !== undefined ? Number(credit_limit) : undefined,
+          default_lead_time_days !== undefined && default_lead_time_days !== null
+            ? Number(default_lead_time_days) : undefined,
+          id,
+        ]
       );
       if (rowCount === 0) return res.status(404).json({ error: "Supplier not found" });
       res.json({ message: "Supplier updated successfully" });

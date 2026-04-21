@@ -200,6 +200,9 @@ const EMPTY = {
   payment_terms: "cash",
   credit_days: 0,
   credit_limit: 0,
+  // 2-G.8 Inventory Intelligence — supplier-level default; product override
+  // wins; empty string means "inherit the tenant default".
+  default_lead_time_days: "",
 };
 
 export default function SuppliersRedesign() {
@@ -256,6 +259,7 @@ export default function SuppliersRedesign() {
       payment_terms: row.payment_terms || "cash",
       credit_days: row.credit_days || 0,
       credit_limit: row.credit_limit || 0,
+      default_lead_time_days: row.default_lead_time_days ?? "",
     });
     setModalOpen(true);
   };
@@ -275,6 +279,10 @@ export default function SuppliersRedesign() {
         payment_terms: form.payment_terms,
         credit_days: form.payment_terms === "credit" ? Number(form.credit_days) : 0,
         credit_limit: form.payment_terms === "credit" ? Number(form.credit_limit) : 0,
+        default_lead_time_days:
+          form.default_lead_time_days !== "" && form.default_lead_time_days != null
+            ? Number(form.default_lead_time_days)
+            : null,
       };
       if (isEdit) {
         await api.put(`/api/suppliers/${form.id}`, payload);
@@ -551,6 +559,25 @@ export default function SuppliersRedesign() {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* 2-G.8 Inventory Intelligence — supplier-level lead time default */}
+              <div className="rounded-lg border border-(--ui-border) p-3">
+                <label className="mb-1 block text-xs font-semibold uppercase text-(--ui-text-muted)">
+                  Default lead time (days)
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="Blank uses tenant default"
+                  value={form.default_lead_time_days}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, default_lead_time_days: e.target.value }))
+                  }
+                />
+                <p className="mt-1 text-xs text-(--ui-text-muted)">
+                  Applies to every product assigned to this supplier unless a product sets its own override.
+                </p>
               </div>
 
               <ModalFooter>

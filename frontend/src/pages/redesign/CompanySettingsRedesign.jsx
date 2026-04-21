@@ -47,6 +47,10 @@ const DEFAULT_FORM = {
   fiscal_year_start: "01-01", timezone: "Asia/Karachi", logo_url: "",
   monthly_sales_target: 0, margin_threshold_pct: 20,
   refund_threshold_pct: 5, void_threshold_pct: 3,
+  // 2-G.8 Inventory Intelligence tenant defaults
+  abc_window_days: 90,
+  tenant_default_lead_time_days: 7,
+  tenant_default_safety_stock_days: 3,
 };
 
 function FormField({ label, children }) {
@@ -419,6 +423,47 @@ export default function CompanySettingsRedesign() {
                 placeholder="3"
                 value={form.void_threshold_pct ?? 3}
                 onChange={(e) => upd("void_threshold_pct", e.target.value)}
+              />
+            </FormField>
+          </div>
+        </SectionCard>
+
+        {/* 2-G.8 Inventory Intelligence tenant defaults */}
+        <SectionCard className="p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-base font-semibold text-(--ui-text)">Inventory Intelligence</h2>
+          </div>
+          <p className="mb-3 text-xs text-(--ui-text-muted)">
+            Tenant-wide defaults used when a product or supplier doesn't set an override.
+            The nightly ABC worker uses the window; the reorder hub uses lead time + safety stock.
+          </p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <FormField label="ABC window (days)">
+              <Input
+                type="number"
+                min="7"
+                max="365"
+                placeholder="90"
+                value={form.abc_window_days ?? 90}
+                onChange={(e) => upd("abc_window_days", e.target.value)}
+              />
+            </FormField>
+            <FormField label="Default lead time (days)">
+              <Input
+                type="number"
+                min="0"
+                placeholder="7"
+                value={form.tenant_default_lead_time_days ?? 7}
+                onChange={(e) => upd("tenant_default_lead_time_days", e.target.value)}
+              />
+            </FormField>
+            <FormField label="Default safety stock (days)">
+              <Input
+                type="number"
+                min="0"
+                placeholder="3"
+                value={form.tenant_default_safety_stock_days ?? 3}
+                onChange={(e) => upd("tenant_default_safety_stock_days", e.target.value)}
               />
             </FormField>
           </div>
