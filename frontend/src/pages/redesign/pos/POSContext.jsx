@@ -102,6 +102,20 @@ export const POSProvider = ({ children }) => {
     }).catch(() => {});
   }, []);
 
+  // ── Loyalty config (Phase 2-G Wave 2 — 2-G.3) ──────────────────────────
+  // Replaces the hardcoded 1pt/PKR-100 earn and PKR-10/100pts redeem
+  // rates with tenant-configured values. Falls back to the defaults if
+  // the endpoint errors or the tenant DB predates v63.
+  const [loyaltyConfig, setLoyaltyConfig] = useState(null);
+  useEffect(() => {
+    api.get("/api/loyalty/config")
+      .then((d) => setLoyaltyConfig({
+        earn_rate: Number(d.earn_rate ?? 1),
+        redeem_rate: Number(d.redeem_rate ?? 10),
+      }))
+      .catch(() => setLoyaltyConfig(null));
+  }, []);
+
   // ── Lock state ───────────────────────────────────────────────────────────
   const [isLocked, setIsLocked] = useState(
     () => sessionStorage.getItem("posLocked") === "1",
@@ -279,6 +293,7 @@ export const POSProvider = ({ children }) => {
     customers,
     checkoutCustomerId,
     total: cartHook.total,
+    loyaltyConfig,
   });
 
   const folio = useFolioCharging({

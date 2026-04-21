@@ -160,6 +160,33 @@ export default function POSReceiptModal() {
               </div>
             )}
           </div>
+          {/* Phase 2-G Wave 2 (2-G.2) — codes generated on this sale. */}
+          {Array.isArray(slip.issuedGiftCards) && slip.issuedGiftCards.length > 0 && (
+            <>
+              <div className="border-t border-dashed border-slate-300" />
+              <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">
+                Gift Cards Issued
+              </p>
+              <div className="space-y-1">
+                {slip.issuedGiftCards.map((gc) => (
+                  <div
+                    key={gc.id || gc.code}
+                    className="flex justify-between items-center text-xs bg-emerald-50 border border-emerald-200 rounded-md px-2 py-1.5"
+                  >
+                    <span className="font-mono font-bold tracking-widest text-emerald-900">
+                      {gc.code}
+                    </span>
+                    <span className="font-semibold text-emerald-800">
+                      {money(gc.initial_value)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-slate-500 text-center">
+                Keep the code safe — it's required at checkout to redeem.
+              </p>
+            </>
+          )}
           {slip.orderNote && (
             <>
               <div className="border-t border-dashed border-slate-300" />

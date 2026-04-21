@@ -819,72 +819,9 @@ module.exports = function registerBarcodeExpenseRoutes(app, deps) {
   });
 
   // --- GIFT CARDS ---
-
-  app.get("/api/gift-cards", requirePerm("manage_orders"), async (req, res) => {
-    try {
-      const { rows } = await db.query(
-        "SELECT * FROM gift_cards ORDER BY created_at DESC"
-      );
-      res.json({ gift_cards: rows });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post("/api/gift-cards", requirePerm("manage_orders"), async (req, res) => {
-    const { initial_value } = req.body;
-    if (!initial_value || Number(initial_value) <= 0)
-      return res.status(400).json({ error: "initial_value must be greater than 0" });
-    const code = require("crypto").randomBytes(4).toString("hex").toUpperCase();
-    const val = Number(initial_value);
-    try {
-      const { rows } = await db.query(
-        "INSERT INTO gift_cards (code, initial_value, remaining_value) VALUES ($1, $2, $3) RETURNING id",
-        [code, val, val]
-      );
-      res.json({ id: rows[0].id, code });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get("/api/gift-cards/:code", async (req, res) => {
-    const { code } = req.params;
-    try {
-      const { rows: [row] } = await db.query(
-        "SELECT * FROM gift_cards WHERE code=$1",
-        [code]
-      );
-      if (!row) return res.status(404).json({ error: "Gift card not found" });
-      res.json({ gift_card: row });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post("/api/gift-cards/:code/redeem", requirePerm("manage_orders"), async (req, res) => {
-    const { code } = req.params;
-    const { amount } = req.body;
-    if (!amount || Number(amount) <= 0)
-      return res.status(400).json({ error: "amount must be greater than 0" });
-    try {
-      const { rows: [card] } = await db.query(
-        "SELECT * FROM gift_cards WHERE code=$1",
-        [code]
-      );
-      if (!card) return res.status(404).json({ error: "Gift card not found" });
-      if (card.status !== "active") return res.status(400).json({ error: "Gift card is not active" });
-      const deduct = Math.min(Number(amount), Number(card.remaining_value));
-      const newBalance = Number(card.remaining_value) - deduct;
-      const newStatus = newBalance <= 0 ? "redeemed" : "active";
-      const redeemedAt = newBalance <= 0 ? new Date().toISOString().replace("T", " ").slice(0, 19) : null;
-      await db.query(
-        "UPDATE gift_cards SET remaining_value=$1, status=$2, redeemed_at=COALESCE(redeemed_at, $3) WHERE code=$4",
-        [newBalance, newStatus, redeemedAt, code]
-      );
-      res.json({ deducted: deduct, remaining_value: newBalance, status: newStatus });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
+  // The 4 routes that used to live here were deprecated in Phase 2-G
+  // Wave 2 (2-G.2). See routes/gift-cards.js for the wired-up
+  // replacements: filter-aware list, digital + physical create, range
+  // management, activation, balance, and transactional POS redemption
+  // with ledger audit + depleted state handling.
 };

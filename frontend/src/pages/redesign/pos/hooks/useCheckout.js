@@ -153,11 +153,15 @@ export function useCheckout({
     }
   }, [newCustName, newCustMobile, setCustomers, setCheckoutCustomerId]);
 
-  const addPayment = useCallback((e) => {
+  // Phase 2-G Wave 2 (2-G.2): optional `extras` slot lets the caller
+  // attach method-specific fields (e.g. `code` for gift_card tender)
+  // without changing the signature for Cash/Card/Wallet callers.
+  const addPayment = useCallback((e, extras) => {
     if (e && e.preventDefault) e.preventDefault();
     const amount = Number(paymentAmount);
     if (!amount || amount <= 0) return;
-    setPayments((prev) => [...prev, { method: paymentMethod, amount }]);
+    const entry = { method: paymentMethod, amount, ...(extras || {}) };
+    setPayments((prev) => [...prev, entry]);
     setPaymentAmount(
       remaining - amount > 0 ? (remaining - amount).toFixed(2) : "",
     );
@@ -180,6 +184,9 @@ export function useCheckout({
     taxInclusive,
     orderNote: opts.orderNote ?? (orderNote || null),
     timestamp: new Date().toLocaleString(),
+    // Phase 2-G Wave 2 (2-G.2) — codes issued on this sale (empty
+    // array for any sale that didn't include a gift-card SKU).
+    issuedGiftCards: Array.isArray(data?.issuedGiftCards) ? data.issuedGiftCards : [],
   }), [cart, payments, total, change, outlets, selectedOutletId, employee, discountValue, discountInput, discountType, taxInclusive, taxTotal, orderNote]);
 
   const clearAfterSale = useCallback(() => {

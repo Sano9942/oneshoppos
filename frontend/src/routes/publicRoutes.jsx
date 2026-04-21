@@ -16,6 +16,7 @@ const LoginPage = lazy(() => import("../pages/LoginPage"));
 const KioskRedesign = lazy(() => import("../pages/redesign/KioskRedesign"));
 const CustomerDisplayPage = lazy(() => import("../pages/CustomerDisplayPage"));
 const ReceiptPublicPage = lazy(() => import("../pages/ReceiptPublicPage"));
+const GiftCardBalancePage = lazy(() => import("../pages/GiftCardBalancePage"));
 const ResetPassword = lazy(() => import("../pages/ResetPassword"));
 const SignupPage = lazy(() => import("../pages/SignupPage"));
 const StorefrontLayout = lazy(() => import("../pages/storefront/StorefrontLayout"));
@@ -83,6 +84,7 @@ export const publicRoutes = [
   <Route key="reset-password" path="/reset-password" element={<Suspense fallback={<RouteLoading />}><ResetPassword /></Suspense>} />,
   <Route key="signup" path="/signup" element={<Suspense fallback={<RouteLoading />}><SignupPage /></Suspense>} />,
   <Route key="receipt" path="/receipt/:invoiceNumber" element={<Suspense fallback={<RouteLoading />}><ReceiptPublicPage /></Suspense>} />,
+  <Route key="gift-card" path="/gift-card/:code" element={<Suspense fallback={<RouteLoading />}><GiftCardBalancePage /></Suspense>} />,
   <Route key="access-denied" path="/access-denied" element={<AccessDenied />} />,
   <Route key="context-select" path="/context-select" element={<RequireAuth><ContextSelect /></RequireAuth>} />,
   <Route

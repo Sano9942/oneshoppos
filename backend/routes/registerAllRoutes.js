@@ -158,6 +158,10 @@ module.exports = function registerAllRoutes(app, deps) {
   // Public receipt endpoint — no auth required, manually resolves tenant DB
   require("./receipts")(app, deps);
 
+  // Public gift-card balance (Phase 2-G Wave 2 — 2-G.2) — no auth,
+  // same manual tenant-resolution pattern as receipts.
+  require("./gift-cards-public")(app, deps);
+
   // Public storefront endpoints — no auth required, manually resolves tenant DB
   require("./storefront")(app, deps);
 
@@ -511,6 +515,15 @@ module.exports = function registerAllRoutes(app, deps) {
 
   // --- ROUTES: PRICE LIST ASSIGNMENTS (Phase 2) ---
   require("./price-list-assignments")(app, deps);
+
+  // --- ROUTES: PRICE BOOKS (Phase 2-G Wave 2 — 2-G.4) ---
+  require("./price-books")(app, deps);
+
+  // --- ROUTES: LOYALTY (Phase 2-G Wave 2 — 2-G.3) ---
+  require("./loyalty")(app, deps);
+
+  // --- ROUTES: GIFT CARDS (Phase 2-G Wave 2 — 2-G.2) ---
+  require("./gift-cards")(app, deps);
 
   // --- ROUTES: DRAFT ORDERS (Phase 2) ---
   require("./draft-orders")(app, deps);

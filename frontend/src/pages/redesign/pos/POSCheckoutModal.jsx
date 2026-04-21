@@ -14,6 +14,7 @@ import {
   ToggleLeft,
   ToggleRight,
   PenLine,
+  Gift,
 } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { usePreset } from "../../../contexts/PresetContext";
@@ -84,9 +85,67 @@ export default function POSCheckoutModal() {
     employeesList,
     setShowGuestMode,
     signatureSvg,
+    posFlags,
   } = usePOS();
   const { labels = {}, hasMode } = usePreset();
   const restaurantOn = hasMode && hasMode("restaurant");
+  const giftCardsOn = !!posFlags?.phase2g_gift_cards;
+
+  // Phase 2-G Wave 2 (2-G.2) — gift-card tender state, local to the modal.
+  const [giftCardCode, setGiftCardCode] = useState("");
+  const [giftCardBalance, setGiftCardBalance] = useState(null); // { remaining, status } | null
+  const [giftCardLookupBusy, setGiftCardLookupBusy] = useState(false);
+  const [giftCardError, setGiftCardError] = useState("");
+
+  const lookupGiftCardBalance = async () => {
+    const code = giftCardCode.trim().toUpperCase();
+    setGiftCardError("");
+    setGiftCardBalance(null);
+    if (!code) return;
+    setGiftCardLookupBusy(true);
+    try {
+      let data;
+      try {
+        data = await api.get(`/api/gift-cards/${encodeURIComponent(code)}/balance`);
+      } catch (err) {
+        // Phase 2-G Wave 2 (2-G.2) — pre-printed flow: if the card
+        // isn't in gift_cards yet, /balance returns 404. Attempt to
+        // auto-activate from a registered range and then re-read the
+        // balance. If no range matches, surface the original 404.
+        if (err.status === 404) {
+          try {
+            await api.post(`/api/gift-cards/${encodeURIComponent(code)}/activate`, {});
+            data = await api.get(`/api/gift-cards/${encodeURIComponent(code)}/balance`);
+          } catch {
+            throw err;
+          }
+        } else {
+          throw err;
+        }
+      }
+
+      // If the card exists but is still flagged pre_printed (e.g. an
+      // admin manually seeded it), activate it now so the cashier can
+      // tender immediately.
+      if (data.activation_status === "pre_printed") {
+        try {
+          await api.post(`/api/gift-cards/${encodeURIComponent(code)}/activate`, {});
+          data = await api.get(`/api/gift-cards/${encodeURIComponent(code)}/balance`);
+        } catch {
+          // Leave status as-is; the cashier will see pre_printed in the UI.
+        }
+      }
+
+      setGiftCardBalance({
+        remaining: Number(data.remaining_value),
+        status: data.activation_status,
+      });
+    } catch (err) {
+      setGiftCardError(err.body?.error || "Gift card not found");
+    } finally {
+      setGiftCardLookupBusy(false);
+    }
+  };
   const customerLabel = labels.customer || "Customer";
   const roomManagementOn = hasMode && hasMode("room_management");
   const treatmentPlansOn = hasMode && hasMode("treatment_plans");
@@ -682,30 +741,114 @@ export default function POSCheckoutModal() {
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
               Payment Method
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className={`grid ${giftCardsOn ? "grid-cols-4" : "grid-cols-3"} gap-2`}>
               {[
                 { id: "Cash", icon: <Banknote size={16} /> },
                 { id: "Card", icon: <CreditCard size={16} /> },
                 { id: "Wallet", icon: <Wallet size={16} /> },
-              ].map(({ id, icon }) => (
+                ...(giftCardsOn
+                  ? [{ id: "gift_card", label: "Gift Card", icon: <Gift size={16} /> }]
+                  : []),
+              ].map(({ id, label, icon }) => (
                 <button
                   key={id}
                   type="button"
-                  onClick={() => setPaymentMethod(id)}
+                  onClick={() => {
+                    setPaymentMethod(id);
+                    if (id !== "gift_card") {
+                      setGiftCardCode("");
+                      setGiftCardBalance(null);
+                      setGiftCardError("");
+                    }
+                  }}
                   className={`py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 font-bold text-sm transition border-2 ${
                     paymentMethod === id
                       ? "border-[#8066FF] bg-[#8066FF]/5 text-[#8066FF]"
                       : "border-slate-100 bg-white hover:border-slate-200 text-slate-600"
                   }`}
                 >
-                  {icon} {id}
+                  {icon} {label || id}
                 </button>
               ))}
             </div>
+
+            {paymentMethod === "gift_card" && (
+              <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                  Gift Card Code
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={giftCardCode}
+                    onChange={(e) => {
+                      setGiftCardCode(e.target.value);
+                      setGiftCardBalance(null);
+                      setGiftCardError("");
+                    }}
+                    placeholder="Scan or paste code"
+                    className="flex-1 px-3 py-2 bg-white border-2 border-slate-200 rounded-lg focus:border-[#8066FF] outline-none font-mono text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={lookupGiftCardBalance}
+                    disabled={giftCardLookupBusy || !giftCardCode.trim()}
+                    className="bg-slate-900 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-slate-800 disabled:opacity-30 transition"
+                  >
+                    {giftCardLookupBusy ? "…" : "Check"}
+                  </button>
+                </div>
+                {giftCardBalance && (
+                  <div
+                    className={`text-sm px-3 py-2 rounded-lg ${
+                      giftCardBalance.status === "active"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-amber-50 text-amber-700 border border-amber-200"
+                    }`}
+                  >
+                    Balance: <strong>{money(giftCardBalance.remaining)}</strong>
+                    {" "}· {giftCardBalance.status}
+                  </div>
+                )}
+                {giftCardError && (
+                  <div className="text-sm px-3 py-2 rounded-lg bg-rose-50 text-rose-700 border border-rose-200">
+                    {giftCardError}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Amount */}
-          <form onSubmit={addPayment}>
+          <form
+            onSubmit={(e) => {
+              // Phase 2-G Wave 2: when tendering a gift card, force a
+              // balance lookup + attach the code to the payment entry.
+              if (paymentMethod === "gift_card") {
+                e.preventDefault();
+                const code = giftCardCode.trim().toUpperCase();
+                const amt = Number(paymentAmount);
+                if (!code) {
+                  setGiftCardError("Enter a gift card code first");
+                  return;
+                }
+                if (!amt || amt <= 0) return;
+                if (giftCardBalance && amt > giftCardBalance.remaining) {
+                  setGiftCardError(
+                    `Amount exceeds remaining balance (${money(giftCardBalance.remaining)})`,
+                  );
+                  return;
+                }
+                addPayment(null, { code });
+                // Reset code-side state so the next tender lookup is fresh.
+                setGiftCardCode("");
+                setGiftCardBalance(null);
+                setGiftCardError("");
+                return;
+              }
+              addPayment(e);
+            }}
+          >
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
               Amount
             </label>

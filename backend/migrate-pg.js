@@ -4786,6 +4786,90 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 63,
+    description:
+      "Phase 2-G Wave 2 — gift_cards.card_type/activation_status, gift_card_ranges, price_lists.customer_group_id, products.is_gift_card_sku",
+    up: async (client) => {
+      // 2-G.2: gift card additions. card_type distinguishes digital/physical
+      // so the issue flow + activation UI can branch on a single column.
+      // activation_status tracks the physical-card lifecycle (pre_printed →
+      // active → depleted). The existing `status` column stays for backward
+      // compat; new code reads activation_status instead.
+      await client.query(
+        `ALTER TABLE gift_cards
+           ADD COLUMN IF NOT EXISTS card_type TEXT NOT NULL DEFAULT 'digital'
+             CHECK (card_type IN ('digital','physical'))`
+      );
+      await client.query(
+        `ALTER TABLE gift_cards
+           ADD COLUMN IF NOT EXISTS activation_status TEXT NOT NULL DEFAULT 'active'
+             CHECK (activation_status IN ('pre_printed','issued','active','depleted'))`
+      );
+      await client.query(
+        `ALTER TABLE gift_cards
+           ADD COLUMN IF NOT EXISTS issued_to_customer_id INTEGER REFERENCES customers(id)`
+      );
+      await client.query(
+        `ALTER TABLE gift_cards
+           ADD COLUMN IF NOT EXISTS issued_to_email TEXT`
+      );
+      await client.query(
+        `ALTER TABLE gift_cards
+           ADD COLUMN IF NOT EXISTS issued_from_sale_id INTEGER REFERENCES sales(id)`
+      );
+
+      // 2-G.2: physical card-range registration. Admins record prefix +
+      // numeric range of pre-printed cards before any POS activation.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS gift_card_ranges (
+          id SERIAL PRIMARY KEY,
+          prefix TEXT NOT NULL,
+          range_start BIGINT NOT NULL,
+          range_end BIGINT NOT NULL,
+          face_value NUMERIC(12,2) NOT NULL,
+          notes TEXT,
+          created_by INTEGER REFERENCES employees(id),
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          CHECK (range_end >= range_start)
+        )
+      `);
+
+      // 2-G.2: products flag for gift-card SKUs. When a cart line's product
+      // has is_gift_card_sku=true, sale completion generates the card.
+      await client.query(
+        `ALTER TABLE products
+           ADD COLUMN IF NOT EXISTS is_gift_card_sku BOOLEAN NOT NULL DEFAULT false`
+      );
+
+      // 2-G.4: attach customer_group_id to price_lists so group-scoped
+      // per-product overrides piggyback on existing price-list infra
+      // (instead of a duplicate price_books table).
+      await client.query(
+        `ALTER TABLE price_lists
+           ADD COLUMN IF NOT EXISTS customer_group_id INTEGER REFERENCES customer_groups(id)`
+      );
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_price_lists_customer_group
+          ON price_lists(customer_group_id)
+          WHERE customer_group_id IS NOT NULL
+      `);
+
+      // 2-G.3: loyalty earn/redeem rates per tenant. Replaces the
+      // hardcoded LOYALTY_EARN_RATE=1 (1pt per PKR 100) and
+      // LOYALTY_REDEEM_RATE=10 (100pts = PKR 10) constants in the POS
+      // hook. Stored on company_profile because loyalty is a
+      // tenant-wide setting, not per-tier.
+      await client.query(
+        `ALTER TABLE company_profile
+           ADD COLUMN IF NOT EXISTS loyalty_earn_rate NUMERIC(8,4) NOT NULL DEFAULT 1`
+      );
+      await client.query(
+        `ALTER TABLE company_profile
+           ADD COLUMN IF NOT EXISTS loyalty_redeem_rate NUMERIC(8,4) NOT NULL DEFAULT 10`
+      );
+    },
+  },
 ];
 
 async function migrate(db) {

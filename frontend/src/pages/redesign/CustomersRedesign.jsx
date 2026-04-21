@@ -16,6 +16,7 @@ import {
   SectionCard,
   TableToolbar,
 } from "../../ui/primitives";
+import GiftCardLookupStrip from "./customers/GiftCardLookupStrip";
 
 const PAGE_SIZE = 25;
 
@@ -669,6 +670,8 @@ export default function CustomersRedesign() {
           {error}
         </SectionCard>
       ) : null}
+
+      <GiftCardLookupStrip />
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
         <SectionCard className="xl:col-span-8">

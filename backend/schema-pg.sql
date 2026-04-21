@@ -151,7 +151,10 @@ CREATE TABLE IF NOT EXISTS products (
   is_sold_out BOOLEAN NOT NULL DEFAULT false,
   sold_out_since TIMESTAMPTZ,
   sold_out_until TIMESTAMPTZ,
-  sold_out_reason TEXT
+  sold_out_reason TEXT,
+  -- 2-G.2 Wave 2: mark this SKU as a gift card. On sale completion a
+  -- gift_cards row is generated (digital code or physical range serial).
+  is_gift_card_sku BOOLEAN NOT NULL DEFAULT false
 );
 
 CREATE TABLE IF NOT EXISTS product_variants (
@@ -231,8 +234,13 @@ CREATE TABLE IF NOT EXISTS price_lists (
   type TEXT DEFAULT 'customer_group' CHECK(type IN ('customer_group','volume','promotional')),
   is_default BOOLEAN DEFAULT false,
   is_active BOOLEAN DEFAULT true,
+  customer_group_id INTEGER,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_price_lists_customer_group
+  ON price_lists(customer_group_id)
+  WHERE customer_group_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS price_list_items (
   id SERIAL PRIMARY KEY,
@@ -265,6 +273,21 @@ CREATE TABLE IF NOT EXISTS customer_groups (
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Phase 2-G Wave 2 (2-G.4): attach the FK after both tables exist so
+-- schema apply works in a single pass (price_lists is defined earlier).
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_schema = current_schema()
+      AND table_name = 'price_lists'
+      AND constraint_name = 'price_lists_customer_group_id_fkey'
+  ) THEN
+    ALTER TABLE price_lists
+      ADD CONSTRAINT price_lists_customer_group_id_fkey
+      FOREIGN KEY (customer_group_id) REFERENCES customer_groups(id);
+  END IF;
+END $$;
 
 -- ── Loyalty Tiers ────────────────────────────────────────────────────
 
@@ -751,7 +774,27 @@ CREATE TABLE IF NOT EXISTS gift_cards (
   remaining_value NUMERIC(12,2) NOT NULL,
   status TEXT NOT NULL DEFAULT 'active',
   redeemed_at TIMESTAMPTZ,
+  card_type TEXT NOT NULL DEFAULT 'digital'
+    CHECK (card_type IN ('digital','physical')),
+  activation_status TEXT NOT NULL DEFAULT 'active'
+    CHECK (activation_status IN ('pre_printed','issued','active','depleted')),
+  issued_to_customer_id INTEGER REFERENCES customers(id),
+  issued_to_email TEXT,
+  issued_from_sale_id INTEGER REFERENCES sales(id),
   created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Phase 2-G Wave 2 (2-G.2): pre-printed physical card ranges.
+CREATE TABLE IF NOT EXISTS gift_card_ranges (
+  id SERIAL PRIMARY KEY,
+  prefix TEXT NOT NULL,
+  range_start BIGINT NOT NULL,
+  range_end BIGINT NOT NULL,
+  face_value NUMERIC(12,2) NOT NULL,
+  notes TEXT,
+  created_by INTEGER REFERENCES employees(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  CHECK (range_end >= range_start)
 );
 
 -- Phase 2-G Wave 1: gift card ledger (mirrors customer_wallet_ledger shape).
@@ -819,6 +862,11 @@ CREATE TABLE IF NOT EXISTS company_profile (
   void_threshold_pct NUMERIC(6,2) DEFAULT 3,
   cash_denominations TEXT DEFAULT '[5000,1000,500,100,50,20,10]',
   onboarding_dismissed BOOLEAN DEFAULT false,
+  -- 2-G.3 Wave 2: tenant-wide loyalty conversion rates.
+  --   earn_rate = points per PKR 100 of spend (default 1 = 1pt/100 PKR).
+  --   redeem_rate = PKR off per 100 points redeemed (default 10 = PKR 10/100pts).
+  loyalty_earn_rate NUMERIC(8,4) NOT NULL DEFAULT 1,
+  loyalty_redeem_rate NUMERIC(8,4) NOT NULL DEFAULT 10,
   fbr_api_token TEXT,
   fbr_environment TEXT DEFAULT 'sandbox',
   fbr_default_hs_code TEXT,
