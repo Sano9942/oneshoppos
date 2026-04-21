@@ -1,5 +1,7 @@
 const { toUtcStart, toUtcEnd } = require("../utils/tz");
 const logger = require("../services/logger");
+const { getFeatureFlagsMap } = require("../middleware/feature-flags");
+const { recordApprovalEvent } = require("../services/approval-policy");
 
 module.exports = function registerSalesRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale, path, fs, UPLOADS_DIR } = deps;
@@ -531,6 +533,93 @@ module.exports = function registerSalesRoutes(app, deps) {
       return res.status(401).json({ error: "Login is required for checkout" });
     }
 
+    // Phase 2-G Wave 3 (2-G.5) — validate per-line price_override metadata
+    // before the transaction opens. Collects one entry per cart line (same
+    // index) so the INSERT pass can stamp the audit columns without another
+    // round-trip.
+    const overridesByIndex = new Array(cartItems.length).fill(null);
+    const anyOverride = cartItems.some((it) => it && it.price_override);
+    if (anyOverride) {
+      const flags = await getFeatureFlagsMap(req.tenantId);
+      if (!flags.phase2g_price_override) {
+        return res.status(503).json({
+          error: "Feature disabled: phase2g_price_override",
+          flag: "phase2g_price_override",
+        });
+      }
+      const hasPerm =
+        Array.isArray(req.employeePerms) &&
+        (req.employeePerms.includes("all_access") ||
+          req.employeePerms.includes("override_price"));
+      for (let i = 0; i < cartItems.length; i++) {
+        const ov = cartItems[i]?.price_override;
+        if (!ov) continue;
+        const originalPrice = Number(ov.original_price);
+        if (!isFinite(originalPrice) || originalPrice < 0) {
+          return res.status(400).json({ error: "price_override.original_price must be a non-negative number" });
+        }
+        const reasonId = ov.reason_id != null ? Number(ov.reason_id) : null;
+        const approvalEventId =
+          ov.approval_event_id != null ? Number(ov.approval_event_id) : null;
+
+        if (!approvalEventId && !hasPerm) {
+          return res.status(403).json({
+            error: "Manager approval required for price override",
+          });
+        }
+
+        let approvedBy = null;
+        if (approvalEventId) {
+          const { rows } = await db.query(
+            `SELECT id, action_type, status, approved_by
+               FROM approval_events
+              WHERE id = $1`,
+            [approvalEventId]
+          );
+          const ev = rows[0];
+          if (!ev || ev.action_type !== "price_override" || ev.status !== "approved") {
+            return res.status(400).json({ error: "Invalid approval_event_id for price override" });
+          }
+          approvedBy = ev.approved_by;
+        } else {
+          // Manager self-approving via their own session — record an event now
+          // so the audit trail stays consistent.
+          const ev = await recordApprovalEvent(db, {
+            policyId: null,
+            actionType: "price_override",
+            referenceType: "sale_item_pending",
+            referenceId: null,
+            requestedBy: authenticatedEmployeeId,
+            approvedBy: authenticatedEmployeeId,
+            status: "approved",
+            reason: "Self-approved by manager with override_price",
+            metadata: {
+              product_id: cartItems[i].original_product_id || cartItems[i].id || null,
+              variant_id: cartItems[i].variant_id || null,
+              original_price: originalPrice,
+              new_price: Number(cartItems[i].price),
+              reason_id: reasonId,
+            },
+            outletId: outlet_id ?? null,
+          });
+          overridesByIndex[i] = {
+            originalPrice,
+            reasonId,
+            approvedBy: authenticatedEmployeeId,
+            approvalEventId: ev.id,
+          };
+          continue;
+        }
+
+        overridesByIndex[i] = {
+          originalPrice,
+          reasonId,
+          approvedBy,
+          approvalEventId,
+        };
+      }
+    }
+
     let activeShift;
     try {
       activeShift = await getActiveShiftForOutlet(outlet_id);
@@ -829,11 +918,21 @@ module.exports = function registerSalesRoutes(app, deps) {
         const newSaleId = saleRow.id;
 
         // 3. Loop through cart to insert Line Items AND deduct stock
-        for (const item of cartItems) {
+        for (let cartIdx = 0; cartIdx < cartItems.length; cartIdx++) {
+          const item = cartItems[cartIdx];
           // M5: gross_weight/tare_weight persist audit trail for weighted items.
           // Non-weighted items pass null/0 and behave identically to pre-M5.
+          // 2-G.5: price_override_* columns are NULL unless an override was
+          // validated in the pre-transaction pass (overridesByIndex).
+          const ov = overridesByIndex[cartIdx];
           await client.query(
-            "INSERT INTO sale_items (sale_id, product_id, variant_id, quantity, price_at_sale, cost_price_at_sale, gross_weight, tare_weight, staff_id, seat_number) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+            `INSERT INTO sale_items
+               (sale_id, product_id, variant_id, quantity, price_at_sale,
+                cost_price_at_sale, gross_weight, tare_weight, staff_id, seat_number,
+                price_override_amount, price_override_reason_id,
+                price_override_approved_by, price_override_approved_at,
+                price_override_approval_event_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
             [
               newSaleId,
               item.original_product_id || item.id,
@@ -848,6 +947,11 @@ module.exports = function registerSalesRoutes(app, deps) {
               // 2-R.8: seat_number carried from the draft_order item (dine-in
               // checks stamp this via SeatCoursePicker); retail carts pass null.
               item.seat_number != null ? Number(item.seat_number) : null,
+              ov ? ov.originalPrice : null,
+              ov ? ov.reasonId : null,
+              ov ? ov.approvedBy : null,
+              ov ? new Date() : null,
+              ov ? ov.approvalEventId : null,
             ]
           );
 

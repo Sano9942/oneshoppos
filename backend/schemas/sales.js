@@ -3,10 +3,20 @@ const { z } = require("zod");
 // POST /api/sales — cartItems uses `id` (not product_id), `price` (not unit_price)
 // M5: quantity allows decimals for weight/length-based items (kg, g, lb, m, cm).
 // Optional gross_weight / tare_weight persist audit trail for weighted sales.
+// 2-G.5: optional price_override captures the audit trail for a cashier price
+// override. approval_event_id is mandatory when the cashier lacks the
+// `override_price` permission (validated in sales.js, not here).
+const PriceOverrideSchema = z.object({
+  original_price: z.coerce.number().nonnegative(),
+  reason_id: z.coerce.number().int().positive().optional().nullable(),
+  approval_event_id: z.coerce.number().int().positive().optional().nullable(),
+}).passthrough();
+
 const CartItemSchema = z.object({
   id: z.coerce.number().int().positive(),
   price: z.coerce.number(),
   quantity: z.coerce.number().positive(),
+  price_override: PriceOverrideSchema.optional().nullable(),
 }).passthrough(); // preserve name, cost_price, tax, gst, barcode, variant_id, gross_weight, tare_weight, unit, etc.
 
 // Payment line — split-tender support. Method is free-form (Cash, Card, Wallet,
@@ -32,4 +42,4 @@ const VoidSaleSchema = z.object({
   void_reason: z.string().min(1, "void_reason is required"),
 }).passthrough();
 
-module.exports = { CartItemSchema, PaymentLineSchema, CreateSaleSchema, VoidSaleSchema };
+module.exports = { CartItemSchema, PriceOverrideSchema, PaymentLineSchema, CreateSaleSchema, VoidSaleSchema };

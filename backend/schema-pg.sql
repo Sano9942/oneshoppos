@@ -437,6 +437,9 @@ CREATE TABLE IF NOT EXISTS sale_items (
   -- Retail sales leave this null. Indexed by (sale_id, seat_number) for
   -- per-seat aggregation in reports and receipts.
   seat_number INTEGER
+  -- 2-G.5 (migration v64): price_override_* columns added via ALTER TABLE
+  -- at the end of this file (after override_reasons + approval_events are
+  -- defined, since they're forward-referenced FKs).
 );
 CREATE INDEX IF NOT EXISTS idx_sale_items_sale_seat ON sale_items(sale_id, seat_number);
 
@@ -4094,6 +4097,30 @@ CREATE INDEX IF NOT EXISTS idx_appointments_treatment_plan
 ALTER TABLE sales ADD COLUMN IF NOT EXISTS treatment_folio_id INTEGER REFERENCES treatment_folios(id);
 CREATE INDEX IF NOT EXISTS idx_sales_treatment_folio_id
   ON sales(treatment_folio_id) WHERE treatment_folio_id IS NOT NULL;
+
+-- ── Phase 2-G Wave 3 — 2-G.5 manager price override (migration v64) ──
+-- Lookup table for cashier-facing override reasons. Editable per tenant so
+-- reason labels stay out of the enum.
+CREATE TABLE IF NOT EXISTS override_reasons (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  label TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- sale_items override audit columns — added here (not inline) because
+-- override_reasons + approval_events are defined later in the file and the
+-- FK references can't be forward-declared in a single-pass schema load.
+ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS price_override_amount NUMERIC(12,2);
+ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS price_override_reason_id INTEGER REFERENCES override_reasons(id);
+ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS price_override_approved_by INTEGER REFERENCES employees(id);
+ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS price_override_approved_at TIMESTAMPTZ;
+ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS price_override_approval_event_id INTEGER REFERENCES approval_events(id);
+CREATE INDEX IF NOT EXISTS idx_sale_items_price_override
+  ON sale_items(price_override_approved_by, price_override_approved_at)
+  WHERE price_override_amount IS NOT NULL;
 
 -- ── Schema versioning ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schema_version (

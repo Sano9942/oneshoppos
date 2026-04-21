@@ -4870,6 +4870,78 @@ const MIGRATIONS = [
       );
     },
   },
+  {
+    version: 64,
+    description:
+      "Phase 2-G Wave 3 — 2-G.5 manager price override: override_reasons lookup + sale_items override columns + override_price permission seed",
+    up: async (client) => {
+      // 2-G.5: lookup table for cashier-facing override reason codes. Keeps
+      // reason labels editable per tenant without changing the backend enum.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS override_reasons (
+          id SERIAL PRIMARY KEY,
+          code TEXT NOT NULL UNIQUE,
+          label TEXT NOT NULL,
+          is_active BOOLEAN NOT NULL DEFAULT true,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        INSERT INTO override_reasons (code, label, sort_order) VALUES
+          ('price_match', 'Price match', 10),
+          ('damaged_item', 'Damaged item', 20),
+          ('loyalty_gesture', 'Loyalty gesture', 30),
+          ('manager_discretion', 'Manager discretion', 40)
+        ON CONFLICT (code) DO NOTHING
+      `);
+
+      // 2-G.5: per-line override audit columns on sale_items. price_at_sale
+      // remains authoritative (the final charged price); price_override_amount
+      // captures the ORIGINAL list price so reporting can compute the delta.
+      // The approval_event_id links back to the manager PIN approval so the
+      // cashier-wise override report can trace each override to its approver.
+      await client.query(
+        `ALTER TABLE sale_items
+           ADD COLUMN IF NOT EXISTS price_override_amount NUMERIC(12,2)`
+      );
+      await client.query(
+        `ALTER TABLE sale_items
+           ADD COLUMN IF NOT EXISTS price_override_reason_id INTEGER REFERENCES override_reasons(id)`
+      );
+      await client.query(
+        `ALTER TABLE sale_items
+           ADD COLUMN IF NOT EXISTS price_override_approved_by INTEGER REFERENCES employees(id)`
+      );
+      await client.query(
+        `ALTER TABLE sale_items
+           ADD COLUMN IF NOT EXISTS price_override_approved_at TIMESTAMPTZ`
+      );
+      await client.query(
+        `ALTER TABLE sale_items
+           ADD COLUMN IF NOT EXISTS price_override_approval_event_id INTEGER REFERENCES approval_events(id)`
+      );
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sale_items_price_override
+          ON sale_items(price_override_approved_by, price_override_approved_at)
+          WHERE price_override_amount IS NOT NULL
+      `);
+
+      // 2-G.5: seed override_price permission onto the Manager role. The
+      // back-seed also runs at boot via ensureDefaultRolePermissions, but
+      // doing it here means the permission is usable the instant the
+      // migration finishes (no restart required for existing tenants).
+      const { rows: mgrRoles } = await client.query(
+        "SELECT id FROM roles WHERE name = 'Manager'"
+      );
+      for (const r of mgrRoles) {
+        await client.query(
+          "INSERT INTO role_permissions (role_id, permission) VALUES ($1, 'override_price') ON CONFLICT DO NOTHING",
+          [r.id]
+        );
+      }
+    },
+  },
 ];
 
 async function migrate(db) {
