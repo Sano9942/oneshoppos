@@ -18,7 +18,10 @@ import { DashboardAttendance } from "../dashboard/DashboardAttendance";
 import { DashboardRecentSales } from "../dashboard/DashboardRecentSales";
 import { DashboardAttention } from "../dashboard/DashboardAttention";
 import DashboardHoldsExpiring from "../dashboard/DashboardHoldsExpiring";
+import DashboardRiskSummary from "../dashboard/DashboardRiskSummary";
 import { DashboardTopProducts } from "../dashboard/DashboardTopProducts";
+import DashboardStaffOfDay from "../dashboard/DashboardStaffOfDay";
+import DashboardCashPosition from "../dashboard/DashboardCashPosition";
 import { DashboardOnboarding } from "../dashboard/DashboardOnboarding";
 import { InsightCards } from "../dashboard/InsightCards";
 import { AIChatPanel } from "../dashboard/AIChatPanel";
@@ -51,7 +54,10 @@ export default function DashboardRedesign() {
 
   // Feature flags (for AI chat panel)
   const { flags } = useFeatureFlags(authHeaders);
-  const { dashboard_widgets, presetLoaded } = usePreset();
+  const { dashboard_widgets, presetLoaded, hasMode } = usePreset();
+  // 2-G.16 Merchant home cards — only show when the tenant is in a retail
+  // preset. Clinical / restaurant tenants keep the original dashboard.
+  const showRetailCards = !isCashier && typeof hasMode === "function" && hasMode("retail");
 
   const fetchDashboard = useCallback((silent = false) => {
     let mounted = true;
@@ -164,6 +170,14 @@ export default function DashboardRedesign() {
         <DashboardKPICards data={data} isCashier={isCashier} onNavigate={onNavigate} />
       </div>
 
+      {/* 2-G.16 Merchant home — staff-of-day + cash-position side-by-side (retail only) */}
+      {showRetailCards && (
+        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <DashboardStaffOfDay data={data} />
+          <DashboardCashPosition data={data} />
+        </div>
+      )}
+
       {/* Outlet ranking — all-branches only, admin/manager only */}
       {!isSingleBranch && !isCashier && (
         <div className="mb-4">
@@ -173,8 +187,9 @@ export default function DashboardRedesign() {
 
       {/* Exceptions — hidden for cashier */}
       {!isCashier && (
-        <div className="mb-4">
+        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
           <DashboardExceptions data={data} onNavigate={onNavigate} />
+          <DashboardRiskSummary />
         </div>
       )}
 

@@ -836,6 +836,17 @@ function giftCardIssued(data) {
   };
 }
 
+// 2-G.16 Merchant home: weekly digest email wraps the existing digest HTML
+// builder. Data payload mirrors the dashboard response so buildDigestEmailHtml
+// can format it without a second query round-trip.
+function retailWeeklyDigest({ companyName, dateStr, data }) {
+  const { buildDigestEmailHtml } = require("../utils/digestEmail");
+  return {
+    subject: `Your weekly snapshot — ${companyName || "SanoPOS"}`,
+    html: buildDigestEmailHtml(data || {}, companyName || "SanoPOS", dateStr || ""),
+  };
+}
+
 // -- Template Registry ----------------------------------------------------
 const TEMPLATES = {
   campaign_test: campaignTest,
@@ -884,6 +895,8 @@ const TEMPLATES = {
   customer_portal_payment_receipt: customerPortalPaymentReceipt,
   // Phase 2-G Wave 2 (2-G.2)
   gift_card_issued: giftCardIssued,
+  // Phase 2-G Wave 6 (2-G.16)
+  retail_weekly_digest: retailWeeklyDigest,
 };
 
 module.exports = { TEMPLATES, wrapEmailHtml };

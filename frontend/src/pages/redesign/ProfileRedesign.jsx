@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { KeyRound, Lock, Mail, MapPin, Shield, User } from "lucide-react";
+import { Home, KeyRound, Lock, Mail, MapPin, Shield, User } from "lucide-react";
 import { api } from "../../api";
 import { useAuth } from "../../auth/AuthProvider";
-import { Badge, Button, Input, PageShell, SectionCard } from "../../ui/primitives";
+import { Badge, Button, Input, PageShell, SectionCard, Select } from "../../ui/primitives";
 import { useToast } from "../../contexts/ToastContext";
 
 export default function ProfileRedesign() {
@@ -24,21 +24,39 @@ export default function ProfileRedesign() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
 
+  // 2-G.16 Merchant home — "Land here on login" preference.
+  const [homePage, setHomePage] = useState("");
+  const [savingHomePage, setSavingHomePage] = useState(false);
+
   useEffect(() => {
     (async () => {
       try {
-        const [meData, outData] = await Promise.all([
+        const [meData, outData, prefData] = await Promise.all([
           api.get("/api/auth/me"),
           employee?.id ? api.get(`/api/employees/${employee.id}/outlets`) : null,
+          api.get("/api/employees/me/preferences").catch(() => ({ home_page: null })),
         ]);
         setProfile(meData.employee || meData);
         if (outData) {
           setOutlets(outData.outlets || []);
         }
+        setHomePage(prefData?.home_page || "");
       } catch { /* silent */ }
       setLoading(false);
     })();
   }, [employee?.id]);
+
+  const saveHomePage = async (value) => {
+    setSavingHomePage(true);
+    try {
+      await api.put("/api/employees/me/preferences", { home_page: value || null });
+      setHomePage(value);
+      success("Home page preference saved");
+    } catch (err) {
+      showError(err.message || "Failed to save preference");
+    }
+    setSavingHomePage(false);
+  };
 
   const changePin = async (e) => {
     e.preventDefault();
@@ -92,6 +110,26 @@ export default function ProfileRedesign() {
               </div>
             </>
           )}
+        </SectionCard>
+
+        {/* 2-G.16 Home page preference */}
+        <SectionCard className="p-5">
+          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-(--ui-text-muted)">
+            <Home size={14} className="mr-1 inline" />
+            Home page
+          </h3>
+          <p className="text-xs text-(--ui-text-muted) mb-2">
+            Where you land after signing in.
+          </p>
+          <Select
+            value={homePage || ""}
+            onChange={(e) => saveHomePage(e.target.value)}
+            disabled={savingHomePage}
+          >
+            <option value="">Default (Dashboard)</option>
+            <option value="dashboard">Dashboard</option>
+            <option value="retail_home">Retail Home</option>
+          </Select>
         </SectionCard>
 
         {/* Change PIN */}

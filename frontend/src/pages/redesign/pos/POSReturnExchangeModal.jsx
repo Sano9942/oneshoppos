@@ -3,6 +3,7 @@ import { X, Search, Plus, Minus, RotateCcw, ShoppingCart, AlertTriangle } from "
 import { api } from "../../../api";
 import { usePOS } from "./POSContext";
 import { useCurrency } from "../../../contexts/CurrencyContext";
+import POSRefundThresholdModal from "./POSRefundThresholdModal";
 
 export default function POSReturnExchangeModal() {
   const { fmt: money } = useCurrency();
@@ -18,6 +19,7 @@ export default function POSReturnExchangeModal() {
     showNotice,
     setError,
     posFlags,
+    setCollisionModal,
   } = usePOS();
 
   // 2-G.7: gate per-line restock controls on the tenant flag. When off, the
@@ -67,6 +69,12 @@ export default function POSReturnExchangeModal() {
 
   const [settleMethod, setSettleMethod] = useState("Cash");
   const [submitting, setSubmitting] = useState(false);
+
+  // 2-G.17: refund threshold manager-PIN prompt state. Triggered when
+  // /api/returns responds with { code: "manager_pin_required", threshold }.
+  const [thresholdPrompt, setThresholdPrompt] = useState(null); // { threshold, refundAmount, retry: (pin) => Promise }
+  const [thresholdError, setThresholdError] = useState("");
+  const [thresholdSubmitting, setThresholdSubmitting] = useState(false);
 
   useEffect(() => {
     if (!returnModalOpen) {
@@ -356,21 +364,82 @@ export default function POSReturnExchangeModal() {
 
       // POST return only after exchange sale succeeds (or if refund-only mode)
       if (selectedItems.length > 0) {
-        await api.post("/api/returns", {
-            original_sale_id: resolvedSale?.id || null,
-            outlet_id: Number(selectedOutletId),
-            employee_id: employee?.id || null,
-            customer_id: null,
-            total_refund: refundTotal,
-            refund_method: mode === "exchange" ? "Return Credit" : settleMethod,
-            reason: reason || null,
-            items: selectedItems,
-            // Phase 2 fields
-            policy_id: policyQuote?.policy_id || null,
-            return_reason_id: selectedReasonId ? Number(selectedReasonId) : null,
-            processed_by_employee_id: employee?.id || null,
-            approval_event_id: approvalEventId || null,
-          });
+        // 2-G.15 Day 3: client-generated UUID prevents double-submit. Survives
+        // manager-PIN retry via the same payload object; survives network
+        // retry because the backend rejects the second POST with 409.
+        const idempotencyKey =
+          crypto?.randomUUID?.() || `ret-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const returnPayload = {
+          original_sale_id: resolvedSale?.id || null,
+          outlet_id: Number(selectedOutletId),
+          employee_id: employee?.id || null,
+          customer_id: null,
+          total_refund: refundTotal,
+          refund_method: mode === "exchange" ? "Return Credit" : settleMethod,
+          reason: reason || null,
+          items: selectedItems,
+          // Phase 2 fields
+          policy_id: policyQuote?.policy_id || null,
+          return_reason_id: selectedReasonId ? Number(selectedReasonId) : null,
+          processed_by_employee_id: employee?.id || null,
+          approval_event_id: approvalEventId || null,
+          // 2-G.15 Day 3 refund idempotency
+          idempotency_key: idempotencyKey,
+        };
+
+        try {
+          await api.post("/api/returns", returnPayload);
+        } catch (err) {
+          // 2-G.15 Day 3: duplicate return detected server-side. Show the
+          // collision modal with the existing return ref and abort this
+          // transaction — the caller already has a refund recorded.
+          if (err.status === 409 && err.body?.code === "duplicate_return") {
+            if (typeof setCollisionModal === "function") {
+              setCollisionModal({ existing: err.body.existing });
+            }
+            setReturnModalOpen(false);
+            return;
+          }
+          // 2-G.17: if the server requires a manager PIN, surface the prompt
+          // and wait for the user to submit one. The resolve/reject of this
+          // promise controls whether the surrounding try block continues.
+          if (err.body?.code === "manager_pin_required") {
+            await new Promise((resolve, reject) => {
+              setThresholdError("");
+              setThresholdPrompt({
+                threshold: err.body?.threshold,
+                refundAmount: refundTotal,
+                retry: async (pin) => {
+                  setThresholdSubmitting(true);
+                  setThresholdError("");
+                  try {
+                    await api.post("/api/returns", { ...returnPayload, manager_pin: pin });
+                    setThresholdPrompt(null);
+                    setThresholdSubmitting(false);
+                    resolve();
+                  } catch (retryErr) {
+                    setThresholdSubmitting(false);
+                    // Only re-prompt for PIN-related errors — other errors
+                    // abort the whole flow.
+                    if (retryErr.body?.code === "manager_pin_required") {
+                      setThresholdError("Invalid manager PIN");
+                      return; // stay in the modal
+                    }
+                    setThresholdPrompt(null);
+                    reject(retryErr);
+                  }
+                },
+                cancel: () => {
+                  setThresholdPrompt(null);
+                  setThresholdSubmitting(false);
+                  reject(new Error("Refund cancelled"));
+                },
+              });
+            });
+          } else {
+            throw err;
+          }
+        }
       }
 
       if (saleData) {
@@ -787,6 +856,16 @@ export default function POSReturnExchangeModal() {
           </div>
         )}
       </div>
+
+      <POSRefundThresholdModal
+        open={!!thresholdPrompt}
+        threshold={thresholdPrompt?.threshold}
+        refundAmount={thresholdPrompt?.refundAmount || 0}
+        error={thresholdError}
+        loading={thresholdSubmitting}
+        onSubmit={(pin) => thresholdPrompt?.retry?.(pin)}
+        onClose={() => thresholdPrompt?.cancel?.()}
+      />
     </div>
   );
 }

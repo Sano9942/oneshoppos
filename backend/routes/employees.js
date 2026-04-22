@@ -421,6 +421,45 @@ module.exports = function registerEmployeeRoutes(app, deps) {
     }
   });
 
+  // 2-G.16 Merchant home: self-service preferences — where the employee
+  // lands on login. Writes to employees.home_page (added in v75). Any
+  // authenticated employee can read/write their own row; no admin perm.
+  app.get("/api/employees/me/preferences", async (req, res) => {
+    const actorId = Number(req.headers["x-employee-id"] || 0);
+    if (!actorId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const { rows } = await db.query(
+        "SELECT home_page FROM employees WHERE id = $1 AND deleted_at IS NULL",
+        [actorId],
+      );
+      if (!rows.length) return res.status(404).json({ error: "Employee not found" });
+      res.json({ home_page: rows[0].home_page || null });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/employees/me/preferences", async (req, res) => {
+    const actorId = Number(req.headers["x-employee-id"] || 0);
+    if (!actorId) return res.status(401).json({ error: "Not authenticated" });
+    const raw = req.body?.home_page;
+    const home_page = raw == null || raw === "" ? null : String(raw);
+    // Narrow allowlist — silently reject anything else so a malformed call
+    // can't write arbitrary strings into an unbounded column.
+    if (home_page != null && !["dashboard", "retail_home"].includes(home_page)) {
+      return res.status(400).json({ error: "home_page must be 'dashboard', 'retail_home', or null" });
+    }
+    try {
+      await db.query(
+        "UPDATE employees SET home_page = $1 WHERE id = $2 AND deleted_at IS NULL",
+        [home_page, actorId],
+      );
+      res.json({ home_page });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // POST /api/employees/:id/send-reset — admin sends password reset email
   app.post("/api/employees/:id/send-reset", requirePerm("all_access"), async (req, res) => {
     const { id } = req.params;

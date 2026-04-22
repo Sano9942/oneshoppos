@@ -69,9 +69,12 @@ export default function ContextSelect() {
   }
 
   // Redirect conditions (after hooks)
+  // 2-G.16 Merchant home: honor the employee's `home_page` preference
+  // (`retail_home` → `/retail/home`) if set, else land on /dashboard.
+  const preferredHome = employee?.home_page === "retail_home" ? "/retail/home" : "/dashboard";
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (hasExistingContext) return <Navigate to="/dashboard" replace />;
-  if (flagOff) return <Navigate to="/dashboard" replace />;
+  if (hasExistingContext) return <Navigate to={preferredHome} replace />;
+  if (flagOff) return <Navigate to={preferredHome} replace />;
 
   const isAdmin = bootstrap?.scope_mode_default === "all_branches";
   const outlets = bootstrap?.outlets || [];
@@ -101,7 +104,7 @@ export default function ContextSelect() {
     }
 
     writeContext(context);
-    navigate("/dashboard", { replace: true });
+    navigate(preferredHome, { replace: true });
   };
 
   if (flagsLoading || loading) {

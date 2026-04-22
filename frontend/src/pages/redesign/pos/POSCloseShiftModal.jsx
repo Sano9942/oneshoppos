@@ -25,6 +25,14 @@ export default function POSCloseShiftModal() {
     denominations.map((value) => ({ denomination: value, count: 0 })),
   );
 
+  // 2-G.17: when the backend rejects the close because variance exceeds the
+  // tenant threshold, it returns { code: "manager_pin_required" | "variance_reason_required" }.
+  // We surface a manager PIN input (and require variance_reason) once the
+  // server signals the threshold has been crossed.
+  const [managerPin, setManagerPin] = useState("");
+  const [needsThresholdApproval, setNeedsThresholdApproval] = useState(false);
+  const [thresholdAmount, setThresholdAmount] = useState(null);
+
   const closingCash = useMemo(
     () =>
       denoms.reduce(
@@ -43,6 +51,9 @@ export default function POSCloseShiftModal() {
     setApprovedBy("");
     setNotes("");
     setResult(null);
+    setManagerPin("");
+    setNeedsThresholdApproval(false);
+    setThresholdAmount(null);
     setDenoms(denominations.map((value) => ({ denomination: value, count: 0 })));
   };
 
@@ -56,6 +67,9 @@ export default function POSCloseShiftModal() {
           notes: notes || null,
           variance_reason: varianceReason || null,
           variance_approved_by: approvedBy || null,
+          // 2-G.17: manager PIN is only sent when the shift has flipped into
+          // "threshold approval" mode. Server ignores it otherwise.
+          variance_approved_by_pin: needsThresholdApproval ? managerPin : undefined,
           denominations: denoms
             .filter((row) => Number(row.count || 0) > 0)
             .map((row) => ({
@@ -67,7 +81,16 @@ export default function POSCloseShiftModal() {
       showNotice("Shift closed successfully.");
       await refreshGateStatus(activeShift.outlet_id);
     } catch (err) {
-      setError(err.message || "Failed to close shift");
+      // 2-G.17: surface the threshold prompt on the first rejection, then
+      // keep the form open so the cashier can add reason + PIN and resubmit.
+      const code = err.body?.code;
+      if (code === "manager_pin_required" || code === "variance_reason_required") {
+        setNeedsThresholdApproval(true);
+        setThresholdAmount(err.body?.threshold ?? null);
+        setError(err.message || "Variance exceeds threshold — reason + manager PIN required");
+      } else {
+        setError(err.message || "Failed to close shift");
+      }
     } finally {
       setBusy(false);
     }
@@ -147,8 +170,14 @@ export default function POSCloseShiftModal() {
               <input
                 value={varianceReason}
                 onChange={(e) => setVarianceReason(e.target.value)}
-                placeholder="Variance reason (optional)"
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium focus:border-[#8066FF] focus:outline-none"
+                placeholder={needsThresholdApproval
+                  ? "Variance reason (required)"
+                  : "Variance reason (optional)"}
+                className={`w-full rounded-xl border px-4 py-3 text-sm font-medium focus:outline-none ${
+                  needsThresholdApproval && !varianceReason
+                    ? "border-rose-300 focus:border-rose-500"
+                    : "border-slate-300 focus:border-[#8066FF]"
+                }`}
               />
               <input
                 value={approvedBy}
@@ -162,6 +191,24 @@ export default function POSCloseShiftModal() {
                 placeholder="Notes (optional)"
                 className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium focus:border-[#8066FF] focus:outline-none"
               />
+              {needsThresholdApproval && (
+                <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 space-y-2">
+                  <p className="text-sm font-semibold text-amber-900">
+                    Variance exceeds tenant threshold
+                    {thresholdAmount != null ? ` (${money(thresholdAmount)})` : ""}.
+                    A manager PIN is required to close.
+                  </p>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    value={managerPin}
+                    onChange={(e) => setManagerPin(e.target.value)}
+                    placeholder="Manager PIN"
+                    autoFocus
+                    className="w-full rounded-xl border border-amber-400 px-4 py-3 text-sm font-medium tracking-widest focus:border-amber-500 focus:outline-none"
+                  />
+                </div>
+              )}
               <div className="flex gap-2">
                 <button
                   type="button"

@@ -24,6 +24,12 @@ import POSHoldCreateModal from "./pos/POSHoldCreateModal";
 import POSHoldPickupModal from "./pos/POSHoldPickupModal";
 import POSSessionExpiredModal from "./pos/POSSessionExpiredModal";
 import POSShortcutsOverlay from "./pos/POSShortcutsOverlay";
+import POSReceiptRetryModal from "./pos/POSReceiptRetryModal";
+import POSShiftRecoveryModal from "./pos/POSShiftRecoveryModal";
+import POSCartCollisionModal from "./pos/POSCartCollisionModal";
+import POSCartResumeModal from "./pos/POSCartResumeModal";
+import POSBarcodeMissModal from "./pos/POSBarcodeMissModal";
+import POSInsufficientStockModal from "./pos/POSInsufficientStockModal";
 import EndlessAisleModal from "./pos/EndlessAisleModal";
 import { ErrorBoundary } from "../../ui/ErrorBoundary";
 
@@ -196,7 +202,94 @@ function POSContent() {
       <POSSessionExpiredModal />
       <EndlessAisleModal />
       <POSShortcutsOverlay />
+      <POSErrorStateModals />
     </div>
+  );
+}
+
+// 2-G.15 Day 2 — the receipt retry + shift recovery modals need context
+// values piped in as props (same pattern as POSApprovalModal /
+// POSEmailReceiptModal). Keeping them in a dedicated sub-component avoids
+// threading a dozen usePOS() values into POSContent itself.
+function POSErrorStateModals() {
+  const {
+    receiptRetryPrompt, dismissReceiptRetry,
+    receiptTemplate, presetLabels, currencySymbol,
+    shiftRecoveryOpen, setShiftRecoveryOpen, setShiftRecoveryDismissed,
+    activeShift, setCloseShiftOpen, money,
+    collisionModal, setCollisionModal,
+    cartResumePrompt, resumeCartFromCheckpoint, discardCartCheckpoint,
+    barcodeMissPrompt, setBarcodeMissPrompt,
+    insufficientStockPrompt, setInsufficientStockPrompt,
+    addToCart, setQty,
+  } = usePOS();
+
+  return (
+    <>
+      <POSReceiptRetryModal
+        open={!!receiptRetryPrompt}
+        slip={receiptRetryPrompt?.slip}
+        template={receiptTemplate}
+        labels={presetLabels}
+        currencySymbol={currencySymbol}
+        error={receiptRetryPrompt?.error}
+        onClose={dismissReceiptRetry}
+      />
+
+      <POSShiftRecoveryModal
+        open={shiftRecoveryOpen}
+        shift={activeShift}
+        money={money}
+        onCloseNow={() => {
+          setShiftRecoveryOpen(false);
+          setShiftRecoveryDismissed(true);
+          setCloseShiftOpen(true);
+        }}
+        onQuickClose={() => {
+          // Same trigger — POSCloseShiftModal collects the close details.
+          // The "quick" framing is a UX hint; the actual close still goes
+          // through the normal modal for safety.
+          setShiftRecoveryOpen(false);
+          setShiftRecoveryDismissed(true);
+          setCloseShiftOpen(true);
+        }}
+        onKeepOpen={() => {
+          setShiftRecoveryOpen(false);
+          setShiftRecoveryDismissed(true);
+        }}
+      />
+
+      <POSCartCollisionModal
+        open={!!collisionModal}
+        existing={collisionModal?.existing}
+        currencySymbol={currencySymbol}
+        onClose={() => setCollisionModal(null)}
+      />
+
+      <POSCartResumeModal
+        open={!!cartResumePrompt}
+        checkpoint={cartResumePrompt}
+        currencySymbol={currencySymbol}
+        onResume={resumeCartFromCheckpoint}
+        onDiscard={discardCartCheckpoint}
+      />
+
+      <POSBarcodeMissModal
+        open={!!barcodeMissPrompt}
+        barcode={barcodeMissPrompt?.barcode}
+        currencySymbol={currencySymbol}
+        onCreated={(product) => addToCart?.(product)}
+        onClose={() => setBarcodeMissPrompt(null)}
+      />
+
+      <POSInsufficientStockModal
+        open={!!insufficientStockPrompt}
+        prompt={insufficientStockPrompt}
+        canOverride={false}
+        onAdjust={(productId, _variantId, available) => setQty?.(productId, available)}
+        onClose={() => setInsufficientStockPrompt(null)}
+      />
+    </>
   );
 }
 

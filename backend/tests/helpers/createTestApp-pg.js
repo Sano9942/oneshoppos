@@ -92,6 +92,8 @@ const DEFAULT_FEATURE_FLAGS = {
   phase2g_inventory_intelligence: false,
   phase2g_receipt_barcode_lookup: false,
   phase2g_label_designer: false,
+  phase2g_risk_controls: false,
+  retail_weekly_digest: false,
 };
 
 const PERMISSION_RULES = [

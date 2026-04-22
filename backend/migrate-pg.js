@@ -5408,6 +5408,148 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 73,
+    description:
+      "Phase 2-G.17 Anti-theft & shrinkage — no-sale tracking, anomaly flags, risk thresholds",
+    up: async (client) => {
+      // Seedable reason codes for no-sale drawer kicks.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS no_sale_reasons (
+          id SERIAL PRIMARY KEY,
+          code TEXT UNIQUE NOT NULL,
+          label TEXT NOT NULL,
+          is_active BOOLEAN DEFAULT TRUE,
+          sort_order INT DEFAULT 0
+        )
+      `);
+      await client.query(`
+        INSERT INTO no_sale_reasons (code, label, sort_order) VALUES
+          ('give_change', 'Give change', 1),
+          ('count_cash',  'Count cash',  2),
+          ('training',    'Training',    3),
+          ('other',       'Other',       9)
+        ON CONFLICT (code) DO NOTHING
+      `);
+
+      // Per-event audit log for every no-sale drawer kick.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS no_sale_events (
+          id SERIAL PRIMARY KEY,
+          employee_id INT NOT NULL REFERENCES employees(id),
+          outlet_id INT REFERENCES outlets(id),
+          shift_id INT REFERENCES cash_shifts(id),
+          reason_code TEXT REFERENCES no_sale_reasons(code),
+          note TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_no_sale_events_employee_created
+          ON no_sale_events(employee_id, created_at DESC)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_no_sale_events_outlet_created
+          ON no_sale_events(outlet_id, created_at DESC)
+      `);
+
+      // Anomaly flags produced by the nightly worker.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS retail_anomaly_flags (
+          id SERIAL PRIMARY KEY,
+          employee_id INT NOT NULL REFERENCES employees(id),
+          outlet_id INT REFERENCES outlets(id),
+          metric TEXT NOT NULL,
+          value NUMERIC(8,4) NOT NULL,
+          peer_mean NUMERIC(8,4) NOT NULL,
+          peer_stddev NUMERIC(8,4) NOT NULL,
+          z_score NUMERIC(6,2) NOT NULL,
+          period_start DATE NOT NULL,
+          period_end DATE NOT NULL,
+          flagged_at TIMESTAMPTZ DEFAULT NOW(),
+          reviewed_by INT REFERENCES employees(id),
+          reviewed_at TIMESTAMPTZ,
+          review_note TEXT
+        )
+      `);
+      // Dedupe key: same employee + metric + window cannot flag twice.
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_anomaly_flags_employee_metric_period
+          ON retail_anomaly_flags(employee_id, metric, period_start, period_end)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_anomaly_flags_employee
+          ON retail_anomaly_flags(employee_id, flagged_at DESC)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_anomaly_flags_unreviewed
+          ON retail_anomaly_flags(flagged_at DESC)
+          WHERE reviewed_at IS NULL
+      `);
+
+      // Tenant-level risk thresholds (single-row table, id=1).
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS risk_controls_config (
+          id INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+          refund_approval_threshold NUMERIC(12,2) DEFAULT 5000,
+          variance_approval_threshold NUMERIC(12,2) DEFAULT 500,
+          anomaly_z_score_threshold NUMERIC(4,2) DEFAULT 2.0,
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        INSERT INTO risk_controls_config (id) VALUES (1)
+        ON CONFLICT (id) DO NOTHING
+      `);
+
+      // Seed umbrella feature flag (default OFF).
+      await client.query(`
+        INSERT INTO feature_flags (key, enabled, description)
+          VALUES ('phase2g_risk_controls', FALSE,
+                  '2-G.17 anti-theft: no-sale tracking, refund threshold, anomaly detection, shift variance')
+          ON CONFLICT (key) DO NOTHING
+      `);
+    },
+  },
+  {
+    version: 74,
+    description:
+      "Phase 2-G.15 Refund idempotency — partial unique index on returns(original_sale_id, idempotency_key)",
+    up: async (client) => {
+      // Idempotency column + partial unique index: a client-supplied key lets
+      // the server reject an accidental double-submit (network retry, double
+      // click). NULL keys are always allowed — legacy callers keep working.
+      await client.query(`
+        ALTER TABLE returns
+          ADD COLUMN IF NOT EXISTS idempotency_key TEXT
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_returns_sale_idempotency
+          ON returns(original_sale_id, idempotency_key)
+          WHERE idempotency_key IS NOT NULL
+      `);
+    },
+  },
+  {
+    version: 75,
+    description:
+      "Phase 2-G.16 Merchant home — employees.home_page preference + retail_weekly_digest flag",
+    up: async (client) => {
+      // Per-employee "land here on login" preference. Nullable so existing
+      // employees keep the default /dashboard landing.
+      await client.query(`
+        ALTER TABLE employees
+          ADD COLUMN IF NOT EXISTS home_page TEXT
+      `);
+      // Opt-in weekly digest email for retail tenants — off by default.
+      await client.query(`
+        INSERT INTO feature_flags (key, enabled, description)
+          VALUES ('retail_weekly_digest', FALSE,
+                  '2-G.16 weekly digest email to merchant owners (Monday 08:00 local)')
+          ON CONFLICT (key) DO NOTHING
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

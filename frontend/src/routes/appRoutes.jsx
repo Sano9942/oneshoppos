@@ -50,12 +50,14 @@ const CashManagementRoute = lazy(() => import("../pages/CashManagementRoute"));
 const ReturnsRoute = lazy(() => import("../pages/ReturnsRoute"));
 const ParkedSalesRedesign = lazy(() => import("../pages/redesign/ParkedSalesRedesign"));
 const HoldsRoute = lazy(() => import("../pages/HoldsRoute"));
+const RetailRiskRoute = lazy(() => import("../pages/RetailRiskRoute"));
 const ReorderAlertsRedesign = lazy(() => import("../pages/redesign/ReorderAlertsRedesign"));
 const InventoryIntelligenceRoute = lazy(() => import("../pages/InventoryIntelligenceRoute"));
 const NotificationsRedesign = lazy(() => import("../pages/redesign/NotificationsRedesign"));
 const ProfileRedesign = lazy(() => import("../pages/redesign/ProfileRedesign"));
 const MyTicketsRoute = lazy(() => import("../pages/MyTicketsRoute"));
 const ImportRedesign = lazy(() => import("../pages/redesign/ImportRedesign"));
+const ImportFromCompetitorRoute = lazy(() => import("../pages/ImportFromCompetitorRoute"));
 const CourierSettingsRedesign = lazy(() => import("../pages/redesign/CourierSettingsRedesign"));
 const MarketingCampaignsRoute = lazy(() => import("../pages/MarketingCampaignsRoute"));
 const MessagingInboxRoute = lazy(() => import("../pages/MessagingInboxRoute"));
@@ -124,6 +126,8 @@ export const appRoutes = [
     }
   >
     <Route path="/dashboard" element={<DashboardRoute />} />
+    {/* 2-G.16 Merchant home alias — same component, preference-friendly URL. */}
+    <Route path="/retail/home" element={<DashboardRoute />} />
     <Route path="/profile" element={<ProfileRedesign />} />
     <Route path="/my-tickets" element={<MyTicketsRoute />} />
     <Route path="/sales-history" element={<SalesHistoryRoute />} />
@@ -135,6 +139,7 @@ export const appRoutes = [
     <Route path="/orders" element={perm("manage_orders", <OrdersRoute />)} />
     <Route path="/parked-sales" element={perm("manage_orders", <ParkedSalesRedesign />)} />
     <Route path="/holds" element={perm("manage_orders", <HoldsRoute />)} />
+    <Route path="/retail-risk" element={perm("view_reports", wrap(RetailRiskRoute))} />
     <Route path="/lookup" element={<PlaceholderPage />} />
     <Route path="/custom-fields" element={<PlaceholderPage />} />
     <Route path="/partners" element={<PlaceholderPage />} />
@@ -166,6 +171,7 @@ export const appRoutes = [
     <Route path="/administrator" element={perm("all_access", <AdministratorRoute />)} />
     <Route path="/action-history" element={perm("all_access", <ActionHistoryRoute />)} />
     <Route path="/import" element={perm("all_access", <ImportRedesign />)} />
+    <Route path="/settings/import-from-competitor" element={perm("all_access", wrap(ImportFromCompetitorRoute))} />
     <Route path="/backup-restore" element={perm("all_access", <BackupRestoreRoute />)} />
     <Route path="/settings/integrations" element={perm("manage_inventory", <IntegrationsHubRedesign />)} />
     <Route path="/integrations/shopify" element={perm("manage_inventory", <ShopifyIntegrationRoute />)} />

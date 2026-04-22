@@ -54,6 +54,9 @@ export function useCheckout({
   // notices
   setError,
   showNotice,
+  // 2-G.15 Day 4: when the backend rejects with insufficient_stock, we hand
+  // the error payload up to POSContext so it can open POSInsufficientStockModal.
+  onInsufficientStock,
 }) {
   const { employee } = useAuth();
 
@@ -319,6 +322,20 @@ export function useCheckout({
         setSubmitting(false);
         return;
       }
+      // 2-G.15 Day 4: insufficient_stock is a 400 with structured body.
+      // Surface the modal instead of a generic toast so the cashier can
+      // clamp/oversell/cancel without retyping the cart.
+      if (!res.ok && data?.code === "insufficient_stock" && onInsufficientStock) {
+        onInsufficientStock({
+          product_id: data.product_id,
+          variant_id: data.variant_id,
+          available: data.available,
+          requested: data.requested,
+          message: data.error,
+        });
+        setSubmitting(false);
+        return;
+      }
       if (!res.ok) throw new Error(data.error || "Failed to complete sale");
 
       const custObj = checkoutCustomerId
@@ -360,6 +377,7 @@ export function useCheckout({
     enqueueSale, setSlip, setSlipOpen, clearAfterSale, showNotice, setError,
     buildSuccessSlip, loadParked, tipAmount, tipMethod, serverId,
     draftOrderId, orderContext, tableSessionId, seatCount, signatureSvg,
+    onInsufficientStock,
   ]);
 
   const retryPendingSale = useCallback(async () => {

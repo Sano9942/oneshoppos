@@ -52,9 +52,56 @@ module.exports = function printerRoutes(app, deps) {
   // POST /api/print/open-drawer — kick the cash drawer without printing
   // (no-sale, cash drop, safe drop scenarios). Always returns 200 — caller
   // checks result.ok. Requires authenticated employee but no specific perm.
+  //
+  // 2-G.17: when phase2g_risk_controls is ON, we require a reason_code in
+  // the body and write a no_sale_events audit row. The POS is expected to
+  // hit /api/risk/no-sale directly in that mode, so this path is a legacy
+  // fallback — but enforcing the same contract keeps an out-of-band drawer
+  // kick from bypassing the audit trail.
   app.post("/api/print/open-drawer", async (req, res) => {
     const employeeId = Number(req.headers["x-employee-id"] || 0);
     if (!employeeId) return res.status(401).json({ error: "Unauthorized" });
+
+    let riskEnabled = false;
+    try {
+      const { rows } = await db.query(
+        "SELECT enabled FROM feature_flags WHERE key = 'phase2g_risk_controls'",
+      );
+      riskEnabled = !!rows[0]?.enabled;
+    } catch { /* flag table may be absent in legacy tests */ }
+
+    if (riskEnabled) {
+      const reasonCode = req.body?.reason_code;
+      if (!reasonCode) {
+        return res.status(400).json({ error: "reason_code is required when risk controls are enabled" });
+      }
+      const { rows: reasonRows } = await db.query(
+        "SELECT code FROM no_sale_reasons WHERE code = $1 AND is_active = true",
+        [reasonCode],
+      );
+      if (!reasonRows.length) {
+        return res.status(400).json({ error: `Unknown or inactive reason_code "${reasonCode}"` });
+      }
+
+      const outletId = req.body?.outlet_id ? Number(req.body.outlet_id) : null;
+      let shiftId = null;
+      if (outletId) {
+        const { rows: shiftRows } = await db.query(
+          "SELECT id FROM cash_shifts WHERE outlet_id = $1 AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
+          [outletId],
+        );
+        shiftId = shiftRows.length ? shiftRows[0].id : null;
+      }
+
+      const result = await openDrawer();
+      await db.query(
+        `INSERT INTO no_sale_events (employee_id, outlet_id, shift_id, reason_code, note)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [employeeId, outletId, shiftId, reasonCode, req.body?.note || null],
+      );
+      return res.json(result);
+    }
+
     const result = await openDrawer();
     return res.json(result);
   });

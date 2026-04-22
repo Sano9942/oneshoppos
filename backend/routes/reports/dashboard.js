@@ -405,6 +405,88 @@ module.exports = function (app, deps) {
         contribution_pct: totalRevenueToday > 0 ? Number(((Number(row.total || 0) / totalRevenueToday) * 100).toFixed(2)) : 0,
       }));
 
+      // ─── 2-G.16 Merchant home: staff-of-the-day + cash-position ───
+      // Top 3 staff by today's non-voided sales. Outlet filter already applied
+      // upstream via `outletClause` wrapping — reuse the existing clause shape.
+      const staffOfDayClause = buildOutletClause("s.outlet_id", outletIds, 3);
+      const { rows: staffOfDayRows } = await db.query(
+        `SELECT e.id, e.name, COUNT(s.id)::int AS sale_count, COALESCE(SUM(s.total_amount),0) AS total
+           FROM sales s
+           JOIN employees e ON e.id = s.employee_id
+          WHERE s.timestamp >= $1 AND s.timestamp < $2 AND COALESCE(s.voided, false) = false
+            ${staffOfDayClause.clause}
+          GROUP BY e.id, e.name
+          ORDER BY total DESC
+          LIMIT 3`,
+        [todayStart, todayEnd, ...staffOfDayClause.values],
+      );
+      const staffOfDay = staffOfDayRows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        sale_count: Number(r.sale_count),
+        total: Number(r.total),
+      }));
+
+      // Cash position: for every open shift, expected_cash = opening_float +
+      // sum(cash payments) - sum(cash_paid_out). We approximate cash_paid_out
+      // via expenses flagged paid from the drawer (no dedicated table today);
+      // the shifts close flow has the authoritative calc and matches this.
+      const cashShiftClause = buildOutletClause("cs.outlet_id", outletIds, 1);
+      const { rows: cashPositionRows } = await db.query(
+        `SELECT cs.id AS shift_id,
+                cs.outlet_id,
+                o.name AS outlet_name,
+                cs.opening_float,
+                cs.opened_at,
+                e.name AS employee_name,
+                COALESCE((
+                  SELECT SUM(sp.amount)
+                    FROM sale_payments sp
+                    JOIN sales s ON s.id = sp.sale_id
+                   WHERE s.shift_id = cs.id
+                     AND LOWER(sp.payment_method) = 'cash'
+                     AND COALESCE(s.voided, false) = false
+                ), 0) AS cash_in,
+                COALESCE((
+                  SELECT SUM(r.total_refund)
+                    FROM returns r
+                   WHERE r.shift_id = cs.id
+                     AND LOWER(r.refund_method) = 'cash'
+                ), 0) AS cash_out
+           FROM cash_shifts cs
+           JOIN outlets o ON o.id = cs.outlet_id
+           LEFT JOIN employees e ON e.id = cs.employee_id
+          WHERE cs.status = 'open'
+            ${cashShiftClause.clause}
+          ORDER BY cs.opened_at ASC`,
+        [...cashShiftClause.values],
+      );
+      const cashPosition = {
+        by_outlet: cashPositionRows.map((r) => {
+          const expected = Number(r.opening_float || 0) + Number(r.cash_in || 0) - Number(r.cash_out || 0);
+          return {
+            shift_id: r.shift_id,
+            outlet_id: r.outlet_id,
+            outlet_name: r.outlet_name,
+            employee_name: r.employee_name,
+            opened_at: r.opened_at,
+            opening_float: Number(r.opening_float || 0),
+            cash_in: Number(r.cash_in || 0),
+            cash_out: Number(r.cash_out || 0),
+            expected_cash: Number(expected.toFixed(2)),
+          };
+        }),
+        total_expected: Number(
+          cashPositionRows
+            .reduce(
+              (sum, r) =>
+                sum + Number(r.opening_float || 0) + Number(r.cash_in || 0) - Number(r.cash_out || 0),
+              0,
+            )
+            .toFixed(2),
+        ),
+      };
+
       res.json({
         currency: {
           symbol: req.company?.currency_symbol || "PKRs",
@@ -481,6 +563,9 @@ module.exports = function (app, deps) {
           total_products: 0,
           low_stock_items: 0,
         },
+        // 2-G.16 Merchant home — new retail-focused cards
+        staffOfDay,
+        cashPosition,
       });
     } catch (err) {
       console.error("Dashboard Error:", err);

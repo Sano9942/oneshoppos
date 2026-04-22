@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../api";
+import { logErrorState } from "../../../utils/errorLog";
 import { useAuth } from "../../../auth/AuthProvider";
 import { useCurrency } from "../../../contexts/CurrencyContext";
 import { usePreset } from "../../../contexts/PresetContext";
@@ -77,7 +78,7 @@ export const usePOS = () => {
 
 export const POSProvider = ({ children }) => {
   const navigate = useNavigate();
-  const { employee, authHeaders, logout } = useAuth();
+  const { employee, authHeaders, logout, hasPerm } = useAuth();
   const { fmt: money, denominations: currencyDenominations, symbol: currencySymbol } = useCurrency();
   const { labels: presetLabels } = usePreset();
 
@@ -173,8 +174,49 @@ export const POSProvider = ({ children }) => {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutCustomerId, setCheckoutCustomerId] = useState("");
 
+  // ── 2-G.15 Day 2 — stale-shift recovery ─────────────────────────────────
+  // Shown when an active shift was opened > 20h ago AND current local time
+  // is before noon. Dismissed for the rest of the session via state.
+  const [shiftRecoveryOpen, setShiftRecoveryOpen] = useState(false);
+  const [shiftRecoveryDismissed, setShiftRecoveryDismissed] = useState(false);
+
+  // ── 2-G.15 Day 3 — refund collision + cart resume ───────────────────────
+  // Collision modal is opened by POSReturnExchangeModal when /api/returns
+  // returns 409 { code: "duplicate_return" }. Payload carries the existing
+  // return reference so the cashier can see who/when/how-much.
+  const [collisionModal, setCollisionModal] = useState(null); // { existing: {...} } | null
+  // Cart resume modal shows when a sessionStorage checkpoint is loaded and
+  // cart is empty. Checkpoint key is scoped per employee so a second cashier
+  // logging in on the same terminal never sees the first cashier's cart.
+  const [cartResumePrompt, setCartResumePrompt] = useState(null); // { cart, selectedOutletId, customer, timestamp } | null
+
+  // ── 2-G.15 Day 4 — barcode miss + insufficient stock ─────────────────────
+  // Barcode miss prompt: shown only when the cashier has inventory perms so
+  // they can quick-create the product right from POS. Everyone else just
+  // gets a toast (see handleBarcodeScanned below).
+  const [barcodeMissPrompt, setBarcodeMissPrompt] = useState(null); // { barcode } | null
+  // Insufficient-stock prompt: opened by checkout hook when the sale POST
+  // returns { code: "insufficient_stock", available, product_id }.
+  const [insufficientStockPrompt, setInsufficientStockPrompt] = useState(null); // { product_id, product_name, requested, available } | null
+
   // ── Compose hooks (bottom-up) ────────────────────────────────────────────
   const shift = useShiftGate({ setError, showNotice });
+
+  // 2-G.15 Day 2 — stale-shift detection. Fires when the gate finishes
+  // loading and we land on an active shift opened long enough ago that
+  // the cashier probably forgot to close it yesterday. Gated to before
+  // noon so a legitimate night-shift doesn't see the prompt all day.
+  useEffect(() => {
+    if (shiftRecoveryDismissed) return;
+    if (!shift.activeShift?.opened_at) return;
+    const now = new Date();
+    const opened = new Date(shift.activeShift.opened_at);
+    const ageHours = (now.getTime() - opened.getTime()) / 3_600_000;
+    const beforeNoon = now.getHours() < 12;
+    if (ageHours > 20 && beforeNoon) {
+      setShiftRecoveryOpen(true);
+    }
+  }, [shift.activeShift?.opened_at, shiftRecoveryDismissed]);
 
   // 2-G.13: per-device POS identity. A stable browser UUID is generated
   // once, registered with the backend to obtain a surrogate integer id,
@@ -212,6 +254,83 @@ export const POSProvider = ({ children }) => {
     showNotice,
     posDeviceId,
   });
+
+  // ── 2-G.15 Day 3 — cart resume checkpoint ───────────────────────────────
+  // On mount (or employee change), if a recent checkpoint exists for this
+  // employee AND the cart is currently empty, offer to restore it. Key is
+  // scoped per employee so a second cashier on the same terminal doesn't
+  // inherit the previous cashier's cart. 8h TTL as a secondary guard.
+  const cartCheckpointKey = employee?.id ? `pos_cart_checkpoint_${employee.id}` : null;
+  const cartCheckpointPromptedRef = useRef(false);
+
+  useEffect(() => {
+    if (!cartCheckpointKey) return;
+    if (cartCheckpointPromptedRef.current) return;
+    if (cartHook.cart.length > 0) return;
+    try {
+      const raw = sessionStorage.getItem(cartCheckpointKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      const age = Date.now() - Number(parsed?.timestamp || 0);
+      if (!(age >= 0 && age <= 8 * 3_600_000)) {
+        sessionStorage.removeItem(cartCheckpointKey);
+        return;
+      }
+      if (!Array.isArray(parsed.cart) || parsed.cart.length === 0) return;
+      setCartResumePrompt(parsed);
+      cartCheckpointPromptedRef.current = true;
+    } catch {
+      /* bad JSON — drop the key and move on */
+      try { sessionStorage.removeItem(cartCheckpointKey); } catch { /* noop */ }
+    }
+  }, [cartCheckpointKey, cartHook.cart.length]);
+
+  // Debounced checkpoint write — fires 1s after the last cart/customer/outlet
+  // change while the cart is non-empty. When the cart drops back to empty
+  // (completed sale or explicit clear), wipe the checkpoint so we don't
+  // re-prompt on the next navigation.
+  useEffect(() => {
+    if (!cartCheckpointKey) return;
+    if (cartHook.cart.length === 0) {
+      try { sessionStorage.removeItem(cartCheckpointKey); } catch { /* noop */ }
+      return;
+    }
+    const t = setTimeout(() => {
+      try {
+        const payload = {
+          cart: cartHook.cart,
+          selectedOutletId: shift.selectedOutletId,
+          customer: selectedCustomerId
+            ? customers.find((c) => String(c.id) === String(selectedCustomerId)) || null
+            : null,
+          timestamp: Date.now(),
+        };
+        sessionStorage.setItem(cartCheckpointKey, JSON.stringify(payload));
+      } catch { /* quota / serialization — best effort */ }
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [cartCheckpointKey, cartHook.cart, shift.selectedOutletId, selectedCustomerId, customers]);
+
+  const resumeCartFromCheckpoint = useCallback(() => {
+    if (!cartResumePrompt) return;
+    try {
+      cartHook.setCart(cartResumePrompt.cart);
+      if (cartResumePrompt.selectedOutletId && !shift.selectedOutletId) {
+        shift.setSelectedOutletId(cartResumePrompt.selectedOutletId);
+      }
+      if (cartResumePrompt.customer?.id) {
+        setSelectedCustomerId(String(cartResumePrompt.customer.id));
+      }
+    } catch { /* noop */ }
+    setCartResumePrompt(null);
+  }, [cartResumePrompt, cartHook, shift, setSelectedCustomerId]);
+
+  const discardCartCheckpoint = useCallback(() => {
+    if (cartCheckpointKey) {
+      try { sessionStorage.removeItem(cartCheckpointKey); } catch { /* noop */ }
+    }
+    setCartResumePrompt(null);
+  }, [cartCheckpointKey]);
 
   // ── Price override apply (Phase 2-G Wave 3 — 2-G.5) ─────────────────────
   // Stamps the override metadata onto a cart line and swaps in the new price.
@@ -428,6 +547,19 @@ export const POSProvider = ({ children }) => {
     setShowGuestMode,
     setError,
     showNotice,
+    // 2-G.15 Day 4: hand insufficient_stock errors up to context so the
+    // dedicated modal opens instead of just a toast.
+    onInsufficientStock: (info) => {
+      const line = cartHook.cart.find((i) => i.id === info.product_id);
+      setInsufficientStockPrompt({
+        product_id: info.product_id,
+        variant_id: info.variant_id || null,
+        product_name: line?.name || `Product ${info.product_id}`,
+        available: info.available,
+        requested: info.requested,
+      });
+      logErrorState("pos_insufficient_stock", `Insufficient stock for product ${info.product_id}`, info);
+    },
   });
 
   // ── Reload parked on outlet change ──────────────────────────────────────
@@ -598,6 +730,18 @@ export const POSProvider = ({ children }) => {
       const res = await api.raw(`/api/products/scan/${encodeURIComponent(barcode)}`, {
         headers: { "x-employee-id": String(employee?.id || "") },
       });
+      // 2-G.15 Day 4: 404 → offer quick-create when the cashier can manage
+      // inventory; otherwise surface a visible toast instead of the old
+      // silent-return that left cashiers thinking the scanner was broken.
+      if (res.status === 404) {
+        logErrorState("pos_barcode_miss", `Barcode ${barcode} not found`, { barcode });
+        if (hasPerm && hasPerm("manage_inventory")) {
+          setBarcodeMissPrompt({ barcode });
+        } else {
+          setError(`Barcode ${barcode} not found`);
+        }
+        return;
+      }
       if (!res.ok) return;
       const data = await res.json();
       const product = data.product;
@@ -618,7 +762,7 @@ export const POSProvider = ({ children }) => {
     } catch (err) {
       console.error("Barcode lookup failed:", err);
     }
-  }, [employee?.id, addToCartWithModifiers]);
+  }, [employee?.id, addToCartWithModifiers, hasPerm, setError]);
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -687,6 +831,21 @@ export const POSProvider = ({ children }) => {
     openShiftFromPOS: shift.openShiftFromPOS,
     closeShiftOpen: shift.closeShiftOpen,
     setCloseShiftOpen: shift.setCloseShiftOpen,
+    // 2-G.15 Day 2 — stale shift recovery
+    shiftRecoveryOpen,
+    setShiftRecoveryOpen,
+    setShiftRecoveryDismissed,
+    // 2-G.15 Day 3 — refund collision + cart resume
+    collisionModal,
+    setCollisionModal,
+    cartResumePrompt,
+    resumeCartFromCheckpoint,
+    discardCartCheckpoint,
+    // 2-G.15 Day 4 — barcode miss + insufficient stock
+    barcodeMissPrompt,
+    setBarcodeMissPrompt,
+    insufficientStockPrompt,
+    setInsufficientStockPrompt,
     refreshGateStatus: shift.refreshGateStatus,
     search: cartHook.search,
     setSearch: cartHook.setSearch,
@@ -803,6 +962,9 @@ export const POSProvider = ({ children }) => {
     handleQuickCreateCustomer: checkout.handleQuickCreateCustomer,
     addPayment: checkout.addPayment,
     printSlip: receipt.printSlip,
+    printBrowserFallback: receipt.printBrowserFallback,
+    receiptRetryPrompt: receipt.retryPrompt,
+    dismissReceiptRetry: receipt.dismissRetryPrompt,
     completeSale: checkout.completeSale,
     // M9 charge-to-room
     chargeToRoomFolioId: folio.chargeToRoomFolioId,
