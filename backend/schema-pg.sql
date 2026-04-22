@@ -2556,7 +2556,7 @@ CREATE INDEX IF NOT EXISTS idx_crw_definition ON custom_report_widgets(definitio
 CREATE TABLE IF NOT EXISTS pos_layouts (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
-  scope_type TEXT NOT NULL DEFAULT 'global' CHECK (scope_type IN ('global','outlet','role','employee')),
+  scope_type TEXT NOT NULL DEFAULT 'global' CHECK (scope_type IN ('global','outlet','role','employee','device')),
   scope_id INTEGER,
   layout_json TEXT NOT NULL DEFAULT '[]',
   is_active BOOLEAN DEFAULT TRUE,
@@ -2565,6 +2565,17 @@ CREATE TABLE IF NOT EXISTS pos_layouts (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(scope_type, scope_id)
 );
+
+-- 2-G.13 Per-device Quick Grid — browser UUID ↔ surrogate integer device id
+CREATE TABLE IF NOT EXISTS pos_device_registry (
+  id SERIAL PRIMARY KEY,
+  device_uuid TEXT UNIQUE NOT NULL,
+  outlet_id INTEGER REFERENCES outlets(id),
+  label TEXT,
+  last_seen TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pos_device_registry_outlet ON pos_device_registry(outlet_id);
 
 -- ── Phase 2B: Product Affinities ────────────────────────────────────
 CREATE TABLE IF NOT EXISTS product_affinities (

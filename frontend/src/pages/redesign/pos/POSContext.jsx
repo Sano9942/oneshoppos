@@ -176,12 +176,41 @@ export const POSProvider = ({ children }) => {
   // ── Compose hooks (bottom-up) ────────────────────────────────────────────
   const shift = useShiftGate({ setError, showNotice });
 
+  // 2-G.13: per-device POS identity. A stable browser UUID is generated
+  // once, registered with the backend to obtain a surrogate integer id,
+  // and both are cached in localStorage. The integer id is what
+  // pos_layouts scope_id references for scope_type='device'.
+  const [posDeviceId, setPosDeviceId] = useState(null);
+  useEffect(() => {
+    if (!shift.selectedOutletId) return;
+    let uuid;
+    try {
+      uuid = localStorage.getItem("pos_device_uuid");
+      if (!uuid) {
+        uuid = (crypto?.randomUUID?.() || `dev-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+        localStorage.setItem("pos_device_uuid", uuid);
+      }
+    } catch { return; }
+    // Register (idempotent) — picks up outlet + bumps last_seen. Silent fail
+    // on fresh tenants where the feature flag is off.
+    api.post("/api/pos-devices/register", {
+      device_uuid: uuid,
+      outlet_id: shift.selectedOutletId,
+    }).then((r) => {
+      if (r?.device?.id) {
+        setPosDeviceId(r.device.id);
+        try { localStorage.setItem("pos_device_id", String(r.device.id)); } catch { /* noop */ }
+      }
+    }).catch(() => { /* flag off or unreachable — cascade falls back to outlet/global */ });
+  }, [shift.selectedOutletId]);
+
   const cartHook = useCart({
     selectedOutletId: shift.selectedOutletId,
     selectedCustomerId,
     customers,
     posFlags,
     showNotice,
+    posDeviceId,
   });
 
   // ── Price override apply (Phase 2-G Wave 3 — 2-G.5) ─────────────────────

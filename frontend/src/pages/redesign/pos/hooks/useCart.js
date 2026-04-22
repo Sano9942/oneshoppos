@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { api } from "../../../../api";
 import { calcGrossTotal, calcDiscountValue, calcTaxTotal, calcTotal } from "../cartMath.js";
 
-export function useCart({ selectedOutletId, selectedCustomerId, customers, posFlags, showNotice }) {
+export function useCart({ selectedOutletId, selectedCustomerId, customers, posFlags, showNotice, posDeviceId }) {
   // ── Product search ────────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
   const [barcodeSearch, setBarcodeSearch] = useState("");
@@ -59,12 +59,14 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
       .catch(() => setOutletPriceListItems([]));
   }, [selectedOutletId]);
 
-  // ── POS Layout fetch (phase2_pos_layouts) ──────────────────────────────
+  // ── POS Layout fetch (phase2_pos_layouts) — 2-G.13 includes device_id so
+  // the backend cascade prefers device > employee > role > outlet > global.
   useEffect(() => {
     const params = new URLSearchParams();
     if (selectedOutletId) params.set("outlet_id", selectedOutletId);
+    if (posDeviceId) params.set("device_id", posDeviceId);
     api.get(`/api/pos-layouts?${params}`).then(d => setPosLayout(d.layout)).catch(() => {});
-  }, [selectedOutletId]);
+  }, [selectedOutletId, posDeviceId]);
 
   // ── Item suggestions fetch (phase2_item_suggestions, debounced) ───────
   useEffect(() => {

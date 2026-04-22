@@ -12,6 +12,7 @@ const SCOPE_TYPES = [
   { value: "outlet", label: "Outlet" },
   { value: "role", label: "Role" },
   { value: "employee", label: "Employee" },
+  { value: "device", label: "Device" },
 ];
 
 const TILE_TYPES = [
@@ -37,6 +38,7 @@ export default function POSLayoutsRedesign() {
   const toast = useToast();
 
   const [layouts, setLayouts] = useState([]);
+  const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -49,6 +51,9 @@ export default function POSLayoutsRedesign() {
       setLayouts(r.layouts || []);
       setLoading(false);
     }).catch(() => setLoading(false));
+    // 2-G.13: load registered devices for the Device scope picker. Silent
+    // fail keeps the page usable if the flag is off or no devices yet.
+    api.get("/api/pos-devices").then(r => setDevices(r.devices || [])).catch(() => {});
   }, []);
 
   const openCreate = () => {
@@ -119,7 +124,14 @@ export default function POSLayoutsRedesign() {
               {layouts.map(l => (
                 <tr key={l.id} className="border-b border-(--ui-border)">
                   <td className="py-2 font-medium text-(--ui-text)">{l.name}</td>
-                  <td className="py-2">{l.scope_type}{l.scope_id ? ` #${l.scope_id}` : ""}</td>
+                  <td className="py-2">
+                    {l.scope_type}
+                    {l.scope_id ? (
+                      l.scope_type === "device"
+                        ? ` · ${devices.find((d) => d.id === l.scope_id)?.label || `Device #${l.scope_id}`}`
+                        : ` #${l.scope_id}`
+                    ) : ""}
+                  </td>
                   <td className="py-2">{l.layout_json?.length || 0}</td>
                   <td className="py-2"><Badge tone={l.is_active ? "success" : "default"}>{l.is_active ? "Active" : "Inactive"}</Badge></td>
                   <td className="py-2 text-right flex gap-1 justify-end">
@@ -171,10 +183,33 @@ export default function POSLayoutsRedesign() {
               )}
             </div>
 
-            {!editing && form.scope_type !== "global" && (
+            {!editing && form.scope_type !== "global" && form.scope_type !== "device" && (
               <div className="mb-3">
                 <label className="block text-sm text-(--ui-muted) mb-1">Scope ID ({form.scope_type} ID)</label>
                 <input className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)" type="number" value={form.scope_id || ""} onChange={e => setForm(f => ({ ...f, scope_id: e.target.value ? Number(e.target.value) : null }))} />
+              </div>
+            )}
+
+            {!editing && form.scope_type === "device" && (
+              <div className="mb-3">
+                <label className="block text-sm text-(--ui-muted) mb-1">Device</label>
+                {devices.length === 0 ? (
+                  <div className="text-xs text-(--ui-muted) italic">No devices registered yet. Open the POS on a terminal to register it.</div>
+                ) : (
+                  <select
+                    className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)"
+                    value={form.scope_id || ""}
+                    onChange={(e) => setForm((f) => ({ ...f, scope_id: e.target.value ? Number(e.target.value) : null }))}
+                  >
+                    <option value="">Select a device…</option>
+                    {devices.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.label || `Device #${d.id}`}
+                        {d.outlet_name ? ` · ${d.outlet_name}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             )}
 

@@ -5372,6 +5372,42 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 72,
+    description:
+      "Phase 2-G.13 Per-device Quick Grid — widen pos_layouts.scope_type to include 'device' + pos_device_registry sidecar",
+    up: async (client) => {
+      // 2-G.13: extend pos_layouts scope_type with a fifth value. scope_id
+      // continues to carry an INTEGER (the surrogate device id from the
+      // sidecar registry), preserving the existing UNIQUE(scope_type, scope_id).
+      await client.query(`
+        ALTER TABLE pos_layouts DROP CONSTRAINT IF EXISTS pos_layouts_scope_type_check
+      `);
+      await client.query(`
+        ALTER TABLE pos_layouts
+          ADD CONSTRAINT pos_layouts_scope_type_check
+          CHECK (scope_type IN ('global','outlet','role','employee','device'))
+      `);
+
+      // Device registry — maps browser-generated UUIDs to surrogate serial ids
+      // so the admin UI has a human-readable device list. last_seen lets a
+      // future cleanup sweep orphan devices idle > 90 days.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS pos_device_registry (
+          id SERIAL PRIMARY KEY,
+          device_uuid TEXT UNIQUE NOT NULL,
+          outlet_id INTEGER REFERENCES outlets(id),
+          label TEXT,
+          last_seen TIMESTAMPTZ DEFAULT NOW(),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_pos_device_registry_outlet
+          ON pos_device_registry(outlet_id)
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {
