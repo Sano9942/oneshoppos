@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
-import { FileText, Plus, Edit2, Trash2, X, CheckCircle2, Star } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { FileText, Plus, Edit2, Trash2, X, CheckCircle2, Star, Upload } from "lucide-react";
 
 import { api } from '../api';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { PAPER_SIZES, pxForChars } from '../utils/paperSizes';
 
 
 const EMPTY = {
@@ -12,14 +13,35 @@ const EMPTY = {
   show_barcode: false,
   show_logo: false,
   is_active: false,
+  // Bucket F designer v2 fields
+  logo_url: "",
+  paper_width: 48,
+  show_tax_breakdown: true,
+  show_fbr: true,
+  show_qr: true,
 };
 
-// Live receipt preview using template values
+// Live receipt preview using template values. Width tracks paper_width so
+// merchants can see 58mm vs 80mm render differences inline.
 function ReceiptPreview({ template, symbol }) {
   const s = symbol || "$";
+  const width = pxForChars(template.paper_width || 48);
+  const showTax = template.show_tax_breakdown !== false;
+  const showFbr = template.show_fbr !== false;
+  const showQr = template.show_qr !== false;
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 font-mono text-xs text-slate-800 w-full max-w-[260px] shadow-sm">
+    <div
+      className="bg-white border border-slate-200 rounded-xl p-4 font-mono text-xs text-slate-800 shadow-sm"
+      style={{ width: `${width}px` }}
+    >
       <div className="text-center border-b border-dashed border-slate-300 pb-3 mb-3">
+        {template.logo_url && (
+          <img
+            src={template.logo_url}
+            alt=""
+            className="mx-auto mb-2 max-h-10 object-contain"
+          />
+        )}
         <div className="font-bold text-sm">{template.header_text || "Store Name"}</div>
         <div className="text-slate-500 text-[11px] mt-1">Receipt #1042</div>
       </div>
@@ -29,7 +51,9 @@ function ReceiptPreview({ template, symbol }) {
       </div>
       <div className="border-t border-dashed border-slate-300 pt-2 mb-3 space-y-1">
         <div className="flex justify-between text-slate-500"><span>Subtotal</span><span>{s} 55.00</span></div>
-        <div className="flex justify-between text-slate-500"><span>Tax</span><span>{s} 2.75</span></div>
+        {showTax && (
+          <div className="flex justify-between text-slate-500"><span>Tax</span><span>{s} 2.75</span></div>
+        )}
         <div className="flex justify-between font-bold"><span>TOTAL</span><span>{s} 57.75</span></div>
         <div className="flex justify-between text-slate-500"><span>Cash</span><span>{s} 60.00</span></div>
         <div className="flex justify-between font-bold"><span>CHANGE</span><span>{s} 2.25</span></div>
@@ -38,6 +62,16 @@ function ReceiptPreview({ template, symbol }) {
         <div className="border-t border-dashed border-slate-300 pt-2 mb-2 text-center">
           <div className="text-[10px] tracking-widest text-slate-400">▌▌▌▌▌▌▌▌▌▌▌▌</div>
           <div className="text-[10px] text-slate-400">1042</div>
+        </div>
+      )}
+      {(showFbr || showQr) && (
+        <div className="border-t border-dashed border-slate-300 pt-2 mb-2 text-center">
+          {showFbr && <div className="text-[10px] text-slate-500">FBR Ref: (sample)</div>}
+          {showQr && (
+            <div className="mx-auto mt-1 h-10 w-10 bg-slate-200 text-[8px] text-slate-500 flex items-center justify-center border border-slate-300">
+              QR
+            </div>
+          )}
         </div>
       )}
       <div className="border-t border-dashed border-slate-300 pt-2 text-center text-[11px] text-slate-500">
@@ -57,6 +91,24 @@ export default function ReceiptTemplates() {
   const [form, setForm] = useState(EMPTY);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const logoInputRef = useRef(null);
+
+  const handleLogoUpload = async (file) => {
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("image", file);
+      const data = await api.upload("/api/uploads/receipt-logo", fd);
+      setForm((f) => ({ ...f, logo_url: data.url }));
+    } catch (err) {
+      alert("Logo upload failed: " + err.message);
+    } finally {
+      setIsUploading(false);
+      if (logoInputRef.current) logoInputRef.current.value = "";
+    }
+  };
 
   useEffect(() => { fetchTemplates(); }, []);
 
@@ -87,6 +139,13 @@ export default function ReceiptTemplates() {
       show_barcode: !!t.show_barcode,
       show_logo: !!t.show_logo,
       is_active: !!t.is_active,
+      // Bucket F designer v2. Null/undefined → sensible defaults so older
+      // rows (before v76) hydrate cleanly.
+      logo_url: t.logo_url || "",
+      paper_width: Number.isFinite(Number(t.paper_width)) ? Number(t.paper_width) : 48,
+      show_tax_breakdown: t.show_tax_breakdown !== false,
+      show_fbr: t.show_fbr !== false,
+      show_qr: t.show_qr !== false,
     });
     setIsModalOpen(true);
   };
@@ -296,6 +355,69 @@ export default function ReceiptTemplates() {
                     <p className="text-xs text-slate-400 mt-1">Appears at the bottom of the receipt</p>
                   </div>
 
+                  {/* Bucket F: logo upload */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">
+                      Logo
+                    </label>
+                    <div className="flex items-center gap-3">
+                      {form.logo_url ? (
+                        <img
+                          src={form.logo_url}
+                          alt=""
+                          className="h-14 w-14 rounded-lg border border-slate-200 bg-white object-contain p-1"
+                        />
+                      ) : (
+                        <div className="h-14 w-14 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400">
+                          <FileText size={18} />
+                        </div>
+                      )}
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={(e) => handleLogoUpload(e.target.files?.[0])}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => logoInputRef.current?.click()}
+                        disabled={isUploading}
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 bg-white border-2 border-slate-200 rounded-xl hover:border-[#8066FF] disabled:opacity-60"
+                      >
+                        <Upload size={14} />
+                        {isUploading ? "Uploading…" : form.logo_url ? "Replace" : "Upload"}
+                      </button>
+                      {form.logo_url && (
+                        <button
+                          type="button"
+                          onClick={() => setForm({ ...form, logo_url: "" })}
+                          className="text-xs text-slate-500 hover:text-red-600"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">PNG/JPG/WebP up to 10MB. Resized to 300×100.</p>
+                  </div>
+
+                  {/* Bucket F: paper width */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">
+                      Paper Width
+                    </label>
+                    <select
+                      value={form.paper_width}
+                      onChange={(e) => setForm({ ...form, paper_width: Number(e.target.value) })}
+                      className="w-full px-4 py-2 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-[#8066FF] text-sm"
+                    >
+                      {PAPER_SIZES.map((sz) => (
+                        <option key={sz.value} value={sz.value}>{sz.label}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-400 mt-1">Controls layout width on browser popup and thermal printer.</p>
+                  </div>
+
                   <div className="border-t border-slate-100 pt-5 space-y-3">
                     <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-2">
                       Options
@@ -308,6 +430,35 @@ export default function ReceiptTemplates() {
                         className="w-4 h-4 accent-[#8066FF]"
                       />
                       <span className="text-sm text-slate-700 font-medium">Show barcode on receipt</span>
+                    </label>
+                    {/* Bucket F: three new toggles. Defaults ON — merchants
+                        opt out for space on 58mm rolls or privacy reasons. */}
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.show_tax_breakdown}
+                        onChange={(e) => setForm({ ...form, show_tax_breakdown: e.target.checked })}
+                        className="w-4 h-4 accent-[#8066FF]"
+                      />
+                      <span className="text-sm text-slate-700 font-medium">Show tax breakdown</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.show_fbr}
+                        onChange={(e) => setForm({ ...form, show_fbr: e.target.checked })}
+                        className="w-4 h-4 accent-[#8066FF]"
+                      />
+                      <span className="text-sm text-slate-700 font-medium">Show FBR reference (IRN)</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.show_qr}
+                        onChange={(e) => setForm({ ...form, show_qr: e.target.checked })}
+                        className="w-4 h-4 accent-[#8066FF]"
+                      />
+                      <span className="text-sm text-slate-700 font-medium">Show FBR QR code</span>
                     </label>
                     <label className="flex items-center gap-3 cursor-pointer">
                       <input

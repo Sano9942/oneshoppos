@@ -1,3 +1,10 @@
+import { PAPER_SIZES as _PAPER_SIZES, pxForChars as _pxForChars } from "./paperSizes";
+
+// Re-export so existing callers that already import from utils/receipt.js
+// can access the paper-width helper without an extra import.
+export const PAPER_SIZES = _PAPER_SIZES;
+export const pxForChars = _pxForChars;
+
 /**
  * Single source of truth for receipt data.
  * Both printSlip (popup) and POSReceiptModal (screen) consume this.
@@ -27,6 +34,14 @@ export function buildReceiptSections(slip, template, currencySymbol = "$") {
     storeName: template?.header_text || slip.outlet?.name || "SanoPOS",
     footerText: template?.footer_text || "Thank you for your purchase!",
     showBarcode: Boolean(template?.show_barcode),
+
+    // Bucket F designer v2. Undefined/null defaults to TRUE/sensible defaults
+    // so tenants without v76 migration applied still render legacy layout.
+    logoUrl: template?.logo_url || null,
+    paperWidth: Number(template?.paper_width) || 48,
+    showTaxBreakdown: template?.show_tax_breakdown !== false,
+    showFbr: template?.show_fbr !== false,
+    showQr: template?.show_qr !== false,
 
     // Header info
     // slip.timestamp must already be a display string (e.g. new Date().toLocaleString())
@@ -77,7 +92,11 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
   const fmt = makeFmt(currencySymbol);
   const s = buildReceiptSections(slip, template, currencySymbol);
 
-  const w = window.open("", "_blank", "width=360,height=620");
+  // Bucket F: paper-width-aware popup. Width tracks the active template's
+  // paper_width so 58mm rolls render at ~227px and 80mm rolls at ~341px.
+  const popupPx = pxForChars(s.paperWidth);
+  const winW = Math.max(popupPx + 60, 320);
+  const w = window.open("", "_blank", `width=${winW},height=620`);
   if (!w) {
     alert("Pop-up blocked. Please allow pop-ups for this site to print receipts.");
     return;
@@ -86,12 +105,14 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
 
   const style = d.createElement("style");
   style.textContent = [
-    "body{font-family:monospace;font-size:13px;width:300px;margin:0 auto;padding:12px}",
+    `body{font-family:monospace;font-size:13px;width:${popupPx}px;margin:0 auto;padding:12px}`,
     ".row{display:flex;justify-content:space-between}",
     ".c{text-align:center}",
     "hr{border:none;border-top:1px dashed #999;margin:6px 0}",
     ".label{font-size:11px;font-weight:bold;text-transform:uppercase;color:#666;margin:4px 0 2px}",
     ".ret{color:#c0392b}",
+    ".logo{max-width:100%;max-height:60px;display:block;margin:0 auto 6px}",
+    ".qr{display:block;margin:6px auto;max-width:80%;height:auto}",
   ].join(" ");
   d.head.appendChild(style);
   d.title = `Receipt ${s.invoiceNumber}`;
@@ -113,7 +134,14 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
   };
   const hr = () => d.createElement("hr");
 
-  // Header
+  // Header — logo first when template has one (Bucket F)
+  if (s.logoUrl) {
+    const img = d.createElement("img");
+    img.src = s.logoUrl;
+    img.className = "logo";
+    img.alt = "";
+    b.appendChild(img);
+  }
   b.appendChild(txt("div", s.storeName, "c"));
   b.appendChild(txt("div", s.timestamp, "c"));
   // 2-G.9: hold slip gets a prominent "HOLD SLIP" header and renames the
@@ -195,7 +223,7 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
   // Totals block
   b.appendChild(row("Subtotal", fmt(s.subtotal)));
 
-  if (s.taxAmount > 0)
+  if (s.showTaxBreakdown && s.taxAmount > 0)
     b.appendChild(row("GST (incl.)", fmt(s.taxAmount)));
 
   if (s.exchangeCredit > 0) {
@@ -284,10 +312,29 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
       });
   }
 
-  // FBR Digital Invoice reference
-  if (slip.fbr_irn) {
+  // FBR Digital Invoice reference — toggles respected (Bucket F).
+  // Dynamic qrcode import keeps the ~40KB library out of initial bundle;
+  // only fetched when a template actually renders the QR.
+  if (s.showFbr && slip.fbr_irn) {
     b.appendChild(hr());
     b.appendChild(txt("div", `FBR Ref: ${slip.fbr_irn}`, "c"));
+    if (s.showQr && slip.fbr_qr_code) {
+      const qrImg = d.createElement("img");
+      qrImg.className = "qr";
+      qrImg.alt = "FBR QR";
+      b.appendChild(qrImg);
+      const raw = String(slip.fbr_qr_code);
+      if (raw.startsWith("data:") || raw.startsWith("http")) {
+        // Already an image — use directly.
+        qrImg.src = raw;
+      } else {
+        // Raw payload string — encode client-side. Lazy-loaded.
+        import("qrcode")
+          .then((mod) => (mod.default || mod).toDataURL(raw, { margin: 1, width: 140 }))
+          .then((url) => { qrImg.src = url; })
+          .catch(() => { qrImg.remove(); });
+      }
+    }
   } else if (slip.fbr_status === "pending") {
     b.appendChild(hr());
     const fbrNote = txt("div", "FBR: Processing...", "c");
