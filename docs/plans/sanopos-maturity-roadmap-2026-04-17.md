@@ -1,9 +1,9 @@
 # SanoPOS Maturity Roadmap — From Scaffolding to Square/Shopify Parity
 
 > **Date:** 2026-04-17
-> **Last updated:** 2026-04-18
+> **Last updated:** 2026-04-23
 > **Source:** Brainstorming session, plan file at `~/.claude/plans/we-have-made-allof-smooth-jellyfish.md`
-> **Status:** Phase 1 COMPLETE, Phase 2.1 COMPLETE, Phase 2-R.0 COMPLETE — ready to start 2-R.1
+> **Status:** Phase 1 COMPLETE (with non-blocking deferrals). Phase 2.1 Restaurant Maturation COMPLETE. Phase 2-R.0 through 2-R.10 COMPLETE (Waves A–D shipped). Phase 2-G.0 through 2-G.17 COMPLETE (Waves 1–6 shipped, including 2-G.14 Shopify+Square import, 2-G.15 retail error states, 2-G.16 merchant home, 2-G.17 anti-theft). **Remaining in Phase 2:** 2.2 Clinical Maturation (6 items, none shipped) and 2.3 Repair Shop Maturation (6 items, none shipped).
 
 ## Context
 
@@ -111,7 +111,7 @@ Today you're bottom-left: wide but shallow, capable but rough. Square is top-rig
 
 **What's next:** see Phase 2.2 below — closes 10 remaining gaps vs Square for Restaurants / Toast / TouchBistro / Lightspeed so restaurant becomes a lead-with product.
 
-### 2.2 Clinical Maturation — Dental/Vet/Physio (close from ~60% → 95%)
+### 2.2 Clinical Maturation — Dental/Vet/Physio (close from ~60% → 95%) ⏸ NOT STARTED
 **Already have:** `patient_subjects`, `treatment_plans`, sessions, lab orders, consent forms, prescriptions, folios, plan templates (v46). Files: [backend/routes/treatment-plans.js](../../backend/routes/treatment-plans.js), [backend/routes/treatment-plan-templates.js](../../backend/routes/treatment-plan-templates.js).
 
 **Build:**
@@ -122,7 +122,7 @@ Today you're bottom-left: wide but shallow, capable but rough. Square is top-rig
 - Multi-provider treatment splits (commission per provider per session)
 - Consent form e-signature capture (canvas → PNG → R2)
 
-### 2.3 Repair Shop Maturation (close from ~65% → 95%)
+### 2.3 Repair Shop Maturation (close from ~65% → 95%) ⏸ NOT STARTED
 **Already have:** Service ticket pipeline, line items, deposits. File: [backend/routes/service-tickets.js](../../backend/routes/service-tickets.js).
 
 **Build:**
