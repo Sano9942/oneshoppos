@@ -567,6 +567,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: PARKED SALES ---
   require("./parked-sales")(app, deps);
 
+  // --- ROUTES: HOLDS / LAYAWAY (2-G.9) ---
+  require("./holds")(app, deps);
+
   // --- ROUTES: ORDERS ---
   const {
     processPendingShopifyInventoryEvents,

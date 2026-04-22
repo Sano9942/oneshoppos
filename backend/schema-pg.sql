@@ -2014,6 +2014,54 @@ CREATE INDEX IF NOT EXISTS idx_inventory_reservations_key ON inventory_reservati
 CREATE INDEX IF NOT EXISTS idx_inventory_reservations_outlet_product ON inventory_reservations(outlet_id, product_id);
 CREATE INDEX IF NOT EXISTS idx_inventory_reservations_status ON inventory_reservations(status) WHERE status = 'active';
 
+-- ── Phase 2-G.9 Holds / Layaway / Special-order ─────────────────────
+-- Stock held via inventory_reservations with reservation_key='hold:<id>:...'.
+-- Dedicated hold_payments ledger (sale_payments.sale_id is NOT NULL so we
+-- can't book a deposit against a not-yet-created sale).
+
+CREATE TABLE IF NOT EXISTS holds (
+  id SERIAL PRIMARY KEY,
+  hold_number TEXT UNIQUE NOT NULL,
+  customer_id INTEGER REFERENCES customers(id),
+  customer_phone TEXT,
+  customer_name TEXT,
+  outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active','paid','completed','forfeit','cancelled')),
+  total_amount NUMERIC(12,2) NOT NULL,
+  deposit_paid NUMERIC(12,2) NOT NULL DEFAULT 0,
+  balance_due NUMERIC(12,2) NOT NULL,
+  hold_until TIMESTAMPTZ,
+  notes TEXT,
+  created_by INTEGER REFERENCES employees(id),
+  completed_sale_id INTEGER REFERENCES sales(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_holds_outlet_status ON holds(outlet_id, status);
+CREATE INDEX IF NOT EXISTS idx_holds_hold_until ON holds(hold_until) WHERE status = 'active';
+
+CREATE TABLE IF NOT EXISTS hold_items (
+  id SERIAL PRIMARY KEY,
+  hold_id INTEGER NOT NULL REFERENCES holds(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  variant_id INTEGER REFERENCES product_variants(id),
+  quantity NUMERIC(10,3) NOT NULL,
+  price_at_hold NUMERIC(12,2) NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_hold_items_hold ON hold_items(hold_id);
+
+CREATE TABLE IF NOT EXISTS hold_payments (
+  id SERIAL PRIMARY KEY,
+  hold_id INTEGER NOT NULL REFERENCES holds(id) ON DELETE CASCADE,
+  amount NUMERIC(12,2) NOT NULL,
+  method TEXT NOT NULL,
+  gateway_ref TEXT,
+  paid_at TIMESTAMPTZ DEFAULT NOW(),
+  recorded_by INTEGER REFERENCES employees(id)
+);
+CREATE INDEX IF NOT EXISTS idx_hold_payments_hold ON hold_payments(hold_id);
+
 -- ── Customer Addresses ──────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS customer_addresses (
@@ -2117,6 +2165,7 @@ INSERT INTO feature_flags (key, enabled, description) VALUES
   ('phase2g_per_line_restock', false, '2-G.7 per-line restock toggle + reasons'),
   ('phase2g_inventory_intelligence', false, '2-G.8 inventory-intelligence hub'),
   ('phase2g_receipt_barcode_lookup', false, '2-G.11 receipt barcode + return lookup'),
+  ('phase2g_holds', false, '2-G.9 layaway/hold/special-order'),
   ('phase2g_label_designer', false, 'Parallel track — ZPL/TSPL/EPL label designer')
 ON CONFLICT (key) DO NOTHING;
 
