@@ -269,20 +269,39 @@ export default function CommissionPlansRedesign() {
             <input className="w-full border border-(--ui-border) rounded px-3 py-2 text-sm bg-(--ui-bg) text-(--ui-text)" type="datetime-local" value={planForm.ends_at} onChange={e => setPlanForm(f => ({ ...f, ends_at: e.target.value }))} />
           </div>
         </div>
-        <label className="block text-sm font-medium text-(--ui-muted) mb-2">Rules</label>
+        <label className="block text-sm font-medium text-(--ui-muted) mb-2">
+          {planForm.type === "tiered" ? "Tier steps" : "Rules"}
+        </label>
+        {planForm.type === "tiered" && (
+          <p className="text-xs text-(--ui-muted) mb-2">
+            Tier step: when sale total ≥ <span className="font-semibold">Min</span>, apply <span className="font-semibold">Rate %</span>.
+            The highest matching <span className="font-semibold">Min</span> wins. Only "All" scope is used for tiers.
+          </p>
+        )}
         {planForm.rules.map((rule, idx) => (
           <div key={idx} className="flex gap-2 mb-2 items-center flex-wrap">
-            <select className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-28" value={rule.scope_type} onChange={e => updateRule(idx, "scope_type", e.target.value)}>
-              {SCOPE_TYPES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
-            {rule.scope_type !== "all" && <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" placeholder="ID" value={rule.scope_id || ""} onChange={e => updateRule(idx, "scope_id", e.target.value ? Number(e.target.value) : null)} />}
-            <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" step="0.01" placeholder="Rate" value={rule.rate} onChange={e => updateRule(idx, "rate", Number(e.target.value))} />
-            <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" placeholder="Min" value={rule.min_threshold} onChange={e => updateRule(idx, "min_threshold", Number(e.target.value))} />
+            {planForm.type === "tiered" ? (
+              <span className="text-xs font-semibold text-(--ui-muted) w-16">Tier {idx + 1}</span>
+            ) : (
+              <select className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-28" value={rule.scope_type} onChange={e => updateRule(idx, "scope_type", e.target.value)}>
+                {SCOPE_TYPES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            )}
+            {planForm.type !== "tiered" && rule.scope_type !== "all" && <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" placeholder="ID" value={rule.scope_id || ""} onChange={e => updateRule(idx, "scope_id", e.target.value ? Number(e.target.value) : null)} />}
+            {planForm.type === "tiered" && (
+              <label className="text-xs text-(--ui-muted) flex items-center gap-1">
+                ≥ <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-24" type="number" placeholder="Threshold" value={rule.min_threshold} onChange={e => updateRule(idx, "min_threshold", Number(e.target.value))} />
+              </label>
+            )}
+            <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" step="0.01" placeholder={planForm.type === "tiered" ? "Rate %" : "Rate"} value={rule.rate} onChange={e => updateRule(idx, "rate", Number(e.target.value))} />
+            {planForm.type !== "tiered" && <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" placeholder="Min" value={rule.min_threshold} onChange={e => updateRule(idx, "min_threshold", Number(e.target.value))} />}
             <input className="border border-(--ui-border) rounded px-2 py-1 text-sm bg-(--ui-bg) text-(--ui-text) w-20" type="number" placeholder="Cap" value={rule.max_cap || ""} onChange={e => updateRule(idx, "max_cap", e.target.value ? Number(e.target.value) : null)} />
             {planForm.rules.length > 1 && <Button tone="plain" size="sm" iconOnly onClick={() => removeRule(idx)} aria-label="Remove rule" className="text-red-500"><X size={14} /></Button>}
           </div>
         ))}
-        <Button tone="link" size="sm" onClick={addRule} className="mb-4">+ Add rule</Button>
+        <Button tone="link" size="sm" onClick={addRule} className="mb-4">
+          + {planForm.type === "tiered" ? "Add tier" : "Add rule"}
+        </Button>
         <ModalFooter>
           <Button size="sm" onClick={() => setShowPlanModal(false)}>Cancel</Button>
           <Button tone="primary" size="sm" onClick={handleSavePlan}>{editingPlan ? "Update" : "Create"}</Button>
