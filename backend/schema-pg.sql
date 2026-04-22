@@ -417,7 +417,11 @@ CREATE TABLE IF NOT EXISTS cash_shifts (
   closed_at TIMESTAMPTZ,
   notes TEXT,
   variance_reason TEXT,
-  variance_approved_by TEXT
+  variance_approved_by TEXT,
+  -- Bucket F shift auto-close (migration v76)
+  closing_method TEXT DEFAULT 'manual',
+  closing_note TEXT,
+  auto_closed_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS shift_denominations (
@@ -796,6 +800,12 @@ CREATE TABLE IF NOT EXISTS receipt_templates (
   show_barcode BOOLEAN DEFAULT FALSE,
   show_logo BOOLEAN DEFAULT FALSE,
   is_active BOOLEAN DEFAULT FALSE,
+  -- Bucket F receipt designer v2 (migration v76)
+  logo_url TEXT,
+  paper_width INTEGER DEFAULT 48,
+  show_tax_breakdown BOOLEAN DEFAULT TRUE,
+  show_fbr BOOLEAN DEFAULT TRUE,
+  show_qr BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -968,7 +978,9 @@ CREATE TABLE IF NOT EXISTS company_profile (
   industry_type TEXT DEFAULT 'general_retail',
   business_model TEXT DEFAULT 'buy_sell',
   country_code TEXT DEFAULT 'PK',
-  industry_preset_version INTEGER DEFAULT 1
+  industry_preset_version INTEGER DEFAULT 1,
+  -- Bucket F shift auto-close threshold (migration v76)
+  shift_auto_close_hours INTEGER DEFAULT 36
 );
 
 CREATE TABLE IF NOT EXISTS tenant_modes (

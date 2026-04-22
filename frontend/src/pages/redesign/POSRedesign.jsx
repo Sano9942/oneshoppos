@@ -39,8 +39,25 @@ const MOBILE_TABS = [
   { key: "pay", label: "Pay", icon: CreditCard },
 ];
 
+// Bucket F: banner label respects type-split so users know whether their
+// queue contains refunds as well as sales. `queuedSalesCount`/`queuedReturnsCount`
+// are optional so older tests / external callers without Bucket F still render.
+function offlineBannerLabel({ offlineQueueCount, queuedSalesCount, queuedReturnsCount }) {
+  const s = Number(queuedSalesCount || 0);
+  const r = Number(queuedReturnsCount || 0);
+  if (s && r) return `${s} sale(s) + ${r} refund(s) queued offline — will sync automatically`;
+  if (r && !s) return `${r} refund(s) queued offline — will sync automatically`;
+  // Default (sales-only or untyped legacy rows) — preserve the original wording.
+  return `${offlineQueueCount} sale(s) queued offline — will sync automatically`;
+}
+
 function POSContent() {
-  const { isLocked, notice, error, cart, total, money, openCheckout, offlineQueueCount, offlineSyncing, offlineSyncResult, syncQueue, posLayout, suggestions, addToCart } = usePOS();
+  const {
+    isLocked, notice, error, cart, total, money, openCheckout,
+    offlineQueueCount, queuedSalesCount, queuedReturnsCount,
+    offlineSyncing, offlineSyncResult, syncQueue,
+    posLayout, suggestions, addToCart,
+  } = usePOS();
   const [activeTab, setActiveTab] = useState("cart");
 
   if (isLocked) {
@@ -54,7 +71,7 @@ function POSContent() {
         <div className="fixed top-0 left-0 right-0 z-60 flex items-center justify-between px-4 py-2.5 bg-amber-500 text-white text-sm font-medium shadow-lg animate-in fade-in slide-in-from-top-4 duration-300">
           <span className="flex items-center gap-2">
             <WifiOff size={16} />
-            {offlineQueueCount} sale(s) queued offline — will sync automatically
+            {offlineBannerLabel({ offlineQueueCount, queuedSalesCount, queuedReturnsCount })}
           </span>
           <button
             onClick={syncQueue}
@@ -66,10 +83,14 @@ function POSContent() {
           </button>
         </div>
       )}
-      {/* Sync success banner */}
+      {/* Sync success banner — Bucket F: use the richer message from the hook. */}
       {offlineSyncResult && (
         <div className="fixed top-0 left-0 right-0 z-60 flex items-center justify-center px-4 py-2.5 bg-emerald-500 text-white text-sm font-medium shadow-lg animate-in fade-in slide-in-from-top-4 duration-300">
-          {offlineSyncResult.synced} sale(s) synced successfully
+          {offlineSyncResult.sales && offlineSyncResult.returns
+            ? `${offlineSyncResult.sales} sale(s) + ${offlineSyncResult.returns} refund(s) synced`
+            : offlineSyncResult.returns
+              ? `${offlineSyncResult.returns} refund(s) synced successfully`
+              : `${offlineSyncResult.sales || offlineSyncResult.synced} sale(s) synced successfully`}
         </div>
       )}
       {/* Notifications */}

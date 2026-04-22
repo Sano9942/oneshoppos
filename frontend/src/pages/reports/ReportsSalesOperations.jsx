@@ -552,8 +552,17 @@ export function DailyOperationsTab({ filters }) {
                 <>
                   Shift window {fmtDateTime(shift.opened_at)} to{" "}
                   {shift.closed_at ? fmtDateTime(shift.closed_at) : "Open shift"}.
+                  {/* Bucket F: flag shifts force-closed by the background worker so
+                      finance knows to reconcile manually (expected_cash is NULL). */}
+                  {shift.closing_method === "auto" && (
+                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
+                      Auto-closed
+                    </span>
+                  )}
+                  {" "}
                   Variance {fmt(shift.variance || 0)}
                   {shift.variance_reason ? ` (${shift.variance_reason})` : ""}.
+                  {shift.closing_note ? ` ${shift.closing_note}.` : ""}
                 </>
               ) : (
                 "Shift data unavailable for the selected filter."

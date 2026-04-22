@@ -26,13 +26,35 @@ function getDb() {
   return _dbPromise;
 }
 
+// Bucket F: lazy row-type stamping. Existing rows (written before the
+// offline-returns feature) don't carry a `type` field. We default them to
+// "sale" on read so older tabs keep working without bumping DB_VERSION.
+function normalizeRow(row) {
+  if (!row) return row;
+  if (!row.type) row.type = "sale";
+  return row;
+}
+
 export function getQueueKey(employeeId) {
   return `${LS_PREFIX}${employeeId}`;
 }
 
 export async function getQueue(employeeId) {
   const db = await getDb();
-  return db.getAllFromIndex(STORE, "by_employee", employeeId);
+  const rows = await db.getAllFromIndex(STORE, "by_employee", employeeId);
+  return rows.map(normalizeRow);
+}
+
+// Bucket F: type-scoped getters. Keep `getQueue` returning everything so the
+// top-of-file count in the banner stays a single number the UI can display.
+export async function getSalesQueue(employeeId) {
+  const rows = await getQueue(employeeId);
+  return rows.filter((r) => r.type === "sale");
+}
+
+export async function getReturnsQueue(employeeId) {
+  const rows = await getQueue(employeeId);
+  return rows.filter((r) => r.type === "return");
 }
 
 export async function getQueueByState(employeeId, state) {
@@ -40,26 +62,44 @@ export async function getQueueByState(employeeId, state) {
   return rows.filter((r) => r.sync_state === state);
 }
 
-export async function enqueue(employeeId, salePayload) {
+// Internal: shared write path for both sale and return queue rows. Keeps the
+// MAX_QUEUED cap across all types (sales + returns combined) to match the
+// existing single-bucket UX — users won't stockpile both.
+async function enqueueTyped(employeeId, payload, type) {
   const existing = await getQueue(employeeId);
   if (existing.length >= MAX_QUEUED) {
-    throw new Error(`Offline queue full (${MAX_QUEUED} sales). Please sync before adding more.`);
+    throw new Error(`Offline queue full (${MAX_QUEUED} items). Please sync before adding more.`);
   }
-  const key = salePayload?.idempotency_key;
-  if (!key) throw new Error("Sale payload missing idempotency_key");
+  const key = payload?.idempotency_key;
+  if (!key) throw new Error(`${type === "return" ? "Return" : "Sale"} payload missing idempotency_key`);
   const row = {
     idempotency_key: key,
     employee_id: employeeId,
+    type,
     sync_state: "pending",
     retry_count: 0,
     last_error: null,
     queued_at: new Date().toISOString(),
     last_attempt_at: null,
-    payload: salePayload,
+    payload,
   };
   const db = await getDb();
   await db.put(STORE, row);
   return existing.length + 1;
+}
+
+// Back-compat: the existing enqueue() keeps its sale-only semantics.
+export async function enqueue(employeeId, salePayload) {
+  return enqueueTyped(employeeId, salePayload, "sale");
+}
+
+// Bucket F: explicit helpers for callers that want to be unambiguous.
+export async function enqueueSale(employeeId, salePayload) {
+  return enqueueTyped(employeeId, salePayload, "sale");
+}
+
+export async function enqueueReturn(employeeId, returnPayload) {
+  return enqueueTyped(employeeId, returnPayload, "return");
 }
 
 export async function markSyncing(idempotencyKey) {
@@ -132,6 +172,8 @@ export async function migrateFromLocalStorage(employeeId) {
     await db.put(STORE, {
       idempotency_key: idempotencyKey,
       employee_id: employeeId,
+      // Migrated legacy rows are always sales — returns queue is new in Bucket F.
+      type: "sale",
       sync_state: "pending",
       retry_count: 0,
       last_error: null,

@@ -204,16 +204,17 @@ export const POSProvider = ({ children }) => {
 
   // 2-G.15 Day 2 — stale-shift detection. Fires when the gate finishes
   // loading and we land on an active shift opened long enough ago that
-  // the cashier probably forgot to close it yesterday. Gated to before
-  // noon so a legitimate night-shift doesn't see the prompt all day.
+  // the cashier probably forgot to close it yesterday.
+  // Bucket F: before-noon filter removed — overnight/extended shifts that
+  // cross into the afternoon without a proper close are also stale. The
+  // 20h threshold is still the load-bearing guard against noise.
   useEffect(() => {
     if (shiftRecoveryDismissed) return;
     if (!shift.activeShift?.opened_at) return;
     const now = new Date();
     const opened = new Date(shift.activeShift.opened_at);
     const ageHours = (now.getTime() - opened.getTime()) / 3_600_000;
-    const beforeNoon = now.getHours() < 12;
-    if (ageHours > 20 && beforeNoon) {
+    if (ageHours > 20) {
       setShiftRecoveryOpen(true);
     }
   }, [shift.activeShift?.opened_at, shiftRecoveryDismissed]);
@@ -535,6 +536,9 @@ export const POSProvider = ({ children }) => {
     pointsDiscount: loyalty.pointsDiscount,
     setSlip: receipt.setSlip, setSlipOpen: receipt.setSlipOpen,
     enqueueSale: offlineQueue.enqueueSale,
+    // Bucket F: offline refund queue. Gated at the call site via the
+    // `offline_returns` feature flag — hook exports the function either way.
+    enqueueReturn: offlineQueue.enqueueReturn,
     loadParked,
     // Phase 2-R.0 — restaurant shell context wired into completeSale payload
     draftOrderId,
@@ -1014,6 +1018,10 @@ export const POSProvider = ({ children }) => {
     retryPendingSale: checkout.retryPendingSale,
     // Offline queue
     offlineQueueCount: offlineQueue.offlineQueueCount,
+    // Bucket F: type-split counts so POSRedesign banner can show e.g.
+    // "3 sales + 1 refund queued offline".
+    queuedSalesCount: offlineQueue.queuedSalesCount,
+    queuedReturnsCount: offlineQueue.queuedReturnsCount,
     offlineSyncing: offlineQueue.offlineSyncing,
     offlineSyncResult: offlineQueue.offlineSyncResult,
     syncQueue: offlineQueue.syncQueue,

@@ -1,14 +1,11 @@
 import { useState, useEffect } from "react";
 import { PageShell } from "../../ui/primitives";
 import { api } from "../../api";
+import { PAPER_SIZES as SHARED_PAPER_SIZES } from "../../utils/paperSizes";
 
-const PAPER_SIZES = [
-  { label: "80mm — 48 chars (standard)", value: 48 },
-  { label: "76mm — 42 chars", value: 42 },
-  { label: "58mm — 32 chars (mini)", value: 32 },
-  { label: "57mm — 30 chars (narrow)", value: 30 },
-  { label: "Custom", value: "custom" },
-];
+// Printer Settings adds a "Custom" option to the shared list so admins can
+// type a non-standard width for unusual printers.
+const PAPER_SIZES = [...SHARED_PAPER_SIZES, { label: "Custom", value: "custom" }];
 
 export default function PrinterSettingsRedesign() {
   const [cfg, setCfg] = useState({

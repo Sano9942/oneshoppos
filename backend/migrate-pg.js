@@ -5550,6 +5550,53 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 76,
+    description:
+      "Phase 2-G Bucket F polish — receipt template designer (logo, paper width, toggles) + shift auto-close + offline returns flag",
+    up: async (client) => {
+      // Receipt designer v2: extend receipt_templates with designer fields.
+      //   paper_width = roll character width (32=58mm, 42=80mm, 48=80mm-wide).
+      //   show_tax_breakdown / show_fbr / show_qr default TRUE so existing
+      //   tenants keep today's layout on the first render after upgrade.
+      await client.query(`
+        ALTER TABLE receipt_templates
+          ADD COLUMN IF NOT EXISTS logo_url TEXT,
+          ADD COLUMN IF NOT EXISTS paper_width INTEGER DEFAULT 48,
+          ADD COLUMN IF NOT EXISTS show_tax_breakdown BOOLEAN DEFAULT TRUE,
+          ADD COLUMN IF NOT EXISTS show_fbr BOOLEAN DEFAULT TRUE,
+          ADD COLUMN IF NOT EXISTS show_qr BOOLEAN DEFAULT TRUE
+      `);
+
+      // Shift auto-close: track closing method + audit trail for forced closes.
+      await client.query(`
+        ALTER TABLE cash_shifts
+          ADD COLUMN IF NOT EXISTS closing_method TEXT DEFAULT 'manual',
+          ADD COLUMN IF NOT EXISTS closing_note TEXT,
+          ADD COLUMN IF NOT EXISTS auto_closed_at TIMESTAMPTZ
+      `);
+
+      // Per-tenant auto-close threshold (hours). 36h default = overnight
+      // retail tolerance without punishing legitimate 24h outlets.
+      await client.query(`
+        ALTER TABLE company_profile
+          ADD COLUMN IF NOT EXISTS shift_auto_close_hours INTEGER DEFAULT 36
+      `);
+
+      // Bucket F feature flags. receipt_designer_v2 is ON by default
+      // (additive UI with safe defaults); worker + offline refunds start OFF.
+      await client.query(`
+        INSERT INTO feature_flags (key, enabled, description) VALUES
+          ('receipt_designer_v2', TRUE,
+           'Bucket F: logo upload, paper width, per-template show/hide toggles, QR on receipt'),
+          ('shift_auto_close', FALSE,
+           'Bucket F: background worker force-closes shifts older than tenant threshold'),
+          ('offline_returns', FALSE,
+           'Bucket F: queue partial refunds in IndexedDB while offline')
+        ON CONFLICT (key) DO NOTHING
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

@@ -1,3 +1,5 @@
+const multer = require("multer");
+
 module.exports = function registerReceiptTemplateRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm } = deps;
 
@@ -7,6 +9,22 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
       try { await db.query(`ALTER TABLE action_history ADD COLUMN ${col}`); } catch {}
     }
   })();
+
+  // Bucket F receipt designer v2 fields — tolerated as absent on read so
+  // upgrade sequence (migrate → deploy) doesn't 500 if a tenant hasn't run
+  // v76 yet. New columns default safe on fresh schemas.
+  function coerceDesignerFields(body) {
+    const out = {};
+    if (body.logo_url !== undefined) out.logo_url = body.logo_url || null;
+    if (body.paper_width !== undefined) {
+      const n = parseInt(body.paper_width, 10);
+      out.paper_width = Number.isFinite(n) && n > 0 ? n : 48;
+    }
+    if (body.show_tax_breakdown !== undefined) out.show_tax_breakdown = !!body.show_tax_breakdown;
+    if (body.show_fbr !== undefined) out.show_fbr = !!body.show_fbr;
+    if (body.show_qr !== undefined) out.show_qr = !!body.show_qr;
+    return out;
+  }
 
 // --- RECEIPT TEMPLATES ---
 
@@ -33,13 +51,29 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
   app.post("/api/receipt-templates", requirePerm("all_access"), async (req, res) => {
     const { name, header_text, footer_text, show_barcode, show_logo, is_active } = req.body;
     if (!name) return res.status(400).json({ error: "Name is required" });
+    const d = coerceDesignerFields(req.body);
     try {
       if (is_active) {
         await db.query("UPDATE receipt_templates SET is_active = false");
       }
       const { rows } = await db.query(
-        "INSERT INTO receipt_templates (name, header_text, footer_text, show_barcode, show_logo, is_active) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-        [name, header_text || "", footer_text || "", show_barcode ? true : false, show_logo ? true : false, is_active ? true : false]
+        `INSERT INTO receipt_templates
+           (name, header_text, footer_text, show_barcode, show_logo, is_active,
+            logo_url, paper_width, show_tax_breakdown, show_fbr, show_qr)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+        [
+          name,
+          header_text || "",
+          footer_text || "",
+          show_barcode ? true : false,
+          show_logo ? true : false,
+          is_active ? true : false,
+          d.logo_url ?? null,
+          d.paper_width ?? 48,
+          d.show_tax_breakdown ?? true,
+          d.show_fbr ?? true,
+          d.show_qr ?? true,
+        ]
       );
       res.json({ id: rows[0].id, message: "Template created" });
     } catch (err) {
@@ -51,13 +85,41 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
     const { id } = req.params;
     const { name, header_text, footer_text, show_barcode, show_logo, is_active } = req.body;
     if (!name) return res.status(400).json({ error: "Name is required" });
+    const d = coerceDesignerFields(req.body);
     try {
       if (is_active) {
         await db.query("UPDATE receipt_templates SET is_active = false");
       }
+      // COALESCE keeps existing column values when the client omits a field —
+      // lets partial PUTs work (e.g. handleSetActive which only toggles is_active).
       const { rowCount } = await db.query(
-        "UPDATE receipt_templates SET name=$1, header_text=$2, footer_text=$3, show_barcode=$4, show_logo=$5, is_active=$6 WHERE id=$7",
-        [name, header_text || "", footer_text || "", show_barcode ? true : false, show_logo ? true : false, is_active ? true : false, id]
+        `UPDATE receipt_templates SET
+            name = $1,
+            header_text = $2,
+            footer_text = $3,
+            show_barcode = $4,
+            show_logo = $5,
+            is_active = $6,
+            logo_url = COALESCE($7, logo_url),
+            paper_width = COALESCE($8, paper_width),
+            show_tax_breakdown = COALESCE($9, show_tax_breakdown),
+            show_fbr = COALESCE($10, show_fbr),
+            show_qr = COALESCE($11, show_qr)
+         WHERE id = $12`,
+        [
+          name,
+          header_text || "",
+          footer_text || "",
+          show_barcode ? true : false,
+          show_logo ? true : false,
+          is_active ? true : false,
+          d.logo_url === undefined ? null : d.logo_url,
+          d.paper_width === undefined ? null : d.paper_width,
+          d.show_tax_breakdown === undefined ? null : d.show_tax_breakdown,
+          d.show_fbr === undefined ? null : d.show_fbr,
+          d.show_qr === undefined ? null : d.show_qr,
+          id,
+        ]
       );
       if (rowCount === 0) return res.status(404).json({ error: "Template not found" });
       res.json({ message: "Template updated" });
@@ -75,6 +137,41 @@ module.exports = function registerReceiptTemplateRoutes(app, deps) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // --- RECEIPT LOGO UPLOAD (Bucket F) ---
+  // Mirrors routes/products.js:1126-1155 pattern: multer memoryStorage, sharp
+  // resize to WebP, R2 upload (falls back to local filesystem if R2 unset).
+  // 300×100 is a safe inline-header size for both 58mm and 80mm rolls.
+  const { uploadToR2 } = require("../utils/r2");
+  const sharp = require("sharp");
+  const { imageFileFilter } = require("../middleware/upload-validation");
+
+  const receiptLogoUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: imageFileFilter,
+  });
+
+  app.post(
+    "/api/uploads/receipt-logo",
+    requirePerm("all_access"),
+    receiptLogoUpload.single("image"),
+    async (req, res) => {
+      if (!req.file) return res.status(400).json({ error: "Image file is required" });
+      try {
+        const resized = await sharp(req.file.buffer)
+          .resize(300, 100, { fit: "inside", withoutEnlargement: true })
+          .webp({ quality: 85 })
+          .toBuffer();
+        const filename = `receipt_${Date.now()}_${Math.round(Math.random() * 1e6)}.webp`;
+        const key = `receipt-logos/${filename}`;
+        const url = await uploadToR2(resized, key, "image/webp");
+        res.json({ url, filename, original_name: req.file.originalname, size: resized.length });
+      } catch (err) {
+        res.status(500).json({ error: "Upload failed: " + err.message });
+      }
+    },
+  );
 
   // --- ACTION HISTORY ---
 

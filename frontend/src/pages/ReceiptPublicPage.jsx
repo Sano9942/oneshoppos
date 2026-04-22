@@ -2,6 +2,38 @@ import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 
+// Lightweight wrapper around the `qrcode` package for the public receipt.
+// Sniffs the stored value: a data: or http: URL is an <img src> directly;
+// a raw payload string gets encoded client-side via dynamic import.
+function FbrQrImage({ value }) {
+  const [dataUrl, setDataUrl] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!value) return;
+    const raw = String(value);
+    if (raw.startsWith("data:") || raw.startsWith("http")) {
+      setDataUrl(raw);
+      return;
+    }
+    let cancelled = false;
+    import("qrcode")
+      .then((mod) => (mod.default || mod).toDataURL(raw, { margin: 1, width: 140 }))
+      .then((url) => { if (!cancelled) setDataUrl(url); })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, [value]);
+
+  if (failed || !dataUrl) return null;
+  return (
+    <img
+      src={dataUrl}
+      alt="FBR QR code"
+      className="mx-auto mt-2 h-28 w-28 border border-gray-200 bg-white p-1"
+    />
+  );
+}
+
 function fmtMoney(amount, symbol = "") {
   const n = Number(amount) || 0;
   return `${symbol}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -40,6 +72,45 @@ export default function ReceiptPublicPage() {
       .finally(() => setLoading(false));
   }, [invoiceNumber, tenant]);
 
+  // Bucket F: OG meta for WhatsApp + social preview cards. Inject via plain
+  // DOM so we don't pull in react-helmet for four tags. Cleans up on unmount
+  // so navigating away leaves the document title alone.
+  useEffect(() => {
+    if (!data) return;
+    const storeName = data.store?.name || "Receipt";
+    const invoice = data.sale?.invoice_number || invoiceNumber;
+    const total = data.sale?.total_amount;
+    const sym = data.sale?.currency_symbol || "";
+    const logo = data.template?.logo_url || data.store?.logo || "";
+    const prevTitle = document.title;
+    document.title = `Receipt ${invoice} — ${storeName}`;
+
+    const metas = [
+      ["og:title", `Receipt ${invoice} — ${storeName}`],
+      ["og:description", total != null ? `Total: ${sym}${Number(total).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : `Thank you for your purchase at ${storeName}.`],
+      ["og:type", "website"],
+      ...(logo ? [["og:image", logo]] : []),
+      ["twitter:card", "summary"],
+    ];
+
+    const nodes = metas.map(([prop, content]) => {
+      const m = document.createElement("meta");
+      // Twitter uses `name`, OG uses `property` — browsers tolerate both but
+      // WhatsApp crawlers are strict about OG using `property=`.
+      if (prop.startsWith("og:")) m.setAttribute("property", prop);
+      else m.setAttribute("name", prop);
+      m.setAttribute("content", content);
+      m.setAttribute("data-bucket-f", "1");
+      document.head.appendChild(m);
+      return m;
+    });
+
+    return () => {
+      document.title = prevTitle;
+      nodes.forEach((n) => n.remove());
+    };
+  }, [data, invoiceNumber]);
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -67,8 +138,13 @@ export default function ReceiptPublicPage() {
     );
   }
 
-  const { store, sale, items, payments } = data;
+  const { store, sale, items, payments, fbr, template } = data;
   const sym = sale.currency_symbol || "";
+  // Template overrides — null-safe across tenants that haven't run v76 yet.
+  const headerLogo = template?.logo_url || store.logo || null;
+  const footerText = template?.footer_text || null;
+  const showFbr = template?.show_fbr !== false;
+  const showQr = template?.show_qr !== false;
 
   return (
     <>
@@ -83,11 +159,11 @@ export default function ReceiptPublicPage() {
 
       <div className="min-h-screen bg-gray-50 px-4 py-8">
         <div className="receipt-card mx-auto max-w-md overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-          {/* Store header */}
+          {/* Store header — prefers template logo over global company logo (Bucket F) */}
           <div className="bg-emerald-600 px-6 py-5 text-center text-white">
-            {store.logo && (
+            {headerLogo && (
               <img
-                src={store.logo}
+                src={headerLogo}
                 alt={store.name}
                 className="mx-auto mb-3 h-14 w-14 rounded-full border-2 border-white/30 bg-white object-contain p-1"
               />
@@ -176,6 +252,24 @@ export default function ReceiptPublicPage() {
                     <span className="text-sm font-medium text-gray-800">{fmtMoney(p.amount, sym)}</span>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* FBR digital invoice (Bucket F) — only when sale has an IRN and
+                template has show_fbr !== false. QR shown only when show_qr too. */}
+            {fbr?.irn && showFbr && (
+              <div className="mt-4 border-t border-gray-100 pt-4 text-center">
+                <p className="text-xs uppercase tracking-wide text-gray-400">FBR Digital Invoice</p>
+                <p className="mt-1 font-mono text-xs font-semibold text-gray-800 break-all">{fbr.irn}</p>
+                {showQr && fbr.qr_code && <FbrQrImage value={fbr.qr_code} />}
+              </div>
+            )}
+
+            {/* Template footer override (Bucket F) — sits inside the card,
+                distinct from the fixed "Powered by SanoPOS" strip below. */}
+            {footerText && (
+              <div className="mt-4 border-t border-gray-100 pt-3 text-center">
+                <p className="whitespace-pre-wrap text-xs text-gray-500">{footerText}</p>
               </div>
             )}
 

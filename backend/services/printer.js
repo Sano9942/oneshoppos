@@ -130,6 +130,26 @@ module.exports = function makePrinterService(db) {
     const footerText = template?.footer_text  || "Thank you for your purchase!";
     const showBarcode = Boolean(template?.show_barcode);
 
+    // Bucket F: per-template toggles. Undefined/null → TRUE (preserve legacy
+    // behavior for tenants without designer v2 data).
+    const showTaxBreakdown = template?.show_tax_breakdown !== false;
+    const showFbr = template?.show_fbr !== false;
+    const showQr = template?.show_qr !== false;
+
+    // --- LOGO (Bucket F, best-effort) ---
+    // Render before the text header when template has a logo_url. Wrapped in
+    // try/catch because some Chinese clones stall on printImage and we do NOT
+    // want to extend the 3s printer timeout. A failure here silently falls
+    // through to the text header.
+    if (template?.logo_url) {
+      try {
+        printer.alignCenter();
+        await printer.printImage(template.logo_url);
+      } catch {
+        /* non-fatal — text header follows */
+      }
+    }
+
     // --- HEADER ---
     printer.alignCenter();
     printer.bold(true);
@@ -174,7 +194,7 @@ module.exports = function makePrinterService(db) {
     printer.println(padRow("Subtotal:", fmt(subtotal), W));
 
     const taxAmount = Number(slip.taxAmount || 0);
-    if (taxAmount > 0)
+    if (showTaxBreakdown && taxAmount > 0)
       printer.println(padRow("GST (incl.):", fmt(taxAmount), W));
 
     const exchangeCredit = Number(slip.exchangeCredit || 0);
@@ -228,6 +248,25 @@ module.exports = function makePrinterService(db) {
         }
       } catch {
         printer.println(String(slip.invoiceNumber));
+      }
+      printer.alignLeft();
+    }
+
+    // --- FBR IRN + QR (Bucket F) ---
+    // Ordered block: divider → "FBR Ref: IRN" → QR (when available). Skipped
+    // entirely when template hides FBR, or when the sale has no IRN yet.
+    if (showFbr && slip.fbr_irn) {
+      printer.println(divider(W));
+      printer.alignCenter();
+      printer.println(`FBR Ref: ${slip.fbr_irn}`);
+      if (showQr && slip.fbr_qr_code) {
+        try {
+          // cellSize 6 ≈ ~180px on 80mm printers, comfortably scannable.
+          // Correction "M" tolerates ~15% error — good for thermal prints.
+          printer.printQR(String(slip.fbr_qr_code), { cellSize: 6, correction: "M" });
+        } catch {
+          /* printer lacks printQR — text IRN already printed above */
+        }
       }
       printer.alignLeft();
     }
