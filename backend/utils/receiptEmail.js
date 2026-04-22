@@ -14,6 +14,13 @@ function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol =
   const storeName = template?.header_text || sale.outlet_name || "SanoPOS";
   const footerText = template?.footer_text || "Thank you for your purchase!";
 
+  // Bucket F: per-template toggles. Undefined/null defaults to TRUE
+  // (preserve legacy behavior for tenants without designer v2 data).
+  const showTaxBreakdown = template?.show_tax_breakdown !== false;
+  const showFbr = template?.show_fbr !== false;
+  const showQr = template?.show_qr !== false;
+  const logoUrl = template?.logo_url || null;
+
   const subtotal = items.reduce(
     (s, i) => s + Number(i.price_at_sale || 0) * Number(i.quantity || 0),
     0
@@ -68,6 +75,7 @@ function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol =
 
         <!-- Header -->
         <tr><td style="text-align:center;padding-bottom:16px;border-bottom:2px solid #222;">
+          ${logoUrl ? `<div style="margin-bottom:8px;"><img src="${logoUrl}" alt="" style="max-width:200px;max-height:60px;" /></div>` : ""}
           <div style="font-size:20px;font-weight:bold;">${storeName}</div>
           ${sale.outlet_name ? `<div style="font-size:12px;color:#666;margin-top:4px;">${sale.outlet_name}</div>` : ""}
         </td></tr>
@@ -106,7 +114,7 @@ function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol =
           <table width="100%">
             <tr><td style="color:#555;">Subtotal</td><td style="text-align:right;">${fmt(subtotal)}</td></tr>
             ${discount > 0 ? `<tr><td style="color:#e53e3e;">Discount</td><td style="text-align:right;color:#e53e3e;">-${fmt(discount)}</td></tr>` : ""}
-            ${tax > 0 ? `<tr><td style="color:#555;">Tax</td><td style="text-align:right;">${fmt(tax)}</td></tr>` : ""}
+            ${showTaxBreakdown && tax > 0 ? `<tr><td style="color:#555;">Tax</td><td style="text-align:right;">${fmt(tax)}</td></tr>` : ""}
             <tr><td style="font-weight:bold;font-size:15px;padding-top:6px;">Total</td><td style="text-align:right;font-weight:bold;font-size:15px;padding-top:6px;">${fmt(total)}</td></tr>
           </table>
         </td></tr>
@@ -116,6 +124,16 @@ function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol =
         <tr><td style="padding:12px 0;border-top:1px solid #eee;font-size:13px;">
           <div style="font-weight:bold;margin-bottom:6px;">Payment</div>
           <table width="100%">${paymentRows}</table>
+        </td></tr>` : ""}
+
+        <!-- FBR digital invoice reference (Bucket F) -->
+        ${showFbr && sale.fbr_irn ? `
+        <tr><td style="padding:12px 0;border-top:1px solid #eee;font-size:13px;text-align:center;">
+          <div style="color:#555;margin-bottom:4px;">FBR Ref</div>
+          <div style="font-family:monospace;font-size:12px;color:#111;">${sale.fbr_irn}</div>
+          ${showQr && sale.fbr_qr_code && (String(sale.fbr_qr_code).startsWith("data:") || String(sale.fbr_qr_code).startsWith("http"))
+            ? `<div style="margin-top:8px;"><img src="${sale.fbr_qr_code}" alt="FBR QR" style="max-width:120px;max-height:120px;" /></div>`
+            : ""}
         </td></tr>` : ""}
 
         <!-- Footer -->

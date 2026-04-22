@@ -27,19 +27,29 @@ module.exports = function mountReceiptRoutes(app, deps) {
 
       const invoiceNumber = req.params.invoiceNumber;
 
-      // Fetch sale with store info
+      // Fetch sale with store info. Bucket F adds FBR columns + active
+      // receipt template (logo, toggles, footer override). Left-joined so
+      // tenants without a configured template still render the default view.
       const { rows: [sale] } = await db.query(
         `SELECT s.id, s.invoice_number, s.timestamp, s.total_amount, s.discount_amount,
                 s.customer_id, s.employee_id, s.outlet_id,
+                s.fbr_irn, s.fbr_qr_code, s.fbr_status,
                 e.name AS employee_name,
                 c.name AS customer_name,
                 o.name AS outlet_name,
-                cp.company_name, cp.logo_url, cp.address, cp.phone, cp.currency_symbol
+                cp.company_name, cp.logo_url, cp.address, cp.phone, cp.currency_symbol,
+                rt.logo_url AS template_logo_url,
+                rt.footer_text AS template_footer_text,
+                rt.show_fbr AS template_show_fbr,
+                rt.show_qr AS template_show_qr,
+                rt.show_tax_breakdown AS template_show_tax_breakdown,
+                rt.paper_width AS template_paper_width
          FROM sales s
          LEFT JOIN employees e ON s.employee_id = e.id
          LEFT JOIN customers c ON s.customer_id = c.id
          LEFT JOIN outlets o ON s.outlet_id = o.id
          CROSS JOIN company_profile cp
+         LEFT JOIN receipt_templates rt ON rt.is_active = true
          WHERE s.invoice_number = $1 AND s.voided = false
          LIMIT 1`,
         [invoiceNumber]
@@ -97,6 +107,27 @@ module.exports = function mountReceiptRoutes(app, deps) {
           method: p.method,
           amount: p.amount,
         })),
+        // Bucket F: FBR block omitted when sale has no IRN (non-FBR tenants
+        // still get a tidy response shape).
+        fbr: sale.fbr_irn
+          ? {
+              irn: sale.fbr_irn,
+              qr_code: sale.fbr_qr_code || null,
+              status: sale.fbr_status || null,
+            }
+          : null,
+        // Bucket F: active template overrides (logo, footer, toggles).
+        // Null when no active template is configured.
+        template: sale.template_paper_width != null || sale.template_logo_url || sale.template_footer_text
+          ? {
+              logo_url: sale.template_logo_url || null,
+              footer_text: sale.template_footer_text || null,
+              show_fbr: sale.template_show_fbr !== false,
+              show_qr: sale.template_show_qr !== false,
+              show_tax_breakdown: sale.template_show_tax_breakdown !== false,
+              paper_width: sale.template_paper_width || 48,
+            }
+          : null,
       });
     } catch (err) {
       console.error("Public receipt error:", err.message);
