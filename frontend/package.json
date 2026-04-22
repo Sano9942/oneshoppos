@@ -26,6 +26,7 @@
     "@sentry/react": "^10.46.0",
     "@tailwindcss/vite": "^4.2.0",
     "idb": "^8.0.0",
+    "jsbarcode": "^3.12.3",
     "lucide-react": "^0.575.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

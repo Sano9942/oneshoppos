@@ -223,6 +223,47 @@ module.exports = function registerSalesRoutes(app, deps) {
     }
   });
 
+  // 2-G.11: Look up a sale by scannable invoice barcode (CODE128 of
+  // invoice_number printed on the receipt). Used by POSReturnExchangeModal
+  // to auto-load a sale when the cashier scans the receipt.
+  app.get(
+    "/api/sales/by-barcode/:code",
+    requireAnyPerm(["view_reports", "pos_park", "all_access"]),
+    async (req, res) => {
+      const code = String(req.params.code || "").trim();
+      if (!code) return res.status(400).json({ error: "barcode required" });
+
+      try {
+        const { rows: [sale] } = await db.query(
+          `SELECT s.*, o.name as outlet_name, e.name as employee_name
+           FROM sales s
+           LEFT JOIN outlets o ON s.outlet_id = o.id
+           LEFT JOIN employees e ON s.employee_id = e.id
+           WHERE UPPER(s.invoice_number) = UPPER($1)
+           LIMIT 1`,
+          [code],
+        );
+        if (!sale) return res.status(404).json({ error: "Sale not found" });
+
+        const { rows: items } = await db.query(
+          `SELECT si.*, p.name as product_name, p.barcode
+           FROM sale_items si JOIN products p ON si.product_id = p.id
+           WHERE si.sale_id = $1`,
+          [sale.id],
+        );
+
+        const { rows: payments } = await db.query(
+          "SELECT * FROM sale_payments WHERE sale_id = $1",
+          [sale.id],
+        );
+
+        res.json({ sale, items, payments });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    },
+  );
+
   // GET a single sale with full line items and payments
   app.get("/api/sales/:id", requireAnyPerm(["view_reports", "all_access"]), async (req, res) => {
     const { id } = req.params;

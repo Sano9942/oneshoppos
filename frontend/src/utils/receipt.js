@@ -233,13 +233,37 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
     b.appendChild(txt("div", `Note: ${s.orderNote}`, "c"));
   }
 
-  // Barcode (invoice number as text if template has show_barcode)
+  // Barcode — 2-G.11 renders a CODE128 SVG so scanning the printed receipt
+  // looks up the sale. jsbarcode is loaded lazily so its ~50KB is only paid
+  // by tenants who actually print from the browser.
   if (s.showBarcode) {
     b.appendChild(hr());
-    const bc = d.createElement("div");
-    bc.style.cssText = "text-align:center;font-size:10px;letter-spacing:3px;color:#555";
-    bc.textContent = s.invoiceNumber;
-    b.appendChild(bc);
+    const wrap = d.createElement("div");
+    wrap.style.cssText = "text-align:center;margin:4px 0";
+    const svg = d.createElementNS("http://www.w3.org/2000/svg", "svg");
+    wrap.appendChild(svg);
+    b.appendChild(wrap);
+    // Render after appending so layout is correct.
+    import("jsbarcode")
+      .then(({ default: JsBarcode }) => {
+        try {
+          JsBarcode(svg, String(s.invoiceNumber || ""), {
+            format: "CODE128",
+            height: 40,
+            width: 1.6,
+            displayValue: true,
+            fontSize: 11,
+            margin: 0,
+          });
+        } catch {
+          wrap.textContent = s.invoiceNumber;
+          wrap.style.cssText = "text-align:center;font-size:10px;letter-spacing:3px;color:#555";
+        }
+      })
+      .catch(() => {
+        wrap.textContent = s.invoiceNumber;
+        wrap.style.cssText = "text-align:center;font-size:10px;letter-spacing:3px;color:#555";
+      });
   }
 
   // FBR Digital Invoice reference
