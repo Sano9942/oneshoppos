@@ -165,6 +165,10 @@ export const POSProvider = ({ children }) => {
   const [returnSourceSale, setReturnSourceSale] = useState(null);
   const [showShortcutsOverlay, setShowShortcutsOverlay] = useState(false);
 
+  // ── 2-G.9 Holds modals ──────────────────────────────────────────────────
+  const [holdCreateOpen, setHoldCreateOpen] = useState(false);
+  const [holdPickupOpen, setHoldPickupOpen] = useState(false);
+
   // ── Checkout state lifted here so folio + loyalty can depend on it ──────
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutCustomerId, setCheckoutCustomerId] = useState("");
@@ -795,6 +799,11 @@ export const POSProvider = ({ children }) => {
     returnSourceSale,
     setReturnSourceSale,
     openReturnFromSale,
+    // 2-G.9 Holds
+    holdCreateOpen,
+    setHoldCreateOpen,
+    holdPickupOpen,
+    setHoldPickupOpen,
     // Loyalty & wallet
     checkoutWalletBalance: loyalty.checkoutWalletBalance,
     checkoutWalletLoading: loyalty.checkoutWalletLoading,

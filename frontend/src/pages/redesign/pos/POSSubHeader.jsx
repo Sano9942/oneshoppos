@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Calendar, Pause, Play } from "lucide-react";
+import { Calendar, Pause, Play, Package } from "lucide-react";
 import { usePOS } from "./POSContext";
 
 function readBulkScanMode() {
@@ -28,7 +28,11 @@ export default function POSSubHeader() {
     loadParked,
     setShowParked,
     parkedSales,
+    posFlags,
+    setHoldCreateOpen,
+    setHoldPickupOpen,
   } = usePOS();
+  const holdsOn = !!posFlags?.phase2g_holds;
 
   const [bulkScan, setBulkScan] = useState("increment");
   useEffect(() => { setBulkScan(readBulkScanMode()); }, []);
@@ -117,6 +121,23 @@ export default function POSSubHeader() {
             </span>
           )}
         </button>
+        {holdsOn && (
+          <>
+            <button
+              onClick={() => setHoldCreateOpen(true)}
+              disabled={!cart.length || !selectedOutletId}
+              className="flex items-center gap-1.5 text-[#8066FF] border border-indigo-100 bg-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-50 transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Package size={13} /> Hold
+            </button>
+            <button
+              onClick={() => setHoldPickupOpen(true)}
+              className="flex items-center gap-1.5 text-[#8066FF] border border-indigo-100 bg-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-50 transition shadow-sm"
+            >
+              <Package size={13} /> Pick Up
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
