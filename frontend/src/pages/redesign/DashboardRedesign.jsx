@@ -18,6 +18,7 @@ import { DashboardAttendance } from "../dashboard/DashboardAttendance";
 import { DashboardRecentSales } from "../dashboard/DashboardRecentSales";
 import { DashboardAttention } from "../dashboard/DashboardAttention";
 import DashboardHoldsExpiring from "../dashboard/DashboardHoldsExpiring";
+import DashboardRiskSummary from "../dashboard/DashboardRiskSummary";
 import { DashboardTopProducts } from "../dashboard/DashboardTopProducts";
 import { DashboardOnboarding } from "../dashboard/DashboardOnboarding";
 import { InsightCards } from "../dashboard/InsightCards";
@@ -173,8 +174,9 @@ export default function DashboardRedesign() {
 
       {/* Exceptions — hidden for cashier */}
       {!isCashier && (
-        <div className="mb-4">
+        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
           <DashboardExceptions data={data} onNavigate={onNavigate} />
+          <DashboardRiskSummary />
         </div>
       )}
 

@@ -90,6 +90,7 @@ const LABELS = {
   "gift-cards": "Gift Cards",
   settings: "Settings",
   "import-from-competitor": "Import from Shopify/Square",
+  "retail-risk": "Retail Risk",
 };
 
 const SKIP = ["/dashboard", "/pos", "/kiosk", "/customer-display"];

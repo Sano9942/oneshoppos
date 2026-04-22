@@ -17,6 +17,8 @@ import { useAuth } from "../../auth/AuthProvider";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
+import useFeatureFlags from "../../hooks/useFeatureFlags";
+import POSNoSaleReasonModal from "./pos/POSNoSaleReasonModal";
 
 const fmtDate = fmtUtcDateTime;
 
@@ -59,11 +61,13 @@ function exportCsv(rows) {
 }
 
 export default function CashManagementRedesign() {
-  const { hasPerm } = useAuth();
+  const { hasPerm, authHeaders } = useAuth();
   const { fmt: money, denominations } = useCurrency();
   const toast = useToast();
+  const { flags } = useFeatureFlags(authHeaders);
   const canViewAllOutlets = hasPerm("all_access");
   const [drawerOpening, setDrawerOpening] = useState(false);
+  const [noSaleOpen, setNoSaleOpen] = useState(false);
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -200,6 +204,13 @@ export default function CashManagementRedesign() {
   };
 
   const openDrawer = async () => {
+    // 2-G.17: when risk controls are enabled, require a reason code. The
+    // modal POSTs /api/risk/no-sale which both logs the event and kicks
+    // the drawer server-side.
+    if (flags.phase2g_risk_controls) {
+      setNoSaleOpen(true);
+      return;
+    }
     setDrawerOpening(true);
     try {
       const result = await api.post("/api/print/open-drawer", {});
@@ -514,6 +525,13 @@ export default function CashManagementRedesign() {
           </>
         ) : null}
       </Modal>
+
+      <POSNoSaleReasonModal
+        open={noSaleOpen}
+        outletId={selectedOutlet ? Number(selectedOutlet) : null}
+        onClose={() => setNoSaleOpen(false)}
+        onDone={() => toast.success("Drawer opened and event logged")}
+      />
     </PageShell>
   );
 }
