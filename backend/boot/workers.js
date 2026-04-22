@@ -308,6 +308,11 @@ function startAll(deps) {
           await registerAbcWorker(boss, pool);
         }
 
+        if (String(process.env.ANOMALY_WORKER_ENABLED || "0") === "1") {
+          const { registerAnomalyWorker } = require("../workers/anomaly-worker-boss");
+          await registerAnomalyWorker(boss, pool);
+        }
+
         if (String(process.env.COURSE_RELEASE_WORKER_ENABLED || "0") === "1") {
           const { registerCourseReleaseWorker } = require("../workers/course-release-worker-boss");
           await registerCourseReleaseWorker(boss, pool);

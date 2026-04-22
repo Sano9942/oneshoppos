@@ -111,6 +111,7 @@ const DEFAULT_FEATURE_FLAGS = {
   phase2g_receipt_barcode_lookup: false,
   phase2g_label_designer: false,
   phase2g_holds: false,
+  phase2g_risk_controls: false,
 };
 
 // Per-tenant feature flag cache

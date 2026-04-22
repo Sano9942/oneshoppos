@@ -2166,6 +2166,7 @@ INSERT INTO feature_flags (key, enabled, description) VALUES
   ('phase2g_inventory_intelligence', false, '2-G.8 inventory-intelligence hub'),
   ('phase2g_receipt_barcode_lookup', false, '2-G.11 receipt barcode + return lookup'),
   ('phase2g_holds', false, '2-G.9 layaway/hold/special-order'),
+  ('phase2g_risk_controls', false, '2-G.17 anti-theft: no-sale tracking, refund threshold, anomaly detection, shift variance'),
   ('phase2g_label_designer', false, 'Parallel track — ZPL/TSPL/EPL label designer')
 ON CONFLICT (key) DO NOTHING;
 
@@ -4342,6 +4343,64 @@ ALTER TABLE company_profile
   ADD COLUMN IF NOT EXISTS abc_window_days INTEGER NOT NULL DEFAULT 90,
   ADD COLUMN IF NOT EXISTS tenant_default_lead_time_days INTEGER NOT NULL DEFAULT 7,
   ADD COLUMN IF NOT EXISTS tenant_default_safety_stock_days INTEGER NOT NULL DEFAULT 3;
+
+-- ── 2-G.17 Anti-theft & shrinkage controls (migration v73) ─────────────
+CREATE TABLE IF NOT EXISTS no_sale_reasons (
+  id SERIAL PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  label TEXT NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  sort_order INT DEFAULT 0
+);
+INSERT INTO no_sale_reasons (code, label, sort_order) VALUES
+  ('give_change', 'Give change', 1),
+  ('count_cash',  'Count cash',  2),
+  ('training',    'Training',    3),
+  ('other',       'Other',       9)
+ON CONFLICT (code) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS no_sale_events (
+  id SERIAL PRIMARY KEY,
+  employee_id INT NOT NULL REFERENCES employees(id),
+  outlet_id INT REFERENCES outlets(id),
+  shift_id INT REFERENCES cash_shifts(id),
+  reason_code TEXT REFERENCES no_sale_reasons(code),
+  note TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_no_sale_events_employee_created ON no_sale_events(employee_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_no_sale_events_outlet_created ON no_sale_events(outlet_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS retail_anomaly_flags (
+  id SERIAL PRIMARY KEY,
+  employee_id INT NOT NULL REFERENCES employees(id),
+  outlet_id INT REFERENCES outlets(id),
+  metric TEXT NOT NULL,
+  value NUMERIC(8,4) NOT NULL,
+  peer_mean NUMERIC(8,4) NOT NULL,
+  peer_stddev NUMERIC(8,4) NOT NULL,
+  z_score NUMERIC(6,2) NOT NULL,
+  period_start DATE NOT NULL,
+  period_end DATE NOT NULL,
+  flagged_at TIMESTAMPTZ DEFAULT NOW(),
+  reviewed_by INT REFERENCES employees(id),
+  reviewed_at TIMESTAMPTZ,
+  review_note TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_anomaly_flags_employee_metric_period
+  ON retail_anomaly_flags(employee_id, metric, period_start, period_end);
+CREATE INDEX IF NOT EXISTS idx_anomaly_flags_employee ON retail_anomaly_flags(employee_id, flagged_at DESC);
+CREATE INDEX IF NOT EXISTS idx_anomaly_flags_unreviewed
+  ON retail_anomaly_flags(flagged_at DESC) WHERE reviewed_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS risk_controls_config (
+  id INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  refund_approval_threshold NUMERIC(12,2) DEFAULT 5000,
+  variance_approval_threshold NUMERIC(12,2) DEFAULT 500,
+  anomaly_z_score_threshold NUMERIC(4,2) DEFAULT 2.0,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+INSERT INTO risk_controls_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 -- ── Schema versioning ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schema_version (

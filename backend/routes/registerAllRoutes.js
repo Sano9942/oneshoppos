@@ -573,6 +573,9 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: HOLDS / LAYAWAY (2-G.9) ---
   require("./holds")(app, deps);
 
+  // --- ROUTES: RISK CONTROLS (2-G.17) ---
+  require("./risk-controls")(app, deps);
+
   // --- ROUTES: ORDERS ---
   const {
     processPendingShopifyInventoryEvents,

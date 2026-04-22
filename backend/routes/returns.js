@@ -3,6 +3,8 @@ const logger = require("../services/logger");
 const { validate } = require("../middleware/validate");
 const { CreateReturnSchema } = require("../schemas/returns");
 const { getFeatureFlagsMap } = require("../middleware/feature-flags");
+const { verifyManagerPin } = require("../services/manager-pin");
+const { recordApprovalEvent } = require("../services/approval-policy");
 
 module.exports = function registerReturnsRoutes(app, deps) {
   const { db, requirePerm, requireAnyPerm, createNotification, notifyLowStockForSale } = deps;
@@ -266,11 +268,63 @@ module.exports = function registerReturnsRoutes(app, deps) {
     // 2-G.7: resolve per-line restock feature flag once (gate before tx to
     // keep the transaction tight). When off, per-line restock_flag /
     // reason_code_id inputs are ignored — every line restocks as before.
+    // Same pass reads phase2g_risk_controls so 2-G.17 can enforce the refund
+    // threshold before any DB write.
     let perLineRestockEnabled = false;
+    let riskControlsEnabled = false;
     try {
       const flags = await getFeatureFlagsMap(req.tenantId);
       perLineRestockEnabled = !!flags.phase2g_per_line_restock;
+      riskControlsEnabled = !!flags.phase2g_risk_controls;
     } catch { /* flag fetch failure → fall back to legacy behavior */ }
+
+    // 2-G.17: if risk controls are on AND the refund exceeds the tenant's
+    // configured threshold, the caller must supply a valid manager PIN. We
+    // record an approval_event and pin its id on the return below so the
+    // audit trail survives.
+    let resolvedApprovalEventId = approval_event_id || null;
+    if (riskControlsEnabled) {
+      try {
+        const { rows: thrRows } = await db.query(
+          "SELECT refund_approval_threshold FROM risk_controls_config WHERE id = 1",
+        );
+        const threshold = Number(thrRows[0]?.refund_approval_threshold || 0);
+        if (threshold > 0 && Number(total_refund) > threshold) {
+          const managerPin = req.body?.manager_pin;
+          if (!managerPin) {
+            return res.status(403).json({
+              error: "Manager PIN required — refund exceeds tenant threshold",
+              code: "manager_pin_required",
+              threshold,
+            });
+          }
+          try {
+            const manager = await verifyManagerPin(db, String(managerPin), {
+              requiredPerm: "override_refund",
+              isImpersonating: req.isImpersonating === true,
+            });
+            const event = await recordApprovalEvent(db, {
+              policyId: null,
+              actionType: "refund_threshold_override",
+              referenceType: "return",
+              referenceId: null,
+              requestedBy: Number(req.employee?.id || req.headers["x-employee-id"] || 0) || null,
+              approvedBy: manager.employee_id,
+              status: "approved",
+              reason: `Refund of ${total_refund} exceeded threshold of ${threshold}`,
+              metadata: { refund_amount: Number(total_refund), threshold },
+              outletId: outlet_id || null,
+            });
+            resolvedApprovalEventId = event.id;
+          } catch (pinErr) {
+            const status = pinErr.statusCode || 403;
+            return res.status(status).json({ error: pinErr.message });
+          }
+        }
+      } catch (err) {
+        logger.error({ err }, "2-G.17 threshold lookup failed");
+      }
+    }
 
     // 2-G.7: if the feature is on, validate that any scrapped line carries a
     // reason code. We reject up-front (before any DB work) so the caller gets
@@ -312,7 +366,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
             return_reason_id || null,
             processed_by_employee_id || null,
             approved_by_employee_id || null,
-            approval_event_id || null,
+            resolvedApprovalEventId,
           ],
         );
         const retId = rows[0].id;

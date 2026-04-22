@@ -6,6 +6,8 @@ module.exports = function (app, deps) {
     CloseShiftSchema,
     VarianceApproveSchema,
   } = require("../schemas/shifts");
+  const { getFeatureFlagsMap } = require("../middleware/feature-flags");
+  const { verifyManagerPin } = require("../services/manager-pin");
 
   async function storeShiftDenominations(client, shiftId, stage, denominations = []) {
     const rows = Array.isArray(denominations)
@@ -146,12 +148,55 @@ module.exports = function (app, deps) {
       const expectedCash = parseFloat(shift.opening_float) + netCashSales;
       const variance = parseFloat(closing_cash) - expectedCash;
 
+      // 2-G.17: if risk controls are on AND abs(variance) exceeds the tenant
+      // threshold, require both a variance_reason and a valid manager PIN.
+      // We resolve the manager to an employee id and store it in
+      // variance_approved_by (which is a TEXT column today — keep using the
+      // name to preserve backwards compat with existing data).
+      let resolvedVarianceApprovedBy = variance_approved_by || null;
+      try {
+        const flags = await getFeatureFlagsMap(req.tenantId);
+        if (flags.phase2g_risk_controls) {
+          const { rows: thrRows } = await db.query(
+            "SELECT variance_approval_threshold FROM risk_controls_config WHERE id = 1",
+          );
+          const threshold = Number(thrRows[0]?.variance_approval_threshold || 0);
+          if (threshold > 0 && Math.abs(variance) > threshold) {
+            if (!variance_reason) {
+              return res.status(400).json({
+                error: "variance_reason is required — variance exceeds tenant threshold",
+                code: "variance_reason_required",
+                threshold,
+              });
+            }
+            const approverPin = req.body?.variance_approved_by_pin;
+            if (!approverPin) {
+              return res.status(400).json({
+                error: "Manager PIN required — variance exceeds tenant threshold",
+                code: "manager_pin_required",
+                threshold,
+              });
+            }
+            try {
+              const manager = await verifyManagerPin(db, String(approverPin), {
+                requiredPerm: "manage_orders",
+                isImpersonating: req.isImpersonating === true,
+              });
+              resolvedVarianceApprovedBy = String(manager.employee_id);
+            } catch (pinErr) {
+              const status = pinErr.statusCode || 403;
+              return res.status(status).json({ error: pinErr.message });
+            }
+          }
+        }
+      } catch { /* flag lookup failure → legacy behavior */ }
+
       await db.query(
         `UPDATE cash_shifts
          SET status = 'closed', closing_cash = $1, expected_cash = $2, variance = $3,
              closed_at = $4, notes = $5, variance_reason = $6, variance_approved_by = $7
          WHERE id = $8`,
-        [closing_cash, expectedCash, variance, closedAt, notes || null, variance_reason || null, variance_approved_by || null, id]
+        [closing_cash, expectedCash, variance, closedAt, notes || null, variance_reason || null, resolvedVarianceApprovedBy, id]
       );
 
       if (denominations && denominations.length) {

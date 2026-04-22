@@ -27,6 +27,8 @@ module.exports = function registerSystemRoutes(app, deps) {
       const abcStatus = global.__abcWorkerStatus || null;
       // 2-G.9 Holds — hourly expiry sweep.
       const holdExpiryStatus = global.__holdExpiryWorkerStatus || null;
+      // 2-G.17 Anti-theft — nightly anomaly scan at 02:30 UTC.
+      const anomalyStatus = global.__anomalyWorkerStatus || null;
 
       function workerInfo(status, pollIntervalMs) {
         if (!status) return { enabled: false, running: false };
@@ -56,6 +58,7 @@ module.exports = function registerSystemRoutes(app, deps) {
         reservation_reminder: workerInfo(reservationReminderStatus, 15 * 60_000),
         abc: workerInfo(abcStatus, 24 * 60 * 60 * 1000),
         hold_expiry: workerInfo(holdExpiryStatus, 60 * 60 * 1000),
+        anomaly: workerInfo(anomalyStatus, 24 * 60 * 60 * 1000),
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });
