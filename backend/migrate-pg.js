@@ -5530,6 +5530,26 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 75,
+    description:
+      "Phase 2-G.16 Merchant home — employees.home_page preference + retail_weekly_digest flag",
+    up: async (client) => {
+      // Per-employee "land here on login" preference. Nullable so existing
+      // employees keep the default /dashboard landing.
+      await client.query(`
+        ALTER TABLE employees
+          ADD COLUMN IF NOT EXISTS home_page TEXT
+      `);
+      // Opt-in weekly digest email for retail tenants — off by default.
+      await client.query(`
+        INSERT INTO feature_flags (key, enabled, description)
+          VALUES ('retail_weekly_digest', FALSE,
+                  '2-G.16 weekly digest email to merchant owners (Monday 08:00 local)')
+          ON CONFLICT (key) DO NOTHING
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

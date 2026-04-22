@@ -92,7 +92,9 @@ CREATE TABLE IF NOT EXISTS employees (
   deleted_at TIMESTAMPTZ DEFAULT NULL,
   tokens_revoked_before TIMESTAMPTZ DEFAULT NULL,
   email TEXT,
-  password_hash TEXT
+  password_hash TEXT,
+  -- 2-G.16: per-employee login landing preference ('dashboard', 'retail_home', NULL=default)
+  home_page TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS employees_email_unique ON employees (email) WHERE email IS NOT NULL;
@@ -2174,7 +2176,8 @@ INSERT INTO feature_flags (key, enabled, description) VALUES
   ('phase2g_receipt_barcode_lookup', false, '2-G.11 receipt barcode + return lookup'),
   ('phase2g_holds', false, '2-G.9 layaway/hold/special-order'),
   ('phase2g_risk_controls', false, '2-G.17 anti-theft: no-sale tracking, refund threshold, anomaly detection, shift variance'),
-  ('phase2g_label_designer', false, 'Parallel track — ZPL/TSPL/EPL label designer')
+  ('phase2g_label_designer', false, 'Parallel track — ZPL/TSPL/EPL label designer'),
+  ('retail_weekly_digest', false, '2-G.16 weekly digest email to merchant owners (Monday 08:00 local)')
 ON CONFLICT (key) DO NOTHING;
 
 -- Seed default loyalty tiers

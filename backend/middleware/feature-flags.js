@@ -112,6 +112,7 @@ const DEFAULT_FEATURE_FLAGS = {
   phase2g_label_designer: false,
   phase2g_holds: false,
   phase2g_risk_controls: false,
+  retail_weekly_digest: false,
 };
 
 // Per-tenant feature flag cache

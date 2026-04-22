@@ -126,6 +126,8 @@ export const appRoutes = [
     }
   >
     <Route path="/dashboard" element={<DashboardRoute />} />
+    {/* 2-G.16 Merchant home alias — same component, preference-friendly URL. */}
+    <Route path="/retail/home" element={<DashboardRoute />} />
     <Route path="/profile" element={<ProfileRedesign />} />
     <Route path="/my-tickets" element={<MyTicketsRoute />} />
     <Route path="/sales-history" element={<SalesHistoryRoute />} />

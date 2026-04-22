@@ -313,6 +313,11 @@ function startAll(deps) {
           await registerAnomalyWorker(boss, pool);
         }
 
+        if (String(process.env.RETAIL_DIGEST_WORKER_ENABLED || "0") === "1") {
+          const { registerRetailDigestWorker } = require("../workers/retail-digest-worker-boss");
+          await registerRetailDigestWorker(boss, pool);
+        }
+
         if (String(process.env.COURSE_RELEASE_WORKER_ENABLED || "0") === "1") {
           const { registerCourseReleaseWorker } = require("../workers/course-release-worker-boss");
           await registerCourseReleaseWorker(boss, pool);

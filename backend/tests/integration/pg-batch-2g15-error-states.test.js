@@ -74,9 +74,15 @@ beforeAll(async () => {
      VALUES (8100, 1, 1, NOW(), 0, 'open')
      ON CONFLICT (id) DO NOTHING`,
   );
+  // Anchor session_start to today's UTC noon. The attendance gate computes
+  // today via JS `new Date().toISOString().slice(0,10)` (UTC) and casts the
+  // session start to ::date — using a UTC midday timestamp avoids a
+  // mismatch when the local PG server tz is ahead of UTC.
+  const todayUtc = new Date().toISOString().slice(0, 10);
   await db.query(
     `INSERT INTO attendance_sessions (employee_id, outlet_id, session_type, session_start)
-     VALUES (1, 1, 'work', NOW())`,
+     VALUES (1, 1, 'work', ($1::date + INTERVAL '12 hours') AT TIME ZONE 'UTC')`,
+    [todayUtc],
   );
 
   req = makeRequest(app, ADMIN_ID);
@@ -88,9 +94,13 @@ afterAll(async () => {
 
 describe("2-G.15 Day 3 — refund idempotency", () => {
   test("partial unique index exists on returns(original_sale_id, idempotency_key)", async () => {
+    // Constrain by current_schema() so a parallel test schema's identical
+    // index (or its absence) doesn't influence this assertion.
     const { rows } = await db.query(
       `SELECT indexname FROM pg_indexes
-       WHERE tablename = 'returns' AND indexname = 'idx_returns_sale_idempotency'`,
+       WHERE tablename = 'returns'
+         AND schemaname = current_schema()
+         AND indexname = 'idx_returns_sale_idempotency'`,
     );
     expect(rows.length).toBe(1);
   });

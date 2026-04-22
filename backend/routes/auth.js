@@ -832,7 +832,7 @@ module.exports = function registerAuthRoutes(app, deps) {
 
     try {
       const { rows: [employee] } = await db.query(
-        `SELECT e.id, e.name, e.role_id, r.name as role, NULL as outlet_id
+        `SELECT e.id, e.name, e.role_id, e.home_page, r.name as role, NULL as outlet_id
          FROM employees e
          LEFT JOIN roles r ON e.role_id = r.id
          WHERE e.id = $1`,
@@ -851,6 +851,8 @@ module.exports = function registerAuthRoutes(app, deps) {
           name: employee.name,
           role_id: employee.role_id,
           outlet_id: employee.outlet_id || null,
+          // 2-G.16 Merchant home: landing preference, null=default (/dashboard)
+          home_page: employee.home_page || null,
         },
         permissions: (rows || []).map((r) => r.permission),
       });
