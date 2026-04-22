@@ -116,7 +116,17 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
   // Header
   b.appendChild(txt("div", s.storeName, "c"));
   b.appendChild(txt("div", s.timestamp, "c"));
-  b.appendChild(txt("div", `Invoice: ${s.invoiceNumber}`, "c"));
+  // 2-G.9: hold slip gets a prominent "HOLD SLIP" header and renames the
+  // invoice line to a hold number. The rest of the layout is reused verbatim
+  // so scanner barcode, item list, and deposit/balance lines all come through.
+  if (slip.isHoldSlip) {
+    const h = txt("div", "*** HOLD SLIP ***", "c");
+    h.style.cssText = "font-size:14px;font-weight:bold;margin:2px 0";
+    b.appendChild(h);
+    b.appendChild(txt("div", `Hold #: ${s.invoiceNumber}`, "c"));
+  } else {
+    b.appendChild(txt("div", `Invoice: ${s.invoiceNumber}`, "c"));
+  }
   if (s.returnedFrom)
     b.appendChild(txt("div", `Exchange for: ${s.returnedFrom}`, "c"));
   if (s.employee)
@@ -199,7 +209,15 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
   totalEl.style.fontWeight = "bold";
   b.appendChild(totalEl);
 
-  s.payments.forEach((p) => b.appendChild(row(p.method, fmt(p.amount))));
+  // 2-G.9 hold slip: show deposit + remaining balance instead of payments.
+  if (slip.isHoldSlip) {
+    b.appendChild(row("Deposit Paid", fmt(Number(slip.depositPaid || 0))));
+    const bal = row("Balance Due", fmt(Number(slip.balanceDue || 0)));
+    bal.style.fontWeight = "bold";
+    b.appendChild(bal);
+  } else {
+    s.payments.forEach((p) => b.appendChild(row(p.method, fmt(p.amount))));
+  }
 
   if (s.refundToCustomer != null)
     b.appendChild(row("Refund to Customer", fmt(s.refundToCustomer), "ret"));

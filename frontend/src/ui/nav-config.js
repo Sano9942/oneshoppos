@@ -71,6 +71,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Fulfillment", path: "/fulfillment", icon: PackageCheck, requiredPerm: "manage_orders" },
       { name: "COD Settlements", path: "/cod-settlements", icon: Wallet, requiredPerm: "manage_orders", requiredFlag: "phase5_cod_reconciliation" },
       { name: "Parked Sales", path: "/parked-sales", icon: PauseCircle, requiredPerm: "manage_orders" },
+      { name: "Holds & Layaway", path: "/holds", icon: PauseCircle, requiredPerm: "manage_orders", requiredFlag: "phase2g_holds" },
       { name: "Customers", path: "/customers", icon: Users },
       { name: "Customer Groups", path: "/customer-groups", icon: Users, requiredPerm: "manage_customers" },
       { name: "Loyalty Tiers", path: "/loyalty-tiers", icon: Award, requiredPerm: "all_access" },

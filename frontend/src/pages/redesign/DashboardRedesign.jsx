@@ -17,6 +17,7 @@ import { DashboardInventoryAlerts } from "../dashboard/DashboardInventoryAlerts"
 import { DashboardAttendance } from "../dashboard/DashboardAttendance";
 import { DashboardRecentSales } from "../dashboard/DashboardRecentSales";
 import { DashboardAttention } from "../dashboard/DashboardAttention";
+import DashboardHoldsExpiring from "../dashboard/DashboardHoldsExpiring";
 import { DashboardTopProducts } from "../dashboard/DashboardTopProducts";
 import { DashboardOnboarding } from "../dashboard/DashboardOnboarding";
 import { InsightCards } from "../dashboard/InsightCards";
@@ -151,6 +152,11 @@ export default function DashboardRedesign() {
       {/* Prescriptive attention queue */}
       <div className="mb-4">
         <DashboardAttention data={data} onNavigate={onNavigate} />
+      </div>
+
+      {/* 2-G.9 holds expiring this week (flag-gated inside widget) */}
+      <div className="mb-4">
+        <DashboardHoldsExpiring />
       </div>
 
       {/* KPI cards */}
