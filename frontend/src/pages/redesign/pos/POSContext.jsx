@@ -536,6 +536,9 @@ export const POSProvider = ({ children }) => {
     pointsDiscount: loyalty.pointsDiscount,
     setSlip: receipt.setSlip, setSlipOpen: receipt.setSlipOpen,
     enqueueSale: offlineQueue.enqueueSale,
+    // Bucket F: offline refund queue. Gated at the call site via the
+    // `offline_returns` feature flag — hook exports the function either way.
+    enqueueReturn: offlineQueue.enqueueReturn,
     loadParked,
     // Phase 2-R.0 — restaurant shell context wired into completeSale payload
     draftOrderId,
@@ -1015,6 +1018,10 @@ export const POSProvider = ({ children }) => {
     retryPendingSale: checkout.retryPendingSale,
     // Offline queue
     offlineQueueCount: offlineQueue.offlineQueueCount,
+    // Bucket F: type-split counts so POSRedesign banner can show e.g.
+    // "3 sales + 1 refund queued offline".
+    queuedSalesCount: offlineQueue.queuedSalesCount,
+    queuedReturnsCount: offlineQueue.queuedReturnsCount,
     offlineSyncing: offlineQueue.offlineSyncing,
     offlineSyncResult: offlineQueue.offlineSyncResult,
     syncQueue: offlineQueue.syncQueue,

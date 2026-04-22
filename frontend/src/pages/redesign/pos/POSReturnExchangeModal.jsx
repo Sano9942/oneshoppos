@@ -20,12 +20,17 @@ export default function POSReturnExchangeModal() {
     setError,
     posFlags,
     setCollisionModal,
+    enqueueReturn,
   } = usePOS();
 
   // 2-G.7: gate per-line restock controls on the tenant flag. When off, the
   // modal renders its legacy UI and backend ignores any restock_flag /
   // reason_code_id values we might send.
   const perLineRestockOn = !!posFlags?.phase2g_per_line_restock;
+  // Bucket F: tenant opts into offline refund queueing separately from
+  // offline sales (some retailers want offline sales but require refund
+  // audit trail to be live).
+  const offlineReturnsOn = !!posFlags?.offline_returns;
 
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [saleLoading, setSaleLoading] = useState(false);
@@ -386,6 +391,30 @@ export default function POSReturnExchangeModal() {
           // 2-G.15 Day 3 refund idempotency
           idempotency_key: idempotencyKey,
         };
+
+        // Bucket F: offline refund queue. Only intercepts pure refund mode —
+        // exchanges mutate stock on a new sale that requires the network to
+        // validate inventory, so we keep those online-only. Gated by feature
+        // flag so tenants without offline refund trust can stay online-only.
+        if (
+          mode !== "exchange" &&
+          offlineReturnsOn &&
+          typeof navigator !== "undefined" &&
+          navigator.onLine === false &&
+          typeof enqueueReturn === "function"
+        ) {
+          try {
+            await enqueueReturn(returnPayload);
+            showNotice?.("Refund queued offline — will sync when you're back online.");
+            setReturnModalOpen(false);
+            return;
+          } catch (queueErr) {
+            // Fall through to the online path — if the queue is full or IndexedDB
+            // throws, the online POST will surface its own error.
+            setError?.(queueErr.message || "Failed to queue refund");
+            return;
+          }
+        }
 
         try {
           await api.post("/api/returns", returnPayload);
