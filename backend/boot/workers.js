@@ -318,6 +318,14 @@ function startAll(deps) {
           await registerRetailDigestWorker(boss, pool);
         }
 
+        // Bucket F (Phase 2-G): hourly sweep that force-closes open cash shifts
+        // older than each tenant's `company_profile.shift_auto_close_hours`
+        // (default 36h). Tenant-gated by `shift_auto_close` feature flag.
+        if (String(process.env.SHIFT_AUTO_CLOSE_WORKER_ENABLED || "0") === "1") {
+          const { registerShiftAutoCloseWorker } = require("../workers/shift-auto-close-worker-boss");
+          await registerShiftAutoCloseWorker(boss, pool);
+        }
+
         if (String(process.env.COURSE_RELEASE_WORKER_ENABLED || "0") === "1") {
           const { registerCourseReleaseWorker } = require("../workers/course-release-worker-boss");
           await registerCourseReleaseWorker(boss, pool);

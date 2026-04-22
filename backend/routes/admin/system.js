@@ -31,6 +31,8 @@ module.exports = function registerSystemRoutes(app, deps) {
       const anomalyStatus = global.__anomalyWorkerStatus || null;
       // 2-G.16 Merchant home — weekly digest email (Monday 08:00 UTC).
       const retailDigestStatus = global.__retailDigestWorkerStatus || null;
+      // Bucket F — hourly force-close of stale open shifts.
+      const shiftAutoCloseStatus = global.__shiftAutoCloseWorkerStatus || null;
 
       function workerInfo(status, pollIntervalMs) {
         if (!status) return { enabled: false, running: false };
@@ -62,6 +64,7 @@ module.exports = function registerSystemRoutes(app, deps) {
         hold_expiry: workerInfo(holdExpiryStatus, 60 * 60 * 1000),
         anomaly: workerInfo(anomalyStatus, 24 * 60 * 60 * 1000),
         retail_digest: workerInfo(retailDigestStatus, 7 * 24 * 60 * 60 * 1000),
+        shift_auto_close: workerInfo(shiftAutoCloseStatus, 60 * 60 * 1000),
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });
