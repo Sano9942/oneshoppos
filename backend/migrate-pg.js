@@ -5297,6 +5297,117 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 71,
+    description:
+      "Phase 2-G.9 Layaway / hold / special-order — holds + hold_items + hold_payments + phase2g_holds flag",
+    up: async (client) => {
+      // 2-G.9: holds is the entry row; hold_items carries the cart snapshot;
+      // hold_payments is the ledger of deposits/part-payments (dedicated table
+      // rather than sale_payments because sale_payments.sale_id is NOT NULL
+      // and we have no sale until the hold is completed). Stock is held via
+      // inventory_reservations with reference_type='hold' — no schema change
+      // needed there.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS holds (
+          id SERIAL PRIMARY KEY,
+          hold_number TEXT UNIQUE NOT NULL,
+          customer_id INTEGER REFERENCES customers(id),
+          customer_phone TEXT,
+          customer_name TEXT,
+          outlet_id INTEGER NOT NULL REFERENCES outlets(id),
+          status TEXT NOT NULL DEFAULT 'active'
+            CHECK (status IN ('active','paid','completed','forfeit','cancelled')),
+          total_amount NUMERIC(12,2) NOT NULL,
+          deposit_paid NUMERIC(12,2) NOT NULL DEFAULT 0,
+          balance_due NUMERIC(12,2) NOT NULL,
+          hold_until TIMESTAMPTZ,
+          notes TEXT,
+          created_by INTEGER REFERENCES employees(id),
+          completed_sale_id INTEGER REFERENCES sales(id),
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_holds_outlet_status ON holds(outlet_id, status)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_holds_hold_until ON holds(hold_until) WHERE status = 'active'
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS hold_items (
+          id SERIAL PRIMARY KEY,
+          hold_id INTEGER NOT NULL REFERENCES holds(id) ON DELETE CASCADE,
+          product_id INTEGER NOT NULL REFERENCES products(id),
+          variant_id INTEGER REFERENCES product_variants(id),
+          quantity NUMERIC(10,3) NOT NULL,
+          price_at_hold NUMERIC(12,2) NOT NULL
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_hold_items_hold ON hold_items(hold_id)
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS hold_payments (
+          id SERIAL PRIMARY KEY,
+          hold_id INTEGER NOT NULL REFERENCES holds(id) ON DELETE CASCADE,
+          amount NUMERIC(12,2) NOT NULL,
+          method TEXT NOT NULL,
+          gateway_ref TEXT,
+          paid_at TIMESTAMPTZ DEFAULT NOW(),
+          recorded_by INTEGER REFERENCES employees(id)
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_hold_payments_hold ON hold_payments(hold_id)
+      `);
+
+      await client.query(`
+        INSERT INTO feature_flags (key, enabled, description)
+          VALUES ('phase2g_holds', FALSE, '2-G.9 layaway/hold/special-order')
+          ON CONFLICT (key) DO NOTHING
+      `);
+    },
+  },
+  {
+    version: 72,
+    description:
+      "Phase 2-G.13 Per-device Quick Grid — widen pos_layouts.scope_type to include 'device' + pos_device_registry sidecar",
+    up: async (client) => {
+      // 2-G.13: extend pos_layouts scope_type with a fifth value. scope_id
+      // continues to carry an INTEGER (the surrogate device id from the
+      // sidecar registry), preserving the existing UNIQUE(scope_type, scope_id).
+      await client.query(`
+        ALTER TABLE pos_layouts DROP CONSTRAINT IF EXISTS pos_layouts_scope_type_check
+      `);
+      await client.query(`
+        ALTER TABLE pos_layouts
+          ADD CONSTRAINT pos_layouts_scope_type_check
+          CHECK (scope_type IN ('global','outlet','role','employee','device'))
+      `);
+
+      // Device registry — maps browser-generated UUIDs to surrogate serial ids
+      // so the admin UI has a human-readable device list. last_seen lets a
+      // future cleanup sweep orphan devices idle > 90 days.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS pos_device_registry (
+          id SERIAL PRIMARY KEY,
+          device_uuid TEXT UNIQUE NOT NULL,
+          outlet_id INTEGER REFERENCES outlets(id),
+          label TEXT,
+          last_seen TIMESTAMPTZ DEFAULT NOW(),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_pos_device_registry_outlet
+          ON pos_device_registry(outlet_id)
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

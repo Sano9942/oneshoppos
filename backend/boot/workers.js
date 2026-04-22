@@ -288,6 +288,11 @@ function startAll(deps) {
           await registerRentalOverdueWorker(boss, pool);
         }
 
+        if (String(process.env.HOLD_EXPIRY_WORKER_ENABLED || "0") === "1") {
+          const { registerHoldExpiryWorker } = require("../workers/hold-expiry-worker-boss");
+          await registerHoldExpiryWorker(boss, pool);
+        }
+
         if (String(process.env.ROOM_OVERDUE_WORKER_ENABLED || "0") === "1") {
           const { registerRoomOverdueCheckoutWorker } = require("../workers/room-overdue-checkout-worker-boss");
           await registerRoomOverdueCheckoutWorker(boss, pool);

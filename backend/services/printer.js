@@ -216,11 +216,19 @@ module.exports = function makePrinterService(db) {
       printer.println(`Note: ${slip.orderNote}`);
     }
 
-    // --- BARCODE (invoice number as text) ---
+    // --- BARCODE — 2-G.11 CODE128 render; falls back to text on unsupported printers ---
     if (showBarcode && slip.invoiceNumber) {
       printer.println(divider(W));
       printer.alignCenter();
-      printer.println(slip.invoiceNumber);
+      try {
+        if (typeof printer.code128 === "function") {
+          printer.code128(String(slip.invoiceNumber), { width: 2, height: 60, text: 2 });
+        } else {
+          printer.println(String(slip.invoiceNumber));
+        }
+      } catch {
+        printer.println(String(slip.invoiceNumber));
+      }
       printer.alignLeft();
     }
 

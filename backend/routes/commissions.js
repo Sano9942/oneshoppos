@@ -216,104 +216,176 @@ module.exports = function registerCommissionRoutes(app, deps) {
     }
   });
 
-  // POST /api/commissions/calculate — manual recalculation for a sale
+  // 2-G.10: pick the matching scope rule for an item.
+  function findItemRule(rules, item) {
+    return rules.find((r) => {
+      if (r.scope_type === "all") return true;
+      if (r.scope_type === "product" && r.scope_id === item.product_id) return true;
+      if (r.scope_type === "category" && r.scope_id === item.category_id) return true;
+      if (r.scope_type === "brand" && r.scope_id === item.brand_id) return true;
+      return false;
+    });
+  }
+
+  // 2-G.10: tier step resolution for type='tiered'. Rules model tier steps:
+  // the rule with the highest `min_threshold` that is ≤ the running total
+  // wins. Returns { rule, rate } or null. v1 operates on the sale's total
+  // only — no cross-sale period accumulation yet.
+  function resolveTierForAmount(rules, amount) {
+    const eligible = rules
+      .filter((r) => r.scope_type === "all")
+      .filter((r) => Number(r.min_threshold || 0) <= amount)
+      .sort((a, b) => Number(b.min_threshold || 0) - Number(a.min_threshold || 0));
+    return eligible[0] || null;
+  }
+
+  async function insertEarning(client, row) {
+    const { rows } = await client.query(
+      `INSERT INTO commission_earnings (employee_id, sale_id, plan_id, rule_id, sale_amount, commission_amount)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [row.employee_id, row.sale_id, row.plan_id, row.rule_id, row.sale_amount, row.commission_amount],
+    );
+    return rows[0];
+  }
+
+  // POST /api/commissions/calculate — manual recalculation for a sale.
+  // 2-G.10: groups sale_items by attributed employee (item.staff_id ?? sale.employee_id),
+  // loads each employee's own commission_plan, computes per-employee commission,
+  // and writes one commission_earnings row per (employee, sale).
   // Body: { sale_id }
   app.post("/api/commissions/calculate", feat, async (req, res) => {
     const { sale_id } = req.body;
     if (!sale_id) return res.status(400).json({ error: "sale_id required" });
     try {
-      const { rows: saleRows } = await db.query(
-        `SELECT s.*, e.commission_plan_id
-         FROM sales s
-         JOIN employees e ON e.id = s.employee_id
-         WHERE s.id = $1 AND s.voided = FALSE`,
-        [sale_id]
-      );
-      if (!saleRows.length) return res.status(404).json({ error: "Sale not found or voided" });
-      const sale = saleRows[0];
-      if (!sale.commission_plan_id) return res.json({ earnings: [], message: "Employee has no commission plan" });
+      const result = await db.transaction(async (client) => {
+        const { rows: saleRows } = await client.query(
+          `SELECT s.* FROM sales s WHERE s.id = $1 AND s.voided = FALSE`,
+          [sale_id],
+        );
+        if (!saleRows.length) {
+          const err = new Error("Sale not found or voided");
+          err.statusCode = 404;
+          throw err;
+        }
+        const sale = saleRows[0];
 
-      const { rows: planRows } = await db.query(
-        `SELECT * FROM commission_plans WHERE id = $1 AND is_active = TRUE
-         AND (starts_at IS NULL OR starts_at <= $2) AND (ends_at IS NULL OR ends_at >= $2)`,
-        [sale.commission_plan_id, sale.timestamp]
-      );
-      if (!planRows.length) return res.json({ earnings: [], message: "Commission plan not active" });
-      const plan = planRows[0];
+        const { rows: items } = await client.query(
+          `SELECT si.*, p.category_id, p.brand_id
+           FROM sale_items si
+           JOIN products p ON p.id = si.product_id
+           WHERE si.sale_id = $1`,
+          [sale_id],
+        );
 
-      const { rows: rules } = await db.query(
-        "SELECT * FROM commission_plan_rules WHERE plan_id = $1 ORDER BY priority DESC", [plan.id]
-      );
-
-      const { rows: items } = await db.query(
-        `SELECT si.*, p.category_id, p.brand_id
-         FROM sale_items si
-         JOIN products p ON p.id = si.product_id
-         WHERE si.sale_id = $1`,
-        [sale_id]
-      );
-
-      let totalCommission = 0;
-      const earnings = [];
-
-      if (plan.type === "percentage" || plan.type === "tiered") {
+        // 2-G.10: per-item attribution — item.staff_id wins, falls back to
+        // the sale's cashier employee_id when unset.
+        const itemsByEmployee = new Map();
         for (const item of items) {
-          const matchedRule = rules.find(r => {
-            if (r.scope_type === "all") return true;
-            if (r.scope_type === "product" && r.scope_id === item.product_id) return true;
-            if (r.scope_type === "category" && r.scope_id === item.category_id) return true;
-            if (r.scope_type === "brand" && r.scope_id === item.brand_id) return true;
-            return false;
-          });
-          if (!matchedRule) continue;
+          const empId = item.staff_id != null ? item.staff_id : sale.employee_id;
+          if (!itemsByEmployee.has(empId)) itemsByEmployee.set(empId, []);
+          itemsByEmployee.get(empId).push(item);
+        }
 
-          const itemTotal = Number(item.price_at_sale) * item.quantity;
-          if (itemTotal < Number(matchedRule.min_threshold)) continue;
+        const earnings = [];
+        const messages = [];
 
-          let commission = itemTotal * Number(matchedRule.rate) / 100;
-          if (matchedRule.max_cap && commission > Number(matchedRule.max_cap)) {
-            commission = Number(matchedRule.max_cap);
+        for (const [employeeId, empItems] of itemsByEmployee.entries()) {
+          const { rows: empRows } = await client.query(
+            "SELECT id, commission_plan_id FROM employees WHERE id = $1",
+            [employeeId],
+          );
+          const emp = empRows[0];
+          if (!emp || !emp.commission_plan_id) {
+            messages.push(`Employee ${employeeId} has no commission plan`);
+            continue;
           }
-          totalCommission += commission;
+
+          const { rows: planRows } = await client.query(
+            `SELECT * FROM commission_plans WHERE id = $1 AND is_active = TRUE
+             AND (starts_at IS NULL OR starts_at <= $2) AND (ends_at IS NULL OR ends_at >= $2)`,
+            [emp.commission_plan_id, sale.timestamp],
+          );
+          if (!planRows.length) {
+            messages.push(`Plan ${emp.commission_plan_id} not active for employee ${employeeId}`);
+            continue;
+          }
+          const plan = planRows[0];
+
+          const { rows: rules } = await client.query(
+            "SELECT * FROM commission_plan_rules WHERE plan_id = $1 ORDER BY priority DESC, min_threshold DESC",
+            [plan.id],
+          );
+
+          const empSaleAmount = empItems.reduce(
+            (s, i) => s + Number(i.price_at_sale) * Number(i.quantity),
+            0,
+          );
+
+          let commission = 0;
+          let ruleIdUsed = null;
+
+          if (plan.type === "percentage") {
+            for (const item of empItems) {
+              const rule = findItemRule(rules, item);
+              if (!rule) continue;
+              const itemTotal = Number(item.price_at_sale) * Number(item.quantity);
+              if (itemTotal < Number(rule.min_threshold || 0)) continue;
+              let c = (itemTotal * Number(rule.rate)) / 100;
+              if (rule.max_cap && c > Number(rule.max_cap)) c = Number(rule.max_cap);
+              commission += c;
+              ruleIdUsed = rule.id;
+            }
+          } else if (plan.type === "tiered") {
+            // 2-G.10: apply the tier step whose min_threshold ≤ this
+            // employee's share of the sale. Bug-fix vs prior behavior
+            // which treated tiered identically to percentage.
+            const tier = resolveTierForAmount(rules, empSaleAmount);
+            if (tier) {
+              let c = (empSaleAmount * Number(tier.rate)) / 100;
+              if (tier.max_cap && c > Number(tier.max_cap)) c = Number(tier.max_cap);
+              commission = c;
+              ruleIdUsed = tier.id;
+            }
+          } else if (plan.type === "fixed_per_sale") {
+            const rule = rules[0];
+            if (rule && empSaleAmount >= Number(rule.min_threshold || 0)) {
+              commission = Math.min(
+                Number(rule.rate),
+                rule.max_cap ? Number(rule.max_cap) : Infinity,
+              );
+              ruleIdUsed = rule.id;
+            }
+          } else if (plan.type === "fixed_per_item") {
+            const rule = rules[0];
+            if (rule) {
+              const totalQty = empItems.reduce((s, i) => s + Number(i.quantity), 0);
+              commission = Math.min(
+                totalQty * Number(rule.rate),
+                rule.max_cap ? Number(rule.max_cap) : Infinity,
+              );
+              ruleIdUsed = rule.id;
+            }
+          }
+
+          if (commission > 0) {
+            const row = await insertEarning(client, {
+              employee_id: employeeId,
+              sale_id,
+              plan_id: plan.id,
+              rule_id: ruleIdUsed,
+              sale_amount: Math.round(empSaleAmount * 100) / 100,
+              commission_amount: Math.round(commission * 100) / 100,
+            });
+            earnings.push(row);
+          }
         }
 
-        if (totalCommission > 0) {
-          const bestRule = rules[0];
-          const { rows: inserted } = await db.query(
-            `INSERT INTO commission_earnings (employee_id, sale_id, plan_id, rule_id, sale_amount, commission_amount)
-             VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-            [sale.employee_id, sale_id, plan.id, bestRule?.id || null,
-             Number(sale.total_amount), Math.round(totalCommission * 100) / 100]
-          );
-          earnings.push(inserted[0]);
-        }
-      } else if (plan.type === "fixed_per_sale") {
-        const rule = rules[0];
-        if (rule && Number(sale.total_amount) >= Number(rule.min_threshold)) {
-          const commission = Math.min(Number(rule.rate), rule.max_cap ? Number(rule.max_cap) : Infinity);
-          const { rows: inserted } = await db.query(
-            `INSERT INTO commission_earnings (employee_id, sale_id, plan_id, rule_id, sale_amount, commission_amount)
-             VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-            [sale.employee_id, sale_id, plan.id, rule.id, Number(sale.total_amount), commission]
-          );
-          earnings.push(inserted[0]);
-        }
-      } else if (plan.type === "fixed_per_item") {
-        const rule = rules[0];
-        if (rule) {
-          const totalQty = items.reduce((sum, i) => sum + i.quantity, 0);
-          const commission = Math.min(totalQty * Number(rule.rate), rule.max_cap ? Number(rule.max_cap) : Infinity);
-          const { rows: inserted } = await db.query(
-            `INSERT INTO commission_earnings (employee_id, sale_id, plan_id, rule_id, sale_amount, commission_amount)
-             VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-            [sale.employee_id, sale_id, plan.id, rule.id, Number(sale.total_amount), commission]
-          );
-          earnings.push(inserted[0]);
-        }
-      }
+        return { earnings, messages };
+      });
 
-      res.json({ earnings });
+      res.json(result);
     } catch (err) {
+      if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
       res.status(500).json({ error: err.message });
     }
   });

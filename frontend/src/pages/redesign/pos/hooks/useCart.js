@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { api } from "../../../../api";
 import { calcGrossTotal, calcDiscountValue, calcTaxTotal, calcTotal } from "../cartMath.js";
 
-export function useCart({ selectedOutletId, selectedCustomerId, customers, posFlags, showNotice }) {
+export function useCart({ selectedOutletId, selectedCustomerId, customers, posFlags, showNotice, posDeviceId }) {
   // ── Product search ────────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
   const [barcodeSearch, setBarcodeSearch] = useState("");
@@ -59,12 +59,14 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
       .catch(() => setOutletPriceListItems([]));
   }, [selectedOutletId]);
 
-  // ── POS Layout fetch (phase2_pos_layouts) ──────────────────────────────
+  // ── POS Layout fetch (phase2_pos_layouts) — 2-G.13 includes device_id so
+  // the backend cascade prefers device > employee > role > outlet > global.
   useEffect(() => {
     const params = new URLSearchParams();
     if (selectedOutletId) params.set("outlet_id", selectedOutletId);
+    if (posDeviceId) params.set("device_id", posDeviceId);
     api.get(`/api/pos-layouts?${params}`).then(d => setPosLayout(d.layout)).catch(() => {});
-  }, [selectedOutletId]);
+  }, [selectedOutletId, posDeviceId]);
 
   // ── Item suggestions fetch (phase2_item_suggestions, debounced) ───────
   useEffect(() => {
@@ -185,8 +187,16 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
     // the schema applies on draft_order_items / sale_items.
     const seatStamp = overlay.seat_number ?? null;
     const courseStamp = overlay.course_name ?? "main";
+    // 2-G.12: bulk-scan toggle — when set to "new_line", each add creates a
+    // fresh line even if the same product already exists in the cart.
+    let bulkScanMode = "increment";
+    try {
+      const deviceId = localStorage.getItem("pos_device_id") || "default";
+      bulkScanMode = localStorage.getItem(`pos_bulk_scan_mode_${deviceId}`) || "increment";
+    } catch { /* localStorage unavailable — keep default */ }
+    const forceNewLine = bulkScanMode === "new_line";
     setCart((prev) => {
-      const found = prev.find((x) => x.id === product.id);
+      const found = forceNewLine ? null : prev.find((x) => x.id === product.id);
       if (found) {
         if (!isBundle && stock > 0 && found.quantity >= stock)
           showNotice?.(`Note: Selling past available stock (${stock} in stock).`);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { X, Search, Plus, Minus, RotateCcw, ShoppingCart, AlertTriangle } from "lucide-react";
 import { api } from "../../../api";
 import { usePOS } from "./POSContext";
@@ -147,6 +147,51 @@ export default function POSReturnExchangeModal() {
       setSaleLoading(false);
     }
   };
+
+  // 2-G.11: exact-match by-barcode lookup. Used by the scanner listener when
+  // the cashier scans a printed receipt CODE128.
+  const loadSaleByBarcode = useCallback(async (code) => {
+    if (!code) return;
+    setInvoiceSearch(code);
+    setSaleLoading(true);
+    try {
+      const data = await api.get(`/api/sales/by-barcode/${encodeURIComponent(code)}`);
+      const saleId = data.sale?.id;
+      if (!saleId) throw new Error("Invoice not found");
+      await loadSaleDetail(saleId);
+    } catch (e) {
+      setError(e.message || "Invoice not found");
+      setSaleLoading(false);
+    }
+  }, []);
+
+  // 2-G.11: scanner listener — 100ms inter-key buffer, fires on Enter when
+  // the modal is open and no sale is resolved yet. Ignores keystrokes while
+  // focus is already in an input/textarea so manual typing still works.
+  const scanBufferRef = useRef("");
+  const scanLastKeyRef = useRef(0);
+  useEffect(() => {
+    if (!returnModalOpen || resolvedSale) return;
+    const handler = (ev) => {
+      const target = ev.target;
+      const isTyping = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      const now = Date.now();
+      if (now - scanLastKeyRef.current > 100) scanBufferRef.current = "";
+      scanLastKeyRef.current = now;
+      if (ev.key === "Enter") {
+        const code = scanBufferRef.current;
+        scanBufferRef.current = "";
+        if (!isTyping && code.length >= 3) {
+          ev.preventDefault();
+          loadSaleByBarcode(code);
+        }
+        return;
+      }
+      if (ev.key.length === 1) scanBufferRef.current += ev.key;
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [returnModalOpen, resolvedSale, loadSaleByBarcode]);
 
   // Separate product search functions with their own loading state
   const searchReturnProducts = useCallback(async (q) => {

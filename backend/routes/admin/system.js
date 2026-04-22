@@ -25,6 +25,8 @@ module.exports = function registerSystemRoutes(app, deps) {
       const reservationReminderStatus = global.__reservationReminderWorkerStatus || null;
       // 2-G.8 Inventory Intelligence — nightly ABC rollup at 02:00 UTC.
       const abcStatus = global.__abcWorkerStatus || null;
+      // 2-G.9 Holds — hourly expiry sweep.
+      const holdExpiryStatus = global.__holdExpiryWorkerStatus || null;
 
       function workerInfo(status, pollIntervalMs) {
         if (!status) return { enabled: false, running: false };
@@ -53,6 +55,7 @@ module.exports = function registerSystemRoutes(app, deps) {
         kds_snapshot: workerInfo(kdsSnapshotStatus, 15 * 60_000),
         reservation_reminder: workerInfo(reservationReminderStatus, 15 * 60_000),
         abc: workerInfo(abcStatus, 24 * 60 * 60 * 1000),
+        hold_expiry: workerInfo(holdExpiryStatus, 60 * 60 * 1000),
       });
     } catch (err) {
       return res.status(500).json({ error: err.message });

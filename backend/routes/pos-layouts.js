@@ -2,15 +2,19 @@ module.exports = function registerPOSLayoutRoutes(app, deps) {
   const { db, requirePerm, requireFeature } = deps;
   const feat = requireFeature("phase2_pos_layouts");
 
-  // GET /api/pos-layouts — returns the best matching layout for current context
+  // GET /api/pos-layouts — returns the best matching layout for current context.
+  // 2-G.13: device-scope wins before employee/role/outlet/global. The caller
+  // passes its registered device id (surrogate integer from pos_device_registry)
+  // as ?device_id; when absent the cascade falls back to the pre-2-G.13 order.
   app.get("/api/pos-layouts", feat, async (req, res) => {
-    const { outlet_id, role_id, employee_id } = req.query;
+    const { outlet_id, role_id, employee_id, device_id } = req.query;
     try {
       const { rows } = await db.query(
         `SELECT * FROM pos_layouts
          WHERE is_active = TRUE
          ORDER BY
            CASE scope_type
+             WHEN 'device' THEN 0
              WHEN 'employee' THEN 1
              WHEN 'role' THEN 2
              WHEN 'outlet' THEN 3
@@ -21,6 +25,7 @@ module.exports = function registerPOSLayoutRoutes(app, deps) {
 
       let layout = null;
       for (const row of rows) {
+        if (row.scope_type === "device" && device_id && row.scope_id === Number(device_id)) { layout = row; break; }
         if (row.scope_type === "employee" && row.scope_id === Number(employee_id)) { layout = row; break; }
         if (row.scope_type === "role" && row.scope_id === Number(role_id)) { layout = row; break; }
         if (row.scope_type === "outlet" && row.scope_id === Number(outlet_id)) { layout = row; break; }

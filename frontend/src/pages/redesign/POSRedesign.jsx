@@ -20,6 +20,8 @@ import POSPriceOverrideModal from "./pos/POSPriceOverrideModal";
 import POSVariantMatrixModal from "./pos/POSVariantMatrixModal";
 import POSSerialEntryModal from "./pos/POSSerialEntryModal";
 import POSReturnExchangeModal from "./pos/POSReturnExchangeModal";
+import POSHoldCreateModal from "./pos/POSHoldCreateModal";
+import POSHoldPickupModal from "./pos/POSHoldPickupModal";
 import POSSessionExpiredModal from "./pos/POSSessionExpiredModal";
 import POSShortcutsOverlay from "./pos/POSShortcutsOverlay";
 import EndlessAisleModal from "./pos/EndlessAisleModal";
@@ -189,6 +191,8 @@ function POSContent() {
       <POSVariantMatrixModal />
       <POSSerialEntryModal />
       <POSReturnExchangeModal />
+      <POSHoldCreateModal />
+      <POSHoldPickupModal />
       <POSSessionExpiredModal />
       <EndlessAisleModal />
       <POSShortcutsOverlay />

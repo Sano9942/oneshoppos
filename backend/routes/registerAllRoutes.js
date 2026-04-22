@@ -561,11 +561,17 @@ module.exports = function registerAllRoutes(app, deps) {
   // --- ROUTES: POS LAYOUTS (Phase 2B) ---
   require("./pos-layouts")(app, deps);
 
+  // --- ROUTES: POS DEVICE REGISTRY (2-G.13) ---
+  require("./pos-devices")(app, deps);
+
   // --- ROUTES: ITEM SUGGESTIONS (Phase 2B) ---
   require("./item-suggestions")(app, deps);
 
   // --- ROUTES: PARKED SALES ---
   require("./parked-sales")(app, deps);
+
+  // --- ROUTES: HOLDS / LAYAWAY (2-G.9) ---
+  require("./holds")(app, deps);
 
   // --- ROUTES: ORDERS ---
   const {

@@ -49,6 +49,7 @@ const SalesHistoryRoute = lazy(() => import("../pages/SalesHistoryRoute"));
 const CashManagementRoute = lazy(() => import("../pages/CashManagementRoute"));
 const ReturnsRoute = lazy(() => import("../pages/ReturnsRoute"));
 const ParkedSalesRedesign = lazy(() => import("../pages/redesign/ParkedSalesRedesign"));
+const HoldsRoute = lazy(() => import("../pages/HoldsRoute"));
 const ReorderAlertsRedesign = lazy(() => import("../pages/redesign/ReorderAlertsRedesign"));
 const InventoryIntelligenceRoute = lazy(() => import("../pages/InventoryIntelligenceRoute"));
 const NotificationsRedesign = lazy(() => import("../pages/redesign/NotificationsRedesign"));
@@ -133,6 +134,7 @@ export const appRoutes = [
     <Route path="/attribute-sets" element={<AttributeSetsRoute />} />
     <Route path="/orders" element={perm("manage_orders", <OrdersRoute />)} />
     <Route path="/parked-sales" element={perm("manage_orders", <ParkedSalesRedesign />)} />
+    <Route path="/holds" element={perm("manage_orders", <HoldsRoute />)} />
     <Route path="/lookup" element={<PlaceholderPage />} />
     <Route path="/custom-fields" element={<PlaceholderPage />} />
     <Route path="/partners" element={<PlaceholderPage />} />
