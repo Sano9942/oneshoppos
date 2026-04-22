@@ -173,8 +173,30 @@ export const POSProvider = ({ children }) => {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutCustomerId, setCheckoutCustomerId] = useState("");
 
+  // ── 2-G.15 Day 2 — stale-shift recovery ─────────────────────────────────
+  // Shown when an active shift was opened > 20h ago AND current local time
+  // is before noon. Dismissed for the rest of the session via state.
+  const [shiftRecoveryOpen, setShiftRecoveryOpen] = useState(false);
+  const [shiftRecoveryDismissed, setShiftRecoveryDismissed] = useState(false);
+
   // ── Compose hooks (bottom-up) ────────────────────────────────────────────
   const shift = useShiftGate({ setError, showNotice });
+
+  // 2-G.15 Day 2 — stale-shift detection. Fires when the gate finishes
+  // loading and we land on an active shift opened long enough ago that
+  // the cashier probably forgot to close it yesterday. Gated to before
+  // noon so a legitimate night-shift doesn't see the prompt all day.
+  useEffect(() => {
+    if (shiftRecoveryDismissed) return;
+    if (!shift.activeShift?.opened_at) return;
+    const now = new Date();
+    const opened = new Date(shift.activeShift.opened_at);
+    const ageHours = (now.getTime() - opened.getTime()) / 3_600_000;
+    const beforeNoon = now.getHours() < 12;
+    if (ageHours > 20 && beforeNoon) {
+      setShiftRecoveryOpen(true);
+    }
+  }, [shift.activeShift?.opened_at, shiftRecoveryDismissed]);
 
   // 2-G.13: per-device POS identity. A stable browser UUID is generated
   // once, registered with the backend to obtain a surrogate integer id,
@@ -687,6 +709,10 @@ export const POSProvider = ({ children }) => {
     openShiftFromPOS: shift.openShiftFromPOS,
     closeShiftOpen: shift.closeShiftOpen,
     setCloseShiftOpen: shift.setCloseShiftOpen,
+    // 2-G.15 Day 2 — stale shift recovery
+    shiftRecoveryOpen,
+    setShiftRecoveryOpen,
+    setShiftRecoveryDismissed,
     refreshGateStatus: shift.refreshGateStatus,
     search: cartHook.search,
     setSearch: cartHook.setSearch,
@@ -803,6 +829,9 @@ export const POSProvider = ({ children }) => {
     handleQuickCreateCustomer: checkout.handleQuickCreateCustomer,
     addPayment: checkout.addPayment,
     printSlip: receipt.printSlip,
+    printBrowserFallback: receipt.printBrowserFallback,
+    receiptRetryPrompt: receipt.retryPrompt,
+    dismissReceiptRetry: receipt.dismissRetryPrompt,
     completeSale: checkout.completeSale,
     // M9 charge-to-room
     chargeToRoomFolioId: folio.chargeToRoomFolioId,
