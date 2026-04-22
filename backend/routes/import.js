@@ -1,4 +1,5 @@
 const XLSX = require("xlsx");
+const { getMapper, getTemplate, listSources } = require("../services/import/mappers");
 
 module.exports = function mountImportRoutes(app, deps) {
   const { db, multer, requirePerm } = deps;
@@ -28,6 +29,18 @@ module.exports = function mountImportRoutes(app, deps) {
   }
 
   // ---------------------------------------------------------------------------
+  // Helper: if ?source=<shopify|square> is set, run raw rows through the
+  // competitor mapper before normaliseRow(). Unknown source = ignored.
+  // Returns the mapped rows (still in their raw-capitalised shape for Shopify)
+  // which normaliseRow() will then lowercase + snake_case downstream.
+  // ---------------------------------------------------------------------------
+  function applySourceMapper(rawRows, source, entity) {
+    const mapper = getMapper(source, entity);
+    if (!mapper) return rawRows;
+    return mapper(rawRows);
+  }
+
+  // ---------------------------------------------------------------------------
   // POST /api/import/products
   // ---------------------------------------------------------------------------
   app.post(
@@ -38,7 +51,10 @@ module.exports = function mountImportRoutes(app, deps) {
       try {
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-        const rows = parseFile(req.file.buffer, req.file.originalname).map(normaliseRow);
+        const source = req.query.source ? String(req.query.source).toLowerCase() : null;
+        const raw = parseFile(req.file.buffer, req.file.originalname);
+        const mapped = source ? applySourceMapper(raw, source, "products") : raw;
+        const rows = mapped.map(normaliseRow);
         if (!rows.length) return res.status(400).json({ error: "File is empty or has no data rows" });
 
         const isPreview = req.query.preview === "1";
@@ -158,7 +174,10 @@ module.exports = function mountImportRoutes(app, deps) {
       try {
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-        const rows = parseFile(req.file.buffer, req.file.originalname).map(normaliseRow);
+        const source = req.query.source ? String(req.query.source).toLowerCase() : null;
+        const raw = parseFile(req.file.buffer, req.file.originalname);
+        const mapped = source ? applySourceMapper(raw, source, "customers") : raw;
+        const rows = mapped.map(normaliseRow);
         if (!rows.length) return res.status(400).json({ error: "File is empty or has no data rows" });
 
         const isPreview = req.query.preview === "1";
@@ -516,14 +535,35 @@ module.exports = function mountImportRoutes(app, deps) {
 
   // ---------------------------------------------------------------------------
   // GET /api/import/template/:entity
+  // Optional ?source=shopify|square → delivers a source-specific template so
+  // merchants can export from Shopify/Square and upload the file directly.
   // ---------------------------------------------------------------------------
   app.get(
     "/api/import/template/:entity",
     requirePerm("all_access"),
     (req, res) => {
       const { entity } = req.params;
+      const source = req.query.source ? String(req.query.source).toLowerCase() : null;
       let headers;
       let exampleRows;
+
+      if (source) {
+        const tpl = getTemplate(source, entity);
+        if (!tpl) {
+          return res.status(400).json({
+            error: `No ${source} template for "${entity}". Supported sources: ${listSources().join(", ")}. Supported entities for a source: products, customers`,
+          });
+        }
+        headers = tpl.headers;
+        exampleRows = tpl.examples;
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...exampleRows]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, entity);
+        const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.setHeader("Content-Disposition", `attachment; filename="${source}_${entity}_template.xlsx"`);
+        return res.send(buf);
+      }
 
       switch (entity) {
         case "products":

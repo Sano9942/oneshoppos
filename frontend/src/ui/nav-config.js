@@ -155,6 +155,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Receipt Templates", path: "/receipt-templates", icon: FileText, requiredPerm: "manage_inventory" },
       { name: "Printer Settings", path: "/printer-settings", icon: Printer, requiredPerm: "all_access" },
       { name: "Import Data", path: "/import", icon: Upload, requiredPerm: "all_access" },
+      { name: "Import from Shopify/Square", path: "/settings/import-from-competitor", icon: Upload, requiredPerm: "all_access" },
       { name: "Backup & Restore", path: "/backup-restore", icon: DatabaseBackup, requiredPerm: "all_access", requiredFlag: "backup_restore" },
       { name: "Outlet Tax Profiles", path: "/settings/outlet-tax-profiles", icon: Receipt, requiredPerm: "all_access", requiredFlag: "phase2_outlet_tax" },
       { name: "POS Layouts", path: "/settings/pos-layouts", icon: LayoutGrid, requiredPerm: "all_access", requiredFlag: "phase2_pos_layouts" },

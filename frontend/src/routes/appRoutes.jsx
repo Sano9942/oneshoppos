@@ -56,6 +56,7 @@ const NotificationsRedesign = lazy(() => import("../pages/redesign/Notifications
 const ProfileRedesign = lazy(() => import("../pages/redesign/ProfileRedesign"));
 const MyTicketsRoute = lazy(() => import("../pages/MyTicketsRoute"));
 const ImportRedesign = lazy(() => import("../pages/redesign/ImportRedesign"));
+const ImportFromCompetitorRoute = lazy(() => import("../pages/ImportFromCompetitorRoute"));
 const CourierSettingsRedesign = lazy(() => import("../pages/redesign/CourierSettingsRedesign"));
 const MarketingCampaignsRoute = lazy(() => import("../pages/MarketingCampaignsRoute"));
 const MessagingInboxRoute = lazy(() => import("../pages/MessagingInboxRoute"));
@@ -166,6 +167,7 @@ export const appRoutes = [
     <Route path="/administrator" element={perm("all_access", <AdministratorRoute />)} />
     <Route path="/action-history" element={perm("all_access", <ActionHistoryRoute />)} />
     <Route path="/import" element={perm("all_access", <ImportRedesign />)} />
+    <Route path="/settings/import-from-competitor" element={perm("all_access", wrap(ImportFromCompetitorRoute))} />
     <Route path="/backup-restore" element={perm("all_access", <BackupRestoreRoute />)} />
     <Route path="/settings/integrations" element={perm("manage_inventory", <IntegrationsHubRedesign />)} />
     <Route path="/integrations/shopify" element={perm("manage_inventory", <ShopifyIntegrationRoute />)} />
