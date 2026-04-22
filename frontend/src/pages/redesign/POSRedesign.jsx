@@ -28,6 +28,8 @@ import POSReceiptRetryModal from "./pos/POSReceiptRetryModal";
 import POSShiftRecoveryModal from "./pos/POSShiftRecoveryModal";
 import POSCartCollisionModal from "./pos/POSCartCollisionModal";
 import POSCartResumeModal from "./pos/POSCartResumeModal";
+import POSBarcodeMissModal from "./pos/POSBarcodeMissModal";
+import POSInsufficientStockModal from "./pos/POSInsufficientStockModal";
 import EndlessAisleModal from "./pos/EndlessAisleModal";
 import { ErrorBoundary } from "../../ui/ErrorBoundary";
 
@@ -217,6 +219,9 @@ function POSErrorStateModals() {
     activeShift, setCloseShiftOpen, money,
     collisionModal, setCollisionModal,
     cartResumePrompt, resumeCartFromCheckpoint, discardCartCheckpoint,
+    barcodeMissPrompt, setBarcodeMissPrompt,
+    insufficientStockPrompt, setInsufficientStockPrompt,
+    addToCart, setQty,
   } = usePOS();
 
   return (
@@ -267,6 +272,22 @@ function POSErrorStateModals() {
         currencySymbol={currencySymbol}
         onResume={resumeCartFromCheckpoint}
         onDiscard={discardCartCheckpoint}
+      />
+
+      <POSBarcodeMissModal
+        open={!!barcodeMissPrompt}
+        barcode={barcodeMissPrompt?.barcode}
+        currencySymbol={currencySymbol}
+        onCreated={(product) => addToCart?.(product)}
+        onClose={() => setBarcodeMissPrompt(null)}
+      />
+
+      <POSInsufficientStockModal
+        open={!!insufficientStockPrompt}
+        prompt={insufficientStockPrompt}
+        canOverride={false}
+        onAdjust={(productId, _variantId, available) => setQty?.(productId, available)}
+        onClose={() => setInsufficientStockPrompt(null)}
       />
     </>
   );

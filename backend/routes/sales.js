@@ -994,7 +994,14 @@ module.exports = function registerSalesRoutes(app, deps) {
                 if (!row || row.available < neededQty) {
                   throw Object.assign(
                     new Error(`Insufficient stock for bundle component variant ${comp.component_variant_id}`),
-                    { statusCode: 400, code: "insufficient_stock" }
+                    {
+                      statusCode: 400,
+                      code: "insufficient_stock",
+                      variant_id: comp.component_variant_id,
+                      product_id: comp.component_product_id || null,
+                      available: Number(row?.available ?? 0),
+                      requested: neededQty,
+                    }
                   );
                 }
               } else {
@@ -1006,7 +1013,13 @@ module.exports = function registerSalesRoutes(app, deps) {
                 if (!row || row.available < neededQty) {
                   throw Object.assign(
                     new Error(`Insufficient stock for bundle component ${comp.component_product_id}`),
-                    { statusCode: 400, code: "insufficient_stock" }
+                    {
+                      statusCode: 400,
+                      code: "insufficient_stock",
+                      product_id: comp.component_product_id,
+                      available: Number(row?.available ?? 0),
+                      requested: neededQty,
+                    }
                   );
                 }
               }
@@ -1029,7 +1042,14 @@ module.exports = function registerSalesRoutes(app, deps) {
                 if (vos.available < item.quantity) {
                   throw Object.assign(
                     new Error(`Insufficient stock for variant ${variantId} at this outlet`),
-                    { statusCode: 400, code: "insufficient_stock" }
+                    {
+                      statusCode: 400,
+                      code: "insufficient_stock",
+                      product_id: item.id,
+                      variant_id: variantId,
+                      available: Number(vos.available),
+                      requested: Number(item.quantity),
+                    }
                   );
                 }
               } else {
@@ -1041,7 +1061,14 @@ module.exports = function registerSalesRoutes(app, deps) {
                 if (!row || row.available < item.quantity) {
                   throw Object.assign(
                     new Error(`Insufficient stock for variant ${variantId}`),
-                    { statusCode: 400, code: "insufficient_stock" }
+                    {
+                      statusCode: 400,
+                      code: "insufficient_stock",
+                      product_id: item.id,
+                      variant_id: variantId,
+                      available: Number(row?.available ?? 0),
+                      requested: Number(item.quantity),
+                    }
                   );
                 }
               }
@@ -1055,7 +1082,13 @@ module.exports = function registerSalesRoutes(app, deps) {
               if (!row || row.available < item.quantity) {
                 throw Object.assign(
                   new Error(`Insufficient stock for product ${productId}`),
-                  { statusCode: 400, code: "insufficient_stock" }
+                  {
+                    statusCode: 400,
+                    code: "insufficient_stock",
+                    product_id: productId,
+                    available: Number(row?.available ?? 0),
+                    requested: Number(item.quantity),
+                  }
                 );
               }
             }
@@ -1641,7 +1674,18 @@ module.exports = function registerSalesRoutes(app, deps) {
       }
     } catch (err) {
       if (err.statusCode) {
-        return res.status(err.statusCode).json({ error: err.message, code: err.code });
+        // 2-G.15 Day 4: insufficient_stock now carries `available` +
+        // `product_id` so the POS can render the backorder/oversell modal
+        // without a second roundtrip. Other statusCode errors keep the
+        // original shape.
+        const body = { error: err.message, code: err.code };
+        if (err.code === "insufficient_stock") {
+          if (err.available != null) body.available = err.available;
+          if (err.product_id != null) body.product_id = err.product_id;
+          if (err.variant_id != null) body.variant_id = err.variant_id;
+          if (err.requested != null) body.requested = err.requested;
+        }
+        return res.status(err.statusCode).json(body);
       }
       res.status(500).json({ error: err.message || "Transaction failed" });
     }

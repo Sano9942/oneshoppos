@@ -1,12 +1,16 @@
 /**
- * 2-G.15 Day 3 — Refund collision + idempotency.
+ * 2-G.15 Day 3 + Day 4 — POS error-state contracts.
  *
- * Covers:
+ * Day 3 — Refund collision + idempotency:
  *  1. v74 partial unique index exists on returns(original_sale_id, idempotency_key)
  *  2. POST /api/returns with idempotency_key persists the key
  *  3. Second POST with same key returns 409 { code: "duplicate_return", existing }
- *  4. Third POST with no key (legacy caller) still succeeds — NULL keys not blocked
- *  5. Insufficient stock (Day 4 prep) — error body shape contract
+ *  4. Different key on the same sale still succeeds
+ *  5. Legacy callers (no key) are not blocked by the partial index
+ *
+ * Day 4 — Insufficient stock error body contract:
+ *  6. POST /api/sales over-quantity returns { code, available, product_id, requested }
+ *  7. Barcode miss: GET /api/products/scan/:code returns 404 for unknown barcode
  */
 
 require("dotenv").config({ path: require("path").resolve(__dirname, "..", "..", ".env") });
@@ -39,6 +43,8 @@ beforeAll(async () => {
   featureFlags.init({ db, IS_MULTI_TENANT: false, tenantDbManager: null, dbProxy: db });
 
   require("../../routes/returns")(app, deps);
+  require("../../routes/sales")(app, deps);
+  require("../../routes/products")(app, deps);
 
   // Seed a sale we can refund against.
   await db.query(
@@ -59,6 +65,18 @@ beforeAll(async () => {
   await db.query(
     `INSERT INTO sale_items (sale_id, product_id, quantity, price_at_sale)
      VALUES (9101, 1, 1, 500)`,
+  );
+
+  // Open shift + clock-in so POST /api/sales passes the gate and reaches
+  // the stock check we want to exercise.
+  await db.query(
+    `INSERT INTO cash_shifts (id, outlet_id, employee_id, opened_at, opening_float, status)
+     VALUES (8100, 1, 1, NOW(), 0, 'open')
+     ON CONFLICT (id) DO NOTHING`,
+  );
+  await db.query(
+    `INSERT INTO attendance_sessions (employee_id, outlet_id, session_type, session_start)
+     VALUES (1, 1, 'work', NOW())`,
   );
 
   req = makeRequest(app, ADMIN_ID);
@@ -153,5 +171,34 @@ describe("2-G.15 Day 3 — refund idempotency", () => {
       items: [{ product_id: 1, quantity: 1, refund_price: 100 }],
     });
     expect(res2.status).toBe(200);
+  });
+});
+
+describe("2-G.15 Day 4 — insufficient stock + barcode miss", () => {
+  test("POST /api/sales over-quantity returns structured insufficient_stock body", async () => {
+    // Product id=1 has 50 at outlet 1 per seed. Refund tests above adjusted
+    // that stock; re-query to get the current level and request + 999 more.
+    const { rows: stockRows } = await db.query(
+      "SELECT COALESCE(quantity, 0)::int AS q FROM outlet_stock WHERE product_id = 1 AND outlet_id = 1",
+    );
+    const current = stockRows[0]?.q || 0;
+    const overQty = current + 999;
+
+    const res = await req.post("/api/sales").send({
+      cartItems: [{ id: 1, quantity: overQty, price: 100 }],
+      payments: [{ method: "Cash", amount: overQty * 100 }],
+      outlet_id: 1,
+      employee_id: 1,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("insufficient_stock");
+    expect(res.body.product_id).toBe(1);
+    expect(Number(res.body.available)).toBe(current);
+    expect(Number(res.body.requested)).toBe(overQty);
+  });
+
+  test("GET /api/products/scan/:barcode returns 404 for unknown barcode", async () => {
+    const res = await req.get("/api/products/scan/NOPE-9999-DOES-NOT-EXIST");
+    expect(res.status).toBe(404);
   });
 });

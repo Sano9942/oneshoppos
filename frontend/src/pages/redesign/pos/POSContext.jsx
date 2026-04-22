@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../api";
+import { logErrorState } from "../../../utils/errorLog";
 import { useAuth } from "../../../auth/AuthProvider";
 import { useCurrency } from "../../../contexts/CurrencyContext";
 import { usePreset } from "../../../contexts/PresetContext";
@@ -77,7 +78,7 @@ export const usePOS = () => {
 
 export const POSProvider = ({ children }) => {
   const navigate = useNavigate();
-  const { employee, authHeaders, logout } = useAuth();
+  const { employee, authHeaders, logout, hasPerm } = useAuth();
   const { fmt: money, denominations: currencyDenominations, symbol: currencySymbol } = useCurrency();
   const { labels: presetLabels } = usePreset();
 
@@ -188,6 +189,15 @@ export const POSProvider = ({ children }) => {
   // cart is empty. Checkpoint key is scoped per employee so a second cashier
   // logging in on the same terminal never sees the first cashier's cart.
   const [cartResumePrompt, setCartResumePrompt] = useState(null); // { cart, selectedOutletId, customer, timestamp } | null
+
+  // ── 2-G.15 Day 4 — barcode miss + insufficient stock ─────────────────────
+  // Barcode miss prompt: shown only when the cashier has inventory perms so
+  // they can quick-create the product right from POS. Everyone else just
+  // gets a toast (see handleBarcodeScanned below).
+  const [barcodeMissPrompt, setBarcodeMissPrompt] = useState(null); // { barcode } | null
+  // Insufficient-stock prompt: opened by checkout hook when the sale POST
+  // returns { code: "insufficient_stock", available, product_id }.
+  const [insufficientStockPrompt, setInsufficientStockPrompt] = useState(null); // { product_id, product_name, requested, available } | null
 
   // ── Compose hooks (bottom-up) ────────────────────────────────────────────
   const shift = useShiftGate({ setError, showNotice });
@@ -537,6 +547,19 @@ export const POSProvider = ({ children }) => {
     setShowGuestMode,
     setError,
     showNotice,
+    // 2-G.15 Day 4: hand insufficient_stock errors up to context so the
+    // dedicated modal opens instead of just a toast.
+    onInsufficientStock: (info) => {
+      const line = cartHook.cart.find((i) => i.id === info.product_id);
+      setInsufficientStockPrompt({
+        product_id: info.product_id,
+        variant_id: info.variant_id || null,
+        product_name: line?.name || `Product ${info.product_id}`,
+        available: info.available,
+        requested: info.requested,
+      });
+      logErrorState("pos_insufficient_stock", `Insufficient stock for product ${info.product_id}`, info);
+    },
   });
 
   // ── Reload parked on outlet change ──────────────────────────────────────
@@ -707,6 +730,18 @@ export const POSProvider = ({ children }) => {
       const res = await api.raw(`/api/products/scan/${encodeURIComponent(barcode)}`, {
         headers: { "x-employee-id": String(employee?.id || "") },
       });
+      // 2-G.15 Day 4: 404 → offer quick-create when the cashier can manage
+      // inventory; otherwise surface a visible toast instead of the old
+      // silent-return that left cashiers thinking the scanner was broken.
+      if (res.status === 404) {
+        logErrorState("pos_barcode_miss", `Barcode ${barcode} not found`, { barcode });
+        if (hasPerm && hasPerm("manage_inventory")) {
+          setBarcodeMissPrompt({ barcode });
+        } else {
+          setError(`Barcode ${barcode} not found`);
+        }
+        return;
+      }
       if (!res.ok) return;
       const data = await res.json();
       const product = data.product;
@@ -727,7 +762,7 @@ export const POSProvider = ({ children }) => {
     } catch (err) {
       console.error("Barcode lookup failed:", err);
     }
-  }, [employee?.id, addToCartWithModifiers]);
+  }, [employee?.id, addToCartWithModifiers, hasPerm, setError]);
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -806,6 +841,11 @@ export const POSProvider = ({ children }) => {
     cartResumePrompt,
     resumeCartFromCheckpoint,
     discardCartCheckpoint,
+    // 2-G.15 Day 4 — barcode miss + insufficient stock
+    barcodeMissPrompt,
+    setBarcodeMissPrompt,
+    insufficientStockPrompt,
+    setInsufficientStockPrompt,
     refreshGateStatus: shift.refreshGateStatus,
     search: cartHook.search,
     setSearch: cartHook.setSearch,
