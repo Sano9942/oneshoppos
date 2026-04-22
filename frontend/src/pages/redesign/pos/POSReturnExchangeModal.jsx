@@ -19,6 +19,7 @@ export default function POSReturnExchangeModal() {
     showNotice,
     setError,
     posFlags,
+    setCollisionModal,
   } = usePOS();
 
   // 2-G.7: gate per-line restock controls on the tenant flag. When off, the
@@ -363,6 +364,11 @@ export default function POSReturnExchangeModal() {
 
       // POST return only after exchange sale succeeds (or if refund-only mode)
       if (selectedItems.length > 0) {
+        // 2-G.15 Day 3: client-generated UUID prevents double-submit. Survives
+        // manager-PIN retry via the same payload object; survives network
+        // retry because the backend rejects the second POST with 409.
+        const idempotencyKey =
+          crypto?.randomUUID?.() || `ret-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         const returnPayload = {
           original_sale_id: resolvedSale?.id || null,
           outlet_id: Number(selectedOutletId),
@@ -377,11 +383,23 @@ export default function POSReturnExchangeModal() {
           return_reason_id: selectedReasonId ? Number(selectedReasonId) : null,
           processed_by_employee_id: employee?.id || null,
           approval_event_id: approvalEventId || null,
+          // 2-G.15 Day 3 refund idempotency
+          idempotency_key: idempotencyKey,
         };
 
         try {
           await api.post("/api/returns", returnPayload);
         } catch (err) {
+          // 2-G.15 Day 3: duplicate return detected server-side. Show the
+          // collision modal with the existing return ref and abort this
+          // transaction — the caller already has a refund recorded.
+          if (err.status === 409 && err.body?.code === "duplicate_return") {
+            if (typeof setCollisionModal === "function") {
+              setCollisionModal({ existing: err.body.existing });
+            }
+            setReturnModalOpen(false);
+            return;
+          }
           // 2-G.17: if the server requires a manager PIN, surface the prompt
           // and wait for the user to submit one. The resolve/reject of this
           // promise controls whether the surrounding try block continues.

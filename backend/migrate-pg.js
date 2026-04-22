@@ -5511,6 +5511,25 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 74,
+    description:
+      "Phase 2-G.15 Refund idempotency — partial unique index on returns(original_sale_id, idempotency_key)",
+    up: async (client) => {
+      // Idempotency column + partial unique index: a client-supplied key lets
+      // the server reject an accidental double-submit (network retry, double
+      // click). NULL keys are always allowed — legacy callers keep working.
+      await client.query(`
+        ALTER TABLE returns
+          ADD COLUMN IF NOT EXISTS idempotency_key TEXT
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_returns_sale_idempotency
+          ON returns(original_sale_id, idempotency_key)
+          WHERE idempotency_key IS NOT NULL
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

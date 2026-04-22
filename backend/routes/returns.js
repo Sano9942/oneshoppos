@@ -167,7 +167,45 @@ module.exports = function registerReturnsRoutes(app, deps) {
       processed_by_employee_id,
       approved_by_employee_id,
       approval_event_id,
+      // 2-G.15 Day 3: client-supplied idempotency key prevents accidental
+      // double-submit (network retry, double click) from creating two refunds
+      // for the same sale. Legacy callers that omit this keep working.
+      idempotency_key,
     } = req.body;
+
+    // 2-G.15 Day 3: pre-flight idempotency check — if the same sale already
+    // has a return with this key, return 409 with the existing return's ref
+    // so the client can show a collision modal instead of silently creating
+    // a duplicate refund.
+    if (idempotency_key && original_sale_id) {
+      try {
+        const { rows: dupRows } = await db.query(
+          `SELECT r.id, r.timestamp, r.total_refund, r.employee_id,
+                  e.name AS employee_name
+             FROM returns r
+             LEFT JOIN employees e ON e.id = r.employee_id
+            WHERE r.original_sale_id = $1 AND r.idempotency_key = $2
+            LIMIT 1`,
+          [original_sale_id, idempotency_key],
+        );
+        if (dupRows.length) {
+          const dup = dupRows[0];
+          return res.status(409).json({
+            error: "Return already processed for this sale with the same idempotency key",
+            code: "duplicate_return",
+            existing: {
+              id: dup.id,
+              timestamp: dup.timestamp,
+              total_refund: Number(dup.total_refund),
+              employee_id: dup.employee_id,
+              employee_name: dup.employee_name,
+            },
+          });
+        }
+      } catch (err) {
+        logger.error({ err }, "2-G.15 idempotency pre-check failed");
+      }
+    }
 
     if (!items || items.length === 0) {
       return res.status(400).json({ error: "Return must have items" });
@@ -350,8 +388,8 @@ module.exports = function registerReturnsRoutes(app, deps) {
       const returnId = await db.transaction(async (client) => {
         const { rows } = await client.query(
           `INSERT INTO returns (original_sale_id, web_order_id, outlet_id, employee_id, customer_id, total_refund, refund_method, reason, shift_id,
-           policy_id, return_reason_id, processed_by_employee_id, approved_by_employee_id, approval_event_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id`,
+           policy_id, return_reason_id, processed_by_employee_id, approved_by_employee_id, approval_event_id, idempotency_key)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id`,
           [
             original_sale_id || null,
             web_order_id || null,
@@ -367,6 +405,7 @@ module.exports = function registerReturnsRoutes(app, deps) {
             processed_by_employee_id || null,
             approved_by_employee_id || null,
             resolvedApprovalEventId,
+            idempotency_key || null,
           ],
         );
         const retId = rows[0].id;
@@ -532,6 +571,36 @@ module.exports = function registerReturnsRoutes(app, deps) {
         id: returnId,
       });
     } catch (err) {
+      // 2-G.15 Day 3: race-condition fallback — if two concurrent requests
+      // sneak past the pre-flight check, the partial unique index raises
+      // 23505. Return 409 so the client can show the collision modal.
+      if (err && err.code === "23505" && idempotency_key && original_sale_id) {
+        try {
+          const { rows: dupRows } = await db.query(
+            `SELECT r.id, r.timestamp, r.total_refund, r.employee_id,
+                    e.name AS employee_name
+               FROM returns r
+               LEFT JOIN employees e ON e.id = r.employee_id
+              WHERE r.original_sale_id = $1 AND r.idempotency_key = $2
+              LIMIT 1`,
+            [original_sale_id, idempotency_key],
+          );
+          if (dupRows.length) {
+            const dup = dupRows[0];
+            return res.status(409).json({
+              error: "Return already processed for this sale with the same idempotency key",
+              code: "duplicate_return",
+              existing: {
+                id: dup.id,
+                timestamp: dup.timestamp,
+                total_refund: Number(dup.total_refund),
+                employee_id: dup.employee_id,
+                employee_name: dup.employee_name,
+              },
+            });
+          }
+        } catch { /* fall through to generic 500 */ }
+      }
       res.status(500).json({ error: err.message });
     }
   });

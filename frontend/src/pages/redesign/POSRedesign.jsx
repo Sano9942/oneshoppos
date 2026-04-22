@@ -26,6 +26,8 @@ import POSSessionExpiredModal from "./pos/POSSessionExpiredModal";
 import POSShortcutsOverlay from "./pos/POSShortcutsOverlay";
 import POSReceiptRetryModal from "./pos/POSReceiptRetryModal";
 import POSShiftRecoveryModal from "./pos/POSShiftRecoveryModal";
+import POSCartCollisionModal from "./pos/POSCartCollisionModal";
+import POSCartResumeModal from "./pos/POSCartResumeModal";
 import EndlessAisleModal from "./pos/EndlessAisleModal";
 import { ErrorBoundary } from "../../ui/ErrorBoundary";
 
@@ -213,6 +215,8 @@ function POSErrorStateModals() {
     receiptTemplate, presetLabels, currencySymbol,
     shiftRecoveryOpen, setShiftRecoveryOpen, setShiftRecoveryDismissed,
     activeShift, setCloseShiftOpen, money,
+    collisionModal, setCollisionModal,
+    cartResumePrompt, resumeCartFromCheckpoint, discardCartCheckpoint,
   } = usePOS();
 
   return (
@@ -248,6 +252,21 @@ function POSErrorStateModals() {
           setShiftRecoveryOpen(false);
           setShiftRecoveryDismissed(true);
         }}
+      />
+
+      <POSCartCollisionModal
+        open={!!collisionModal}
+        existing={collisionModal?.existing}
+        currencySymbol={currencySymbol}
+        onClose={() => setCollisionModal(null)}
+      />
+
+      <POSCartResumeModal
+        open={!!cartResumePrompt}
+        checkpoint={cartResumePrompt}
+        currencySymbol={currencySymbol}
+        onResume={resumeCartFromCheckpoint}
+        onDiscard={discardCartCheckpoint}
       />
     </>
   );

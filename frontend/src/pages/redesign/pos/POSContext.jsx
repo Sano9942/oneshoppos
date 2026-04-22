@@ -179,6 +179,16 @@ export const POSProvider = ({ children }) => {
   const [shiftRecoveryOpen, setShiftRecoveryOpen] = useState(false);
   const [shiftRecoveryDismissed, setShiftRecoveryDismissed] = useState(false);
 
+  // ── 2-G.15 Day 3 — refund collision + cart resume ───────────────────────
+  // Collision modal is opened by POSReturnExchangeModal when /api/returns
+  // returns 409 { code: "duplicate_return" }. Payload carries the existing
+  // return reference so the cashier can see who/when/how-much.
+  const [collisionModal, setCollisionModal] = useState(null); // { existing: {...} } | null
+  // Cart resume modal shows when a sessionStorage checkpoint is loaded and
+  // cart is empty. Checkpoint key is scoped per employee so a second cashier
+  // logging in on the same terminal never sees the first cashier's cart.
+  const [cartResumePrompt, setCartResumePrompt] = useState(null); // { cart, selectedOutletId, customer, timestamp } | null
+
   // ── Compose hooks (bottom-up) ────────────────────────────────────────────
   const shift = useShiftGate({ setError, showNotice });
 
@@ -234,6 +244,83 @@ export const POSProvider = ({ children }) => {
     showNotice,
     posDeviceId,
   });
+
+  // ── 2-G.15 Day 3 — cart resume checkpoint ───────────────────────────────
+  // On mount (or employee change), if a recent checkpoint exists for this
+  // employee AND the cart is currently empty, offer to restore it. Key is
+  // scoped per employee so a second cashier on the same terminal doesn't
+  // inherit the previous cashier's cart. 8h TTL as a secondary guard.
+  const cartCheckpointKey = employee?.id ? `pos_cart_checkpoint_${employee.id}` : null;
+  const cartCheckpointPromptedRef = useRef(false);
+
+  useEffect(() => {
+    if (!cartCheckpointKey) return;
+    if (cartCheckpointPromptedRef.current) return;
+    if (cartHook.cart.length > 0) return;
+    try {
+      const raw = sessionStorage.getItem(cartCheckpointKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      const age = Date.now() - Number(parsed?.timestamp || 0);
+      if (!(age >= 0 && age <= 8 * 3_600_000)) {
+        sessionStorage.removeItem(cartCheckpointKey);
+        return;
+      }
+      if (!Array.isArray(parsed.cart) || parsed.cart.length === 0) return;
+      setCartResumePrompt(parsed);
+      cartCheckpointPromptedRef.current = true;
+    } catch {
+      /* bad JSON — drop the key and move on */
+      try { sessionStorage.removeItem(cartCheckpointKey); } catch { /* noop */ }
+    }
+  }, [cartCheckpointKey, cartHook.cart.length]);
+
+  // Debounced checkpoint write — fires 1s after the last cart/customer/outlet
+  // change while the cart is non-empty. When the cart drops back to empty
+  // (completed sale or explicit clear), wipe the checkpoint so we don't
+  // re-prompt on the next navigation.
+  useEffect(() => {
+    if (!cartCheckpointKey) return;
+    if (cartHook.cart.length === 0) {
+      try { sessionStorage.removeItem(cartCheckpointKey); } catch { /* noop */ }
+      return;
+    }
+    const t = setTimeout(() => {
+      try {
+        const payload = {
+          cart: cartHook.cart,
+          selectedOutletId: shift.selectedOutletId,
+          customer: selectedCustomerId
+            ? customers.find((c) => String(c.id) === String(selectedCustomerId)) || null
+            : null,
+          timestamp: Date.now(),
+        };
+        sessionStorage.setItem(cartCheckpointKey, JSON.stringify(payload));
+      } catch { /* quota / serialization — best effort */ }
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [cartCheckpointKey, cartHook.cart, shift.selectedOutletId, selectedCustomerId, customers]);
+
+  const resumeCartFromCheckpoint = useCallback(() => {
+    if (!cartResumePrompt) return;
+    try {
+      cartHook.setCart(cartResumePrompt.cart);
+      if (cartResumePrompt.selectedOutletId && !shift.selectedOutletId) {
+        shift.setSelectedOutletId(cartResumePrompt.selectedOutletId);
+      }
+      if (cartResumePrompt.customer?.id) {
+        setSelectedCustomerId(String(cartResumePrompt.customer.id));
+      }
+    } catch { /* noop */ }
+    setCartResumePrompt(null);
+  }, [cartResumePrompt, cartHook, shift, setSelectedCustomerId]);
+
+  const discardCartCheckpoint = useCallback(() => {
+    if (cartCheckpointKey) {
+      try { sessionStorage.removeItem(cartCheckpointKey); } catch { /* noop */ }
+    }
+    setCartResumePrompt(null);
+  }, [cartCheckpointKey]);
 
   // ── Price override apply (Phase 2-G Wave 3 — 2-G.5) ─────────────────────
   // Stamps the override metadata onto a cart line and swaps in the new price.
@@ -713,6 +800,12 @@ export const POSProvider = ({ children }) => {
     shiftRecoveryOpen,
     setShiftRecoveryOpen,
     setShiftRecoveryDismissed,
+    // 2-G.15 Day 3 — refund collision + cart resume
+    collisionModal,
+    setCollisionModal,
+    cartResumePrompt,
+    resumeCartFromCheckpoint,
+    discardCartCheckpoint,
     refreshGateStatus: shift.refreshGateStatus,
     search: cartHook.search,
     setSearch: cartHook.setSearch,

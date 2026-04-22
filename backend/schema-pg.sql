@@ -543,7 +543,11 @@ CREATE TABLE IF NOT EXISTS returns (
   approval_event_id INTEGER,
   processed_by_employee_id INTEGER REFERENCES employees(id),
   approved_by_employee_id INTEGER REFERENCES employees(id),
-  return_reason_id INTEGER REFERENCES return_reasons(id)
+  return_reason_id INTEGER REFERENCES return_reasons(id),
+  -- 2-G.15 Day 3: client-supplied idempotency key prevents double-submit
+  -- (network retry, rapid double-click) from creating two refunds for the
+  -- same sale. Partial unique index below allows NULL keys (legacy callers).
+  idempotency_key TEXT
 );
 
 CREATE TABLE IF NOT EXISTS return_items (
@@ -1700,6 +1704,9 @@ CREATE INDEX IF NOT EXISTS idx_customers_email ON customers (email) WHERE email 
 CREATE INDEX IF NOT EXISTS idx_cash_shifts_outlet_status ON cash_shifts (outlet_id, status);
 CREATE INDEX IF NOT EXISTS idx_returns_original_sale_id ON returns (original_sale_id);
 CREATE INDEX IF NOT EXISTS idx_returns_timestamp ON returns (timestamp DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_returns_sale_idempotency
+  ON returns(original_sale_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
 
 -- ── Password Reset Tokens ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
