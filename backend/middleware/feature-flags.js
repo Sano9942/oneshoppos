@@ -113,6 +113,13 @@ const DEFAULT_FEATURE_FLAGS = {
   phase2g_holds: false,
   phase2g_risk_controls: false,
   retail_weekly_digest: false,
+  // Phase 2-G Bucket F polish (migration v76). Receipt designer is ON by
+  // default (additive UI with safe defaults — existing tenants see no visible
+  // change except QR rendering, which is null-safe when fbr_qr_code is absent).
+  // Worker + offline refunds start OFF for gated rollout.
+  receipt_designer_v2: true,
+  shift_auto_close: false,
+  offline_returns: false,
 };
 
 // Per-tenant feature flag cache
