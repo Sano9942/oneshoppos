@@ -13,6 +13,7 @@ import SupportWidget from "../ui/SupportWidget";
 import ContextSwitcher from "./ContextSwitcher";
 import NotificationBell from "./NotificationBell";
 import AnnouncementBanner from "../ui/AnnouncementBanner";
+import PlanLimitModalInterceptor from "./PlanLimitModalInterceptor";
 import { usePreset } from "../contexts/PresetContext";
 import { api } from "../api";
 
@@ -203,6 +204,7 @@ export default function AppLayoutRedesign() {
         </main>
       </div>
       <SupportWidget />
+      <PlanLimitModalInterceptor />
     </div>
   );
 }

@@ -23,6 +23,7 @@ import { DashboardTopProducts } from "../dashboard/DashboardTopProducts";
 import DashboardStaffOfDay from "../dashboard/DashboardStaffOfDay";
 import DashboardCashPosition from "../dashboard/DashboardCashPosition";
 import { DashboardOnboarding } from "../dashboard/DashboardOnboarding";
+import PlanUsageBanner from "../dashboard/PlanUsageBanner";
 import { InsightCards } from "../dashboard/InsightCards";
 import { AIChatPanel } from "../dashboard/AIChatPanel";
 import { BackupStatusCard } from "../dashboard/BackupStatusCard";
@@ -136,6 +137,9 @@ export default function DashboardRedesign() {
           {error}
         </SectionCard>
       )}
+
+      {/* Plan-usage banner — admin/manager only; hidden if all dimensions <80% or all unlimited */}
+      {(isAdmin || isManager) && <PlanUsageBanner />}
 
       {/* Onboarding checklist — shown to admin/manager until dismissed or all steps complete */}
       {(isAdmin || isManager) && (

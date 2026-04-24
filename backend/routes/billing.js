@@ -10,6 +10,7 @@
 
 module.exports = function registerBillingRoutes(app, deps) {
   const db = require("../db-pg");
+  const tenantDb = deps.db; // tenant-scoped Proxy for /usage queries
   const masterDb = require("../master-db-pg");
   const paymentGateway = require("../services/payment-gateway");
   const { validate } = require("../middleware/validate");
@@ -159,6 +160,42 @@ module.exports = function registerBillingRoutes(app, deps) {
         upgrade_options: upgradeOptions,
         pending_request: pendingReq || null,
         max_outlets: tenant.max_outlets || 1,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Plan Usage (cap-hit UX) ────────────────────────────────────────────
+  // Returns current vs. limit for the three capped resources. Frontend polls
+  // this on the dashboard to show an amber "approaching plan limit" banner
+  // (≥80%) and the upgrade-to-Pro modal triggered by 403 PLAN_LIMIT_REACHED
+  // responses.
+  //
+  //   limit: null  → unlimited (Pro plan; max_* column is 0)
+  //   limit: N     → cap; current >= N triggers a hard block on writes
+  app.get("/api/billing/usage", async (req, res) => {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) return res.status(400).json({ error: "Tenant context required" });
+
+      const tenant = await masterDb.getTenantById(tenantId);
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+      const [empR, prodR, outR] = await Promise.all([
+        tenantDb.query("SELECT COUNT(*) AS cnt FROM employees WHERE deleted_at IS NULL"),
+        tenantDb.query("SELECT COUNT(*) AS cnt FROM products WHERE deleted_at IS NULL"),
+        tenantDb.query("SELECT COUNT(*) AS cnt FROM outlets"),
+      ]);
+
+      // 0 in the master.tenants column means unlimited; surface that as null
+      // so the frontend renders "unlimited" instead of "0 of 0".
+      const asLimit = (n) => (n == null || Number(n) <= 0 ? null : Number(n));
+
+      res.json({
+        employees: { used: Number(empR.rows[0].cnt), limit: asLimit(tenant.max_employees) },
+        products:  { used: Number(prodR.rows[0].cnt), limit: asLimit(tenant.max_products) },
+        outlets:   { used: Number(outR.rows[0].cnt),  limit: asLimit(tenant.max_outlets) },
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
