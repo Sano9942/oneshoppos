@@ -1,7 +1,64 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Store, CheckCircle, XCircle } from "lucide-react";
 import { api } from "../api";
+import { TURNSTILE_SITE_KEY } from "../config";
+
+// Lightweight Turnstile loader — no npm dep needed. Loads the official
+// challenges.cloudflare.com script once per page lifetime, renders the
+// widget into a div ref, and calls onChange(token) when the user solves it.
+// If TURNSTILE_SITE_KEY is empty, the component renders nothing (CAPTCHA off).
+function TurnstileWidget({ siteKey, onChange }) {
+  const containerRef = useRef(null);
+  const widgetIdRef = useRef(null);
+
+  useEffect(() => {
+    if (!siteKey || !containerRef.current) return;
+
+    function render() {
+      if (!window.turnstile || !containerRef.current) return;
+      // Avoid double-render on hot reload / strict mode
+      if (widgetIdRef.current) return;
+      widgetIdRef.current = window.turnstile.render(containerRef.current, {
+        sitekey: siteKey,
+        callback: (token) => onChange(token),
+        "error-callback": () => onChange(""),
+        "expired-callback": () => onChange(""),
+        theme: "light",
+      });
+    }
+
+    if (window.turnstile) {
+      render();
+      return;
+    }
+    // Inject the loader script once
+    const existing = document.querySelector('script[data-turnstile]');
+    if (existing) {
+      existing.addEventListener("load", render, { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+    script.async = true;
+    script.defer = true;
+    script.dataset.turnstile = "1";
+    script.onload = render;
+    document.head.appendChild(script);
+
+    return () => {
+      try {
+        if (widgetIdRef.current && window.turnstile) {
+          window.turnstile.remove(widgetIdRef.current);
+        }
+      } catch { /* widget already removed */ }
+      widgetIdRef.current = null;
+    };
+  }, [siteKey, onChange]);
+
+  if (!siteKey) return null;
+  return <div ref={containerRef} className="flex justify-center" />;
+}
 
 export default function SignupPage() {
   const navigate = useNavigate();
@@ -11,21 +68,29 @@ export default function SignupPage() {
     email: "",
     password: "",
   });
+  const [tosAccepted, setTosAccepted] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
 
+  const captchaRequired = !!TURNSTILE_SITE_KEY;
   const valid =
     form.store_name.trim().length >= 3 &&
     form.owner_name.trim() &&
     form.email.trim() &&
-    form.password.length >= 8;
+    form.password.length >= 8 &&
+    tosAccepted &&
+    (!captchaRequired || !!turnstileToken);
 
   const onSubmit = async (e) => {
     e.preventDefault();
     if (!valid) return;
     setLoading(true);
     try {
-      const data = await api.post("/api/auth/signup", form);
+      const payload = captchaRequired
+        ? { ...form, turnstile_token: turnstileToken }
+        : form;
+      const data = await api.post("/api/auth/signup", payload);
       // PR 8 flow: backend no longer hands out setupToken until email is
       // verified. Show "Check your email" confirmation. Legacy fallback (if
       // setupToken is somehow returned) still redirects directly.
@@ -178,6 +243,38 @@ export default function SignupPage() {
           <p className="text-xs text-slate-500 text-center">
             You'll start on our <span className="font-semibold text-emerald-700">Free plan</span> — 1 outlet, 3 employees, 100 products. Upgrade to Pro anytime from your dashboard.
           </p>
+
+          <label className="flex items-start gap-2 text-xs text-slate-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={tosAccepted}
+              onChange={(e) => setTosAccepted(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            <span>
+              I agree to the{" "}
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-emerald-700 hover:underline"
+              >
+                Terms of Service
+              </a>{" "}
+              and{" "}
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-emerald-700 hover:underline"
+              >
+                Privacy Policy
+              </a>
+              .
+            </span>
+          </label>
+
+          <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} onChange={setTurnstileToken} />
 
           <button
             type="submit"

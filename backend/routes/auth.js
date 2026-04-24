@@ -723,6 +723,38 @@ module.exports = function registerAuthRoutes(app, deps) {
       return res.status(429).json({ error: "Too many signup attempts. Please try again in an hour." });
     }
 
+    // PR 9 — Cloudflare Turnstile CAPTCHA verification.
+    // Only enforced when TURNSTILE_SECRET_KEY is configured, so dev / test /
+    // staging environments without a Turnstile key still work. In production
+    // (where the env var is set) signup rejects without a valid token.
+    if (process.env.TURNSTILE_SECRET_KEY) {
+      const turnstileToken = req.body?.turnstile_token;
+      if (!turnstileToken) {
+        return res.status(400).json({ error: "CAPTCHA token is required." });
+      }
+      try {
+        const verifyRes = await fetch(
+          "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              secret: process.env.TURNSTILE_SECRET_KEY,
+              response: turnstileToken,
+              remoteip: clientIp,
+            }).toString(),
+          }
+        );
+        const verifyJson = await verifyRes.json();
+        if (!verifyJson?.success) {
+          return res.status(403).json({ error: "CAPTCHA verification failed. Please try again." });
+        }
+      } catch (turnstileErr) {
+        console.error("[signup] Turnstile verify error:", turnstileErr.message);
+        return res.status(500).json({ error: "CAPTCHA service unreachable. Please try again." });
+      }
+    }
+
     const { store_name, owner_name, email, password } = req.body;
 
     const slug = store_name
@@ -905,6 +937,94 @@ module.exports = function registerAuthRoutes(app, deps) {
     } catch (err) {
       console.error("[verify-email]", err.message);
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/auth/resend-setup-link — re-issue setup token + email link
+  // Body: { email }
+  // Rate-limited: 1 resend per email per hour. Always returns the same
+  // generic OK response so we don't leak which emails exist. The actual
+  // re-send happens silently if a matching pending tenant is found.
+  const resendLimits = new Map(); // email -> resetAt timestamp
+  function checkResendRate(email) {
+    const now = Date.now();
+    const resetAt = resendLimits.get(email);
+    if (resetAt && now < resetAt) return false;
+    resendLimits.set(email, now + 3600000); // 1h cooldown
+    return true;
+  }
+  app.post("/api/auth/resend-setup-link", async (req, res) => {
+    if (process.env.MULTI_TENANT !== "1") {
+      return res.status(400).json({ error: "Resend setup link is only used in multi-tenant mode" });
+    }
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ error: "email is required" });
+
+    const okMsg = {
+      ok: true,
+      message: "If an unfinished signup exists for that email, we've sent a fresh setup link.",
+    };
+    const cleanEmail = String(email).trim().toLowerCase();
+    if (!checkResendRate(cleanEmail)) {
+      return res.status(429).json({ error: "Too many resend attempts. Try again in an hour." });
+    }
+
+    try {
+      const masterDb = require("../master-db-pg");
+      // Owner email is stored in the per-tenant employees table for the
+      // admin (role_id=1). The master tenants row has owner_email but it's
+      // copied at provision time. Match against master.
+      const { rows: [tenant] } = await masterDb.query(
+        `SELECT id, slug, name FROM tenants
+         WHERE LOWER(owner_email) = $1 AND deleted_at IS NULL AND status = 'active'
+         ORDER BY created_at DESC LIMIT 1`,
+        [cleanEmail]
+      );
+      if (!tenant) return res.json(okMsg); // Generic response — don't leak
+
+      const tenantDbManager = require("../tenant-db-manager-pg");
+      const tenantDb = await tenantDbManager.getDb(tenant.id);
+      const { rows: [profile] } = await tenantDb.query(
+        "SELECT setup_complete FROM company_profile WHERE id = 1"
+      );
+      if (profile?.setup_complete) return res.json(okMsg); // Already done — don't re-issue
+
+      // Regenerate setup token + push expiry to 48h from now
+      const newSetupToken = crypto.randomUUID();
+      await tenantDb.query(
+        `UPDATE company_profile
+            SET setup_token = $1,
+                setup_token_expires_at = NOW() + INTERVAL '48 hours'
+          WHERE id = 1`,
+        [newSetupToken]
+      );
+
+      // Resend the welcome email pointing at /setup directly. PR 8's verify
+      // flow already gated this behind email verification; if the merchant
+      // has clicked the verify link once, they have a valid setup_token —
+      // this resend just refreshes it.
+      if (process.env.RESEND_API_KEY) {
+        try {
+          const { sendWelcomeEmail } = require("../utils/resendEmail");
+          const corsOrigin = process.env.CORS_ORIGIN?.split(",")[0] || "https://sanopos.com";
+          const setupUrl = `${corsOrigin}/setup?token=${newSetupToken}&tenant=${tenant.slug}`;
+          await sendWelcomeEmail({
+            toEmail: cleanEmail,
+            ownerName: "there",
+            storeName: tenant.name,
+            slug: tenant.slug,
+            setupUrl,
+          });
+        } catch (emailErr) {
+          console.error("Resend setup email failed:", emailErr.message);
+        }
+      }
+
+      return res.json(okMsg);
+    } catch (err) {
+      console.error("[resend-setup-link]", err.message);
+      // Generic response so we don't leak failure details
+      return res.json(okMsg);
     }
   });
 
