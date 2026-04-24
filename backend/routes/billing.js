@@ -146,6 +146,20 @@ module.exports = function registerBillingRoutes(app, deps) {
         next_renewal_date = tenant.plan_expires_at;
       }
 
+      // Multi-outlet seeded flag — read from tenant company_profile so the
+      // dashboard banner can decide visibility without exposing the flag via
+      // a separate endpoint. Best-effort; missing column (tenants on a stale
+      // schema) silently returns false.
+      let multi_outlet_flags_seeded = false;
+      try {
+        const { rows: [profile] } = await tenantDb.query(
+          "SELECT multi_outlet_flags_seeded FROM company_profile WHERE id = 1"
+        );
+        multi_outlet_flags_seeded = profile?.multi_outlet_flags_seeded === true;
+      } catch {
+        // column not present — leave as false
+      }
+
       res.json({
         plan: tenant.plan,
         billing_cycle: tenant.billing_cycle || null,
@@ -160,6 +174,7 @@ module.exports = function registerBillingRoutes(app, deps) {
         upgrade_options: upgradeOptions,
         pending_request: pendingReq || null,
         max_outlets: tenant.max_outlets || 1,
+        multi_outlet_flags_seeded,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -225,6 +240,78 @@ module.exports = function registerBillingRoutes(app, deps) {
       );
 
       res.json({ ok: true, message: "Upgrade request submitted. We'll be in touch shortly." });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Add Outlet (Pro only — pay first, then create) ─────────────────────
+  // Pro tenants pay for one extra outlet's worth of subscription. The webhook
+  // (routes/webhooks.js context 1) bumps tenants.max_outlets via Math.max
+  // when payment_intents.outlet_count is greater than the current limit, so
+  // no webhook changes are needed.
+  app.post("/api/billing/add-outlet", async (req, res) => {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) return res.status(400).json({ error: "Tenant context required" });
+
+      const tenant = await masterDb.getTenantById(tenantId);
+      if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+      // Free tenants must upgrade to Pro first — the upgrade flow uses
+      // /api/billing/create-checkout, not this endpoint.
+      if (tenant.plan !== "pro") {
+        return res.status(400).json({
+          error: "Upgrade to Pro before adding outlets.",
+          code: "UPGRADE_REQUIRED",
+        });
+      }
+
+      if (!paymentGateway.isEnabled()) {
+        return res.status(400).json({ error: "Online payments are not configured. Contact support to add an outlet." });
+      }
+
+      const cycle = tenant.billing_cycle || "monthly";
+      const newOutletCount = (tenant.max_outlets || 1) + 1;
+
+      const { rows: [pricingRow] } = await db.pool.query(
+        "SELECT price FROM plan_pricing WHERE plan = 'pro' AND cycle = $1 AND is_active = true",
+        [cycle]
+      );
+      if (!pricingRow) {
+        return res.status(400).json({ error: `No active pricing found for pro/${cycle}` });
+      }
+      const pricePerOutlet = Number(pricingRow.price);
+      // Charge for the additional outlet only — webhook will bump max_outlets
+      // via Math.max(current, newOutletCount), preserving the existing
+      // subscription period.
+      const amount = pricePerOutlet;
+
+      const gateway = process.env.PAYMENT_GATEWAY || "manual";
+      const frontendUrl = process.env.CORS_ORIGIN?.split(",")[0] || "https://sanopos.com";
+
+      const { rows: [intent] } = await masterDb.query(
+        `INSERT INTO payment_intents (tenant_id, amount, plan, cycle, outlet_count, gateway, return_url, provider)
+         VALUES ($1, $2, 'pro', $3, $4, $5, $6, $5)
+         RETURNING id`,
+        [tenantId, amount, cycle, newOutletCount, gateway, `${frontendUrl}/outlets`]
+      );
+
+      const { checkout_url, gateway_ref } = await paymentGateway.createCheckout({
+        amount,
+        currency: "PKR",
+        reference: intent.id,
+        description: `Add outlet (${newOutletCount} total) — Pro ${cycle}`,
+        returnUrl: `${frontendUrl}/outlets?payment=success&intent=${intent.id}`,
+        cancelUrl: `${frontendUrl}/outlets?payment=cancelled&intent=${intent.id}`,
+      });
+
+      await masterDb.query(
+        "UPDATE payment_intents SET gateway_ref = $1 WHERE id = $2",
+        [gateway_ref, intent.id]
+      );
+
+      res.json({ checkout_url, payment_intent_id: intent.id, new_outlet_count: newOutletCount });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

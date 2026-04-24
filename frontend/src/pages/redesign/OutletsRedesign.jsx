@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, MapPin, Phone, Plus, Search, Trash2 } from "lucide-react";
+import { Download, MapPin, Phone, Plus, Search, Trash2, ArrowUpRight } from "lucide-react";
 import { api } from "../../api";
 import {
   Button,
@@ -17,6 +17,7 @@ const EMPTY = { name: "", address: "", phone: "" };
 
 export default function OutletsRedesign() {
   const [outlets, setOutlets] = useState([]);
+  const [billing, setBilling] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -26,13 +27,19 @@ export default function OutletsRedesign() {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null); // outlet being deleted
   const [reassignTo, setReassignTo] = useState("");
+  const [addOutletConfirmOpen, setAddOutletConfirmOpen] = useState(false);
+  const [addOutletSubmitting, setAddOutletSubmitting] = useState(false);
 
   const load = async () => {
     setLoading(true);
     setError("");
     try {
-      const data = await api.get("/api/outlets");
-      setOutlets(data.outlets || []);
+      const [outletsData, billingData] = await Promise.all([
+        api.get("/api/outlets"),
+        api.get("/api/billing/status").catch(() => null),
+      ]);
+      setOutlets(outletsData.outlets || []);
+      setBilling(billingData);
     } catch (e) {
       setError(e.body?.error || e.message || "Failed to load outlets");
     } finally {
@@ -41,6 +48,34 @@ export default function OutletsRedesign() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // Post-payment return: poll billing/status until max_outlets bumps, then
+  // clean URL params. Mirrors the BillingRedesign post-payment polling.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("payment") !== "success") return;
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      try {
+        const data = await api.get("/api/billing/status");
+        const oldMax = billing?.max_outlets || 1;
+        if (data.max_outlets > oldMax || attempts >= 15) {
+          clearInterval(poll);
+          setBilling(data);
+          await load();
+          window.history.replaceState({}, "", "/outlets");
+        }
+      } catch {
+        if (attempts >= 15) {
+          clearInterval(poll);
+          window.history.replaceState({}, "", "/outlets");
+        }
+      }
+    }, 2000);
+    return () => clearInterval(poll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const visible = useMemo(() => {
     if (!search.trim()) return outlets;
@@ -52,7 +87,35 @@ export default function OutletsRedesign() {
     );
   }, [outlets, search]);
 
-  const openCreate = () => { setEditing(null); setForm(EMPTY); setModalOpen(true); };
+  // Add Outlet routing:
+  //   Free tenant         → POST /api/outlets returns 403 PLAN_LIMIT_REACHED;
+  //                         the global PlanLimitModalInterceptor (mounted in
+  //                         AppLayoutRedesign) opens the "Upgrade to Pro"
+  //                         modal automatically. Just submit the form.
+  //   Pro at cap          → show purchase confirmation → /api/billing/add-outlet
+  //   Pro below cap       → standard create modal
+  const proAtCap = billing?.plan === "pro" && outlets.length >= (billing?.max_outlets || 1);
+  const openCreate = () => {
+    if (proAtCap) {
+      setAddOutletConfirmOpen(true);
+      return;
+    }
+    setEditing(null);
+    setForm(EMPTY);
+    setModalOpen(true);
+  };
+
+  const handlePurchaseAddOutlet = async () => {
+    setAddOutletSubmitting(true);
+    setError("");
+    try {
+      const data = await api.post("/api/billing/add-outlet", {});
+      window.location.href = data.checkout_url;
+    } catch (e) {
+      setError(e.body?.error || e.message || "Failed to start checkout");
+      setAddOutletSubmitting(false);
+    }
+  };
   const openEdit = (o) => {
     setEditing(o);
     setForm({ name: o.name, address: o.address || "", phone: o.phone || "" });
@@ -221,6 +284,35 @@ export default function OutletsRedesign() {
           </ModalFooter>
         </form>
       </Modal>
+      <Modal
+        open={addOutletConfirmOpen}
+        onClose={addOutletSubmitting ? undefined : () => setAddOutletConfirmOpen(false)}
+        title="Add another outlet"
+        size="sm"
+      >
+        <p className="mb-3 text-sm text-(--ui-text-muted)">
+          You're at your current outlet limit ({billing?.max_outlets || 1}).
+          Adding another outlet adds <strong>PKR 8,000/month</strong> to your subscription
+          (or the equivalent for your billing cycle).
+        </p>
+        <p className="mb-3 text-xs text-(--ui-text-muted)">
+          You'll be redirected to the payment gateway. After payment confirms,
+          come back to this page and your new outlet slot will be ready.
+        </p>
+        {error && <p className="mb-3 text-sm text-rose-600">{error}</p>}
+        <ModalFooter>
+          <Button type="button" onClick={() => setAddOutletConfirmOpen(false)} disabled={addOutletSubmitting}>
+            Cancel
+          </Button>
+          <Button tone="primary" onClick={handlePurchaseAddOutlet} disabled={addOutletSubmitting}>
+            <span className="inline-flex items-center gap-1.5">
+              {addOutletSubmitting ? "Redirecting…" : "Continue to payment"}
+              {!addOutletSubmitting && <ArrowUpRight size={14} />}
+            </span>
+          </Button>
+        </ModalFooter>
+      </Modal>
+
       <Modal
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
