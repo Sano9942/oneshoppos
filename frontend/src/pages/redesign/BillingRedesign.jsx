@@ -363,18 +363,40 @@ export default function BillingRedesign() {
           );
         })()}
 
-        {/* Upgrade Options */}
-        {Object.keys(upgradePlans).length > 0 && !billing?.pending_request && (
-          <div className="rounded-xl border border-(--ui-border) bg-(--ui-surface) p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-(--ui-text) mb-2">Upgrade to Pro</h2>
-            <p className="text-sm text-(--ui-text-muted) mb-4">Unlimited employees, products, and all features included. Choose a billing cycle:</p>
+        {/* Upgrade to Pro — shown to Free tenants without a pending request.
+            Branches on billing.payment_enabled:
+              true  → /create-checkout (gateway path, immediate xPay redirect)
+              false → /request-upgrade (manual path, admin records payment)
+            Keeps the page useful before xPay merchant contract is signed. */}
+        {billing?.plan === "free" && !billing?.pending_request && Object.keys(upgradePlans).length > 0 && (
+          <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50/30 p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-1">
+              <ArrowUpRight size={20} className="text-emerald-600" />
+              <h2 className="text-lg font-semibold text-(--ui-text)">Upgrade to Pro</h2>
+            </div>
+            <p className="text-sm text-(--ui-text-muted) mb-4">
+              Unlimited employees, unlimited products, and all advanced features. Pricing per outlet — choose a billing cycle:
+            </p>
             <div className="mb-4"><CycleCards /><OutletBreakdown /></div>
-            <button
-              onClick={() => { setSelectedPlan("pro"); setShowUpgradeModal(true); }}
-              className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors flex items-center gap-1"
-            >
-              Request Upgrade <ArrowUpRight size={14} />
-            </button>
+            {billing.payment_enabled ? (
+              <Button tone="primary" onClick={() => handlePayNow(cycle)} disabled={submitting}>
+                <span className="inline-flex items-center gap-1.5">
+                  {submitting ? "Redirecting…" : `Upgrade Now — ${priceLabel}`}
+                  {!submitting && <ArrowUpRight size={14} />}
+                </span>
+              </Button>
+            ) : (
+              <>
+                <Button tone="primary" onClick={() => { setSelectedPlan("pro"); setShowUpgradeModal(true); }}>
+                  <span className="inline-flex items-center gap-1.5">
+                    Request Upgrade <ArrowUpRight size={14} />
+                  </span>
+                </Button>
+                <p className="mt-3 text-xs text-(--ui-text-muted)">
+                  Online payments aren't enabled yet — submit a request and we'll activate Pro after manual confirmation.
+                </p>
+              </>
+            )}
           </div>
         )}
 
