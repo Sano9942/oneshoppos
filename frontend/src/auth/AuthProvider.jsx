@@ -33,6 +33,7 @@ export function AuthProvider({ children }) {
   const [impersonationSessionId, setImpersonationSessionId] = useState(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null); // null | 'trial' | 'grace' | 'expired' | 'active'
   const [subscriptionDaysLeft, setSubscriptionDaysLeft] = useState(null);
+  const [tenantPlan, setTenantPlan] = useState(null); // null | 'free' | 'pro'
 
   const employee = session?.employee || null;
   const permissions = session?.permissions || EMPTY_PERMISSIONS;
@@ -269,6 +270,7 @@ export function AuthProvider({ children }) {
               if (isMounted) {
                 setSubscriptionStatus(billingData.payment_status || "active");
                 setSubscriptionDaysLeft(billingData.trial_days_left ?? billingData.grace_days_left ?? null);
+                setTenantPlan(billingData.plan || null);
               }
             }
           } catch {
@@ -435,6 +437,7 @@ export function AuthProvider({ children }) {
       impersonationSessionId,
       subscriptionStatus,
       subscriptionDaysLeft,
+      tenantPlan,
     }),
     [
       session,
@@ -450,6 +453,7 @@ export function AuthProvider({ children }) {
       impersonationSessionId,
       subscriptionStatus,
       subscriptionDaysLeft,
+      tenantPlan,
     ],
   );
 

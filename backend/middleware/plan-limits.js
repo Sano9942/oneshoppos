@@ -113,8 +113,10 @@ function requireActiveSubscription(req, res, next) {
   if (!tenantId) return next();
 
   const masterDb = require("../master-db-pg");
-  masterDb.query("SELECT payment_status FROM tenants WHERE id = $1", [tenantId])
+  masterDb.query("SELECT plan, payment_status FROM tenants WHERE id = $1", [tenantId])
     .then(({ rows }) => {
+      // Free-forever: never block writes for Free tenants regardless of payment_status drift.
+      if (rows[0]?.plan === "free") return next();
       const status = rows[0]?.payment_status;
       if (status === "expired") {
         return res.status(403).json({

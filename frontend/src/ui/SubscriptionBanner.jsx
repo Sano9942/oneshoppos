@@ -3,8 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Clock, XCircle } from "lucide-react";
 
 export default function SubscriptionBanner() {
-  const { subscriptionStatus, subscriptionDaysLeft } = useAuth();
+  const { subscriptionStatus, subscriptionDaysLeft, tenantPlan } = useAuth();
   const navigate = useNavigate();
+
+  // Free-forever: never show subscription banner regardless of payment_status drift.
+  if (tenantPlan === "free") return null;
 
   if (!subscriptionStatus || subscriptionStatus === "active") return null;
 

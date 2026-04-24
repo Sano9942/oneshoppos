@@ -75,11 +75,12 @@ async function sendLifecycleEmail(boss, pool, tenantId, type, to, from, data, lo
 async function runBillingLifecycleCheck(boss, pool, logger) {
   const fromAddress = process.env.RESEND_FROM_EMAIL || "SanoPOS <noreply@sanopos.com>";
 
-  // 1. Trial warning — 7 days before trial ends
+  // 1. Trial warning — 7 days before trial ends (Free plans never receive these)
   const { rows: warningTenants } = await pool.query(
     `SELECT id, slug, name, trial_ends_at
      FROM tenants
      WHERE payment_status = 'trial'
+       AND plan != 'free'
        AND trial_ends_at BETWEEN NOW() AND NOW() + INTERVAL '7 days'
        AND status != 'deleted'`
   );
@@ -91,10 +92,11 @@ async function runBillingLifecycleCheck(boss, pool, logger) {
       { storeName: t.name, daysLeft }, logger);
   }
 
-  // 2. Trial → Grace transition
+  // 2. Trial → Grace transition (Free plans never enter this branch)
   const { rows: expiredTrials } = await pool.query(
     `SELECT id, slug, name FROM tenants
-     WHERE payment_status = 'trial' AND trial_ends_at < NOW() AND status != 'deleted'`
+     WHERE payment_status = 'trial' AND plan != 'free'
+       AND trial_ends_at < NOW() AND status != 'deleted'`
   );
   for (const t of expiredTrials) {
     await pool.query(
@@ -110,10 +112,11 @@ async function runBillingLifecycleCheck(boss, pool, logger) {
     logger.info({ tenant: t.slug }, "Trial → grace transition");
   }
 
-  // 3. Grace → Expired transition
+  // 3. Grace → Expired transition (Free plans never enter this branch)
   const { rows: expiredGrace } = await pool.query(
     `SELECT id, slug, name FROM tenants
-     WHERE payment_status = 'grace' AND grace_ends_at < NOW() AND status != 'deleted'`
+     WHERE payment_status = 'grace' AND plan != 'free'
+       AND grace_ends_at < NOW() AND status != 'deleted'`
   );
   for (const t of expiredGrace) {
     await pool.query(
