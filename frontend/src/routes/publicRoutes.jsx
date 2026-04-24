@@ -20,6 +20,8 @@ const GiftCardBalancePage = lazy(() => import("../pages/GiftCardBalancePage"));
 const ResetPassword = lazy(() => import("../pages/ResetPassword"));
 const SignupPage = lazy(() => import("../pages/SignupPage"));
 const VerifyEmail = lazy(() => import("../pages/VerifyEmail"));
+const Terms = lazy(() => import("../pages/public/Terms"));
+const Privacy = lazy(() => import("../pages/public/Privacy"));
 const StorefrontLayout = lazy(() => import("../pages/storefront/StorefrontLayout"));
 const StorefrontHome = lazy(() => import("../pages/storefront/StorefrontHome"));
 const StorefrontProducts = lazy(() => import("../pages/storefront/StorefrontProducts"));
@@ -85,6 +87,8 @@ export const publicRoutes = [
   <Route key="reset-password" path="/reset-password" element={<Suspense fallback={<RouteLoading />}><ResetPassword /></Suspense>} />,
   <Route key="signup" path="/signup" element={<Suspense fallback={<RouteLoading />}><SignupPage /></Suspense>} />,
   <Route key="verify-email" path="/verify-email" element={<Suspense fallback={<RouteLoading />}><VerifyEmail /></Suspense>} />,
+  <Route key="terms" path="/terms" element={<Suspense fallback={<RouteLoading />}><Terms /></Suspense>} />,
+  <Route key="privacy" path="/privacy" element={<Suspense fallback={<RouteLoading />}><Privacy /></Suspense>} />,
   <Route key="receipt" path="/receipt/:invoiceNumber" element={<Suspense fallback={<RouteLoading />}><ReceiptPublicPage /></Suspense>} />,
   <Route key="gift-card" path="/gift-card/:code" element={<Suspense fallback={<RouteLoading />}><GiftCardBalancePage /></Suspense>} />,
   <Route key="access-denied" path="/access-denied" element={<AccessDenied />} />,

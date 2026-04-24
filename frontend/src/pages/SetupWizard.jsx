@@ -139,6 +139,14 @@ export default function SetupWizard() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  // PR 9 — when the setup token has expired (HTTP 403 from setup-complete),
+  // we surface a "Resend setup link" inline form so the merchant doesn't
+  // have to email support to restart.
+  const [linkExpired, setLinkExpired] = useState(false);
+  const [resendEmail, setResendEmail] = useState("");
+  const [resendSent, setResendSent] = useState(false);
+  const [resendSubmitting, setResendSubmitting] = useState(false);
+  const [resendError, setResendError] = useState("");
   const [tzSearch, setTzSearch] = useState("");
   const [denomInput, setDenomInput] = useState("");
 
@@ -287,6 +295,7 @@ export default function SetupWizard() {
       if (!res.ok) {
         if (res.status === 403) {
           setError("This setup link has expired or has already been used.");
+          setLinkExpired(true);
         } else {
           setError(data.error || "Setup failed. Please try again.");
         }
@@ -589,6 +598,56 @@ export default function SetupWizard() {
               {error && (
                 <div className="mt-4 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
                   {error}
+                </div>
+              )}
+
+              {/* Resend setup link — only shown after a 403 expired-link error.
+                  Inline so the merchant can recover without emailing support. */}
+              {linkExpired && !resendSent && (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm">
+                  <p className="mb-2 font-medium text-amber-900">Need a fresh link?</p>
+                  <p className="mb-3 text-xs text-amber-800">
+                    Enter the email you signed up with — we&apos;ll send a new setup link valid for 48 hours.
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      type="email"
+                      value={resendEmail}
+                      onChange={(e) => setResendEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      className="flex-1 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                    />
+                    <button
+                      type="button"
+                      disabled={resendSubmitting || !resendEmail.trim()}
+                      onClick={async () => {
+                        setResendSubmitting(true);
+                        setResendError("");
+                        try {
+                          await api.post("/api/auth/resend-setup-link", { email: resendEmail.trim() });
+                          setResendSent(true);
+                        } catch (err) {
+                          setResendError(err.body?.error || err.message || "Could not send link.");
+                        } finally {
+                          setResendSubmitting(false);
+                        }
+                      }}
+                      className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50 cursor-pointer"
+                    >
+                      {resendSubmitting ? "Sending…" : "Resend link"}
+                    </button>
+                  </div>
+                  {resendError && (
+                    <p className="mt-2 text-xs text-red-600">{resendError}</p>
+                  )}
+                </div>
+              )}
+              {linkExpired && resendSent && (
+                <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm">
+                  <p className="font-medium text-emerald-900">Check your email</p>
+                  <p className="mt-1 text-xs text-emerald-800">
+                    If an unfinished signup exists for that email, a fresh setup link is on its way.
+                  </p>
                 </div>
               )}
 

@@ -7,6 +7,12 @@ export const IS_MULTI_TENANT = import.meta.env.VITE_MULTI_TENANT === "1";
 // Sentry DSN — empty string means Sentry is disabled
 export const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN || "";
 
+// Cloudflare Turnstile site key — empty string means CAPTCHA is disabled.
+// When set, SignupPage renders the widget and submission requires a token.
+// Backend signup also gates on TURNSTILE_SECRET_KEY being set; the two are
+// configured together.
+export const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
+
 // Vite build-time environment flags
 export const ENV_MODE = import.meta.env.MODE;
 export const IS_PROD = import.meta.env.PROD;
