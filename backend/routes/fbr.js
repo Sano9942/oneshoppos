@@ -71,6 +71,23 @@ module.exports = function registerFbrRoutes(app, deps) {
           `UPDATE feature_flags SET enabled = $1, updated_at = NOW() WHERE key = 'fbr_integration'`,
           [enabled]
         );
+      } else {
+        // Auto-enable when the merchant has saved a complete config (NTN +
+        // token + province) and hasn't explicitly toggled the flag in this
+        // request. Only flips OFF→ON; never auto-disables a working setup.
+        const { rows: [profileNow] } = await db.query(
+          `SELECT ntn, fbr_api_token, fbr_province FROM company_profile WHERE id = 1`
+        );
+        const hasFullConfig =
+          profileNow?.ntn?.trim() &&
+          profileNow?.fbr_api_token?.trim() &&
+          profileNow?.fbr_province?.trim();
+        if (hasFullConfig) {
+          await db.query(
+            `UPDATE feature_flags SET enabled = true, updated_at = NOW()
+             WHERE key = 'fbr_integration' AND enabled = false`
+          );
+        }
       }
 
       res.json({ message: "FBR config updated" });
