@@ -37,11 +37,23 @@ function buildSteps(data, onNavigate, presetSteps, labelFn) {
       done: hasProducts,
       navigate: () => onNavigate("/products/new"),
     },
+    customer: {
+      id: "customer",
+      label: `Add your first ${labelFn("customer").toLowerCase()}`,
+      done: (data?.customerCount ?? 0) > 0,
+      navigate: () => onNavigate("/customers"),
+    },
     employees: {
       id: "employees",
       label: "Add employees",
       done: (data?.attendanceSummary?.total_employees ?? 0) > 1,
       navigate: () => onNavigate("/employees"),
+    },
+    receipt: {
+      id: "receipt",
+      label: "Print a test receipt",
+      done: data?.testReceiptPrinted === true,
+      navigate: () => onNavigate("/printer-settings"),
     },
     shift: {
       id: "shift",

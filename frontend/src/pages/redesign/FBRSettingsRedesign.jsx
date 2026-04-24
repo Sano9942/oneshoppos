@@ -236,6 +236,11 @@ export default function FBRSettingsRedesign() {
                   onChange={(e) => setFbrApiToken(e.target.value)}
                   placeholder="Enter your FBR API token"
                 />
+                {!fbrApiToken && (
+                  <p className="mt-1 text-xs text-(--ui-text-muted)">
+                    Don&apos;t have an API token yet? Apply through the FBR IRIS portal.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-(--ui-text)">Default HS Code</label>

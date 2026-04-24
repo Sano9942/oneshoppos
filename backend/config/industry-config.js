@@ -22,7 +22,7 @@ const INDUSTRY_PRESETS = Object.freeze({
       floor_plan: false,
       appointments_today: false,
     },
-    onboarding_steps: ["store", "product", "employees", "shift", "sale"],
+    onboarding_steps: ["store", "product", "customer", "employees", "shift", "sale", "receipt"],
     pos_layout_mode: "grid",
     visible_report_groups: null,
     pos_search_config: { show_barcode: true, show_sku: true, show_price: true },

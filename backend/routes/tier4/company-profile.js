@@ -201,6 +201,18 @@ module.exports = function createCompanyProfileRouter({
     }
   });
 
+  // Dismiss FBR setup banner (PR 7) — mirror of onboarding-dismiss for the
+  // PK-only "Set up FBR / Not required for my business" prompt on the
+  // dashboard. Once dismissed, never shows again for this tenant.
+  router.put("/api/company-profile/fbr-banner-dismiss", requirePerm("all_access"), async (req, res) => {
+    try {
+      await db.query("UPDATE company_profile SET fbr_banner_dismissed = true WHERE id = 1");
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   const { uploadToR2 } = require("../../utils/r2");
   const { imageFileFilter, safeExtension } = require("../../middleware/upload-validation");
 
