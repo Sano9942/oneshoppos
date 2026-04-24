@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Package, ChefHat, Scissors, ShoppingCart, Coffee, Stethoscope, Wrench, Dumbbell, Warehouse, Camera, Beef, Candy, Shirt, Car, HardHat, Sofa, Sparkles, BedDouble, Home, Building, PawPrint, Activity } from "lucide-react";
 import { api } from "../api";
+import { writeSession } from "../auth/authStore";
 
 // At launch only `general_retail` is selectable; the other 21 tiles render as
 // "Coming soon" — disabled, grayscale icon, badge in the corner. Keeping all
@@ -292,7 +293,24 @@ export default function SetupWizard() {
         return;
       }
       setDone(true);
-      setTimeout(() => navigate("/login", { replace: true }), 2500);
+      // PR 6 auto-login: if the backend issued a session, write it directly
+      // and land on /dashboard. Use window.location (not router navigate) so
+      // AuthProvider re-bootstraps and picks up the freshly-written session.
+      // Otherwise fall back to the legacy /login flow so we never strand the
+      // merchant on the wizard.
+      if (data.token && data.employee && data.tenant) {
+        writeSession({
+          employee: data.employee,
+          permissions: data.permissions || [],
+          token: data.token,
+          tenant_slug: data.tenant.slug,
+          tenant: data.tenant,
+          loadedAt: Date.now(),
+        });
+        setTimeout(() => { window.location.href = "/dashboard"; }, 1500);
+      } else {
+        setTimeout(() => navigate("/login", { replace: true }), 2500);
+      }
     } catch {
       setError("Network error. Please check your connection.");
     } finally {
