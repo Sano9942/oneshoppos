@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   timezone               TEXT NOT NULL DEFAULT 'UTC',
   max_employees          INTEGER DEFAULT 3,
   max_outlets            INTEGER DEFAULT 1,
-  max_products           INTEGER DEFAULT 500,
+  max_products           INTEGER DEFAULT 100,
   stripe_customer_id     TEXT,
   stripe_subscription_id TEXT,
   trial_ends_at          TIMESTAMPTZ,

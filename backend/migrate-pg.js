@@ -5597,6 +5597,22 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 77,
+    description:
+      "Retail launch — company_profile flags for multi-outlet seed/test-receipt/FBR banner; tenants email verification columns",
+    up: async (client) => {
+      // Tenant-schema columns: PR 5 (multi-outlet auto-enable), PR 7 (test
+      // receipt printed marker + dismissable FBR banner). All nullable / safe
+      // defaults so existing tenants keep current behavior.
+      await client.query(`
+        ALTER TABLE company_profile
+          ADD COLUMN IF NOT EXISTS multi_outlet_flags_seeded BOOLEAN DEFAULT false,
+          ADD COLUMN IF NOT EXISTS test_receipt_printed_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS fbr_banner_dismissed BOOLEAN DEFAULT false
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {

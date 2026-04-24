@@ -26,8 +26,12 @@ async function registerSubscriptionGraceWorker(boss, pool) {
       if (String(process.env.MULTI_TENANT || "0") === "1") {
         const masterDb = require("../master-db-pg");
         const tenantDbMgr = require("../tenant-db-manager-pg");
+        // Skip Free tenants — they have no customer subscription billing surface
+        // (the customer_subscriptions table is unused on Free), so iterating
+        // them is wasted work and avoids "table does not exist" noise on any
+        // tenant where the subscription tables aren't provisioned yet.
         const { rows: tenants } = await masterDb.query(
-          "SELECT id, slug FROM tenants WHERE status = 'active'"
+          "SELECT id, slug FROM tenants WHERE status = 'active' AND plan != 'free'"
         );
         for (const tenant of tenants) {
           try {

@@ -40,13 +40,12 @@ const ResetPasswordSchema = z.object({
   store_code: z.string().optional(),
 }).passthrough();
 
-// POST /api/auth/signup (self-service)
+// POST /api/auth/signup (self-service) — Free-forever; no plan field
 const SignupSchema = z.object({
   store_name: z.string().min(1, "store_name is required"),
   owner_name: z.string().min(1, "owner_name is required"),
   email: z.string().email("Valid email is required"),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  plan: z.string().optional(),
 }).passthrough();
 
 module.exports = { LoginSchema, MtLoginSchema, KioskLoginSchema, ForgotPasswordSchema, ResetPasswordSchema, SignupSchema };

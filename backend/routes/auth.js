@@ -723,7 +723,7 @@ module.exports = function registerAuthRoutes(app, deps) {
       return res.status(429).json({ error: "Too many signup attempts. Please try again in an hour." });
     }
 
-    const { store_name, owner_name, email, password, plan } = req.body;
+    const { store_name, owner_name, email, password } = req.body;
 
     const slug = store_name
       .toLowerCase()
@@ -746,20 +746,16 @@ module.exports = function registerAuthRoutes(app, deps) {
       const { provision } = require("../tenant-provisioner-pg");
       const result = await provision(dbPg, { slug, name: store_name, ownerEmail: email, pin: "0000", timezone: "UTC" });
 
-      // Apply plan + its default limits
+      // Free-forever: every signup lands on the Free plan with active status
+      // and no trial clock. Pro is reached via /billing upgrade flow.
       const { PLAN_DEFAULTS } = require("../middleware/plan-limits");
-      const effectivePlan = ["free", "pro"].includes(plan) ? plan : "free";
-      const limits = PLAN_DEFAULTS[effectivePlan] || PLAN_DEFAULTS.free;
-
-      // Pro gets a 45-day trial; Free stays active forever
-      const trialFields = effectivePlan === "pro"
-        ? `, trial_ends_at = NOW() + INTERVAL '45 days', payment_status = 'trial'`
-        : ``;
+      const limits = PLAN_DEFAULTS.free;
 
       await masterDb.query(
-        `UPDATE tenants SET plan = $1, max_outlets = $2, max_employees = $3, max_products = $4${trialFields}
-         WHERE id = $5`,
-        [effectivePlan, limits.max_outlets, limits.max_employees, limits.max_products, result.tenantId]
+        `UPDATE tenants SET plan = 'free', max_outlets = $1, max_employees = $2, max_products = $3,
+                            trial_ends_at = NULL, payment_status = 'active'
+         WHERE id = $4`,
+        [limits.max_outlets, limits.max_employees, limits.max_products, result.tenantId]
       );
 
       // Update the admin employee with password and email
