@@ -84,4 +84,34 @@ async function sendWelcomeEmail({ toEmail, ownerName, storeName, slug, setupUrl 
   if (error) throw new Error(`Resend error: ${error.message}`);
 }
 
-module.exports = { sendPasswordResetEmail, sendWelcomeEmail };
+function buildVerifyEmailHtml({ ownerName, storeName, verifyUrl }) {
+  return `
+    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
+      <h2 style="color:#059669;margin-bottom:16px">Confirm your email</h2>
+      <p>Hi ${ownerName},</p>
+      <p>Thanks for signing up for SanoPOS. Please confirm your email address to activate your store <strong>${storeName}</strong>.</p>
+      <p style="margin:24px 0">
+        <a href="${verifyUrl}"
+           style="display:inline-block;background:#059669;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">
+          Verify email
+        </a>
+      </p>
+      <p style="color:#64748b;font-size:13px">If you didn't sign up, you can ignore this email.</p>
+      <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0" />
+      <p style="color:#94a3b8;font-size:12px">SanoPOS — Point of Sale</p>
+    </div>
+  `;
+}
+
+async function sendVerifyEmail({ toEmail, ownerName, storeName, verifyUrl }) {
+  const resend = getResend();
+  const { error } = await resend.emails.send({
+    from: FROM,
+    to: toEmail,
+    subject: `Confirm your email — ${storeName}`,
+    html: buildVerifyEmailHtml({ ownerName, storeName, verifyUrl }),
+  });
+  if (error) throw new Error(`Resend error: ${error.message}`);
+}
+
+module.exports = { sendPasswordResetEmail, sendWelcomeEmail, sendVerifyEmail };

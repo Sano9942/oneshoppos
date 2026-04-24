@@ -19,6 +19,7 @@ const ReceiptPublicPage = lazy(() => import("../pages/ReceiptPublicPage"));
 const GiftCardBalancePage = lazy(() => import("../pages/GiftCardBalancePage"));
 const ResetPassword = lazy(() => import("../pages/ResetPassword"));
 const SignupPage = lazy(() => import("../pages/SignupPage"));
+const VerifyEmail = lazy(() => import("../pages/VerifyEmail"));
 const StorefrontLayout = lazy(() => import("../pages/storefront/StorefrontLayout"));
 const StorefrontHome = lazy(() => import("../pages/storefront/StorefrontHome"));
 const StorefrontProducts = lazy(() => import("../pages/storefront/StorefrontProducts"));
@@ -83,6 +84,7 @@ export const publicRoutes = [
   <Route key="login" path="/login" element={<Suspense fallback={<RouteLoading />}><LoginPage /></Suspense>} />,
   <Route key="reset-password" path="/reset-password" element={<Suspense fallback={<RouteLoading />}><ResetPassword /></Suspense>} />,
   <Route key="signup" path="/signup" element={<Suspense fallback={<RouteLoading />}><SignupPage /></Suspense>} />,
+  <Route key="verify-email" path="/verify-email" element={<Suspense fallback={<RouteLoading />}><VerifyEmail /></Suspense>} />,
   <Route key="receipt" path="/receipt/:invoiceNumber" element={<Suspense fallback={<RouteLoading />}><ReceiptPublicPage /></Suspense>} />,
   <Route key="gift-card" path="/gift-card/:code" element={<Suspense fallback={<RouteLoading />}><GiftCardBalancePage /></Suspense>} />,
   <Route key="access-denied" path="/access-denied" element={<AccessDenied />} />,

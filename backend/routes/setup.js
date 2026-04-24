@@ -115,6 +115,30 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
     }
 
     try {
+      // PR 8: block setup completion until the owner has verified their email.
+      // Only enforced in MT mode (single-tenant has no owner email per tenant).
+      if (IS_MULTI_TENANT) {
+        const masterDb = require("../master-db-pg");
+        const slug = req.query.tenant || req.body?.tenant;
+        if (slug) {
+          try {
+            const { rows: [t] } = await masterDb.query(
+              "SELECT email_verified_at FROM tenants WHERE slug = $1",
+              [String(slug).trim()]
+            );
+            if (t && t.email_verified_at == null) {
+              return res.status(403).json({
+                error: "Please verify your email before completing setup.",
+                code: "EMAIL_NOT_VERIFIED",
+              });
+            }
+          } catch {
+            // Column may not exist on a stale schema — fall through.
+            // The migration runs before any setup-complete in production.
+          }
+        }
+      }
+
       const setupDb = await getSetupDb(req);
       // Verify token
       const { rows: [profile] } = await setupDb.query(

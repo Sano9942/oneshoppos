@@ -26,13 +26,20 @@ export default function SignupPage() {
     setLoading(true);
     try {
       const data = await api.post("/api/auth/signup", form);
-      // Redirect immediately to setup wizard
+      // PR 8 flow: backend no longer hands out setupToken until email is
+      // verified. Show "Check your email" confirmation. Legacy fallback (if
+      // setupToken is somehow returned) still redirects directly.
       if (data.setupToken && data.slug) {
         window.location.href = `/setup?token=${data.setupToken}&tenant=${data.slug}`;
         return;
       }
-      // Fallback: show success screen (if token not returned)
-      setResult({ success: true, slug: data.slug, message: data.message });
+      setResult({
+        success: true,
+        slug: data.slug,
+        email: data.email || form.email,
+        verificationRequired: data.verification_required === true,
+        message: data.message,
+      });
     } catch (err) {
       setResult({ success: false, message: err.message });
     } finally {
@@ -43,6 +50,33 @@ export default function SignupPage() {
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
   if (result?.success) {
+    if (result.verificationRequired) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-sm p-6 text-center">
+            <CheckCircle size={40} className="mx-auto text-emerald-500 mb-3" />
+            <h2 className="text-lg font-semibold text-slate-900 mb-2">Check your email</h2>
+            <p className="text-sm text-slate-600 mb-2">
+              We sent a confirmation link to{" "}
+              <span className="font-semibold text-slate-800">{result.email}</span>.
+              Click the link to verify your email and finish setup.
+            </p>
+            <p className="text-xs text-slate-500 mb-4">
+              Your store code is: <span className="font-mono font-bold text-slate-800">{result.slug}</span>
+            </p>
+            <p className="text-xs text-slate-400 mb-4">
+              Didn&apos;t get it? Check spam or contact support.
+            </p>
+            <button
+              onClick={() => navigate("/login")}
+              className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg py-2 font-semibold transition-colors cursor-pointer text-sm"
+            >
+              Back to login
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
         <div className="bg-white rounded-xl shadow-lg w-full max-w-sm p-6 text-center">
