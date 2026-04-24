@@ -1,5 +1,6 @@
 module.exports = function registerOutletRoutes(app, deps) {
   const { db, requirePerm, requirePlanLimit } = deps;
+  const { seedMultiOutletFlags } = require("../services/retail-flag-preset");
 
   // Get all outlets
   app.get("/api/outlets", async (req, res) => {
@@ -28,14 +29,50 @@ module.exports = function registerOutletRoutes(app, deps) {
   });
 
   // Add a new outlet
+  //
+  // When the tenant transitions from 1 → 2+ outlets, seed the 5 multi-outlet
+  // feature flags (context_selection_required, context_header_enforced,
+  // phase2_outlet_pricing, phase2_outlet_visibility, phase2g_price_books) so
+  // the merchant gets outlet-aware pricing/visibility/price-books on by
+  // default. Guarded by company_profile.multi_outlet_flags_seeded so deleting
+  // and recreating an outlet doesn't re-seed.
+  // Note: kiosk_context_locked is NOT in the seed list — merchant opt-in.
   app.post("/api/outlets", requirePerm("all_access"), requirePlanLimit("outlets"), async (req, res) => {
     try {
       const { name, address, phone } = req.body;
-      const { rows } = await db.query(
-        "INSERT INTO outlets (name, address, phone) VALUES ($1, $2, $3) RETURNING id",
-        [name, address, phone]
-      );
-      res.json({ id: rows[0].id, name, address, phone });
+      const result = await db.transaction(async (client) => {
+        const { rows: [{ id: outletId }] } = await client.query(
+          "INSERT INTO outlets (name, address, phone) VALUES ($1, $2, $3) RETURNING id",
+          [name, address, phone]
+        );
+
+        // Read the resulting outlet count + the seed-once flag in one round-trip.
+        const [{ rows: [{ cnt }] }, { rows: [profile] }] = await Promise.all([
+          client.query("SELECT COUNT(*) AS cnt FROM outlets"),
+          client.query("SELECT multi_outlet_flags_seeded FROM company_profile WHERE id = 1"),
+        ]);
+        const outletCount = Number(cnt);
+        const alreadySeeded = profile?.multi_outlet_flags_seeded === true;
+
+        let multiOutletSeeded = false;
+        if (outletCount > 1 && !alreadySeeded) {
+          await seedMultiOutletFlags(client);
+          await client.query(
+            "UPDATE company_profile SET multi_outlet_flags_seeded = true WHERE id = 1"
+          );
+          multiOutletSeeded = true;
+        }
+
+        return { id: outletId, multiOutletSeeded };
+      });
+
+      res.json({
+        id: result.id,
+        name,
+        address,
+        phone,
+        multi_outlet_flags_seeded: result.multiOutletSeeded,
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

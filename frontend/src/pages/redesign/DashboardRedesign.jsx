@@ -24,6 +24,7 @@ import DashboardStaffOfDay from "../dashboard/DashboardStaffOfDay";
 import DashboardCashPosition from "../dashboard/DashboardCashPosition";
 import { DashboardOnboarding } from "../dashboard/DashboardOnboarding";
 import PlanUsageBanner from "../dashboard/PlanUsageBanner";
+import MultiOutletEnabledBanner from "../../ui/MultiOutletEnabledBanner";
 import { InsightCards } from "../dashboard/InsightCards";
 import { AIChatPanel } from "../dashboard/AIChatPanel";
 import { BackupStatusCard } from "../dashboard/BackupStatusCard";
@@ -140,6 +141,9 @@ export default function DashboardRedesign() {
 
       {/* Plan-usage banner — admin/manager only; hidden if all dimensions <80% or all unlimited */}
       {(isAdmin || isManager) && <PlanUsageBanner />}
+
+      {/* Multi-outlet enabled banner — fires once after 1→2 outlet transition */}
+      {(isAdmin || isManager) && <MultiOutletEnabledBanner />}
 
       {/* Onboarding checklist — shown to admin/manager until dismissed or all steps complete */}
       {(isAdmin || isManager) && (
