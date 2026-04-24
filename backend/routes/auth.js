@@ -751,11 +751,18 @@ module.exports = function registerAuthRoutes(app, deps) {
       const { PLAN_DEFAULTS } = require("../middleware/plan-limits");
       const limits = PLAN_DEFAULTS.free;
 
+      // PR 8: gate setup-complete on email verification. Generate a fresh
+      // verification token; the merchant follows the link in their email,
+      // we mark email_verified_at, and only THEN do we hand back the
+      // setupToken so they can hit the wizard.
+      const verificationToken = crypto.randomUUID();
+
       await masterDb.query(
         `UPDATE tenants SET plan = 'free', max_outlets = $1, max_employees = $2, max_products = $3,
-                            trial_ends_at = NULL, payment_status = 'active'
-         WHERE id = $4`,
-        [limits.max_outlets, limits.max_employees, limits.max_products, result.tenantId]
+                            trial_ends_at = NULL, payment_status = 'active',
+                            email_verified_at = NULL, email_verification_token = $4
+         WHERE id = $5`,
+        [limits.max_outlets, limits.max_employees, limits.max_products, verificationToken, result.tenantId]
       );
 
       // Update the admin employee with password and email
@@ -767,21 +774,22 @@ module.exports = function registerAuthRoutes(app, deps) {
         [owner_name, email, passwordHash, result.employeeId]
       );
 
-      // Attempt welcome email via Resend
+      // Send verification email (replaces the previous welcome-with-setup-link).
+      // The setup link is intentionally NOT in this email — it's handed out by
+      // /api/auth/verify-email after the merchant clicks the verify link.
       if (process.env.RESEND_API_KEY) {
         try {
-          const { sendWelcomeEmail } = require("../utils/resendEmail");
-          const corsOrigin = process.env.CORS_ORIGIN?.split(",")[0] || "https://sanopos.vercel.app";
-          const setupUrl = `${corsOrigin}/setup?token=${result.setupToken}&tenant=${slug}`;
-          await sendWelcomeEmail({
+          const { sendVerifyEmail } = require("../utils/resendEmail");
+          const corsOrigin = process.env.CORS_ORIGIN?.split(",")[0] || "https://sanopos.com";
+          const verifyUrl = `${corsOrigin}/verify-email?token=${verificationToken}&tenant=${slug}`;
+          await sendVerifyEmail({
             toEmail: email,
             ownerName: owner_name,
             storeName: store_name,
-            slug,
-            setupUrl,
+            verifyUrl,
           });
         } catch (emailErr) {
-          console.error("Welcome email failed:", emailErr.message);
+          console.error("Verify email failed:", emailErr.message);
         }
       }
 
@@ -815,9 +823,87 @@ module.exports = function registerAuthRoutes(app, deps) {
         console.error("Drip email enqueue failed:", dripErr.message);
       }
 
-      res.json({ ok: true, slug, setupToken: result.setupToken, message: "Store created! Redirecting to setup..." });
+      // PR 8: do NOT return setupToken yet — frontend shows "Check your email"
+      // screen and the merchant only gets the setup token after verifying.
+      res.json({
+        ok: true,
+        slug,
+        email,
+        verification_required: true,
+        message: "Store created. Please check your email to verify your address.",
+      });
     } catch (err) {
       console.error("[signup]", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/auth/verify-email — exchange verification token for setup token
+  // Body: { token, tenant }
+  // On success, marks email_verified_at + clears email_verification_token,
+  // and returns { setupToken, slug } so the wizard can pick up where signup
+  // left off. Idempotent only on first success — re-using the same token
+  // returns 404 (already-consumed tokens are wiped).
+  app.post("/api/auth/verify-email", async (req, res) => {
+    if (process.env.MULTI_TENANT !== "1") {
+      return res.status(400).json({ error: "Email verification is only used in multi-tenant mode" });
+    }
+    const { token, tenant: slug } = req.body || {};
+    if (!token || !slug) {
+      return res.status(400).json({ error: "token and tenant are required" });
+    }
+    try {
+      const masterDb = require("../master-db-pg");
+      const { rows: [tenant] } = await masterDb.query(
+        `SELECT id, slug, status FROM tenants
+         WHERE slug = $1 AND email_verification_token = $2 AND deleted_at IS NULL`,
+        [String(slug).trim(), String(token).trim()]
+      );
+      if (!tenant) {
+        return res.status(404).json({ error: "Verification link is invalid or has already been used." });
+      }
+      if (tenant.status !== "active") {
+        return res.status(403).json({ error: "Tenant is not active" });
+      }
+
+      // Mark verified + clear token (one-shot use)
+      await masterDb.query(
+        `UPDATE tenants
+            SET email_verified_at = NOW(),
+                email_verification_token = NULL,
+                updated_at = NOW()
+          WHERE id = $1`,
+        [tenant.id]
+      );
+
+      // Read the freshly-issued setupToken from the tenant's company_profile.
+      // This was set by tenant-provisioner during signup with a 48h TTL.
+      const tenantDbManager = require("../tenant-db-manager-pg");
+      const tenantDb = await tenantDbManager.getDb(tenant.id);
+      const { rows: [profile] } = await tenantDb.query(
+        "SELECT setup_token, setup_token_expires_at, setup_complete FROM company_profile WHERE id = 1"
+      );
+      if (!profile) {
+        return res.status(500).json({ error: "Tenant setup record missing" });
+      }
+      if (profile.setup_complete) {
+        // Already finished setup — direct them to login instead of wizard
+        return res.json({ ok: true, slug: tenant.slug, setup_complete: true });
+      }
+      if (!profile.setup_token) {
+        return res.status(410).json({ error: "Setup link no longer available. Please request a new one." });
+      }
+      if (profile.setup_token_expires_at && new Date(profile.setup_token_expires_at) < new Date()) {
+        return res.status(410).json({ error: "Your setup link has expired. Please request a new one." });
+      }
+
+      return res.json({
+        ok: true,
+        slug: tenant.slug,
+        setupToken: profile.setup_token,
+      });
+    } catch (err) {
+      console.error("[verify-email]", err.message);
       res.status(500).json({ error: err.message });
     }
   });

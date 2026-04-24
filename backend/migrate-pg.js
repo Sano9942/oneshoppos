@@ -5613,6 +5613,31 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 78,
+    description:
+      "Retail launch PR 8 — public.tenants email verification columns",
+    up: async (client) => {
+      // Public-schema only. Idempotent ALTER works under both contexts:
+      //   - public migrate: targets public.tenants directly
+      //   - per-tenant migrate: search_path includes public, so the same
+      //     ALTER hits the same public.tenants row; IF NOT EXISTS makes it
+      //     a no-op on the second pass.
+      await client.query(`
+        ALTER TABLE tenants
+          ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS email_verification_token TEXT
+      `);
+      // Backfill existing tenants as already-verified so they aren't blocked
+      // from /api/setup/complete after this ships. New signups will get NULL
+      // until they click the verify link.
+      await client.query(`
+        UPDATE tenants
+           SET email_verified_at = COALESCE(email_verified_at, created_at)
+         WHERE email_verified_at IS NULL
+      `);
+    },
+  },
 ];
 
 async function migrate(db) {
