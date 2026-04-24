@@ -487,11 +487,47 @@ module.exports = function (app, deps) {
         ),
       };
 
+      // ─── PR 7 onboarding-checklist signals + FBR banner state ─────────
+      // customerCount drives the "Add your first customer" step;
+      // testReceiptPrinted drives "Print a test receipt"; the country_code +
+      // fbr_banner_dismissed pair drives the PK-only FBR prompt banner.
+      // All best-effort so dashboard render never fails on stale schemas.
+      let customerCount = 0;
+      let testReceiptPrinted = false;
+      let countryCode = req.company?.country_code || null;
+      let fbrBannerDismissed = false;
+      let fbrIntegrationEnabled = false;
+      try {
+        const { rows: [r] } = await db.query(
+          "SELECT COUNT(*)::int AS cnt FROM customers WHERE deleted_at IS NULL"
+        );
+        customerCount = Number(r?.cnt || 0);
+      } catch { /* table missing on legacy tenant — leave 0 */ }
+      try {
+        const { rows: [r] } = await db.query(
+          "SELECT test_receipt_printed_at, country_code, fbr_banner_dismissed FROM company_profile WHERE id = 1"
+        );
+        testReceiptPrinted = r?.test_receipt_printed_at != null;
+        if (r?.country_code) countryCode = r.country_code;
+        fbrBannerDismissed = r?.fbr_banner_dismissed === true;
+      } catch { /* column missing — leave defaults */ }
+      try {
+        const { rows: [r] } = await db.query(
+          "SELECT enabled FROM feature_flags WHERE key = 'fbr_integration'"
+        );
+        fbrIntegrationEnabled = r?.enabled === true;
+      } catch { /* table missing — leave false */ }
+
       res.json({
         currency: {
           symbol: req.company?.currency_symbol || "PKRs",
           code: req.company?.currency_code || "PKR",
         },
+        customerCount,
+        testReceiptPrinted,
+        countryCode,
+        fbrBannerDismissed,
+        fbrIntegrationEnabled,
         targets: {
           monthly_sales_target: Number(req.company?.monthly_sales_target || 0),
           margin_threshold_pct: Number(req.company?.margin_threshold_pct || 20),

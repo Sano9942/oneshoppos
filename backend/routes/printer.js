@@ -44,8 +44,22 @@ module.exports = function printerRoutes(app, deps) {
   });
 
   // POST /api/print/test — send a sample test receipt to the configured printer
+  //
+  // PR 7 onboarding: stamp company_profile.test_receipt_printed_at the first
+  // time a successful test prints. Drives the "Print a test receipt" step in
+  // the merchant onboarding checklist. Best-effort — never blocks the print
+  // result on the bookkeeping write.
   app.post("/api/print/test", requirePerm("all_access"), async (req, res) => {
     const result = await printTest();
+    if (result?.ok) {
+      try {
+        await db.query(
+          `UPDATE company_profile
+              SET test_receipt_printed_at = NOW()
+            WHERE id = 1 AND test_receipt_printed_at IS NULL`
+        );
+      } catch { /* column missing on stale schema — non-fatal */ }
+    }
     return res.json(result);
   });
 

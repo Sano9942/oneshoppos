@@ -25,6 +25,7 @@ import DashboardCashPosition from "../dashboard/DashboardCashPosition";
 import { DashboardOnboarding } from "../dashboard/DashboardOnboarding";
 import PlanUsageBanner from "../dashboard/PlanUsageBanner";
 import MultiOutletEnabledBanner from "../../ui/MultiOutletEnabledBanner";
+import FBRPromptBanner from "../../ui/FBRPromptBanner";
 import { InsightCards } from "../dashboard/InsightCards";
 import { AIChatPanel } from "../dashboard/AIChatPanel";
 import { BackupStatusCard } from "../dashboard/BackupStatusCard";
@@ -144,6 +145,15 @@ export default function DashboardRedesign() {
 
       {/* Multi-outlet enabled banner — fires once after 1→2 outlet transition */}
       {(isAdmin || isManager) && <MultiOutletEnabledBanner />}
+
+      {/* FBR prompt banner — PK tenants only, until set up or dismissed */}
+      {(isAdmin || isManager) && data && (
+        <FBRPromptBanner
+          countryCode={data.countryCode}
+          fbrBannerDismissed={data.fbrBannerDismissed}
+          fbrIntegrationEnabled={data.fbrIntegrationEnabled}
+        />
+      )}
 
       {/* Onboarding checklist — shown to admin/manager until dismissed or all steps complete */}
       {(isAdmin || isManager) && (
