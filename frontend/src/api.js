@@ -1,5 +1,12 @@
 import { API_BASE } from "./config";
 
+// Plan-limit event: emitted whenever a 403 with code:"PLAN_LIMIT_REACHED"
+// comes back from the API. PlanLimitModalInterceptor (mounted once inside
+// AppLayoutRedesign) listens for this event and opens the upgrade modal.
+// Callers still receive the rejected promise — per-form catch handlers keep
+// working so they can show inline feedback in addition to the modal.
+export const PLAN_LIMIT_EVENT = "sanopos:plan-limit-reached";
+
 async function request(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { "Content-Type": "application/json", ...options.headers },
@@ -13,6 +20,23 @@ async function json(path, options = {}) {
   const res = await request(path, options);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
+    if (res.status === 403 && body?.code === "PLAN_LIMIT_REACHED") {
+      // Fan out to the global modal. Detail mirrors the backend response so
+      // the modal can show "{used} of {limit} {dimension} used".
+      try {
+        window.dispatchEvent(
+          new CustomEvent(PLAN_LIMIT_EVENT, {
+            detail: {
+              error: body.error,
+              limit: body.limit,
+              current: body.current,
+            },
+          })
+        );
+      } catch {
+        // CustomEvent failed (extremely old browser) — fall through to throw
+      }
+    }
     const err = new Error(body.error || `HTTP ${res.status}`);
     err.status = res.status;
     err.body = body;
