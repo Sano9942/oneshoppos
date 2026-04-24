@@ -17,6 +17,7 @@ const { getFeatureFlagsForModes } = require("../config/mode-registry");
 const { getCountryPack, getCountryCodeFromName } = require("../config/country-packs");
 const { seedPresetData } = require("../seeds/preset-seed-data");
 const { seedRetailFlags } = require("../services/retail-flag-preset");
+const { signAccessToken, signRefreshToken } = require("../jwt-auth");
 
 const ROLE_PERMISSIONS = {
   Administrator: ['all_access'],
@@ -44,6 +45,17 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
     const tenant = await masterDb.getTenantBySlug(slug);
     if (!tenant) throw new Error(`Tenant "${slug}" not found`);
     return tenantDbManager.getDb(tenant.id);
+  }
+
+  // Resolve tenant for token issuance after setup completes. Mirrors the
+  // lookup in getSetupDb but returns the master tenant row (id, slug, name)
+  // since signAccessToken needs `tid`. Called outside the setup transaction.
+  async function getSetupTenant(req) {
+    if (!IS_MULTI_TENANT) return null;
+    const slug = req.query.tenant || req.body?.tenant;
+    if (!slug) return null;
+    const masterDb = require("../master-db-pg");
+    return await masterDb.getTenantBySlug(slug);
   }
 
   // ── GET /api/setup/status ────────────────────────────────────────────────
@@ -119,6 +131,10 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
       if (profile.setup_token_expires_at && new Date(profile.setup_token_expires_at) < new Date()) {
         return res.status(403).json({ error: 'Setup link has expired. Please contact support or request a new setup link.' });
       }
+
+      // Captured outside the transaction so we can sign an auto-login JWT
+      // for the new admin after the transaction commits successfully.
+      let createdEmployeeId = null;
 
       // All good — run everything in a single transaction
       await setupDb.transaction(async (client) => {
@@ -282,6 +298,7 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
             [empId]
           );
         }
+        createdEmployeeId = empId;
 
         // 6. Default receipt template
         const { rows: [existingTemplate] } = await client.query(
@@ -314,7 +331,56 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
         );
       });
 
-      res.json({ success: true });
+      // ── Auto-login (PR 6) ──────────────────────────────────────────────
+      // After successful setup, hand the merchant a fresh access + refresh
+      // token so the frontend can land directly on /dashboard instead of
+      // bouncing through /login. Mirrors the response shape of mt-login so
+      // AuthProvider's writeSession() can consume it unchanged. Best-effort
+      // — if any of this fails we still return success:true so the wizard
+      // can fall back to the legacy /login redirect.
+      let auth = null;
+      try {
+        const tenant = await getSetupTenant(req);
+        const JWT_SECRET = process.env.JWT_SECRET;
+        const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
+        if (tenant && createdEmployeeId && JWT_SECRET && JWT_REFRESH_SECRET) {
+          const accessToken = signAccessToken(
+            { tid: tenant.id, eid: createdEmployeeId, rid: 1, oid: null },
+            JWT_SECRET
+          );
+          const { token: refreshToken, hash: tokenHash, expiresAt } = signRefreshToken(
+            { tid: tenant.id, eid: createdEmployeeId },
+            JWT_REFRESH_SECRET
+          );
+          const masterDb = require("../master-db-pg");
+          await masterDb.query(
+            "INSERT INTO tenant_refresh_tokens (tenant_id, employee_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)",
+            [tenant.id, createdEmployeeId, tokenHash, expiresAt]
+          );
+          res.cookie("refreshToken", refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+            path: "/api/auth",
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+          });
+          auth = {
+            token: accessToken,
+            employee: {
+              id: createdEmployeeId,
+              name: admin_name,
+              role_id: 1,
+            },
+            permissions: ROLE_PERMISSIONS.Administrator,
+            tenant: { slug: tenant.slug, name: tenant.name },
+          };
+        }
+      } catch (authErr) {
+        // Non-fatal — wizard falls back to legacy /login redirect
+        console.error("[setup] Auto-login token issuance failed (non-fatal):", authErr.message);
+      }
+
+      res.json({ success: true, ...(auth || {}) });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
