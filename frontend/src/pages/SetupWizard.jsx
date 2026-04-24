@@ -3,63 +3,66 @@ import { useNavigate } from "react-router-dom";
 import { Package, ChefHat, Scissors, ShoppingCart, Coffee, Stethoscope, Wrench, Dumbbell, Warehouse, Camera, Beef, Candy, Shirt, Car, HardHat, Sofa, Sparkles, BedDouble, Home, Building, PawPrint, Activity } from "lucide-react";
 import { api } from "../api";
 
+// At launch only `general_retail` is selectable; the other 21 tiles render as
+// "Coming soon" — disabled, grayscale icon, badge in the corner. Keeping all
+// tiles visible lets prospects see the roadmap.
 const BUSINESS_TYPE_CATEGORIES = [
   {
     label: "Retail",
     types: [
       { value: "general_retail", label: "Retail Store", description: "Sell products, manage inventory & stock", icon: Package, iconBg: "bg-blue-100", iconColor: "text-blue-600" },
-      { value: "grocery", label: "Grocery / Supermarket", description: "Barcode scanning, perishables, stock alerts", icon: ShoppingCart, iconBg: "bg-green-100", iconColor: "text-green-600" },
-      { value: "wholesale", label: "Wholesale / Distribution", description: "B2B bulk sales, price lists, buyer accounts", icon: Warehouse, iconBg: "bg-slate-100", iconColor: "text-slate-600" },
+      { value: "grocery", label: "Grocery / Supermarket", description: "Barcode scanning, perishables, stock alerts", icon: ShoppingCart, iconBg: "bg-green-100", iconColor: "text-green-600", comingSoon: true },
+      { value: "wholesale", label: "Wholesale / Distribution", description: "B2B bulk sales, price lists, buyer accounts", icon: Warehouse, iconBg: "bg-slate-100", iconColor: "text-slate-600", comingSoon: true },
     ],
   },
   {
     label: "Weight / Length Based",
     types: [
-      { value: "butcher", label: "Butcher / Meat Shop", description: "Sell cuts by kg or lb with gross/tare tracking", icon: Beef, iconBg: "bg-red-100", iconColor: "text-red-600" },
-      { value: "sweet_shop", label: "Sweet Shop / Mithai", description: "Sell by weight, pieces, or dozen", icon: Candy, iconBg: "bg-pink-100", iconColor: "text-pink-600" },
-      { value: "textile", label: "Textile / Fabric", description: "Sell fabric by metre or centimetre", icon: Shirt, iconBg: "bg-sky-100", iconColor: "text-sky-600" },
+      { value: "butcher", label: "Butcher / Meat Shop", description: "Sell cuts by kg or lb with gross/tare tracking", icon: Beef, iconBg: "bg-red-100", iconColor: "text-red-600", comingSoon: true },
+      { value: "sweet_shop", label: "Sweet Shop / Mithai", description: "Sell by weight, pieces, or dozen", icon: Candy, iconBg: "bg-pink-100", iconColor: "text-pink-600", comingSoon: true },
+      { value: "textile", label: "Textile / Fabric", description: "Sell fabric by metre or centimetre", icon: Shirt, iconBg: "bg-sky-100", iconColor: "text-sky-600", comingSoon: true },
     ],
   },
   {
     label: "Food & Beverage",
     types: [
-      { value: "restaurant", label: "Restaurant / Cafe", description: "Tables, floor plan, kitchen orders, KDS", icon: ChefHat, iconBg: "bg-amber-100", iconColor: "text-amber-600" },
-      { value: "cafe", label: "Cafe / Quick Service", description: "Counter orders, menu items, kitchen display", icon: Coffee, iconBg: "bg-orange-100", iconColor: "text-orange-600" },
+      { value: "restaurant", label: "Restaurant / Cafe", description: "Tables, floor plan, kitchen orders, KDS", icon: ChefHat, iconBg: "bg-amber-100", iconColor: "text-amber-600", comingSoon: true },
+      { value: "cafe", label: "Cafe / Quick Service", description: "Counter orders, menu items, kitchen display", icon: Coffee, iconBg: "bg-orange-100", iconColor: "text-orange-600", comingSoon: true },
     ],
   },
   {
     label: "Services",
     types: [
-      { value: "salon", label: "Salon / Services", description: "Appointments, commissions, client bookings", icon: Scissors, iconBg: "bg-purple-100", iconColor: "text-purple-600" },
-      { value: "clinic", label: "Clinic / Practice", description: "Patient appointments, services, calendar", icon: Stethoscope, iconBg: "bg-rose-100", iconColor: "text-rose-600" },
-      { value: "repair_shop", label: "Repair / Service Shop", description: "Job tickets, deposits, repair tracking", icon: Wrench, iconBg: "bg-zinc-100", iconColor: "text-zinc-600" },
-      { value: "gym", label: "Gym / Fitness Studio", description: "Memberships, class bookings, member tracking", icon: Dumbbell, iconBg: "bg-indigo-100", iconColor: "text-indigo-600" },
-      { value: "photography_studio", label: "Photography / Creative Studio", description: "Projects, session bookings, packages", icon: Camera, iconBg: "bg-teal-100", iconColor: "text-teal-600" },
+      { value: "salon", label: "Salon / Services", description: "Appointments, commissions, client bookings", icon: Scissors, iconBg: "bg-purple-100", iconColor: "text-purple-600", comingSoon: true },
+      { value: "clinic", label: "Clinic / Practice", description: "Patient appointments, services, calendar", icon: Stethoscope, iconBg: "bg-rose-100", iconColor: "text-rose-600", comingSoon: true },
+      { value: "repair_shop", label: "Repair / Service Shop", description: "Job tickets, deposits, repair tracking", icon: Wrench, iconBg: "bg-zinc-100", iconColor: "text-zinc-600", comingSoon: true },
+      { value: "gym", label: "Gym / Fitness Studio", description: "Memberships, class bookings, member tracking", icon: Dumbbell, iconBg: "bg-indigo-100", iconColor: "text-indigo-600", comingSoon: true },
+      { value: "photography_studio", label: "Photography / Creative Studio", description: "Projects, session bookings, packages", icon: Camera, iconBg: "bg-teal-100", iconColor: "text-teal-600", comingSoon: true },
     ],
   },
   {
     label: "Rentals",
     types: [
-      { value: "car_rental", label: "Car Rental / Vehicle Hire", description: "Fleet bookings, deposits, overdue alerts", icon: Car, iconBg: "bg-blue-100", iconColor: "text-blue-600" },
-      { value: "equipment_hire", label: "Equipment Hire / Tool Rental", description: "Track assets, hourly/daily/weekly rates", icon: HardHat, iconBg: "bg-yellow-100", iconColor: "text-yellow-700" },
-      { value: "furniture_rental", label: "Furniture / Events Rental", description: "Event rentals with deposit & late-fee tracking", icon: Sofa, iconBg: "bg-emerald-100", iconColor: "text-emerald-700" },
-      { value: "party_supplies", label: "Party Supplies / Event Rental", description: "Checkout, return, and return-condition flows", icon: Sparkles, iconBg: "bg-fuchsia-100", iconColor: "text-fuchsia-600" },
+      { value: "car_rental", label: "Car Rental / Vehicle Hire", description: "Fleet bookings, deposits, overdue alerts", icon: Car, iconBg: "bg-blue-100", iconColor: "text-blue-600", comingSoon: true },
+      { value: "equipment_hire", label: "Equipment Hire / Tool Rental", description: "Track assets, hourly/daily/weekly rates", icon: HardHat, iconBg: "bg-yellow-100", iconColor: "text-yellow-700", comingSoon: true },
+      { value: "furniture_rental", label: "Furniture / Events Rental", description: "Event rentals with deposit & late-fee tracking", icon: Sofa, iconBg: "bg-emerald-100", iconColor: "text-emerald-700", comingSoon: true },
+      { value: "party_supplies", label: "Party Supplies / Event Rental", description: "Checkout, return, and return-condition flows", icon: Sparkles, iconBg: "bg-fuchsia-100", iconColor: "text-fuchsia-600", comingSoon: true },
     ],
   },
   {
     label: "Hospitality",
     types: [
-      { value: "hotel", label: "Hotel", description: "Rooms, folios, housekeeping, overnight stays", icon: BedDouble, iconBg: "bg-violet-100", iconColor: "text-violet-600" },
-      { value: "guesthouse", label: "Guesthouse / B&B", description: "Small-property bookings with per-date rates", icon: Home, iconBg: "bg-cyan-100", iconColor: "text-cyan-600" },
-      { value: "hostel", label: "Hostel", description: "Bed inventory, open folios, group stays", icon: Building, iconBg: "bg-teal-100", iconColor: "text-teal-700" },
+      { value: "hotel", label: "Hotel", description: "Rooms, folios, housekeeping, overnight stays", icon: BedDouble, iconBg: "bg-violet-100", iconColor: "text-violet-600", comingSoon: true },
+      { value: "guesthouse", label: "Guesthouse / B&B", description: "Small-property bookings with per-date rates", icon: Home, iconBg: "bg-cyan-100", iconColor: "text-cyan-600", comingSoon: true },
+      { value: "hostel", label: "Hostel", description: "Bed inventory, open folios, group stays", icon: Building, iconBg: "bg-teal-100", iconColor: "text-teal-700", comingSoon: true },
     ],
   },
   {
     label: "Clinical / Medical",
     types: [
-      { value: "dental_clinic", label: "Dental Clinic", description: "Multi-visit treatment plans, charting, prescriptions", icon: Stethoscope, iconBg: "bg-sky-100", iconColor: "text-sky-700" },
-      { value: "veterinary", label: "Veterinary Practice", description: "Pet records, owners, lab orders, consent", icon: PawPrint, iconBg: "bg-rose-100", iconColor: "text-rose-600" },
-      { value: "physiotherapy", label: "Physiotherapy Clinic", description: "Session plans, body-chart notes, progress tracking", icon: Activity, iconBg: "bg-emerald-100", iconColor: "text-emerald-700" },
+      { value: "dental_clinic", label: "Dental Clinic", description: "Multi-visit treatment plans, charting, prescriptions", icon: Stethoscope, iconBg: "bg-sky-100", iconColor: "text-sky-700", comingSoon: true },
+      { value: "veterinary", label: "Veterinary Practice", description: "Pet records, owners, lab orders, consent", icon: PawPrint, iconBg: "bg-rose-100", iconColor: "text-rose-600", comingSoon: true },
+      { value: "physiotherapy", label: "Physiotherapy Clinic", description: "Session plans, body-chart notes, progress tracking", icon: Activity, iconBg: "bg-emerald-100", iconColor: "text-emerald-700", comingSoon: true },
     ],
   },
 ];
@@ -351,26 +354,39 @@ export default function SetupWizard() {
                       <div key={cat.label}>
                         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">{cat.label}</p>
                         <div className="grid grid-cols-2 gap-2">
-                          {cat.types.map((bt) => (
-                            <button
-                              key={bt.value}
-                              type="button"
-                              onClick={() => set("industry_type", bt.value)}
-                              className={`flex flex-col items-start gap-2 rounded-xl border-2 p-3 text-left transition cursor-pointer ${
-                                form.industry_type === bt.value
-                                  ? "border-indigo-500 bg-indigo-50"
-                                  : "border-slate-200 hover:border-slate-300"
-                              }`}
-                            >
-                              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${bt.iconBg}`}>
-                                <bt.icon size={16} className={bt.iconColor} />
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium text-slate-800">{bt.label}</p>
-                                <p className="text-xs leading-tight text-slate-500">{bt.description}</p>
-                              </div>
-                            </button>
-                          ))}
+                          {cat.types.map((bt) => {
+                            const disabled = Boolean(bt.comingSoon);
+                            const selected = form.industry_type === bt.value;
+                            return (
+                              <button
+                                key={bt.value}
+                                type="button"
+                                disabled={disabled}
+                                onClick={() => { if (!disabled) set("industry_type", bt.value); }}
+                                title={disabled ? "Coming soon — only Retail Store is available at launch" : undefined}
+                                className={`relative flex flex-col items-start gap-2 rounded-xl border-2 p-3 text-left transition ${
+                                  disabled
+                                    ? "cursor-not-allowed border-slate-200 bg-slate-50 opacity-60"
+                                    : selected
+                                    ? "cursor-pointer border-indigo-500 bg-indigo-50"
+                                    : "cursor-pointer border-slate-200 hover:border-slate-300"
+                                }`}
+                              >
+                                {disabled && (
+                                  <span className="absolute right-2 top-2 inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                                    Coming soon
+                                  </span>
+                                )}
+                                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${bt.iconBg} ${disabled ? "grayscale" : ""}`}>
+                                  <bt.icon size={16} className={bt.iconColor} />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-slate-800">{bt.label}</p>
+                                  <p className="text-xs leading-tight text-slate-500">{bt.description}</p>
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     ))}

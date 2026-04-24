@@ -16,6 +16,7 @@ const { getPreset, VALID_INDUSTRY_TYPES } = require("../config/industry-config")
 const { getFeatureFlagsForModes } = require("../config/mode-registry");
 const { getCountryPack, getCountryCodeFromName } = require("../config/country-packs");
 const { seedPresetData } = require("../seeds/preset-seed-data");
+const { seedRetailFlags } = require("../services/retail-flag-preset");
 
 const ROLE_PERMISSIONS = {
   Administrator: ['all_access'],
@@ -190,6 +191,13 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
              ON CONFLICT (key) DO UPDATE SET enabled = true`,
             [flag]
           );
+        }
+
+        // 1f. Retail-only flag bundle. Only fires for general_retail today —
+        // other industries skip this entirely until their own preset bundles
+        // ship. See services/retail-flag-preset.js for the 19-flag list.
+        if (industry_type === "general_retail") {
+          await seedRetailFlags(client);
         }
 
         // 2. Create/update outlet
