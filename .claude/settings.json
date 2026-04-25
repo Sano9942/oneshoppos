@@ -168,7 +168,8 @@
       "WebFetch(domain:sanopos.com)",
       "mcp__claude_ai_Supabase__get_logs",
       "mcp__claude_ai_Supabase__get_organization",
-      "WebFetch(domain:supabase.com)"
+      "WebFetch(domain:supabase.com)",
+      "Bash(railway logs *)"
     ],
     "additionalDirectories": [
       "\\tmp",
