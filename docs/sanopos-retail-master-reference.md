@@ -12,7 +12,7 @@ The older retail docs have been archived under:
 
 The prior 2026-04-23 version of this file is preserved at [docs/archive/retail-reference/sanopos-retail-master-reference-2026-04-23.md](archive/retail-reference/sanopos-retail-master-reference-2026-04-23.md).
 
-> **Re-audit note (2026-04-24):** This file was fully rewritten on 2026-04-24 against live source files (every backend route, every `*Redesign.jsx` page, every worker, every feature flag). CLAUDE.md docs in the repo were treated as stale and NOT used as authority. Spot-check any claim against the cited paths before acting on it.
+> **Re-audit note (2026-04-24, refreshed 2026-04-25):** This file was fully rewritten on 2026-04-24 against live source files (every backend route, every `*Redesign.jsx` page, every worker, every feature flag). CLAUDE.md docs in the repo were treated as stale and NOT used as authority. The 2026-04-25 refresh folded in the retail launch (PRs 1–9, merged 2026-04-24/25), corrected stale Known Gaps, and added an env-var column to the Workers table. Spot-check any claim against the cited paths before acting on it.
 
 ## What Counts As Retail Here
 
@@ -36,22 +36,43 @@ Verified directly from live source files on 2026-04-24:
 |---|---:|
 | Retail presets | 6 |
 | Total industry presets | ~22 |
-| `*Redesign.jsx` pages | 102 |
+| `*Redesign.jsx` pages | 99 (total — includes non-retail like restaurant, KDS, rentals, treatments) |
 | Top-level backend route files | 89 |
 | Worker `-boss.js` files | 18 |
 | Backend integration test files | 122 |
 | Frontend `*.spec.js` / `*.test.js(x)` | 68 |
 | Default feature flags | 84 |
 | Schema tables (CREATE TABLE in schema-pg.sql) | 271 |
-| Current migration marker | v76 |
-| Courier adapter files | 16 (base + 14 adapters + index) |
+| Current migration marker | v78 |
+| Courier adapter files | 16 (base + generic + 13 named adapters + index) |
 | Shopify integration files | 10 |
 | Integrations hub files | 8 |
-| Marketplace client files | 6 |
+| Marketplace client files | 5 (base + daraz + meta-commerce + whatsapp + google-merchant) |
 | Customer portal backend files | 6 |
 | Admin (super-admin) backend files | 11 |
 | Tier 4 backend files | 8 |
 | Report backend files | 18 |
+
+## Retail launch (PRs 1–9, merged 2026-04-24/25)
+
+The 2026-04-24 retail launch shipped 9 code PRs + 1 infra PR ([retail-launch-build-plan.md](retail-launch-build-plan.md)). The plan locked the Free-forever pricing model, narrowed signup to `general_retail` only, and added the 19-flag retail seed. Surfaces that landed:
+
+| PR | What it shipped | Key files |
+|---|---|---|
+| PR 0 | Railway env vars: 6 retail workers + `INTEGRATION_SECRET_KEY` + `SHOPIFY_SECRET_KEY` placeholder + optional `ADMIN_ALLOWED_IPS` | (infra-only, no code) |
+| PR 1 | Free-forever lifecycle. `plan = 'free'` is permanent (`payment_status='active'`, `trial_ends_at=null`). `requireActiveSubscription` early-returns for free. `subscription-grace-worker-boss` skips free tenants. SubscriptionBanner returns `null` for free. Free `max_products` default lowered to 100. | [routes/auth.js](../backend/routes/auth.js), [middleware/plan-limits.js](../backend/middleware/plan-limits.js), [workers/subscription-grace-worker-boss.js](../backend/workers/subscription-grace-worker-boss.js), [ui/SubscriptionBanner.jsx](../frontend/src/ui/SubscriptionBanner.jsx) |
+| PR 2 | 19-flag retail seed (only for `general_retail`). Setup wizard tile gating: 21 of 22 industry tiles disabled with "Coming soon" badge. FBR settings save flips `fbr_integration` ON when valid NTN+token+province present. | [services/retail-flag-preset.js](../backend/services/retail-flag-preset.js), [routes/setup.js](../backend/routes/setup.js), [routes/fbr.js](../backend/routes/fbr.js), [SetupWizard.jsx](../frontend/src/pages/SetupWizard.jsx) |
+| PR 3 | Cap-hit UX. New `GET /api/billing/usage` returns `{ employees, products, outlets } × { used, limit }`. Global 403 interceptor opens upgrade modal. Soft amber banner at ≥80% usage. | [routes/billing.js](../backend/routes/billing.js), [components/PlanLimitModalInterceptor.jsx](../frontend/src/components/PlanLimitModalInterceptor.jsx), [pages/dashboard/PlanUsageBanner.jsx](../frontend/src/pages/dashboard/PlanUsageBanner.jsx) |
+| PR 4 | Free→Pro upgrade card on `/billing` with monthly (8000 PKR) / annual (80000 PKR, 17% off) toggle. Routes through existing `POST /api/billing/create-checkout` to xPay. | [BillingRedesign.jsx](../frontend/src/pages/redesign/BillingRedesign.jsx) |
+| PR 5 | Add-outlet flow. `POST /api/billing/add-outlet` creates a payment intent; webhook bumps `tenants.max_outlets`. On 2nd outlet creation, 5 multi-outlet flags auto-flip ON: `context_selection_required`, `context_header_enforced`, `phase2_outlet_pricing`, `phase2_outlet_visibility`, `phase2g_price_books`. `kiosk_context_locked` stays OFF (merchant opt-in). `multi_outlet_flags_seeded` column on `company_profile` prevents re-seeding. | [routes/billing.js](../backend/routes/billing.js), [routes/webhooks.js](../backend/routes/webhooks.js), [routes/outlets.js](../backend/routes/outlets.js), [OutletsRedesign.jsx](../frontend/src/pages/redesign/OutletsRedesign.jsx), [ui/MultiOutletEnabledBanner.jsx](../frontend/src/ui/MultiOutletEnabledBanner.jsx) |
+| PR 6 | Auto-login after setup wizard. `/api/setup/complete` returns access + refresh tokens; SetupWizard navigates to `/dashboard` directly, no re-login. | [routes/setup.js](../backend/routes/setup.js), [SetupWizard.jsx](../frontend/src/pages/SetupWizard.jsx) |
+| PR 7 | Onboarding checklist extended to 7 steps (added `customer` and `receipt`). Test-print writes `company_profile.test_receipt_printed_at`. FBR prompt banner for PK tenants on dashboard with two CTAs ("Set up FBR" / "Not required"). New column `company_profile.fbr_banner_dismissed` + `PUT /api/company-profile/fbr-banner-dismiss`. | [config/industry-config.js](../backend/config/industry-config.js), [routes/printer.js](../backend/routes/printer.js), [ui/FBRPromptBanner.jsx](../frontend/src/ui/FBRPromptBanner.jsx), [DashboardOnboarding.jsx](../frontend/src/pages/dashboard/DashboardOnboarding.jsx) |
+| PR 8 | Email verification before account activation. New columns `email_verified_at`, `email_verification_token`. Setup blocked until verified. New page `VerifyEmail.jsx` at `/verify-email?token=X`. SignupPage shows "Check your email" screen on submit instead of redirecting to setup. | [routes/auth.js](../backend/routes/auth.js), [pages/VerifyEmail.jsx](../frontend/src/pages/VerifyEmail.jsx), [pages/SignupPage.jsx](../frontend/src/pages/SignupPage.jsx) |
+| PR 9 | Pre-public-launch hygiene. New public pages [Terms.jsx](../frontend/src/pages/public/Terms.jsx) and [Privacy.jsx](../frontend/src/pages/public/Privacy.jsx). TOS checkbox + Cloudflare Turnstile widget on SignupPage. Backend Turnstile siteverify in `routes/auth.js` signup. New rate-limited `POST /api/auth/resend-setup-link`. Env vars `TURNSTILE_SECRET_KEY` (backend) + `VITE_TURNSTILE_SITE_KEY` (frontend). | [routes/auth.js](../backend/routes/auth.js), [SignupPage.jsx](../frontend/src/pages/SignupPage.jsx), [SetupWizard.jsx](../frontend/src/pages/SetupWizard.jsx) |
+
+**Plan model after launch**: Free is permanent, capped (3 emp / 100 prod / 1 outlet). Pro is 8000 PKR/mo or 80000 PKR/yr **per outlet** (1 outlet default; pay-per-outlet for additional). Feature access is identical between Free and Pro — plan only gates resource caps.
+
+**Flags that intentionally stay OFF (not in the 19-flag seed)**: `phase2g_serialized_inventory`, `phase2_commissions`, `phase5_payment_gateways`, `shift_auto_close`, `offline_returns`, `payment_links`, `fbr_integration`. Each is merchant opt-in or pending external prerequisites.
 
 ## Presets
 
@@ -70,7 +91,12 @@ Shared retail defaults (from `backend/config/industry-config.js`):
 - Retail labels remain product / customer / sale centric
 - Portal tabs: `[invoices, orders, loyalty, profile]` for `general_retail`, `grocery`, `sweet_shop`; `[invoices, orders, profile]` (no loyalty) for `wholesale`, `butcher`, `textile`
 
-**Important**: all 6 retail presets ship with `modes: []`. No modes are enabled by default on signup. This is intentional — all retail-specific feature flags (Phase 2-G, Phase 2, recent polish) start OFF and must be flipped per tenant via the admin feature-flags UI. See "Known gaps and quirks" below.
+**Important — preset launch state**: all 6 retail presets ship with `modes: []`. After the 2026-04-24 retail launch, `routes/setup.js` now calls `seedRetailFlags(client)` from [services/retail-flag-preset.js](../backend/services/retail-flag-preset.js) — but **only when `industry_type === 'general_retail'`**. The 19-flag seed (8 polish + 7 opt-in + 4 integrations) does NOT fire for the other 5 retail presets. As a result:
+
+- `general_retail`: 19 retail flags seeded ON at signup
+- `grocery`, `wholesale`, `butcher`, `sweet_shop`, `textile`: zero retail flags seeded — admin must flip each one manually per tenant via the admin feature-flags UI
+
+At launch, only `general_retail` is clickable in the setup wizard; the other 21 industry tiles (including the 5 sister retail presets) are marked "Coming soon" and disabled. So the unseeded-presets gap is theoretical for new merchants, but real for any tenant created via admin/API bypass.
 
 ## What You Built
 
@@ -84,7 +110,6 @@ Each section lists the shipped surfaces with their concrete file paths, feature-
 - [ParkedSalesRedesign.jsx](../frontend/src/pages/redesign/ParkedSalesRedesign.jsx) — parked cart management
 - [HoldsRedesign.jsx](../frontend/src/pages/redesign/HoldsRedesign.jsx) — layaway / cart holds
 - [CashManagementRedesign.jsx](../frontend/src/pages/redesign/CashManagementRedesign.jsx)
-- [ShiftSessionsRedesign.jsx](../frontend/src/pages/redesign/ShiftSessionsRedesign.jsx) (if present)
 
 **Backend routes**
 - [sales.js](../backend/routes/sales.js) — core POS sale endpoint with FOR UPDATE stock lock
@@ -109,8 +134,8 @@ Each section lists the shipped surfaces with their concrete file paths, feature-
 - `phase2g_variant_picker` → [POSVariantMatrixModal.jsx](../frontend/src/pages/redesign/pos/POSVariantMatrixModal.jsx)
 
 **Offline continuity**
-- [utils/offlineQueue.js](../frontend/src/utils/offlineQueue.js) — queue layer
-- [offline-returns worker](../backend/middleware/feature-flags.js) gated by `offline_returns` (default OFF, partial)
+- [utils/offlineQueue.js](../frontend/src/utils/offlineQueue.js) — frontend queue layer (best-effort sync)
+- `offline_returns` flag (default OFF) — flag exists in `DEFAULT_FEATURE_FLAGS`, but **there is no dedicated offline-returns worker**. The frontend queue is the only offline path today.
 
 **Maturity**: core POS is **Shipped**. Holds, serials, price override, draft orders, approvals, item suggestions, and POS layouts are **Flagged** (real code, default OFF). Full offline-first is **Partial** — queue exists, not full autonomy.
 
@@ -203,7 +228,7 @@ Each section lists the shipped surfaces with their concrete file paths, feature-
 - [ReportBuilderRedesign.jsx](../frontend/src/pages/redesign/ReportBuilderRedesign.jsx) — `phase2_report_builder`
 - [DashboardRedesign.jsx](../frontend/src/pages/redesign/DashboardRedesign.jsx) + 20+ widgets under `frontend/src/pages/dashboard/` (KPI, cash, trends, inventory alerts, AIChatPanel, BackupStatusCard)
 - [RetailRiskRedesign.jsx](../frontend/src/pages/redesign/RetailRiskRedesign.jsx) — `phase2g_risk_controls`
-- [InsightsAIRedesign.jsx](../frontend/src/pages/redesign/InsightsAIRedesign.jsx) (dashboard chat panel) — `ai_insights` soft check
+- [AIChatPanel.jsx](../frontend/src/pages/dashboard/AIChatPanel.jsx) — dashboard widget only (no standalone page); `ai_insights` soft DB check
 
 **Backend routes**
 - `backend/routes/reports/` — 18 report files including analytics.js, sales.js, inventory.js, finance.js, governance.js, exceptions.js, fbr-export.js, commissions.js
@@ -362,19 +387,29 @@ All 18 worker files live in `backend/workers/`. Breakdown:
 
 **Retail-relevant (11)**
 
-| Worker | Gate | Default | Purpose |
-|---|---|---|---|
-| [retail-digest-worker-boss.js](../backend/workers/retail-digest-worker-boss.js) | `retail_weekly_digest` | OFF | Weekly retail digest email to owner |
-| [shift-auto-close-worker-boss.js](../backend/workers/shift-auto-close-worker-boss.js) | `shift_auto_close` | OFF | Auto-closes idle cash shifts (>36h) |
-| [hold-expiry-worker-boss.js](../backend/workers/hold-expiry-worker-boss.js) | `phase2g_holds` | OFF | Expires stale holds, frees inventory |
-| [anomaly-worker-boss.js](../backend/workers/anomaly-worker-boss.js) | `phase2g_risk_controls` | OFF | Shrink / fraud anomaly scoring |
-| [abc-worker-boss.js](../backend/workers/abc-worker-boss.js) | — | ON | ABC inventory classification |
-| [reservation-worker-boss.js](../backend/workers/reservation-worker-boss.js) | — | ON | 5-min inventory reservation expiry |
-| [fbr-worker-boss.js](../backend/workers/fbr-worker-boss.js) | `fbr_integration` | OFF (seeded in migration) | FBR invoice posting, exponential backoff |
-| [marketplace-sync-worker-boss.js](../backend/workers/marketplace-sync-worker-boss.js) | `marketplace_integrations` | ON (flag) | Shopify / Daraz / FB / WhatsApp / Google Merchant poll |
-| [email-worker-boss.js](../backend/workers/email-worker-boss.js) | — | ON | Transactional email queue processor |
-| [cleanup-worker-boss.js](../backend/workers/cleanup-worker-boss.js) | — | ON | Dead tenant cleanup (>7 days without setup) |
-| [orphan-schema-scan-worker-boss.js](../backend/workers/orphan-schema-scan-worker-boss.js) | — | ON | Ops hygiene — orphan schema detection |
+Workers have **two-layer gating**: the Railway env var must be set for the worker to start, AND the tenant feature flag must be ON for it to fire for that tenant. Flipping a flag in the admin UI does nothing if the env var is unset — the worker simply isn't running.
+
+| Worker | Env var (must be `1`) | Tenant flag | Flag default | Purpose |
+|---|---|---|---|---|
+| [retail-digest-worker-boss.js](../backend/workers/retail-digest-worker-boss.js) | `RETAIL_DIGEST_WORKER_ENABLED` | `retail_weekly_digest` | OFF | Weekly retail digest email to owner (Mon 08:00 UTC) |
+| [shift-auto-close-worker-boss.js](../backend/workers/shift-auto-close-worker-boss.js) | `SHIFT_AUTO_CLOSE_WORKER_ENABLED` | `shift_auto_close` | OFF | Auto-closes idle cash shifts (>36h) |
+| [hold-expiry-worker-boss.js](../backend/workers/hold-expiry-worker-boss.js) | `HOLD_EXPIRY_WORKER_ENABLED` | `phase2g_holds` | OFF | Expires stale holds, frees inventory |
+| [anomaly-worker-boss.js](../backend/workers/anomaly-worker-boss.js) | `ANOMALY_WORKER_ENABLED` | `phase2g_risk_controls` | OFF | Shrink / fraud anomaly scoring |
+| [abc-worker-boss.js](../backend/workers/abc-worker-boss.js) | `ABC_WORKER_ENABLED` | `phase2g_inventory_intelligence` | OFF | ABC inventory classification |
+| [reservation-worker-boss.js](../backend/workers/reservation-worker-boss.js) | `RESERVATION_WORKER_ENABLED` | — | ON | 5-min inventory reservation expiry |
+| [fbr-worker-boss.js](../backend/workers/fbr-worker-boss.js) | `FBR_WORKER_ENABLED` | `fbr_integration` | OFF (seeded in migration) | FBR invoice posting, **fixed 60s retry, max 5 attempts** |
+| [marketplace-sync-worker-boss.js](../backend/workers/marketplace-sync-worker-boss.js) | `MARKETPLACE_SYNC_WORKER_ENABLED` | `marketplace_integrations` | ON | Shopify / Daraz / FB / WhatsApp / Google Merchant poll — **see ⚠️ stub note below** |
+| [email-worker-boss.js](../backend/workers/email-worker-boss.js) | `EMAIL_WORKER_ENABLED` | — | ON | Transactional email queue processor |
+| [cleanup-worker-boss.js](../backend/workers/cleanup-worker-boss.js) | `CLEANUP_WORKER_ENABLED` | — | ON | Dead tenant cleanup (>7 days without setup) |
+| [orphan-schema-scan-worker-boss.js](../backend/workers/orphan-schema-scan-worker-boss.js) | (always on) | — | ON | Ops hygiene — orphan schema detection |
+
+**Catalog scheduling**: `phase2_scheduled_changes` (default ON) is also gated by `SCHEDULED_CATALOG_WORKER_ENABLED` env var via the [catalog-scheduler.js](../backend/services/catalog-scheduler.js) service. If the env var is unset, scheduled price/availability changes never fire even though the flag is ON.
+
+**Encryption keys**: `INTEGRATION_SECRET_KEY` and `SHOPIFY_SECRET_KEY` env vars must be set for marketplace + courier credentials to be encrypted at rest. If unset, [services/crypto.js](../backend/services/crypto.js) falls back to plaintext storage (verified at line 26: `if (!key) return value;`). PR 0 of the retail launch set these — verify they remain set on Railway after any env wipe.
+
+**⚠️ Marketplace-sync worker is a stub.** [marketplace-sync-worker-boss.js](../backend/workers/marketplace-sync-worker-boss.js) registers the cron jobs and logs "Polling Daraz orders" / "Checking Google Merchant feed status", but the actual `DarazClient.pullOrders()` / `MetaCommerceClient.pullOrders()` / `GoogleMerchantClient.checkFeedStatus()` calls are **commented out**. The cron fires but no orders are imported and no feeds checked. The marketplace UI works (manual operations via routes/integrations/* are real), but background sync is not implemented. Treat marketplace integrations as **Partial / manual-only** until the worker handlers are completed.
+
+**⚠️ `requireActiveSubscription` async race.** [middleware/plan-limits.js:116](../backend/middleware/plan-limits.js) uses `masterDb.query(...).then(...).catch(() => next())` — the lookup runs but `next()` is called inside the `.then()` callback. `requirePlanLimit` and `requireActiveSubscription` therefore work correctly in practice (Express awaits the promise via the middleware chain). Documented as a quirk in [middleware/CLAUDE.md](../backend/middleware/CLAUDE.md) — be aware when modifying.
 
 **Non-retail (7) — listed for completeness only**
 
@@ -384,7 +419,7 @@ All 18 worker files live in `backend/workers/`. Breakdown:
 
 These are real, verified in source, and worth keeping in your head when describing the product.
 
-1. **`general_retail` preset enables ZERO retail flags at signup.** The preset row in [industry-config.js](../backend/config/industry-config.js) has `modes: []`, and [setup.js](../backend/routes/setup.js) only enables flags from `getFeatureFlagsForModes(preset.modes)`. Result: every new retail tenant starts with all 13 Phase 2-G flags, all recent polish flags, and several Phase 2 opt-ins OFF. You must flip them manually per tenant via the admin feature-flags UI. This is fixable (add a `retail` mode to the mode registry that bundles the phase2g_* flags), but the fix has not been applied.
+1. **Only `general_retail` gets the retail flag seed.** Fixed for `general_retail` by retail-launch PR 2 (2026-04-24): [services/retail-flag-preset.js](../backend/services/retail-flag-preset.js) exports `RETAIL_SEED_FLAGS` (19 flags), and `routes/setup.js` calls `seedRetailFlags(client)` inside the setup transaction when `industry_type === 'general_retail'`. The 5 other retail presets (`grocery`, `wholesale`, `butcher`, `sweet_shop`, `textile`) still ship with `modes: []` and no seed — they are scaffolded but unseeded. Cosmetically hidden behind the "Coming soon" wizard tile gate, but a tenant created via admin or API for one of these presets gets the bare-bones default-flag set.
 
 2. **`fbr_integration` is NOT in `DEFAULT_FEATURE_FLAGS`.** All 84 other flags live in [middleware/feature-flags.js](../backend/middleware/feature-flags.js). `fbr_integration` is seeded only via [schema-pg.sql](../backend/schema-pg.sql) INSERT + a migration. Fresh tenants whose migrations haven't yet run may not see the flag until the seed completes. Not a crash, just a seeding inconsistency worth knowing.
 
@@ -392,13 +427,13 @@ These are real, verified in source, and worth keeping in your head when describi
 
 4. **`ai_insights` is a soft DB check, not a `requireFeature`.** [insights-ai.js](../backend/routes/insights-ai.js) queries a row instead of using middleware. AI should still be described as **Partial / experimental**.
 
-5. **`payment_links` is gated inside the POST handler body, not via middleware.** [customer-invoices.js](../backend/routes/customer-invoices.js) checks the flag at the top of the handler; the route itself is always mounted. Behavior is correct but inconsistent with other flags.
+5. **`phase2g_per_line_restock` is a runtime-only flag with no dedicated surface.** Flag exists in `DEFAULT_FEATURE_FLAGS` (default OFF) but has neither a frontend page nor a dedicated backend route — it is checked inline inside `returns.js` to decide per-item restock behavior. Capability Matrix lists it for completeness; treat it as a behavior toggle, not a feature surface.
 
 6. **No admin UI to toggle workers directly.** `retail_weekly_digest`, `shift_auto_close`, `offline_returns`, `phase2g_holds` (hold-expiry worker), `phase2g_risk_controls` (anomaly worker) — each has a worker but no dedicated admin control. Toggle happens through the generic feature-flags list in [AdminTenantDetail.jsx](../frontend/src/pages/admin/AdminTenantDetail.jsx).
 
 7. **Inventory intelligence ships one flag, four tabs.** `phase2g_inventory_intelligence` covers ABC, aging, cycle counts, reorder. Backend + worker exist for each; frontend tab UIs exist but some are thinner than others. Treat as **Flagged / Partial depending on tab**.
 
-8. **Accounting, HR, multi-company, backup/restore, supplier payables, approvals, CRM quotations, notifications are Pro-tier gates.** They are not retail-specific — any tenant on the Pro plan can use them. A Free-tier retail tenant gets none of them by design.
+8. **"Pro-tier" features are actually default-ON feature flags, not plan-gated.** `accounting_core`, `advanced_hr`, `multi_company`, `backup_restore`, `supplier_payables`, `approvals`, `crm_quotations`, `notifications` are all `true` in `DEFAULT_FEATURE_FLAGS` for every tenant regardless of plan. The true Pro/Free differentiator lives in [middleware/plan-limits.js](../backend/middleware/plan-limits.js) `PLAN_DEFAULTS` — Free is capped at 3 employees / 100 products / 1 outlet, Pro is unlimited. A Free tenant can use accounting and HR; they just can't add a 4th employee. If you want a feature to be paywalled, you need to add a plan check — feature flags alone won't enforce it.
 
 9. **`shopify_integration` flag is gone from `DEFAULT_FEATURE_FLAGS`.** Shopify routes are now gated by a live connection check, not a feature flag. Old references in docs / tests are stale.
 
