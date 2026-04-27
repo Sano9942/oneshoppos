@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>2026 POS Inspiration · SanoPOS Direction Gallery</title>
+<style>
+  :root {
+    --bg: #0d0d0f;
+    --bg-elev: #16161a;
+    --bg-card: #1c1c22;
+    --line: #26262e;
+    --line-strong: #34343e;
+    --ink: #f3f0ea;
+    --ink-dim: #a8a59c;
+    --ink-mute: #6b6a64;
+    --accent: #e8c468;
+    --accent-2: #d77c5a;
+    --good: #6dd58c;
+    --serif: 'Iowan Old Style', 'Source Serif Pro', 'Charter', 'Georgia', serif;
+    --sans: 'Inter', 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header.masthead {
+    padding: 64px 48px 40px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #131318 0%, #0d0d0f 100%);
+  }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-mute); margin: 0 0 16px; }
+  h1.title { font-family: var(--serif); font-weight: 400; font-size: clamp(40px, 6vw, 84px); line-height: 0.95; letter-spacing: -0.02em; margin: 0 0 16px; }
+  h1.title em { font-style: italic; color: var(--accent); }
+  .lede { font-family: var(--serif); font-size: 19px; line-height: 1.55; color: var(--ink-dim); max-width: 720px; margin: 0; }
+  .meta-strip { display: flex; gap: 24px; margin-top: 28px; font-family: var(--mono); font-size: 12px; color: var(--ink-mute); flex-wrap: wrap; }
+  .meta-strip span { display: inline-flex; align-items: center; gap: 6px; }
+  .meta-strip span + span::before { content: '·'; color: var(--line-strong); margin-right: 24px; margin-left: -12px; }
+
+  .filterbar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(13,13,15,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+    padding: 16px 48px;
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  }
+  .filterbar .label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); margin-right: 8px; }
+  .chip {
+    display: inline-flex; align-items: center; padding: 6px 12px;
+    font-family: var(--sans); font-size: 12px; font-weight: 500;
+    background: transparent; color: var(--ink-dim);
+    border: 1px solid var(--line-strong); border-radius: 999px;
+    cursor: pointer; transition: all 0.15s ease;
+    user-select: none;
+  }
+  .chip:hover { border-color: var(--ink-dim); color: var(--ink); }
+  .chip.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+  section { padding: 80px 48px; border-bottom: 1px solid var(--line); }
+  .section-head { max-width: 1400px; margin: 0 auto 48px; display: flex; align-items: baseline; justify-content: space-between; gap: 32px; flex-wrap: wrap; }
+  .section-num { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); margin: 0 0 8px; }
+  h2.section-title { font-family: var(--serif); font-weight: 400; font-size: clamp(32px, 4vw, 48px); line-height: 1.05; letter-spacing: -0.02em; margin: 0 0 12px; }
+  .section-sub { font-family: var(--serif); font-size: 17px; line-height: 1.55; color: var(--ink-dim); max-width: 560px; margin: 0; }
+
+  .product-grid { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 24px; }
+  .product-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: hidden;
+    transition: border-color 0.2s ease;
+  }
+  .product-card:hover { border-color: var(--line-strong); }
+  .product-card.hidden { display: none; }
+  .product-images {
+    display: grid; grid-template-columns: 2fr 1fr; gap: 2px;
+    background: var(--line); aspect-ratio: 16 / 9; overflow: hidden;
+  }
+  .product-images .stack { display: grid; grid-template-rows: 1fr 1fr; gap: 2px; background: var(--line); }
+  .product-images .stack .empty { background: var(--bg-elev); }
+  .product-images img {
+    width: 100%; height: 100%; object-fit: cover; cursor: zoom-in;
+    background: var(--bg-elev); display: block;
+    transition: opacity 0.2s ease;
+  }
+  .product-images img:hover { opacity: 0.85; }
+  .product-body { padding: 24px 24px 28px; }
+  .product-name { font-family: var(--serif); font-size: 26px; font-weight: 500; line-height: 1.15; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .product-meta { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 14px; }
+  .product-meta .sep { margin: 0 8px; }
+  .product-desc { font-family: var(--serif); font-size: 15px; line-height: 1.55; color: var(--ink-dim); margin: 0 0 18px; }
+  .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .tag {
+    font-family: var(--sans); font-size: 11px; font-weight: 500;
+    padding: 3px 9px; border-radius: 999px;
+    background: var(--bg-elev); color: var(--ink-dim);
+    border: 1px solid var(--line);
+  }
+  .product-link {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); border-top: 1px solid var(--line); padding-top: 14px; display: inline-block;
+  }
+
+  .pattern-block { max-width: 1400px; margin: 0 auto 64px; }
+  .pattern-block:last-child { margin-bottom: 0; }
+  .pattern-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .pattern-num { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); }
+  .pattern-title { font-family: var(--serif); font-size: 24px; font-weight: 500; margin: 0; letter-spacing: -0.01em; }
+  .pattern-tag { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--ink-mute); letter-spacing: 0.08em; text-transform: uppercase; }
+  .pattern-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+  .pattern-tile {
+    background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px;
+    overflow: hidden; position: relative; aspect-ratio: 4 / 3; cursor: zoom-in;
+    display: block;
+  }
+  .pattern-tile img {
+    width: 100%; height: 100%; object-fit: cover;
+    background: var(--bg-elev); display: block;
+    transition: transform 0.4s ease;
+  }
+  .pattern-tile:hover img { transform: scale(1.03); }
+  .pattern-tile .note {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 14px 16px;
+    background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.85) 70%);
+    color: var(--ink); font-size: 13px; line-height: 1.4;
+    opacity: 0; transition: opacity 0.2s ease;
+    pointer-events: none;
+  }
+  .pattern-tile:hover .note { opacity: 1; }
+
+  .worksheet { max-width: 880px; margin: 0 auto; background: var(--bg-card); border: 1px solid var(--line); border-radius: 16px; padding: 48px; }
+  .worksheet h3 { font-family: var(--serif); font-size: 28px; font-weight: 500; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .worksheet .intro { font-family: var(--serif); font-size: 16px; color: var(--ink-dim); line-height: 1.55; margin: 0 0 36px; }
+  .question { margin-bottom: 32px; padding-bottom: 32px; border-bottom: 1px solid var(--line); }
+  .question:last-child { border-bottom: none; padding-bottom: 0; }
+  .q-num { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: var(--accent); margin-bottom: 8px; }
+  .q-text { font-family: var(--serif); font-size: 19px; line-height: 1.4; margin: 0 0 16px; color: var(--ink); }
+  .options { display: flex; flex-wrap: wrap; gap: 10px; }
+  .option {
+    font-family: var(--sans); font-size: 13px; font-weight: 500;
+    padding: 10px 16px; border: 1px solid var(--line-strong);
+    border-radius: 10px; color: var(--ink-dim); background: transparent;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  .option:hover { border-color: var(--ink-dim); color: var(--ink); }
+  .option.selected { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+  .lightbox {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.92);
+    display: none; align-items: center; justify-content: center;
+    z-index: 100; cursor: zoom-out; padding: 40px;
+  }
+  .lightbox.open { display: flex; }
+  .lightbox img { max-width: 95%; max-height: 95%; object-fit: contain; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+  .lightbox .close { position: fixed; top: 24px; right: 32px; font-family: var(--mono); font-size: 12px; color: var(--ink); letter-spacing: 0.12em; }
+
+  footer { padding: 48px; text-align: center; font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-mute); }
+  footer a { color: var(--ink-dim); }
+
+  img { color: transparent; }
+
+  @media (max-width: 720px) {
+    header.masthead, .filterbar, section { padding-left: 24px; padding-right: 24px; }
+    .worksheet { padding: 28px; }
+    .product-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <p class="eyebrow">Direction gallery · April 2026</p>
+  <h1 class="title">How POS software<br><em>actually looks</em> in 2026.</h1>
+  <p class="lede">Twelve shipping products, ten reusable patterns, one worksheet. Scroll, scan, click anything to enlarge. The goal isn't to copy — it's to choose a direction so the next redesign of SanoPOS has a point of view.</p>
+  <div class="meta-strip">
+    <span>12 products surveyed</span>
+    <span>10 pattern buckets</span>
+    <span>~80 reference images</span>
+    <span>Compiled for SanoPOS</span>
+  </div>
+</header>
+
+<div class="filterbar">
+  <span class="label">Filter</span>
+  <button class="chip active" data-filter="all">All</button>
+  <button class="chip" data-filter="light">Light</button>
+  <button class="chip" data-filter="dark">Dark</button>
+  <button class="chip" data-filter="minimal">Minimal</button>
+  <button class="chip" data-filter="dense">Dense</button>
+  <button class="chip" data-filter="colorful">Colorful</button>
+  <button class="chip" data-filter="monochrome">Monochrome</button>
+  <button class="chip" data-filter="editorial">Editorial</button>
+  <button class="chip" data-filter="playful">Playful</button>
+  <button class="chip" data-filter="restaurant">Restaurant</button>
+  <button class="chip" data-filter="retail">Retail</button>
+  <button class="chip" data-filter="tablet-first">Tablet-first</button>
+  <button class="chip" data-filter="enterprise">Enterprise</button>
+  <button class="chip" data-filter="consumer">Consumer-friendly</button>
+</div>
+
+<section id="products">
+  <div class="section-head">
+    <div>
+      <p class="section-num">Part 01 — Product survey</p>
+      <h2 class="section-title">What's actually shipping.</h2>
+    </div>
+    <p class="section-sub">Twelve POS products with active 2024–2026 design work. Each card shows their visual language, screenshots from their marketing pages, and a link to see it live.</p>
+  </div>
+  <div class="product-grid" id="product-grid"></div>
+</section>
+
+<section id="patterns">
+  <div class="section-head">
+    <div>
+      <p class="section-num">Part 02 — Pattern library</p>
+      <h2 class="section-title">The building blocks.</h2>
+    </div>
+    <p class="section-sub">Same screen idea — cart panel, payment screen, dashboard — shown across many products. Use this section to mix and match rather than copy any single product.</p>
+  </div>
+  <div id="pattern-blocks"></div>
+</section>
+
+<section id="worksheet">
+  <div class="section-head">
+    <div>
+      <p class="section-num">Part 03 — Direction worksheet</p>
+      <h2 class="section-title">Pick your point of view.</h2>
+    </div>
+    <p class="section-sub">After scanning the gallery, click your answer to each question. Your selections become the brief I'll work from when we redesign actual SanoPOS pages.</p>
+  </div>
+  <div class="worksheet">
+    <h3>Five questions, five answers.</h3>
+    <p class="intro">No wrong answers — just clarity. Click an option to highlight it. Selections are stored in your browser so you can come back to this page later.</p>
+    <div id="questions"></div>
+  </div>
+</section>
+
+<footer>
+  Compiled with research on shipping 2026 POS software · <a href="#products">Top ↑</a>
+</footer>
+
+<div class="lightbox" id="lightbox">
+  <span class="close">✕ close</span>
+  <img src="" alt="">
+</div>
+
+<script>
+const PRODUCTS = [
+  {
+    name: "Square Point of Sale",
+    url: "https://squareup.com/us/en/point-of-sale",
+    description: "Calm, confident, app-store-clean. Warm whites, sharp black product shots, pops of inky blue and acid green. Tight modern grotesque sans, oversized headlines, generous whitespace. Hardware photographed against pastel backdrops — consumer-electronics-launch vibe.",
+    tags: ["light", "minimal", "consumer", "retail", "card-based", "flat"],
+    device: "Counter terminal", tier: "SMB",
+    images: [
+      "https://images.ctfassets.net/2d5q1td6cyxq/5pawOAMVB7Pn1mU1cb2T5A/e39e598733b37649f4b14929484fcbab/PD05653_-_Handheld_Subnav.png",
+      "https://images.ctfassets.net/2d5q1td6cyxq/5a3Hyi2cUpp8tbZ5U19x4a/27b8ed1445ef9a178b60699f08dbc4aa/Terminal.png",
+      "https://images.ctfassets.net/2d5q1td6cyxq/3zfL8vIhAdrbstTgMcMby7/8e95fb44e2d8d1cab73a7793b54b0dc7/Kiosk.png"
+    ]
+  },
+  {
+    name: "Shopify POS",
+    url: "https://www.shopify.com/pos",
+    description: "Editorial e-commerce energy translated to POS. White and warm-cream foundation with mossy emerald green for accents. Custom sans paired with bold magazine-style headlines and large hero photography of real shopkeepers. Lots of breathing room, merchant-as-protagonist.",
+    tags: ["light", "editorial", "consumer", "retail", "tablet-first", "card-based"],
+    device: "Tablet", tier: "SMB",
+    images: [
+      "https://cdn.shopify.com/b/shopify-brochure2-assets/28682faae2e378113d0ac45289e8b595.webp",
+      "https://cdn.shopify.com/b/shopify-brochure2-assets/7fc4d8489bab18f6eabbc775bd90a948.webp",
+      "https://cdn.shopify.com/b/shopify-brochure2-assets/f9af82a7d9daaebaffbfed60e38d452e.webp"
+    ]
+  },
+  {
+    name: "Toast",
+    url: "https://pos.toasttab.com/",
+    description: "Restaurant-warm and food-forward. Signature deep red-orange used as both UI accent and brand mark, set against off-white pages and dark restaurant photography. Handhelds and terminals shown in dark UI mode — purpose-built for low-light kitchens. High-density menu tiles.",
+    tags: ["dark", "colorful", "restaurant", "tablet-first", "dense", "card-based"],
+    device: "Tablet", tier: "Mid-market",
+    images: [
+      "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/6110be210280099.670e8e28ea2bd.png",
+      "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/1cdced210280099.670fcf7420f08.png",
+      "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/9dbbe9210280099.670e8e28e5ad9.png"
+    ]
+  },
+  {
+    name: "Lightspeed Retail",
+    url: "https://www.lightspeedhq.com/pos/retail/",
+    description: "Quietly premium and a touch corporate. Near-monochrome of dark navy, off-white, and a signature cobalt-violet accent. Confident geometric sans with editorial H1s. Light-themed iPad app with cool grey neutral. Moody product shots in real boutiques.",
+    tags: ["light", "minimal", "enterprise", "retail", "tablet-first", "monochrome"],
+    device: "Tablet", tier: "Mid-market",
+    images: [
+      "https://assets.lightspeedhq.com/img/8d79b46f-retail_pos_hero-united.webp",
+      "https://assets.lightspeedhq.com/img/16648223-pos_united_hero-2.jpg"
+    ]
+  },
+  {
+    name: "Stripe Terminal",
+    url: "https://stripe.com/terminal",
+    description: "The platonic ideal of fintech-clean. Pure white, gradient mesh in cool blues and lavenders, ultra-precise typography. Light-mode UI with signature Stripe gradient and monochrome iconography. Extremely low density — every pixel intentional. Premium developer-tooling vibe applied to hardware.",
+    tags: ["light", "minimal", "enterprise", "monochrome", "glassmorphic", "flat"],
+    device: "Counter terminal", tier: "Enterprise",
+    images: [
+      "https://images.stripeassets.com/fzn2n1nzq965/2IuqN8DySO7Nasa3trUCdb/2ecd0e0c27a1dad57a44d4da4f441bb6/S700-knockout.png",
+      "https://images.stripeassets.com/fzn2n1nzq965/2SRocLBDullWbnlouNA2Ch/f7b4bfca84cfa93ad7c985610728136d/S700_Splash.png",
+      "https://images.stripeassets.com/fzn2n1nzq965/1jyxyIQs1mdBm2WVHLNfKZ/0f5d387457b828691d5cbd503e120c1d/S700_top_screen.png"
+    ]
+  },
+  {
+    name: "Clover",
+    url: "https://www.clover.com/station-solo",
+    description: "Sturdy, trustworthy, very 'merchant services'. Lime-green and white brand combined with industrial-looking dark grey hardware photography. Content-dense site with stacked feature cards and traditional SaaS-style screenshots. App-grid metaphor on the home screen.",
+    tags: ["light", "colorful", "retail", "restaurant", "dense", "card-based", "consumer"],
+    device: "Counter terminal", tier: "SMB",
+    images: [
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Clover_Station_with_receipt_printer_and_cash_drawer.jpg/250px-Clover_Station_with_receipt_printer_and_cash_drawer.jpg",
+      "https://blog.clover.com/wp-content/uploads/2019/12/CloverGo_Phone-1.jpg",
+      "https://blog.clover.com/wp-content/uploads/2025/06/resize2-250505_Fiserv_Restaurant_01_02316_v2.jpg"
+    ]
+  },
+  {
+    name: "Loyverse POS",
+    url: "https://loyverse.com/point-of-sale",
+    description: "Practical, friendly, no-frills SaaS. Bright sky-blue + white with rounded UI components. Generic humanist sans, very legible. POS screen is a colorful tile grid — each product a vibrant block of color with the item name. Extremely cashier-fast and visually playful.",
+    tags: ["light", "colorful", "consumer", "retail", "tablet-first", "playful", "card-based"],
+    device: "Tablet", tier: "Free",
+    images: [
+      "https://loyverse.com/sites/all/themes/loyversecom/images/home/loyverse-pos.webp",
+      "https://loyverse.com/sites/all/themes/loyversecom/images/home/en/point-of-sale.webp",
+      "https://loyverse.com/sites/all/themes/loyversecom/images/home/payments.webp"
+    ]
+  },
+  {
+    name: "SumUp POS",
+    url: "https://www.sumup.com/en-us/pos/pos-lite/",
+    description: "Approachable European fintech. Confident teal-on-white palette with rounded geometric sans. Big friendly product photos of card readers and small merchants. Light-mode tile grid with teal as the primary action color. Closer to a consumer banking app than a traditional POS.",
+    tags: ["light", "colorful", "consumer", "retail", "minimal", "tablet-first"],
+    device: "Tablet", tier: "SMB",
+    images: [
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c2/SumUp_at_Caff%C3%A8_Culture_2022_-_07.jpg/500px-SumUp_at_Caff%C3%A8_Culture_2022_-_07.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ed/SumUp_Contactloos_Pinapparaat%2C_Makro_Delft_%282020%29_01.jpg/500px-SumUp_Contactloos_Pinapparaat%2C_Makro_Delft_%282020%29_01.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/SumUp_Contactloos_Pinapparaat%2C_Makro_Delft_%282020%29_02.jpg/500px-SumUp_Contactloos_Pinapparaat%2C_Makro_Delft_%282020%29_02.jpg"
+    ]
+  },
+  {
+    name: "Revel / Shift4",
+    url: "https://www.shift4.com/food-beverage",
+    description: "Now folded into Shift4: deep midnight blue, electric cyan accents, bold all-caps display typography. Enterprise-fintech tone — dense data viz, big stat callouts. iPad-first layout with dark sidebar + light content area, high information density, very utilitarian.",
+    tags: ["dark", "enterprise", "restaurant", "retail", "dense", "tablet-first"],
+    device: "Tablet", tier: "Enterprise",
+    images: [
+      "https://cdn.sanity.io/images/2nz3tcxf/production/d94fa9bf631b94691f5162a12587d28653efd5e7-1500x947.png",
+      "https://cdn.sanity.io/images/2nz3tcxf/production/11f456621c4c1f710ca70d2e47017fdcfa6bc1ef-660x728.png",
+      "https://cdn.sanity.io/images/2nz3tcxf/production/3d6c76806dbf4f621f8a108717641ab7210a505c-2196x935.png"
+    ]
+  },
+  {
+    name: "SpotOn",
+    url: "https://www.spoton.com/restaurant-pos/",
+    description: "Refined, hospitality-focused, very 2025. High-contrast monochrome (true black + ivory white) with a single bright accent. Editorial typography with serif/sans pairing. Lots of breathing room, large lifestyle photography. Dark POS UI with crisp white type — feels like a hotel-app design language.",
+    tags: ["dark", "editorial", "restaurant", "minimal", "monochrome", "tablet-first"],
+    device: "Tablet", tier: "Mid-market",
+    images: [
+      "https://www.spoton.com/_next/static/media/hero-text-left-image-right.d4af9151.png",
+      "https://www.spoton.com/_next/static/media/image-1-image.09af198c.png",
+      "https://www.spoton.com/_next/static/media/image-2-image.d9d7abb3.png"
+    ]
+  },
+  {
+    name: "Helcim",
+    url: "https://www.helcim.com/point-of-sale/",
+    description: "Friendly Canadian fintech. Soft warm orange (sunset/persimmon) against off-white, with hand-drawn or illustrated accents. Humanist sans with generous line-height. Surprisingly designy for a payment processor — rounded cards, soft shadows, big tap targets. 'Small business friend' vibe.",
+    tags: ["light", "colorful", "consumer", "retail", "minimal", "card-based", "playful"],
+    device: "Tablet", tier: "SMB",
+    images: [
+      "https://www.helcim.com/images/pos-hero-hands.png",
+      "https://www.helcim.com/images/pos-on-laptop.png",
+      "https://www.helcim.com/images/pos-on-ipad.png"
+    ]
+  },
+  {
+    name: "Sunday",
+    url: "https://sundayapp.com/pay-at-table/",
+    description: "The most fashion-forward POS-adjacent product on this list. Treats payment as hospitality design: muted cream backgrounds, oversized serif display type, warm earth-tone palette (terracotta, mustard, deep olive), beautifully shot still-life food photography. Feels like an Instagram-era restaurant menu.",
+    tags: ["light", "editorial", "minimal", "consumer", "restaurant", "mobile-first"],
+    device: "Mobile", tier: "SMB",
+    images: [
+      "https://sundayapp.com/app/uploads/2024/02/Pay-at-table-Cover-LanguageUS@2x-min.png",
+      "https://sundayapp.com/app/uploads/2024/03/Guest-app-Image-EN.png"
+    ]
+  }
+];
+
+const PATTERNS = [
+  {
+    title: "Cart & order panel layouts",
+    tag: "Right-rail · bottom-sheet · modal",
+    items: [
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/max_1200_webp/658761176726579.64ca02402e056.png", note: "Right-rail cart on iPad with category browser left, sticky total + pay button bottom-right" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/6dbb7c213966059.674faf5a99606.png", note: "Nomad — narrow right-rail order panel with line-item editing inline" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/max_632_webp/be787c133532689.65e630f8cd646.jpg", note: "Two-pane: big colorful product tiles left, slim totals panel right" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/9dbbe9210280099.670e8e28e5ad9.png", note: "Restaurant ticket/cart with modifier expansion and table number header" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/max_632_webp/0c86e6124617201.61081c5c3e023.png", note: "iPad split: sidebar nav, grid, cart drawer — classic 3-column POS" }
+    ]
+  },
+  {
+    title: "Item grid systems",
+    tag: "Categories · search-first · favorites",
+    items: [
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/6110be210280099.670e8e28ea2bd.png", note: "Color-coded category strip + photo-led product grid with price overlays" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/fc4bd2172579443.64818c03552d8.png", note: "Soft pastel chips for categories, white product cards with subtle shadows" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/disp_webp/ac003e208314565.66ecef359016d.png", note: "Coffee-shop UI kit — rounded category pills, big espresso photography" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/max_632_webp/aff8d0133532689.65e630f93a0e1.jpg", note: "Search-first layout with favorites strip pinned to top" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/max_632_webp/14620d245381999.69ac679a05038.png", note: "Plate POS — vertical category nav + dense 4-col grid for fast cashier flow" }
+    ]
+  },
+  {
+    title: "Payment & tender screens",
+    tag: "Split-tender · tip · NFC states",
+    items: [
+      { image: "https://images.stripeassets.com/fzn2n1nzq965/1jyxyIQs1mdBm2WVHLNfKZ/0f5d387457b828691d5cbd503e120c1d/S700_top_screen.png", note: "Stripe S700 — single-action payment screen, huge amount, contactless ring" },
+      { image: "https://images.stripeassets.com/fzn2n1nzq965/7o0zi4xyVginHCOZ8WoPxL/7702c7c2519c650d017881ee5f5602f2/S700_card.png", note: "Stripe terminal card-tap state, glossy gradient backdrop" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/5c69be200310407.66605c43c0607.png", note: "Tip + split-tender modal with quick-percent chips" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/03bf49210280099.670e8e28e844f.png", note: "Multi-method tender screen: cash/card/QR with calculator pad" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/max_632_webp/c3db9e124617201.61081c5c3f1ab.png", note: "Viapos checkout sheet — payment method radio cards" }
+    ]
+  },
+  {
+    title: "Receipt & post-sale UX",
+    tag: "Confirmation · send-receipt flows",
+    items: [
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/389a99213966059.674faf5a9a410.png", note: "Post-sale confirmation full-screen with email/SMS/print options" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/500c55172579443.64818c035e1d6.png", note: "Receipt detail view with tip breakdown line" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/d5fe88210280099.670e8e28e6a9e.png", note: "Order complete + 'send receipt' with WhatsApp/email/SMS chips" }
+    ]
+  },
+  {
+    title: "Customer-facing displays",
+    tag: "Second screen · CFD",
+    items: [
+      { image: "https://sundayapp.com/app/uploads/2024/03/Guest-app-Image-EN.png", note: "Sunday guest-facing pay-at-table — single bill total + tap to split" },
+      { image: "https://images.stripeassets.com/fzn2n1nzq965/45Hfm1D1qcdrXX4k8uog4x/842fb953c0c25d2e7bebe69d11ce41a0/furni-white-label-en-jp.png", note: "Stripe white-label customer-facing terminal screen with merchant branding" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/max_632_webp/9768fc208314565.69511da42f78f.png", note: "Tip-prompt customer screen with three preset percentages" }
+    ]
+  },
+  {
+    title: "Dashboards & reports",
+    tag: "KPI tiles · charts · tables",
+    items: [
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/77d429200310407.66605c43c00c5.png", note: "Sales overview KPI tiles + line chart + leaderboard table" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/d285f9200310407.6660551cbf4cc.png", note: "Item-wise sales table with sparklines and filter chips" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/b2490d205591753.66c454c1ebf00.png", note: "Glossy dark dashboard, donut + bar combos, modern fintech vibe" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/bce1ff205591753.66bda056d05cf.png", note: "Sales analytics — area chart hero + small-multiple cards" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/1cdced210280099.670fcf7420f08.png", note: "Restaurant manager dashboard — table heatmap + revenue cards" }
+    ]
+  },
+  {
+    title: "Dark-mode POS UIs",
+    tag: "Low-light kitchens · charcoal panels",
+    items: [
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/max_632_webp/0fce69113386919.602691122e402.png", note: "Dedicated dark-mode POS — deep grey panels with neon-mint accent" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/935278205591753.66bda056d2beb.png", note: "Dark admin panel with violet gradient highlights" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/9995c7213966059.674faf5a98dff.png", note: "Nomad — dark cashier UI with electric blue active state" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/970c13213966059.674faf5a99c24.png", note: "Dark menu-tile grid with full-color food thumbnails" }
+    ]
+  },
+  {
+    title: "Tablet-first layouts",
+    tag: "iPad mockups · landscape",
+    items: [
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/max_1200_webp/155a89176726579.64ca02402d3d1.png", note: "iPad-landscape first, three-pane layout in iPad mock" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/max_632_webp/f16a50245381999.69ac679a05c5d.png", note: "Plate POS designed natively for 11\" iPad" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/max_632_webp/5424e8245381999.69ac679a0571f.png", note: "Tablet checkout flow with one-handed-reach action bar" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/max_632_webp/2bdc5f124617201.61081c5c3eb6d.png", note: "Restaurant tablet view with floor plan + order ticket side by side" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/max_632_webp/59139c129973783.63ac3b8363845.png", note: "ANODA tablet POS in iPad mockup — confident sidebar nav" }
+    ]
+  },
+  {
+    title: "Color systems",
+    tag: "Distinctive POS palettes",
+    items: [
+      { image: "https://images.stripeassets.com/fzn2n1nzq965/2SRocLBDullWbnlouNA2Ch/f7b4bfca84cfa93ad7c985610728136d/S700_Splash.png", note: "Stripe — white #FFFFFF, indigo #635BFF, slate #0A2540 (premium fintech)" },
+      { image: "https://www.helcim.com/images/pos-hero-hands.png", note: "Helcim — persimmon orange #FF6E40, ivory #FFF8F2, charcoal #1A1A1A (friendly SMB)" },
+      { image: "https://sundayapp.com/app/uploads/2024/02/Pay-at-table-Cover-LanguageUS@2x-min.png", note: "Sunday — cream #F5F1EA, terracotta #C45A3F, deep olive #2F3A2A (editorial)" },
+      { image: "https://loyverse.com/sites/all/themes/loyversecom/images/home/en/point-of-sale.webp", note: "Loyverse — sky blue #1E88E5 + multi-color tiles (red/yellow/green/teal)" }
+    ]
+  },
+  {
+    title: "Density & typography",
+    tag: "Cashier-fast vs manager-dense",
+    items: [
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/6110be210280099.670e8e28ea2bd.png", note: "Cashier-fast: huge tap targets, 5 cols max, 80px touch tiles" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/d285f9200310407.6660551cbf4cc.png", note: "Manager-dense: 12-col data table with sparklines, filter rail, KPI strip" },
+      { image: "https://images.stripeassets.com/fzn2n1nzq965/2llp4uLkmHjmPBb42wnfyM/b2a6d4c81ce7979a7d00db79230f1d7e/device_management_en-us.png", note: "Stripe — cards-as-rows, low density, premium" },
+      { image: "https://mir-s3-cdn-cf.behance.net/project_modules/1400_webp/2ec6c7172579443.64818c035a8ad.png", note: "Mid-density mobile cashier — single product list with swipe actions" }
+    ]
+  }
+];
+
+const QUESTIONS = [
+  {
+    q: "Density — how much information should be on screen at once?",
+    options: ["Airy (Square / Stripe / Sunday)", "Balanced (Shopify / Helcim)", "Dense (Toast / Lightspeed / Revel)"]
+  },
+  {
+    q: "Vibe — what mood should SanoPOS feel like?",
+    options: ["Clinical / fintech (Stripe)", "Editorial / hospitality (Sunday / SpotOn)", "Friendly / playful (Loyverse / Helcim)", "Confident / premium (Lightspeed / Square)", "Restaurant-warm (Toast)"]
+  },
+  {
+    q: "Theme — light, dark, or both?",
+    options: ["Light-only", "Dark-only (kitchen-friendly)", "Both with toggle (most modern)"]
+  },
+  {
+    q: "Primary device — what should the design optimize for first?",
+    options: ["Counter terminal (desktop)", "Tablet (iPad-first)", "Mobile / handheld", "All three equally"]
+  },
+  {
+    q: "Color strategy — how bold should the brand color be?",
+    options: ["Monochrome + one accent (Stripe / SpotOn)", "Two-color brand (Square / Helcim)", "Multi-color tile system (Loyverse / Toast)", "Earth tones / editorial (Sunday)"]
+  }
+];
+
+// Safe DOM creation helpers — no innerHTML on dynamic data
+function el(tag, attrs, children) {
+  const node = document.createElement(tag);
+  if (attrs) {
+    for (const k in attrs) {
+      if (k === 'class') node.className = attrs[k];
+      else if (k === 'data') for (const dk in attrs.data) node.dataset[dk] = attrs.data[dk];
+      else if (k === 'on') for (const ek in attrs.on) node.addEventListener(ek, attrs.on[ek]);
+      else node.setAttribute(k, attrs[k]);
+    }
+  }
+  if (children) for (const c of [].concat(children)) {
+    if (c == null) continue;
+    node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return node;
+}
+
+function openLightbox(src) {
+  const lb = document.getElementById('lightbox');
+  lb.querySelector('img').src = src;
+  lb.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+// Render product cards
+const grid = document.getElementById('product-grid');
+PRODUCTS.forEach(p => {
+  const mainImg = el('img', { src: p.images[0] || '', alt: p.name + ' primary', loading: 'lazy' });
+  mainImg.addEventListener('click', () => openLightbox(mainImg.src));
+
+  const stack = el('div', { class: 'stack' });
+  const stackImgs = p.images.slice(1, 3);
+  stackImgs.forEach(src => {
+    const img = el('img', { src: src, alt: p.name + ' detail', loading: 'lazy' });
+    img.addEventListener('click', () => openLightbox(img.src));
+    stack.appendChild(img);
+  });
+  for (let i = stackImgs.length; i < 2; i++) stack.appendChild(el('div', { class: 'empty' }));
+
+  const meta = el('div', { class: 'product-meta' }, [p.device, el('span', { class: 'sep' }, '·'), p.tier]);
+
+  const tagRow = el('div', { class: 'tag-row' }, p.tags.map(t => el('span', { class: 'tag' }, t)));
+
+  const link = el('a', { class: 'product-link', href: p.url, target: '_blank', rel: 'noopener' },
+    'Visit ' + new URL(p.url).hostname.replace('www.','') + ' →');
+
+  const card = el('div', { class: 'product-card', data: { tags: p.tags.join(' ') } }, [
+    el('div', { class: 'product-images' }, [mainImg, stack]),
+    el('div', { class: 'product-body' }, [
+      el('h3', { class: 'product-name' }, p.name),
+      meta,
+      el('p', { class: 'product-desc' }, p.description),
+      tagRow,
+      link
+    ])
+  ]);
+  grid.appendChild(card);
+});
+
+// Render pattern blocks
+const patternRoot = document.getElementById('pattern-blocks');
+PATTERNS.forEach((p, idx) => {
+  const tiles = p.items.map(item => {
+    const img = el('img', { src: item.image, alt: '', loading: 'lazy' });
+    const note = el('div', { class: 'note' }, item.note);
+    const tile = el('div', { class: 'pattern-tile' }, [img, note]);
+    tile.addEventListener('click', () => openLightbox(item.image));
+    return tile;
+  });
+  const block = el('div', { class: 'pattern-block' }, [
+    el('div', { class: 'pattern-head' }, [
+      el('span', { class: 'pattern-num' }, String(idx + 1).padStart(2, '0')),
+      el('h3', { class: 'pattern-title' }, p.title),
+      el('span', { class: 'pattern-tag' }, p.tag)
+    ]),
+    el('div', { class: 'pattern-grid' }, tiles)
+  ]);
+  patternRoot.appendChild(block);
+});
+
+// Render worksheet questions
+const STORAGE_KEY = 'sanopos_pos_inspiration_choices';
+const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+const qRoot = document.getElementById('questions');
+QUESTIONS.forEach((q, idx) => {
+  const opts = q.options.map((label, oi) => {
+    const btn = el('button', { class: 'option', data: { opt: String(oi) } }, label);
+    if (saved[idx] !== undefined && Number(saved[idx]) === oi) btn.classList.add('selected');
+    btn.addEventListener('click', () => {
+      grpDiv.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
+      btn.classList.add('selected');
+      saved[idx] = oi;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+    });
+    return btn;
+  });
+  const grpDiv = el('div', { class: 'options', data: { q: String(idx) } }, opts);
+  qRoot.appendChild(el('div', { class: 'question' }, [
+    el('div', { class: 'q-num' }, 'Q' + String(idx + 1).padStart(2, '0')),
+    el('p', { class: 'q-text' }, q.q),
+    grpDiv
+  ]));
+});
+
+// Filter chips
+document.querySelectorAll('.filterbar .chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.filterbar .chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    const f = chip.dataset.filter;
+    document.querySelectorAll('.product-card').forEach(card => {
+      if (f === 'all' || card.dataset.tags.split(' ').includes(f)) card.classList.remove('hidden');
+      else card.classList.add('hidden');
+    });
+  });
+});
+
+// Lightbox close
+const lightbox = document.getElementById('lightbox');
+lightbox.addEventListener('click', () => {
+  lightbox.classList.remove('open');
+  document.body.style.overflow = '';
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && lightbox.classList.contains('open')) {
+    lightbox.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+});
+</script>
+</body>
+</html>
