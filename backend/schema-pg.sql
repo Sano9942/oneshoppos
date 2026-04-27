@@ -1288,7 +1288,7 @@ CREATE TABLE IF NOT EXISTS inventory_reconciliation (
 CREATE TABLE IF NOT EXISTS courier_integrations (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
-  adapter_key TEXT NOT NULL DEFAULT 'generic',
+  adapter_key TEXT NOT NULL DEFAULT 'generic' UNIQUE,
   api_base_url TEXT,
   api_key TEXT,
   api_secret TEXT,
@@ -1312,7 +1312,7 @@ INSERT INTO courier_integrations (name, adapter_key, tracking_url_template) VALU
   ('Pakistan Post', 'pakpost', 'https://ep.gov.pk/track/{tracking}'),
   ('DHL Express', 'dhl', 'https://www.dhl.com/pk-en/home/tracking.html?tracking-id={tracking}'),
   ('FedEx', 'fedex', 'https://www.fedex.com/fedextrack/?trknbr={tracking}')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (adapter_key) DO NOTHING;
 
 -- ── Web Orders ────────────────────────────────────────────────────────
 

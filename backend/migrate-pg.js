@@ -116,7 +116,7 @@ const MIGRATIONS = [
           ('M&P', 'mnp', 'https://www.mulphico.com/tracking/{tracking}'),
           ('Bykea', 'bykea', ''),
           ('Swyft', 'swyft', 'https://swyft.pk/tracking/{tracking}')
-        ON CONFLICT DO NOTHING;
+        ON CONFLICT (adapter_key) DO NOTHING;
 
         ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS tracking_number TEXT;
         ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS courier_id INTEGER REFERENCES courier_integrations(id);
@@ -984,7 +984,7 @@ const MIGRATIONS = [
             ('Pakistan Post', 'pakpost', 'https://ep.gov.pk/track/{tracking}'),
             ('DHL Express', 'dhl', 'https://www.dhl.com/pk-en/home/tracking.html?tracking-id={tracking}'),
             ('FedEx', 'fedex', 'https://www.fedex.com/fedextrack/?trknbr={tracking}')
-          ON CONFLICT DO NOTHING
+          ON CONFLICT (adapter_key) DO NOTHING
         `);
       } catch (_) {
         // courier_integrations may not exist in all schemas
@@ -5800,6 +5800,101 @@ const MIGRATIONS = [
           ) THEN
             ALTER TABLE chart_of_accounts
               ADD CONSTRAINT chart_of_accounts_code_key UNIQUE (code);
+          END IF;
+        END $$
+      `);
+    },
+  },
+  {
+    version: 81,
+    description:
+      "Courier integrations — dedupe + UNIQUE(adapter_key) (same ON CONFLICT no-op bug class as v79/v80)",
+    up: async (client) => {
+      // Background: third instance of the same bug class as v79 (loyalty_tiers)
+      // and v80 (chart_of_accounts). The courier_integrations seed in
+      // schema-pg.sql + the v5 migration (10 couriers) + the v17 migration
+      // (3 more couriers) all used `ON CONFLICT DO NOTHING` without a target
+      // column. The table had no UNIQUE on `adapter_key`, so the conflict
+      // target defaulted to the PRIMARY KEY (id, SERIAL) — which never
+      // collides. Fresh tenants got 3x duplicate rows for all 13 system
+      // couriers (39 rows). Discovered during Phase 2 Day 2 walkthrough on
+      // 2026-04-28.
+      //
+      // Why this matters: Courier Settings UI shows 39 cards for 13 unique
+      // couriers — confusing and error-prone (which one to enable?). If a
+      // user enables one duplicate, web_orders.courier_id may FK to a
+      // different copy than other workflows expect.
+      //
+      // This migration:
+      //   1. Reassigns FK references (web_orders.courier_id, loadsheets,
+      //      order_shipments, cod_settlement_batches) from non-canonical
+      //      duplicate rows to the canonical (lowest id) row of the same
+      //      adapter_key.
+      //   2. Deletes duplicate rows (keeps lowest id per adapter_key).
+      //   3. Adds the UNIQUE(adapter_key) constraint.
+      //
+      // Idempotent: on a clean tenant the UPDATEs and DELETE are no-ops,
+      // and the DO block guards the ALTER so re-runs don't fail.
+
+      // Skip if the table doesn't exist in this schema (defensive)
+      const { rows: tableExists } = await client.query(`
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = 'courier_integrations'
+      `);
+      if (!tableExists.length) return;
+
+      // 1. Reassign FK references from duplicate rows to the canonical row.
+      //    Each table is guarded — older schema states may not have all of them.
+      const fkTables = [
+        "web_orders",
+        "loadsheets",
+        "order_shipments",
+        "cod_settlement_batches",
+      ];
+      for (const tbl of fkTables) {
+        const { rows: refExists } = await client.query(
+          `
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = $1
+            AND column_name = 'courier_id'
+        `,
+          [tbl]
+        );
+        if (!refExists.length) continue;
+        await client.query(`
+          WITH canonical AS (
+            SELECT adapter_key, MIN(id) AS keep_id
+              FROM courier_integrations GROUP BY adapter_key
+          )
+          UPDATE ${tbl} t
+             SET courier_id = can.keep_id
+            FROM courier_integrations c
+            JOIN canonical can ON can.adapter_key = c.adapter_key
+           WHERE t.courier_id = c.id
+             AND c.id <> can.keep_id
+        `);
+      }
+
+      // 2. Delete duplicate rows (keep lowest id per adapter_key)
+      await client.query(`
+        DELETE FROM courier_integrations
+         WHERE id NOT IN (
+           SELECT MIN(id) FROM courier_integrations GROUP BY adapter_key
+         )
+      `);
+
+      // 3. Add UNIQUE(adapter_key) constraint if not already present
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+             WHERE conname = 'courier_integrations_adapter_key_key'
+               AND conrelid = 'courier_integrations'::regclass
+          ) THEN
+            ALTER TABLE courier_integrations
+              ADD CONSTRAINT courier_integrations_adapter_key_key UNIQUE (adapter_key);
           END IF;
         END $$
       `);
