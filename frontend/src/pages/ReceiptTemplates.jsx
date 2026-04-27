@@ -190,17 +190,7 @@ export default function ReceiptTemplates() {
 
   return (
     <div className="w-full h-full flex flex-col space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
-            <FileText className="text-[#8066FF]" size={28} />
-            Receipt Templates
-          </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Customize how receipts look when printed from the POS
-          </p>
-        </div>
+      <div className="flex justify-end">
         <button
           onClick={openCreate}
           className="bg-[#8066FF] hover:bg-[#7055E6] text-white px-5 py-2.5 rounded-lg font-bold shadow-md shadow-indigo-200 transition-all flex items-center gap-2"

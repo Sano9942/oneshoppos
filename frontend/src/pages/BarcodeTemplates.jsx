@@ -300,22 +300,16 @@ export default function BarcodeTemplates() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Barcode Label Designer</h1>
-          <p className="text-sm text-gray-500 mt-1">Configure label templates and print product barcodes in batch</p>
-        </div>
-        <div className="flex gap-3">
-          <button onClick={fetchTemplates} className="flex items-center gap-2 px-3 py-2 text-sm border rounded-lg hover:bg-gray-50">
-            <RefreshCw size={14} /> Refresh
-          </button>
-          <button onClick={openPrint} className="flex items-center gap-2 px-4 py-2 border border-green-600 text-green-700 rounded-lg text-sm font-medium hover:bg-green-50">
-            <Printer size={16} /> Print Labels
-          </button>
-          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-            <Plus size={16} /> New Template
-          </button>
-        </div>
+      <div className="flex justify-end gap-3">
+        <button onClick={fetchTemplates} className="flex items-center gap-2 px-3 py-2 text-sm border rounded-lg hover:bg-gray-50">
+          <RefreshCw size={14} /> Refresh
+        </button>
+        <button onClick={openPrint} className="flex items-center gap-2 px-4 py-2 border border-green-600 text-green-700 rounded-lg text-sm font-medium hover:bg-green-50">
+          <Printer size={16} /> Print Labels
+        </button>
+        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+          <Plus size={16} /> New Template
+        </button>
       </div>
 
       {loading ? (
