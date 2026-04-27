@@ -655,6 +655,58 @@ _None outstanding from Phase 1_
 
 ---
 
+### Phase 2 — Day 2 (2026-04-28)
+
+**Items walked**: 50 of ~50 nav items — **walkthrough complete**.
+
+Groups covered: Commerce remaining (3) → Inventory (8) → Stock Control (8) → Procurement (3) → Insights (6) → Operations (6) → Setup (11) → Online Store (1) → Compliance (2) → Admin (5). Service Tickets verified correctly hidden for retail mode (Day-1 brief was outdated — it never surfaced).
+
+**Three fixes shipped today (all on production):**
+
+| # | Fix | Commit | How verified |
+|---|---|---|---|
+| 1 | **Chart of Accounts triplicate seeds — same root-cause class as v79 loyalty-tiers fix.** All 21 system accounts appeared 3× (63 rows). `chart_of_accounts.code` had no UNIQUE; bare `ON CONFLICT DO NOTHING` no-op'd. 3 INSERT sites all fired during provisioning. v80 dedupe + UNIQUE(code) + 3 ON CONFLICT (code) fixes. FK-safe via UPDATE-then-DELETE on `journal_entry_lines.account_id` and self-FK `parent_id`. | `cd6f4bd` | UI shows each account once (63 → 21 rows verified live) |
+| 2 | **Courier integrations triplicate seeds — third instance of same root-cause class.** 13 system couriers × 3 = 39 rows. `adapter_key` had no UNIQUE. v81 dedupe + UNIQUE(adapter_key) + 3 ON CONFLICT (adapter_key) fixes. FK-safe via UPDATE-then-DELETE on `web_orders`, `loadsheets`, `order_shipments`, `cod_settlement_batches`. **Cross-table audit confirmed couriers is the LAST vulnerable seed table** (chart_areas 97/97, role_permissions 22/22, void_reason_codes 10/10, return_reasons 6/6, no_sale_reasons 4/4, override_reasons 4/4 all clean; loyalty/CoA already fixed). | `593062a` | UI shows each courier once (39 → 13 rows verified live) |
+| 3 | **Duplicate page headers on 3 tier-2 pages** (Approvals, Barcode Templates, Receipt Templates). Each Redesign wrapper used `<PageShell title=… subtitle=…>` AROUND a legacy component that ALSO rendered its own `<h1>` + subtitle. Stripped the inner `<h1>` from each legacy file; preserved action buttons via `flex justify-end`. | `00dad32` | /approvals after Vercel redeploy — header rendered exactly once |
+
+For livetest1 specifically, fixes #1 and #2 also required manual SQL because its migration loop is still stuck at v69 (Day-1 side-finding).
+
+**⚠️ Outstanding medium issues (functional, not yet fixed):**
+
+| Page | Issue |
+|---|---|
+| Insights → Accounting | `GET /api/accounting/cashflow/daily?from=…&to=…` returns **400** on page load. Possible feature-flag gap or validation bug. |
+| Stock Control → Inventory Audit | Page is **largely blank below the title** — no KPIs, no table, no empty state. Half-finished. Plus breadcrumb says "Stock Counts" while title is "Inventory Audit". |
+| Online Store → Storefront | Empty state copy says "Try adjusting your search or filters" but real issue is products aren't published (need rows in `channel_publications`). Misleading copy + no clear path from Inventory to publish. UX trap for new tenants who see 5 sample products in Inventory but empty storefront. |
+| Admin → Billing | "BEST VALUE" pill is on Annual (17% off, save PKR 16k) but the **Quarterly** card is pre-selected with a green border. Default cycle should match the recommended pill. |
+
+**⚠️ Polish bundle (16+ low-severity items, all bundleable into one cleanup commit):**
+
+- **Lowercase-leading subtitles** on 9 pages: Brands, Taxes, Attribute Sets, Promotions, Purchase Orders, Stock Adjustments, Transfers, Returned Stock, Supplier Payables. Sources: [BrandsRedesign.jsx:103](frontend/src/pages/redesign/BrandsRedesign.jsx#L103), [TaxesRedesign.jsx:105](frontend/src/pages/redesign/TaxesRedesign.jsx#L105), [AttributeSetsRedesign.jsx:176](frontend/src/pages/redesign/AttributeSetsRedesign.jsx#L176), [PromotionsRedesign.jsx:312](frontend/src/pages/redesign/PromotionsRedesign.jsx#L312) + 5 others.
+- **Subtitles missing trailing period** on ~10 pages.
+- **Nav-vs-title mismatches** on 6 pages: Inventory Audit / "Stock Counts", HR / "HR Management", Company Profile / "Company Settings", Barcode Templates / "Barcode Label Designer", Backup / "Backup & Restore", Tax Lookup / "Tax Rate Lookup". Plus FBR breadcrumb shows "Fbr" instead of "FBR" and Chart of Accounts breadcrumb shows "Chart Of Accounts".
+- **Layout drift on older pages** (no KPIs / outline-style CTAs / bare HTML forms / no subtitles): Price Lists, Review Moderation, Inventory Audit, Printer Settings.
+- **CTA color drift** — at least 5 different button styles across primary CTAs: green-fill (correct), green-outline (Print Labels), blue (New Template / Add Custom Courier / Apply / Save Settings), purple/violet (Receipt Templates New Template), white-outline (Refresh).
+- **Stock display `100.000`** — trailing zeros from v45 NUMERIC(10,3) widening; should trim when fractional == 0.
+- **"GST %" hardcoded label** on Add Product → Pricing section (country-coupled to PK).
+- **"outlet #1" ID leak** in Notifications body text — should resolve to outlet name.
+- **Login bootstrap 401** — single `/api/context/bootstrap` 401 during login redirect (different code path from Day-1 fix `6afdd70`; harmless noise but Sentry sees it).
+- **Reports subtitle** missing space ("acrosssales" → "across sales") + lists "restaurant" reports for retail tenants (subtitle should be retail-mode-aware).
+- **Revenue Forecast chart warning** — Recharts/EChart wrapper has width(-1)/height(-1) sizing race (chart still renders).
+- **Post-Dated Cheques silent 503s** on bootstrap (3 endpoints) — same fix-pattern as Day-1 fix #5 (`58e6c9d`).
+- **Action History** action/entity columns blank for login events — could be by design but visually odd.
+
+**Withdrawn finding (verified not a bug):**
+- **Returns "Original sale id (optional)" UI label** — git/code check confirmed [routes/returns.js](backend/routes/returns.js#L153) treats `original_sale_id` as nullable (handles web-order returns + no-receipt returns). UI label is correct. The OpenAPI doc string at lines 27/37 is the stale one and CLAUDE.md was quoting it. **Doc fix** candidate, not UX bug.
+
+**Pre-launch verifications still pending (defer to Phase 8):**
+- Sign up a fresh test tenant and confirm provisioner inserts Default Tax 0% with `is_default=true` (Day-1 fix #3 verification on livetest1 was inconclusive — that tenant has pre-fix residue).
+- Investigate making v69 migration idempotent against the partial-schema state before onboarding any real existing tenants. Not a launch blocker (livetest1 gets nuked in Phase 8) but a hidden trap.
+
+**Key takeaway:** the same provisioner-loop bug class showed up 3 times in 2 days (loyalty v79, CoA v80, couriers v81). The audit confirms no other seed tables are vulnerable. But this points to a need for **a unit test that runs the provisioner end-to-end and asserts no duplicate seed rows** — would have caught all three at PR time.
+
+---
+
 ## Out of Scope
 
 The following are deliberately excluded from this walkthrough — confirmed out of scope for the retail launch. Do not pad the walkthrough with them; they should be revisited in their own dedicated walkthrough when those modes/features ship.
