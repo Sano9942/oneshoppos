@@ -718,7 +718,7 @@ const MIGRATIONS = [
           ('5500', 'Office Supplies', 'expense', 'operating_expense', true, 'debit'),
           ('5600', 'Depreciation', 'expense', 'operating_expense', true, 'debit'),
           ('5900', 'Other Expenses', 'expense', 'operating_expense', true, 'debit')
-        ON CONFLICT DO NOTHING;
+        ON CONFLICT (code) DO NOTHING;
 
         -- ── Journal Entries ──────────────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS journal_entries (
@@ -5709,6 +5709,97 @@ const MIGRATIONS = [
           ) THEN
             ALTER TABLE loyalty_tiers
               ADD CONSTRAINT loyalty_tiers_name_key UNIQUE (name);
+          END IF;
+        END $$
+      `);
+    },
+  },
+  {
+    version: 80,
+    description:
+      "Chart of accounts — dedupe + UNIQUE(code) (same ON CONFLICT no-op bug class as v79)",
+    up: async (client) => {
+      // Background: identical bug to loyalty_tiers (v79). The chart_of_accounts
+      // seed in schema-pg.sql + the v9 migration both used `ON CONFLICT DO NOTHING`
+      // without a target column. The table had no UNIQUE on `code`, so the
+      // conflict target defaulted to the PRIMARY KEY (id, SERIAL) — which never
+      // collides. Every re-run inserted fresh duplicate rows. Tenants
+      // provisioned with the old DDL accumulated 3× duplicate rows for every
+      // system account (~63 rows for the 21 default accounts) — discovered
+      // during Phase 2 Day 2 walkthrough on 2026-04-28.
+      //
+      // Why critical: the rows have is_system=true → locked from UI deletion.
+      // Journal entries reference one of N duplicates ambiguously; reports
+      // sum across only the joined copy. Real accounting integrity risk.
+      //
+      // This migration:
+      //   1. Reassigns journal_entry_lines.account_id from non-canonical
+      //      duplicate rows to the canonical (lowest id) row of the same code.
+      //   2. Reassigns chart_of_accounts.parent_id (self-FK) the same way.
+      //   3. Deletes duplicate rows (keeps lowest id per code).
+      //   4. Adds the UNIQUE(code) constraint that should have been there
+      //      from day one.
+      //
+      // Idempotent: on a clean tenant the UPDATEs and DELETE are no-ops,
+      // and the DO block guards the ALTER so re-runs don't fail.
+
+      // Skip if the table doesn't exist in this schema (defensive)
+      const { rows: tableExists } = await client.query(`
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = 'chart_of_accounts'
+      `);
+      if (!tableExists.length) return;
+
+      // 1. Reassign journal_entry_lines.account_id to the canonical row.
+      //    Guarded — table may not exist in every schema state.
+      const { rows: jelExists } = await client.query(`
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = 'journal_entry_lines'
+      `);
+      if (jelExists.length) {
+        await client.query(`
+          WITH canonical AS (
+            SELECT code, MIN(id) AS keep_id FROM chart_of_accounts GROUP BY code
+          )
+          UPDATE journal_entry_lines jel
+             SET account_id = can.keep_id
+            FROM chart_of_accounts a
+            JOIN canonical can ON can.code = a.code
+           WHERE jel.account_id = a.id
+             AND a.id <> can.keep_id
+        `);
+      }
+
+      // 2. Reassign chart_of_accounts.parent_id (self-FK) to the canonical row.
+      await client.query(`
+        WITH canonical AS (
+          SELECT code, MIN(id) AS keep_id FROM chart_of_accounts GROUP BY code
+        )
+        UPDATE chart_of_accounts c
+           SET parent_id = can.keep_id
+          FROM chart_of_accounts p
+          JOIN canonical can ON can.code = p.code
+         WHERE c.parent_id = p.id
+           AND p.id <> can.keep_id
+      `);
+
+      // 3. Delete duplicate rows (keep lowest id per code)
+      await client.query(`
+        DELETE FROM chart_of_accounts
+         WHERE id NOT IN (SELECT MIN(id) FROM chart_of_accounts GROUP BY code)
+      `);
+
+      // 4. Add UNIQUE(code) constraint if not already present
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+             WHERE conname = 'chart_of_accounts_code_key'
+               AND conrelid = 'chart_of_accounts'::regclass
+          ) THEN
+            ALTER TABLE chart_of_accounts
+              ADD CONSTRAINT chart_of_accounts_code_key UNIQUE (code);
           END IF;
         END $$
       `);

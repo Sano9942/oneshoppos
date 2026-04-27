@@ -1202,7 +1202,7 @@ CREATE TABLE IF NOT EXISTS postdated_cheques (
 
 CREATE TABLE IF NOT EXISTS chart_of_accounts (
   id SERIAL PRIMARY KEY,
-  code TEXT NOT NULL,
+  code TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   type TEXT NOT NULL CHECK(type IN ('asset','liability','equity','revenue','expense')),
   sub_type TEXT,
@@ -2224,7 +2224,7 @@ INSERT INTO chart_of_accounts (code, name, type, sub_type, is_system, normal_bal
   ('5500', 'Office Supplies', 'expense', 'operating_expense', true, 'debit'),
   ('5600', 'Depreciation', 'expense', 'operating_expense', true, 'debit'),
   ('5900', 'Other Expenses', 'expense', 'operating_expense', true, 'debit')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (code) DO NOTHING;
 
 -- ── Phase 2A: Workforce Scheduling ──────────────────────────────────
 CREATE TABLE IF NOT EXISTS scheduled_shifts (

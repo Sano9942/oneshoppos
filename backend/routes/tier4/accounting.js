@@ -957,7 +957,7 @@ module.exports = function createAccountingRouter({
         await db.query(
           `INSERT INTO chart_of_accounts (code, name, type, sub_type, is_system, is_active, normal_balance)
            VALUES ($1, $2, $3, $4, true, true, $5)
-           ON CONFLICT DO NOTHING`,
+           ON CONFLICT (code) DO NOTHING`,
           [code, name, type, sub_type, normal_balance]
         );
       }
