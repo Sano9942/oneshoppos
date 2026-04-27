@@ -1,4 +1,6 @@
-import { createContext, useContext, useState, useCallback } from "react";
+import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { api } from "../api";
+import { useAuth } from "../auth/AuthProvider";
 
 const DEFAULT_LABELS = {
   product: "Product",
@@ -50,6 +52,7 @@ const PresetContext = createContext({
 });
 
 export function PresetProvider({ children }) {
+  const { employee } = useAuth();
   const [preset, setPreset] = useState(DEFAULT_PRESET);
   const [presetLoaded, setPresetLoaded] = useState(false);
 
@@ -59,6 +62,30 @@ export function PresetProvider({ children }) {
       setPresetLoaded(true);
     }
   }, []);
+
+  // Bootstrap preset once employee is authenticated. Self-contained so any
+  // route — including ones outside AppLayoutRedesign (e.g. /pos opens in a
+  // new tab) — has presetLoaded available without a layout component
+  // having to fetch it. Always flips presetLoaded=true so consumers
+  // (POSRoute) don't hang forever if the endpoint fails.
+  useEffect(() => {
+    if (!employee?.id) {
+      setPresetLoaded(false);
+      return;
+    }
+    let cancelled = false;
+    api.get("/api/context/bootstrap")
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.preset) setPreset({ ...DEFAULT_PRESET, ...data.preset });
+        setPresetLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPresetLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, [employee?.id]);
 
   const hasMode = useCallback(
     (modeName) => {

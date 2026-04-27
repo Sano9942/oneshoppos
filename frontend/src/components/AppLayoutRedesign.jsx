@@ -15,7 +15,6 @@ import NotificationBell from "./NotificationBell";
 import AnnouncementBanner from "../ui/AnnouncementBanner";
 import PlanLimitModalInterceptor from "./PlanLimitModalInterceptor";
 import { usePreset } from "../contexts/PresetContext";
-import { api } from "../api";
 
 function ProfileDropdown({ employee, logout, navigate }) {
   const [open, setOpen] = useState(false);
@@ -79,16 +78,11 @@ export default function AppLayoutRedesign() {
   const navigate = useNavigate();
   const { employee, hasPerm, logout, authHeaders } = useAuth();
   const { flags } = useFeatureFlags(authHeaders);
-  const { updatePreset, hasMode } = usePreset();
+  const { hasMode } = usePreset();
   const [collapsed, setCollapsed] = useState(false);
 
-  // Load preset data from bootstrap once on mount
-  useEffect(() => {
-    if (!employee?.id) return;
-    api.get("/api/context/bootstrap")
-      .then(data => { if (data?.preset) updatePreset(data.preset); })
-      .catch(() => {});
-  }, [employee?.id, updatePreset]);
+  // Preset bootstrap moved to PresetProvider so routes outside AppLayout
+  // (e.g. /pos opens in a new tab) also get presetLoaded=true.
 
   const nav = useMemo(
     () =>
