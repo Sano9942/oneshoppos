@@ -533,18 +533,90 @@ Currently `PAYMENT_GATEWAY=sandbox`. Pick one:
 
 ## Findings Log
 
-Date: 2026-04-27
-Tenant slug: ___
-Operator: ___
+Date started: 2026-04-27
+Operator: Hassan (sanomerchandise@gmail.com)
+Tenant slug used: `livetest1` (signup auto-derives slug from "Live Test 1" → `livetest1`)
+Test inbox: `oneshop349@gmail.com`
+Admin user: name `Hassan`, password `Danish11`, PIN `1234`
+Plan: Free (1 outlet / 3 employees / 100 products caps)
 
-### Critical (🔴) — blocks launch
-_None yet_
+### Resume instructions (for next sitting)
+
+To pick up where Phase 1 left off:
+
+1. **Log in** at `https://sanopos.com/login`:
+   - Store Code: `livetest1`
+   - Username: `hassan`
+   - Password: `Danish11`
+2. You should land on the dashboard. Sample seed data is already there: 5 products, 500 units in stock (Rs 1,330,000 retail).
+3. Continue with **Phase 2 — Sidebar walkthrough** (~30–45 min): click each nav item, take screenshots at desktop/tablet/mobile, log findings.
+4. **Cleanup at the very end (Phase 8)**: super-admin → `/admin/tenants` → delete `livetest1` AND `live_test_1` (the broken half-tenant from the first attempt; it failed v69 migration on the latest deploy and is harmless but should be purged).
+
+### Phase 1 — completed 2026-04-27
+
+What ran clean (✅):
+
+| Check | Result |
+|---|---|
+| Landing page render (hero, features, pricing, CTAs) | ✅ |
+| Signup form fields (Store Name / Your Name / Email / Password) | ✅ |
+| Cloudflare Turnstile — invisible auto-pass on clean session | ✅ |
+| Cloudflare Turnstile — interactive checkbox fallback when CF heuristics flag the session | ✅ (real users get invisible; this only fires for repeat submitters / VPN / automation) |
+| TOS gating — submit disabled until checked | ✅ |
+| "Check your email" screen (PR 8) | ✅ |
+| Email arrival latency | ✅ ~1 minute or faster (Gmail showed "0 minutes ago") |
+| Email deliverability — inbox, not spam (DKIM/SPF/DMARC pass) | ✅ |
+| HTML email render — branded, "Hi Hassan," personalization, clear CTA | ✅ |
+| Verify-email exchanges email-token for setup-session token | ✅ (good security pattern) |
+| Setup wizard — 5 steps render, progress indicator, Back/Next nav | ✅ |
+| Mode tile counts — 1 enabled (Retail Store), 22 "Coming soon" | ✅ |
+| Tile selection state (blue border + tinted fill) | ✅ |
+| PK localization — country=Pakistan, timezone=Asia/Karachi, currency=Rs/PKR, denominations seeded, +92 phone placeholder, GST 17% default tax | ✅ |
+| Live timezone clock | ✅ |
+| Setup completion → sample seed data created | ✅ 5 products, 500 units (Fix #1 + #2) |
+| Login → context-select → dashboard | ✅ |
+| Multi-viewport layout (desktop 1440 / tablet 820 / mobile 390) | ✅ no overflow at any size |
+
+Findings filed during Phase 1 — all addressed in commit `d517d56` and follow-up commit:
+
+### Critical (🔴) — fixed, on production
+
+1. **`/api/setup/complete` returned 500 — every new tenant signup blocked.** Root cause: `seedPresetData` inserted `products(is_active)` but the schema column is `status TEXT DEFAULT 'active'`. Catch block claimed "non-fatal" but the parent transaction was already aborted, so every subsequent INSERT (admin user, outlet, role permissions, receipt template) failed with `current transaction is aborted, commands ignored until end of transaction block`.
+   - Fix: drop the bad column from `backend/seeds/preset-seed-data.js`.
+2. **Aborted transaction not rolled back.** The "non-fatal" catch had no SAVEPOINT/ROLLBACK, so a seed bug poisoned the entire setup transaction.
+   - Fix: wrap the seed call in a `SAVEPOINT seed_data` in `backend/routes/setup.js`. Future seed failures now don't poison setup.
+3. **Raw Postgres error string leaked into the wizard UI** (users saw `current transaction is aborted, commands ignored until end of transaction block` verbatim).
+   - Fix: sanitize the 500 response in `setup.js` to a generic message; log full error server-side.
+
+### Important (⚠️) — fixed, on production
+
+4. **Setup wizard Step 1 — `Next` not disabled when no business type selected.** User could advance with no implicit pick (silently auto-defaulted). Fine today since retail is the only enabled tile but breaks once more modes ship.
+   - Fix: `industry_type` initial state = empty string; `validateStep()` blocks step 1 advance; Next button disabled with opacity-50 styling until a tile is clicked.
+5. **Data loss between signup and wizard Step 2.** Store Name entered at signup was empty in Step 2 (Store Identity).
+   - Fix: extended `GET /api/setup/status` to return `store_name` / `admin_name` / `admin_email`; wizard pre-fills on mount. Email also pre-fills.
+6. **Same data loss on Step 5.** Full Name entered at signup ("Hassan") was empty in the Admin Account step.
+   - Fix: same `/api/setup/status` extension covers admin_name pre-fill.
+7. **Fiscal Year defaulted to January even for Pakistan.** PK fiscal year is July–June; should auto-localize.
+   - Fix: `fiscal_year_start` field added to country packs (PK: `07-01`, AU: `07-01`, IN: `04-01`); wizard hydrates from selected country pack on mount and on country change.
+8. **Slug naming — "Live Test 1" produced `live_test_1` (snake_case underscores)**, not the cleaner `livetest1`.
+   - Fix: slug regex now strips all non-alphanumerics (`[^a-z0-9]/g → ""`) instead of replacing with underscores. "Live Test 1" → `livetest1`. Forward-looking — existing tenants unaffected.
+9. **Signup form has no tenant slug field — by design (out of scope for fix per operator decision).** Slug is auto-derived from store name. The "Check your email" screen does show `Your store code is: <slug>` so users see what they got.
+10. **Turnstile console pollution — Cloudflare iframe emits ~10 TrustedHTML/TrustedScript CSP violations** that are noise inside CF's sandboxed iframe (not actionable on our side).
+    - Fix: Sentry config updated with `denyUrls` for `challenges.cloudflare.com` + `about:srcdoc` and `ignoreErrors` for the Trusted Types messages.
+11. **PR 6 auto-login fallback to `/login`** instead of `/dashboard` after setup completes. Root cause: `loadCompanyProfile` middleware populates the cache with a placeholder `{ timezone: "UTC" }` (no `setup_complete` field), kicks off a fire-and-forget DB load, then immediately checks `!entry.profile.setup_complete` → `undefined` → 503 `SETUP_REQUIRED`. Race condition. Same race also bites the first authenticated request after any backend restart.
+    - Fix (separate commit): in `backend/middleware/tenant-auth.js`, AWAIT the company-profile load on cold-cache start; periodic refresh stays async. Also exposes `invalidateCompanyProfileCache(tenantId)` and calls it from `setup.js` after the setup transaction commits, so the wizard's mount-time `/api/setup/status` (which warms the cache with `setup_complete=false`) doesn't strand the auto-login behind the 5-min TTL.
+
+### Side observations (not bugs, just noted)
+
+- The `live_test_1` half-tenant from the first failed signup is in master DB with `setup_complete=false` and a partial schema. **v69 migration ran during the post-fix Railway boot and failed on it** (transaction-aborted during migration too). Not blocking — backend logs the per-tenant failure and continues. Will be deleted in Phase 8 cleanup.
+- Default Tax (GST 17%) auto-detected from country pack and pre-filled in Step 3 with a "DEFAULT TAX (AUTO-DETECTED FOR YOUR COUNTRY)" panel. Nice UX.
+- "Approaching plan limit" banner fires immediately on dashboard for Free tier (1 of 1 outlets used) — correct behavior.
 
 ### Important (⚠️) — should fix before launch
-_None yet_
+_None outstanding — all Phase 1 items fixed and deployed_
 
 ### Cosmetic / minor (✅ with notes) — fix post-launch
-_None yet_
+_None outstanding from Phase 1_
 
 ### Pre-launch decisions made
 - [ ] Payment gateway choice (Phase 7.5):

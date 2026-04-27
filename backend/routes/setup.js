@@ -379,6 +379,15 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
         );
       });
 
+      // Bust the company-profile cache so the immediate post-setup request
+      // (auto-login dashboard fetch) doesn't see the stale setup_complete=false
+      // entry that was warmed by the wizard's mount-time /api/setup/status.
+      try {
+        const { invalidateCompanyProfileCache } = require("../middleware/tenant-auth");
+        const tenantForCache = IS_MULTI_TENANT ? await getSetupTenant(req) : null;
+        invalidateCompanyProfileCache(tenantForCache?.id ?? "_default");
+      } catch { /* non-fatal */ }
+
       // ── Auto-login (PR 6) ──────────────────────────────────────────────
       // After successful setup, hand the merchant a fresh access + refresh
       // token so the frontend can land directly on /dashboard instead of

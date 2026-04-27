@@ -229,14 +229,27 @@ async function resolveTenant(req, res, next) {
   }
 }
 
-function loadCompanyProfile(req, res, next) {
+async function loadCompanyProfile(req, res, next) {
   const cacheKey = IS_MULTI_TENANT ? (req.tenantId || "_default") : "_default";
-  const entry = _companyCache.get(cacheKey) || { profile: { timezone: "UTC" }, lastCheck: 0 };
+  let entry = _companyCache.get(cacheKey);
   const now = Date.now();
 
-  if (now - entry.lastCheck > COMPANY_CACHE_MS) {
-    entry.lastCheck = now;
+  // Cold start: AWAIT the first load. The placeholder profile lacks
+  // `setup_complete`, so the post-wizard auto-login (and any first request
+  // after a server restart) would race the fire-and-forget load and 503
+  // with SETUP_REQUIRED even though setup is actually complete.
+  if (!entry) {
+    entry = { profile: { timezone: "UTC" }, lastCheck: now };
     _companyCache.set(cacheKey, entry);
+    try {
+      const { rows: [row] } = await _getCompanyDb(req).query(
+        "SELECT * FROM company_profile WHERE id = 1"
+      );
+      if (row) entry.profile = row;
+    } catch { /* tolerated — fall through with placeholder profile */ }
+  } else if (now - entry.lastCheck > COMPANY_CACHE_MS) {
+    // Periodic refresh stays async — cache is already warm.
+    entry.lastCheck = now;
     _getCompanyDb(req).query("SELECT * FROM company_profile WHERE id = 1").then(({ rows: [row] }) => {
       if (row) {
         entry.profile = row;
@@ -354,6 +367,19 @@ function init(deps) {
   _warmCaches();
 }
 
+// Lets setup-complete (and admin tooling) blow away a stale company-profile
+// entry. Without this, the wizard's mount-time /api/setup/status warms the
+// cache with setup_complete=false; the post-wizard auto-login then hits the
+// cached row before the 5-min TTL refreshes it and bounces with SETUP_REQUIRED.
+function invalidateCompanyProfileCache(tenantIdOrSlug) {
+  if (tenantIdOrSlug == null) {
+    _companyCache.clear();
+    return;
+  }
+  _companyCache.delete(tenantIdOrSlug);
+  _companyCache.delete(String(tenantIdOrSlug));
+}
+
 module.exports = {
   init,
   loadEmployeePerms,
@@ -361,4 +387,5 @@ module.exports = {
   resolveTenant,
   loadCompanyProfile,
   resolveContext,
+  invalidateCompanyProfileCache,
 };
