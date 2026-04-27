@@ -757,11 +757,12 @@ module.exports = function registerAuthRoutes(app, deps) {
 
     const { store_name, owner_name, email, password } = req.body;
 
+    // Slug = lowercase store name with all non-alphanumerics stripped.
+    // "Live Test 1" → "livetest1", "Sano POS" → "sanopos". Underscores
+    // stay legal (regex `^[a-z0-9_]{3,40}$`) but signup never produces them.
     const slug = store_name
       .toLowerCase()
-      .replace(/[^a-z0-9]/g, "_")
-      .replace(/_+/g, "_")
-      .replace(/^_|_$/g, "")
+      .replace(/[^a-z0-9]/g, "")
       .substring(0, 30);
 
     if (slug.length < 3) {

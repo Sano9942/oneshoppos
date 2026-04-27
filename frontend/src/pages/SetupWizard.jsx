@@ -160,7 +160,9 @@ export default function SetupWizard() {
   const tenantSlug = searchParams.get("tenant") || "";
 
   const [form, setForm] = useState({
-    industry_type: "general_retail",
+    // Empty by default so step 1 forces an explicit click instead of silently
+    // advancing with the implicit retail default. Validation gates Next.
+    industry_type: "",
     company_name: "",
     country_code: "PK",
     country: "Pakistan",
@@ -170,7 +172,8 @@ export default function SetupWizard() {
     timezone: "Asia/Karachi",
     currency_symbol: "Rs",
     currency_code: "PKR",
-    fiscal_year_start: "01-01",
+    // Pakistan fiscal year is July–June; pulled from country pack on mount.
+    fiscal_year_start: "07-01",
     tax_name: "",
     tax_rate: "",
     denominations: [5000, 1000, 500, 100, 50, 20, 10],
@@ -189,12 +192,25 @@ export default function SetupWizard() {
     setDenomInput("");
   };
 
-  // On mount: check setup status + fetch country packs
+  // On mount: check setup status (also pre-fills store/admin captured at signup)
+  // + fetch country packs + fetch the PK pack so fiscal_year_start hydrates
+  // before the merchant lands on step 3.
   useEffect(() => {
     api.raw(`/api/setup/status${tenantSlug ? `?tenant=${tenantSlug}` : ""}`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.setup_complete) navigate("/login", { replace: true });
+        if (data.setup_complete) {
+          navigate("/login", { replace: true });
+          return;
+        }
+        // Carry signup data into the wizard so the merchant doesn't re-type
+        // store name (step 2) or full name (step 5).
+        setForm((f) => ({
+          ...f,
+          company_name: f.company_name || data.store_name || "",
+          admin_name: f.admin_name || data.admin_name || "",
+          email: f.email || data.admin_email || "",
+        }));
       })
       .catch(() => {});
     api.raw("/api/country-packs")
@@ -203,7 +219,23 @@ export default function SetupWizard() {
         if (Array.isArray(list) && list.length > 0) setCountries(list);
       })
       .catch(() => {});
-  }, [navigate]);
+    // Hydrate the default country (PK) pack so fiscal year + denominations
+    // + tax line up before the merchant scrolls to step 3.
+    api.raw("/api/country-packs/PK")
+      .then((r) => r.json())
+      .then((pack) => {
+        if (!pack || pack.error) return;
+        setSelectedPack(pack);
+        setForm((f) => ({
+          ...f,
+          fiscal_year_start: pack.fiscal_year_start || f.fiscal_year_start,
+          denominations: pack.cash_denominations || f.denominations,
+          tax_name: f.tax_name || (pack.default_tax ? pack.default_tax.name : ""),
+          tax_rate: f.tax_rate || (pack.default_tax ? String(pack.default_tax.rate) : ""),
+        }));
+      })
+      .catch(() => {});
+  }, [navigate, tenantSlug]);
 
   function set(field, value) {
     setForm((prev) => {
@@ -217,7 +249,7 @@ export default function SetupWizard() {
           next.currency_code = summary.currency_code;
           next.timezone = summary.timezone_default;
         }
-        // Fetch full pack for denominations, tax, etc.
+        // Fetch full pack for denominations, tax, fiscal year, etc.
         api.raw(`/api/country-packs/${value}`)
           .then((r) => r.json())
           .then((pack) => {
@@ -227,6 +259,7 @@ export default function SetupWizard() {
               denominations: pack.cash_denominations || [100, 50, 20, 10, 5, 1],
               tax_name: pack.default_tax ? pack.default_tax.name : "",
               tax_rate: pack.default_tax ? String(pack.default_tax.rate) : "",
+              fiscal_year_start: pack.fiscal_year_start || "01-01",
             }));
           })
           .catch(() => {});
@@ -236,6 +269,9 @@ export default function SetupWizard() {
   }
 
   function validateStep() {
+    if (step === 1) {
+      if (!form.industry_type) return "Pick a business type to continue.";
+    }
     if (step === 2) {
       if (!form.company_name.trim()) return "Store name is required.";
     }
@@ -247,6 +283,10 @@ export default function SetupWizard() {
     }
     return "";
   }
+
+  // Drives the disabled state of the Next/Complete button so the user gets
+  // a visual cue before they click — better than relying on the inline error.
+  const stepInvalid = Boolean(validateStep());
 
   function next() {
     const err = validateStep();
@@ -663,15 +703,16 @@ export default function SetupWizard() {
                 {step < 5 ? (
                   <button
                     onClick={next}
-                    className="rounded-lg bg-indigo-600 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 active:bg-indigo-800"
+                    disabled={stepInvalid}
+                    className="rounded-lg bg-indigo-600 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 active:bg-indigo-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-indigo-600"
                   >
                     Next
                   </button>
                 ) : (
                   <button
                     onClick={submit}
-                    disabled={submitting}
-                    className="rounded-lg bg-emerald-600 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-60"
+                    disabled={submitting || stepInvalid}
+                    className="rounded-lg bg-emerald-600 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {submitting ? "Setting up…" : "Complete Setup"}
                   </button>

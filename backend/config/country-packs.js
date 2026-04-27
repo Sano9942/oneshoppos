@@ -25,6 +25,7 @@ const COUNTRY_PACKS = Object.freeze({
     compliance_features: ["fbr_integration"],
     available_couriers: ["leopards", "tcs", "blueex", "trax", "callcourier", "mnp", "postex", "rider", "swyft", "bykea", "pakpost"],
     regions: ["Punjab", "Sindh", "KPK", "Balochistan", "ICT", "AJK", "GB"],
+    fiscal_year_start: "07-01",
   },
   US: {
     code: "US",
@@ -77,6 +78,7 @@ const COUNTRY_PACKS = Object.freeze({
     compliance_features: [],
     available_couriers: ["dhl", "fedex"],
     regions: [],
+    fiscal_year_start: "07-01",
   },
   IN: {
     code: "IN",
@@ -90,6 +92,7 @@ const COUNTRY_PACKS = Object.freeze({
     compliance_features: [],
     available_couriers: ["dhl", "fedex"],
     regions: [],
+    fiscal_year_start: "04-01",
   },
   AE: {
     code: "AE",

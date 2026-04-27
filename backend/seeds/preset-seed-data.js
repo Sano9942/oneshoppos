@@ -137,8 +137,8 @@ async function seedPresetData(client, industryType, outletId) {
   for (const item of seed.products) {
     const categoryId = catMap[item.category] || null;
     const { rows: [product] } = await client.query(
-      `INSERT INTO products (name, price, category_id, is_active)
-       VALUES ($1, $2, $3, true)
+      `INSERT INTO products (name, price, category_id)
+       VALUES ($1, $2, $3)
        RETURNING id`,
       [item.name, item.price, categoryId]
     );

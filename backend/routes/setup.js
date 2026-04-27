@@ -59,6 +59,8 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
   }
 
   // ── GET /api/setup/status ────────────────────────────────────────────────
+  // Returns setup state plus the store/admin info captured at signup so the
+  // wizard can pre-fill fields (Store Name on step 2, Full Name on step 5).
   router.get('/status', async (req, res) => {
     try {
       const setupDb = await getSetupDb(req);
@@ -66,10 +68,27 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
         'SELECT setup_complete FROM company_profile WHERE id = 1',
         []
       );
-      if (!row) return res.json({ setup_complete: false });
-      res.json({ setup_complete: Boolean(row.setup_complete) });
+      const setup_complete = Boolean(row?.setup_complete);
+
+      // Tenant + admin pre-fill (best effort — never fail status on this).
+      let store_name = null, admin_name = null, admin_email = null;
+      try {
+        const tenant = await getSetupTenant(req);
+        if (tenant) store_name = tenant.name || null;
+        const { rows: emp } = await setupDb.query(
+          "SELECT name, email FROM employees WHERE role_id = 1 ORDER BY id ASC LIMIT 1",
+          []
+        );
+        if (emp[0]) {
+          admin_name = emp[0].name || null;
+          admin_email = emp[0].email || null;
+        }
+      } catch { /* ignore — pre-fill is non-critical */ }
+
+      res.json({ setup_complete, store_name, admin_name, admin_email });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      console.error("[setup/status] failed:", err);
+      res.status(500).json({ error: "Could not load setup status." });
     }
   });
 
@@ -258,10 +277,15 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
           );
         }
 
-        // 2b. Seed sample data (categories + products) — failure is non-fatal
+        // 2b. Seed sample data (categories + products) — failure is non-fatal.
+        // Wrapped in a SAVEPOINT so a seed failure can't poison the parent
+        // transaction (Postgres aborts the whole tx on any unhandled error).
+        await client.query("SAVEPOINT seed_data");
         try {
           await seedPresetData(client, industry_type, 1);
+          await client.query("RELEASE SAVEPOINT seed_data");
         } catch (seedErr) {
+          await client.query("ROLLBACK TO SAVEPOINT seed_data");
           console.error("[setup] Sample data seeding failed (non-fatal):", seedErr.message);
         }
 
@@ -406,7 +430,11 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
 
       res.json({ success: true, ...(auth || {}) });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      // Log full error for debugging but never leak raw DB messages to UI.
+      console.error("[setup/complete] failed:", err);
+      res.status(500).json({
+        error: "Setup failed. Please try again or contact support if this persists.",
+      });
     }
   });
 

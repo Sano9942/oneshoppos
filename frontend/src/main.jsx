@@ -16,6 +16,17 @@ if (SENTRY_DSN) {
     environment: ENV_MODE,
     tracesSampleRate: 0,
     replaysSessionSampleRate: 0,
+    // Cloudflare Turnstile runs inside an iframe whose internal scripts
+    // violate browser-enforced Trusted Types. The token still generates;
+    // these errors are noise we don't own. Filter so they don't drown
+    // real frontend issues in Sentry.
+    denyUrls: [
+      /challenges\.cloudflare\.com/i,
+      /^about:srcdoc$/i,
+    ],
+    ignoreErrors: [
+      /This document requires 'Trusted(HTML|Script|ScriptURL)' assignment/i,
+    ],
   });
 }
 
