@@ -52,7 +52,7 @@ const PresetContext = createContext({
 });
 
 export function PresetProvider({ children }) {
-  const { employee } = useAuth();
+  const { employee, isBootstrapping } = useAuth();
   const [preset, setPreset] = useState(DEFAULT_PRESET);
   const [presetLoaded, setPresetLoaded] = useState(false);
 
@@ -66,9 +66,19 @@ export function PresetProvider({ children }) {
   // Bootstrap preset once employee is authenticated. Self-contained so any
   // route — including ones outside AppLayoutRedesign (e.g. /pos opens in a
   // new tab) — has presetLoaded available without a layout component
-  // having to fetch it. Always flips presetLoaded=true so consumers
-  // (POSRoute) don't hang forever if the endpoint fails.
+  // having to fetch it.
+  //
+  // Wait for AuthProvider to finish bootstrapping before fetching: the auth
+  // fetch interceptor is wired in an AuthProvider useEffect, and child
+  // useEffects run before parent useEffects in React. Without this guard,
+  // the first /api/context/bootstrap call goes through unpatched fetch and
+  // 401s — preset stays as default `general_retail`, which silently breaks
+  // clinic/restaurant tenants on direct /pos navigation.
+  //
+  // Always flips presetLoaded=true on completion (success or error) so
+  // consumers like POSRoute never hang.
   useEffect(() => {
+    if (isBootstrapping) return;
     if (!employee?.id) {
       setPresetLoaded(false);
       return;
@@ -85,7 +95,7 @@ export function PresetProvider({ children }) {
         setPresetLoaded(true);
       });
     return () => { cancelled = true; };
-  }, [employee?.id]);
+  }, [employee?.id, isBootstrapping]);
 
   const hasMode = useCallback(
     (modeName) => {
