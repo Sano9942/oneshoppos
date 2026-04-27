@@ -4,6 +4,10 @@ A live, end-to-end verification pass against production (`https://sanopos.com`) 
 
 This is **not** an automated test suite. It's a guided walkthrough where the script drives the obvious clicks, pauses for CAPTCHA / email verification, and the operator (you) watches for anomalies. Findings get logged inline.
 
+## Scope
+
+This walkthrough covers **`general_retail` mode only** — the launch target. Mode-gated features (Restaurant, Appointments, Service Tickets, Projects/Contracts, Rentals, Rooms, Clinical) do not appear in retail tenants' UI and are explicitly **out of scope** (see "Out of Scope" section at the bottom). Super-admin panel walkthrough is also out of scope (internal team, separate auth, not part of merchant launch).
+
 ## Why This Exists
 
 Code tests verify correctness. Click-throughs verify experience. Specifically catches:
@@ -252,6 +256,52 @@ These are cross-feature flows that exercise multiple subsystems. Bugs here are u
 - [ ] Gift Cards → issue card "GC-001" with 500 balance
 - [ ] Open `/gift-card/GC-001` in incognito → balance 500 visible
 
+### 3.9 Shopify import smoke
+- [ ] Setup → Import from Shopify/Square → click Shopify connect
+- [ ] OAuth flow redirects to Shopify (or paste sandbox creds)
+- [ ] Verify token persisted (encrypted) in tenant config
+- [ ] Trigger product sync → verify a product lands in Inventory
+- [ ] Trigger order pull (if Shopify orders seeded) → verify order in Orders
+- [ ] `GET /api/integrations/shopify/health` returns OK
+
+### 3.10 Courier shipment + tracking
+- [ ] Courier Settings → enable one courier (Leopards or generic) with sandbox/test creds
+- [ ] Orders → pick a fulfillable sale → Ship → choose courier → submit
+- [ ] Verify: tracking number returned, label/AWB printable
+- [ ] Refresh tracking → verify status fetched from courier API
+- [ ] Verify courier webhook callback updates order status (use sandbox or simulate)
+
+### 3.11 Receipt printer + cash drawer
+- [ ] Printer Settings → "+ Printer" → configure network printer (TCP host:port) or USB
+- [ ] Test print button → verify physical paper output
+- [ ] POS → complete a cash sale → verify receipt prints automatically
+- [ ] Verify cash drawer kicks open on cash payment
+- [ ] Pull network cable mid-print → verify graceful failure (no crash, retry option)
+
+### 3.12 CSV import preview validation
+- [ ] Import Data → Products tab → upload sample CSV with: 1 valid row, 1 missing-required-field row, 1 duplicate-SKU row
+- [ ] Verify preview screen flags the bad rows distinctly
+- [ ] Fix the issues inline (or re-upload corrected) → import succeeds
+- [ ] Verify imported products appear in Inventory with correct prices/taxes
+- [ ] Repeat with Customers tab using a 5-row XLSX
+
+### 3.13 Sandbox payment checkout end-to-end
+- [ ] From cap-hit modal in 3.4 → click "Upgrade to Pro" → routes to /billing
+- [ ] Click monthly Pro plan → "Pay Now" → redirects to SanoPay sandbox
+- [ ] Complete sandbox payment with test card
+- [ ] Verify webhook fires → tenant auto-upgrades to Pro
+- [ ] Verify confirmation email arrives
+- [ ] Verify `payment_records` row created with correct amount + status
+- [ ] Verify Free-tier caps lifted (try adding 4th employee — succeeds)
+
+### 3.14 Mixed-rate tax sale correctness
+- [ ] Inventory → create "Coffee Beans" with 17% GST
+- [ ] Inventory → create "Snack Bar" with 5% GST
+- [ ] POS → ring up 1× Coffee Beans (100) + 2× Snack Bar (50)
+- [ ] Verify receipt shows two tax lines: 17 (17% of 100) + 5 (5% of 100) = 22 total tax
+- [ ] Verify report (Sales Summary) shows correct tax breakdown by rate
+- [ ] If FBR enabled (after 3.3): verify FBR payload preserves per-line tax rates
+
 ---
 
 ## Phase 4 — Public Surfaces
@@ -284,6 +334,12 @@ Background workers don't surface naturally in click-throughs. These need explici
 - [ ] **Email worker**: trigger any email-emitting event (welcome, receipt, password reset) → check inbox
 - [ ] **Marketplace sync worker**: it's a stub, but verify cron fires by checking `/api/admin/worker-status` → marketplace-sync `lastPollAt` updates every 10 min
 - [ ] **Cleanup worker**: don't wait 24h, just verify `/api/admin/worker-status` shows it registered
+- [ ] **Shift auto-close worker** (`shift-auto-close-worker-boss.js`): verify registered + heartbeat updating; optionally seed a >36h-old open shift and confirm it closes
+- [ ] **Retail digest worker** (`retail-digest-worker-boss.js`): verify registered; trigger manual run if endpoint exists, confirm digest email queued
+- [ ] **ABC inventory worker** (`abc-worker-boss.js`): verify registered + heartbeat; verify Intelligence → ABC tab populates after run
+- [ ] **Anomaly worker** (`anomaly-worker-boss.js`): verify registered; check Retail Risk page picks up anomalies
+- [ ] **Subscription grace worker** (`subscription-grace-worker-boss.js`): verify registered + heartbeat (hourly); manually flip a tenant to grace and confirm transition
+- [ ] **Reservation reminder worker** (`reservation-reminder-worker-boss.js`): verify registered; create a near-expiry reservation and confirm reminder fires
 
 Findings to log:
 - Worker latency (how long until job runs?)
@@ -347,6 +403,26 @@ Test the 4 known gating leaks from `retail-targeted-code-audit-2026-04-27.md`:
 
 These should match the audit findings — if any behaves differently, that's a NEW finding.
 
+### 6.9 Dashboard JWT silent refresh
+- [ ] Log into dashboard → leave open and idle past JWT expiry (or manually short-expire token in DevTools)
+- [ ] Click any nav item that triggers an API call (e.g., Sales History)
+- [ ] Verify: `AuthProvider.jsx` refresh interceptor swaps token transparently — no logout, no redirect to login
+- [ ] If refresh fails, verify graceful redirect to login (not white screen)
+
+### 6.10 Error boundary recovery UI
+- [ ] Open POS → DevTools console → force a render error (e.g., `throw` in a child component, or break a context value temporarily)
+- [ ] Verify: `ui/ErrorBoundary.jsx` catches it and renders the recovery card (NOT a white screen)
+- [ ] Verify: "Try again" / "Reload" CTA works
+- [ ] Verify: error reaches Sentry with tenant + employee context tagged
+
+### 6.11 Timezone correctness on receipts and reports
+- [ ] During Phase 1 wizard, set timezone to a non-UTC zone (e.g., `Asia/Karachi` UTC+5)
+- [ ] Make a sale at a known wall-clock time
+- [ ] Verify receipt timestamp shows local PK time, not UTC
+- [ ] Verify Sales History date column shows local date
+- [ ] Run Sales Summary report with date filter for "today" — verify date boundary respects PK midnight, not UTC midnight (especially relevant for sales between 19:00–23:59 PK)
+- [ ] Spot-check FBR payload (if enabled): `invoice_datetime` should be local + offset, not bare UTC
+
 ---
 
 ## Phase 7 — Pre-Launch Operational Decisions
@@ -407,6 +483,42 @@ Currently `PAYMENT_GATEWAY=sandbox`. Pick one:
 - [ ] All retail-relevant workers show `lastPollAt` updating
 - [ ] No stuck queue depths
 
+### 7.10 Rate limit smoke
+- [ ] Auth: attempt 21 logins with bad credentials in <15 min → verify 429 on the 21st with `Retry-After` header
+- [ ] Auth: verify successful login resets the counter
+- [ ] Webhook: blast 121 requests/min at `/api/webhooks/xpay` (sandbox) → verify 429 kicks in
+- [ ] Global: confirm normal browsing never hits rate limit during full Phase 2 walkthrough
+
+### 7.11 Upload security smoke
+- [ ] Product image: rename `payload.exe` to `payload.jpg` and upload → verify reject (MIME sniff vs extension mismatch)
+- [ ] Support ticket screenshot: upload an SVG with embedded `<script>` → verify either rejected or rendered safely (no script execution)
+- [ ] Upload an oversized file (e.g., 50MB) → verify reject with clear error
+- [ ] Upload zero-byte file → verify graceful handling
+
+### 7.12 SEO and OG tag verification
+- [ ] Inspect `<head>` of landing page (`/`) — verify title, meta description, OG image, OG title, favicon
+- [ ] Inspect login page (`/login`) — at minimum: title, favicon, no-index if intentional
+- [ ] Inspect signup page (`/signup`) — title, meta description
+- [ ] Inspect public receipt (`/receipt/:invoiceNumber`) — at least title; ideally OG image for share previews
+- [ ] Inspect public storefront (`/store/{slug}`) — full SEO set (title, description, OG image, JSON-LD product schema if shipped)
+- [ ] Run a Twitter/Facebook share preview check on landing page URL
+
+### 7.13 Backup data integrity
+- [ ] Trigger backup from Backup & Restore page → wait for completion
+- [ ] Verify R2 file exists (`backups/tenant_{slug}/backup_YYYYMMDD.sql.gz`)
+- [ ] Note row counts for: products, customers, sales, sale_items, orders, inventory, employees on the source tenant
+- [ ] Provision a fresh test tenant `livetest1-restore` → trigger restore from the backup
+- [ ] Compare row counts for the same tables — must match exactly
+- [ ] Spot-check 3 random sales: receipt detail, totals, tax lines preserved
+- [ ] Spot-check 1 product image — does R2 link still resolve, or did backup miss media?
+
+### 7.14 Decisions (commit yes/no before launch — don't default)
+- [ ] **Performance baseline** — capture Lighthouse scores (dashboard, POS, storefront) + sale completion latency? Yes/No: ___
+- [ ] **Accessibility smoke** — keyboard nav + dark-mode contrast + axe-core on landing? Yes/No: ___
+- [ ] **AI insights chat** — `ai_insights` flag is OFF per `project-ai-deferred` memory; confirm explicitly out of scope? Yes/No: ___
+- [ ] **PWA installed-mode** — test offline manifest + service worker update on installed PWA? Yes/No: ___
+- [ ] **Audit finding #6 (loyalty tiers ungated nav)** — fix code gate before launch, or document leak? Decision: ___
+
 ---
 
 ## Phase 8 — Cleanup
@@ -438,6 +550,32 @@ _None yet_
 - [ ] Payment gateway choice (Phase 7.5):
 - [ ] Browser compatibility verdict:
 - [ ] T&C content sign-off:
+
+---
+
+## Out of Scope
+
+The following are deliberately excluded from this walkthrough — confirmed out of scope for the retail launch. Do not pad the walkthrough with them; they should be revisited in their own dedicated walkthrough when those modes/features ship.
+
+| Area | Why out of scope |
+|---|---|
+| Restaurant nav group (Floor Plan, Checks, KDS, Modifiers, Tip Pools, etc.) | Mode-gated; not enabled in `general_retail` tenants |
+| Appointments / Bookings nav group | Mode-gated; non-retail |
+| Service Tickets nav group | Mode-gated; non-retail |
+| Projects & Contracts nav group | Mode-gated; non-retail |
+| Rentals nav group | Mode-gated; non-retail |
+| Rooms (hotel/lodging) nav group | Mode-gated; non-retail |
+| Clinical (Treatment Plans, Lab Orders) nav group | Mode-gated; non-retail |
+| Public booking pages (`/book/:slug`, `/reserve/:slug`) | Surface only when bookings module is enabled |
+| Public restaurant QR pages (`/menu/:token`, `/pay/:token`) | Surface only when restaurant module is enabled |
+| Subscriptions nav (`/subscriptions`) | Mode-gated (`requiredMode: subscriptions`) — not in `general_retail`. Surfaces in gym preset only. |
+| Commissions nav (`/commissions`) | Mode-gated (`requiredMode: commissions`) — not in `general_retail`. Surfaces in salon/services preset only. |
+| Mode-gated workers (rental-overdue, room-overdue, treatment-plan, kds-load-snapshot, course-release, booking-reminder) | Don't run for retail tenants |
+| Super-admin panel walkthrough (10 admin pages) | Internal team surface, separate auth, not part of merchant launch |
+| SMS campaign provider integration | `phase5_sms_providers` flag — no provider creds wired; post-launch |
+| Marketplace background sync (Daraz, Meta, WhatsApp, Google Merchant) | Stubbed; "manual sync only" disclaimer is the launch story |
+| Multi-day offline POS | Best-effort by design; document in support FAQ |
+| AI Insights chat (`/api/insights/ask`) | Per `project-ai-deferred` memory — AI expansion deferred, no customer demand |
 
 ---
 
