@@ -325,7 +325,7 @@ END $$;
 
 CREATE TABLE IF NOT EXISTS loyalty_tiers (
   id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL,
+  name TEXT NOT NULL UNIQUE,
   min_spend NUMERIC(12,2) NOT NULL DEFAULT 0,
   points_multiplier NUMERIC(4,2) NOT NULL DEFAULT 1.0,
   discount_percent NUMERIC(4,2) DEFAULT 0,
@@ -2192,14 +2192,14 @@ INSERT INTO feature_flags (key, enabled, description) VALUES
   ('retail_weekly_digest', false, '2-G.16 weekly digest email to merchant owners (Monday 08:00 local)')
 ON CONFLICT (key) DO NOTHING;
 
--- Seed default loyalty tiers
+-- Seed default loyalty tiers (idempotent via UNIQUE(name) constraint)
 INSERT INTO loyalty_tiers (name, min_spend, points_multiplier, discount_percent, color, sort_order)
 VALUES
   ('Bronze', 0, 1.0, 0, '#CD7F32', 1),
   ('Silver', 25000, 1.5, 2, '#C0C0C0', 2),
   ('Gold', 75000, 2.0, 5, '#FFD700', 3),
   ('Platinum', 200000, 3.0, 8, '#E5E4E2', 4)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (name) DO NOTHING;
 
 -- Seed default Pakistan-standard chart of accounts
 INSERT INTO chart_of_accounts (code, name, type, sub_type, is_system, normal_balance) VALUES

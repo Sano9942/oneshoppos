@@ -567,14 +567,14 @@ const MIGRATIONS = [
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
 
-        -- Seed default loyalty tiers
+        -- Seed default loyalty tiers (idempotent on (name) post v79)
         INSERT INTO loyalty_tiers (name, min_spend, points_multiplier, discount_percent, color, sort_order)
         VALUES
           ('Bronze', 0, 1.0, 0, '#CD7F32', 1),
           ('Silver', 25000, 1.5, 2, '#C0C0C0', 2),
           ('Gold', 75000, 2.0, 5, '#FFD700', 3),
           ('Platinum', 200000, 3.0, 8, '#E5E4E2', 4)
-        ON CONFLICT DO NOTHING;
+        ON CONFLICT (name) DO NOTHING;
 
         -- ── Product Bundles ──────────────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS product_bundles (
@@ -5635,6 +5635,82 @@ const MIGRATIONS = [
         UPDATE tenants
            SET email_verified_at = COALESCE(email_verified_at, created_at)
          WHERE email_verified_at IS NULL
+      `);
+    },
+  },
+  {
+    version: 79,
+    description:
+      "Loyalty tiers — dedupe + UNIQUE(name) (fixes ON CONFLICT no-op bug)",
+    up: async (client) => {
+      // Background: the original loyalty_tiers seed in schema-pg.sql + the v34
+      // migration both used `ON CONFLICT DO NOTHING` without a target column.
+      // The table had no UNIQUE on `name`, so PostgreSQL never matched a
+      // conflict — every re-run inserted fresh duplicate rows. Tenants
+      // provisioned with the old DDL accumulated 8-12 dup rows when setup
+      // retried (see Phase 2 walkthrough finding from 2026-04-27).
+      //
+      // This migration:
+      //   1. Reassigns customers.loyalty_tier_id from any non-canonical
+      //      duplicate row to the canonical (lowest id) row of the same name,
+      //      preserving the FK reference.
+      //   2. Deletes the duplicate rows (keeps lowest id per name).
+      //   3. Adds the UNIQUE(name) constraint that should have been there
+      //      from day one.
+      //
+      // Idempotent: on a clean tenant the UPDATE and DELETE are no-ops,
+      // and the DO block guards the ALTER so re-runs don't fail.
+      //
+      // Public schema also has loyalty_tiers (created by v34's CREATE TABLE
+      // IF NOT EXISTS running under search_path=public). It's empty/unused
+      // for production, so the dedup is a no-op there.
+
+      // Skip if the table doesn't exist in this schema (defensive)
+      const { rows: tableExists } = await client.query(`
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = 'loyalty_tiers'
+      `);
+      if (!tableExists.length) return;
+
+      // 1. Reassign customers from duplicate tiers to the canonical row.
+      //    Guarded — public schema may have loyalty_tiers but not customers.
+      const { rows: customersExists } = await client.query(`
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = 'customers'
+      `);
+      if (customersExists.length) {
+        await client.query(`
+          WITH canonical AS (
+            SELECT name, MIN(id) AS keep_id FROM loyalty_tiers GROUP BY name
+          )
+          UPDATE customers c
+             SET loyalty_tier_id = can.keep_id
+            FROM loyalty_tiers t
+            JOIN canonical can ON can.name = t.name
+           WHERE c.loyalty_tier_id = t.id
+             AND t.id <> can.keep_id
+        `);
+      }
+
+      // 2. Delete duplicate rows (keep lowest id per name)
+      await client.query(`
+        DELETE FROM loyalty_tiers
+         WHERE id NOT IN (SELECT MIN(id) FROM loyalty_tiers GROUP BY name)
+      `);
+
+      // 3. Add UNIQUE(name) constraint if not already present
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+             WHERE conname = 'loyalty_tiers_name_key'
+               AND conrelid = 'loyalty_tiers'::regclass
+          ) THEN
+            ALTER TABLE loyalty_tiers
+              ADD CONSTRAINT loyalty_tiers_name_key UNIQUE (name);
+          END IF;
+        END $$
       `);
     },
   },
