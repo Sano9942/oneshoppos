@@ -120,9 +120,11 @@ async function provision(db, { slug, name, ownerEmail, timezone, pin }) {
       [name, timezone || "UTC", setupToken]
     );
 
-    // Default tax
+    // Default tax — 0% baseline marked as default. Merchants who need
+    // country-specific taxes (GST 17% for PK, etc.) add them via the
+    // Taxes settings page or the optional Step 3 wizard field.
     await client.query(
-      "INSERT INTO taxes (name, rate) VALUES ('Default Tax', 0)"
+      "INSERT INTO taxes (name, rate, is_default) VALUES ('Default Tax', 0, true)"
     );
 
     await client.query("COMMIT");

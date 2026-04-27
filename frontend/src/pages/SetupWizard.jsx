@@ -230,8 +230,9 @@ export default function SetupWizard() {
           ...f,
           fiscal_year_start: pack.fiscal_year_start || f.fiscal_year_start,
           denominations: pack.cash_denominations || f.denominations,
-          tax_name: f.tax_name || (pack.default_tax ? pack.default_tax.name : ""),
-          tax_rate: f.tax_rate || (pack.default_tax ? String(pack.default_tax.rate) : ""),
+          // Tax fields stay empty — merchant opts in to a country-specific
+          // tax (GST 17% for PK, etc.) by typing it themselves on Step 3.
+          // Provisioner already seeded "Default Tax" 0% as is_default=true.
         }));
       })
       .catch(() => {});
@@ -257,8 +258,7 @@ export default function SetupWizard() {
             setForm((f) => ({
               ...f,
               denominations: pack.cash_denominations || [100, 50, 20, 10, 5, 1],
-              tax_name: pack.default_tax ? pack.default_tax.name : "",
-              tax_rate: pack.default_tax ? String(pack.default_tax.rate) : "",
+              // Tax stays empty regardless of country pack — merchant opts in.
               fiscal_year_start: pack.fiscal_year_start || "01-01",
             }));
           })
@@ -562,8 +562,11 @@ export default function SetupWizard() {
                     </select>
                   </Field>
                   <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                      {selectedPack?.default_tax ? "Default Tax (auto-detected for your country)" : "Optional: Add a Default Tax"}
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Optional: Add a tax
+                    </p>
+                    <p className="mb-2 text-xs text-slate-500">
+                      We&apos;ll seed a 0% &ldquo;Default Tax&rdquo; for you. Add a country-specific tax here (e.g. GST 17% for Pakistan) if it applies — or skip and add it later under Settings &rarr; Taxes.
                     </p>
                     <div className="grid grid-cols-2 gap-3">
                       <Field label="Tax Name">

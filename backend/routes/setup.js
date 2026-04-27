@@ -362,9 +362,14 @@ module.exports = function createSetupRouter(db, { IS_MULTI_TENANT, tenantDbManag
           );
         }
 
-        // 7. Tax — user-specified or auto-seed from country pack
-        const finalTaxName = tax_name || (countryPack.default_tax && countryPack.default_tax.name);
-        const finalTaxRate = (tax_rate !== undefined && tax_rate !== '') ? parseFloat(tax_rate) : (countryPack.default_tax ? countryPack.default_tax.rate : NaN);
+        // 7. Tax — only insert if the merchant explicitly typed a name+rate
+        // in Step 3. The 0% "Default Tax" seeded by the provisioner is
+        // already marked is_default=true, so this row stays non-default.
+        // We deliberately do NOT auto-seed the country-pack tax (e.g. GST
+        // 17% for PK) — merchants opt in by typing it themselves or adding
+        // it later via Settings → Taxes.
+        const finalTaxName = (tax_name && String(tax_name).trim()) || null;
+        const finalTaxRate = (tax_rate !== undefined && tax_rate !== '') ? parseFloat(tax_rate) : NaN;
         if (finalTaxName && !isNaN(finalTaxRate)) {
           await client.query(
             'INSERT INTO taxes (name, rate, is_default) VALUES ($1, $2, false)',
