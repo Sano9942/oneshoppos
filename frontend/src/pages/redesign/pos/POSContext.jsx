@@ -225,7 +225,11 @@ export const POSProvider = ({ children }) => {
   // pos_layouts scope_id references for scope_type='device'.
   const [posDeviceId, setPosDeviceId] = useState(null);
   useEffect(() => {
-    if (!shift.selectedOutletId) return;
+    // /api/pos-devices/register is gated by phase2_pos_layouts on the
+    // backend (returns 503 when off). Skip the round-trip when the flag is
+    // off so fresh tenants don't log phantom Sentry/console errors.
+    // Effect re-fires once posFlags loads (initial value is {}).
+    if (!shift.selectedOutletId || !posFlags.phase2_pos_layouts) return;
     let uuid;
     try {
       uuid = localStorage.getItem("pos_device_uuid");
@@ -235,7 +239,7 @@ export const POSProvider = ({ children }) => {
       }
     } catch { return; }
     // Register (idempotent) — picks up outlet + bumps last_seen. Silent fail
-    // on fresh tenants where the feature flag is off.
+    // kept as defense-in-depth in case the flag flips while POS is open.
     api.post("/api/pos-devices/register", {
       device_uuid: uuid,
       outlet_id: shift.selectedOutletId,
@@ -245,7 +249,7 @@ export const POSProvider = ({ children }) => {
         try { localStorage.setItem("pos_device_id", String(r.device.id)); } catch { /* noop */ }
       }
     }).catch(() => { /* flag off or unreachable — cascade falls back to outlet/global */ });
-  }, [shift.selectedOutletId]);
+  }, [shift.selectedOutletId, posFlags.phase2_pos_layouts]);
 
   const cartHook = useCart({
     selectedOutletId: shift.selectedOutletId,

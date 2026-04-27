@@ -46,8 +46,14 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
   }, [selectedCustomerId, customers]);
 
   // ── Outlet price list fetch (phase2_outlet_pricing) ───────────────────────
+  // Skip the backend round-trip when the flag is off — requireFeature() returns
+  // 503 in that case, and we don't want to pollute Network tab / Sentry with
+  // phantom errors. Effect re-fires once posFlags loads (initial value is {}).
   useEffect(() => {
-    if (!selectedOutletId) { setOutletPriceListItems([]); return; }
+    if (!selectedOutletId || !posFlags.phase2_outlet_pricing) {
+      setOutletPriceListItems([]);
+      return;
+    }
     api.get(`/api/price-list-assignments?scope_type=outlet&scope_id=${selectedOutletId}`)
       .then(async (d) => {
         const assignments = d.assignments || [];
@@ -57,27 +63,36 @@ export function useCart({ selectedOutletId, selectedCustomerId, customers, posFl
         setOutletPriceListItems(items.items || []);
       })
       .catch(() => setOutletPriceListItems([]));
-  }, [selectedOutletId]);
+  }, [selectedOutletId, posFlags.phase2_outlet_pricing]);
 
   // ── POS Layout fetch (phase2_pos_layouts) — 2-G.13 includes device_id so
   // the backend cascade prefers device > employee > role > outlet > global.
+  // Skipped when phase2_pos_layouts is off (default for new tenants).
   useEffect(() => {
+    if (!posFlags.phase2_pos_layouts) {
+      setPosLayout(null);
+      return;
+    }
     const params = new URLSearchParams();
     if (selectedOutletId) params.set("outlet_id", selectedOutletId);
     if (posDeviceId) params.set("device_id", posDeviceId);
     api.get(`/api/pos-layouts?${params}`).then(d => setPosLayout(d.layout)).catch(() => {});
-  }, [selectedOutletId, posDeviceId]);
+  }, [selectedOutletId, posDeviceId, posFlags.phase2_pos_layouts]);
 
   // ── Item suggestions fetch (phase2_item_suggestions, debounced) ───────
+  // Skipped when the flag is off — same rationale as above.
   useEffect(() => {
-    if (!cart.length) { setSuggestions([]); return; }
+    if (!cart.length || !posFlags.phase2_item_suggestions) {
+      setSuggestions([]);
+      return;
+    }
     const timer = setTimeout(() => {
       const ids = cart.map(c => c.id).filter(Boolean).join(",");
       if (!ids) return;
       api.get(`/api/pos/suggestions?product_ids=${ids}`).then(d => setSuggestions(d.suggestions || [])).catch(() => {});
     }, 500);
     return () => clearTimeout(timer);
-  }, [cart.map(c => c.id).join(",")]);
+  }, [cart.map(c => c.id).join(","), posFlags.phase2_item_suggestions]);
 
   // ── Auto-apply promotions (debounced on cart change) ──────────────────
   useEffect(() => {
