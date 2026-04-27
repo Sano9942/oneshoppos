@@ -542,14 +542,17 @@ Plan: Free (1 outlet / 3 employees / 100 products caps)
 
 ### Resume instructions (for next sitting)
 
-To pick up where Phase 1 left off:
+To pick up where Phase 2 Day 1 left off (Apr 28):
 
 1. **Log in** at `https://sanopos.com/login`:
    - Store Code: `livetest1`
    - Username: `hassan`
    - Password: `Danish11`
-2. You should land on the dashboard. Sample seed data is already there: 5 products, 500 units in stock (Rs 1,330,000 retail).
-3. Continue with **Phase 2 — Sidebar walkthrough** (~30–45 min): click each nav item, take screenshots at desktop/tablet/mobile, log findings.
+2. You should land on the dashboard. State on `livetest1`:
+   - 5 products / 500 units / Rs 1,330,000 retail
+   - 1 active shift opened (#1 Main Store, opened by Hassan, Rs 5,000 float — opened during Day-1 diagnosis of the POS hang)
+   - 4 loyalty tiers (Bronze/Silver/Gold/Platinum) — was 12 before today's manual dedup
+3. Continue **Phase 2 — Sidebar walkthrough**. About **10 of ~60 nav items** walked on Day 1. Remaining: Gift Cards, Returns, Sales History (rest of Commerce); all of Inventory / Stock Control / Procurement / Insights / Operations / Setup; Service Tickets; Online Store; Compliance; Admin.
 4. **Cleanup at the very end (Phase 8)**: super-admin → `/admin/tenants` → delete `livetest1` AND `live_test_1` (the broken half-tenant from the first attempt; it failed v69 migration on the latest deploy and is harmless but should be purged).
 
 ### Phase 1 — completed 2026-04-27
@@ -622,6 +625,33 @@ _None outstanding from Phase 1_
 - [ ] Payment gateway choice (Phase 7.5):
 - [ ] Browser compatibility verdict:
 - [ ] T&C content sign-off:
+
+---
+
+### Phase 2 — Day 1 (2026-04-28)
+
+**Items walked**: ~10 of ~60 nav items.
+- ✅ Overview / Dashboard
+- ✅ Commerce: POS (originally 🔴 — fixed today), Orders, Fulfillment, COD Settlements, Parked Sales, Holds & Layaway, Customers, Customer Groups, Loyalty Tiers (originally 🔴 — fixed today), Cash Management (used to open shift during POS diagnosis)
+
+**Five fixes shipped today (all on production):**
+
+| # | Fix | Commit | How verified |
+|---|---|---|---|
+| 1 | POS infinite Loading on new-tab open — POSRoute gated on `presetLoaded` from PresetContext, but PresetContext only fetched inside `AppLayoutRedesign`. POS opens in a new tab outside AppLayout → preset never loaded. Moved bootstrap into `PresetProvider` itself. | `60ad6f4` | POS renders end-to-end |
+| 2 | PresetProvider race — useEffect fired before AuthProvider's fetch interceptor was patched, returning 401 from `/api/context/bootstrap` and falling back to `general_retail` preset (silent breakage for clinic/restaurant tenants on direct /pos nav). Gated on `useAuth().isBootstrapping=false`. | `6afdd70` | `/api/context/bootstrap` returns 200 |
+| 3 | No tax marked `is_default`. Provisioner inserted "Default Tax" 0% without `is_default`; setup-complete fell back to country-pack default (GST 17% PK) and inserted that as a second row also non-default. New model per merchant request: provisioner seeds 0% Default Tax with `is_default=true`; wizard Step 3 no longer auto-prefills the country-pack tax — merchants opt in. | `520d3e5` | Vercel + Railway both redeployed; deployed bundle has the new "Optional: Add a tax" copy |
+| 4 | Loyalty tiers seeded 3× (12 rows for 4 tiers). `ON CONFLICT DO NOTHING` was a no-op because no UNIQUE on `name`. Provisioner runs `schema-pg.sql` AND migration v34 each seed once → fresh tenant always got 8+ rows. Added UNIQUE in `schema-pg.sql`, fixed `ON CONFLICT (name)` in both seed sites, added migration **v79** that dedupes existing rows + adds the constraint (idempotent via DO block, FK-safe via UPDATE-then-DELETE-then-ADD). | `2044e9e` + manual SQL on `tenant_livetest1` (because livetest1's migration loop is stuck at v69 — see side-finding) | API returns 4 rows; `loyalty_tiers_name_key` constraint visible in `pg_constraint` |
+| 5 | POS bootstrap fired 4 phantom 503s. `useCart`/`POSContext` called `/api/pos-layouts`, `/api/price-list-assignments`, `/api/pos/suggestions`, `/api/pos-devices/register` unconditionally; `requireFeature()` returns 503 when the corresponding phase-2 flag is off. Silent `.catch()` blocks swallowed the errors but Sentry / Network tab still saw them. Gated each useEffect on the relevant flag. | `58e6c9d` | Network tab shows zero requests to those endpoints on POS bootstrap |
+
+**Side-finding (low priority — log only):**
+
+- **livetest1's tenant migration loop is stuck at v69** ("Schema hygiene sweep — idempotent backfill of returns columns + product_serial_numbers.status CHECK"). It aborts with `current transaction is aborted, commands ignored until end of transaction block` because of a partial schema state from yesterday's first failed signup. **Future migrations cannot apply to this tenant** — that's why fix #4's v79 had to be applied manually. **Not a launch blocker** (livetest1 is a test tenant getting nuked in Phase 8). Worth investigating before onboarding any real existing tenants — should make v69 idempotent against the broken state.
+
+**Resume next sitting:**
+- Continue Phase 2 walk from Commerce / Gift Cards.
+- Pause every ~15 items for spot-check.
+- 1 open shift remaining on `livetest1` (Main Store, Hassan) — gets nuked in Phase 8 anyway.
 
 ---
 
