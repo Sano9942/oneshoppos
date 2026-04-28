@@ -1,0 +1,803 @@
+# Phase 3 — End-to-End Flows — WIP Findings
+
+> Scratch file for the 2026-04-28 Phase 3 walkthrough on `livetest1`. Promoted into the canonical plan doc + deleted at end of phase.
+
+## Resume tomorrow at 3.2 — current state
+
+**Live on production** (all 6 commits pushed + deployed + verified):
+1. `6828dc8` `fix(provisioner)` pre-seed schema_version
+2. `5e3b60f` `fix(migrations) v69 SAVEPOINT`
+3. `aa77ea8` `fix(products)` first-outlet fallback for Opening Stock
+4. `8bf8c44` `fix(attendance)` kiosk PIN bcrypt
+5. `65fb149` `fix(auth)` bake default outlet into JWT.oid
+6. (data-only) cleaned `livetest1.tenant_modes` of bogus `workflow_tickets` row + flipped `phase4_workflow_tickets=false`
+
+**livetest1 state for 3.2 resume**:
+- Schema version: v81 (current top)
+- Products: 5 samples + Test Coffee (id=8, Rs 100, **stock 8** after 3.1 sold 2)
+- Sales: 1 row — INV-2026-00001, Rs 200, cash, completed by Hassan
+- Shift #1 still open (Main Store, opened Apr 27, Rs 5,000 float) — DO NOT close
+- Active session for Hassan in attendance_sessions (clocked in via fix verification)
+- tenant_modes: empty (correct for retail)
+
+**Next step (3.2 Return-to-Restock)**:
+- Returns → look up sale INV-2026-00001 → return 1× Test Coffee → cash refund
+- Verify Sales History shows return-linked
+- Verify Test Coffee stock back to 9 (8 + 1)
+- Verify Returned Stock page shows the unit
+
+
+**Date**: 2026-04-28
+**Operator**: Hassan
+**Tenant**: `livetest1` (Free; 5 sample products; Shift #1 OPEN; loyalty/CoA/couriers all deduped; **schema_version now at v81 after today's pre-Phase-3 fixes**)
+**Browser**: headed Playwright at 1440×900
+
+## Pre-Phase-3 architectural fixes shipped today
+
+| Commit | What | Impact |
+|---|---|---|
+| `6828dc8` `fix(provisioner)` | Provisioner pre-seeds `schema_version` with all migration versions on tenant create | Future signups skip the v1→vN replay entirely |
+| `5e3b60f` `fix(migrations) v69 SAVEPOINT` | Wraps `ADD CONSTRAINT` in SAVEPOINT so 42710 doesn't poison the outer transaction | Unblocked livetest1's catch-up; v69 was the only migration with this antipattern |
+
+**Verified**: livetest1 jumped from v68 → v81 cleanly on the post-fix Railway boot (13 migrations applied in ~525ms at 13:05:48 UTC).
+
+---
+
+## 3.1 Sale-to-Report flow
+
+### 🔴 Opening Stock field on Add Product silently drops to 0 (BLOCKER)
+
+**Steps to reproduce:**
+1. Inventory → + Add Product
+2. Fill: Name "Test Coffee", Selling Price 100, **Opening Stock 10**
+3. Save
+4. Test Coffee appears in product list with **Stock: 0** (not 10)
+5. Edit Test Coffee → Inventory section reads *"No stock data. Use Inventory Adjustments to set stock."*
+
+**Verified via DB**: `outlet_stock` has zero rows for product_id=6 (Test Coffee). Sample products created via Phase-1 SQL seed have proper rows.
+
+**Root cause:**
+- Frontend [ProductFormPage.jsx:190](frontend/src/pages/redesign/ProductFormPage.jsx#L190) sends `initial_stock: <value>` per variant in the POST, but does NOT send `outlet_id`.
+- Backend [routes/products.js:691](backend/routes/products.js#L691) gates the outlet_stock INSERT behind `if (outlet_id && initial_stock)`.
+- Both must be truthy → INSERT skipped silently → product is created but never gets a stock row.
+
+**Severity rationale**: silent data loss on a primary onboarding flow. Every new merchant who uses the "Opening Stock" field expects stock to be set. They get 0. Their first POS sale fails ("not enough stock") and they have no idea why.
+
+**Suggested fix**: backend should default `outlet_id` to the authenticated session's default outlet when not provided in the body — single-outlet tenants (Free plan = 1 outlet) should never have to specify it. Multi-outlet tenants probably still need an explicit field, but a sane default for the most common case is correct.
+
+**Status: ✅✅ FIXED on production** — two commits:
+- `30b6192` `fix(products): default outlet_id from session context on Add Product` — first attempt; relied on `req.context.outletId` which is null because of finding #2 below
+- `aa77ea8` `fix(products): add first-outlet fallback for Opening Stock seed` — final fallback to first outlet via SQL
+
+Verified live: Test Coffee (id=8) created via UI → outlet_stock row inserted with quantity=10.000 at outlet_id=1.
+
+Before/after screenshots: `phase3-1a-test-coffee-stock-zero.png` / `phase3-1b-test-coffee-stock-fixed.png`
+
+### ⚠️✅ JWT.oid stays null after login — FIXED
+
+**Root cause** (verified from actual code, not stale docs):
+- `mt-login` ([routes/auth.js:384](backend/routes/auth.js#L384)) signed JWT with `oid: null`, comment: *"oid null until context selection"*
+- `refresh` ([routes/auth.js:477](backend/routes/auth.js#L477)) did the same — every silent token refresh dropped the outlet
+- Frontend `ContextSelect.jsx` ([line 28-29](frontend/src/pages/ContextSelect.jsx#L28-L29)) skips entirely when `flags.context_selection_required === false`, which is the **default** ([feature-flags.js:24](backend/middleware/feature-flags.js#L24))
+- So the user logged in, ContextSelect silently skipped without ever calling `/api/auth/update-context`, and `req.context.outletId` stayed `null` for the entire session
+
+**Blast radius**: every backend code path reading `req.context.outletId` was silently degraded. The Opening Stock fix (`aa77ea8`) added a SQL first-outlet fallback in products.js to mask this for that one route, but the bug surfaced anywhere else that depended on session context.
+
+**Fix** (`65fb149`): introduced `pickDefaultOutletForEmployee(tenantDb, employeeId)` helper in auth.js. mt-login + refresh now query `employee_outlets` JOIN `outlets` (active only, primary first), bake the result into JWT.oid. Admin "all_access" accounts with no outlet assignments still get `oid: null` — correct for "all branches" scope mode.
+
+**Verified live** (curl + base64-decode of mt-login JWT):
+```json
+{ "tid": 95, "eid": 1, "rid": 1, "oid": 1, "scope": "full", ... }
+```
+oid is now `1` (Main Store) instead of `null` ✅
+
+### ⚠️✅ Service Tickets nav appeared after migration catch-up — INVESTIGATED + FIXED on livetest1
+
+**Root cause** (NOT a migration in v70-v81 — was always present, observation miss on Day-2):
+- Migration v32 unconditionally inserted `phase4_workflow_tickets=true` into `feature_flags` for all tenants when Phase-4 first shipped, before mode-gating was decided
+- Migration v44 (Apr 2026) backfilled `tenant_modes` based on the "globally on" feature_flags state, conflating "feature shipped" with "tenant opted in"
+- Result: every tenant provisioned via the legacy migrate-pg ladder (v1→vN sequentially) ended up with `tenant_modes('workflow_tickets', true)` even if they were `general_retail`
+
+**Why fresh tenants from now on are unaffected**:
+- Provisioner fix (`6828dc8`) pre-seeds `schema_version` with all migration versions
+- Fresh tenants skip v32+v44 entirely — they get the post-fix defaults
+- `DEFAULT_FEATURE_FLAGS.phase4_workflow_tickets = false` ([middleware/feature-flags.js:83](backend/middleware/feature-flags.js#L83))
+- `schema-pg.sql` doesn't seed the flag
+
+**Why no v82 migration needed**:
+- Production has only one active tenant (livetest1) and it's getting nuked in Phase 8
+- Other "active" tenants (packagesmall, khantoys, live_test_1) are deleted with schemas dropped
+- Future tenants don't run v32+v44 anymore (provisioner fix)
+
+**livetest1 cleanup** (manual SQL, applied):
+```sql
+DELETE FROM tenant_livetest1.tenant_modes WHERE mode = 'workflow_tickets';
+UPDATE tenant_livetest1.feature_flags SET enabled = false WHERE key = 'phase4_workflow_tickets';
+```
+
+**Verified live**: dashboard sidebar no longer shows "Service Tickets" / "Tickets" workflow nav (only "My Tickets" — different feature, support tickets in the Admin section, correctly always-visible).
+
+### Sale-to-Report continued
+
+
+---
+
+## 3.2 Return-to-Restock flow — 2026-04-28
+
+**Pre-state:** Test Coffee (id=8) Rs 100, stock=8 at outlet 1. Sale id=1 (INV-2026-00001) Rs 200 cash, 2× Test Coffee.
+
+**Steps walked:**
+1. Returns → Process Return → searched "Test Coffee" → suggestion picked → 1× Rs 100 added to draft
+2. Original sale id = 1, Outlet = Main Store, Processed by = Hassan, Refund = Cash, Reason = "Customer changed mind"
+3. Total Refund Rs 100.00 → Complete Return → success
+4. Returns list now shows RTN-1 / Main Store / Hassan / 1 item / Rs 100.00 ✅
+5. DB: outlet_stock product 8 went 8.000 → 9.000 ✅
+6. DB: returns row id=1, original_sale_id=1, refund_method=Cash, total_refund=100.00, restock_flag=true ✅
+
+Screenshots: `phase3-2-01-returns-empty.png`, `…02-return-modal-filled.png`, `…03-return-completed.png`, `…04b-returned-stock.png`, `…05-sales-history.png`, `…06-sale-detail.png`, `…07-reports.png`, `…08-refunds-voids.png`.
+
+### ✅ What works
+- End-to-end refund processing: stock restored, refund recorded, FBR-ready, idempotency_key column present.
+- Reports → Refunds & Voids → Refund Journal correctly lists the return (4/28/2026 7:40 PM, Return #1, Main Store, Hassan, Walk-In, Cash, Rs 100.00).
+- Reports → Sales → Overview → "Leakage Today" KPI: Disc 0 / Void 0 / **Refund Rs 100** ✅.
+- DB columns now wider — quantity stored as `1.000` (NUMERIC(10,3) from v45).
+
+### ⚠️ M1 — Sales History does NOT show return-linked status (plan-doc acceptance criterion FAILED)
+
+**Plan said:** "Verify Sales History shows return-linked"
+
+**Actual:** After processing a partial return against sale #1:
+- Row in Sales History list: status pill is still green "active", no refund/return badge column.
+- Detail panel for sale #1 shows the original line items unchanged ("Test Coffee 2.000 x Rs 100.00"), Total still Rs 200. No "Refunded: Rs 100" line, no link to RTN-1, no remaining-qty math.
+- The "Return" button in the detail panel is still active with no awareness that 1 of 2 units has already been returned — a cashier could try to refund the same unit twice.
+
+**Schema reality:** `sales` table has no `return_status` column (verified). Tracking partial-return state would require either a denormalized column or a JOIN-on-`returns.original_sale_id` at query time. Backend `routes/sales.js` GET handler currently does neither.
+
+**Severity:** ⚠️ medium UX gap. Data is correct in DB; merchants get partial-return confusion in the most-used screen for sale review. Risk of double-refund if a busy cashier doesn't notice that the original sale was already partially refunded.
+
+**Suggested fix (lite):** Sales History GET should LEFT JOIN `returns` on `original_sale_id`, expose a `refund_total` and `return_count` per sale; UI surfaces a "Partially refunded — Rs 100" line in the detail panel and disables / annotates the Return button.
+
+### ⚠️ M2 — "Returned Stock" nav label is misleading
+
+The nav entry "Returned Stock" under Stock Control points to `/returned-stock`, which is a **supplier-RMA** workflow ("send stock back to supplier"). The customer-return restock flow has no dedicated tracking page — restocked units are reflected only in `outlet_stock` and via the Returns module + Refund Journal report.
+
+The page subtitle disambiguates ("supplier return (RMA) workflow…") but the label alone leads merchants to expect customer-returned items here.
+
+**Suggested fix:** rename nav label to "Supplier Returns (RMA)" so it doesn't collide with the customer-return mental model. Update `nav-config.js` only — page logic is fine.
+
+### ⚠️ M3 — Process Return UI is product-first, not sale-lookup-first
+
+Plan-doc said "Returns → look up the sale from 3.1 → return 1 unit". Actual UI flow: search by product name/barcode/SKU, optionally enter "Original sale id (optional)" as numeric text. There is no sale-lookup-by-receipt-number flow on the admin Returns page — that flow exists only in POS via `POSReturnExchangeModal.jsx`.
+
+For unattended-receipt or no-printer scenarios this is fine. But it requires the cashier to know the numeric sale_id (not the human-friendly INV-2026-00001 invoice number) to link the return — and even then, nothing in the UI validates that the product being returned was actually on that sale, or that it caps the qty at what was sold.
+
+**Severity:** ⚠️ medium. Discoverability gap. POS path is the proper tool; admin Returns is a power-user override.
+
+**Suggested fix:** rename the field to "Original receipt number / sale ID (optional)" and accept either the numeric id or the invoice_number string. Bonus: validate the returned product against the original sale's items.
+
+### ⚠️ M4 — `processed_by_employee_id` is NULL after admin Returns submit
+
+Modal has a "Processed by" dropdown that I set to Hassan. After submit, DB row has `employee_id=1` (auth context) but `processed_by_employee_id=null`. Cause: `ReturnsRedesign.jsx:215` posts `employee_id: form.employee_id` (overwriting the auth-default), but does NOT post `processed_by_employee_id`. Backend route accepts both — POS modal (`POSReturnExchangeModal.jsx:389`) sets `processed_by_employee_id`; admin Returns sets `employee_id` only.
+
+This dual-field design predates the walkthrough; no incorrect data lands, but Reports / FBR audit queries that read `processed_by_employee_id` will be blank for admin-Returns-originated refunds. Reports → Refund Journal currently reads `employee_id` (which is set correctly), so today's reports are unaffected.
+
+**Severity:** ⚠️ low — design ambiguity, not a bug. Worth picking one field as the source of truth post-launch.
+
+### Plan-doc acceptance criteria scorecard
+
+| Criterion | Result |
+|---|---|
+| Look up sale from 3.1 → return 1 unit → cash refund | ✅ (sale id=1 numeric path) |
+| Sales History shows return-linked | ⚠️ FAILS — no indicator anywhere |
+| Inventory → Test Coffee stock back to 9 | ✅ (8 → 9 in `outlet_stock`) |
+| Returned Stock page shows the unit | ⚠️ N/A — page is supplier-RMA, not customer-return |
+| Reports show negative revenue line | ✅ (Leakage Today card + Refund Journal) |
+
+**No 🔴 blockers.** 4 ⚠️ findings worth bundling into a small UX/copy PR before launch (M1 = real risk of double-refund; M2/M3 = onboarding clarity; M4 = future-proofing).
+
+---
+
+### 3.2 follow-up — verifying 2 additional refund entry points (operator request)
+
+After the initial pass, walked the two other ways a cashier can refund against an existing sale, on top of the admin Returns modal already covered.
+
+**Path B — Sales History → row → Return button (sidebar action).**
+
+Click `Return` from the sale-detail panel of INV-2026-00001 (the sale already partially refunded with RTN-1):
+- Navigates to `/returns` and opens the same Process Return modal — but **pre-populated**:
+  - Items table: `Test Coffee × 2 @ Rs 100` (the FULL original sale qty, NOT remaining-after-prior-return)
+  - Original sale id: `1`
+  - Outlet: Main Store
+  - Processed by: Hassan
+  - Refund method: Cash
+  - **Total Refund: Rs 200.00**
+- Submitting would create a SECOND refund for Rs 200 on top of the existing Rs 100 — the merchant would pay out Rs 200 in cash for goods worth Rs 100, AND `outlet_stock` would jump from 9 → 11 (re-restocking 2 phantom units that physically left the store the first time).
+
+Did NOT submit. Cancelled.
+
+**Path C — POS top-bar → Return.**
+
+Better UX scaffolding than admin Returns:
+- Explicit "Do you have the original bill?" prompt with invoice-number lookup (placeholder `e.g. INV-2026-00042` — accepts the human invoice number, not the numeric sale_id).
+- "Continue without a bill (manual return)" fallback link.
+- After "Find Bill" → modal shows **`Test Coffee × 2 of 2`** with — / + qty stepper, per-line `Restock` checkbox + bulk "All Restock ON/OFF" toggle, reason dropdown, branching CTA `Full Refund` vs `Exchange for Other Items`, refund methods Cash/Card/**Wallet**/Store Credit (admin Returns is missing Wallet entirely — minor consistency gap).
+- BUT: same data bug as Path B. The "of 2" badge is the **original** sold quantity, not `sold − already_returned`. Refund pre-fills as Rs 200. Stepper allows submitting qty 2 → over-refund.
+
+Did NOT submit. Cancelled.
+
+**Backend confirms it has no guard either.** Grep of `routes/returns.js` for any prior-return-aware validation: zero hits other than an OpenAPI doc comment. The route accepts whatever items+qty the client posts and inserts them, then increments `outlet_stock` for any items with `restock_flag=true`. No SUM-over-prior-returns sanity check.
+
+### 🔴 P1 (UPGRADED FROM ⚠️ M1) — Over-refund hole, all 3 entry points + backend
+
+What started as an "M1 missing badge" UX gap is actually a full-stack data-integrity hole. **Three** UIs (admin Returns, Sales History → Return, POS Return/Exchange) all let a cashier process a return for the FULL original sale quantity even when prior partial returns exist. The backend doesn't enforce a cap either. Outcome of a real-world double-refund:
+
+- Cash drawer: pays out 2× the merchandise value
+- Inventory: `outlet_stock` jumps to "more units than were ever sold"
+- Reports: Refund Journal shows two refunds, leakage doubles
+- FBR: two refund payloads queued (one of them fictitious)
+
+This is the kind of bug that survives QA because all three UIs work in isolation — the integration test is "process a return, then process another against the same sale" and that's not in any spec.
+
+### Fix plan (proposed — awaiting approval)
+
+| # | Layer | Change | Severity |
+|---|---|---|---|
+| F1 | backend `routes/returns.js` | When `original_sale_id` provided, compute remaining-refundable qty per line as `sale_items.quantity − COALESCE(SUM(prior return_items.quantity), 0)` inside the same transaction (`SELECT … FOR UPDATE` on the original `sale_items` rows to be safe under concurrent retries). Reject 400 with `{ error: "Cannot refund N units of <product>; only M remaining" }` if any line exceeds. **Hard guard, no UI dependency.** | 🔴 must-fix-before-launch |
+| F2 | backend `routes/sales.js` GET | The single-sale fetcher (used by Sales History detail + POS lookup) joins `return_items` and exposes `refunded_qty` per line + `refund_total` per sale. | needed for F3/F4 |
+| F3 | frontend `POSReturnExchangeModal.jsx` + Sales-History pre-fill | Use `refunded_qty` from F2 to display `… × (qty − refunded) of qty`, default stepper to remaining, refuse to set stepper above remaining. Also: when a sale is fully refunded, disable Return button and show "Fully refunded" badge instead. | medium |
+| F4 | frontend `SalesHistoryRedesign.jsx` detail panel | Show "Refunded: Rs X (link to RTN-N)" line under the items list. Show a "Partially refunded" status pill on the row when refund_total > 0 and < total. | medium |
+| F5 | frontend `ReturnsRedesign.jsx` | Rename placeholder "Original sale id (optional)" → "Original receipt number / sale ID (optional)". Add Wallet to the refund-method dropdown to match POS. (No new look-up logic — that's POS's job.) | low UX |
+| F6 | frontend `ui/nav-config.js` | Rename "Returned Stock" nav label → "Supplier Returns (RMA)". | low UX copy |
+
+F1 alone closes the data-integrity hole. F2-F4 close the UX trap that lets cashiers fall into it. F5/F6 are unbundled cleanup.
+
+Each will ship as its own commit (cd6f4bd / 593062a / 65fb149 style) once approved.
+
+---
+
+### Status — 2026-04-29 (after F1–F6 shipped + verified live)
+
+| # | Commit | Verified live |
+|---|---|---|
+| F1 | `6e3be0e` `fix(returns): cap refund qty by sold − already-returned` | ✅ Forced qty=2 on the partial sale via Sales History → Return → backend rejected with `Cannot refund 2 units of product 8; only 1 remaining`. `outlet_stock` and `returns` table both unchanged. |
+| F2 | `213422e` `feat(sales): expose refunded_qty + refund_total on GET /api/sales/:id` | ✅ Detail panel + POS modal both consume the new fields end-to-end. |
+| F3 | `0df2838` `fix(pos): show remaining-refundable qty in Return / Exchange modal` | ✅ POS Return on `INV-2026-00001` now shows `Test Coffee — qty 1 of 1`, refund Rs 100 (was 2 of 2 / Rs 200). `+` clicked five times — qty held at 1. |
+| F4 | `3fa1500` `fix(sales-history): surface refund status + cap Return prefill at remaining qty` | ✅ Sales History detail shows "Partially refunded −Rs 100.00", item line "(1 refunded, 1 remaining)" in rose, "Partial refund recorded — only remaining units are eligible." note under buttons. Return click navigates with `quantity: 1` (was 2). |
+| F5 | `461f849` `fix(returns): admin Returns parity with POS` | Verified at edit-time; will surface in next admin Returns interaction. |
+| F6 | `a58e65d` `fix(nav): "Returned Stock" → "Supplier Returns"` | ✅ Sidebar shows "Supplier Returns" under Stock Control. |
+
+Screenshots: `phase3-2-15-sales-history-after-fixes.png`, `…16-saleshistory-return-prefill-after-fix.png`, `…17-backend-rejects-overrefund.png`, `…19-pos-return-after-fix.png`.
+
+**Phase 3.2 fully closed.** All four findings + the upgraded P1 are resolved on production. No new findings introduced by the fix bundle. Ready to move to 3.3.
+
+---
+
+## 3.3 FBR enable + invoice queue — BLOCKED
+
+No FBR sandbox creds available. Web search confirmed: FBR has a real sandbox (`https://gw.fbr.gov.pk/di_data/v1/di/postinvoicedata_sb`) but the token is **gated** — requires a registered NTN+STRN, IRIS portal login, choice of Licensed Integrator (PRAL is free), and Railway egress IP whitelisted with FBR. No public/anonymous demo token. Skipped to 3.4. Re-open when operator provides NTN/STRN/sandbox-token/province.
+
+---
+
+## 3.4 Cap-hit flow (Free plan) — 2026-04-29
+
+**Pre-state:** livetest1 on Free plan, 1 employee (Hassan, admin). Free caps: 1 outlet, 3 employees, 100 products.
+
+**Steps walked + result:**
+1. `/employees` — added Test Cashier 2 (PIN 2222, Main Store) → total 2/3 ✅
+2. At 2/3 (67%) the dashboard `PlanUsageBanner` is hidden (correct — threshold is 80%, see [PlanUsageBanner.jsx:8](frontend/src/pages/dashboard/PlanUsageBanner.jsx#L8)) ✅
+3. Added Test Cashier 3 (PIN 3333) → total 3/3 ✅
+4. Visited `/dashboard` — amber banner shows: "Approaching plan limit. You're using 3 of 3 employees, 1 of 1 outlets. Upgrade to Pro for unlimited." with Upgrade button + dismiss × ✅ (`phase3-4-01-plan-usage-banner-dashboard.png`)
+5. `/employees` → Add Employee → filled "Cap Hit Test" / PIN 9999 / Main Store / Save → backend returned `403 { error: "Plan limit reached: maximum 3 employees allowed", code: "PLAN_LIMIT_REACHED", limit: 3, current: 3 }` ✅
+6. UI shows BOTH: red inline error banner under the Employees title AND the global cap modal (mounted in AppLayoutRedesign as `PlanLimitModalInterceptor`) ✅ (`phase3-4-03-cap-modal-real-trigger.png`)
+7. Modal copy: "Plan limit reached / Plan limit reached: maximum 3 employees allowed / Currently using 3 of 3 on the Free plan. / Upgrade to Pro — Unlimited products and employees, plus advanced features. 8000 PKR/month per outlet." with **Not now** + **Upgrade to Pro** CTAs ✅
+8. Clicked **Upgrade to Pro** → routed to `/billing` ✅ (`phase3-4-04-billing-after-upgrade-cta.png`)
+
+### Plan-doc acceptance scorecard
+
+| Criterion | Result |
+|---|---|
+| Add employees until 3 exist | ✅ (2 new: Test Cashier 2 + 3) |
+| 4th attempt → cap modal with Upgrade to Pro CTA | ✅ (modal + inline error both fire) |
+| Upgrade CTA routes to `/billing` | ✅ |
+| PlanUsageBanner appears at 80% threshold | ✅ at 100% (3/3 + 1/1). Threshold is never directly tested between 80% and 100% on Free because employees jump from 67%(2/3) to 100%(3/3). |
+| Skip actual checkout | ✅ (deferred to 3.13) |
+
+### ⚠️ M5 — Cap-modal pricing line conflicts with /billing pricing cards
+
+**Modal copy:** *"Unlimited products and employees, plus advanced features. **8000 PKR/month** per outlet."*
+
+**Actual /billing cards:**
+- Monthly: PKR 8,000 (matches)
+- Quarterly: PKR 21,600 (= 7,200/mo, 10% off)
+- Semi-Annual: PKR 40,800 (= 6,800/mo, 15% off)
+- Annual: PKR 80,000 (= 6,667/mo, 17% off, **BEST VALUE** pill)
+
+The modal advertises only the highest (monthly) rate without mentioning that 3 cheaper cycles exist. A merchant on the cap modal sees "8000/mo" and may bounce instead of clicking through. Suggested copy: *"From PKR 6,667/month with annual billing. Plans start at PKR 8,000/month."* — reuses the existing pricing tiers without hardcoding numbers.
+
+**Severity:** ⚠️ low. UX/copy nit. No data integrity issue. Pickable in same PR as M6.
+
+### ⚠️ M6 — Add Employee form opens at-cap with no preflight warning
+
+When `total === limit` (3/3), `Add Employee` button still shows green/active and opens the form. The user fills in name + PIN + email + outlet, clicks Save, then learns the cap is hit. Frontend already has `usage` data via the same `/api/billing/usage` endpoint — could disable the button and show a small "Free plan: at 3/3 employees" hint inline next to it.
+
+**Severity:** ⚠️ low. Wasted-effort UX gap, not a bug. Backend correctly enforces. Modal still fires correctly on Save attempt, so users do reach the upgrade flow — they just type a form first.
+
+**Note:** finding #M5 (modal pricing copy) and the existing known medium ("/billing Quarterly highlighted, Annual has BEST VALUE pill") are both billing-cards UX. Worth a small bundled cleanup PR after launch.
+
+### Onboarding checklist sneak peek (3.6 prep)
+
+While on `/dashboard` the "Get started with SanoPOS" checklist showed **4 of 7 steps complete**: Set up your store ✅, Add your first product ✅, Add employees ✅, Open a shift ✅. Incomplete: Add your first customer, Make your first sale (this row is interesting — 3.1 made a sale, so this should be ticked. Possibly counts only "today" or only sales linked to a customer. Will verify in 3.6.), Print a test receipt.
+
+**No 🔴 blockers.** 2 ⚠️ low-severity UX/copy notes (M5, M6). Phase 3.4 acceptance criteria all met.
+
+---
+
+## 3.5 Marketplace stub disclaimer — 2026-04-29
+
+**Pre-state:** `/settings/integrations` shows the unified hub. All 4 marketplace/social/messaging cards present.
+
+**Disclaimer copy verified per card** (matches PROVIDER_META in [IntegrationsHubRedesign.jsx:34-40](frontend/src/pages/redesign/IntegrationsHubRedesign.jsx#L34)):
+
+| Card | Disclaimer |
+|---|---|
+| Daraz | "Manual sync only — click Pull Orders to fetch new orders. Automatic background sync coming soon." ✅ |
+| Facebook Shop | same as Daraz ✅ |
+| Instagram Shopping | "Managed via Facebook Shop connection" ✅ (passive, no separate connect) |
+| WhatsApp Business | "Manual sync only — automatic inbound message sync coming soon." ✅ (variant: messaging not orders) + cost-warning amber bar: "WhatsApp Business API charges per conversation. First 1,000 service conversations/month are free." ✅ |
+| Google Merchant Center | "Manual sync only — click Sync Products to push your catalog. Automatic feed status checks coming soon." ✅ (variant: push-feed not pull-orders) |
+
+**Daraz happy-path walked end-to-end:**
+1. Connect → modal opens with App Key / App Secret / Access Token fields → fake creds saved → POST `/api/integrations/connect` returned 200 ✅ (`phase3-5-02-daraz-connected.png`)
+2. Card flips to "Connected" badge + Test / Disconnect / Sync Products / Pull Orders / Push Inventory buttons ✅
+3. Pull Orders → POST `/api/integrations/daraz/pull-orders` → 500 with body `{"error":"The specified App Key is invalid"}` (upstream Daraz auth failure passed through) → toast.error fires "The specified App Key is invalid" ✅ (`phase3-5-04-pull-orders-error-toast.png`, captured via DOM poll)
+4. Disconnect → card returns to "Connect" state ✅ (clean state, no test data left in `integration_settings`)
+
+**Connect dialogs walked (cancel-only) for parity check:**
+
+| Provider | Fields | Token field type |
+|---|---|---|
+| Daraz | App Key / App Secret / Access Token | password ✅ |
+| Facebook Shop | Page Access Token / Catalog Id / Commerce Account Id | password ✅ |
+| WhatsApp Business | API Token / Phone Number Id / Business Account Id | **`text`** ⚠️ (M7 below) |
+| Google Merchant Center | OAuth Token / Merchant Id | password ✅ |
+
+### Plan-doc acceptance scorecard
+
+| Criterion | Result |
+|---|---|
+| Click Daraz → fill creds → save → "Connected" badge + caption | ✅ |
+| Click Pull Orders → toast shows result | ✅ (error toast on bad creds — expected per fake-creds path) |
+| Verify same for Facebook Shop, WhatsApp, Google Merchant (disclaimer + Connect dialog) | ✅ — disclaimer copy + dialog forms verified for all 3 |
+
+### ⚠️ M7 — WhatsApp API Token input is `type=text`, not `password`
+
+The Connect WhatsApp Business dialog renders the API Token input as `<input type="text">`, while Daraz Access Token, Facebook Page Access Token, and GMC OAuth Token are all `type="password"`. Result: the WhatsApp token sits in plaintext on screen during entry — visible to anyone shoulder-surfing or screen-recording.
+
+**Suggested fix:** in `IntegrationsHubRedesign.jsx`, the connect-form input renderer should treat any field name matching `/token|secret|key/i` as a password input. Today the rule appears to be hardcoded per-field — `Daraz` and `Facebook` got it right, `WhatsApp` slipped through.
+
+**Severity:** ⚠️ low. Operator-only screen, but inconsistent with sibling forms and breaks security expectations. Bundle with M5 + M6 in the post-launch UX cleanup PR.
+
+### ⚠️ M8 — Pull Orders / Sync Products propagate upstream errors with HTTP 500
+
+Backend `POST /api/integrations/daraz/pull-orders` returned `500 { error: "The specified App Key is invalid" }` when called with invalid creds. The error message itself is fine (it's the upstream Daraz API's response), but **HTTP 500 is wrong for a credential failure** — should be 4xx (401 Unauthorized or 422 Unprocessable Entity). 500 implies a server-side bug; merchants reading logs / Sentry will treat it as actionable backend incident, not a tenant config issue.
+
+**Suggested fix:** in the backend marketplace adapters, catch upstream auth/creds errors and surface as 401/422 with a `code: "INTEGRATION_AUTH_FAILED"` so the frontend can show a more actionable toast ("Daraz credentials rejected — re-enter your App Key under Settings → Integrations") instead of the bare upstream string.
+
+**Severity:** ⚠️ low. Functional path works (toast still surfaces). Sentry noise + log-grep noise are the cost. Defer.
+
+**No 🔴 blockers.** 2 ⚠️ low findings (M7 token field type, M8 wrong HTTP code on creds-fail). Phase 3.5 closed; livetest1 state clean.
+
+---
+
+## 3.6 Onboarding checklist — 2026-04-29
+
+**Source verified:** `DashboardOnboarding.jsx` (preset-driven step builder via `usePreset().onboarding_steps`) + `routes/reports/dashboard.js` (signal payload). For `general_retail` preset, the 7 steps are: store, product, customer, employees, shift, sale, receipt.
+
+**Real backend payload** for livetest1 today (`GET /api/reports/dashboard`):
+
+| Signal | Value | Step gated | Resulting state |
+|---|---|---|---|
+| `data` truthy | yes | store | ✅ |
+| `inventory.total_products` | `"6"` | product | ✅ |
+| `customerCount` | `0` | customer | ⭕ |
+| `attendanceSummary.total_employees` | `3` | employees | ✅ |
+| `operationalReadiness[0].shift_open` | `true` | shift | ✅ |
+| `saleCount` | `0` | sale | ⭕ |
+| `totalRevenueToday` | `0` | sale | ⭕ |
+| `testReceiptPrinted` | `false` | receipt | ⭕ |
+
+UI shows **4 of 7 steps complete** — matches.
+
+**Go-button routing verified live:**
+- "Add your first customer" Go → navigates to `/customers` ✅
+- "Print a test receipt" Go → navigates to `/printer-settings` ✅
+- "Make your first sale" Go → opens `/pos` in a new tab (per [DashboardOnboarding.jsx:68](frontend/src/pages/dashboard/DashboardOnboarding.jsx#L68))
+
+**Regression check:** created customer via `POST /api/customers` (Walk-In Test Customer) → `customerCount` flipped 0→1 → dashboard reload → step list went **4/7 → 5/7** with "Add your first customer" ticked + line-through, no more "Go →" next to it ✅. Soft-deleted the customer afterwards (DELETE returns "Customer archived"); `customerCount` correctly drops back to 0 (deleted rows are excluded).
+
+**Wiring verified for "Print a test receipt":** [routes/printer.js:55-62](backend/routes/printer.js#L55) does `UPDATE company_profile SET test_receipt_printed_at = NOW() WHERE test_receipt_printed_at IS NULL` on first successful test print. Dashboard reads `r.test_receipt_printed_at != null` as the boolean. So pressing the **Test Print** button on `/printer-settings` does flip the step.
+
+### 🔴 → ⚠️ M9 — "Make your first sale" step gates on TODAY's sale count, not lifetime first sale
+
+**Plan-doc said:** "Steps so far should be: ... sale ✅ (from 3.1) ..." — implying the sale created in 3.1 (`INV-2026-00001` on Apr 27, total Rs 200) should keep the step ticked.
+
+**Actual:** [DashboardOnboarding.jsx:12](frontend/src/pages/dashboard/DashboardOnboarding.jsx#L12) computes `hasSales = (data?.saleCount ?? 0) > 0 || (data?.totalRevenueToday ?? 0) > 0`. Both signals come from [routes/reports/dashboard.js:67,82](backend/routes/reports/dashboard.js#L67) which filter `WHERE s.timestamp >= todayStart AND s.timestamp < todayEnd`. So:
+
+- **Day 1**: merchant rings up first sale → `saleCount = 1` → step ticked ✅
+- **Day 2 (next morning)**: page reload → `saleCount = 0` (no sales today yet) → step **un-ticks** 🔴
+
+For an onboarding "first ever" milestone this is wrong. A merchant who completed setup yesterday and returns today sees the checklist regress to a less-complete state. Worse: every Sunday morning a merchant who forgot to sell on Sunday will see their checklist "lose" the sale step until the first Monday transaction.
+
+**Suggested fix:** in `routes/reports/dashboard.js`, add a separate signal `hasEverSold = SELECT EXISTS(SELECT 1 FROM sales WHERE voided = false LIMIT 1)` and use that to gate the onboarding step. Keep `saleCount` / `totalRevenueToday` as today-only (they're correct for the KPI cards). Then `DashboardOnboarding.jsx` reads `data.hasEverSold` for the sale step.
+
+Same pattern would future-proof the customer step (today: `customerCount` is a lifetime count derived from `customers` table — correct), the receipt step (today: timestamp on `company_profile` — correct), etc. The sale step is the only signal that's incorrectly time-windowed.
+
+**Severity:** ⚠️ medium. Not data corruption — purely UX regression on the onboarding card. Once a merchant dismisses the card (✕ button or auto-dismiss after all 7 done) it's gone forever via `localStorage.onboarding_dismissed=1` + `PUT /api/company-profile/onboarding-dismiss`. So the bug only bites users who haven't yet completed the full 7 steps. Still, every general_retail tenant currently in setup will hit it on day 2 of their trial.
+
+### Plan-doc acceptance scorecard
+
+| Criterion | Result |
+|---|---|
+| 7-step checklist visible on Dashboard | ✅ |
+| store ✅, employee ✅, product ✅ from earlier phases | ✅ all match |
+| sale ✅ from 3.1 | ⚠️ FAILS — un-ticks next day (M9 above) |
+| customer (if attached) | ⭕ correctly not ticked (no customer was created in 3.1) |
+| receipt print | ⭕ correctly not ticked |
+| FBR config | N/A — `general_retail` preset doesn't include this step (FBR is gated through a separate banner, not the onboarding card; verified at [DashboardOnboarding.jsx:9-145](frontend/src/pages/dashboard/DashboardOnboarding.jsx#L9)) |
+| Each completed step shows checkmark; incomplete shows CTA | ✅ verified |
+
+**No 🔴 blockers** (M9 downgraded to ⚠️ medium — UX regression on a self-dismissing card). Phase 3.6 closed.
+
+---
+
+## 3.7 Public receipt share — 2026-04-29
+
+**Pre-state:** `INV-2026-00001` (Apr 27, Rs 200, partially refunded), backend at `213422e`, frontend at `a58e65d`.
+
+**What the plan-doc said:**
+> - Sales History → click any sale → "Share receipt" → copy URL
+> - Open URL in incognito window → public receipt renders without auth
+
+**Findings — three separate bugs in this single flow.**
+
+### 🔴 P2 — Public receipt API is broken: SQL query references nonexistent column
+
+**Reproduce:** `curl "https://api.sanopos.com/api/receipts/INV-2026-00001/public?tenant=livetest1"` → `500 {"error":"Internal server error"}`.
+
+**Railway log line at `x-request-id: 7d945e59-bb84-4bc7-ab4a-d927c2d966dc`:**
+```
+Public receipt error: column "method" does not exist
+```
+
+**Root cause** (verified against actual source, not CLAUDE.md):
+- [routes/receipts.js:76](backend/routes/receipts.js#L76) does `SELECT method, amount FROM sale_payments`
+- [schema-pg.sql:482-488](backend/schema-pg.sql#L482) defines `sale_payments(id, sale_id, payment_method, amount, gateway_ref)` — column is `payment_method`, NOT `method`
+- Same error on line 107 (`p.method` should be `p.payment_method`)
+
+**Blast radius:** Every public-receipt URL on every tenant in production is broken. Visiting `/receipt/:invoiceNumber` lands on the React page, which calls the broken API and renders **"Receipt Not Found / Failed to load receipt"**. The dashboard's `routes/reports/dashboard.js:67-68` correctly uses `payment_method` — so this isn't a global rename gone wrong, just a typo in this one route that nobody hit because the share flow is rarely exercised.
+
+**Severity: 🔴 P2.** Not a launch-blocker for normal POS operations (sales work, returns work, receipts print). But the `/receipt/:slug` URL is the entire premise of 3.7, AND the WhatsApp share button in `POSReceiptModal` uses this URL, so any merchant who sends a customer the share link gets a "receipt not found" experience for them. Plan-doc public-receipt behaviour FAILS until fixed.
+
+**Fix:** rename `method` → `payment_method` in lines 76 and 107 of `routes/receipts.js`. Two-character backend patch. TDD: add a tests/integration test that hits `/api/receipts/:invoiceNumber/public` and asserts 200 + payment shape. (Existing tests don't cover this route; that's how the typo survived.)
+
+### 🔴 P3 — POS WhatsApp share URL is missing `?tenant=` and would 400 even if P2 were fixed
+
+**Reproduce:** look at [POSReceiptModal.jsx:14-24](frontend/src/pages/redesign/pos/POSReceiptModal.jsx#L14):
+```js
+const receiptUrl = `${window.location.origin}/receipt/${slip.invoiceNumber}`;
+```
+No `?tenant=<slug>`. The frontend page reads `?tenant=` from the query string and forwards it to the API. The backend ([receipts.js:8-12](backend/routes/receipts.js#L8)) returns `400 { error: "tenant query param is required" }` when `MULTI_TENANT=1` and the param is missing — which is the production state.
+
+**Blast radius:** every WhatsApp-shared receipt URL since multi-tenant rolled out on production points to a 400. Even if P2 above is fixed, the share link from POS still won't work because the URL itself is wrong.
+
+**Fix:** in `POSReceiptModal.jsx:16`, derive tenant slug from `readTenantSlug()` (helper exists in `auth/authStore.js`) or from `localStorage.authSession.tenant.slug`, and append `?tenant=${slug}` to the URL. Same pattern needed in any other place that builds a share URL — grep for `/receipt/${`. One additional helper `buildPublicReceiptUrl(invoiceNumber)` would centralise this; today it's inlined.
+
+### ⚠️ M10 — No "Share receipt" button in Sales History detail panel
+
+**Plan-doc said:** "Sales History → click any sale → Share receipt → copy URL". **Actual:** the detail panel for a sale shows only Reprint / Invoice / Void / Return. No share / copy URL anywhere.
+
+**Verified:** grep `SalesHistoryRedesign.jsx` for `share|/receipt/|copyToClipboard|wa\.me` → **zero hits**. The share-receipt feature exists ONLY in `POSReceiptModal` (the post-checkout modal), which means a merchant who wants to send a receipt link days later (the 90% case for "share receipt") has no UI path.
+
+**Severity:** ⚠️ medium UX gap. The infrastructure exists (public route, public page, public API endpoint — once P2 fixed), but the discovery surface is missing. POS-only share covers "I just rang up this sale and the customer wants the link" — not "the customer is asking for last week's receipt."
+
+**Suggested fix:** add a Share button to the Sales History detail panel that:
+- Builds the URL via the same `buildPublicReceiptUrl` helper from P3
+- Copies to clipboard via `navigator.clipboard.writeText(url)` with toast feedback
+- Optionally opens `wa.me/?text=...` for WhatsApp sharing (matches POS flow)
+
+### Plan-doc acceptance scorecard
+
+| Criterion | Result |
+|---|---|
+| Sales History → click sale → Share receipt → copy URL | 🔴 FAILS — no share button (M10) |
+| Open URL in incognito → public receipt renders without auth | 🔴 FAILS — P2 + P3 (API broken + share URL malformed) |
+
+**Phase 3.7 hard-fails on 2 criteria.** Three findings — P2 (backend SQL typo) is the most urgent, P3 (frontend share URL missing tenant) compounds it, M10 (no Sales History share button) blocks the discovery path.
+
+### Status — 2026-04-29 (after P2 + P3 + M10 shipped + verified live)
+
+| # | Commit | Verified live |
+|---|---|---|
+| P2 | `389e75c` `fix(receipts): public receipt SQL column is payment_method, not method` | ✅ `curl https://api.sanopos.com/api/receipts/INV-2026-00001/public?tenant=livetest1` returns full JSON payload (200) — store, sale, items, payments[0].method = "Cash". 3/3 vitest integration tests green. |
+| P3 | `7bf0dbc` `fix(pos): include tenant slug in shared receipt URL` | ✅ Browser eval after Vercel redeploy: clicking Share copies `https://sanopos.com/receipt/INV-2026-00001?tenant=livetest1` (was bare URL without tenant). Helper `buildPublicReceiptUrl()` reads `IS_MULTI_TENANT` + `readTenantSlug()` and appends correctly. |
+| M10 | `61291c2` `feat(sales-history): add Share button to copy public receipt link` | ✅ Sales History detail panel now shows Reprint / Invoice / **Share** / Void / Return. Click → clipboard.writeText fires → toast "Receipt link copied" appears. |
+
+Final end-to-end check: opened `https://sanopos.com/receipt/INV-2026-00001?tenant=livetest1` in a no-auth-headers context → public page rendered: green "Live Test 1" header, INV-2026-00001, Apr 28 2026 06:56 PM, Hassan, Test Coffee × 2.000 @ Rs100.00 = Rs200.00, Total Rs200.00, Payment Cash Rs200.00, "Please come again." footer, Print Receipt button. Screenshot: `phase3-7-fixed-public-receipt-renders.png`.
+
+The partial-refund detail (1 refunded / 1 remaining) deliberately does NOT appear on the public receipt — customers see the original transaction shape, not internal refund tracking.
+
+**Phase 3.7 fully closed.** Plan-doc acceptance criteria all met after the 3 fixes. No regressions introduced (POS WhatsApp share now produces working URLs too — same helper, same logic).
+
+### Bonus end-to-end verification — 2026-04-29
+
+After the fixes shipped, rang up a fresh POS sale to verify all 4 distribution paths physically work:
+
+**New sale on livetest1**: INV-2026-00002, Test Coffee × 1, Rs 100, Cash, by Hassan (Apr 29 01:43 AM). Test Coffee stock dropped 9 → 8.
+
+| Path | Verified | Evidence |
+|---|---|---|
+| POS post-checkout **WhatsApp** | ✅ | Intercepted `window.open` captured `https://wa.me/?text=...View%3A%20https%3A%2F%2Fsanopos.com%2Freceipt%2FINV-2026-00002%3Ftenant%3Dlivetest1` |
+| POS post-checkout **Email** | ✅ | `POST /api/email/send-receipt-v2 → 200 (588ms)`. Railway log: `Email sent to="oneshop349@gmail.com" subject="Receipt #INV-2026-00002 from Live Test 1"` |
+| Sales History detail **Share** | ✅ | Clipboard captured `https://sanopos.com/receipt/INV-2026-00002?tenant=livetest1` + toast "Receipt link copied" |
+| Public receipt page (no-auth) | ✅ | `/receipt/INV-2026-00002?tenant=livetest1` rendered: green "Live Test 1" header, INV-2026-00002, Hassan, Test Coffee × 1.000 = Rs 100.00, Cash, "Please come again.", Print Receipt button (`phase3-7-public-receipt-INV2.png`) |
+
+### ⚠️ M11 — Sales History detail panel is missing Email + WhatsApp buttons (parity gap)
+
+POS post-checkout modal has Email / WhatsApp / Print / Close. Sales History detail panel has Reprint / Invoice / **Share** / Void / Return — no Email, no WhatsApp. A merchant looking up last week's sale to email or WhatsApp the receipt has to use Share to copy the link, then manually paste into WhatsApp/email themselves. The infrastructure for both already exists (`POST /api/email/send-receipt-v2` accepts any `saleId`, and `buildPublicReceiptUrl` is reusable).
+
+**Suggested fix:** add Email + WhatsApp buttons to Sales History detail panel that mirror the POS post-checkout modal. Email opens an inline form like `POSEmailReceiptModal`; WhatsApp builds the same `wa.me/?text=...` URL. Could ship as a single "Send" dropdown (Copy / Email / WhatsApp) or three discrete buttons.
+
+**Severity:** ⚠️ medium UX gap. Workaround exists (Share → copy → paste). But the "send a customer their receipt later" path is the primary use case for this entire feature surface.
+
+### ⚠️ M12 — POS WhatsApp share embeds receipt-template "header_text" instead of company name
+
+The actual WhatsApp message body starts with `"Receipt from Thank you for shopping!"` — `sections.storeName` per [`utils/receipt.js:34`](frontend/src/utils/receipt.js#L34) resolves to `template?.header_text || slip.outlet?.name || "SanoPOS"`. Tenants whose receipt template has `header_text = "Thank you for shopping!"` (a *greeting*, not a name) end up with an awkward share preamble. Production livetest1 hits this today.
+
+**Suggested fix:** in `POSReceiptModal.shareWhatsApp`, prefer the actual company name (from auth session or `slip.outlet?.name`) over `template.header_text`. The template header_text is a *receipt-format greeting*, not a brand identifier. Reorder fallback to: outlet name → company name → header_text → "SanoPOS".
+
+**Severity:** ⚠️ low UX/copy. Doesn't break the share URL (which is what 3.7 cared about) — just an awkward preamble.
+
+### Status — 2026-04-29 (after M11 + M12 shipped + verified live)
+
+| # | Commit | Verified live |
+|---|---|---|
+| M12 | `04449f7` `fix(pos): WhatsApp share preamble uses outlet name, not template greeting` | ✅ Captured Sales History WhatsApp URL post-fix: `Receipt from Main Store\nInvoice: INV-2026-00002\nTotal: Rs 100.00\nView: https://sanopos.com/receipt/INV-2026-00002?tenant=livetest1` (was "Receipt from Thank you for shopping!"). Reusable helpers `buildReceiptShareMessage()` + `buildWhatsAppShareUrl()` added to `utils/publicReceipt.js`. |
+| M11 | `5caa5e4` `feat(sales-history): add Email + WhatsApp buttons for receipt sharing parity` | ✅ Sales History detail action row now: Reprint / Invoice / **Share** / **Email** / **WhatsApp** / Void / Return. Email reuses `POSEmailReceiptModal` (props-driven); WhatsApp uses the M12 helper. |
+
+Final live verification: clicked Sales History WhatsApp on INV-2026-00002 with no intercept → WhatsApp's "Share on WhatsApp" page opened in new tab with message preview correctly showing `Receipt from Main Store Invoice: INV-2026-00002 Total: Rs 100.00 View: https://sanopos.com/receipt/INV-2026-00002?tenant=livetest1` plus Open app / Continue to WhatsApp Web CTAs (`phase3-7-whatsapp-real-share-page.png`). Sales History buttons screenshot: `phase3-7-m11-sales-history-buttons.png`.
+
+**Phase 3.7 share/distribution surface fully closed.** All paths now work end-to-end: POS post-checkout (Email/WhatsApp/Print/Close), Sales History detail (Reprint/Invoice/Share/Email/WhatsApp/Void/Return), public receipt page (renders without auth from any of those URLs).
+
+---
+
+## 3.8 Gift card public balance lookup — 2026-04-29
+
+**Pre-state:** No gift cards on livetest1.
+
+**Steps walked:**
+1. `/gift-cards` → click New Card → modal opens with Type (Digital/Physical), Initial Value, Recipient email
+2. Filled: Digital, Initial Value 500, no email → Create
+3. Toast/inline confirmation: `Gift card created! BF18801AC599 Balance: Rs 500.00` ✅ (`phase3-8-01-gift-card-created.png`)
+4. Cards table now shows `BF18801AC599 / Digital / active / Rs 500.00 / Rs 500.00 / —` ✅
+5. Public API: `curl https://api.sanopos.com/api/gift-cards/public/BF18801AC599?tenant=livetest1` → 200 with `{ code, initial_value: 500, remaining_value: 500, activation_status: "active", card_type: "digital", created_at }` (no auth headers) ✅
+6. Public page: `https://sanopos.com/gift-card/BF18801AC599?tenant=livetest1` rendered → green "Gift Card / Balance check" header, code, REMAINING 500 of 500 initial, TYPE Digital, STATUS Active, footer "Present the code at the store to redeem." ✅ (`phase3-8-02-public-balance-page.png`)
+
+### Plan-doc acceptance scorecard
+
+| Criterion | Result |
+|---|---|
+| Issue card "GC-001" with 500 balance | ⚠️ Partial — UI doesn't allow specifying a custom code (M14 below). Used the auto-generated `BF18801AC599`. |
+| Open `/gift-card/<code>` in incognito → balance 500 visible | ✅ |
+
+### ⚠️ M13 — Public gift card page shows balance with no currency symbol
+
+The page renders REMAINING as a bare "500" (and "of 500 initial"). [GiftCardBalancePage.jsx:50-54](frontend/src/pages/GiftCardBalancePage.jsx#L50) uses `Number(n).toLocaleString()` without any currency symbol/code. A customer in Pakistan looking at a `500` balance can't tell whether it's PKR 500 (~$1.80) or some other denomination. Compare with the public receipt page (3.7) which shows `Rs 100.00`.
+
+**Suggested fix:** the public gift-card API response should include `currency_symbol` (read from `company_profile.currency_symbol` like receipts.js does). The page then renders `Rs 500` or `Rs 500.00`. No tenant context is required since the slug is already in the request and the company profile is keyed by tenant.
+
+**Severity:** ⚠️ medium UX. Customer-facing surface. Doesn't break the lookup but undermines trust ("how much is on this card?").
+
+### ⚠️ M14 — Gift card UI doesn't allow custom codes
+
+Plan-doc said "issue card 'GC-001'" — but `New Gift Card` form only offers Digital (auto-generated) or Physical (also single-card auto-generated). There is no input field to specify a custom human-readable code like "GC-001" or a printed-card serial like "PROMO-2026-XMAS". The only way to register a non-auto code is via the **Register Range** flow (which I didn't open — it expects bulk pre-printed batches, not a single named card).
+
+**Severity:** ⚠️ low product-design gap. The auto-generated `BF18801AC599` works fine for digital gifts (codes are meant to be distributed to recipient via email/SMS, not memorable). But it's an awkward gap for tenants who want to issue named promo cards via the standard flow. Could ship as an optional "Custom code" field on the Physical (single) tab.
+
+**Severity:** ⚠️ low. Workaround: use Register Range with `count=1` and a custom prefix.
+
+**No 🔴 blockers.** 2 ⚠️ findings (M13 currency symbol on public page, M14 custom code support). Phase 3.8 closed; livetest1 has 1 active gift card (`BF18801AC599`, Rs 500 remaining).
+
+### Bonus end-to-end verification — 2026-04-29
+
+After 3.8 plan-doc acceptance, walked the full POS gift-card flow against the same `BF18801AC599` to confirm no upstream bugs before polishing M13/M14:
+
+| Path | Verified | Evidence |
+|---|---|---|
+| POS Checkout → Gift Card tender → Check | ✅ | UI shows "Balance: Rs 500.00 · active" |
+| POS Add tender Rs 100 → Complete Sale | ✅ | INV-2026-00003 created, payment row `gift_card Rs 100.00` (M15 logged from this) |
+| Public API balance after redemption | ✅ | `remaining_value: 400` (500 → 400 deduction confirmed) |
+| Customers page Gift Card Balance lookup | ✅ | "Balance Rs 400.00 / Rs 500.00 · Active" (auth'd CRM read uses `/api/gift-cards/:code/balance`, separate from public route) |
+
+Gift-card flow is fully functional end-to-end on production. The 3 polish findings below are all UX/cosmetic, not data-integrity.
+
+### ⚠️ M15 (new) — Gift card tender renders as raw `gift_card` on receipts
+
+Discovered while ringing up INV-2026-00003. The POS Checkout uses `"gift_card"` (lowercase + underscore) as the internal tender id so UI code can branch on it; that raw string was then propagated to the receipt's PAYMENT row (POS post-checkout modal, browser print, public receipt page, emailed receipt). Other tenders happened to already be display-cased ("Cash", "Card", "Wallet") so the bug only surfaced for gift cards.
+
+### Status — 2026-04-29 (after M13 + M14 + M15 shipped + verified live)
+
+| # | Commit | Verified live |
+|---|---|---|
+| M13 | `87cb4ba` `fix(gift-cards): public balance page renders currency symbol` | ✅ Public API now returns `currency_symbol: "Rs"`. Public page renders REMAINING **Rs400.00** of Rs500.00 initial (was bare "500"). 21/21 backend tests green. (`phase3-8-m13-public-balance-with-currency.png`) |
+| M14 | `279d0f9` `feat(gift-cards): optional custom code on physical card issue` | ✅ New Gift Card form: switching to Physical reveals "Custom code (optional) — leave empty to auto-generate" input. Created `GC-PHASE3-TEST` Rs 250 ✅. Re-submitting same code returned `409 Gift card code already exists` ✅. 24/24 backend tests green. |
+| M15 | `73f82bd` `fix(receipts): format gift_card tender as "Gift Card" on all surfaces` | ✅ Public receipt for INV-2026-00003 now shows PAYMENT row `Gift Card  Rs100.00` (was `gift_card`). Helper applied across browser print + POS modal + public page + email HTML. (`phase3-8-m15-public-receipt-gift-card-label.png`) |
+
+**Phase 3.8 fully closed including all 3 polish findings.** livetest1 now has:
+- 3 sales (INV-2026-00001 Rs 200 partially refunded; INV-2026-00002 Rs 100 cash; INV-2026-00003 Rs 100 gift card)
+- 2 active gift cards (`BF18801AC599` Rs 400 remaining digital, `GC-PHASE3-TEST` Rs 250 remaining physical with custom code)
+- Test Coffee stock: **7.000** (was 8 — sold 1 to gift-card sale)
+- Shift #1 still open
+
+---
+
+## 3.12 CSV import preview validation — 2026-04-29
+
+**Pre-state:** livetest1 had 6 products (5 sample + Test Coffee), 0 customers (Walk-In test customer from 3.6 was soft-deleted), shift #1 open, Hassan logged in. Backend `87cb4ba` / frontend `73f82bd` at start.
+
+**Probe approach:** built two intentionally-mixed test files:
+- **`docs/phase3-fixtures/products-3-12-probe.csv`** — 6 rows: 1 valid baseline, 1 missing name, 1 missing price, 1 in-file dup-SKU, 1 unknown category, 1 with whitespace name + non-numeric price + Excel-scientific-notation barcode
+- **`docs/phase3-fixtures/customers-3-12-probe.xlsx`** — 5 rows: 1 valid, 1 missing name, 1 invalid email, 1 dup mobile, 1 with whitespace name
+
+Walking the Products tab in the UI revealed the entire `/import` page was silently broken in production. Walking via direct API call to capture the actual response shape revealed 4 distinct issues plus 1 hidden parsing bug.
+
+### 🔴 P4 — Frontend/backend preview shape mismatch — entire `/import` UI silently broken (ALL 5 TABS)
+
+**Reproduce:** Upload any valid CSV at `/import` (Products / Customers / Suppliers / Expenses / Payments) → page shows **"0 valid rows"** and the **Import button never appears**, regardless of file content.
+
+**Root cause:** [ImportRedesign.jsx:82-86](frontend/src/pages/redesign/ImportRedesign.jsx#L82-L86) reads `preview.rows[]._errors`, but [routes/import.js:124](backend/routes/import.js#L124) returned `{ preview, valid (count), errors[], sample[] }` — no `rows` key, no per-row `_errors` field. Frontend always saw `preview.rows = undefined` → `validRows = []` → no Import button.
+
+**Blast radius:** every merchant who tried bulk-import on production since launch hit this. Affected all 5 tabs. The single most impactful bug surfaced in Phase 3.
+
+### 🔴 P5 — In-file + DB duplicate SKU not detected by import preview, no DB UNIQUE constraint either
+
+**Reproduce:** Upload products CSV with `[Coffee Beans, COFFEE-001]` and `[Drip Filter, COFFEE-001]` rows → both go into `valid[]` → pressing Import inserts both → two products share a SKU. Schema confirms: `products.sku TEXT` is nullable with no UNIQUE index ([schema-pg.sql:145](backend/schema-pg.sql#L145)).
+
+**Blast radius:** POS barcode-scan-by-SKU would resolve ambiguously; Reports → SKU dump shows duplicate rows; future variant resolution by SKU is unsafe.
+
+### ⚠️ M16 — Excel scientific-notation barcode silently truncated
+
+**Reproduce:** Real-world Excel converts long digit strings (e.g. EAN-13 `1234567890005`) to scientific notation `1.23E+12` when re-saving as CSV. The XLSX library parsed `1.23E+12` as the float `1230000000000`, **losing the last 5 digits of the barcode**, with no warning.
+
+**Severity:** ⚠️ low. Cosmetic in the demo; real Excel-using merchants would see consistent barcode corruption. Defer to a polish bundle (would need the barcode column to be quoted as a string).
+
+### ⚠️ M17 — Misleading error wording for non-numeric `selling_price`
+
+**Reproduce:** Upload CSV with `selling_price=Rs 850` → preview said `"selling_price is required and must be a number"` even though the field had content. A merchant reading "is required" thinks the column is empty.
+
+### ⚠️ M21 (caught while fixing F7) — XLSX auto-coerces ISO date strings into Excel serials
+
+**Reproduce:** Upload expenses or payments CSV with `date=2026-04-29` → `XLSX.utils.sheet_to_json` returns `date=46141.20847…` (Excel serial). Then the route's `Date.parse(46141.2)` returns NaN → "date is not valid" → all rows rejected.
+
+**Blast radius:** every expense/payment CSV import with ISO dates was silently failing in production. The bug was hiding behind P4 (merchants couldn't reach the Import button to discover it). Found while writing the F7 vitest test.
+
+### ⚠️ M18 (deferred) — Customer import accepts invalid email format silently
+
+Row with `email="not-an-email"` slipped into `sample[]`. Now fixed via F14.
+
+### ⚠️ M19 (deferred) — Customer import accepts duplicate mobile silently
+
+Two rows with the same `mobile` both inserted as separate customers, splitting CRM history. Now fixed via F15.
+
+### ⚠️ M20 — Customer name uniqueness not checked
+
+Out of scope — legitimate edge cases (two customers can share a name). Logged but no fix.
+
+### Plan-doc acceptance scorecard (3.12)
+
+| Criterion | Pre-fix | Post-fix |
+|---|---|---|
+| Upload CSV with valid + missing-field + dup-SKU rows | 🔴 broken UI shows "0 valid rows" regardless | ✅ all rows rendered with per-row error column |
+| Preview flags bad rows distinctly | 🔴 cannot reach preview UI | ✅ red rows for errors, OK for valid (verified live screenshot `phase3-12-import-fixed-products-preview.png`) |
+| Fix issues, import succeeds | 🔴 Import button hidden | ✅ "Import 1 row" CTA → product inserts (id=9, INV count 6→7→6 after soft-delete cleanup) |
+| Imported products in Inventory with correct prices/taxes | ✅ once UI worked | ✅ Coffee Beans landed with `sku=COFFEE-001, price=850, barcode=1234567890001` |
+| Repeat with Customers tab using 5-row XLSX | ✅ same broken-shape issue confirmed via API; F7 fix unifies all 5 tabs | ✅ same fix applies |
+
+### Status — 2026-04-29 (after C1–C4 shipped + verified live)
+
+| # | Commit | Verified live |
+|---|---|---|
+| C1 (F7 + M21) | `e5a7998` `fix(import): unify preview response shape so frontend can render rows` | ✅ POST `/api/import/products?preview=1` now returns `{ preview, rows: [{ _row, _errors, ...fields }], valid, errors }`. UI renders 6 rows with per-row Status column (`phase3-12-import-fixed-products-preview.png`). Same shape across all 5 tabs. M21 fixed by `{ raw: false }` on `sheet_to_json` — ISO dates now stay as strings. |
+| C2 (F8 + F9) | `6c30a23` `fix(import): block duplicate SKUs on products import (in-file + DB)` | ✅ Live test row 5 (`Drip Filter, COFFEE-001`) now reports `duplicate SKU "COFFEE-001" already used on row 2`. Re-uploading the same SKU after import returned `SKU "COFFEE-001" already exists in inventory` ✅. |
+| C3 (F10) | `e75a098` `fix(migrations): v82 partial UNIQUE on products.sku` | ✅ Railway log: `[migrate-pg] Migrating tenant: livetest1 (tenant_livetest1)` → `Schema is up to date (version 82).` No skip warnings (production has 0 dup SKUs to clean up). DB-level guard now active for direct INSERTs (POS Add Product, single-product API POST). |
+| C4 (F11–F15) | `27e55e5` `fix(import): polish error wording + parity dup-detection across remaining tabs` | ✅ Row 4 (empty price) shows "selling_price is required". Row 7 (`Rs 850`) shows `selling_price "Rs 850" is not a number`. Customers/suppliers/payments dup-detection covered by 7 vitest tests. |
+
+### Live verification summary
+
+After 4 pushes + Railway redeploy + tenant_livetest1 migration to v82:
+
+```
+POST /api/import/products?preview=1 (with 6-row probe CSV)
+→ { preview: true, rows: [...6 rows...], valid: 1, errors: 5 }
+  row 2: Coffee Beans, COFFEE-001 → _errors: []  ← valid
+  row 3: (empty name)              → _errors: ["name is required"]
+  row 4: Loose Tea, TEA-001        → _errors: ["selling_price is required"]
+  row 5: Drip Filter, COFFEE-001   → _errors: ["duplicate SKU \"COFFEE-001\" already used on row 2"]
+  row 6: Snack Bar, DoesNotExist   → _errors: ["category \"DoesNotExist\" not found"]
+  row 7: Espresso Maker, Rs 850    → _errors: ["selling_price \"Rs 850\" is not a number"]
+```
+
+UI renders the same 6 rows in a table with red-highlighted errors and a green "Import 1 row" CTA. Real import inserts only row 2 — verified product count 6→7, then soft-deleted the test row to restore livetest1 state to 6.
+
+**Test coverage added in C1–C4:** 23 new vitest tests across 2 files:
+- `backend/tests/integration/pg-import-preview-shape.test.js` — 17 tests (preview shape on 5 endpoints, dup-SKU in-file + DB, NULL-SKU repetition allowed, real import blocking, F11 wording, F12/F13/F14/F15 polish)
+- `backend/tests/integration/pg-migration-v82-products-sku-unique.test.js` — 6 tests (clean-schema creation, idempotency, NULL repetition, dup rejection, legacy-with-dups skip, no-products-table no-op)
+
+Plus `backend/tests/integration/pg-batch-2g14-competitor-import.test.js` (existing) updated to assert the new unified shape.
+
+### Findings deferred to post-launch polish
+
+- **M16** — Excel sci-notation barcode truncation. Needs CSV barcode column wrapped as string, separate concern.
+- **M20** — Customer name uniqueness. Legitimate to share names.
+- Expenses dedup — same-day-same-amount expenses are legitimate (two cashiers, two parking expenses).
+
+**Phase 3.12 fully closed.** All P-level findings shipped + verified live. 4 ⚠️ findings either fixed (M17/M21 in C1, M18/M19 in C4) or deferred with rationale (M16, M20).
+
+---
+
+## Resume next session at 3.13
+
+**State on `livetest1` (production):**
+- 3 sales (INV-2026-00001 partial refund, INV-2026-00002 cash, INV-2026-00003 gift card). Test Coffee stock **7.000**. Shift #1 still open.
+- 2 active gift cards (`BF18801AC599` Rs 400, `GC-PHASE3-TEST` Rs 250).
+- 6 products (Phase 3.12 cleanup verified — Coffee Beans test product soft-deleted post-verification).
+- 3/3 employees at Free plan cap.
+- Backend on Railway at `27e55e5`, schema at v82. Frontend on Vercel at `73f82bd` (no frontend changes in 3.12 — purely backend).
+- v82 migration applied to public + tenant_livetest1 successfully (no dups to skip).
+
+**Next step — 3.13 sandbox payment checkout end-to-end.** From cap-hit modal in 3.4 → /billing → pick **Annual** (Quarterly default is broken, known) → Pay Now → SanoPay sandbox → complete test card → verify webhook fires → tenant auto-upgrade to Pro → confirmation email → `payment_records` row → Free caps lifted (try adding 4th employee).
+
+**After 3.13:** 3.14 mixed-rate tax sale (17% + 5% products → verify per-line tax preserved on receipt + reports).
+
+**Still blocked:** 3.3 FBR (NTN/STRN/sandbox token), 3.9 Shopify, 3.10 Courier (sandbox creds). 3.11 SKIP (physical hardware).
+
+---
+
+## (legacy) Resume tomorrow at 3.8 — superseded by 3.12 closure above
+
+**State on `livetest1` (production):**
+- Test Coffee (id=8): stock **9.000** at outlet 1, sale id=1 (`INV-2026-00001`) Rs 200 cash, RTN-1 already refunded 1 unit (Rs 100). 1 unit still refundable.
+- Shift #1 (Main Store, opened 4/27 Rs 5,000 float) — **still open**, do not close.
+- Hassan attendance session — should still be active. If POS shows the kiosk PIN gate, `POST /api/attendance/pin-checkin?tenant=livetest1 {"pin_code":"1234","outlet_id":1}`.
+- Backend on Railway (api.sanopos.com) at commit `213422e`, frontend on Vercel (sanopos.com) at `a58e65d`. F1–F6 all live.
+- **Employees: 3/3** (Hassan, Test Cashier 2 PIN 2222, Test Cashier 3 PIN 3333) — at Free plan cap.
+- Cap modal + /billing routing all verified working. M5 (modal pricing copy) + M6 (preflight on Add) noted as low-severity UX nits.
+- 3.5 done: Daraz happy-path walked + disconnected. M7 (WhatsApp token=text) + M8 (HTTP 500 on bad creds) noted. No integrations currently connected — clean state.
+- 3.6 done: 4-of-7 onboarding state matches backend signals exactly. M9 noted: sale step gates on `saleCount` (today-only), causing it to un-tick the day after a merchant's first sale. Walk-In Test Customer created + soft-deleted during regression check, state clean.
+- 3.7 closed: P2 + P3 + M10 + M11 + M12 all shipped (commits 389e75c / 7bf0dbc / 61291c2 / 04449f7 / 5caa5e4) and verified live.
+- Bonus end-to-end check: rang up INV-2026-00002 (Test Coffee × 1, Rs 100, Cash). All paths now verified live with real button clicks (no intercepts) — POS WhatsApp + Email, Sales History Share + Email + WhatsApp, public-receipt page renders, real WhatsApp share landing page shows pre-filled message.
+- 3.8 closed (incl. polish): M13 + M14 + M15 all shipped (commits 87cb4ba / 279d0f9 / 73f82bd) and verified live. Public balance page renders "Rs400.00", physical-card form has optional Custom code input with 409 dedup, all receipt surfaces render "Gift Card" instead of "gift_card".
+- POS gift-card flow fully functional: tender lookup, redemption (deducts 500 → 400 ✅), CRM balance lookup all working pre-fix; M13/M14/M15 were UX polish on top of a sound core.
+- **livetest1 state changed**: 3 sales + 2 active gift cards. INV-2026-00001 (Rs 200 partial refund), INV-2026-00002 (Rs 100 cash), INV-2026-00003 (Rs 100 gift card). Cards: `BF18801AC599` Rs 400, `GC-PHASE3-TEST` Rs 250. Test Coffee stock: **7.000**. Shift #1 still open.
+- Backend on Railway at `87cb4ba`, frontend on Vercel at `73f82bd`.
+
+**Next step — 3.12 CSV import preview validation.** Upload sample CSV with valid rows + missing-field rows + duplicate-SKU rows, verify preview flags errors distinctly, fix issues, confirm import succeeds. After that: 3.14 mixed-rate tax sale.
+
+**Still blocked:** 3.3 FBR (needs NTN/STRN/sandbox token), 3.9 Shopify, 3.10 Courier, 3.13 sandbox payment (depends on PAYMENT_GATEWAY env var). 3.11 SKIP (physical hardware).
+
+**Skipped / blocked sub-flows tracked for later:**
+- 3.9 Shopify import — needs sandbox Shopify creds.
+- 3.10 Courier shipment — needs sandbox courier creds.
+- 3.11 Receipt printer + cash drawer — physical hardware, skipped per brief.
+
+**Open mediums (deferred, do not re-flag):**
+- /accounting Cash Flow tab fires 400.
+- /stock-counts (Inventory Audit) blank below title.
+- /store/livetest1 storefront empty (channel_publications gating, Phase 4).
+- /billing Quarterly highlighted, Annual has BEST VALUE pill — pick Annual manually for 3.13.
+- 6 legacy test files still import `helpers/createTestApp` instead of `-pg` (pre-existing).
+- Polish bundle (16+ items, see Phase 2 Day 2).
+
+
+
+
+

@@ -1,0 +1,7 @@
+name,sku,barcode,selling_price,cost_price,category,brand,tax,unit,stock_quantity,status
+Coffee Beans,COFFEE-001,1234567890001,850,400,,,,pcs,20,active
+,COFFEE-002,1234567890002,500,200,,,,pcs,10,active
+Loose Tea,TEA-001,1234567890003,,150,,,,pcs,5,active
+Drip Filter,COFFEE-001,1234567890004,250,100,,,,pcs,15,active
+Snack Bar,SNACK-001,1234567890005,80,40,DoesNotExist,,,pcs,30,active
+ Espresso Maker ,ESPRESSO-001,1.23E+12,Rs 850,3000,,,,pcs,2,active
