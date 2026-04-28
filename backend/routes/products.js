@@ -585,14 +585,24 @@ module.exports = function registerProductRoutes(app, deps) {
       lead_time_days_override, // 2-G.8
       safety_stock_days,       // 2-G.8
     } = req.body;
-    // Fall back to the session's selected outlet (set by context-select after
-    // login → JWT.oid → req.context.outletId). Without this, the Add Product
-    // form's Opening Stock value silently dropped to 0: the form sends
-    // initial_stock but never an outlet_id, and the stock-insert below is
-    // gated on `if (outlet_id && initial_stock)`. Single-outlet tenants
-    // shouldn't have to wire up a hidden field for the obvious default.
-    const outlet_id =
+    // Fall back through: explicit body field → header → session context → first outlet.
+    // Without this, the Add Product form's Opening Stock value silently dropped
+    // to 0: the form sends initial_stock but never an outlet_id, and the
+    // stock-insert below is gated on `if (outlet_id && initial_stock)`.
+    // Session context is also unreliable today — if the user auto-resolved
+    // through /context-select without an explicit pick, JWT.oid stays null
+    // and req.context.outletId comes back null. The "first outlet" SQL
+    // fallback guarantees single-outlet tenants always get their initial
+    // stock seeded; multi-outlet tenants who care about which outlet
+    // continue to pass outlet_id explicitly.
+    let outlet_id =
       req.body.outlet_id || req.headers["x-outlet-id"] || req.context?.outletId;
+    if (!outlet_id && (_initial_stock || req.body.stock)) {
+      const { rows: [first] } = await deps.db.query(
+        "SELECT id FROM outlets ORDER BY id LIMIT 1"
+      );
+      if (first) outlet_id = first.id;
+    }
     try {
       const categoryError = await validateLeafCategory(category_id);
       if (categoryError) {
