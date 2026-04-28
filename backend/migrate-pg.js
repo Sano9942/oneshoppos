@@ -5913,6 +5913,72 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 82,
+    description:
+      "products.sku partial UNIQUE index — DB-level guard for Phase 3.12 import dup-SKU fix (F10)",
+    up: async (client) => {
+      // Phase 3.12 walkthrough surfaced that /api/import/products silently
+      // accepted duplicate SKUs, both within a single uploaded file and against
+      // existing products. C2 (commit 6c30a23) fixed the import-layer
+      // validators (F8/F9), but products.sku has no DB-level guard, so any
+      // direct INSERT (POS Add Product, single-product API POST, future
+      // integrations) could still create dups.
+      //
+      // Adds a partial UNIQUE INDEX on products(sku) WHERE sku IS NOT NULL.
+      // Partial because livetest1 production has 6 of 6 sample products with
+      // sku=NULL — a full UNIQUE constraint would reject any second NULL.
+      // Postgres treats partial UNIQUE WHERE NOT NULL as "many NULLs allowed,
+      // non-NULLs must be unique" — exactly what we want.
+      //
+      // Safety: if existing data already has dup non-NULL SKUs (legacy tenant
+      // state), CREATE UNIQUE INDEX would fail. Wrap in a SAVEPOINT so the
+      // failure doesn't poison the whole migration transaction (same lesson
+      // as v69). Log a structured warning and continue — new imports remain
+      // protected by app-level F8/F9.
+
+      // Skip if the table doesn't exist in this schema (public schema runs
+      // migrations too — only tenant schemas have a `products` table)
+      const { rows: tableExists } = await client.query(`
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = current_schema() AND table_name = 'products'
+      `);
+      if (!tableExists.length) return;
+
+      // Skip if the index already exists (idempotency)
+      const { rows: indexExists } = await client.query(`
+        SELECT 1 FROM pg_indexes
+         WHERE schemaname = current_schema()
+           AND indexname  = 'products_sku_unique'
+      `);
+      if (indexExists.length) return;
+
+      // Probe for existing duplicates first so we can log a clear warning
+      // instead of an opaque "could not create unique index" error.
+      const { rows: dupRows } = await client.query(`
+        SELECT sku, COUNT(*)::int AS n
+          FROM products
+         WHERE sku IS NOT NULL
+         GROUP BY sku
+        HAVING COUNT(*) > 1
+         LIMIT 10
+      `);
+      if (dupRows.length) {
+        console.warn(
+          `[migrate-pg v82] Skipping products_sku_unique index in schema "${
+            (await client.query("SELECT current_schema()")).rows[0].current_schema
+          }" — found ${dupRows.length} duplicate non-NULL SKU group(s): ${dupRows
+            .map((r) => `"${r.sku}" (×${r.n})`)
+            .join(", ")}. Resolve dups manually then re-run migrate-pg.`
+        );
+        return;
+      }
+
+      await client.query(
+        "CREATE UNIQUE INDEX products_sku_unique ON products (sku) WHERE sku IS NOT NULL"
+      );
+    },
+  },
 ];
 
 async function migrate(db) {
