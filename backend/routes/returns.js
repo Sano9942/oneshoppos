@@ -216,7 +216,9 @@ module.exports = function registerReturnsRoutes(app, deps) {
         .json({ error: "Outlet ID is required for restocking" });
     }
 
-    // B16 fix: validate each returned item against original sale
+    // B16 fix: validate each returned item against original sale.
+    // F1 (Apr 28 2026): subtract qty already returned for this sale so a
+    // partially-refunded sale can't be refunded a second time at full qty.
     if (original_sale_id) {
       try {
         const { rows: saleItems } = await db.query(
@@ -229,24 +231,47 @@ module.exports = function registerReturnsRoutes(app, deps) {
           return res.status(400).json({ error: "Original sale not found or has no items" });
         }
 
-        const soldMap = {};
+        const { rows: priorReturned } = await db.query(
+          `SELECT ri.product_id, ri.variant_id, SUM(ri.quantity) AS refunded_qty
+           FROM return_items ri
+           JOIN returns r ON r.id = ri.return_id
+           WHERE r.original_sale_id = $1
+           GROUP BY ri.product_id, ri.variant_id`,
+          [original_sale_id],
+        );
+
+        const remainingMap = {};
         saleItems.forEach((r) => {
           const key = `${r.product_id}_${r.variant_id ?? "null"}`;
-          soldMap[key] = Number(r.sold_qty);
+          remainingMap[key] = Number(r.sold_qty);
+        });
+        priorReturned.forEach((r) => {
+          const key = `${r.product_id}_${r.variant_id ?? "null"}`;
+          if (key in remainingMap) {
+            remainingMap[key] -= Number(r.refunded_qty);
+          }
         });
 
         for (const item of items) {
           const key = `${item.product_id}_${item.variant_id ?? "null"}`;
-          if (!(key in soldMap)) {
+          if (!(key in remainingMap)) {
             return res.status(400).json({
               error: item.variant_id
                 ? `Variant ${item.variant_id} of product ${item.product_id} was not part of the original sale`
                 : `Product ${item.product_id} was not part of the original sale`,
             });
           }
-          if (item.quantity > soldMap[key]) {
+          const remaining = remainingMap[key];
+          if (remaining <= 0) {
             return res.status(400).json({
-              error: `Return quantity ${item.quantity} exceeds sold quantity for this variant`,
+              error: item.variant_id
+                ? `Variant ${item.variant_id} of product ${item.product_id} has already been fully refunded for this sale`
+                : `Product ${item.product_id} has already been fully refunded for this sale`,
+            });
+          }
+          if (item.quantity > remaining) {
+            return res.status(400).json({
+              error: `Cannot refund ${item.quantity} units of product ${item.product_id}; only ${remaining} remaining (the rest was already refunded against this sale)`,
             });
           }
         }
