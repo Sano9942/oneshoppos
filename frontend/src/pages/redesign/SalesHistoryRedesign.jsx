@@ -12,10 +12,12 @@ import {
 } from "../../ui/primitives";
 import { api } from "../../api";
 import InvoiceView from "../InvoiceView";
-import { Ban, Download, FileText, Printer, RefreshCw, Search } from "lucide-react";
+import { Ban, Download, FileText, Printer, RefreshCw, Search, Share2 } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
+import { useToast } from "../../contexts/ToastContext";
 import { buildReceiptHtml } from "../../utils/receipt";
+import { buildPublicReceiptUrl } from "../../utils/publicReceipt";
 
 const formatDate = fmtUtcDateTime;
 
@@ -60,6 +62,7 @@ function exportCsv(rows) {
 export default function SalesHistoryRedesign() {
   const { fmt: money, symbol: currencySymbol } = useCurrency();
   const navigate = useNavigate();
+  const toast = useToast();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -175,6 +178,22 @@ export default function SalesHistoryRedesign() {
       customer: s.customer_name ? { name: s.customer_name } : null,
     };
     buildReceiptHtml(slip, null, currencySymbol);
+  };
+
+  const handleShareReceipt = async () => {
+    if (!detail?.sale?.invoice_number) {
+      toast.error("This sale has no invoice number to share");
+      return;
+    }
+    const url = buildPublicReceiptUrl(detail.sale.invoice_number);
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Receipt link copied");
+    } catch {
+      // Older browsers / iframes without Permissions-Policy=clipboard-write
+      // just see the URL in a prompt — still useful as a fallback.
+      window.prompt("Copy this receipt link:", url);
+    }
   };
 
   if (invoiceSaleId) {
@@ -399,6 +418,7 @@ export default function SalesHistoryRedesign() {
                     <div className="grid grid-cols-2 gap-2">
                       <Button size="sm" onClick={handleReprint}><Printer size={13} className="mr-1 inline" />Reprint</Button>
                       <Button size="sm" onClick={() => setInvoiceSaleId(selected.id)}><FileText size={13} className="mr-1 inline" />Invoice</Button>
+                      <Button size="sm" onClick={handleShareReceipt} title="Copy a public receipt link the customer can open without logging in"><Share2 size={13} className="mr-1 inline" />Share</Button>
                       {!Number(detail.sale.voided || 0) ? (
                         <Button size="sm" tone="danger" onClick={handleVoid}><Ban size={13} className="mr-1 inline" />Void</Button>
                       ) : null}
