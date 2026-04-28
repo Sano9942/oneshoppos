@@ -756,7 +756,7 @@ Plus `backend/tests/integration/pg-batch-2g14-competitor-import.test.js` (existi
 | Redirects to SanoPay sandbox | ✅ (`/api/sandbox/pay/sandbox_1777415747266_3`) |
 | Complete sandbox payment with test card | ✅ clicked "Pay Successfully", page showed "Simulated payment.completed" |
 | Webhook fires → tenant auto-upgrades to Pro | ✅ Railway log: `Payment confirmed — tenant activated` (intent_id=3, tenant_id=95) |
-| Confirmation email arrives | ⚠️ enqueued (no "Failed to enqueue" log fired) but worker send not observed in tail logs — operator to confirm receipt at `oneshop349@gmail.com` |
+| Confirmation email arrives | 🔴 → ✅ exposed P6 + P7 (see below); after C6 fix, verification email (intent_id=5) delivered to `oneshop349@gmail.com` rendered as "Payment Confirmed / Plan: pro (annual) / Amount: PKR 80,000 / Valid Until: April 29, 2027" |
 | `payment_records` row created with correct amount + status | ✅ row id=2, amount=80000.00 PKR, plan=pro, cycle=annual, payment_method=sandbox, period 2026-04-28 → 2027-04-28 |
 | Verify Free-tier caps lifted (4th employee) | ✅ `POST /api/employees` returned id=4 "Test Cashier 4", count went 3→4 |
 
@@ -819,7 +819,83 @@ The new payment_record row has `period_end: "2027-04-28T22:35:59.623Z"` — a UT
 
 **No new fix commits in 3.13** — sandbox payment flow is fully working. Findings M22 / M23 / M24 are deferred to the polish bundle (M22 already known, M23/M24 logged here).
 
-**Phase 3.13 closed.** All 7 plan-doc acceptance criteria met (1 with workaround per brief, 1 needs operator inbox confirmation).
+**Phase 3.13 closed.** All 7 plan-doc acceptance criteria met after the P6 + P7 fixes below.
+
+### 🔴 P6 — Payment confirmation email never sent (root-caused while verifying 3.13)
+
+**Reproduce:** Complete sandbox payment → tenant activates correctly → no email arrives in `oneshop349@gmail.com` (operator inbox).
+
+**Root cause** (verified against actual source, not CLAUDE.md):
+- [routes/webhooks.js:105-109 (pre-fix)](backend/routes/webhooks.js#L105) did a raw `INSERT INTO email_queue (...)` against the legacy `public.email_queue` table.
+- The legacy polling worker (`workers/email-worker.js`) that drained that table was deleted during the pg-boss migration. Only `workers/email-worker-boss.js` is wired in `boot/workers.js:247-248`.
+- The pg-boss "email" worker only consumes jobs published via `boss.send("email", ...)` — it does NOT poll `email_queue` table.
+- Net effect: every payment-confirmation INSERT sat orphaned in `email_queue` forever.
+
+**Why every other email type works:** every other code path uses `services/email.js`'s `enqueueEmail()` helper, which publishes via `boss.send` directly. Only `routes/webhooks.js` was the holdout still doing a raw INSERT.
+
+**Fix (commit `fbc7034`, C5):** swap the raw INSERT for `enqueueEmail(masterDb, { tenantId, type, to, tenant, data })` — same shape every other email path uses.
+
+### 🔴 P7 — pg-boss v12 work handlers all broken — every email + FBR job silently failing in production
+
+**Discovered while verifying P6 fix.** After C5 deployed, the test sandbox payment's email STILL didn't arrive. Inspecting `pgboss.job` table revealed:
+- 1 retry-state email job with stack trace:
+  ```
+  TypeError: Cannot destructure property 'to' of 'job.data' as it is undefined.
+    at handleEmailJob (/app/workers/email-worker-boss.js:43:11)
+  ```
+- Multiple `created`-state email jobs from Apr 27 stuck in queue
+
+**Root cause** (verified):
+- `backend/package.json` declares `"pg-boss": "^12.15.0"`, installed = `12.15.0`.
+- pg-boss v12 changed `WorkHandler` signature from `(job: Job<T>) => ...` to `(job: Job<T>[]) => ...` (verified at `node_modules/pg-boss/dist/types.d.ts:321-325`).
+- `pg-boss/dist/manager.js:201` invokes `callback(jobs)` — passing the whole array.
+- All 6 data-reading handlers in `workers/*-worker-boss.js` were written `async (job) => { const x = job.data.x; }` — destructured `.data` from the array, got `undefined`, crashed on every single job.
+- 13 cron-style handlers (`async () => { ... }`) were unaffected because they ignore the param.
+
+**Why tests didn't catch it:** `tests/unit/workers-email-worker-boss.test.js` called handlers directly with single-job shape, bypassing pg-boss entirely. Tests passed against the wrong contract.
+
+**Blast radius:** every email enqueued via pg-boss since v12 was deployed silently failed. Includes welcome, password reset, drip, billing payment confirmations (now via P6 fix), invoice reminders, customer subscription renewals, marketing campaigns, and FBR digital invoice posting.
+
+**Fix (commit `fb280fe`, C6):** changed 6 handlers from `async (job) =>` to `async ([job]) =>` (array destructure, default batchSize=1 ⇒ array of length 1):
+- `email-worker-boss.js:235` (email), 261 (campaign-email), 322 (invoice-reminder), 379 (campaign-scheduled-send), 397 (subscription-renewal)
+- `fbr-worker-boss.js:134` (fbr-invoice)
+
+Plus 9 unit-test invocations in `workers-email-worker-boss.test.js` updated to pass array shape so tests now validate the v12 contract.
+
+### Verification (post-C6 deploy)
+
+Created fresh pending intent (`scripts/3-13-test-fresh-intent.js`) → `simulate-webhook` → Railway log captured:
+```
+[INFO] Processing webhook event ... event_type="payment.completed" intent_id=5 tenant_id=95
+[INFO] Payment confirmed — tenant activated ... intent_id=5 tenant_id=95
+[INFO] pg-boss email sent ... to="oneshop349@gmail.com" subject="Payment received — Live Test 1"
+```
+
+Operator confirmed: email rendered correctly in inbox — green "SanoPOS / Payment Confirmed" header, Plan: pro (annual), Amount: PKR 80,000, Valid Until: April 29, 2027.
+
+`pgboss.job` state went from `failed: 1` to `completed: 1` — first successful pg-boss email send since v12 was deployed.
+
+### ⚠️ M25 (new) — Tenant deletion does NOT purge pg-boss jobs that reference the tenant
+
+While inspecting `pgboss.job`, found 2 stale `drip_getting_started` / `drip_features` emails scheduled for `start_after = 2026-04-29 12:40 UTC` (tomorrow) targeting `tenant_id=94` — the now-deleted `live_test_1` tenant. They would have fired tomorrow with broken store-link content (linking to the deleted store URL).
+
+**Cleanup applied:** deleted those 2 orphan jobs via `scripts/3-13-cleanup-orphan-drip-jobs.js`. The 2 remaining drip jobs reference `tenant_id=95` (active livetest1) and will fire tomorrow + 5/2 with valid content — left in place.
+
+**Suggested fix:** when soft-deleting a tenant (master `tenants` row → `status='deleted'` + tenant schema dropped), also `DELETE FROM pgboss.job WHERE state='created' AND data->>'tenantId' = $1`. Bundle into a polish PR that addresses the broader email-queue-cleanup story (the legacy `email_queue` table also holds orphan rows now that nothing writes to it).
+
+### Updated state of `livetest1` after 3.13
+
+- Plan: **Pro (annual)**, expires **2027-04-28**
+- payment_records: 2 rows (intent_id=3 from initial 3.13 walk + intent_id=5 from P6/P7 verification — both PKR 80,000 sandbox)
+- Employees: **4** (Hassan, Test Cashier 2, Test Cashier 3, Test Cashier 4 [id=4, PIN 4444, Cashier role])
+- Sales / gift cards / products / shift / Test Coffee stock: unchanged from end of 3.12
+- Backend on Railway at `fb280fe` (C6). Schema at v82.
+
+### Commits (3.13 saga)
+
+- `fbc7034` `fix(webhooks): payment confirmation email — enqueue via pg-boss, not dead email_queue` (C5 / P6)
+- `fb280fe` `fix(workers): pg-boss v12 work handlers receive Job<T>[], not single Job` (C6 / P7)
+- 3 helper scripts in `backend/scripts/`: `3-13-test-fresh-intent.js`, `3-13-check-pgboss-jobs.js`, `3-13-cleanup-orphan-drip-jobs.js` — kept as debug tools (cleanup in polish PR per CLAUDE.md "no out-of-scope churn")
 
 ---
 
@@ -827,16 +903,30 @@ The new payment_record row has `period_end: "2027-04-28T22:35:59.623Z"` — a UT
 
 **State on `livetest1` (production):**
 - **Plan: Pro (annual)**, expires 2027-04-28, `payment_status=active`, grace_ends 2027-05-05.
-- 1 sandbox payment record (id=2, 80000 PKR, plan=pro, cycle=annual, payment_method=sandbox).
-- **4 employees**: Hassan, Test Cashier 2, Test Cashier 3, **Test Cashier 4 (id=4, PIN 4444, Cashier role)** — created in 3.13 to verify caps lifted; safe to leave or delete.
+- **2 sandbox payment records**: id=2 (initial 3.13 walk via /billing UI) + id=3 or higher (P6/P7 verification via simulate-webhook). Both PKR 80,000 sandbox.
+- **4 employees**: Hassan, Test Cashier 2, Test Cashier 3, **Test Cashier 4 (id=4, PIN 4444, Cashier role)** — safe to leave or delete.
 - 3 sales / 2 gift cards / 6 products / Test Coffee stock 7.000 / Shift #1 still open — unchanged from end of 3.12.
-- Backend on Railway at `8bb61d7` (post-3.12 commits all live), schema at v82. Frontend on Vercel at `73f82bd`.
+- Backend on Railway at `fb280fe` (C6 — pg-boss v12 fix). Schema at v82. Frontend on Vercel at `73f82bd`.
+- pg-boss email worker now functioning: state count `completed: 1, failed: 1 (pre-fix residue), created: 2 (legitimate future-scheduled drip emails for livetest1, fire 4/29 13:16 + 5/2 13:16)`.
 
 **Next step — 3.14 Mixed-rate tax sale.** Create "Coffee Beans" with 17% GST + "Snack Bar" with 5% GST → POS ring up 1× CB + 2× SB → verify receipt shows two tax lines (Rs 17 + Rs 5 = Rs 22 total tax on Rs 200 base). Verify Reports → Sales Summary preserves per-rate breakdown. Skip FBR-payload check (3.3 is still blocked).
 
+Pre-flight question: livetest1 currently has 0 tax rates configured (verified via `/import` Snack Bar probe in 3.12 which returned `tax "DoesNotExist" not found` — same would happen for any name). Will need to first add 17% GST + 5% GST rows to the `taxes` table via `/taxes` admin UI before creating the products.
+
 **Still blocked:** 3.3 FBR (NTN/STRN/sandbox token), 3.9 Shopify, 3.10 Courier (sandbox creds). 3.11 SKIP (physical hardware).
 
-**Carryover findings from 3.13:** M22 (Quarterly default vs Annual pill) confirmed real; M23 (`/billing/pricing` still emits Starter rows); M24 (raw ISO in payment_records). All deferred to polish bundle.
+**Carryover findings from 3.13 (deferred to polish bundle):**
+- M22 — `/billing` Quarterly default conflicts with Annual BEST VALUE pill (real conversion bug).
+- M23 — `/api/billing/pricing` still emits Starter tier rows despite Starter removal (UI filters them out, but endpoint isn't cleaned).
+- M24 — `period_end` exposed as raw ISO timestamp in payment_records API.
+- M25 — Tenant deletion does NOT purge orphan pg-boss jobs that reference the deleted tenant. 2 such orphans (drip emails for `live_test_1`, tenantId=94) deleted manually via `scripts/3-13-cleanup-orphan-drip-jobs.js`.
+
+**Helper scripts left in repo for future debug:**
+- `backend/scripts/3-13-test-fresh-intent.js` — create a fresh pending payment_intent on master DB (replay sandbox upgrade flow without going through /billing UI).
+- `backend/scripts/3-13-check-pgboss-jobs.js` — show recent pg-boss "email" jobs + state counts.
+- `backend/scripts/3-13-cleanup-orphan-drip-jobs.js` — delete pg-boss email jobs that reference a specific tenant_id (currently hardcoded to 94 — generalize before re-using).
+- `backend/scripts/3-13-inspect-stuck-jobs.js` — full row dump of one created-state job (column discovery).
+- `backend/scripts/3-13-inspect-remaining.js` — show all created-state jobs + active tenants.
 
 ---
 
