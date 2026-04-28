@@ -87,18 +87,23 @@ module.exports = function mountImportRoutes(app, deps) {
 
         const isPreview = req.query.preview === "1";
 
-        // Pre-fetch lookup tables
-        const [catRows, brandRows, taxRows] = await Promise.all([
+        // Pre-fetch lookup tables + existing non-NULL SKUs (for F9 DB-collision check)
+        const [catRows, brandRows, taxRows, skuRows] = await Promise.all([
           db.query("SELECT id, name FROM categories"),
           db.query("SELECT id, name FROM brands"),
           db.query("SELECT id, name FROM taxes"),
+          db.query("SELECT sku FROM products WHERE sku IS NOT NULL"),
         ]);
         const catMap = new Map(catRows.rows.map((r) => [r.name.toLowerCase(), r.id]));
         const brandMap = new Map(brandRows.rows.map((r) => [r.name.toLowerCase(), r.id]));
         const taxMap = new Map(taxRows.rows.map((r) => [r.name.toLowerCase(), r.id]));
+        const dbSkus = new Set(skuRows.rows.map((r) => String(r.sku).toLowerCase()));
 
         const valid = [];
         const errors = [];
+        // F8: track in-file SKU occurrences. First non-empty occurrence wins;
+        // subsequent rows with the same SKU error out referencing the first row.
+        const skuFirstRow = new Map(); // skuLowercase -> firstRowNum
 
         for (let i = 0; i < rows.length; i++) {
           const r = rows[i];
@@ -108,6 +113,21 @@ module.exports = function mountImportRoutes(app, deps) {
           if (!r.name) rowErrors.push("name is required");
           const sellingPrice = parseFloat(r.selling_price || r.price || "");
           if (isNaN(sellingPrice)) rowErrors.push("selling_price is required and must be a number");
+
+          // F8/F9: SKU duplicate detection (skip when SKU is empty — NULL SKUs allowed)
+          const skuRaw = String(r.sku || "").trim();
+          if (skuRaw) {
+            const skuKey = skuRaw.toLowerCase();
+            const firstRow = skuFirstRow.get(skuKey);
+            if (firstRow !== undefined) {
+              rowErrors.push(`duplicate SKU "${skuRaw}" already used on row ${firstRow}`);
+            } else {
+              skuFirstRow.set(skuKey, rowNum);
+              if (dbSkus.has(skuKey)) {
+                rowErrors.push(`SKU "${skuRaw}" already exists in inventory`);
+              }
+            }
+          }
 
           // Lookup foreign keys
           let category_id = null;

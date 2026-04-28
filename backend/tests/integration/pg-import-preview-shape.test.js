@@ -105,6 +105,126 @@ describe("Import preview shape (F7) — unified rows[] response", () => {
     });
   });
 
+  describe("POST /api/import/products?preview=1 — F8/F9 duplicate SKU detection", () => {
+    it("flags in-file duplicate SKUs on later rows (F8)", async () => {
+      const buf = csvBuffer(
+        ["name", "sku", "selling_price"],
+        [
+          ["Coffee Beans", "DUP-SKU-001", 850],   // row 2 — first occurrence, valid
+          ["Drip Filter",  "DUP-SKU-001", 250],   // row 3 — dup of row 2's sku
+          ["Espresso Cup", "DUP-SKU-001", 100],   // row 4 — dup again
+          ["Tea Bag",      "UNIQUE-001",  50],    // row 5 — valid
+        ],
+      );
+
+      const res = await req
+        .post("/api/import/products?preview=1")
+        .attach("file", buf, "products.csv");
+
+      expect(res.status).toBe(200);
+      expect(res.body.rows).toHaveLength(4);
+
+      // Row 2 stays valid (first occurrence wins)
+      expect(res.body.rows[0]._errors).toEqual([]);
+      // Rows 3 + 4 flagged as in-file duplicates referencing row 2
+      expect(res.body.rows[1]._errors).toEqual(
+        expect.arrayContaining([expect.stringMatching(/duplicate sku.*DUP-SKU-001.*row 2/i)]),
+      );
+      expect(res.body.rows[2]._errors).toEqual(
+        expect.arrayContaining([expect.stringMatching(/duplicate sku.*DUP-SKU-001.*row 2/i)]),
+      );
+      // Row 5 unique
+      expect(res.body.rows[3]._errors).toEqual([]);
+
+      expect(res.body.valid).toBe(2);
+    });
+
+    it("does not flag rows where sku is empty/null (NULL SKUs are allowed to repeat)", async () => {
+      const buf = csvBuffer(
+        ["name", "sku", "selling_price"],
+        [
+          ["Item One",   "", 10],   // row 2 — null sku
+          ["Item Two",   "", 20],   // row 3 — null sku again, allowed
+          ["Item Three", "", 30],   // row 4 — null sku again, allowed
+        ],
+      );
+
+      const res = await req
+        .post("/api/import/products?preview=1")
+        .attach("file", buf, "products.csv");
+
+      expect(res.status).toBe(200);
+      expect(res.body.rows).toHaveLength(3);
+      expect(res.body.rows[0]._errors).toEqual([]);
+      expect(res.body.rows[1]._errors).toEqual([]);
+      expect(res.body.rows[2]._errors).toEqual([]);
+      expect(res.body.valid).toBe(3);
+    });
+
+    it("flags rows whose sku already exists in the DB (F9)", async () => {
+      // Seed a product with a known non-NULL sku
+      await db.query(
+        "INSERT INTO products (name, sku, price) VALUES ('Existing Product', 'DB-COLLISION-001', 999) ON CONFLICT DO NOTHING",
+      );
+
+      const buf = csvBuffer(
+        ["name", "sku", "selling_price"],
+        [
+          ["New Coffee",     "DB-COLLISION-001", 850],   // row 2 — collides with seeded
+          ["Brand New Item", "BRAND-NEW-SKU",    100],   // row 3 — fresh sku
+        ],
+      );
+
+      const res = await req
+        .post("/api/import/products?preview=1")
+        .attach("file", buf, "products.csv");
+
+      expect(res.status).toBe(200);
+      expect(res.body.rows).toHaveLength(2);
+      expect(res.body.rows[0]._errors).toEqual(
+        expect.arrayContaining([expect.stringMatching(/sku.*DB-COLLISION-001.*already exists/i)]),
+      );
+      expect(res.body.rows[1]._errors).toEqual([]);
+      expect(res.body.valid).toBe(1);
+    });
+
+    it("blocks the actual import (no preview) from inserting duplicate SKUs", async () => {
+      // Seed a product to collide with
+      await db.query(
+        "INSERT INTO products (name, sku, price) VALUES ('Existing Block Test', 'BLOCK-SKU-001', 500) ON CONFLICT DO NOTHING",
+      );
+
+      const buf = csvBuffer(
+        ["name", "sku", "selling_price"],
+        [
+          ["New Valid Item",  "FRESH-SKU-AAA", 100],  // row 2 — fresh, should insert
+          ["Tries to Dupe",   "BLOCK-SKU-001", 150],  // row 3 — DB collision, should NOT insert
+          ["Tries to Dupe 2", "FRESH-SKU-AAA", 200],  // row 4 — in-file dup of row 2, should NOT insert
+        ],
+      );
+
+      const before = await db.query(
+        "SELECT COUNT(*)::int AS n FROM products WHERE sku IN ('FRESH-SKU-AAA', 'BLOCK-SKU-001')",
+      );
+
+      const res = await req
+        .post("/api/import/products")
+        .attach("file", buf, "products.csv");
+
+      expect(res.status).toBe(200);
+      // Only row 2 should have inserted
+      expect(res.body.imported).toBe(1);
+      expect(Array.isArray(res.body.errors)).toBe(true);
+      expect(res.body.errors.length).toBeGreaterThanOrEqual(2); // rows 3 + 4 errored
+
+      const after = await db.query(
+        "SELECT COUNT(*)::int AS n FROM products WHERE sku IN ('FRESH-SKU-AAA', 'BLOCK-SKU-001')",
+      );
+      // Was 1 (the seeded BLOCK-SKU-001), now 2 (added FRESH-SKU-AAA once)
+      expect(after.rows[0].n - before.rows[0].n).toBe(1);
+    });
+  });
+
   describe("POST /api/import/customers?preview=1", () => {
     it("returns rows[] with _row + _errors and valid count", async () => {
       const buf = csvBuffer(
