@@ -1019,6 +1019,30 @@ Both should be `tax_rate: 17 → tax_amount: 14.53` and `tax_rate: 5 → tax_amo
 
 The "GST %" field accepts a free numeric. There's no dropdown to pick from the `taxes` table rules. So `tax_id` stays null even when a matching rule exists at that rate. The `taxes` table is decorative for products — only used by import lookup-by-name (which is what the 3.12 probe found) and possibly hard-keyed reports.
 
+### 🟡 M29 — Feature-flag-disabled routes return HTTP 503 (should be 403 or empty 200)
+
+**Observed during 3.14 walk** (in `.playwright-mcp/console-2026-04-28T23-41-00-970Z.log`):
+- `503 GET /api/products/10/modifier-tree` — fires every time an item is added to POS cart (POS unconditionally probes restaurant-style modifier tree).
+- `503 GET /api/products/11/modifier-tree` — same, for second cart item.
+- `503 GET /api/room-bookings?status=checked_in&outlet_id=1` — POS polls room-bookings periodically.
+
+Backend payload in all 3 cases: `{"error": "Feature disabled: phase4_restaurant"}` / `phase4_room_management`. Both flags are intentionally off on livetest1 (retail-only tenant).
+
+**Root cause:** `backend/middleware/feature-flags.js:169` (`requireFeature`) and `:227` (`requireMode`) both return **HTTP 503** when the flag/mode is off.
+
+**Why 503 is wrong:**
+- 503 = "Service Unavailable" — semantically means the server is down or overloaded. Sentry, UptimeRobot, Cloudflare's circuit breakers, and browser fetch retry logic all treat 503 as a transient infra problem. A feature being off on a tenant's plan is not an infra problem.
+- For every retail tenant: every POS cart-add fires 2-3 503s → drowns Sentry's real-5xx alerts in noise.
+- Uptime SLO calculations count these against availability even though the feature is intentionally disabled.
+
+**Correct fix options:**
+1. **HTTP 403** with the same JSON body — semantically correct ("server understood, refuses to authorize") and matches auth-failure pattern. Easiest to roll out.
+2. **HTTP 200 with empty payload** for read-only probe endpoints (modifier-tree, room-bookings) — defensive: POS doesn't even know the feature is off; gets `[]` back and renders normally. Better UX, requires per-route opt-in.
+
+Recommended: change `requireFeature` and `requireMode` to return 403 by default; add an `ifMissing404OrEmpty200` variant for probe endpoints that POS calls speculatively.
+
+**Severity rationale for 🟡 not 🔴:** the routes work correctly when the flag is on; the 503 is purely an observability/noise issue, not a user-facing breakage. But it impacts Sentry signal-to-noise across all retail tenants → worth fixing soon.
+
 ### Verdict on 3.14
 
 **Mixed-rate tax sale correctness is broken end-to-end.** Cart and receipt MODAL render correct math at display time, but nothing is persisted, nothing is preserved per-rate, and every downstream consumer (Sales Summary, FBR Export, Item Wise, public receipt) reports zero tax. This needs a real fix before FBR rollout (3.3) or any tax-jurisdiction compliance.
@@ -1048,7 +1072,7 @@ This is a P-level (compliance-blocker) fix worth a dedicated branch + PR rather 
 
 ### Carryover open mediums after 3.14
 
-(unchanged from 3.13 list — M22, M23, M24, M25 all still deferred to polish bundle. New: P8/P9/P10/P11/M26/M27/M28 all logged above as the 3.14 fix bundle.)
+(unchanged from 3.13 list — M22, M23, M24, M25 all still deferred to polish bundle. New: P8/P9/P10/P11/M26/M27/M28/M29 all logged above as the 3.14 fix bundle.)
 
 ---
 
