@@ -58,6 +58,19 @@ describe("master-db-pg", () => {
     );
     expect(rows[0].company_name).toBe("Provisioned Store");
 
+    // schema_version must be pre-seeded with every migration so the next
+    // migrateAllTenants() boot doesn't replay v1..vN against a schema that
+    // already has every column. Skipping this seed is what trapped the test
+    // tenant `livetest1` at v68 in production (Apr 2026).
+    const { MIGRATIONS } = require("../../migrate-pg");
+    const { rows: versionRows } = await db.query(
+      `SELECT version FROM tenant_${slug}.schema_version ORDER BY version`
+    );
+    expect(versionRows.length).toBe(MIGRATIONS.length);
+    expect(versionRows[versionRows.length - 1].version).toBe(
+      MIGRATIONS[MIGRATIONS.length - 1].version
+    );
+
     // Cleanup
     await db.query(`DROP SCHEMA IF EXISTS tenant_${slug} CASCADE`);
     await db.query("DELETE FROM tenant_audit_log WHERE tenant_id = $1", [result.tenantId]);

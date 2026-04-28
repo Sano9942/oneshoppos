@@ -8,6 +8,7 @@
 const fs = require("fs");
 const path = require("path");
 const bcrypt = require("bcryptjs");
+const { MIGRATIONS } = require("./migrate-pg");
 
 const SCHEMA_SQL = fs.readFileSync(
   path.join(__dirname, "schema-pg.sql"), "utf8"
@@ -77,6 +78,20 @@ async function provision(db, { slug, name, ownerEmail, timezone, pin }) {
     await client.query("BEGIN");
     await client.query(`SET LOCAL search_path = '${schemaName}'`);
     await client.query(SCHEMA_SQL);
+
+    // Mark every existing migration as applied. schema-pg.sql is kept in sync
+    // with all migrations, so a freshly-provisioned schema already contains
+    // every column/constraint v1..vN would add. Without this seed, the next
+    // migrateAllTenants() boot replays v1..vN as no-ops on idempotent guards
+    // (slow, brittle), and any non-idempotent migration would fail. Seed once,
+    // skip the replay forever.
+    if (MIGRATIONS.length > 0) {
+      const values = MIGRATIONS.map((_, i) => `($${i + 1})`).join(", ");
+      await client.query(
+        `INSERT INTO schema_version (version) VALUES ${values} ON CONFLICT DO NOTHING`,
+        MIGRATIONS.map((m) => m.version)
+      );
+    }
 
     // Outlet
     const outletRes = await client.query(
