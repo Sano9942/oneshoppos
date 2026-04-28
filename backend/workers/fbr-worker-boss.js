@@ -131,7 +131,9 @@ async function registerFbrWorker(boss, pool) {
   // Create queue (pg-boss v12+ requires explicit queue creation before work/send)
   await boss.createQueue("fbr-invoice");
 
-  await boss.work("fbr-invoice", { teamSize: 10, teamConcurrency: 10 }, async (job) => {
+  // pg-boss v12 passes Job<T>[] to handlers (default batchSize=1 → array of 1).
+  // Destructure the single job from the array.
+  await boss.work("fbr-invoice", { teamSize: 10, teamConcurrency: 10 }, async ([job]) => {
     if (global.__fbrWorkerStatus) global.__fbrWorkerStatus.lastPollAt = Date.now();
     await handleFbrInvoiceJob(job, pool, logger);
 

@@ -232,7 +232,9 @@ async function registerEmailWorker(boss, pool) {
   await boss.createQueue("subscription-renewal");
 
   // Worker: send a single email
-  await boss.work("email", { teamSize: 5, teamConcurrency: 5 }, async (job) => {
+  // pg-boss v12 passes Job<T>[] to handlers (default batchSize=1 → array of 1).
+  // Destructure the single job from the array.
+  await boss.work("email", { teamSize: 5, teamConcurrency: 5 }, async ([job]) => {
     await handleEmailJob(job, resend, logger);
 
     // Update queue depth for admin dashboard
@@ -258,7 +260,7 @@ async function registerEmailWorker(boss, pool) {
   });
 
   // ── Campaign email delivery worker ──────────────────────────────────────
-  await boss.work("campaign-email", { teamSize: 5, teamConcurrency: 5 }, async (job) => {
+  await boss.work("campaign-email", { teamSize: 5, teamConcurrency: 5 }, async ([job]) => {
     const { tenantSlug, deliveryId, to, subject, html, campaignId } = job.data;
     if (!tenantSlug) {
       throw new Error("Missing tenantSlug in campaign-email job payload");
@@ -319,7 +321,7 @@ async function registerEmailWorker(boss, pool) {
   });
 
   // ── Invoice reminder worker ────────────────────────────────────────────
-  await boss.work("invoice-reminder", async (job) => {
+  await boss.work("invoice-reminder", async ([job]) => {
     const { tenantSlug, reminderId, invoiceId } = job.data;
     if (!tenantSlug) {
       throw new Error("Missing tenantSlug in invoice-reminder job payload");
@@ -376,7 +378,7 @@ async function registerEmailWorker(boss, pool) {
   });
 
   // ── Scheduled campaign send (delayed job) ─────────────────────────────
-  await boss.work("campaign-scheduled-send", async (job) => {
+  await boss.work("campaign-scheduled-send", async ([job]) => {
     const { tenantSlug, campaignId } = job.data;
     if (!tenantSlug) {
       throw new Error("Missing tenantSlug in campaign-scheduled-send job payload");
@@ -394,7 +396,7 @@ async function registerEmailWorker(boss, pool) {
   });
 
   // ── Subscription renewal worker ─────────────────────────────────────────
-  await boss.work("subscription-renewal", async (job) => {
+  await boss.work("subscription-renewal", async ([job]) => {
     const { tenantSlug, subscriptionId } = job.data;
     if (!tenantSlug) {
       throw new Error("Missing tenantSlug in subscription-renewal job payload");

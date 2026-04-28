@@ -126,15 +126,15 @@ describe("subscription-renewal worker", () => {
   it("throws when tenantSlug is missing", async () => {
     const { handlers } = await registerAndCaptureHandlers();
     await expect(
-      handlers["subscription-renewal"]({ data: { subscriptionId: 42 } })
+      handlers["subscription-renewal"]([{ data: { subscriptionId: 42 } }])
     ).rejects.toThrow(/tenantSlug/);
   });
 
   it("sets search_path to tenant_packagesmall before calling processRenewal", async () => {
     const { handlers, clientQueries } = await registerAndCaptureHandlers();
-    await handlers["subscription-renewal"]({
+    await handlers["subscription-renewal"]([{
       data: { tenantSlug: "packagesmall", subscriptionId: 42 },
-    });
+    }]);
     // First query on the scoped client must be the SET search_path.
     expect(clientQueries[0].sql).toContain("SET search_path TO tenant_packagesmall");
     // Last query must be the reset before release.
@@ -144,9 +144,9 @@ describe("subscription-renewal worker", () => {
 
   it("runs processRenewal's subscription lookup SQL inside tenant scope", async () => {
     const { handlers, clientQueries } = await registerAndCaptureHandlers();
-    await handlers["subscription-renewal"]({
+    await handlers["subscription-renewal"]([{
       data: { tenantSlug: "packagesmall", subscriptionId: 42 },
-    });
+    }]);
     // The real processRenewal runs its SELECT against the scoped client.
     // Because our fake returns rows: [], it exits early at the "not found"
     // branch — but we can still assert the SELECT fired and that it ran
@@ -170,7 +170,7 @@ describe("campaign-scheduled-send worker", () => {
   it("throws when tenantSlug is missing", async () => {
     const { handlers } = await registerAndCaptureHandlers();
     await expect(
-      handlers["campaign-scheduled-send"]({ data: { campaignId: 7 } })
+      handlers["campaign-scheduled-send"]([{ data: { campaignId: 7 } }])
     ).rejects.toThrow(/tenantSlug/);
   });
 
@@ -179,9 +179,9 @@ describe("campaign-scheduled-send worker", () => {
     // The real enqueueCampaignSend will 404 on an empty fake client,
     // which propagates as a throw — that's expected and we catch it.
     await expect(
-      handlers["campaign-scheduled-send"]({
+      handlers["campaign-scheduled-send"]([{
         data: { tenantSlug: "handicraft", campaignId: 7 },
-      })
+      }])
     ).rejects.toThrow(/Campaign not found/);
 
     // Even though the service threw, the scoped context ran: first
@@ -209,15 +209,15 @@ describe("invoice-reminder worker", () => {
   it("throws when tenantSlug is missing", async () => {
     const { handlers } = await registerAndCaptureHandlers();
     await expect(
-      handlers["invoice-reminder"]({ data: { reminderId: 1, invoiceId: 2 } })
+      handlers["invoice-reminder"]([{ data: { reminderId: 1, invoiceId: 2 } }])
     ).rejects.toThrow(/tenantSlug/);
   });
 
   it("runs inside tenant context and enqueues the email send", async () => {
     const { handlers, boss, clientQueries } = await registerAndCaptureHandlers();
-    await handlers["invoice-reminder"]({
+    await handlers["invoice-reminder"]([{
       data: { tenantSlug: "khantoys", reminderId: 1, invoiceId: 2 },
-    });
+    }]);
     expect(clientQueries[0].sql).toContain("SET search_path TO tenant_khantoys");
     // SELECT must have fired on the scoped client (not pool.query).
     const selectedInvoice = clientQueries.find((q) => q.sql.includes("FROM customer_invoices"));
@@ -234,15 +234,15 @@ describe("campaign-email worker", () => {
   it("throws when tenantSlug is missing", async () => {
     const { handlers } = await registerAndCaptureHandlers();
     await expect(
-      handlers["campaign-email"]({
+      handlers["campaign-email"]([{
         data: { deliveryId: 1, to: "a@b.com", subject: "s", html: "<p>h</p>" },
-      })
+      }])
     ).rejects.toThrow(/tenantSlug/);
   });
 
   it("updates delivery row under tenant_packagesmall after send", async () => {
     const { handlers, clientQueries } = await registerAndCaptureHandlers();
-    await handlers["campaign-email"]({
+    await handlers["campaign-email"]([{
       data: {
         tenantSlug: "packagesmall",
         deliveryId: 99,
@@ -251,7 +251,7 @@ describe("campaign-email worker", () => {
         html: "<p>Hi</p>",
         campaignId: 5,
       },
-    });
+    }]);
 
     // Scoped client ran SET search_path + the delivery UPDATE.
     // (We don't assert on Resend here — vi.mock() doesn't intercept
