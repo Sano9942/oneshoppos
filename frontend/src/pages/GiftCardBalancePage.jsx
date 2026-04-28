@@ -47,10 +47,13 @@ export default function GiftCardBalancePage() {
     };
   }, [code, tenantSlug]);
 
+  const symbol = data?.currency_symbol || "";
   const fmt = (n) => {
     const v = Number(n);
     if (!Number.isFinite(v)) return "—";
-    return v.toLocaleString();
+    // Render with two-decimal precision so "500" reads as "Rs 500.00" — the
+    // bare integer was misleading on a customer-facing surface (M13).
+    return `${symbol}${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   return (

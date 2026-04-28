@@ -39,14 +39,16 @@ module.exports = function mountGiftCardPublicRoutes(app, deps) {
       if (!code) return res.status(404).json({ error: "Gift card not found" });
 
       const { rows: [card] } = await db.query(
-        `SELECT code,
-                initial_value::numeric AS initial_value,
-                remaining_value::numeric AS remaining_value,
-                activation_status,
-                card_type,
-                created_at
-           FROM gift_cards
-          WHERE code = $1`,
+        `SELECT gc.code,
+                gc.initial_value::numeric AS initial_value,
+                gc.remaining_value::numeric AS remaining_value,
+                gc.activation_status,
+                gc.card_type,
+                gc.created_at,
+                cp.currency_symbol
+           FROM gift_cards gc
+           CROSS JOIN company_profile cp
+          WHERE gc.code = $1`,
         [code],
       );
       if (!card) return res.status(404).json({ error: "Gift card not found" });
@@ -58,6 +60,10 @@ module.exports = function mountGiftCardPublicRoutes(app, deps) {
         activation_status: card.activation_status,
         card_type: card.card_type,
         created_at: card.created_at,
+        // M13: customer-facing balance page is meaningless without a unit.
+        // CROSS JOIN company_profile (single-row table) to surface the
+        // tenant currency symbol alongside the bare number.
+        currency_symbol: card.currency_symbol || null,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });

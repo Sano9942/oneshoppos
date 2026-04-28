@@ -365,4 +365,21 @@ describe("Phase 2-G Wave 2 — public /api/gift-cards/public/:code (no auth)", (
     const res = await anonReq().get("/api/gift-cards/public/PUBCHK2");
     expect(res.status).toBe(200);
   });
+
+  test("response includes currency_symbol from company_profile (M13 regression)", async () => {
+    // The public balance page displays the bare number — without a currency
+    // symbol it's ambiguous whether "500" is PKR, USD, or something else.
+    // Set the company profile currency and assert the public response
+    // surfaces it.
+    await db.query(
+      `UPDATE company_profile SET currency_symbol = 'Rs' WHERE id = 1`,
+    );
+    await db.query(
+      `INSERT INTO gift_cards (code, initial_value, remaining_value, card_type)
+       VALUES ('PUBCHK_CURR', 500, 500, 'digital')`,
+    );
+    const res = await anonReq().get("/api/gift-cards/public/PUBCHK_CURR");
+    expect(res.status).toBe(200);
+    expect(res.body.currency_symbol).toBe("Rs");
+  });
 });
