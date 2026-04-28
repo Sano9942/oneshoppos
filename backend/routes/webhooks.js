@@ -16,7 +16,6 @@
 const masterDb = require("../master-db-pg");
 const _logger = require("../services/logger").child({ component: "webhooks" });
 const { PLAN_DEFAULTS } = require("../middleware/plan-limits");
-const { TEMPLATES } = require("../services/email-templates");
 
 /**
  * Process a verified payment webhook event.
@@ -86,27 +85,35 @@ async function processWebhookEvent({ provider, event_type, transaction_id, statu
          now.toISOString(), periodEnd.toISOString(), provider, `intent:${intent.id}`, `webhook:${provider}`]
       );
 
-      // Enqueue confirmation email (fire-and-forget)
+      // Enqueue confirmation email via pg-boss (fire-and-forget).
+      // Previously INSERTed into legacy `email_queue` table — that path was
+      // orphaned in the email-worker migration to pg-boss (the legacy polling
+      // worker was deleted). Confirmation emails sat unsent forever. Use
+      // services/email.enqueueEmail() like every other email-emitting code path.
       try {
-        const { rows: [tenant] } = await masterDb.query("SELECT slug, name FROM tenants WHERE id = $1", [intent.tenant_id]);
+        const { rows: [tenant] } = await masterDb.query(
+          "SELECT slug, name FROM tenants WHERE id = $1",
+          [intent.tenant_id]
+        );
         if (tenant) {
           const { rows: [cp] } = await masterDb.query(
             `SELECT email FROM tenant_${tenant.slug}.company_profile WHERE id = 1`
           );
           if (cp?.email) {
-            const template = TEMPLATES.billing_payment_recorded({
-              storeName: tenant.name,
-              amount: `PKR ${Number(intent.amount).toLocaleString()}`,
-              plan: intent.plan,
-              cycle: intent.cycle,
-              periodEnd: periodEnd.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+            const { enqueueEmail } = require("../services/email");
+            await enqueueEmail(masterDb, {
+              tenantId: intent.tenant_id,
+              type: "billing_payment_recorded",
+              to: cp.email,
+              tenant: { slug: tenant.slug, name: tenant.name },
+              data: {
+                storeName: tenant.name,
+                amount: `PKR ${Number(intent.amount).toLocaleString()}`,
+                plan: intent.plan,
+                cycle: intent.cycle,
+                periodEnd: periodEnd.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+              },
             });
-            const fromAddress = process.env.RESEND_FROM_EMAIL || "SanoPOS <noreply@sanopos.com>";
-            await masterDb.query(
-              `INSERT INTO email_queue (tenant_id, email_type, to_email, subject, html_body, from_address)
-               VALUES ($1, $2, $3, $4, $5, $6)`,
-              [intent.tenant_id, "billing_payment_recorded", cp.email, template.subject, template.html, fromAddress]
-            );
           }
         }
       } catch (emailErr) {
