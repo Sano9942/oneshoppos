@@ -1,11 +1,47 @@
 module.exports = function registerAttendanceRoutes(app, deps) {
   const { db, requirePerm } = deps;
+  const bcrypt = require("bcryptjs");
   const { validate } = require("../middleware/validate");
   const {
     PinStatusSchema,
     PinCheckinSchema,
     PinCheckoutSchema,
   } = require("../schemas/attendance");
+
+  // Resolve an employee from a kiosk PIN.
+  //
+  // Migration v14 deprecated plaintext PIN storage: the setup wizard,
+  // tenant provisioner, and admin "Add Employee" form all write `pin_hash`
+  // (bcrypt) and leave `pin_code` NULL. The kiosk endpoints used to query
+  // `WHERE pin_code = $1`, which silently broke clock-in for every tenant
+  // provisioned after v14 (livetest1 hit this on 2026-04-28; a legacy
+  // pre-v14 tenant like packagesmall still had pin_code populated and
+  // worked, masking the regression).
+  //
+  // Strategy: scan candidate rows and bcrypt-compare against pin_hash.
+  // Fall back to plaintext pin_code equality for pre-v14 tenants and the
+  // handful of legacy test fixtures that still seed pin_code only. The
+  // employee count per tenant is small (Free=3, Pro=unlimited but in
+  // practice tens), so the linear scan is fine for kiosk traffic.
+  async function resolveEmployeeByPin(pin) {
+    if (!pin) return null;
+    const { rows } = await db.query(
+      "SELECT id, name, pin_hash, pin_code FROM employees WHERE pin_hash IS NOT NULL OR pin_code IS NOT NULL"
+    );
+    for (const row of rows) {
+      if (row.pin_hash) {
+        try {
+          if (await bcrypt.compare(String(pin), row.pin_hash)) {
+            return { id: row.id, name: row.name };
+          }
+        } catch (_) { /* ignore malformed hash, try next */ }
+      }
+      if (row.pin_code && String(row.pin_code) === String(pin)) {
+        return { id: row.id, name: row.name };
+      }
+    }
+    return null;
+  }
 
   // Helper: format decimal hours to "Xh Ym" string
   const fmtDuration = (hours) => {
@@ -173,10 +209,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
     try {
       const { pin_code, outlet_id = null } = req.body || {};
 
-      const { rows: [emp] } = await db.query(
-        "SELECT id, name FROM employees WHERE pin_code = $1",
-        [pin_code]
-      );
+      const emp = await resolveEmployeeByPin(pin_code);
       if (!emp) return res.status(401).json({ error: "Invalid PIN" });
 
       const outletId = outlet_id ? Number(outlet_id) : null;
@@ -283,10 +316,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
     try {
       const { pin_code, outlet_id, latitude, longitude } = req.body || {};
 
-      const { rows: [emp] } = await db.query(
-        "SELECT id, name FROM employees WHERE pin_code = $1",
-        [pin_code]
-      );
+      const emp = await resolveEmployeeByPin(pin_code);
       if (!emp) return res.status(401).json({ error: "Invalid PIN" });
 
       const assigned = await isEmployeeAssignedToOutlet(emp.id, outlet_id);
@@ -412,10 +442,7 @@ module.exports = function registerAttendanceRoutes(app, deps) {
     try {
       const { pin_code, break_reason = null, outlet_id = null } = req.body || {};
 
-      const { rows: [emp] } = await db.query(
-        "SELECT id, name FROM employees WHERE pin_code = $1",
-        [pin_code]
-      );
+      const emp = await resolveEmployeeByPin(pin_code);
       if (!emp) return res.status(401).json({ error: "Invalid PIN" });
 
       if (outlet_id) {
