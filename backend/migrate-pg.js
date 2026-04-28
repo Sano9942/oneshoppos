@@ -5174,16 +5174,29 @@ const MIGRATIONS = [
       // Post-Wave-3 cleanup item 2 of 2: enforce the status domain on
       // product_serial_numbers. Audit (April 2026, all tenant schemas) found
       // zero rows → constraint applies cleanly as VALIDATED. If the
-      // constraint already exists (reruns, or if we ship v69 twice by
-      // accident), skip — catch the 42710 duplicate_object code.
+      // constraint already exists (reruns, or freshly-provisioned tenants
+      // whose schema-pg.sql already has it), skip — catch the 42710
+      // duplicate_object code.
+      //
+      // Why SAVEPOINT: catching a Postgres error inside a transaction without
+      // a SAVEPOINT leaves the transaction poisoned (every subsequent
+      // statement fails with 25P02 'current transaction is aborted'). The JS
+      // try/catch only swallows the exception object, not the transaction
+      // state. SAVEPOINT scopes the rollback to just the failed statement so
+      // the outer migration tx can continue and the schema_version INSERT
+      // can commit. This was the bug that parked livetest1 at v68 in
+      // production (Apr 28 2026).
+      await client.query("SAVEPOINT v69_psn_status_check");
       try {
         await client.query(`
           ALTER TABLE product_serial_numbers
             ADD CONSTRAINT product_serial_numbers_status_check
             CHECK (status IN ('available','sold','returned','warranty_claim','damaged'))
         `);
+        await client.query("RELEASE SAVEPOINT v69_psn_status_check");
       } catch (err) {
         if (err.code !== "42710") throw err;
+        await client.query("ROLLBACK TO SAVEPOINT v69_psn_status_check");
       }
     },
   },
