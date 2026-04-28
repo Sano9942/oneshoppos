@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { CheckCircle2, Mail, MessageCircle, X } from "lucide-react";
 import { usePOS } from "./POSContext";
-import { buildReceiptSections } from "../../../utils/receipt";
+import { buildReceiptSections, formatPaymentMethodLabel } from "../../../utils/receipt";
 import { buildWhatsAppShareUrl } from "../../../utils/publicReceipt";
 import POSEmailReceiptModal from "./POSEmailReceiptModal";
 
@@ -146,7 +146,7 @@ export default function POSReceiptModal() {
               .filter((p) => p.method !== "Return Credit")
               .map((p, i) => (
                 <div key={i} className="flex justify-between text-slate-600">
-                  <span>{p.method}</span>
+                  <span>{formatPaymentMethodLabel(p.method)}</span>
                   <span>{money(p.amount)}</span>
                 </div>
               ))}

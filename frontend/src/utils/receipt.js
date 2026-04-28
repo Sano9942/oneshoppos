@@ -6,6 +6,31 @@ export const PAPER_SIZES = _PAPER_SIZES;
 export const pxForChars = _pxForChars;
 
 /**
+ * Format an internal payment-method id into a human-readable label.
+ * Tender ids in `slip.payments[].method` mostly use display casing
+ * already ("Cash", "Card", "Wallet"), but a few use machine ids
+ * ("gift_card" — kept distinct so UI code can branch on it). This
+ * normalizer makes receipts read naturally regardless of source.
+ */
+export function formatPaymentMethodLabel(method) {
+  if (!method) return "";
+  const raw = String(method);
+  const knownAliases = {
+    gift_card: "Gift Card",
+    return_credit: "Return Credit",
+    store_credit: "Store Credit",
+  };
+  const lower = raw.toLowerCase();
+  if (knownAliases[lower]) return knownAliases[lower];
+  // Generic fallback: split on _ and Title-Case each word. Already-pretty
+  // strings ("Cash", "Card") pass through unchanged.
+  return raw
+    .split("_")
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase())
+    .join(" ");
+}
+
+/**
  * Single source of truth for receipt data.
  * Both printSlip (popup) and POSReceiptModal (screen) consume this.
  *
@@ -244,7 +269,7 @@ export function buildReceiptHtml(slip, template, currencySymbol = "$", labels = 
     bal.style.fontWeight = "bold";
     b.appendChild(bal);
   } else {
-    s.payments.forEach((p) => b.appendChild(row(p.method, fmt(p.amount))));
+    s.payments.forEach((p) => b.appendChild(row(formatPaymentMethodLabel(p.method), fmt(p.amount))));
   }
 
   if (s.refundToCustomer != null)

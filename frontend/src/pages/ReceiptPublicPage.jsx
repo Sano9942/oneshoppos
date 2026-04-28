@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { formatPaymentMethodLabel } from "../utils/receipt";
 
 // Lightweight wrapper around the `qrcode` package for the public receipt.
 // Sniffs the stored value: a data: or http: URL is an <img src> directly;
@@ -248,7 +249,7 @@ export default function ReceiptPublicPage() {
                 <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">Payment</p>
                 {payments.map((p, i) => (
                   <div key={i} className="flex items-center justify-between py-1">
-                    <span className="text-sm capitalize text-gray-600">{p.method}</span>
+                    <span className="text-sm text-gray-600">{formatPaymentMethodLabel(p.method)}</span>
                     <span className="text-sm font-medium text-gray-800">{fmtMoney(p.amount, sym)}</span>
                   </div>
                 ))}

@@ -10,6 +10,26 @@
  * @param {object|null} template - Row from receipt_templates (header_text, footer_text, show_barcode)
  * @returns {string} Complete HTML document string
  */
+// Mirror of frontend/src/utils/receipt.js formatPaymentMethodLabel —
+// keep the two in sync. Inlined here to avoid pulling frontend code
+// into the backend bundle. Used to render "gift_card" → "Gift Card"
+// on emailed receipts.
+function formatPaymentMethodLabel(method) {
+  if (!method) return "";
+  const raw = String(method);
+  const knownAliases = {
+    gift_card: "Gift Card",
+    return_credit: "Return Credit",
+    store_credit: "Store Credit",
+  };
+  const lower = raw.toLowerCase();
+  if (knownAliases[lower]) return knownAliases[lower];
+  return raw
+    .split("_")
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol = "$") {
   const storeName = template?.header_text || sale.outlet_name || "SanoPOS";
   const footerText = template?.footer_text || "Thank you for your purchase!";
@@ -59,7 +79,7 @@ function buildReceiptEmailHtml(sale, items, payments, template, currencySymbol =
     .map(
       (p) => `
       <tr>
-        <td style="padding:2px 0;color:#555;">${p.payment_method}</td>
+        <td style="padding:2px 0;color:#555;">${formatPaymentMethodLabel(p.payment_method)}</td>
         <td style="padding:2px 0;text-align:right;">${fmt(p.amount)}</td>
       </tr>`
     )
