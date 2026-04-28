@@ -321,4 +321,141 @@ describe("Import preview shape (F7) — unified rows[] response", () => {
       expect(res.body.valid).toBe(1);
     });
   });
+
+  // ─── F11: error wording — non-numeric price should say "is not a number"
+  //       instead of "is required and must be a number"
+  describe("POST /api/import/products — F11 error wording", () => {
+    it("uses precise wording when selling_price is provided but non-numeric", async () => {
+      const buf = csvBuffer(
+        ["name", "selling_price"],
+        [["Espresso Maker", "Rs 850"]],
+      );
+      const res = await req
+        .post("/api/import/products?preview=1")
+        .attach("file", buf, "products.csv");
+      expect(res.status).toBe(200);
+      expect(res.body.rows).toHaveLength(1);
+      expect(res.body.rows[0]._errors).toEqual(
+        expect.arrayContaining([expect.stringMatching(/selling_price.*Rs 850.*not a number/i)]),
+      );
+      // Should NOT use the misleading "required" wording when the field has content
+      expect(res.body.rows[0]._errors.some((e) => /required/i.test(e))).toBe(false);
+    });
+
+    it("still uses 'is required' wording when selling_price is empty", async () => {
+      const buf = csvBuffer(
+        ["name", "selling_price"],
+        [["No Price Item", ""]],
+      );
+      const res = await req
+        .post("/api/import/products?preview=1")
+        .attach("file", buf, "products.csv");
+      expect(res.body.rows[0]._errors).toEqual(
+        expect.arrayContaining([expect.stringMatching(/selling_price.*required/i)]),
+      );
+    });
+  });
+
+  // ─── F12: suppliers in-file dup name detection
+  describe("POST /api/import/suppliers — F12 in-file duplicate name", () => {
+    it("flags second+ rows that repeat an earlier supplier name in the same file", async () => {
+      const buf = csvBuffer(
+        ["name", "phone"],
+        [
+          ["ACME Distribution", "021-1111111"],
+          ["acme distribution", "021-2222222"],   // case-insensitive dup
+          ["BetaCo",            "021-3333333"],
+        ],
+      );
+      const res = await req
+        .post("/api/import/suppliers?preview=1")
+        .attach("file", buf, "suppliers.csv");
+      expect(res.status).toBe(200);
+      expect(res.body.rows).toHaveLength(3);
+      expect(res.body.rows[0]._errors).toEqual([]);
+      expect(res.body.rows[1]._errors).toEqual(
+        expect.arrayContaining([expect.stringMatching(/duplicate.*name.*ACME Distribution|acme distribution/i)]),
+      );
+      expect(res.body.rows[2]._errors).toEqual([]);
+      expect(res.body.valid).toBe(2);
+    });
+  });
+
+  // ─── F13: payments in-file dup-payment detection
+  //       (same supplier_id + invoice_number + amount + date == suspected double-pay)
+  describe("POST /api/import/payments — F13 in-file duplicate payment", () => {
+    it("flags second+ rows that repeat an earlier (invoice, amount, date) tuple", async () => {
+      const buf = csvBuffer(
+        ["supplier", "invoice_number", "amount", "date", "payment_method"],
+        [
+          ["Test Supplier", "INV-PAY-001", 500, "2026-04-29", "Cash"],   // first
+          ["Test Supplier", "INV-PAY-001", 500, "2026-04-29", "Cash"],   // exact dup → flag
+          ["Test Supplier", "INV-PAY-001", 250, "2026-04-29", "Cash"],   // diff amount → ok
+        ],
+      );
+      const res = await req
+        .post("/api/import/payments?preview=1")
+        .attach("file", buf, "payments.csv");
+      expect(res.status).toBe(200);
+      expect(res.body.rows).toHaveLength(3);
+      expect(res.body.rows[0]._errors).toEqual([]);
+      expect(res.body.rows[1]._errors).toEqual(
+        expect.arrayContaining([expect.stringMatching(/duplicate payment.*row 2/i)]),
+      );
+      expect(res.body.rows[2]._errors).toEqual([]);
+      expect(res.body.valid).toBe(2);
+    });
+  });
+
+  // ─── F14: customer email format validation when present
+  describe("POST /api/import/customers — F14 email format", () => {
+    it("flags rows where email is provided but malformed", async () => {
+      const buf = csvBuffer(
+        ["name", "email"],
+        [
+          ["Ali",   "ali@example.com"],
+          ["Sara",  "not-an-email"],
+          ["Bilal", ""],   // empty is fine — email is optional
+          ["Hira",  "missing-at-sign.com"],
+        ],
+      );
+      const res = await req
+        .post("/api/import/customers?preview=1")
+        .attach("file", buf, "customers.csv");
+      expect(res.status).toBe(200);
+      expect(res.body.rows[0]._errors).toEqual([]);
+      expect(res.body.rows[1]._errors).toEqual(
+        expect.arrayContaining([expect.stringMatching(/email.*not-an-email.*invalid|email.*format/i)]),
+      );
+      expect(res.body.rows[2]._errors).toEqual([]);
+      expect(res.body.rows[3]._errors).toEqual(
+        expect.arrayContaining([expect.stringMatching(/email.*missing-at-sign.com.*invalid|email.*format/i)]),
+      );
+      expect(res.body.valid).toBe(2);
+    });
+  });
+
+  // ─── F15: customers in-file dup mobile warning
+  describe("POST /api/import/customers — F15 duplicate mobile in same file", () => {
+    it("flags second+ rows that repeat an earlier mobile number", async () => {
+      const buf = csvBuffer(
+        ["name", "mobile"],
+        [
+          ["Ali",   "0300-1112222"],
+          ["Bilal", "0300-1112222"],   // dup mobile
+          ["Sara",  "0300-3334444"],
+        ],
+      );
+      const res = await req
+        .post("/api/import/customers?preview=1")
+        .attach("file", buf, "customers.csv");
+      expect(res.status).toBe(200);
+      expect(res.body.rows[0]._errors).toEqual([]);
+      expect(res.body.rows[1]._errors).toEqual(
+        expect.arrayContaining([expect.stringMatching(/duplicate.*mobile.*0300-1112222.*row 2/i)]),
+      );
+      expect(res.body.rows[2]._errors).toEqual([]);
+      expect(res.body.valid).toBe(2);
+    });
+  });
 });

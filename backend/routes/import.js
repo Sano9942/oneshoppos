@@ -111,8 +111,20 @@ module.exports = function mountImportRoutes(app, deps) {
           const rowErrors = [];
 
           if (!r.name) rowErrors.push("name is required");
-          const sellingPrice = parseFloat(r.selling_price || r.price || "");
-          if (isNaN(sellingPrice)) rowErrors.push("selling_price is required and must be a number");
+          // F11: distinguish between empty and non-numeric so the error is
+          // actionable. The previous wording said "is required and must be a
+          // number" even when the field had content like "Rs 850" — which
+          // misleads merchants into thinking the column is empty.
+          const priceRaw = String(r.selling_price ?? r.price ?? "").trim();
+          let sellingPrice = NaN;
+          if (!priceRaw) {
+            rowErrors.push("selling_price is required");
+          } else {
+            sellingPrice = parseFloat(priceRaw);
+            if (isNaN(sellingPrice)) {
+              rowErrors.push(`selling_price "${priceRaw}" is not a number`);
+            }
+          }
 
           // F8/F9: SKU duplicate detection (skip when SKU is empty — NULL SKUs allowed)
           const skuRaw = String(r.sku || "").trim();
@@ -231,6 +243,11 @@ module.exports = function mountImportRoutes(app, deps) {
         const isPreview = req.query.preview === "1";
         const valid = [];
         const errors = [];
+        // F15: track in-file duplicate mobile numbers (when present).
+        const mobileFirstRow = new Map(); // normalisedMobile -> firstRowNum
+        // Lightweight email shape check — not RFC 5322, but catches "no-at-sign"
+        // and obviously-malformed strings without false-flagging unicode locals.
+        const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
         for (let i = 0; i < rows.length; i++) {
           const r = rows[i];
@@ -238,6 +255,26 @@ module.exports = function mountImportRoutes(app, deps) {
           const rowErrors = [];
 
           if (!r.name) rowErrors.push("name is required");
+
+          // F14: email format validation when present (empty is fine — optional)
+          const emailRaw = String(r.email || "").trim();
+          if (emailRaw && !EMAIL_RE.test(emailRaw)) {
+            rowErrors.push(`email "${emailRaw}" is not a valid email format`);
+          }
+
+          // F15: in-file duplicate mobile detection (when mobile is provided)
+          const mobileRaw = String(r.mobile || r.phone || "").trim();
+          if (mobileRaw) {
+            // Normalise: strip whitespace and dashes for comparison so
+            // "0300 1112222" / "0300-1112222" / "03001112222" all collide.
+            const mobileKey = mobileRaw.replace(/[\s-]/g, "");
+            const firstRow = mobileFirstRow.get(mobileKey);
+            if (firstRow !== undefined) {
+              rowErrors.push(`duplicate mobile "${mobileRaw}" already used on row ${firstRow}`);
+            } else {
+              mobileFirstRow.set(mobileKey, rowNum);
+            }
+          }
 
           if (rowErrors.length) {
             errors.push({ row: rowNum, data: r, errors: rowErrors });
@@ -302,6 +339,9 @@ module.exports = function mountImportRoutes(app, deps) {
         const isPreview = req.query.preview === "1";
         const valid = [];
         const errors = [];
+        // F12: track first occurrence of each supplier name so we can flag
+        // in-file duplicates. Comparison is case-insensitive on trimmed name.
+        const nameFirstRow = new Map(); // nameLowercase -> firstRowNum
 
         for (let i = 0; i < rows.length; i++) {
           const r = rows[i];
@@ -309,6 +349,18 @@ module.exports = function mountImportRoutes(app, deps) {
           const rowErrors = [];
 
           if (!r.name) rowErrors.push("name is required");
+
+          // F12: in-file duplicate name detection
+          const nameRaw = String(r.name || "").trim();
+          if (nameRaw) {
+            const nameKey = nameRaw.toLowerCase();
+            const firstRow = nameFirstRow.get(nameKey);
+            if (firstRow !== undefined) {
+              rowErrors.push(`duplicate supplier name "${nameRaw}" already used on row ${firstRow}`);
+            } else {
+              nameFirstRow.set(nameKey, rowNum);
+            }
+          }
 
           if (rowErrors.length) {
             errors.push({ row: rowNum, data: r, errors: rowErrors });
@@ -483,6 +535,10 @@ module.exports = function mountImportRoutes(app, deps) {
 
         const valid = [];
         const errors = [];
+        // F13: track first occurrence of (supplier_id, invoice_number, amount, date)
+        // tuples so we can flag in-file duplicate payments — guards against
+        // accidental double-pay when a merchant uploads the same payment list twice.
+        const paymentFirstRow = new Map(); // tupleKey -> firstRowNum
 
         for (let i = 0; i < rows.length; i++) {
           const r = rows[i];
@@ -513,6 +569,19 @@ module.exports = function mountImportRoutes(app, deps) {
           const payDate = r.date || r.paid_at || "";
           if (!payDate) rowErrors.push("date is required");
           else if (isNaN(Date.parse(payDate))) rowErrors.push("date is not valid");
+
+          // F13: dup-payment detection — only fire when all four parts are
+          // valid, so we don't pile on top of other errors that already
+          // explain the row.
+          if (supplier_id && invoiceNum && !isNaN(amount) && amount > 0 && payDate && !isNaN(Date.parse(payDate))) {
+            const tupleKey = `${supplier_id}|${invoiceNum.toLowerCase()}|${amount}|${payDate}`;
+            const firstRow = paymentFirstRow.get(tupleKey);
+            if (firstRow !== undefined) {
+              rowErrors.push(`duplicate payment matches row ${firstRow} (same invoice, amount, and date)`);
+            } else {
+              paymentFirstRow.set(tupleKey, rowNum);
+            }
+          }
 
           const paymentMethod = r.payment_method || "Cash";
 
