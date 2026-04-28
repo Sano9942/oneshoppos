@@ -213,6 +213,11 @@ export default function ReturnsRedesign() {
         original_sale_id: form.original_sale_id ? Number(form.original_sale_id) : null,
         outlet_id: Number(form.outlet_id),
         employee_id: form.employee_id ? Number(form.employee_id) : null,
+        // F5 (Apr 28 2026): also populate processed_by_employee_id so admin
+        // Returns matches POS Return / Exchange — Refund Journal + audit
+        // queries that read processed_by_employee_id show this employee
+        // instead of NULL.
+        processed_by_employee_id: form.employee_id ? Number(form.employee_id) : null,
         customer_id: form.customer_id ? Number(form.customer_id) : null,
         total_refund: draftTotal,
         refund_method: form.refund_method,
@@ -467,7 +472,7 @@ export default function ReturnsRedesign() {
               <form className="xl:col-span-5 p-3" onSubmit={submitReturn}>
                 <div className="space-y-2">
                   <Input
-                    placeholder="Original sale id (optional)"
+                    placeholder="Original receipt # or sale ID (optional)"
                     value={form.original_sale_id}
                     onChange={(e) => setForm((p) => ({ ...p, original_sale_id: e.target.value }))}
                   />
@@ -491,6 +496,7 @@ export default function ReturnsRedesign() {
                   <Select value={form.refund_method} onChange={(e) => setForm((p) => ({ ...p, refund_method: e.target.value }))}>
                     <option value="Cash">Cash</option>
                     <option value="Card">Card</option>
+                    <option value="Wallet">Wallet</option>
                     <option value="Store Credit">Store Credit</option>
                   </Select>
                   <Input
