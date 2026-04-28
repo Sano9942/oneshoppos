@@ -71,9 +71,11 @@ module.exports = function mountReceiptRoutes(app, deps) {
         [sale.id]
       );
 
-      // Fetch sale payments
+      // Fetch sale payments. Column is `payment_method` per schema-pg.sql;
+      // we alias to `method` so the externally-visible JSON field name on the
+      // public receipt response stays stable for any client consuming it.
       const { rows: payments } = await db.query(
-        `SELECT method, amount
+        `SELECT payment_method AS method, amount
          FROM sale_payments
          WHERE sale_id = $1
          ORDER BY id ASC`,
