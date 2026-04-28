@@ -930,6 +930,128 @@ Pre-flight question: livetest1 currently has 0 tax rates configured (verified vi
 
 ---
 
+## 3.14 Mixed-rate tax sale correctness — 🔴 BROKEN END-TO-END
+
+**Walked Apr 28 2026.** Tenant `livetest1`, Shift #1 still open, sale `INV-2026-00004` rang up at 23:44 UTC (1× Coffee Beans Rs 100 with `gst=17` + 2× Snack Bar Rs 50 with `gst=5`, paid Rs 200 cash).
+
+### State setup (verified live)
+
+| Step | Result |
+|---|---|
+| `/taxes` adding GST 5% | ✅ Saved. Final state: 3 rules — Default Tax 0%, GST 17% (pre-existing — handoff said "0 tax rates" but this was wrong; it was just the import lookup that couldn't find a name match), GST 5% (new). |
+| Coffee Beans product (id=10) | ✅ price=100, gst=17.0000, total_stock=10. |
+| Snack Bar product (id=11) | ✅ price=50, gst=5.0000, total_stock=20. |
+| POS sale | ✅ Rang up + paid Rs 200 cash. INV-2026-00004 created. |
+
+### What works
+
+- **Cart math is right (in tax-inclusive mode only)**: with the "Tax Inclusive" toggle ON, the cart shows `Subtotal Rs 200.00 / GST (incl.) Rs 19.29 / Total Rs 200.00`. Math checks: Snack Bar Rs 50 incl. 5% → tax Rs 2.38 × 2 = Rs 4.76. Coffee Beans Rs 100 incl. 17% → tax Rs 14.53. Total Rs 19.29 ✓. So the **per-product `gst` rate IS being read correctly** at render time.
+- **Post-sale receipt modal** echoes the same Rs 19.29 line.
+- **FBR-Export endpoint** does emit per-line rows (Snack Bar + Coffee Beans appear as separate rows on INV-2026-00004) — but see 🔴 below for tax columns.
+
+### 🔴 P8 — `sales` and `sale_items` schema has NO tax columns at all
+
+Verified via `backend/scripts/3-14-inspect-sale-tax.js` against tenant_livetest1:
+
+```
+sales columns: id, total_amount, payment_method, timestamp, outlet_id, employee_id,
+voided, void_reason, customer_id, discount_amount, discount_type, points_earned,
+points_redeemed, notes, invoice_number, shift_id, idempotency_key, fbr_status,
+fbr_irn, fbr_qr_code, folio_id, treatment_folio_id
+  → no `subtotal`, no `tax_amount`, no `total_tax`, no `tax_breakdown` JSON.
+
+sale_items columns: id, sale_id, product_id, quantity, price_at_sale,
+cost_price_at_sale, variant_id, gross_weight, tare_weight, staff_id, seat_number,
+price_override_*
+  → no `tax_rate_at_sale`, no `tax_amount_at_sale`, no `gst_at_sale`, no `tax_id`.
+```
+
+**Implication:** the "GST (incl.) Rs 19.29" line on the cart and post-sale receipt is a **render-time artifact** computed by joining `sale_items → products` and reading `products.gst`. Nothing about the tax breakdown is persisted on the sale.
+
+This means:
+- If a product's GST rate is edited after the sale, **the receipt's tax breakdown changes retroactively**.
+- Returns/voids cannot reverse the original tax accurately.
+- FBR posting (when 3.3 unblocks) will need to recompute from the live `products.gst` — incorrect for any sale of a product whose rate later changed.
+- Compliance reports cannot tell you what tax was *charged at sale time* vs. what the rate *currently is*.
+
+This is a **Pakistani tax-compliance blocker for FBR rollout**. Until `sale_items` snapshots tax rate + amount per line at sale-write time, mixed-rate audits are impossible.
+
+### 🔴 P9 — Tax-EXCLUSIVE mode silently drops tax to 0
+
+With "Tax Inclusive" toggle OFF (i.e., user expects tax to be added on top of price):
+- Cart: `Subtotal Rs 200.00 / Total Rs 200.00` — no tax line, no GST sub-line, total === subtotal.
+- The 3.14 plan's expected math (Rs 200 base + Rs 17 + Rs 5 = Rs 222) is **not achievable in this mode**.
+
+Two interpretations:
+1. The product `gst` column is hard-wired as inclusive-only and the toggle just controls whether the tax sub-line is *displayed*.
+2. Tax-exclusive math requires `tax_id` (FK to `taxes` table) on the product, which the new-product form doesn't expose.
+
+Either way, a merchant who toggles "Tax Inclusive" OFF (intending "compute tax on top") loses the tax line entirely — silent failure. **At minimum the toggle should disable + tooltip "tax-exclusive requires linked tax rule" if interp #2 is correct.**
+
+### 🔴 P10 — Sales Summary report says "Tax Collected: Rs 0.00"
+
+`/reports → Sales Summary` reads `sales.tax_amount` (which doesn't exist) and falls back to 0 across all 4 sales. Revenue Rs 600 / Tax Rs 0.00 / Net Sales Rs 600 — even though the cart and receipt UI claimed Rs 19.29 of GST on INV-2026-00004.
+
+Per-rate breakdown (Rs from 17%, Rs from 5%) is **not even attempted** as a row.
+
+### 🔴 P11 — FBR-Export emits `tax_rate: 0` and `tax_amount: "0.00"` per line
+
+`GET /api/reports/fbr-export?from=2026-04-27&to=2026-04-30` returns row for Coffee Beans:
+```json
+{ "tax_rate": 0, "tax_amount": "0.00", "total_amount": "100.00", ... }
+```
+…and Snack Bar:
+```json
+{ "tax_rate": 0, "tax_amount": "0.00", "total_amount": "100.00", ... }
+```
+
+Both should be `tax_rate: 17 → tax_amount: 14.53` and `tax_rate: 5 → tax_amount: 4.76` respectively. The endpoint exposes the per-line columns correctly, but the underlying query never joins to `products.gst` or computes inclusive-tax math. **This is the same root cause as P8 — there's no per-line tax data in `sale_items` to read from.**
+
+### 🟡 M26 — `GET /api/products` (list) drops the `gst` field
+
+`GET /api/products/:id` (single) returns `gst: "17.0000"`. `GET /api/products` (list) omits the field entirely. UI inventory list shows price-only — there's no way to spot-check what GST rate is on each row without opening the product. Minor consistency bug.
+
+### 🟡 M27 — Public `/receipt/:invoiceNumber` page shows zero tax detail
+
+`https://sanopos.com/receipt/INV-2026-00004?tenant=livetest1` renders only items + Total — no tax line at all (not even the consolidated "GST (incl.)"). The customer-shareable receipt is silent on tax. (First fetch hit a transient CORS preflight error too — second fetch worked. Likely Railway cold-start; not flagging as a separate finding.)
+
+### 🟡 M28 — New-product form has no tax-rule picker
+
+The "GST %" field accepts a free numeric. There's no dropdown to pick from the `taxes` table rules. So `tax_id` stays null even when a matching rule exists at that rate. The `taxes` table is decorative for products — only used by import lookup-by-name (which is what the 3.12 probe found) and possibly hard-keyed reports.
+
+### Verdict on 3.14
+
+**Mixed-rate tax sale correctness is broken end-to-end.** Cart and receipt MODAL render correct math at display time, but nothing is persisted, nothing is preserved per-rate, and every downstream consumer (Sales Summary, FBR Export, Item Wise, public receipt) reports zero tax. This needs a real fix before FBR rollout (3.3) or any tax-jurisdiction compliance.
+
+**Recommended fix scope (logged as P8 — single largest 3.14 fix):**
+1. Migration v83: add `sale_items.tax_rate_at_sale NUMERIC(5,2)` + `sale_items.tax_amount_at_sale NUMERIC(10,2)`.
+2. POST `/api/sales` writes both columns at sale-write time, snapshotted from `products.gst` (and inclusive-vs-exclusive computed from the cart's toggle state — also persist that toggle on `sales` row).
+3. Sales Summary, Item Wise, FBR Export, receipt builders all switch to read the snapshotted columns.
+4. Tax-exclusive toggle wires through to actual math instead of silently dropping tax.
+5. UI: receipt modal + public receipt page show two distinct tax lines when rates differ, single line when they match.
+6. Minor: list endpoint echo `gst`; new-product form add tax-rule dropdown that auto-fills numeric and stamps `tax_id`.
+
+This is a P-level (compliance-blocker) fix worth a dedicated branch + PR rather than rolling into the polish bundle.
+
+### Updated state of `livetest1` after 3.14
+
+- Plan: Pro (annual), expires 2027-04-28 — unchanged.
+- Tax rates: 3 (Default Tax 0%, GST 17%, GST 5% — new).
+- Products: 8 total (Coffee Beans id=10 + Snack Bar id=11 added; Test Coffee id=8 still there with stock 7).
+- Sales: 4 — INV-2026-00001 (Rs 200 partial refund), INV-2026-00002 (Rs 100 cash), INV-2026-00003 (Rs 100 gift card), INV-2026-00004 (Rs 200 cash, mixed-rate items).
+- Snack Bar stock: **20.000 → 18.000** after 3.14. Coffee Beans stock: **10.000 → 9.000**.
+- Shift #1 still open. Hassan attendance session active. Backend at `9f1fb1b`, frontend at `73f82bd` — no commits yet today.
+
+### Helper scripts left in repo
+
+- `backend/scripts/3-14-inspect-sale-tax.js` — dump sales + sale_items rows for INV-2026-00004 + their column lists.
+
+### Carryover open mediums after 3.14
+
+(unchanged from 3.13 list — M22, M23, M24, M25 all still deferred to polish bundle. New: P8/P9/P10/P11/M26/M27/M28 all logged above as the 3.14 fix bundle.)
+
+---
+
 ## (legacy) Resume tomorrow at 3.8 — superseded by 3.12 closure above
 
 **State on `livetest1` (production):**
