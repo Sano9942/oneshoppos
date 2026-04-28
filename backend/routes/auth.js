@@ -252,6 +252,31 @@ module.exports = function registerAuthRoutes(app, deps) {
   // --- Multi-tenant JWT endpoints (only active when MULTI_TENANT=1) ---
   if (process.env.MULTI_TENANT === "1") {
     const { signAccessToken, signRefreshToken, verifyRefreshToken, verifyAccessToken, hashToken } = require("../jwt-auth");
+
+    // Pick a sensible default outlet for an employee when minting a JWT.
+    // The frontend ContextSelect skips entirely when context_selection_required
+    // is off (the default), so without baking an outlet here, JWT.oid stays
+    // null forever and every backend code path that reads req.context.outletId
+    // is silently degraded. Strategy: primary outlet first, then any active
+    // assignment. Returns null only when the employee has zero outlets
+    // assigned (admin-only "all_access" account) — in which case ContextSelect
+    // is the right place to make the choice.
+    async function pickDefaultOutletForEmployee(tenantDb, employeeId) {
+      try {
+        const { rows } = await tenantDb.query(
+          `SELECT eo.outlet_id
+           FROM employee_outlets eo
+           JOIN outlets o ON o.id = eo.outlet_id
+           WHERE eo.employee_id = $1 AND o.is_active = true
+           ORDER BY eo.is_primary DESC, eo.outlet_id ASC
+           LIMIT 1`,
+          [employeeId]
+        );
+        return rows[0]?.outlet_id || null;
+      } catch {
+        return null;
+      }
+    }
     const jwtLib = require("jsonwebtoken");
     const masterDb = require("../master-db-pg");
     const tenantDbMgr = process.env.DATABASE_URL
@@ -380,9 +405,13 @@ module.exports = function registerAuthRoutes(app, deps) {
         );
         const permissions = (permRows || []).map(r => r.permission);
 
-        // 5. Sign access token (oid null until context selection)
+        // 5. Sign access token. Bake the employee's primary outlet into oid
+        //    so /context-select can be skipped (default flow) without
+        //    leaving req.context.outletId null on every downstream request.
+        //    See pickDefaultOutletForEmployee for the selection rule.
+        const defaultOutletId = await pickDefaultOutletForEmployee(tenantDb, employee.id);
         const accessToken = signAccessToken(
-          { tid: tenant.id, eid: employee.id, rid: employee.role_id, oid: null },
+          { tid: tenant.id, eid: employee.id, rid: employee.role_id, oid: defaultOutletId },
           JWT_SECRET
         );
 
@@ -473,9 +502,13 @@ module.exports = function registerAuthRoutes(app, deps) {
           return res.status(401).json({ error: "Employee not found" });
         }
 
-        // 5. Sign new access token
+        // 5. Sign new access token — preserve the employee's outlet across
+        //    refresh. The refresh token itself doesn't carry oid, so we
+        //    re-derive it from employee_outlets the same way mt-login does.
+        //    Without this, every silent token refresh dropped req.context.outletId.
+        const defaultOutletId = await pickDefaultOutletForEmployee(tenantDb, decoded.eid);
         const accessToken = signAccessToken(
-          { tid: decoded.tid, eid: decoded.eid, rid: employee.role_id, oid: null },
+          { tid: decoded.tid, eid: decoded.eid, rid: employee.role_id, oid: defaultOutletId },
           JWT_SECRET
         );
 
