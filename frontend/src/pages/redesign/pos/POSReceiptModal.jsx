@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { CheckCircle2, Mail, MessageCircle, X } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { buildReceiptSections } from "../../../utils/receipt";
-import { buildPublicReceiptUrl } from "../../../utils/publicReceipt";
+import { buildWhatsAppShareUrl } from "../../../utils/publicReceipt";
 import POSEmailReceiptModal from "./POSEmailReceiptModal";
 
 export default function POSReceiptModal() {
@@ -14,14 +14,16 @@ export default function POSReceiptModal() {
 
   function shareWhatsApp() {
     const total = money(slip.balanceDue != null ? Math.max(0, slip.balanceDue) : slip.total);
-    const receiptUrl = buildPublicReceiptUrl(slip.invoiceNumber);
-    const text = [
-      `Receipt from ${sections.storeName}`,
-      `Invoice: ${slip.invoiceNumber}`,
-      `Total: ${total}`,
-      `View: ${receiptUrl}`,
-    ].join("\n");
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+    const url = buildWhatsAppShareUrl({
+      invoiceNumber: slip.invoiceNumber,
+      totalLabel: total,
+      outletName: slip.outlet?.name,
+      // sections.storeName falls back to template.header_text, which is a
+      // print-format greeting (e.g. "Thank you for shopping!") — only used
+      // here as a tertiary fallback when outlet name is missing.
+      fallbackName: sections.storeName,
+    });
+    window.open(url, "_blank");
   }
 
   if (!slipOpen || !slip) return null;

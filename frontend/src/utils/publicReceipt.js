@@ -24,3 +24,40 @@ export function buildPublicReceiptUrl(invoiceNumber) {
   if (!slug) return base;
   return `${base}?tenant=${encodeURIComponent(slug)}`;
 }
+
+/**
+ * Build the pre-filled message body for a wa.me share link.
+ *
+ * Used by both POS post-checkout share and Sales History share. Picks a
+ * brand identifier (outlet name, falling back to receipt-template header_text,
+ * finally "SanoPOS") so the message preamble reads naturally — NOT the
+ * receipt-greeting line which is often "Thank you for shopping!" (that's a
+ * print-format greeting, not a brand).
+ *
+ * @param {object} args
+ * @param {string} args.invoiceNumber
+ * @param {string} args.totalLabel - pre-formatted currency string (e.g. "Rs 100.00")
+ * @param {string} [args.outletName] - preferred brand identifier
+ * @param {string} [args.fallbackName] - secondary brand identifier (e.g. template.header_text)
+ * @returns {string} a multi-line message body, NOT URL-encoded
+ */
+export function buildReceiptShareMessage({ invoiceNumber, totalLabel, outletName, fallbackName }) {
+  const brand = outletName || fallbackName || "SanoPOS";
+  return [
+    `Receipt from ${brand}`,
+    `Invoice: ${invoiceNumber}`,
+    `Total: ${totalLabel}`,
+    `View: ${buildPublicReceiptUrl(invoiceNumber)}`,
+  ].join("\n");
+}
+
+/**
+ * Build a `wa.me/?text=...` URL ready to feed into `window.open`.
+ *
+ * @param {object} args - same as buildReceiptShareMessage
+ * @returns {string} a wa.me URL
+ */
+export function buildWhatsAppShareUrl(args) {
+  const text = buildReceiptShareMessage(args);
+  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+}
