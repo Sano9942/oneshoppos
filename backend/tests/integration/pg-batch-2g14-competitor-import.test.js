@@ -73,8 +73,9 @@ describe("2-G.14 Competitor import — Shopify", () => {
     expect(res.body.preview).toBe(true);
     // row 1 valid, row 2 errors (name missing — Title empty on Shopify means name-less)
     expect(res.body.valid).toBeGreaterThanOrEqual(1);
-    expect(Array.isArray(res.body.errors)).toBe(true);
-    expect(Array.isArray(res.body.sample)).toBe(true);
+    // F7 unified shape: rows[] with _row + _errors per input row
+    expect(Array.isArray(res.body.rows)).toBe(true);
+    expect(res.body.rows.every((r) => Array.isArray(r._errors))).toBe(true);
   });
 
   test("non-preview inserts products into DB", async () => {

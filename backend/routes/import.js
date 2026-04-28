@@ -13,7 +13,11 @@ module.exports = function mountImportRoutes(app, deps) {
     const wb = XLSX.read(buffer, { type: "buffer" });
     const sheet = wb.Sheets[wb.SheetNames[0]];
     if (!sheet) return [];
-    return XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    // raw: false keeps cell values as the displayed strings — without it, XLSX
+    // auto-coerces ISO dates ("2026-04-29") into Excel serial numbers
+    // (46141.20...), which breaks Date.parse() in expenses/payments validation.
+    // Numeric fields (selling_price, amount) still parse cleanly via parseFloat.
+    return XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
   }
 
   // ---------------------------------------------------------------------------
@@ -38,6 +42,30 @@ module.exports = function mountImportRoutes(app, deps) {
     const mapper = getMapper(source, entity);
     if (!mapper) return rawRows;
     return mapper(rawRows);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helper: build unified preview response. Merges valid[] + errors[] back into
+  // a single ordered rows[] array (one entry per input data row, in original
+  // file order), with `_row` (line number) and `_errors` (string[], empty when
+  // valid) on each. Frontend ImportRedesign.jsx reads `preview.rows[]._errors`
+  // — keep this shape stable.
+  // ---------------------------------------------------------------------------
+  function buildPreviewResponse(valid, errors, totalRows) {
+    const byRow = new Map();
+    for (const v of valid) {
+      const { row, ...fields } = v;
+      byRow.set(row, { _row: row, _errors: [], ...fields });
+    }
+    for (const e of errors) {
+      byRow.set(e.row, { _row: e.row, _errors: e.errors, ...e.data });
+    }
+    const rows = [];
+    for (let i = 0; i < totalRows; i++) {
+      const rowNum = i + 2;
+      if (byRow.has(rowNum)) rows.push(byRow.get(rowNum));
+    }
+    return { preview: true, rows, valid: valid.length, errors: errors.length };
   }
 
   // ---------------------------------------------------------------------------
@@ -121,7 +149,7 @@ module.exports = function mountImportRoutes(app, deps) {
         }
 
         if (isPreview) {
-          return res.json({ preview: true, valid: valid.length, errors, sample: valid.slice(0, 10) });
+          return res.json(buildPreviewResponse(valid, errors, rows.length));
         }
 
         // Bulk insert in transaction
@@ -207,7 +235,7 @@ module.exports = function mountImportRoutes(app, deps) {
         }
 
         if (isPreview) {
-          return res.json({ preview: true, valid: valid.length, errors, sample: valid.slice(0, 10) });
+          return res.json(buildPreviewResponse(valid, errors, rows.length));
         }
 
         let imported = 0;
@@ -280,7 +308,7 @@ module.exports = function mountImportRoutes(app, deps) {
         }
 
         if (isPreview) {
-          return res.json({ preview: true, valid: valid.length, errors, sample: valid.slice(0, 10) });
+          return res.json(buildPreviewResponse(valid, errors, rows.length));
         }
 
         let imported = 0;
@@ -371,7 +399,7 @@ module.exports = function mountImportRoutes(app, deps) {
         }
 
         if (isPreview) {
-          return res.json({ preview: true, valid: valid.length, errors, sample: valid.slice(0, 10) });
+          return res.json(buildPreviewResponse(valid, errors, rows.length));
         }
 
         const employeeId = req.employee?.id || null;
@@ -488,7 +516,7 @@ module.exports = function mountImportRoutes(app, deps) {
         }
 
         if (isPreview) {
-          return res.json({ preview: true, valid: valid.length, errors, sample: valid.slice(0, 10) });
+          return res.json(buildPreviewResponse(valid, errors, rows.length));
         }
 
         let imported = 0;
