@@ -12,12 +12,13 @@ import {
 } from "../../ui/primitives";
 import { api } from "../../api";
 import InvoiceView from "../InvoiceView";
-import { Ban, Download, FileText, Printer, RefreshCw, Search, Share2 } from "lucide-react";
+import { Ban, Download, FileText, Mail, MessageCircle, Printer, RefreshCw, Search, Share2 } from "lucide-react";
 import { fmtUtcDateTime } from "../../utils/dates";
 import { useCurrency } from "../../contexts/CurrencyContext";
 import { useToast } from "../../contexts/ToastContext";
 import { buildReceiptHtml } from "../../utils/receipt";
-import { buildPublicReceiptUrl } from "../../utils/publicReceipt";
+import { buildPublicReceiptUrl, buildWhatsAppShareUrl } from "../../utils/publicReceipt";
+import POSEmailReceiptModal from "./pos/POSEmailReceiptModal";
 
 const formatDate = fmtUtcDateTime;
 
@@ -80,6 +81,7 @@ export default function SalesHistoryRedesign() {
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [invoiceSaleId, setInvoiceSaleId] = useState(null);
+  const [showEmailModal, setShowEmailModal] = useState(false);
 
   const loadSales = useCallback(
     async (nextPage = page) => {
@@ -194,6 +196,28 @@ export default function SalesHistoryRedesign() {
       // just see the URL in a prompt — still useful as a fallback.
       window.prompt("Copy this receipt link:", url);
     }
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!detail?.sale?.invoice_number) {
+      toast.error("This sale has no invoice number to share");
+      return;
+    }
+    const s = detail.sale;
+    const url = buildWhatsAppShareUrl({
+      invoiceNumber: s.invoice_number,
+      totalLabel: money(s.total_amount),
+      outletName: s.outlet_name,
+    });
+    window.open(url, "_blank");
+  };
+
+  const handleEmailReceipt = () => {
+    if (!detail?.sale?.id) {
+      toast.error("Sale not loaded yet");
+      return;
+    }
+    setShowEmailModal(true);
   };
 
   if (invoiceSaleId) {
@@ -419,6 +443,8 @@ export default function SalesHistoryRedesign() {
                       <Button size="sm" onClick={handleReprint}><Printer size={13} className="mr-1 inline" />Reprint</Button>
                       <Button size="sm" onClick={() => setInvoiceSaleId(selected.id)}><FileText size={13} className="mr-1 inline" />Invoice</Button>
                       <Button size="sm" onClick={handleShareReceipt} title="Copy a public receipt link the customer can open without logging in"><Share2 size={13} className="mr-1 inline" />Share</Button>
+                      <Button size="sm" onClick={handleEmailReceipt} title="Email this receipt to a customer"><Mail size={13} className="mr-1 inline" />Email</Button>
+                      <Button size="sm" onClick={handleShareWhatsApp} title="Open WhatsApp with the receipt link pre-filled"><MessageCircle size={13} className="mr-1 inline" />WhatsApp</Button>
                       {!Number(detail.sale.voided || 0) ? (
                         <Button size="sm" tone="danger" onClick={handleVoid}><Ban size={13} className="mr-1 inline" />Void</Button>
                       ) : null}
@@ -461,6 +487,13 @@ export default function SalesHistoryRedesign() {
           )}
         </SectionCard>
       </div>
+      {showEmailModal && detail?.sale?.id && (
+        <POSEmailReceiptModal
+          saleId={detail.sale.id}
+          customerEmail={detail.sale.customer_email || ""}
+          onClose={() => setShowEmailModal(false)}
+        />
+      )}
     </PageShell>
   );
 }
