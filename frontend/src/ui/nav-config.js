@@ -104,7 +104,7 @@ export const SHOPIFY_NAV_GROUPS = [
       { name: "Inventory Audit", path: "/stock-counts", icon: ClipboardCheck, requiredPerm: "manage_inventory" },
       { name: "Stock Adjustments", path: "/adjustments", icon: RefreshCw, requiredPerm: "manage_inventory" },
       { name: "Transfers", path: "/transfers", icon: ArrowLeftRight, requiredPerm: "manage_inventory" },
-      { name: "Returned Stock", path: "/returned-stock", icon: Package, requiredPerm: "manage_orders" },
+      { name: "Supplier Returns", path: "/returned-stock", icon: Package, requiredPerm: "manage_orders" },
       { name: "Supplier Payables", path: "/supplier-payables", icon: CreditCard, requiredPerm: "manage_orders", requiredFlag: "supplier_payables" },
       { name: "Reorder Alerts", path: "/reorder-alerts", icon: AlertTriangle, requiredPerm: "manage_inventory" },
       { name: "Intelligence", path: "/inventory-intelligence", icon: BarChart2, requiredPerm: "manage_inventory", requiredFlag: "phase2g_inventory_intelligence" },

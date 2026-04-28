@@ -21,7 +21,7 @@ const LABELS = {
   "purchase-orders": "Purchase Orders",
   "stock-adjustments": "Stock Adjustments",
   transfers: "Transfers",
-  "returned-stock": "Returned Stock",
+  "returned-stock": "Supplier Returns",
   "supplier-payables": "Supplier Payables",
   "reorder-alerts": "Reorder Alerts",
   "inventory-intelligence": "Inventory Intelligence",
