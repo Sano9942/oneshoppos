@@ -279,10 +279,25 @@ module.exports = function registerSalesRoutes(app, deps) {
       );
       if (!sale) return res.status(404).json({ error: "Sale not found" });
 
+      // F2 (Apr 28 2026): join return_items so each line item carries
+      // refunded_qty and the sale carries refund_total. Sales History detail
+      // panel + POS Return / Exchange modal use these to show "× (qty −
+      // refunded) of qty" and disable the Return button when fully refunded.
       const { rows: items } = await db.query(
-        `SELECT si.*, p.name as product_name, p.barcode
-       FROM sale_items si JOIN products p ON si.product_id = p.id
-       WHERE si.sale_id = $1`,
+        `SELECT si.*, p.name as product_name, p.barcode,
+                COALESCE(rsum.refunded_qty, 0) AS refunded_qty
+         FROM sale_items si
+         JOIN products p ON si.product_id = p.id
+         LEFT JOIN (
+           SELECT ri.product_id, ri.variant_id, SUM(ri.quantity) AS refunded_qty
+             FROM return_items ri
+             JOIN returns r ON r.id = ri.return_id
+            WHERE r.original_sale_id = $1
+            GROUP BY ri.product_id, ri.variant_id
+         ) rsum
+           ON rsum.product_id = si.product_id
+          AND rsum.variant_id IS NOT DISTINCT FROM si.variant_id
+        WHERE si.sale_id = $1`,
         [id]
       );
 
@@ -290,6 +305,14 @@ module.exports = function registerSalesRoutes(app, deps) {
         "SELECT * FROM sale_payments WHERE sale_id = $1",
         [id]
       );
+
+      const { rows: [refundAgg] } = await db.query(
+        `SELECT COALESCE(SUM(total_refund), 0) AS refund_total
+           FROM returns
+          WHERE original_sale_id = $1`,
+        [id]
+      );
+      sale.refund_total = Number(refundAgg?.refund_total || 0);
 
       res.json({ sale, items, payments });
     } catch (err) {
