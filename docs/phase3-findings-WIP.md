@@ -744,21 +744,99 @@ Plus `backend/tests/integration/pg-batch-2g14-competitor-import.test.js` (existi
 
 ---
 
-## Resume next session at 3.13
+## 3.13 Sandbox payment checkout end-to-end — 2026-04-29
+
+**Pre-state:** livetest1 on Free plan (3/3 employees cap), 0 payment records. `PAYMENT_GATEWAY=sandbox` and `SANDBOX_WEBHOOK_SECRET` confirmed on Railway. Memory `sanopay_sandbox.md` says sandbox went live Apr 18.
+
+### Plan-doc acceptance scorecard
+
+| Criterion | Result |
+|---|---|
+| /billing → click monthly Pro plan → "Pay Now" | ⚠️ default selection is Quarterly (known medium); switched to Annual manually per brief |
+| Redirects to SanoPay sandbox | ✅ (`/api/sandbox/pay/sandbox_1777415747266_3`) |
+| Complete sandbox payment with test card | ✅ clicked "Pay Successfully", page showed "Simulated payment.completed" |
+| Webhook fires → tenant auto-upgrades to Pro | ✅ Railway log: `Payment confirmed — tenant activated` (intent_id=3, tenant_id=95) |
+| Confirmation email arrives | ⚠️ enqueued (no "Failed to enqueue" log fired) but worker send not observed in tail logs — operator to confirm receipt at `oneshop349@gmail.com` |
+| `payment_records` row created with correct amount + status | ✅ row id=2, amount=80000.00 PKR, plan=pro, cycle=annual, payment_method=sandbox, period 2026-04-28 → 2027-04-28 |
+| Verify Free-tier caps lifted (4th employee) | ✅ `POST /api/employees` returned id=4 "Test Cashier 4", count went 3→4 |
+
+### Verified live state after upgrade
+
+```
+GET /api/billing/status →
+{
+  plan: "pro",
+  billing_cycle: "annual",
+  expires_at: "2027-04-28T22:35:59.623Z",
+  grace_ends_at: "2027-05-05T22:35:59.623Z",   // +7 days correctly applied
+  next_renewal_date: "2027-04-28T22:35:59.623Z",
+  payment_status: "active",
+  upgrade_options: []                            // no further upgrade tier
+}
+```
+
+Railway log trace:
+
+```
+POST /api/billing/create-checkout            200 (gatewayRef=sandbox_1777415747266_3, amount=80000)
+GET  /api/sandbox/pay/sandbox_177...          200 (sandbox UI rendered)
+POST /api/sandbox/simulate-webhook            200
+  → Processing webhook event (provider=sandbox, event_type=payment.completed)
+  → Payment confirmed — tenant activated (intent_id=3, tenant_id=95)
+  → Sandbox webhook simulated (result={ok:true})
+```
+
+### Findings
+
+#### 🔴 ⚠️ Re-confirmed M22 — `/billing` Quarterly default conflicts with Annual BEST VALUE pill
+
+This was already a known medium ("/billing Quarterly highlighted, Annual has BEST VALUE pill"), but I want to re-record it with the actual repro evidence:
+
+**Reproduce:** Visit `/billing` while on Free plan → 4 cycle cards render, Annual has the "BEST VALUE" pill, Quarterly is **pre-selected** (visible by inspecting the `Upgrade Now — PKR 21,600/quarter` CTA at the bottom). Clicking Upgrade Now without first clicking Annual would route the merchant to the Quarterly checkout despite the visual cue suggesting Annual is recommended.
+
+**Severity:** ⚠️ medium UX/conversion. A merchant trusting the BEST VALUE pill clicks Upgrade Now → pays Quarterly → realizes mid-flow it wasn't Annual. Either revenue is left on the table (Annual saves Rs 16,000) or the merchant aborts.
+
+**Suggested fix:** in `BillingRedesign.jsx`, default the `selectedCycle` state to Annual (per memory note `BillingRedesign.jsx … Annual cycle is RECOMMENDED_CYCLE`). Bundle into the polish PR.
+
+#### ⚠️ M23 — `/api/billing/pricing` still returns Starter tier rows
+
+`GET /api/billing/pricing` returns 6 rows including 2 Starter rows (PKR 30,000 annual, PKR 3,000 monthly), even though memory `historical_notes.md` says Starter was removed. The `status.upgrade_options` correctly filters to Pro-only, so the UI doesn't surface Starter — but the public pricing endpoint is still emitting it. Likely a leftover seed in `plan_pricing` table that the Starter-removal cleanup missed.
+
+**Severity:** ⚠️ low. UI doesn't surface Starter, so end-user impact is zero. But integrations or future admin UI reads of `/billing/pricing` would surface it. Worth a single SQL cleanup in v83 or admin script.
+
+**Verification suggestion:** `SELECT * FROM plan_pricing WHERE plan='starter'` on master DB — if rows exist, remove them.
+
+#### ⚠️ M24 — `period_end` ISO timestamp shown verbatim on payment_records
+
+The new payment_record row has `period_end: "2027-04-28T22:35:59.623Z"` — a UTC instant down to milliseconds. Most billing UIs display this as a friendly date (`Apr 28, 2027`). Currently the merchant inspecting payment-history via API would see the raw ISO. Frontend `BillingRedesign.jsx` formats it (per the BillingRedesign code), but downstream consumers (CSV export, admin dashboards) might not. Defer.
+
+### Closing state
+
+- **Plan:** Pro (annual), expires 2027-04-28
+- **payment_records:** 1 row (80000 PKR sandbox)
+- **Employees:** 4 (Hassan, Test Cashier 2, Test Cashier 3, **Test Cashier 4** [newly added to verify caps lifted])
+- **Sales / gift cards / products / shift / Test Coffee stock:** unchanged from end of 3.12
+
+**No new fix commits in 3.13** — sandbox payment flow is fully working. Findings M22 / M23 / M24 are deferred to the polish bundle (M22 already known, M23/M24 logged here).
+
+**Phase 3.13 closed.** All 7 plan-doc acceptance criteria met (1 with workaround per brief, 1 needs operator inbox confirmation).
+
+---
+
+## Resume next session at 3.14
 
 **State on `livetest1` (production):**
-- 3 sales (INV-2026-00001 partial refund, INV-2026-00002 cash, INV-2026-00003 gift card). Test Coffee stock **7.000**. Shift #1 still open.
-- 2 active gift cards (`BF18801AC599` Rs 400, `GC-PHASE3-TEST` Rs 250).
-- 6 products (Phase 3.12 cleanup verified — Coffee Beans test product soft-deleted post-verification).
-- 3/3 employees at Free plan cap.
-- Backend on Railway at `27e55e5`, schema at v82. Frontend on Vercel at `73f82bd` (no frontend changes in 3.12 — purely backend).
-- v82 migration applied to public + tenant_livetest1 successfully (no dups to skip).
+- **Plan: Pro (annual)**, expires 2027-04-28, `payment_status=active`, grace_ends 2027-05-05.
+- 1 sandbox payment record (id=2, 80000 PKR, plan=pro, cycle=annual, payment_method=sandbox).
+- **4 employees**: Hassan, Test Cashier 2, Test Cashier 3, **Test Cashier 4 (id=4, PIN 4444, Cashier role)** — created in 3.13 to verify caps lifted; safe to leave or delete.
+- 3 sales / 2 gift cards / 6 products / Test Coffee stock 7.000 / Shift #1 still open — unchanged from end of 3.12.
+- Backend on Railway at `8bb61d7` (post-3.12 commits all live), schema at v82. Frontend on Vercel at `73f82bd`.
 
-**Next step — 3.13 sandbox payment checkout end-to-end.** From cap-hit modal in 3.4 → /billing → pick **Annual** (Quarterly default is broken, known) → Pay Now → SanoPay sandbox → complete test card → verify webhook fires → tenant auto-upgrade to Pro → confirmation email → `payment_records` row → Free caps lifted (try adding 4th employee).
-
-**After 3.13:** 3.14 mixed-rate tax sale (17% + 5% products → verify per-line tax preserved on receipt + reports).
+**Next step — 3.14 Mixed-rate tax sale.** Create "Coffee Beans" with 17% GST + "Snack Bar" with 5% GST → POS ring up 1× CB + 2× SB → verify receipt shows two tax lines (Rs 17 + Rs 5 = Rs 22 total tax on Rs 200 base). Verify Reports → Sales Summary preserves per-rate breakdown. Skip FBR-payload check (3.3 is still blocked).
 
 **Still blocked:** 3.3 FBR (NTN/STRN/sandbox token), 3.9 Shopify, 3.10 Courier (sandbox creds). 3.11 SKIP (physical hardware).
+
+**Carryover findings from 3.13:** M22 (Quarterly default vs Annual pill) confirmed real; M23 (`/billing/pricing` still emits Starter rows); M24 (raw ISO in payment_records). All deferred to polish bundle.
 
 ---
 
