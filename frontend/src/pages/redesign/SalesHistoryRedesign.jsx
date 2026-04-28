@@ -331,46 +331,112 @@ export default function SalesHistoryRedesign() {
                 <h3 className="text-lg font-semibold text-(--ui-text)">Receipt #{selected.id}</h3>
                 <p className="text-xs text-(--ui-text-muted)">{formatDate(selected.timestamp)}</p>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <SectionCard className="p-2 text-center"><p className="text-xs text-(--ui-text-muted)">Total</p><p className="font-semibold text-(--ui-text)">{money(detail.sale.total_amount)}</p></SectionCard>
-                <SectionCard className="p-2 text-center"><p className="text-xs text-(--ui-text-muted)">Payments</p><p className="font-semibold text-(--ui-text)">{(detail.payments || []).length}</p></SectionCard>
-              </div>
+              {/* F4 (Apr 28 2026): surface refund context from GET /api/sales/:id
+                  so the cashier sees what's already been refunded against this
+                  sale and can't blindly re-trigger Return on a fully-refunded
+                  one. refunded_qty / refund_total are populated by F2. */}
+              {(() => {
+                const refundTotal = Number(detail.sale.refund_total || 0);
+                const itemsWithRemaining = (detail.items || []).map((it) => ({
+                  ...it,
+                  remainingQty: Math.max(
+                    0,
+                    Number(it.quantity || 0) - Number(it.refunded_qty || 0),
+                  ),
+                }));
+                const fullyRefunded =
+                  refundTotal > 0 &&
+                  itemsWithRemaining.every((it) => it.remainingQty <= 0);
+                const partiallyRefunded = refundTotal > 0 && !fullyRefunded;
 
-              <div>
-                <h4 className="mb-2 text-sm font-semibold text-(--ui-text)">Items</h4>
-                <div className="max-h-44 space-y-2 overflow-auto">
-                  {(detail.items || []).map((item) => (
-                    <div key={item.id} className="rounded border border-(--ui-border) p-2 text-xs">
-                      <p className="font-medium text-(--ui-text)">{item.product_name}</p>
-                      <p className="text-(--ui-text-muted)">{item.quantity} x {money(item.price_at_sale)}</p>
+                return (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      <SectionCard className="p-2 text-center">
+                        <p className="text-xs text-(--ui-text-muted)">Total</p>
+                        <p className="font-semibold text-(--ui-text)">{money(detail.sale.total_amount)}</p>
+                      </SectionCard>
+                      <SectionCard className="p-2 text-center">
+                        <p className="text-xs text-(--ui-text-muted)">Payments</p>
+                        <p className="font-semibold text-(--ui-text)">{(detail.payments || []).length}</p>
+                      </SectionCard>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <Button size="sm" onClick={handleReprint}><Printer size={13} className="mr-1 inline" />Reprint</Button>
-                <Button size="sm" onClick={() => setInvoiceSaleId(selected.id)}><FileText size={13} className="mr-1 inline" />Invoice</Button>
-                {!Number(detail.sale.voided || 0) ? (
-                  <Button size="sm" tone="danger" onClick={handleVoid}><Ban size={13} className="mr-1 inline" />Void</Button>
-                ) : null}
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    navigate("/returns", {
-                      state: {
-                        sale_id: selected.id,
-                        outlet_id: detail.sale.outlet_id,
-                        employee_id: detail.sale.employee_id,
-                        customer_id: detail.sale.customer_id,
-                        items: detail.items,
-                      },
-                    })
-                  }
-                >
-                  Return
-                </Button>
-              </div>
+                    {refundTotal > 0 ? (
+                      <SectionCard className="p-2 text-center">
+                        <p className="text-xs text-(--ui-text-muted)">
+                          {fullyRefunded ? "Fully refunded" : "Partially refunded"}
+                        </p>
+                        <p className="font-semibold text-rose-600">
+                          −{money(refundTotal)}
+                        </p>
+                      </SectionCard>
+                    ) : null}
+
+                    <div>
+                      <h4 className="mb-2 text-sm font-semibold text-(--ui-text)">Items</h4>
+                      <div className="max-h-44 space-y-2 overflow-auto">
+                        {itemsWithRemaining.map((item) => {
+                          const refunded = Number(item.refunded_qty || 0);
+                          return (
+                            <div key={item.id} className="rounded border border-(--ui-border) p-2 text-xs">
+                              <p className="font-medium text-(--ui-text)">{item.product_name}</p>
+                              <p className="text-(--ui-text-muted)">
+                                {item.quantity} x {money(item.price_at_sale)}
+                                {refunded > 0 ? (
+                                  <span className="ml-1 text-rose-600">
+                                    ({refunded} refunded
+                                    {item.remainingQty > 0 ? `, ${item.remainingQty} remaining` : ""})
+                                  </span>
+                                ) : null}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button size="sm" onClick={handleReprint}><Printer size={13} className="mr-1 inline" />Reprint</Button>
+                      <Button size="sm" onClick={() => setInvoiceSaleId(selected.id)}><FileText size={13} className="mr-1 inline" />Invoice</Button>
+                      {!Number(detail.sale.voided || 0) ? (
+                        <Button size="sm" tone="danger" onClick={handleVoid}><Ban size={13} className="mr-1 inline" />Void</Button>
+                      ) : null}
+                      <Button
+                        size="sm"
+                        disabled={fullyRefunded}
+                        title={fullyRefunded ? "This sale has been fully refunded" : undefined}
+                        onClick={() =>
+                          navigate("/returns", {
+                            state: {
+                              sale_id: selected.id,
+                              outlet_id: detail.sale.outlet_id,
+                              employee_id: detail.sale.employee_id,
+                              customer_id: detail.sale.customer_id,
+                              // Pass remaining-refundable qty (not the original
+                              // quantity) so the prefill in ReturnsRedesign
+                              // matches what the backend will actually accept.
+                              items: itemsWithRemaining
+                                .filter((it) => it.remainingQty > 0)
+                                .map((it) => ({
+                                  ...it,
+                                  quantity: it.remainingQty,
+                                })),
+                            },
+                          })
+                        }
+                      >
+                        Return
+                      </Button>
+                      {partiallyRefunded ? (
+                        <p className="col-span-2 text-center text-xs text-(--ui-text-muted)">
+                          Partial refund recorded — only remaining units are eligible.
+                        </p>
+                      ) : null}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
         </SectionCard>
