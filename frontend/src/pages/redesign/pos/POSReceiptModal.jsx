@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { CheckCircle2, Mail, MessageCircle, X } from "lucide-react";
 import { usePOS } from "./POSContext";
 import { buildReceiptSections } from "../../../utils/receipt";
+import { buildPublicReceiptUrl } from "../../../utils/publicReceipt";
 import POSEmailReceiptModal from "./POSEmailReceiptModal";
 
 export default function POSReceiptModal() {
@@ -13,7 +14,7 @@ export default function POSReceiptModal() {
 
   function shareWhatsApp() {
     const total = money(slip.balanceDue != null ? Math.max(0, slip.balanceDue) : slip.total);
-    const receiptUrl = `${window.location.origin}/receipt/${slip.invoiceNumber}`;
+    const receiptUrl = buildPublicReceiptUrl(slip.invoiceNumber);
     const text = [
       `Receipt from ${sections.storeName}`,
       `Invoice: ${slip.invoiceNumber}`,
