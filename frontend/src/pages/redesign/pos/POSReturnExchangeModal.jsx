@@ -109,13 +109,23 @@ export default function POSReturnExchangeModal() {
     try {
       const data = await api.get(`/api/sales/${saleId}`);
       setResolvedSale(data.sale);
-      const items = (data.items || []).map((i) => ({
-        product_id: i.product_id,
-        variant_id: i.variant_id || null,
-        name: i.product_name || "Item",
-        price: Number(i.price_at_sale || 0),
-        maxQty: Number(i.quantity || 1),
-      }));
+      // F3 (Apr 28 2026): cap maxQty by sold − already-refunded so the
+      // stepper, "of N" badge, and Process Refund button all reflect what's
+      // actually still refundable on this sale. Items already fully refunded
+      // (remaining = 0) are filtered out — there's nothing to do with them
+      // here. Backend (F1) also rejects over-refund as a defence-in-depth.
+      const items = (data.items || [])
+        .map((i) => ({
+          product_id: i.product_id,
+          variant_id: i.variant_id || null,
+          name: i.product_name || "Item",
+          price: Number(i.price_at_sale || 0),
+          maxQty: Math.max(
+            0,
+            Number(i.quantity || 1) - Number(i.refunded_qty || 0),
+          ),
+        }))
+        .filter((i) => i.maxQty > 0);
       setReturnItems(items);
       const defaultQtys = {};
       const defaultRestock = {};
