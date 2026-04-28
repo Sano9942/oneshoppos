@@ -100,9 +100,33 @@ module.exports = function registerGiftCardRoutes(app, deps) {
         return res.status(400).json({ error: "initial_value must be > 0" });
       }
 
-      // Up to 3 collision retries (practically zero).
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        const code = generateCode();
+      // M14: optional custom code — only honored for physical cards.
+      // Digital codes must remain auto-generated to keep entropy high
+      // (admins shouldn't be picking weak/predictable codes for cards
+      // that get distributed via email/SMS). Custom codes are normalized
+      // to uppercase + trimmed.
+      let customCode = null;
+      if (cardType === "physical" && req.body?.code != null) {
+        customCode = String(req.body.code).trim().toUpperCase();
+        if (!customCode) {
+          return res.status(400).json({ error: "code must not be empty after trimming" });
+        }
+        // Pre-flight uniqueness check so we can return 409 with a clean
+        // message rather than 500 from the unique-index violation.
+        const { rowCount } = await db.query(
+          "SELECT 1 FROM gift_cards WHERE code = $1",
+          [customCode],
+        );
+        if (rowCount > 0) {
+          return res.status(409).json({ error: "Gift card code already exists" });
+        }
+      }
+
+      // Up to 3 collision retries for auto-generated codes (practically
+      // zero at 2^60 entropy). For a custom code we just try once.
+      const maxAttempts = customCode ? 1 : 3;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        const code = customCode || generateCode();
         try {
           const { rows: [row] } = await db.query(
             `INSERT INTO gift_cards
@@ -129,8 +153,14 @@ module.exports = function registerGiftCardRoutes(app, deps) {
             remaining_value: Number(row.remaining_value),
           });
         } catch (err) {
-          // Code collision on the unique index — retry with a fresh code.
-          if (String(err.message || "").includes("duplicate key") && attempt < 2) continue;
+          if (String(err.message || "").includes("duplicate key")) {
+            // Custom code race-conditioned with another insert.
+            if (customCode) {
+              return res.status(409).json({ error: "Gift card code already exists" });
+            }
+            // Auto-generated code collision — retry.
+            if (attempt < maxAttempts - 1) continue;
+          }
           throw err;
         }
       }

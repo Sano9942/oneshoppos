@@ -40,6 +40,7 @@ export default function GiftCardsAdminRedesign() {
     card_type: "digital",
     initial_value: "",
     issued_to_email: "",
+    code: "",
   });
   const [createBusy, setCreateBusy] = useState(false);
   const [createResult, setCreateResult] = useState(null);
@@ -89,14 +90,20 @@ export default function GiftCardsAdminRedesign() {
     setCreateBusy(true);
     setCreateResult(null);
     try {
-      const res = await api.post("/api/gift-cards", {
+      const body = {
         card_type: createForm.card_type,
         initial_value: val,
         issued_to_email: createForm.issued_to_email.trim() || null,
-      });
+      };
+      // M14: only honor custom code on physical cards. Digital codes
+      // must remain auto-generated for entropy.
+      if (createForm.card_type === "physical" && createForm.code.trim()) {
+        body.code = createForm.code.trim();
+      }
+      const res = await api.post("/api/gift-cards", body);
       setCreateResult(res);
       await fetchAll();
-      setCreateForm({ card_type: "digital", initial_value: "", issued_to_email: "" });
+      setCreateForm({ card_type: "digital", initial_value: "", issued_to_email: "", code: "" });
     } catch (err) {
       toast.error(err.body?.error || "Create failed");
     } finally {
@@ -376,6 +383,19 @@ export default function GiftCardsAdminRedesign() {
                 autoFocus
               />
             </div>
+            {createForm.card_type === "physical" && (
+              <div>
+                <label className="text-[10px] font-medium text-(--ui-text-muted)">
+                  Custom code (optional) — leave empty to auto-generate
+                </label>
+                <Input
+                  type="text"
+                  placeholder="e.g. GC-2026-XMAS-001"
+                  value={createForm.code}
+                  onChange={(e) => setCreateForm((p) => ({ ...p, code: e.target.value }))}
+                />
+              </div>
+            )}
             <div>
               <label className="text-[10px] font-medium text-(--ui-text-muted)">Recipient email (optional)</label>
               <Input

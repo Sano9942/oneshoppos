@@ -112,6 +112,66 @@ describe("Phase 2-G Wave 2 — gift-cards route (authenticated)", () => {
     expect(Number(rows[0].amount)).toBe(500);
   });
 
+  test("POST /api/gift-cards accepts optional custom code for physical cards (M14)", async () => {
+    const res = await req.post("/api/gift-cards").send({
+      card_type: "physical",
+      initial_value: 250,
+      code: "GC-2026-XMAS-001",
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.code).toBe("GC-2026-XMAS-001");
+    expect(res.body.card_type).toBe("physical");
+  });
+
+  test("POST /api/gift-cards normalizes custom code to uppercase + rejects empty after trim (M14)", async () => {
+    const upper = await req.post("/api/gift-cards").send({
+      card_type: "physical",
+      initial_value: 100,
+      code: "  gc-lower-case  ",
+    });
+    expect(upper.status).toBe(200);
+    expect(upper.body.code).toBe("GC-LOWER-CASE");
+
+    const empty = await req.post("/api/gift-cards").send({
+      card_type: "physical",
+      initial_value: 100,
+      code: "   ",
+    });
+    expect(empty.status).toBe(400);
+    expect(empty.body.error).toMatch(/code/i);
+  });
+
+  test("POST /api/gift-cards rejects duplicate custom code (M14)", async () => {
+    const first = await req.post("/api/gift-cards").send({
+      card_type: "physical",
+      initial_value: 100,
+      code: "DUP-CODE-1",
+    });
+    expect(first.status).toBe(200);
+
+    const dup = await req.post("/api/gift-cards").send({
+      card_type: "physical",
+      initial_value: 100,
+      code: "DUP-CODE-1",
+    });
+    expect(dup.status).toBe(409);
+    expect(dup.body.error).toMatch(/already.*exists|duplicate/i);
+  });
+
+  test("POST /api/gift-cards ignores custom code on digital type (auto-generates) (M14)", async () => {
+    // Digital codes are meant to be auto-generated and distributed via
+    // email/SMS — accepting a custom code here would let admins pick
+    // weak/predictable codes. Force auto-generation for digital.
+    const res = await req.post("/api/gift-cards").send({
+      card_type: "digital",
+      initial_value: 100,
+      code: "MY-WEAK-CODE",
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.code).not.toBe("MY-WEAK-CODE");
+    expect(res.body.code.length).toBeGreaterThan(6);
+  });
+
   test("POST /api/gift-cards rejects invalid card_type + invalid value", async () => {
     const bad1 = await req.post("/api/gift-cards").send({
       card_type: "virtual",
